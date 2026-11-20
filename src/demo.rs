@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | app-modal | app-modal-error | drafts | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -173,6 +173,13 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         "poll" => {
             demo_polls(waffle);
             waffle.poll_picks.insert("195".into(), vec![1]);
+        }
+        // Quizzy's "Suggest a question" form, and the same after a Submit with Answer empty that Quizzy refused.
+        "app-modal" | "app-modal-error" => {
+            waffle.open_app_modal(quizzy_modal(), cx);
+            if scene == "app-modal-error" {
+                waffle.refuse_app_modal(window, cx);
+            }
         }
         "poll-creator" => {
             waffle.open_poll_creator(window, cx);
@@ -1652,6 +1659,33 @@ fn demo_custom_status() -> crate::discord::CustomStatus {
 }
 
 // design/messages.html's two boards, the second with your vote in and its longest answer wrapping.
+fn quizzy_modal() -> crate::app_commands::Modal {
+    use crate::app_commands::{App, Modal, TextInput};
+    let input = |custom_id: &str, label: &str, paragraph: bool, placeholder: Option<&str>, value: Option<&str>, required: bool, max: Option<u32>| TextInput {
+        custom_id: custom_id.into(),
+        label: label.into(),
+        paragraph,
+        placeholder: placeholder.map(Into::into),
+        value: value.map(Into::into),
+        required,
+        min: None,
+        max,
+    };
+    Modal {
+        id: "demo-modal".into(),
+        nonce: None,
+        channel_id: "general".into(),
+        application: App { id: "quizzy".into(), name: "Quizzy".into(), icon: None },
+        title: "Suggest a question".into(),
+        custom_id: "suggest".into(),
+        fields: vec![
+            input("question", "Question", false, None, Some("Which game shipped first: Doom or Myst?"), true, Some(200)),
+            input("answer", "Answer", false, Some("The right answer"), None, true, None),
+            input("why", "Why it's fun (optional)", true, Some("A line on why people will like it"), None, false, Some(400)),
+        ],
+    }
+}
+
 fn demo_polls(waffle: &mut Waffle) {
     use crate::discord::{Poll, PollAnswer};
     let answer = |id: u32, emoji: &str, text: &str, count: u64, me: bool| PollAnswer { id, text: text.into(), emoji: Some(Emoji::unicode(emoji)), count, me };

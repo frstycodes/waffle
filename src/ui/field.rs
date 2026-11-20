@@ -19,12 +19,20 @@ use crate::{icons::Glyph, motion, palette};
 
 // A labelled field: the label, then whatever the caller adds (a frame, a hint, an error).
 pub fn field(label: impl Into<SharedString>, cx: &App) -> Div {
-    div()
+    field_marked(label, false, cx)
+}
+
+// The same, with the danger-ink mark after a label the form can't go without.
+pub fn field_marked(label: impl Into<SharedString>, required: bool, cx: &App) -> Div {
+    let label = div()
         .flex()
-        .flex_col()
-        .gap(px(6.))
-        .min_w_0()
-        .child(div().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(label.into()))
+        .gap(px(4.))
+        .text_size(px(12.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(palette::muted(cx))
+        .child(label.into())
+        .when(required, |d| d.child(div().text_color(palette::danger_ink(cx)).child("*")));
+    div().flex().flex_col().gap(px(6.)).min_w_0().child(label)
 }
 
 // Help under a field, with an optional count or note at the far end.
