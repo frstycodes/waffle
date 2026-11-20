@@ -733,6 +733,14 @@ pub struct Message {
     // Discord's "X pinned a message" notice (type 6): never drawn, it names who pinned `reply_to`.
     #[serde(default)]
     pub pin_notice: bool,
+    // An app's answer to a command, button or form: who triggered it.
+    #[serde(default)]
+    pub interaction: Option<crate::app_commands::InteractionMeta>,
+    #[serde(default)]
+    pub components: Vec<crate::app_commands::Component>,
+    // Discord's message flags: `app_commands::EPHEMERAL`, `LOADING` (the app is thinking), `COMPONENTS_V2`.
+    #[serde(default)]
+    pub flags: u64,
 }
 
 /// A live poll as a message carries it, its counts folded into the answers.
@@ -1065,6 +1073,13 @@ pub enum Event {
     // A dropped connection picked its session back up: nothing to reload.
     Resumed,
     AuthFailed,
+    // Our interaction (by the nonce we sent) was received, answered, or refused; `id` is Discord's id
+    // for it, which the app's reply carries in `interaction_metadata.id`.
+    InteractionCreate { nonce: String, id: String },
+    InteractionSuccess { nonce: String },
+    InteractionFailure { nonce: String },
+    ModalCreate(crate::app_commands::Modal),
+    Autocomplete { nonce: String, choices: Vec<crate::app_commands::Choice> },
 }
 
 #[derive(Clone)]
@@ -1175,6 +1190,20 @@ impl Client {
         body["poll"] = json!({ "question": { "text": poll.question }, "answers": answers, "duration": poll.hours, "allow_multiselect": poll.multiselect, "layout_type": 1 });
         let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
+    }
+
+    /// Not verified: a server's index lists every app's commands there; a DM's comes from the channel.
+    pub async fn command_index(&self, channel_id: &str, guild_id: Option<&str>) -> Result<crate::app_commands::CommandIndex, String> {
+        let path = match guild_id {
+            Some(g) => format!("/guilds/{g}/application-command-index"),
+            None => format!("/channels/{channel_id}/application-command-index"),
+        };
+        self.run(self.request(reqwest::Method::GET, &path)).await.map(|v| crate::app_commands::parse_index(&v))
+    }
+
+    /// Answers 204; what happens next arrives as INTERACTION_* dispatches matched by the body's nonce.
+    pub async fn interact(&self, body: Value) -> Result<(), String> {
+        self.run(self.request(reqwest::Method::POST, "/interactions").json(&body)).await.map(|_| ())
     }
 
     /// Discord's own packs, for everyone.
@@ -2050,6 +2079,11 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
         }
         "USER_GUILD_SETTINGS_UPDATE" => Some(Event::GuildSettings(parse_guild_settings(d))),
         "MESSAGE_CREATE" => parse_message(d).map(|m| Event::MessageCreate(Box::new(m))),
+        "INTERACTION_CREATE" => Some(Event::InteractionCreate { nonce: d["nonce"].as_str()?.to_owned(), id: s(&d["id"]) }),
+        "INTERACTION_SUCCESS" => Some(Event::InteractionSuccess { nonce: d["nonce"].as_str()?.to_owned() }),
+        "INTERACTION_FAILURE" => Some(Event::InteractionFailure { nonce: d["nonce"].as_str()?.to_owned() }),
+        "INTERACTION_MODAL_CREATE" => crate::app_commands::parse_modal(d).map(Event::ModalCreate),
+        "APPLICATION_COMMAND_AUTOCOMPLETE_RESPONSE" => Some(Event::Autocomplete { nonce: d["nonce"].as_str()?.to_owned(), choices: crate::app_commands::parse_choices(d) }),
         "MESSAGE_UPDATE" => Some(Event::MessageUpdate(d.clone())),
         "MESSAGE_DELETE" => Some(Event::MessageDelete { channel_id: s(&d["channel_id"]), id: s(&d["id"]) }),
         "MESSAGE_REACTION_ADD" | "MESSAGE_REACTION_REMOVE" => Some(Event::Reaction {
@@ -2389,6 +2423,9 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         poll: m["poll"].is_object().then(|| parse_poll(&m["poll"])),
         forward: parse_forward(m),
         pin_notice: m["type"] == 6,
+        interaction: crate::app_commands::parse_interaction(m),
+        components: crate::app_commands::parse_components(&m["components"]),
+        flags: m["flags"].as_u64().unwrap_or(0),
     })
 }
 

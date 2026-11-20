@@ -2,6 +2,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod accounts;
+mod app_commands;
+mod app_modal;
+mod command_picker;
+mod components;
+mod interactions;
 mod attachments;
 mod app_keys;
 mod crash;
@@ -627,6 +632,11 @@ pub struct Waffle {
     poll_picks: HashMap<String, Vec<u32>>,
     poll_peek: HashSet<String>,
     forward_dialog: Option<forward::ForwardDialog>,
+    // Our interactions in flight, by the nonce we sent.
+    interactions: HashMap<String, interactions::PendingInteraction>,
+    command_picker: command_picker::CommandPicker,
+    component_state: components::ComponentState,
+    app_modal: Option<app_modal::AppModal>,
     status_flyout: status_menu::Flyout,
     status_input: Entity<SearchState>,
     clear_after: status_menu::ClearAfter,
@@ -1011,6 +1021,10 @@ impl Waffle {
             poll_picks: HashMap::new(),
             poll_peek: HashSet::new(),
             forward_dialog: None,
+            interactions: HashMap::new(),
+            command_picker: Default::default(),
+            component_state: Default::default(),
+            app_modal: None,
             status_flyout: status_menu::Flyout::default(),
             status_input,
             clear_after: status_menu::ClearAfter::default(),
@@ -1626,6 +1640,11 @@ impl Waffle {
             }
             Event::Resumed => self.status = Status::Online,
             Event::AuthFailed => return self.verify_rejected_token(cx),
+            Event::InteractionCreate { nonce, id } => self.on_interaction_create(nonce, id),
+            Event::InteractionSuccess { nonce } => self.on_interaction_success(nonce, cx),
+            Event::InteractionFailure { nonce } => self.interaction_failed(&nonce, cx),
+            Event::ModalCreate(modal) => self.open_app_modal(modal, cx),
+            Event::Autocomplete { nonce, choices } => self.on_autocomplete(nonce, choices, cx),
         }
         self.resolve_voice_users();
         self.refresh_stream_previews(cx);
@@ -1701,9 +1720,10 @@ impl Waffle {
             let dm = self.dms.remove(pos);
             self.dms.insert(0, dm);
         }
+        // An app's reply to our command takes its "is thinking…" stand-in's place.
+        let nonce = self.interaction_reply_nonce(&message).or_else(|| message.nonce.clone());
         let Some(feed) = self.feeds.get_mut(&channel_id) else { return };
         // Our own optimistic copy, sent with this nonce: swap in the real one in place.
-        let nonce = message.nonce.clone();
         if let Some(pending) = Arc::make_mut(&mut feed.messages).iter_mut().find(|m| m.state != SendState::Sent && m.nonce.is_some() && m.nonce == nonce) {
             *pending = message;
             return;
@@ -3317,7 +3337,7 @@ struct UploadJob {
     error: Option<String>,
 }
 
-fn nonce() -> String {
+pub(crate) fn nonce() -> String {
     let millis = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
     // A snowflake-shaped number, as Discord's own clients send.
     ((millis.saturating_sub(1_420_070_400_000) << 22) | u64::from(std::process::id() % 4096)).to_string()
