@@ -965,6 +965,7 @@ impl Waffle {
             state
         });
         cx.subscribe_in(&composer, window, Self::on_composer).detach();
+        cx.observe(&composer, |this, _, cx| this.on_composer_selection(cx)).detach();
         let search_input = cx.new(|cx| SearchState::new(window, cx).placeholder("Search"));
         cx.subscribe_in(&search_input, window, Self::on_search_input).detach();
         // Typing filters the picker and switcher; the views read the inputs' text on render.
@@ -1829,8 +1830,9 @@ impl Waffle {
             self.feeds.insert(id.clone(), Feed { messages: Arc::new(messages), loaded: true, has_more: true, ..Default::default() });
         }
         self.load_dm_profile(&channel, cx);
-        self.command_picker.reset();
+        // Before the reset: the draft keeps the command typed into it.
         self.stash_draft(cx);
+        self.command_picker.reset();
         self.channel = Some(channel);
         self.editing = None;
         self.restore_draft(window, cx);
@@ -2517,12 +2519,13 @@ impl Waffle {
 
     // Keeps the open channel's composer as its draft; an edit in progress is not one.
     fn stash_draft(&mut self, cx: &mut Context<Self>) {
-        let Some(channel) = &self.channel else { return };
+        let Some(channel_id) = self.channel.as_ref().map(|c| c.id.clone()) else { return };
         if self.editing.is_some() {
             return;
         }
-        let draft = drafts::Draft::new(&self.composer.read(cx).content(), self.replying.clone());
-        self.drafts.set(&channel.id, draft);
+        let (command, picks) = self.command_draft(cx);
+        let draft = drafts::Draft::new(&self.composer.read(cx).content(), self.replying.clone()).with_command(command, picks);
+        self.drafts.set(&channel_id, draft);
         self.save_drafts_soon(cx);
     }
 
@@ -2536,6 +2539,7 @@ impl Waffle {
             state.set_value(content, window, cx);
             state.set_selected_range(end..end, cx);
         });
+        self.restore_command(draft.command, draft.picks, cx);
         self.replying = draft.reply;
     }
 

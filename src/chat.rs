@@ -565,12 +565,6 @@ impl Waffle {
             .flex()
             .flex_col()
             .capture_key_down(cx.listener(Self::on_composer_key))
-            // The hint bar follows the caret, which moves without a change event.
-            .capture_any_mouse_up(cx.listener(|this, _: &gpui_kit::MouseUpEvent, _, cx| {
-                if this.command_typed(cx) {
-                    cx.notify();
-                }
-            }))
             // Before the text field's own Tab, which indents and would never reach on_composer_key.
             .capture_action(cx.listener(|this, _: &gpui_kit::component::input::IndentInline, window, cx| {
                 if this.on_command_tab(false, window, cx) {
@@ -795,10 +789,6 @@ impl Waffle {
         let key = event.keystroke.key.as_str();
         if self.on_command_key(key, cx) {
             return cx.stop_propagation();
-        }
-        // The hint bar follows the caret, which moves without a change event.
-        if self.command_typed(cx) {
-            cx.notify();
         }
         if self.autocomplete.is_some() {
             match key {
