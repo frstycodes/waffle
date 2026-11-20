@@ -238,8 +238,7 @@ pub fn role_chip(name: impl Into<SharedString>, color: Hsla, cx: &App) -> Div {
 
 // A keycap: the raised fill, a hairline ring and a deeper bottom edge, so it reads as a key you could press.
 pub fn kbd(key: impl Into<SharedString>, cx: &App) -> Div {
-    let line = palette::line_strong(cx);
-    key_cap(key).bg(palette::surface(palette::Level::Raised, cx)).shadow(vec![shadow(line, 0., -1., 0., 0., true), shadow(line, 0., 0., 0., 1., false)]).text_color(palette::strong(cx))
+    raised_cap(key_cap(key), cx)
 }
 
 // A key cap on a coloured fill (a danger button): a wash of `ink` with an inset edge, lettered in `ink`,
@@ -248,7 +247,26 @@ pub fn kbd_translucent(key: impl Into<SharedString>, ink: Hsla) -> Div {
     key_cap(key).bg(ink.opacity(0.16)).shadow(vec![shadow(ink.opacity(0.24), 0., 0., 0., 1., true)]).text_color(ink)
 }
 
+// A keycap lettered with `glyph` (the arrow keys).
+pub fn kbd_glyph(glyph: Glyph, cx: &App) -> Div {
+    raised_cap(key_cap_shell(), cx).child(Icon::new(glyph).size(px(12.)))
+}
+
+fn raised_cap(cap: Div, cx: &App) -> Div {
+    let line = palette::line_strong(cx);
+    cap.bg(palette::surface(palette::Level::Raised, cx)).shadow(vec![shadow(line, 0., -1., 0., 0., true), shadow(line, 0., 0., 0., 1., false)]).text_color(palette::strong(cx))
+}
+
+// What a key does, after its caps: "[Esc] Cancel".
+pub fn key_hint(caps: impl IntoElement, label: impl Into<SharedString>, cx: &App) -> Div {
+    div().flex_none().flex().items_center().gap(px(6.)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(caps).child(label.into())
+}
+
 fn key_cap(key: impl Into<SharedString>) -> Div {
+    key_cap_shell().child(key.into())
+}
+
+fn key_cap_shell() -> Div {
     div()
         .min_w(px(22.))
         .h(px(22.))
@@ -261,7 +279,6 @@ fn key_cap(key: impl Into<SharedString>) -> Div {
         .flex()
         .items_center()
         .justify_center()
-        .child(key.into())
 }
 
 // A shortcut: its keys side by side.

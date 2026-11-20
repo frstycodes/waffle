@@ -477,6 +477,7 @@ impl Waffle {
         vec![
             crate::menu::item("Upload a file", |this, window, cx| this.upload(window, cx)).icon(Glyph::Upload).entry(),
             (if polls { poll } else { poll.hint("You can't create polls here").disabled() }).entry(),
+            crate::menu::item("Use an app command", |this, window, cx| this.start_command(window, cx)).icon(Glyph::AppWindow).hint("Or type / in your message").entry(),
         ]
     }
 
@@ -493,7 +494,7 @@ impl Waffle {
             .gap(px(4.))
             .child(ui::icon_button("attach", Glyph::PlusCircle, "Upload a file or create a poll", cx).on_click(cx.listener(|this, _, window, cx| this.open_menu(window.mouse_position(), this.attach_entries(), cx))))
             // XSmall gives the editor 0/4px padding of its own; with these, the design's 4/6.
-            .child(div().flex_1().min_w_0().child(Textarea::new(&self.composer).appearance(false).with_size(Size::XSmall).py(px(4.)).px(px(2.)).text_size(px(15.)).line_height(px(22.)).text_color(strong).token(mention_chip(cx))))
+            .child(self.composer_field(strong, cx))
             .children([(ComposerPicker::Gifs, "composer-gif", Glyph::Gif, "Open GIF picker"), (ComposerPicker::Stickers, "composer-sticker", Glyph::Sticker, "Open sticker picker"), (ComposerPicker::Emoji, "composer-emoji", Glyph::Emoji, "Select Emoji")].map(|(picker, id, glyph, label)| {
                 ui::icon_button(id, glyph, label, cx).toggled(open_picker == Some(picker), cx).on_click(cx.listener(move |this, _, window, cx| this.show_composer_picker(picker, window, cx)))
             }));
@@ -514,6 +515,7 @@ impl Waffle {
             .border(px(0.5))
             .border_color(if focused { palette::line_strong(cx) } else { palette::line(cx) })
             .children(self.autocomplete_popup(cx))
+            .children(self.command_popup(cx))
             .children(self.composer_bar(cx))
             .children(self.attachment_tray(cx))
             .child(row);
@@ -521,7 +523,7 @@ impl Waffle {
         let names: Vec<&str> = typers.iter().map(|t| t.name.as_str()).collect();
         // A glass pill just above the composer, out of the flow, so the box never moves when someone types.
         // Out of the way while suggestions are open, which rise over the same spot.
-        let typing = (!names.is_empty() && self.autocomplete.is_none()).then(|| {
+        let typing = (!names.is_empty() && self.autocomplete.is_none() && !self.command_picker.is_open() && !self.command_filling()).then(|| {
             div().absolute().left(px(28.)).top(px(-28.)).max_w(gpui_kit::relative(0.6)).h(px(24.)).px(px(10.)).flex().items_center().gap(px(8.)).rounded_full()
                 .bg(palette::surface(Level::Raised, cx).opacity(0.72))
                 .backdrop_blur(px(16.))
@@ -554,8 +556,16 @@ impl Waffle {
             .capture_key_down(cx.listener(Self::on_composer_key))
             // Before the text field's own Tab, which indents and would never reach on_composer_key.
             .capture_action(cx.listener(|this, _: &gpui_kit::component::input::IndentInline, window, cx| {
+                if this.on_command_tab(false, window, cx) {
+                    return cx.stop_propagation();
+                }
                 if this.autocomplete.is_some() {
                     this.accept_suggestion(window, cx);
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_action(cx.listener(|this, _: &gpui_kit::component::input::OutdentInline, window, cx| {
+                if this.on_command_tab(true, window, cx) {
                     cx.stop_propagation();
                 }
             }))
@@ -572,6 +582,18 @@ impl Waffle {
             .children(note)
             // 8px off the window's foot, level with the user card in the left column.
             .child(div().h(px(8.)))
+    }
+
+    // The composer's text area, or, with a command picked, its chips with the text area in the active one.
+    fn composer_field(&self, ink: Hsla, cx: &mut Context<Self>) -> AnyElement {
+        let field = Textarea::new(&self.composer).appearance(false).with_size(Size::XSmall).text_size(px(15.)).line_height(px(22.)).text_color(ink).token(mention_chip(cx));
+        if self.command_filling() {
+            // 22px of line in a 28px chip.
+            let field = field.py(px(3.)).px(px(0.)).into_any_element();
+            return self.command_chips(field, cx).map(IntoElement::into_any_element).unwrap_or_else(|| div().into_any_element());
+        }
+        // XSmall gives the editor 0/4px padding of its own; with these, the design's 4/6.
+        div().flex_1().min_w_0().child(field.py(px(4.)).px(px(2.))).into_any_element()
     }
 
     // A mention badge's click: a person's profile beside it, or the channel it names.
@@ -653,7 +675,7 @@ impl Waffle {
             .child(div().flex_1().min_w_0().truncate().child(label));
         let bar = match self.replying.is_some() {
             true => bar.child(self.ping_toggle(cx)),
-            false => bar.child(key_hint("Esc", "Cancel", cx)).child(key_hint("Enter", "Save", cx)),
+            false => bar.child(ui::key_hint(ui::kbd("Esc", cx), "Cancel", cx)).child(ui::key_hint(ui::kbd("Enter", cx), "Save", cx)),
         };
         Some(bar.child(ui::icon_button("cancel-compose", Glyph::X, "Cancel", cx).small().on_click(cx.listener(|this, _, window, cx| this.cancel_compose(window, cx)))))
     }
@@ -759,6 +781,9 @@ impl Waffle {
     // Arrows drive the suggestion list (Tab and Enter accept elsewhere); Esc cancels a reply or edit; Up in an empty box edits your last message.
     fn on_composer_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
+        if self.on_command_key(key, window, cx) {
+            return cx.stop_propagation();
+        }
         if self.autocomplete.is_some() {
             match key {
                 "up" => self.move_suggestion(-1, cx),
@@ -786,11 +811,7 @@ impl Waffle {
             _ => "Members".into(),
         };
         let rows = auto.items.iter().enumerate().map(|(i, item)| {
-            let lead = match &item.lead {
-                crate::SuggestLead::Avatar(url) => ui::avatar(url.clone(), 28.).into_any_element(),
-                crate::SuggestLead::Channel => div().size(px(28.)).flex_none().rounded_full().bg(selected).text_color(muted).flex().items_center().justify_center().child(Icon::new(Glyph::Hashtag).size(px(16.))).into_any_element(),
-                crate::SuggestLead::Emoji(emoji) => div().size(px(28.)).flex_none().flex().items_center().justify_center().child(crate::menu::emoji_face(emoji, 22.)).into_any_element(),
-            };
+            let lead = suggest_lead(&item.lead, cx);
             let detail = item.detail.clone().map(|d| div().flex_none().max_w(px(180.)).truncate().text_size(px(12.)).text_color(muted).child(d));
             div()
                 .id(SharedString::from(format!("suggest-{i}")))
@@ -2846,8 +2867,13 @@ pub(crate) fn emphasised(parts: &[(String, bool)], strong: Hsla) -> StyledText {
 }
 
 // A keycap and what it does, for the edit bar.
-fn key_hint(key: &'static str, label: &'static str, cx: &App) -> Div {
-    div().flex_none().flex().items_center().gap(px(6.)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(ui::kbd(key, cx)).child(label)
+// A suggestion's face: an avatar, a channel's #, an emoji.
+pub(crate) fn suggest_lead(lead: &crate::SuggestLead, cx: &App) -> AnyElement {
+    match lead {
+        crate::SuggestLead::Avatar(url) => ui::avatar(url.clone(), 28.).into_any_element(),
+        crate::SuggestLead::Channel => div().size(px(28.)).flex_none().rounded_full().bg(palette::selected(cx)).text_color(palette::muted(cx)).flex().items_center().justify_center().child(Icon::new(Glyph::Hashtag).size(px(16.))).into_any_element(),
+        crate::SuggestLead::Emoji(emoji) => div().size(px(28.)).flex_none().flex().items_center().justify_center().child(crate::menu::emoji_face(emoji, 22.)).into_any_element(),
+    }
 }
 
 // Placeholders shaped like the real transcript, sweeping in step.
