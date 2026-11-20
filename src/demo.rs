@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | command-picker | command-options | drafts | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -266,6 +266,43 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                     this.autocomplete = this.suggest("gg :smil");
                     if accept {
                         this.accept_suggestion(window, cx);
+                    }
+                    cx.notify();
+                })
+                .ok();
+            })
+            .detach();
+        }
+        // The `/` picker with `/pl` typed: Recent first, then each app's matches.
+        "command-picker" => {
+            waffle.command_picker.set_index("1", demo_commands());
+            waffle.command_picker.record_run(&demo_commands().commands[0]);
+            cx.spawn_in(window, async move |this, cx| {
+                cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+                this.update_in(cx, |this, window, cx| {
+                    this.composer.update(cx, |state, cx| {
+                        state.set_value("/pl", window, cx);
+                        state.set_selected_range(3..3, cx);
+                        state.focus(window, cx);
+                    });
+                    this.update_command_picker("/pl", cx);
+                    cx.notify();
+                })
+                .ok();
+            })
+            .detach();
+        }
+        // /play picked: its query half typed with Wavebot's suggestions under it, volume added and filled.
+        "command-options" => {
+            waffle.command_picker.set_index("1", demo_commands());
+            cx.spawn_in(window, async move |this, cx| {
+                cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+                this.update_in(cx, |this, window, cx| {
+                    this.pick_command(0, window, cx);
+                    this.fill_option("volume", "80", window, cx);
+                    this.fill_option("query", "midnight ar", window, cx);
+                    if let Some(filling) = &mut this.command_picker.filling {
+                        filling.set_suggestions(["Midnight Arcade", "Midnight Arcade (Slowed)", "Arcade Midnight Run"].map(|name| crate::app_commands::Choice { name: name.into(), value: serde_json::json!(name) }).to_vec());
                     }
                     cx.notify();
                 })
@@ -1737,4 +1774,38 @@ fn reactors(count: usize) -> Vec<Reactor> {
         ("31000010", "mikey", "mickeeeyyyyyy"),
     ];
     people.iter().take(count).map(|&(id, name, username)| Reactor { user: user(id, name), username: username.into() }).collect()
+}
+
+// Three apps' commands, the shapes `app_commands::parse_index` produces.
+fn demo_commands() -> crate::app_commands::CommandIndex {
+    use crate::app_commands::{App, AppCommand, Choice, CommandIndex, CommandOption, OptionKind};
+    let app = |id: &str, name: &str| App { id: id.into(), name: name.into(), icon: None };
+    let option = |name: &str, kind: OptionKind, required: bool, description: &str| CommandOption { kind, name: name.into(), description: description.into(), required, choices: Vec::new(), autocomplete: false };
+    let command = |id: &str, app: &str, path: &str, description: &str, options: Vec<CommandOption>| AppCommand {
+        id: id.into(),
+        application_id: app.into(),
+        version: "1".into(),
+        path: path.split(' ').map(str::to_owned).collect(),
+        description: description.into(),
+        options,
+        raw: serde_json::json!({ "id": id, "name": path.split(' ').next() }),
+    };
+    let query = CommandOption { autocomplete: true, ..option("query", OptionKind::String, true, "A song name or link") };
+    let category = CommandOption {
+        choices: ["Music", "Movies", "Games"].map(|c| Choice { name: c.into(), value: serde_json::json!(c.to_lowercase()) }).to_vec(),
+        ..option("category", OptionKind::String, true, "What the questions are about")
+    };
+    CommandIndex {
+        apps: vec![app("w", "Wavebot"), app("p", "Pollster"), app("q", "Quizzy")],
+        commands: vec![
+            command("10", "w", "play", "Play a song or playlist in your voice channel", vec![query, option("volume", OptionKind::Integer, false, "Loudness, 0 to 100"), option("shuffle", OptionKind::Boolean, false, "Mix up the order"), option("loop", OptionKind::Boolean, false, "Start again when it ends")]),
+            command("11", "w", "playlist", "Queue one of your saved playlists", vec![option("name", OptionKind::String, true, "The playlist's name")]),
+            command("12", "w", "queue", "Songs coming up, and who placed them", Vec::new()),
+            command("13", "w", "music queue clear", "Empty the queue", Vec::new()),
+            command("20", "p", "place-vote", "Vote in an open Pollster poll", vec![option("poll", OptionKind::String, true, "Which poll"), option("choice", OptionKind::Integer, true, "Your answer's number")]),
+            command("21", "p", "poll", "Start a poll in this channel", vec![option("question", OptionKind::String, true, "What to ask")]),
+            command("30", "q", "quiz", "Start a quiz round for everyone here", vec![category, option("host", OptionKind::User, false, "Who reads the questions")]),
+            command("31", "q", "leaderboard", "Who's answered the most", Vec::new()),
+        ],
+    }
 }

@@ -1827,6 +1827,7 @@ impl Waffle {
             self.feeds.insert(id.clone(), Feed { messages: Arc::new(messages), loaded: true, has_more: true, ..Default::default() });
         }
         self.load_dm_profile(&channel, cx);
+        self.command_picker.reset();
         self.stash_draft(cx);
         self.channel = Some(channel);
         self.editing = None;
@@ -2078,14 +2079,17 @@ impl Waffle {
 
     fn on_composer(&mut self, state: &Entity<ComposerState>, event: &InputEvent, window: &mut Window, cx: &mut Context<Self>) {
         match event {
+            InputEvent::Change if self.command_filling() => self.on_option_typed(state.read(cx).value().to_string(), cx),
             InputEvent::Change => {
                 let text = state.read(cx).value();
                 self.has_draft = !text.trim().is_empty() || !self.pending_files.is_empty();
                 self.stash_draft(cx);
                 self.autocomplete = self.suggest(&text);
+                self.update_command_picker(&text, cx);
                 self.send_typing();
                 cx.notify();
             }
+            InputEvent::PressEnter { shift: false, .. } if self.on_command_enter(window, cx) => {}
             InputEvent::PressEnter { shift: false, .. } if self.autocomplete.is_some() => self.accept_suggestion(window, cx),
             InputEvent::PressEnter { shift: false, .. } => self.submit(window, cx),
             _ => {}
