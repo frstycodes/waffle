@@ -933,6 +933,86 @@ impl Waffle {
     }
 }
 
+// OPTION BOXES
+
+/// The transparent space an option's name chip leaves before itself, so neighbouring boxes don't touch.
+pub(crate) const OPTION_GAP: f32 = 8.;
+// How far a box runs past its value's last glyph, into the space before the next option.
+const VALUE_PAD: f32 = 5.;
+// An empty value still shows room to type in.
+const EMPTY_VALUE: f32 = 10.;
+const BOX_RADIUS: f32 = 6.;
+
+// One option drawn as a box: its name chip, then its value, as byte offsets into the composer's text.
+struct OptionBox {
+    start: usize,
+    key_end: usize,
+    value_end: usize,
+    active: bool,
+    invalid: bool,
+}
+
+impl Waffle {
+    /// Each typed option's box, drawn over the composer's text after it lays out: the text field can't
+    /// border a text range itself, so this reads where its range landed and strokes around it.
+    pub(crate) fn option_boxes(&self, cx: &App) -> Option<impl IntoElement + use<>> {
+        let typed = self.typed_command(cx)?;
+        let active = typed.naming(self.command_picker.naming).is_none().then(|| typed.line.arg_at(typed.caret)).flatten();
+        let picked = &self.command_picker.picked;
+        let boxes: Vec<OptionBox> = typed
+            .line
+            .args
+            .iter()
+            .enumerate()
+            .map(|(n, arg)| {
+                let invalid = !arg.value.is_empty() && command_line::resolve(typed.option(arg), &typed.value(arg, picked)).is_err();
+                OptionBox { start: arg.key.start, key_end: arg.key.end, value_end: arg.value.end.max(arg.key.end), active: active == Some(n), invalid }
+            })
+            .collect();
+        let composer = self.composer.clone();
+        let (line, accent, ring, danger) = (palette::line_strong(cx), palette::accent_ink(cx), palette::accent_soft(cx), palette::danger_ink(cx));
+        let paint = move |bounds: gpui_kit::Bounds<gpui_kit::Pixels>, _: (), window: &mut Window, cx: &mut App| {
+            let state = composer.read(cx);
+            let at = |offset: usize| state.range_to_bounds(&(offset..offset));
+            window.with_content_mask(Some(gpui_kit::ContentMask { bounds }), |window| {
+                for b in &boxes {
+                    let (Some(start), Some(key_end), Some(end)) = (at(b.start), at(b.key_end), at(b.value_end)) else { continue };
+                    let right = if b.value_end == b.key_end { key_end.left() + px(EMPTY_VALUE) } else { end.left() + px(VALUE_PAD) };
+                    let edge = if b.invalid { danger } else if b.active { accent } else { line };
+                    for rect in box_rows(start, right, end, bounds) {
+                        if b.active {
+                            window.paint_quad(gpui_kit::quad(rect.dilate(px(3.)), gpui_kit::Corners::all(px(BOX_RADIUS + 3.)), gpui_kit::transparent_black(), px(3.), ring, gpui_kit::BorderStyle::Solid));
+                        }
+                        window.paint_quad(gpui_kit::quad(rect, gpui_kit::Corners::all(px(BOX_RADIUS)), gpui_kit::transparent_black(), px(1.), edge, gpui_kit::BorderStyle::Solid));
+                    }
+                }
+            });
+        };
+        Some(gpui_kit::canvas(|_, _, _| {}, paint).absolute().inset_0())
+    }
+}
+
+// An option's box, one rectangle per line it wraps across, a pixel outside its line so the border clears
+// the name chip, which starts `OPTION_GAP` into its token.
+fn box_rows(start: gpui_kit::Bounds<gpui_kit::Pixels>, right: gpui_kit::Pixels, end: gpui_kit::Bounds<gpui_kit::Pixels>, clip: gpui_kit::Bounds<gpui_kit::Pixels>) -> Vec<gpui_kit::Bounds<gpui_kit::Pixels>> {
+    let row = |left: gpui_kit::Pixels, right: gpui_kit::Pixels, top: gpui_kit::Pixels, height: gpui_kit::Pixels| {
+        gpui_kit::Bounds::from_corners(point(left - px(1.), top - px(1.)), point(right, top + height + px(1.)))
+    };
+    let left = start.left() + px(OPTION_GAP);
+    let height = start.size.height;
+    if (end.top() - start.top()).abs() < height / 2. {
+        return vec![row(left, right, start.top(), height)];
+    }
+    let mut rows = vec![row(left, clip.right(), start.top(), height)];
+    let mut top = start.top() + height;
+    while top + height / 2. < end.top() {
+        rows.push(row(clip.left(), clip.right(), top, height));
+        top += height;
+    }
+    rows.push(row(clip.left(), right, end.top(), height));
+    rows
+}
+
 fn required_mark(cx: &App) -> Div {
     div().flex_none().text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::danger_ink(cx)).child("Required")
 }
