@@ -3,13 +3,22 @@
 // rows of buttons and selects, and Components V2 layouts.
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use gpui_kit::{AnyElement, App, Bounds, Context, FontWeight, Hsla, Pixels, Point, SharedString, component::Icon, div, point, prelude::*, px};
+use gpui_kit::{
+    AnyElement, App, Bounds, Context, Div, Entity, FontWeight, Hsla, Pixels, Point, SharedString, Window,
+    component::{
+        Icon,
+        input::{InputEvent, InputState},
+    },
+    div, point,
+    prelude::*,
+    px,
+};
 
 use crate::{
     Waffle,
-    app_commands::{self, Button, ButtonStyle, Component, Origin, Select, SelectKind, SelectOption},
-    chat::{self, RowContext},
-    discord::{ChannelKind, Emoji, File, Media, MediaKind, Message, SendState},
+    app_commands::{self, Button, ButtonStyle, Component, GalleryItem, Origin, Select, SelectKind, SelectOption},
+    chat::{self, Paging, RowContext},
+    discord::{Channel, ChannelKind, Emoji, File, Media, MediaKind, Message, SendState},
     icons::Glyph,
     interactions::InteractionKind,
     menu::{self, Entry},
@@ -24,6 +33,8 @@ const THUMBNAIL: f32 = 72.;
 const GALLERY_ITEM: (f32, f32) = (400., 225.);
 // Discord lists at most 25 options in a select.
 const MAX_CHOICES: usize = 25;
+// A container's padding and hairline on each side.
+const CONTAINER_INSET: f32 = 16. + 1.;
 
 // A control on a message: the message's id and the control's custom id.
 pub(crate) type ControlKey = (String, String);
@@ -36,6 +47,11 @@ pub(crate) struct ComponentState {
     picks: HashMap<ControlKey, Vec<String>>,
     // Each select field's bounds as last painted: its menu opens under it.
     anchors: Anchors,
+    // The search atop a user, role, channel or mentionable select's menu (made on its first open), what's
+    // typed in it, and the server whose members it looks up as you type.
+    search: Option<Entity<InputState>>,
+    query: String,
+    search_guild: Option<String>,
 }
 
 type Anchors = Rc<RefCell<HashMap<ControlKey, Bounds<Pixels>>>>;
@@ -89,16 +105,59 @@ impl Waffle {
         self.interact(nonce, app, InteractionKind::Component { message_id: message.id.clone(), custom_id }, body, cx);
     }
 
-    // Opens the select's menu under its field (at `fallback` before the field has painted).
-    fn open_select(&mut self, message: Message, select: Select, fallback: Point<Pixels>, cx: &mut Context<Self>) {
+    // Opens the select's menu under its field and as wide (at `fallback` before the field has painted).
+    fn open_select(&mut self, message: Message, select: Select, fallback: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
         let anchor = self.component_state.anchors.borrow().get(&(message.id.clone(), select.custom_id.clone())).copied();
         let at = anchor.map_or(fallback, |b| point(b.left(), b.bottom() + px(4.)));
         self.component_state.open = Some((message.id.clone(), select.custom_id.clone()));
-        self.open_live_menu(at, move |this| this.select_entries(&message, &select), cx);
+        let search = (select.kind != SelectKind::String).then(|| self.reset_select_search(&message, &select, window, cx));
+        self.open_live_menu(at, move |this| this.select_entries(&message, &select, search.clone()), cx);
+        if let Some(bounds) = anchor {
+            self.set_menu_width(f32::from(bounds.size.width));
+        }
     }
 
-    // Options with their emoji and description; a multi-select checks its picks and ends with Done.
-    fn select_entries(&self, message: &Message, select: &Select) -> Vec<Entry> {
+    // The menu's search field, emptied, and the server it looks members up in.
+    fn reset_select_search(&mut self, message: &Message, select: &Select, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+        let lists_members = matches!(select.kind, SelectKind::User | SelectKind::Mentionable);
+        self.component_state.search_guild = self.select_guild(message).map(|g| g.id.clone()).filter(|_| lists_members);
+        self.component_state.query.clear();
+        let input = match self.component_state.search.clone() {
+            Some(input) => input,
+            None => self.new_select_search(window, cx),
+        };
+        input.update(cx, |state, cx| state.set_value("", window, cx));
+        input
+    }
+
+    fn new_select_search(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search"));
+        cx.subscribe(&input, |this: &mut Self, input, event: &InputEvent, cx| {
+            if matches!(event, InputEvent::Change) {
+                this.search_select(input.read(cx).value().to_string(), cx);
+            }
+        })
+        .detach();
+        self.component_state.search = Some(input.clone());
+        input
+    }
+
+    // Filters the open menu; in a server, also asks the gateway for members matching what's typed, whose
+    // chunk lands in `members` and so in the menu.
+    fn search_select(&mut self, query: String, cx: &mut Context<Self>) {
+        let query = query.trim().to_owned();
+        if let (Some(client), Some(guild_id)) = (&self.client, &self.component_state.search_guild)
+            && !query.is_empty()
+        {
+            client.search_members(guild_id, &query, MAX_CHOICES as u32);
+        }
+        self.component_state.query = query;
+        cx.notify();
+    }
+
+    // Options with their emoji and description, under the search when there is one; a multi-select
+    // checks its picks and ends with Done.
+    fn select_entries(&self, message: &Message, select: &Select, search: Option<Entity<InputState>>) -> Vec<Entry> {
         let key = (message.id.clone(), select.custom_id.clone());
         let picks = self.component_state.picks.get(&key).cloned().unwrap_or_default();
         let multi = is_multi(select);
@@ -127,7 +186,11 @@ impl Waffle {
             })
             .collect();
         if entries.is_empty() {
-            entries.push(menu::item("Nothing to pick here", |_, _, _| {}).disabled().entry());
+            let empty = if self.component_state.query.is_empty() { "Nothing to pick here" } else { "No matches" };
+            entries.push(menu::item(empty, |_, _, _| {}).disabled().entry());
+        }
+        if let Some(input) = search {
+            entries.insert(0, Entry::Search(input));
         }
         if !multi {
             return entries;
@@ -143,35 +206,54 @@ impl Waffle {
         entries
     }
 
-    // GAP: user, role and channel selects list only what this server has cached (the members the member
-    // list loaded, its roles and channels); in a DM they list nobody.
+    // A user, role, channel or mentionable select's choices that match the search, at most 25.
     fn select_choices(&self, message: &Message, select: &Select) -> Vec<SelectOption> {
         if select.kind == SelectKind::String {
             return select.options.clone();
         }
-        let guild_id = message.guild_id.as_ref().or(self.guild_id.as_ref());
-        let Some(guild) = guild_id.and_then(|id| self.guilds.iter().find(|g| &g.id == id)) else { return Vec::new() };
-        let mut users: Vec<SelectOption> = self.members.get(&guild.id).into_iter().flat_map(|m| m.values()).map(|u| choice(&u.name, &u.id)).collect();
-        users.sort_by_key(|o| o.label.to_lowercase());
+        let all = match self.dms.iter().find(|c| c.id == message.channel_id) {
+            Some(dm) => self.dm_choices(dm, select.kind),
+            None => self.server_choices(message, select.kind),
+        };
+        let query = self.component_state.query.to_lowercase();
+        all.into_iter().filter(|o| o.label.to_lowercase().contains(&query)).take(MAX_CHOICES).collect()
+    }
+
+    // In a DM: its recipients and you. Roles and channels belong to servers, so those selects list nobody.
+    fn dm_choices(&self, dm: &Channel, kind: SelectKind) -> Vec<SelectOption> {
+        if !matches!(kind, SelectKind::User | SelectKind::Mentionable) {
+            return Vec::new();
+        }
+        sorted(dm.recipients.iter().chain(self.me.as_ref()).map(|u| choice(&u.name, &u.id)).collect())
+    }
+
+    // GAP: members come from what this server has cached (the member list's, and what a search fetched).
+    fn server_choices(&self, message: &Message, kind: SelectKind) -> Vec<SelectOption> {
+        let Some(guild) = self.select_guild(message) else { return Vec::new() };
+        let users = sorted(self.members.get(&guild.id).into_iter().flat_map(|m| m.values()).map(|u| choice(&u.name, &u.id)).collect());
         // The @everyone role shares the server's id.
         let roles = guild.roles.iter().filter(|r| r.id != guild.id).map(|r| choice(&r.name, &r.id));
         let channels = guild.channels.iter().filter(|c| c.kind != ChannelKind::Category).map(|c| choice(&c.name, &c.id));
-        let all: Vec<SelectOption> = match select.kind {
+        match kind {
             SelectKind::User => users,
             SelectKind::Role => roles.collect(),
             SelectKind::Mentionable => users.into_iter().chain(roles).collect(),
             SelectKind::Channel => channels.collect(),
             SelectKind::String => Vec::new(),
-        };
-        all.into_iter().take(MAX_CHOICES).collect()
+        }
+    }
+
+    fn select_guild(&self, message: &Message) -> Option<&crate::discord::Guild> {
+        let guild_id = message.guild_id.as_ref().or(self.guild_id.as_ref())?;
+        self.guilds.iter().find(|g| &g.id == guild_id)
     }
 
     // Demo scenes: `picks` checked and the select's menu open, once its field has painted.
     #[cfg(debug_assertions)]
-    pub(crate) fn demo_open_select(&mut self, message: Message, custom_id: &str, picks: &[&str], cx: &mut Context<Self>) {
+    pub(crate) fn demo_open_select(&mut self, message: Message, custom_id: &str, picks: &[&str], window: &mut Window, cx: &mut Context<Self>) {
         let Some(select) = find_select(&message.components, custom_id) else { return };
         self.component_state.picks.insert((message.id.clone(), custom_id.to_owned()), picks.iter().map(|p| (*p).to_owned()).collect());
-        self.open_select(message, select, point(px(80.), px(400.)), cx);
+        self.open_select(message, select, point(px(80.), px(400.)), window, cx);
     }
 
     fn pick_option(&mut self, message: &Message, select: &Select, value: &str, cx: &mut Context<Self>) {
@@ -308,29 +390,33 @@ pub(crate) fn message_components(message: &Message, ctx: &Rc<RowContext>, cx: &m
     if message.components.is_empty() {
         return None;
     }
-    let children: Vec<AnyElement> = message.components.iter().enumerate().map(|(i, c)| component(message, c, i.to_string(), ctx, cx)).collect();
-    Some(div().mt(px(8.)).w_full().max_w(px(MAX_WIDTH.min(ctx.column()))).flex().flex_col().gap(px(8.)).children(children).into_any_element())
+    let width = MAX_WIDTH.min(ctx.column());
+    let children: Vec<AnyElement> = message.components.iter().enumerate().map(|(i, c)| component(message, c, i.to_string(), width, ctx, cx)).collect();
+    Some(div().mt(px(8.)).w_full().max_w(px(width)).flex().flex_col().gap(px(8.)).children(children).into_any_element())
 }
 
-// `path` keeps element ids apart: each component's index, from the top level down.
-fn component(message: &Message, c: &Component, path: String, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+// `path` keeps element ids apart: each component's index, from the top level down. `width` is the room
+// it has, which a gallery fills.
+fn component(message: &Message, c: &Component, path: String, width: f32, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     match c {
-        Component::Row(children) => action_row(message, children, &path, ctx, cx),
+        Component::Row(children) => action_row(message, children, &path, width, ctx, cx),
         Component::Button(b) => button(message, b, &path, ctx, cx),
         Component::Select(s) => select_field(message, s, &path, ctx, cx),
-        Component::Section { children, accessory } => section(message, children, accessory.as_deref(), &path, ctx, cx),
-        Component::Text(text) => chat::rich_text(SharedString::from(format!("component-{}-{path}", message.id)), text, ctx),
+        Component::Section { children, accessory } => section(message, children, accessory.as_deref(), &path, width, ctx, cx),
+        Component::Text(text) => chat::rich_text(&format!("component-{}-{path}", message.id), text, ctx, cx),
         Component::Thumbnail { url, .. } => thumbnail(message, url),
-        Component::Gallery(items) => gallery(message, items.iter().map(|i| i.url.as_str()), &path, ctx, cx),
+        Component::Gallery(items) => gallery(message, items, &path, width, ctx, cx),
         Component::File { url, name } => file(message, url, name.as_deref(), cx),
         Component::Separator { divider, large } => separator(*divider, *large, cx),
-        Component::Container { accent, children, .. } => container(message, *accent, children, &path, ctx, cx),
+        Component::Container { accent, spoiler, children } => container(message, *accent, children, &path, width, ctx, cx)
+            .when(*spoiler, |c| c.children(chat::veil(format!("spoiler-{}-{path}", message.id), "Spoiler", ui::all(RADIUS_LG), ctx)))
+            .into_any_element(),
     }
 }
 
 // Up to five buttons, wrapping, or one select; a failed press says so under the row with a retry.
-fn action_row(message: &Message, children: &[Component], path: &str, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
-    let controls: Vec<AnyElement> = children.iter().enumerate().map(|(i, c)| component(message, c, format!("{path}-{i}"), ctx, cx)).collect();
+fn action_row(message: &Message, children: &[Component], path: &str, width: f32, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+    let controls: Vec<AnyElement> = children.iter().enumerate().map(|(i, c)| component(message, c, format!("{path}-{i}"), width, ctx, cx)).collect();
     let failed = children.iter().filter_map(custom_id).find_map(|id| ctx.components.calls.get(&(message.id.clone(), id)).filter(|c| c.failed));
     div()
         .flex()
@@ -376,9 +462,9 @@ fn select_field(message: &Message, s: &Select, path: &str, ctx: &Rc<RowContext>,
         .disabled(s.disabled || message.state != SendState::Sent)
         .when(picked.is_none(), |f| f.text_color(palette::faint(cx)))
         .when(busy, |f| f.loading(Some(shown)))
-        .on_click(move |event, _, cx| {
+        .on_click(move |event, window, cx| {
             cx.stop_propagation();
-            this.update(cx, |this, cx| this.open_select(m.clone(), select.clone(), event.position(), cx)).ok();
+            this.update(cx, |this, cx| this.open_select(m.clone(), select.clone(), event.position(), window, cx)).ok();
         });
     div().relative().w_full().child(gpui_kit::canvas(move |b, _, _| {
             anchors.borrow_mut().insert(anchor_key.clone(), b);
@@ -397,9 +483,9 @@ fn picked_labels(s: &Select, picks: Option<&Vec<String>>, ctx: &RowContext) -> O
 }
 
 // Text on the left; a thumbnail or a button beside it on the right.
-fn section(message: &Message, children: &[Component], accessory: Option<&Component>, path: &str, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
-    let text: Vec<AnyElement> = children.iter().enumerate().map(|(i, c)| component(message, c, format!("{path}-{i}"), ctx, cx)).collect();
-    let accessory = accessory.map(|a| component(message, a, format!("{path}-a"), ctx, cx));
+fn section(message: &Message, children: &[Component], accessory: Option<&Component>, path: &str, width: f32, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+    let text: Vec<AnyElement> = children.iter().enumerate().map(|(i, c)| component(message, c, format!("{path}-{i}"), width, ctx, cx)).collect();
+    let accessory = accessory.map(|a| component(message, a, format!("{path}-a"), width, ctx, cx));
     div()
         .flex()
         .items_start()
@@ -413,13 +499,12 @@ fn thumbnail(message: &Message, url: &str) -> AnyElement {
     ui::media(resolve(message, url), ui::all(RADIUS_MD)).size(px(THUMBNAIL)).flex_none().object_fit(gpui_kit::ObjectFit::Cover).into_any_element()
 }
 
-// The feed's media grid, over the gallery's items.
-// GAP: clicking an item opens the viewer, which pages through the feed's media; a gallery's own items
-// aren't among them, so it may not find the one clicked.
-fn gallery<'a>(message: &Message, urls: impl Iterator<Item = &'a str>, path: &str, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
-    let media = urls.map(|url| Media { url: resolve(message, url), width: GALLERY_ITEM.0, height: GALLERY_ITEM.1, kind: MediaKind::Image }).collect();
-    let items = Message { id: format!("{}-gallery-{path}", message.id), channel_id: message.channel_id.clone(), media, ..Default::default() };
-    chat::media_grid(&items, ctx, cx).unwrap_or_else(|| div().into_any_element())
+// The feed's media grid over the gallery's items, `width` wide; the viewer pages through these alone.
+fn gallery(message: &Message, items: &[GalleryItem], path: &str, width: f32, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+    let media = items.iter().map(|i| Media { url: resolve(message, &i.url), width: GALLERY_ITEM.0, height: GALLERY_ITEM.1, kind: MediaKind::Image }).collect();
+    let spoilers: Vec<bool> = items.iter().map(|i| i.spoiler).collect();
+    let grid = Message { id: format!("{}-gallery-{path}", message.id), channel_id: message.channel_id.clone(), media, ..Default::default() };
+    chat::media_layout(&grid, width, Paging::Gallery { spoilers: &spoilers }, ctx, cx).map_or_else(|| div().into_any_element(), IntoElement::into_any_element)
 }
 
 // The file card, sized from the attachment it points at when the message carries one.
@@ -434,8 +519,7 @@ fn separator(divider: bool, large: bool, cx: &App) -> AnyElement {
 }
 
 // A raised card; the app's accent colour becomes a light tint and a tinted hairline, never a stripe.
-// GAP: a spoiler container shows its content uncovered.
-fn container(message: &Message, accent: Option<u32>, children: &[Component], path: &str, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+fn container(message: &Message, accent: Option<u32>, children: &[Component], path: &str, width: f32, ctx: &Rc<RowContext>, cx: &mut App) -> Div {
     let raised = palette::surface(Level::Raised, cx);
     let (fill, edge) = match accent {
         Some(color) => {
@@ -444,8 +528,9 @@ fn container(message: &Message, accent: Option<u32>, children: &[Component], pat
         }
         None => (raised, palette::line(cx)),
     };
-    let children: Vec<AnyElement> = children.iter().enumerate().map(|(i, c)| component(message, c, format!("{path}-{i}"), ctx, cx)).collect();
-    div().w_full().py(px(14.)).px(px(16.)).flex().flex_col().gap(px(10.)).squircle(RADIUS_LG).bg(fill).border_1().border_color(edge).children(children).into_any_element()
+    let inner = width - 2. * CONTAINER_INSET;
+    let children: Vec<AnyElement> = children.iter().enumerate().map(|(i, c)| component(message, c, format!("{path}-{i}"), inner, ctx, cx)).collect();
+    div().relative().w_full().py(px(14.)).px(px(16.)).flex().flex_col().gap(px(10.)).squircle(RADIUS_LG).bg(fill).border_1().border_color(edge).children(children)
 }
 
 #[cfg(debug_assertions)]
@@ -494,7 +579,13 @@ fn can_finish(count: usize, min: u32) -> bool {
     count >= min as usize
 }
 
+fn sorted(mut options: Vec<SelectOption>) -> Vec<SelectOption> {
+    options.sort_by_key(|o| o.label.to_lowercase());
+    options
+}
+
 fn choice(label: &str, value: &str) -> SelectOption {
+
     SelectOption { label: label.to_owned(), value: value.to_owned(), description: None, emoji: None, default: false }
 }
 

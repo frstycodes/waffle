@@ -1139,6 +1139,13 @@ impl Client {
         self.gateway(json!({ "op": 8, "d": { "guild_id": guild_id, "user_ids": user_ids, "presences": false } }));
     }
 
+    // Members whose username or nickname starts with `query`; they arrive as GUILD_MEMBERS_CHUNK.
+    // Not verified: a user account's op 8 is believed to accept `query` and `limit` as a bot's does.
+    pub fn search_members(&self, guild_id: &str, query: &str, limit: u32) {
+        self.gateway(json!({ "op": 8, "d": { "guild_id": guild_id, "query": query, "limit": limit, "presences": false } }));
+    }
+
+
     /// Oldest first. `before` pages back through history; `around` loads the window a reply jumps to.
     pub async fn messages(&self, channel_id: &str, before: Option<&str>, around: Option<&str>) -> Result<Vec<Message>, String> {
         let mut path = format!("/channels/{channel_id}/messages?limit=50");

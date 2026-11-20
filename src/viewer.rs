@@ -44,10 +44,16 @@ impl Waffle {
         let Some(feed) = self.channel.as_ref().and_then(|c| self.feeds.get(&c.id)) else { return };
         let items: Vec<Media> = feed.messages.iter().flat_map(|m| std::iter::once(m).chain(m.forward.as_deref())).flat_map(|m| m.media.iter().chain(m.embeds.iter().filter(|e| !e.video).flat_map(|e| &e.images)).cloned()).collect();
         let Some(index) = items.iter().position(|m| m.url == url) else { return };
+        self.open_viewer_on(items, index, window, cx);
+    }
+
+    // The viewer at `items[index]`, paging through `items` alone (a Components V2 gallery's own).
+    pub(crate) fn open_viewer_on(&mut self, items: Vec<Media>, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.viewer = Some(Viewer { items, index, from: index, strip: ScrollHandle::new(), reveal: Cell::new(true), loaded: Cell::new(0..0) });
         window.focus(&self.focus, cx);
         cx.notify();
     }
+
 
     pub(crate) fn close_viewer(&mut self, cx: &mut Context<Self>) {
         if let Some(key) = self.viewer.as_ref().and_then(Viewer::video_key) {

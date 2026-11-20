@@ -23,6 +23,8 @@ pub(crate) struct AppModal {
     modal: Modal,
     // One per field, built on the first render: the gateway event that opens the form has no window.
     editors: Vec<Editor>,
+    // Each field's value as the app sent it: once anything differs, a click outside no longer closes it.
+    initial: Vec<String>,
     // What Submit found wrong, field by field; cleared as each is fixed.
     problems: Vec<Option<String>>,
     // The nonce of the last submit: in flight while `interactions` holds it, refused once it's failed.
@@ -62,7 +64,8 @@ impl Waffle {
         self.drop_stand_in(&modal.id, cx);
         self.take_app_modal();
         let problems = vec![None; modal.fields.len()];
-        self.app_modal = Some(AppModal { modal, editors: Vec::new(), problems, sent: None });
+        let initial = modal.fields.iter().map(|f| f.value.clone().unwrap_or_default()).collect();
+        self.app_modal = Some(AppModal { modal, editors: Vec::new(), initial, problems, sent: None });
         cx.notify();
     }
 
@@ -146,6 +149,15 @@ impl Waffle {
         cx.notify();
     }
 
+    // A click outside closes the form only while nothing in it was typed or changed.
+    fn dismiss_app_modal(&mut self, cx: &mut Context<Self>) {
+        let Some(m) = self.app_modal.as_ref() else { return };
+        if app_modal_values(m, cx) != m.initial {
+            return;
+        }
+        self.close_app_modal(cx);
+    }
+
     pub(crate) fn app_modal_overlay(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         self.build_app_modal_editors(window, cx);
         let m = self.app_modal.as_ref()?;
@@ -183,7 +195,7 @@ impl Waffle {
             .children(fields)
             .children(refused.then(|| ui::field_error(format!("{} didn't accept this. Try again.", app.name), cx)))
             .child(footer);
-        let backdrop = div().id("app-modal-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_app_modal(cx)));
+        let backdrop = div().id("app-modal-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.dismiss_app_modal(cx)));
         Some(ui::modal(backdrop, ui::dialog("app-modal", DIALOG_WIDTH, body, window, cx), cx))
     }
 
