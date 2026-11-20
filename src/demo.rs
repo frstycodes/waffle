@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | app-replies | components | components-users | components-v2 | command-picker | command-options | app-modal | app-modal-error | drafts | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | app-replies | components | components-users | components-v2 | command-picker | command-options | command-options-tab | app-modal | app-modal-error | drafts | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -23,6 +23,7 @@ pub fn updating_splash(cx: &mut gpui_kit::App) {
 pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
     // Fixture drafts stay in memory, away from the real drafts file.
     waffle.drafts = crate::drafts::Drafts::default();
+    waffle.command_picker = Default::default();
     let me = me_user();
     match scene {
         "login" => return waffle.status = Status::SignedOut(Login::qr("https://discord.com/ra/demo-fingerprint-0123456789abcdef")),
@@ -283,7 +284,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // The `/` picker with `/pl` typed: Recent first, then each app's matches.
         "command-picker" => {
             waffle.command_picker.set_index("1", demo_commands());
-            waffle.command_picker.record_run(&demo_commands().commands[0]);
+            waffle.command_picker.recent.record(&demo_commands().commands[0]);
             cx.spawn_in(window, async move |this, cx| {
                 cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
                 this.update_in(cx, |this, window, cx| {
@@ -292,26 +293,36 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                         state.set_selected_range(3..3, cx);
                         state.focus(window, cx);
                     });
-                    this.update_command_picker("/pl", cx);
-                    cx.notify();
+                    this.on_composer_change(window, cx);
                 })
                 .ok();
             })
             .detach();
         }
-        // /play picked: its query half typed with Wavebot's suggestions under it, volume added and filled.
-        "command-options" => {
+        // `/play` typed out: the caret in its query, Wavebot's suggestions under it; or, after Tab, the
+        // options still to add.
+        "command-options" | "command-options-tab" => {
             waffle.command_picker.set_index("1", demo_commands());
+            let tab = scene == "command-options-tab";
             cx.spawn_in(window, async move |this, cx| {
                 cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
                 this.update_in(cx, |this, window, cx| {
-                    this.pick_command(0, window, cx);
-                    this.fill_option("volume", "80", window, cx);
-                    this.fill_option("query", "midnight ar", window, cx);
-                    if let Some(filling) = &mut this.command_picker.filling {
-                        filling.set_suggestions(["Midnight Arcade", "Midnight Arcade (Slowed)", "Arcade Midnight Run"].map(|name| crate::app_commands::Choice { name: name.into(), value: serde_json::json!(name) }).to_vec());
+                    let (text, caret) = match tab {
+                        true => ("/play query:Midnight Arcade", 27),
+                        false => ("/play query:midnight ar volume:80", 23),
+                    };
+                    this.composer.update(cx, |state, cx| {
+                        state.set_value(text, window, cx);
+                        state.set_selected_range(caret..caret, cx);
+                        state.focus(window, cx);
+                    });
+                    this.on_composer_change(window, cx);
+                    if tab {
+                        this.on_command_tab(false, window, cx);
+                        return;
                     }
-                    cx.notify();
+                    let songs = ["Midnight Arcade", "Midnight Arcade (Slowed)", "Arcade Midnight Run"];
+                    this.suggest_for_option("query", songs.map(|name| crate::app_commands::Choice { name: name.into(), value: serde_json::json!(name) }).to_vec(), cx);
                 })
                 .ok();
             })
