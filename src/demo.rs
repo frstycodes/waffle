@@ -27,7 +27,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
     let me = me_user();
     match scene {
         "login" => return waffle.status = Status::SignedOut(Login::qr("https://discord.com/ra/demo-fingerprint-0123456789abcdef")),
-        "scanned" => return waffle.status = Status::SignedOut(Login::Scanned(me)),
+        "scanned" => return waffle.status = Status::SignedOut(Login::Scanned(Box::new(me))),
         "failed" => return waffle.status = Status::SignedOut(Login::Failed("Invalid ticket".into())),
         _ => {}
     }
@@ -436,7 +436,9 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // with two picks (`-users`: the user select open, its search field on top).
         "components" | "components-users" => demo_components(waffle, scene == "components-users", window, cx),
         // An accented container with a section (its `-#` subtext), thumbnail, separator and buttons; a gallery
-        // container with a spoilered item and a file of unknown size; a spoiler container.
+        // container with a spoilered item and a file of unknown size; a lone gallery item spanning its
+        // container; a spoiler container.
+
         "components-v2" => demo_components_v2(waffle),
         // The dialog with #📷-media picked and a note; gpui's channel reads only, so it shows locked.
         "forward-dialog" => {
@@ -1989,7 +1991,8 @@ fn demo_components_v2(waffle: &mut Waffle) {
         spoiler: true,
         children: vec![text("## Tonight's winner\nTheo took the crown with 42 points."), Component::Row(vec![button(Secondary, "Rematch", "rematch")])],
     };
-    let post = Message { flags: COMPONENTS_V2, components: vec![now_playing, album, ending], ..app_post("9301", &wavebot, 1, "") };
+    let cover = Component::Container { accent: None, spoiler: false, children: vec![text("**Tonight's poster**"), Component::Gallery(vec![item("4194304", false)])] };
+    let post = Message { flags: COMPONENTS_V2, components: vec![now_playing, album, cover, ending], ..app_post("9301", &wavebot, 1, "") };
 
     append(waffle, vec![post]);
 }

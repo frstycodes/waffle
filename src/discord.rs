@@ -24,6 +24,9 @@ pub struct User {
     // Avatar decoration frame drawn around the avatar.
     pub decoration: Option<String>,
     pub name_style: Option<NameStyle>,
+    // The account's username (`name` is the shown one); empty where Discord didn't send it.
+    #[serde(default)]
+    pub username: String,
 }
 
 // Discord's display-name style: a font, an effect and the effect's colours (0xRRGGBB). Ids are its
@@ -1144,7 +1147,6 @@ impl Client {
     pub fn search_members(&self, guild_id: &str, query: &str, limit: u32) {
         self.gateway(json!({ "op": 8, "d": { "guild_id": guild_id, "query": query, "limit": limit, "presences": false } }));
     }
-
 
     /// Oldest first. `before` pages back through history; `around` loads the window a reply jumps to.
     pub async fn messages(&self, channel_id: &str, before: Option<&str>, around: Option<&str>) -> Result<Vec<Message>, String> {
@@ -2504,7 +2506,9 @@ pub fn parse_user(user: &Value) -> User {
     });
     let decoration = user["avatar_decoration_data"]["asset"].as_str().map(|asset| format!("{CDN}/avatar-decoration-presets/{asset}.png?size=96&passthrough=false"));
     let name_style = parse_name_style(&user["display_name_styles"]);
-    User { id, name, avatar, bot: user["bot"].as_bool().unwrap_or(false), tag, nameplate, decoration, name_style }
+    let username = user["username"].as_str().unwrap_or_default().to_owned();
+    User { id, name, avatar, bot: user["bot"].as_bool().unwrap_or(false), tag, nameplate, decoration, name_style, username }
+
 }
 
 /// An image as Discord's media proxy scales it: `width` x `height` (logical pixels, drawn at up to 2x

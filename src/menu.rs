@@ -590,6 +590,9 @@ impl Waffle {
                 .occlude()
                 .track_focus(&menu.focus)
                 .on_key_down(cx.listener(Self::on_menu_key))
+                // Before a focused search field's own Escape, which may keep the key for itself.
+                .capture_action(cx.listener(|this, _: &gpui_kit::component::input::Escape, window, cx| this.shut_menu(window, cx)))
+
                 .on_mouse_move(cx.listener(|this, e: &gpui_kit::MouseMoveEvent, _, cx| this.track_menu_pointer(e.position, cx)))
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.shut_menu(window, cx)))
                 .on_mouse_down(MouseButton::Right, cx.listener(|this, _, window, cx| this.shut_menu(window, cx)))

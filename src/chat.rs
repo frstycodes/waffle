@@ -43,6 +43,9 @@ const BODY_TEXT: f32 = 16.;
 const SUBTEXT: f32 = 13.;
 const EMBED_TEXT: f32 = 14.;
 const GALLERY_GAP: f32 = 4.;
+// A Components V2 gallery's lone item spans its container, up to this tall.
+const GALLERY_MAX_H: f32 = 360.;
+
 const AVATAR: f32 = 40.;
 // The avatar column plus the gap to the content column: where replies and continuations line up.
 pub(crate) const CONTENT_INSET: f32 = AVATAR + 16.;
@@ -1849,12 +1852,16 @@ pub(crate) fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) 
     media_layout(message, ctx.column.min(COLUMN), Paging::Feed, ctx, cx).map(|grid| grid.mt(px(8.)).into_any_element())
 }
 
-// Media at its own shape: one alone fits 400×320; several tile `width` (2 side by side, 3 one tall and
-// two stacked, 4 two by two, 5 or more two over three with the last counting the rest).
+// Media at its own shape: one alone fits 400×320 in the feed and spans a gallery's `width` up to
+// 360 tall; several tile `width` (2 side by side, 3 one tall and two stacked, 4 two by two, 5 or more
+// two over three with the last counting the rest).
 pub(crate) fn media_layout(message: &Message, width: f32, paging: Paging, ctx: &Rc<RowContext>, cx: &mut App) -> Option<Div> {
     let first = message.media.first()?;
     if message.media.len() == 1 {
-        let scale = (MAX_IMAGE.0.min(width) / first.width).min(MAX_IMAGE.1 / first.height).min(1.);
+        let scale = match paging {
+            Paging::Feed => (MAX_IMAGE.0.min(width) / first.width).min(MAX_IMAGE.1 / first.height).min(1.),
+            Paging::Gallery { .. } => (width / first.width).min(GALLERY_MAX_H / first.height),
+        };
         let (w, h) = (first.width * scale, first.height * scale);
         return Some(div().flex_none().w(px(w)).h(px(h)).child(media_tile(message, 0, (w, h), ui::all(RADIUS_LG), paging, ctx, cx)));
     }

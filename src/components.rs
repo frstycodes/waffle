@@ -18,7 +18,7 @@ use crate::{
     Waffle,
     app_commands::{self, Button, ButtonStyle, Component, GalleryItem, Origin, Select, SelectKind, SelectOption},
     chat::{self, Paging, RowContext},
-    discord::{Channel, ChannelKind, Emoji, File, Media, MediaKind, Message, SendState},
+    discord::{Channel, ChannelKind, Emoji, File, Media, MediaKind, Message, SendState, User},
     icons::Glyph,
     interactions::InteractionKind,
     menu::{self, Entry},
@@ -33,6 +33,8 @@ const THUMBNAIL: f32 = 72.;
 const GALLERY_ITEM: (f32, f32) = (400., 225.);
 // Discord lists at most 25 options in a select.
 const MAX_CHOICES: usize = 25;
+// Typing pauses this long before the member search goes out, so a word costs one request.
+const SEARCH_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(250);
 // A container's padding and hairline on each side.
 const CONTAINER_INSET: f32 = 16. + 1.;
 
@@ -52,6 +54,8 @@ pub(crate) struct ComponentState {
     search: Option<Entity<InputState>>,
     query: String,
     search_guild: Option<String>,
+    // Bumped per keystroke: a debounced member search goes out only if no newer one replaced it.
+    search_seq: u64,
 }
 
 type Anchors = Rc<RefCell<HashMap<ControlKey, Bounds<Pixels>>>>;
@@ -142,17 +146,31 @@ impl Waffle {
         input
     }
 
-    // Filters the open menu; in a server, also asks the gateway for members matching what's typed, whose
-    // chunk lands in `members` and so in the menu.
+    // Filters the open menu at once; in a server, a pause in typing also asks the gateway for members
+    // matching it, whose chunk lands in `members` and so in the menu.
     fn search_select(&mut self, query: String, cx: &mut Context<Self>) {
-        let query = query.trim().to_owned();
-        if let (Some(client), Some(guild_id)) = (&self.client, &self.component_state.search_guild)
-            && !query.is_empty()
-        {
-            client.search_members(guild_id, &query, MAX_CHOICES as u32);
-        }
-        self.component_state.query = query;
+        let state = &mut self.component_state;
+        state.query = query.trim().to_owned();
+        state.search_seq += 1;
         cx.notify();
+        if state.query.is_empty() || state.search_guild.is_none() {
+            return;
+        }
+        let seq = state.search_seq;
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(SEARCH_DEBOUNCE).await;
+            this.update(cx, |this, _| this.send_member_search(seq)).ok();
+        })
+        .detach();
+    }
+
+    fn send_member_search(&self, seq: u64) {
+        let state = &self.component_state;
+        let (Some(client), Some(guild_id)) = (&self.client, &state.search_guild) else { return };
+        if seq != state.search_seq || self.menu.is_none() {
+            return;
+        }
+        client.search_members(guild_id, &state.query, MAX_CHOICES as u32);
     }
 
     // Options with their emoji and description, under the search when there is one; a multi-select
@@ -186,8 +204,7 @@ impl Waffle {
             })
             .collect();
         if entries.is_empty() {
-            let empty = if self.component_state.query.is_empty() { "Nothing to pick here" } else { "No matches" };
-            entries.push(menu::item(empty, |_, _, _| {}).disabled().entry());
+            entries.push(menu::item(self.select_empty(message, select), |_, _, _| {}).disabled().entry());
         }
         if let Some(input) = search {
             entries.insert(0, Entry::Search(input));
@@ -211,29 +228,45 @@ impl Waffle {
         if select.kind == SelectKind::String {
             return select.options.clone();
         }
-        let all = match self.dms.iter().find(|c| c.id == message.channel_id) {
+        let all = match self.select_dm(message) {
             Some(dm) => self.dm_choices(dm, select.kind),
             None => self.server_choices(message, select.kind),
         };
         let query = self.component_state.query.to_lowercase();
-        all.into_iter().filter(|o| o.label.to_lowercase().contains(&query)).take(MAX_CHOICES).collect()
+        all.into_iter().filter(|c| c.matches.contains(&query)).take(MAX_CHOICES).map(|c| c.option).collect()
     }
 
-    // In a DM: its recipients and you. Roles and channels belong to servers, so those selects list nobody.
-    fn dm_choices(&self, dm: &Channel, kind: SelectKind) -> Vec<SelectOption> {
-        if !matches!(kind, SelectKind::User | SelectKind::Mentionable) {
-            return Vec::new();
+    // What an empty menu says instead of showing nothing.
+    fn select_empty(&self, message: &Message, select: &Select) -> &'static str {
+        if !self.component_state.query.is_empty() {
+            return "No matches";
         }
-        sorted(dm.recipients.iter().chain(self.me.as_ref()).map(|u| choice(&u.name, &u.id)).collect())
+        if select.kind == SelectKind::Role && self.select_dm(message).is_some() {
+            return "No roles in a DM";
+        }
+        "Nothing to pick here"
+    }
+
+    fn select_dm(&self, message: &Message) -> Option<&Channel> {
+        self.dms.iter().find(|c| c.id == message.channel_id)
+    }
+
+    // In a DM: its recipients and you, or the DM itself as its one channel. It has no roles.
+    fn dm_choices(&self, dm: &Channel, kind: SelectKind) -> Vec<Choice> {
+        match kind {
+            SelectKind::User | SelectKind::Mentionable => sorted(dm.recipients.iter().chain(self.me.as_ref()).map(Choice::member).collect()),
+            SelectKind::Channel => vec![Choice::named(&dm.name, &dm.id)],
+            SelectKind::Role | SelectKind::String => Vec::new(),
+        }
     }
 
     // GAP: members come from what this server has cached (the member list's, and what a search fetched).
-    fn server_choices(&self, message: &Message, kind: SelectKind) -> Vec<SelectOption> {
+    fn server_choices(&self, message: &Message, kind: SelectKind) -> Vec<Choice> {
         let Some(guild) = self.select_guild(message) else { return Vec::new() };
-        let users = sorted(self.members.get(&guild.id).into_iter().flat_map(|m| m.values()).map(|u| choice(&u.name, &u.id)).collect());
+        let users = sorted(self.members.get(&guild.id).into_iter().flat_map(|m| m.values()).map(Choice::member).collect());
         // The @everyone role shares the server's id.
-        let roles = guild.roles.iter().filter(|r| r.id != guild.id).map(|r| choice(&r.name, &r.id));
-        let channels = guild.channels.iter().filter(|c| c.kind != ChannelKind::Category).map(|c| choice(&c.name, &c.id));
+        let roles = guild.roles.iter().filter(|r| r.id != guild.id).map(|r| Choice::named(&r.name, &r.id));
+        let channels = guild.channels.iter().filter(|c| c.kind != ChannelKind::Category).map(|c| Choice::named(&c.name, &c.id));
         match kind {
             SelectKind::User => users,
             SelectKind::Role => roles.collect(),
@@ -579,10 +612,28 @@ fn can_finish(count: usize, min: u32) -> bool {
     count >= min as usize
 }
 
-fn sorted(mut options: Vec<SelectOption>) -> Vec<SelectOption> {
-    options.sort_by_key(|o| o.label.to_lowercase());
-    options
+// A user, role or channel option and the lowercase text a search matches it on: its label, and for a
+// member their account username too (a server search matches either, and the label may be a nickname).
+struct Choice {
+    option: SelectOption,
+    matches: String,
 }
+
+impl Choice {
+    fn named(label: &str, value: &str) -> Self {
+        Choice { option: choice(label, value), matches: label.to_lowercase() }
+    }
+
+    fn member(user: &User) -> Self {
+        Choice { option: choice(&user.name, &user.id), matches: format!("{}\n{}", user.name, user.username).to_lowercase() }
+    }
+}
+
+fn sorted(mut choices: Vec<Choice>) -> Vec<Choice> {
+    choices.sort_by_key(|c| c.option.label.to_lowercase());
+    choices
+}
+
 
 fn choice(label: &str, value: &str) -> SelectOption {
 
@@ -642,7 +693,17 @@ mod tests {
     }
 
     #[test]
+    fn members_match_on_their_shown_name_and_username() {
+        let mira = Choice::member(&User { id: "1".into(), name: "Mira (host)".into(), username: "mira_k".into(), ..Default::default() });
+        assert!(mira.matches.contains("host"));
+        assert!(mira.matches.contains("mira_k"));
+        assert!(!mira.matches.contains("theo"));
+        assert_eq!(Choice::named("Moderators", "9").matches, "moderators");
+    }
+
+    #[test]
     fn attachment_urls_resolve_to_the_message_files() {
+
         let message = Message { files: vec![File { name: "log.txt".into(), url: "https://cdn.discordapp.com/attachments/1/2/log.txt?ex=1".into(), size: 3 }], ..Default::default() };
         assert_eq!(resolve(&message, "attachment://log.txt"), message.files[0].url);
         assert_eq!(resolve(&message, "https://x/y.png"), "https://x/y.png");
