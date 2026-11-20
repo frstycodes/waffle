@@ -520,11 +520,17 @@ impl Waffle {
             .children(self.composer_bar(cx))
             .children(self.attachment_tray(cx))
             .child(row);
+        // Enter on a command that can't run yet.
+        let shake = self.command_picker.shake;
+        let card = match shake {
+            0 => card.into_any_element(),
+            n => card.with_animation(("composer-shake", n), Animation::new(crate::motion::SHAKE), |card, t| card.left(px(crate::motion::shake(t)))).into_any_element(),
+        };
         let typers = self.typers();
         let names: Vec<&str> = typers.iter().map(|t| t.name.as_str()).collect();
         // A glass pill just above the composer, out of the flow, so the box never moves when someone types.
         // Out of the way while suggestions are open, which rise over the same spot.
-        let typing = (!names.is_empty() && self.autocomplete.is_none() && !self.command_picker.is_open() && !self.command_filling()).then(|| {
+        let typing = (!names.is_empty() && self.autocomplete.is_none() && !self.command_picker.is_open() && !self.command_typed(cx)).then(|| {
             div().absolute().left(px(28.)).top(px(-28.)).max_w(gpui_kit::relative(0.6)).h(px(24.)).px(px(10.)).flex().items_center().gap(px(8.)).rounded_full()
                 .bg(palette::surface(Level::Raised, cx).opacity(0.72))
                 .backdrop_blur(px(16.))
@@ -555,6 +561,12 @@ impl Waffle {
             .flex()
             .flex_col()
             .capture_key_down(cx.listener(Self::on_composer_key))
+            // The hint bar follows the caret, which moves without a change event.
+            .capture_any_mouse_up(cx.listener(|this, _: &gpui_kit::MouseUpEvent, _, cx| {
+                if this.command_typed(cx) {
+                    cx.notify();
+                }
+            }))
             // Before the text field's own Tab, which indents and would never reach on_composer_key.
             .capture_action(cx.listener(|this, _: &gpui_kit::component::input::IndentInline, window, cx| {
                 if this.on_command_tab(false, window, cx) {
@@ -585,14 +597,8 @@ impl Waffle {
             .child(div().h(px(8.)))
     }
 
-    // The composer's text area, or, with a command picked, its chips with the text area in the active one.
     fn composer_field(&self, ink: Hsla, cx: &mut Context<Self>) -> AnyElement {
-        let field = Textarea::new(&self.composer).appearance(false).with_size(Size::XSmall).text_size(px(15.)).line_height(px(22.)).text_color(ink).token(mention_chip(cx));
-        if self.command_filling() {
-            // 22px of line in a 28px chip.
-            let field = field.py(px(3.)).px(px(0.)).into_any_element();
-            return self.command_chips(field, cx).map(IntoElement::into_any_element).unwrap_or_else(|| div().into_any_element());
-        }
+        let field = Textarea::new(&self.composer).appearance(false).with_size(Size::XSmall).text_size(px(15.)).line_height(px(22.)).text_color(ink).token(composer_chip(cx));
         // XSmall gives the editor 0/4px padding of its own; with these, the design's 4/6.
         div().flex_1().min_w_0().child(field.py(px(4.)).px(px(2.))).into_any_element()
     }
@@ -782,8 +788,12 @@ impl Waffle {
     // Arrows drive the suggestion list (Tab and Enter accept elsewhere); Esc cancels a reply or edit; Up in an empty box edits your last message.
     fn on_composer_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
-        if self.on_command_key(key, window, cx) {
+        if self.on_command_key(key, cx) {
             return cx.stop_propagation();
+        }
+        // The hint bar follows the caret, which moves without a change event.
+        if self.command_typed(cx) {
+            cx.notify();
         }
         if self.autocomplete.is_some() {
             match key {
@@ -1527,10 +1537,24 @@ fn mention_badge(label: SharedString, fill: Hsla, ink: Hsla) -> Div {
     div().px(px(3.)).rounded(px(4.)).bg(fill).text_color(ink).font_weight(FontWeight::MEDIUM).whitespace_nowrap().child(label)
 }
 
-// The composer's mention tokens, in the message badge; the hover fill marks one inside the selection.
-fn mention_chip(cx: &App) -> impl Fn(&gpui_kit::component::input::InlineTokenContext, &mut Window, &mut App) -> Div + 'static {
+// The composer's tokens: mentions in the message badge, a slash command's option names as a quieter
+// chip. The hover fill marks one inside the selection.
+fn composer_chip(cx: &App) -> impl Fn(&gpui_kit::component::input::InlineTokenContext, &mut Window, &mut App) -> Div + 'static {
     let (fill, selected, ink) = (palette::accent_soft(cx), palette::accent().opacity(0.26), palette::accent_ink(cx));
-    move |token, _, _| mention_badge(token.token().label().clone(), if token.is_selected() { selected } else { fill }, ink).h(token.line_height()).flex().items_center()
+    let (key_fill, key_selected, key_ink) = (palette::selected(cx), palette::accent_soft(cx), palette::muted(cx));
+    move |token, _, _| {
+        let label = token.token().label().clone();
+        if crate::command_picker::is_option_token(token.token()) {
+            let fill = if token.is_selected() { key_selected } else { key_fill };
+            return div().h(token.line_height()).flex().items_center().child(option_key(label, fill, key_ink));
+        }
+        mention_badge(label, if token.is_selected() { selected } else { fill }, ink).h(token.line_height()).flex().items_center()
+    }
+}
+
+// An option name in a typed slash command: its value follows as plain text.
+fn option_key(label: SharedString, fill: Hsla, ink: Hsla) -> Div {
+    div().h(px(20.)).mr(px(3.)).px(px(6.)).flex().items_center().rounded(px(4.)).bg(fill).text_color(ink).text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).whitespace_nowrap().child(label)
 }
 
 // Discord markdown with mentions, channel links and code copy buttons; messages and embeds share it.

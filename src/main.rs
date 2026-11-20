@@ -4,7 +4,9 @@
 mod accounts;
 mod app_commands;
 mod app_modal;
+mod command_line;
 mod command_picker;
+mod recent_commands;
 mod components;
 mod interactions;
 mod attachments;
@@ -1022,7 +1024,7 @@ impl Waffle {
             poll_peek: HashSet::new(),
             forward_dialog: None,
             interactions: HashMap::new(),
-            command_picker: Default::default(),
+            command_picker: command_picker::CommandPicker::load(),
             component_state: Default::default(),
             app_modal: None,
             status_flyout: status_menu::Flyout::default(),
@@ -2077,23 +2079,28 @@ impl Waffle {
         let _ = cx;
     }
 
-    fn on_composer(&mut self, state: &Entity<ComposerState>, event: &InputEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_composer(&mut self, _: &Entity<ComposerState>, event: &InputEvent, window: &mut Window, cx: &mut Context<Self>) {
         match event {
-            InputEvent::Change if self.command_filling() => self.on_option_typed(state.read(cx).value().to_string(), cx),
-            InputEvent::Change => {
-                let text = state.read(cx).value();
-                self.has_draft = !text.trim().is_empty() || !self.pending_files.is_empty();
-                self.stash_draft(cx);
-                self.autocomplete = self.suggest(&text);
-                self.update_command_picker(&text, cx);
-                self.send_typing();
-                cx.notify();
-            }
+            InputEvent::Change => self.on_composer_change(window, cx),
             InputEvent::PressEnter { shift: false, .. } if self.on_command_enter(window, cx) => {}
             InputEvent::PressEnter { shift: false, .. } if self.autocomplete.is_some() => self.accept_suggestion(window, cx),
             InputEvent::PressEnter { shift: false, .. } => self.submit(window, cx),
             _ => {}
         }
+    }
+
+    // A slash command typed out gets the hint bar instead of mention suggestions, and sends no typing.
+    fn on_composer_change(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let text = self.composer.read(cx).value();
+        self.has_draft = !text.trim().is_empty() || !self.pending_files.is_empty();
+        self.stash_draft(cx);
+        self.update_command_picker(&text, cx);
+        let command = self.on_command_text(window, cx);
+        self.autocomplete = (!command && !self.command_picker.is_open()).then(|| self.suggest(&text)).flatten();
+        if !command {
+            self.send_typing();
+        }
+        cx.notify();
     }
 
     fn send_typing(&mut self) {

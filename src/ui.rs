@@ -487,12 +487,14 @@ pub fn dm_face(face: &crate::discord::DmFace, size: f32, ring: Hsla) -> AnyEleme
 // An avatar without a photo: the name's initial on a gradient picked from the name. Below 24px it
 // drops the initial.
 pub fn monogram(name: &str, size: f32) -> Div {
-    let hue = name_hue(name);
-    let initial: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
+    monogram_face(name_hue(name), size).rounded_full().when(size >= 24., |d| d.child(initial(name)))
+}
+
+// The monogram's gradient and type at `size`, on `hue`, with no shape or letter yet.
+fn monogram_face(hue: f32, size: f32) -> Div {
     div()
         .size(px(size))
         .flex_none()
-        .rounded_full()
         .bg(linear_gradient(135., linear_color_stop(palette::oklch(0.53, 0.12, hue), 0.), linear_color_stop(palette::oklch(0.41, 0.13, hue + 35.), 1.)))
         .flex()
         .items_center()
@@ -500,7 +502,10 @@ pub fn monogram(name: &str, size: f32) -> Div {
         .text_color(gpui_kit::white())
         .font_weight(FontWeight::SEMIBOLD)
         .text_size(px(size * 0.38))
-        .when(size >= 24., |d| d.child(initial))
+}
+
+fn initial(name: &str) -> String {
+    name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default()
 }
 
 // The design's avatar hue: a stable hash of the name onto the colour wheel.
@@ -599,6 +604,15 @@ pub fn server_tile(icon: Option<&str>, name: &str, size: f32, cx: &App) -> AnyEl
         .justify_center()
         .child(crate::sidebar::initials(name))
         .into_any_element()
+}
+
+// An app's icon as a server tile, or without one its initial on the monogram gradient, hued by `id` so an
+// app keeps its colour whatever it's called.
+pub fn app_tile(icon: Option<&str>, name: &str, id: &str, size: f32, cx: &App) -> AnyElement {
+    if icon.is_some() {
+        return server_tile(icon, name, size, cx);
+    }
+    monogram_face(name_hue(id), size).squircle(size * SERVER_TILE_ROUNDING).child(initial(name)).into_any_element()
 }
 
 // A server tile with `badge` (a channel's kind) on a round mark at its bottom-right, ringed 2px in
