@@ -85,6 +85,8 @@ pub enum Tone {
     Ghost,
     // The destructive step itself.
     Danger,
+    // A confirming step (an app's Success button): the positive fill.
+    Positive,
     // Translucent black over video and images.
     OnMedia,
     // Just the accent ink, underlined on hover: "View all members".

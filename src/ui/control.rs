@@ -477,6 +477,7 @@ fn tone_look(tone: Tone, cx: &App) -> Look {
         Tone::Secondary => (palette::selected(cx), palette::press(cx), palette::press(cx), palette::strong(cx)),
         Tone::Ghost => (clear, palette::hover(cx), palette::press(cx), palette::text(cx)),
         Tone::Danger => (palette::danger(), palette::danger_hover(), palette::danger_hover(), white),
+        Tone::Positive => (palette::success(), palette::success_hover(), palette::success_hover(), white),
         Tone::OnMedia => (gpui_kit::black().opacity(0.6), gpui_kit::black().opacity(0.75), gpui_kit::black().opacity(0.85), white),
         Tone::Link => (clear, clear, clear, palette::accent_ink(cx)),
     };

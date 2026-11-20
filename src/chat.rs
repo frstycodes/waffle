@@ -19,7 +19,7 @@ use gpui_kit::{
 use gpui_motion_kit::core::{Motion, Target};
 
 use crate::{
-    EmojiTarget, Feed, RightPanel, Waffle,
+    EmojiTarget, Feed, RightPanel, Waffle, components,
     discord::{Channel, ChannelKind, Embed, Emoji, MediaKind, Message, NameEffect, NameStyle, Poll, PollAnswer, SendState, User},
     icons::Glyph,
     layout::HEADER_HEIGHT,
@@ -41,7 +41,7 @@ const COLUMN: f32 = 432.;
 const GALLERY_GAP: f32 = 4.;
 const AVATAR: f32 = 40.;
 // The avatar column plus the gap to the content column: where replies and continuations line up.
-const CONTENT_INSET: f32 = AVATAR + 16.;
+pub(crate) const CONTENT_INSET: f32 = AVATAR + 16.;
 // The unread bar's room at the feed's top: 8 above it, its 36, 8 below.
 const UNREAD_BAR_SPACE: f32 = 52.;
 // A reply preview's line, above the message it answers.
@@ -467,6 +467,7 @@ impl Waffle {
             threads: channel.is_some_and(|c| c.kind == ChannelKind::Text && self.can_in(&c.id, crate::discord::perm::CREATE_PUBLIC_THREADS)),
             poll_picks: self.poll_picks.clone(),
             poll_peek: self.poll_peek.clone(),
+            components: self.component_view(),
         })
     }
 
@@ -864,8 +865,17 @@ impl Waffle {
 
 impl RowContext {
     // The name this server shows for someone: their nickname once the member is known.
-    fn name_of(&self, user: &User) -> String {
+    pub(crate) fn name_of(&self, user: &User) -> String {
         self.names.get(&user.id).cloned().unwrap_or_else(|| user.name.clone())
+    }
+
+    // A person, role or channel this row context knows by id.
+    pub(crate) fn name_for_id(&self, id: &str) -> Option<String> {
+        self.names.get(id).or_else(|| self.role_names.get(id)).or_else(|| self.channel_names.get(id)).cloned()
+    }
+
+    pub(crate) fn column(&self) -> f32 {
+        self.column
     }
 
     pub(crate) fn this(&self) -> WeakEntity<Waffle> {
@@ -874,7 +884,7 @@ impl RowContext {
 }
 
 pub(crate) struct RowContext {
-    me: Option<User>,
+    pub(crate) me: Option<User>,
     // Files going out with pending messages, by nonce, and their tile pictures.
     uploads: HashMap<String, crate::UploadJob>,
     previews: HashMap<std::path::PathBuf, Option<std::sync::Arc<gpui_kit::RenderImage>>>,
@@ -915,6 +925,7 @@ pub(crate) struct RowContext {
     column: f32,
     poll_picks: HashMap<String, Vec<u32>>,
     poll_peek: std::collections::HashSet<String>,
+    pub(crate) components: crate::components::ComponentView,
 }
 
 // More than a few rows below the viewport: the feed is scrolled away from its newest message.
@@ -931,7 +942,11 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
     if message.pin_notice {
         return pin_line(message, ctx, cx);
     }
-    let media = media_grid(message, ctx, cx);
+    // A Components V2 message lays out its own media and files.
+    let v2 = message.flags & crate::app_commands::COMPONENTS_V2 != 0;
+    let loading = message.flags & crate::app_commands::LOADING != 0;
+    let ephemeral = components::is_ephemeral(message);
+    let media = media_grid(message, ctx, cx).filter(|_| !v2);
     let group = SharedString::from(format!("msg-{}", message.id));
     let mine = ctx.me.as_ref().is_some_and(|me| me.id == message.author.id);
     let mention = ctx.mentions_me.contains(&message.id);
@@ -963,6 +978,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .text_size(px(16.))
         .text_color(ink)
         .children(content(message, ctx, cx))
+        .when(loading, |b| b.child(components::thinking(message, ctx, cx)))
         .children(message.forward.as_ref().map(|original| forward_card(original, ctx, cx)))
         .children(media.map(|m| div().when(pending, |d| d.opacity(0.6)).child(m)))
         .children(message.stickers.iter().map(|s| div().when(pending, |d| d.opacity(0.6)).child(crate::stickers::in_chat(s, cx))))
@@ -970,10 +986,15 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .children(message.embeds.iter().filter(|_| ctx.embeds).enumerate().map(|(i, e)| embed_card(e, message.reply_to.as_deref(), format!("embed-{}-{i}", message.id), ctx, cx)))
         .children(link_cards(message, ctx, cx))
         .children(message.thread.as_ref().map(|t| thread_card(t, ctx, cx)))
-        .children(files(message, ctx, cx))
+        .when(!v2, |b| b.children(files(message, ctx, cx)))
         .children(upload_cards(message, ctx, cx))
+        .children(components::message_components(message, ctx, cx))
         .children(reactions(message, ctx, cx).filter(|_| ctx.reactions))
-        .when(message.state == SendState::Failed, |b| b.child(send_failure(message, ctx, cx)))
+        .when(message.state == SendState::Failed, |b| match components::is_failed_stand_in(message) {
+            true => b.child(components::stand_in_failure(message, ctx, cx)),
+            false => b.child(send_failure(message, ctx, cx)),
+        })
+        .when(ephemeral, |b| b.child(components::only_you(message, ctx, cx)))
         // Where a jump landed: a squiggle under the message, gone with the flash.
         .when(landed, |b| b.child(div().absolute().left_0().right_0().bottom(px(-6.)).h(px(8.)).child(ui::squiggle(SharedString::from(format!("squiggle-{}", message.id)), message.id.parse().unwrap_or(0), palette::accent_ink(cx), JUMP_FLASH))));
     let row = div()
@@ -988,6 +1009,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .flex()
         .flex_col()
         .line_height(gpui_kit::relative(1.45))
+        .when(ephemeral, |r| r.bg(components::ephemeral_tint(cx)))
         // Mentioning you: the tint and a 2px accent bar down the left edge, square like Discord's.
         // `hovered` too: the toolbar occludes the row, so the row's own `.hover` drops while the pointer is on it.
         .when(mention, |r| r.rounded(px(0.)).bg(rest.unwrap_or(if hovered { mention_hover } else { soft })).hover(move |s| s.bg(rest.unwrap_or(mention_hover))).child(div().absolute().left_0().top_0().bottom_0().w(px(2.)).bg(palette::accent())))
@@ -1015,6 +1037,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .mt(px(12.))
         .pt(px(4.))
         .children(message.reply.as_ref().map(|reply| reply_preview(reply, message.reply_to.clone(), ctx, cx)))
+        .children(components::used_command(message, ctx, cx))
         .child(
             div()
                 .flex()
@@ -1451,6 +1474,11 @@ pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Opti
     )
 }
 
+// Discord markdown outside a message's own content (a Components V2 text block), with its mentions.
+pub(crate) fn rich_text(id: SharedString, text: &str, ctx: &RowContext) -> AnyElement {
+    div().w_full().min_w_0().child(markdown(id, readable(text, ctx), ctx)).into_any_element()
+}
+
 // Mentions, role and channel links draw as badges (messages.css `.at`): accent ink on the soft fill.
 struct MentionBadges {
     this: WeakEntity<Waffle>,
@@ -1741,7 +1769,7 @@ pub(crate) fn animated_image(source: impl Into<gpui_kit::ImageSource>) -> Statef
 
 // Media at its own shape: one alone fits 400×320; several tile the 432px column (2 side by side,
 // 3 one tall and two stacked, 4 two by two, 5 or more two over three with the last counting the rest).
-fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<AnyElement> {
+pub(crate) fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<AnyElement> {
     let first = message.media.first()?;
     if message.media.len() == 1 {
         let scale = (MAX_IMAGE.0.min(ctx.column) / first.width).min(MAX_IMAGE.1 / first.height).min(1.);
@@ -2460,7 +2488,7 @@ fn file_picture(picture: Option<std::sync::Arc<gpui_kit::RenderImage>>, kind: cr
     .into_any_element()
 }
 
-fn file_card(message: &Message, file: &crate::discord::File, cx: &App) -> AnyElement {
+pub(crate) fn file_card(message: &Message, file: &crate::discord::File, cx: &App) -> AnyElement {
     let (strong, faint, muted) = (palette::strong(cx), palette::faint(cx), palette::muted(cx));
     let (open, download) = (file.url.clone(), file.url.clone());
     div()
@@ -2945,7 +2973,9 @@ fn continues(previous: &Message, message: &Message) -> bool {
     let (Ok(a), Ok(b)) = (DateTime::parse_from_rfc3339(&previous.timestamp), DateTime::parse_from_rfc3339(&message.timestamp)) else {
         return false;
     };
-    previous.author.id == message.author.id && (b - a).num_seconds() < GROUP_GAP_SECS
+    // An app's answer to a command keeps its own header and "used /command" line.
+    let answers_command = message.interaction.as_ref().is_some_and(|i| i.command.is_some());
+    previous.author.id == message.author.id && !answers_command && (b - a).num_seconds() < GROUP_GAP_SECS
 }
 
 fn local(timestamp: &str) -> Option<DateTime<Local>> {
