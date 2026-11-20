@@ -17,6 +17,7 @@ use crate::{
     SuggestLead, Waffle,
     app_commands::{self, AppCommand, Choice, CommandIndex, CommandOption, OptionKind, Origin},
     command_line::{self, Arg, ArgValue, Blocked, CommandLine},
+    drafts::CommandPick,
     icons::Glyph,
     interactions::InteractionKind,
     palette::{self, Level},
@@ -53,12 +54,15 @@ pub(crate) struct CommandPicker {
     debounce: Option<Task<()>>,
     // Why the last Enter didn't run, and the text it was about: shown until the text changes.
     blocked: Option<(SharedString, String)>,
-    // Choices picked by label whose value differs: (option, label, value).
-    picked: Vec<(String, String, Value)>,
+    // Choices picked by label, kept with the draft.
+    picked: Vec<CommandPick>,
     // Esc hid the hint bar; the next edit brings it back.
     hidden: bool,
     // The options that had a key at the last edit. Only a new key becomes a chip, so undoing a chip sticks.
     keyed: Vec<usize>,
+    // The composer's selection as last seen, and the option the caret was in then.
+    selection: Range<usize>,
+    focused: Option<usize>,
     // Bumped by each Enter that can't run: the composer shakes once per bump.
     pub(crate) shake: usize,
 }
@@ -77,7 +81,15 @@ impl CommandPicker {
     pub(crate) fn reset(&mut self) {
         self.open = false;
         self.dismissed = false;
+        self.preferred = None;
         self.forget_typing();
+    }
+
+    /// A restored draft's command: the one picked from the list, and the choices picked for its options.
+    pub(crate) fn restore(&mut self, command: Option<String>, picks: Vec<CommandPick>) {
+        self.reset();
+        self.preferred = command;
+        self.picked = picks;
     }
 
     // The composer stopped being a command, or ran one.
@@ -140,14 +152,14 @@ impl Typed {
     }
 
     // A mention chip filling the value sends its id; a picked choice still showing its label sends its value.
-    fn value(&self, arg: &Arg, picked: &[(String, String, Value)]) -> ArgValue {
+    fn value(&self, arg: &Arg, picked: &[CommandPick]) -> ArgValue {
         let mention = self.content.tokens().iter().find(|t| t.range() == arg.value && !is_option_token(t.token()));
         if let Some(mention) = mention {
             return ArgValue { text: command_line::mention_id(mention.token().id()).to_owned(), picked: None };
         }
         let text = self.text()[arg.value.clone()].to_owned();
         let name = &self.option(arg).name;
-        let picked = picked.iter().find(|(o, label, _)| o == name && *label == text).map(|(_, _, v)| v.clone());
+        let picked = picked.iter().find(|p| p.option == *name && p.label == text).map(|p| p.value.clone());
         ArgValue { text, picked }
     }
 
@@ -393,6 +405,40 @@ impl Waffle {
         self.typed_command(cx).is_some()
     }
 
+    /// A restored draft's command; a `/` draft also needs the index to read it as one.
+    pub(crate) fn restore_command(&mut self, command: Option<String>, picks: Vec<CommandPick>, cx: &mut Context<Self>) {
+        self.command_picker.restore(command, picks);
+        if self.composer.read(cx).value().starts_with('/') {
+            self.ensure_command_index(cx);
+        }
+    }
+
+    /// What a draft keeps of the command typed into it, if it is one.
+    pub(crate) fn command_draft(&self, cx: &App) -> (Option<String>, Vec<CommandPick>) {
+        if !self.command_typed(cx) {
+            return (None, Vec::new());
+        }
+        (self.command_picker.preferred.clone(), self.command_picker.picked.clone())
+    }
+
+    /// The caret or selection moved, typing or not: the hint bar and the boxes follow it, and an
+    /// autocomplete option it lands in asks its app for choices.
+    pub(crate) fn on_composer_selection(&mut self, cx: &mut Context<Self>) {
+        let selection = self.composer.read(cx).selected_range();
+        if self.command_picker.selection == selection {
+            return;
+        }
+        self.command_picker.selection = selection;
+        let Some(typed) = self.typed_command(cx) else { return };
+        let focused = typed.arg().map(|(_, a)| a.option);
+        if self.command_picker.focused != focused {
+            self.command_picker.focused = focused;
+            self.command_picker.highlighted = 0;
+            self.schedule_autocomplete(cx);
+        }
+        cx.notify();
+    }
+
     /// The composer's text changed: false when it isn't a command. A command's option keys become chips,
     /// and an autocomplete option asks its app again.
     pub(crate) fn on_command_text(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
@@ -504,9 +550,9 @@ impl Waffle {
         let name = typed.option(arg).name.clone();
         let range = arg.key.end..arg.value.end.max(arg.key.end);
         let picked = &mut self.command_picker.picked;
-        picked.retain(|(o, _, _)| *o != name);
+        picked.retain(|p| p.option != name);
         if choice.token.is_none() {
-            picked.push((name, choice.label.clone(), choice.value));
+            picked.push(CommandPick { option: name, label: choice.label.clone(), value: choice.value });
         }
         self.composer.update(cx, |state, cx| {
             state.set_selected_range(range, cx);
@@ -638,7 +684,6 @@ impl Waffle {
         self.command_picker.recent.record(&command);
         self.interact(nonce, app, InteractionKind::Command, body, cx);
         self.command_picker.reset();
-        self.command_picker.preferred = None;
         self.composer.update(cx, |state, cx| state.set_value("", window, cx));
         self.has_draft = !self.pending_files.is_empty();
         self.drafts.clear(&channel_id);
@@ -931,6 +976,86 @@ impl Waffle {
             .child(div().flex_1().min_w_0().truncate().text_color(palette::strong(cx)).child(choice.label))
             .on_click(cx.listener(move |this, _, window, cx| this.pick_choice(i, window, cx)))
     }
+}
+
+// OPTION BOXES
+
+/// The transparent space an option's name chip leaves before itself, so neighbouring boxes don't touch.
+pub(crate) const OPTION_GAP: f32 = 8.;
+// How far a box runs past its value's last glyph, into the space before the next option.
+const VALUE_PAD: f32 = 5.;
+// An empty value still shows room to type in.
+const EMPTY_VALUE: f32 = 10.;
+const BOX_RADIUS: f32 = 6.;
+
+// One option drawn as a box: its name chip, then its value, as byte offsets into the composer's text.
+struct OptionBox {
+    start: usize,
+    key_end: usize,
+    value_end: usize,
+    active: bool,
+    invalid: bool,
+}
+
+impl Waffle {
+    /// Each typed option's box, drawn over the composer's text after it lays out: the text field can't
+    /// border a text range itself, so this reads where its range landed and strokes around it.
+    pub(crate) fn option_boxes(&self, cx: &App) -> Option<impl IntoElement + use<>> {
+        let typed = self.typed_command(cx)?;
+        let active = typed.naming(self.command_picker.naming).is_none().then(|| typed.line.arg_at(typed.caret)).flatten();
+        let picked = &self.command_picker.picked;
+        let boxes: Vec<OptionBox> = typed
+            .line
+            .args
+            .iter()
+            .enumerate()
+            .map(|(n, arg)| {
+                let invalid = !arg.value.is_empty() && command_line::resolve(typed.option(arg), &typed.value(arg, picked)).is_err();
+                OptionBox { start: arg.key.start, key_end: arg.key.end, value_end: arg.value.end.max(arg.key.end), active: active == Some(n), invalid }
+            })
+            .collect();
+        let composer = self.composer.clone();
+        let (line, accent, ring, danger) = (palette::line_strong(cx), palette::accent_ink(cx), palette::accent_soft(cx), palette::danger_ink(cx));
+        let paint = move |bounds: gpui_kit::Bounds<gpui_kit::Pixels>, _: (), window: &mut Window, cx: &mut App| {
+            let state = composer.read(cx);
+            let at = |offset: usize| state.range_to_bounds(&(offset..offset));
+            window.with_content_mask(Some(gpui_kit::ContentMask { bounds }), |window| {
+                for b in &boxes {
+                    let (Some(start), Some(key_end), Some(end)) = (at(b.start), at(b.key_end), at(b.value_end)) else { continue };
+                    let right = if b.value_end == b.key_end { key_end.left() + px(EMPTY_VALUE) } else { end.left() + px(VALUE_PAD) };
+                    let edge = if b.invalid { danger } else if b.active { accent } else { line };
+                    for rect in box_rows(start, right, end, bounds) {
+                        if b.active {
+                            window.paint_quad(gpui_kit::quad(rect.dilate(px(3.)), gpui_kit::Corners::all(px(BOX_RADIUS + 3.)), gpui_kit::transparent_black(), px(3.), ring, gpui_kit::BorderStyle::Solid));
+                        }
+                        window.paint_quad(gpui_kit::quad(rect, gpui_kit::Corners::all(px(BOX_RADIUS)), gpui_kit::transparent_black(), px(1.), edge, gpui_kit::BorderStyle::Solid));
+                    }
+                }
+            });
+        };
+        Some(gpui_kit::canvas(|_, _, _| {}, paint).absolute().inset_0())
+    }
+}
+
+// An option's box, one rectangle per line it wraps across, a pixel outside its line so the border clears
+// the name chip, which starts `OPTION_GAP` into its token.
+fn box_rows(start: gpui_kit::Bounds<gpui_kit::Pixels>, right: gpui_kit::Pixels, end: gpui_kit::Bounds<gpui_kit::Pixels>, clip: gpui_kit::Bounds<gpui_kit::Pixels>) -> Vec<gpui_kit::Bounds<gpui_kit::Pixels>> {
+    let row = |left: gpui_kit::Pixels, right: gpui_kit::Pixels, top: gpui_kit::Pixels, height: gpui_kit::Pixels| {
+        gpui_kit::Bounds::from_corners(point(left - px(1.), top - px(1.)), point(right, top + height + px(1.)))
+    };
+    let left = start.left() + px(OPTION_GAP);
+    let height = start.size.height;
+    if (end.top() - start.top()).abs() < height / 2. {
+        return vec![row(left, right, start.top(), height)];
+    }
+    let mut rows = vec![row(left, clip.right(), start.top(), height)];
+    let mut top = start.top() + height;
+    while top + height / 2. < end.top() {
+        rows.push(row(clip.left(), clip.right(), top, height));
+        top += height;
+    }
+    rows.push(row(clip.left(), right, end.top(), height));
+    rows
 }
 
 fn required_mark(cx: &App) -> Div {

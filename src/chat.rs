@@ -568,12 +568,6 @@ impl Waffle {
             .flex()
             .flex_col()
             .capture_key_down(cx.listener(Self::on_composer_key))
-            // The hint bar follows the caret, which moves without a change event.
-            .capture_any_mouse_up(cx.listener(|this, _: &gpui_kit::MouseUpEvent, _, cx| {
-                if this.command_typed(cx) {
-                    cx.notify();
-                }
-            }))
             // Before the text field's own Tab, which indents and would never reach on_composer_key.
             .capture_action(cx.listener(|this, _: &gpui_kit::component::input::IndentInline, window, cx| {
                 if this.on_command_tab(false, window, cx) {
@@ -607,7 +601,8 @@ impl Waffle {
     fn composer_field(&self, ink: Hsla, cx: &mut Context<Self>) -> AnyElement {
         let field = Textarea::new(&self.composer).appearance(false).with_size(Size::XSmall).text_size(px(15.)).line_height(px(22.)).text_color(ink).token(composer_chip(cx));
         // XSmall gives the editor 0/4px padding of its own; with these, the design's 4/6.
-        div().flex_1().min_w_0().child(field.py(px(4.)).px(px(2.))).into_any_element()
+        // The option boxes paint after the field: they read where its text landed this frame.
+        div().relative().flex_1().min_w_0().child(field.py(px(4.)).px(px(2.))).children(self.option_boxes(cx)).into_any_element()
     }
 
     // A mention badge's click: a person's profile beside it, or the channel it names.
@@ -797,10 +792,6 @@ impl Waffle {
         let key = event.keystroke.key.as_str();
         if self.on_command_key(key, cx) {
             return cx.stop_propagation();
-        }
-        // The hint bar follows the caret, which moves without a change event.
-        if self.command_typed(cx) {
-            cx.notify();
         }
         if self.autocomplete.is_some() {
             match key {
@@ -1567,15 +1558,17 @@ fn composer_chip(cx: &App) -> impl Fn(&gpui_kit::component::input::InlineTokenCo
         let label = token.token().label().clone();
         if crate::command_picker::is_option_token(token.token()) {
             let fill = if token.is_selected() { key_selected } else { key_fill };
-            return div().h(token.line_height()).flex().items_center().child(option_key(label, fill, key_ink));
+            return option_key(label, token.line_height(), fill, key_ink);
         }
         mention_badge(label, if token.is_selected() { selected } else { fill }, ink).h(token.line_height()).flex().items_center()
     }
 }
 
-// An option name in a typed slash command: its value follows as plain text.
-fn option_key(label: SharedString, fill: Hsla, ink: Hsla) -> Div {
-    div().h(px(20.)).mr(px(3.)).px(px(6.)).flex().items_center().rounded(px(4.)).bg(fill).text_color(ink).text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).whitespace_nowrap().child(label)
+// An option name in a typed slash command: the muted left segment of the option's box, which
+// `Waffle::option_boxes` strokes around it and the value typed after it.
+fn option_key(label: SharedString, height: Pixels, fill: Hsla, ink: Hsla) -> Div {
+    let key = div().h_full().px(px(7.)).flex().items_center().rounded_l(px(5.)).bg(fill).text_color(ink).text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).whitespace_nowrap().child(label);
+    div().h(height).pl(px(crate::command_picker::OPTION_GAP)).pr(px(5.)).flex().child(key)
 }
 
 // Discord markdown with mentions, channel links and code copy buttons; messages and embeds share it.
