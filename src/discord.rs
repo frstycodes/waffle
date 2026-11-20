@@ -741,6 +741,9 @@ pub struct Message {
     // Discord's message flags: `app_commands::EPHEMERAL`, `LOADING` (the app is thinking), `COMPONENTS_V2`.
     #[serde(default)]
     pub flags: u64,
+    // The app that sent it (or whose interaction it answers); `None` from a person.
+    #[serde(default)]
+    pub application_id: Option<String>,
 }
 
 /// A live poll as a message carries it, its counts folded into the answers.
@@ -2426,6 +2429,7 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         interaction: crate::app_commands::parse_interaction(m),
         components: crate::app_commands::parse_components(&m["components"]),
         flags: m["flags"].as_u64().unwrap_or(0),
+        application_id: m["application_id"].as_str().map(str::to_owned),
     })
 }
 

@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | app-replies | components | components-v2 | drafts | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -375,6 +375,12 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // and an expired code, a message you can't see (no card), and two still loading.
         "link-previews" => demo_link_previews(waffle),
         "forwarded" => demo_forwarded(waffle),
+        // An app thinking, its reply, an ephemeral reply and a command it never answered.
+        "app-replies" => demo_app_replies(waffle),
+        // Every button style (one disabled, one spinning, one failed) and a multi-select open with two picks.
+        "components" => demo_components(waffle, window, cx),
+        // An accented container with a section, thumbnail, separator and buttons; a gallery container.
+        "components-v2" => demo_components_v2(waffle),
         // The dialog with #📷-media picked and a note; gpui's channel reads only, so it shows locked.
         "forward-dialog" => {
             if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "2") {
@@ -1737,4 +1743,126 @@ fn reactors(count: usize) -> Vec<Reactor> {
         ("31000010", "mikey", "mickeeeyyyyyy"),
     ];
     people.iter().take(count).map(|&(id, name, username)| Reactor { user: user(id, name), username: username.into() }).collect()
+}
+
+fn app_user(id: &str, name: &str) -> User {
+    User { bot: true, ..user(id, name) }
+}
+
+fn app_post(id: &str, author: &User, minutes_ago: i64, content: &str) -> Message {
+    Message {
+        id: id.into(),
+        channel_id: "general".into(),
+        guild_id: Some("1".into()),
+        author: author.clone(),
+        content: content.into(),
+        timestamp: (chrono::Utc::now() - chrono::Duration::minutes(minutes_ago)).to_rfc3339(),
+        application_id: Some(author.id.clone()),
+        ..Default::default()
+    }
+}
+
+fn used(by: &User, command: &str) -> Option<crate::app_commands::InteractionMeta> {
+    Some(crate::app_commands::InteractionMeta { id: format!("demo-{command}"), user: by.clone(), command: Some(command.into()) })
+}
+
+fn append(waffle: &mut Waffle, posts: Vec<Message>) {
+    let Some(feed) = waffle.feeds.get_mut("general") else { return };
+    let mut messages = feed.messages.as_ref().clone();
+    messages.extend(posts);
+    feed.messages = std::sync::Arc::new(messages);
+    waffle.list.reset(waffle.feeds.get("general").map_or(0, |f| f.messages.len()));
+}
+
+// An interaction as `Waffle::interact` leaves it: in flight, or failed when `failed`.
+fn pending(app: &User, kind: crate::interactions::InteractionKind, failed: bool) -> crate::interactions::PendingInteraction {
+    let app = crate::app_commands::App { id: app.id.clone(), name: app.name.clone(), icon: Some(app.avatar.clone()) };
+    crate::interactions::PendingInteraction { channel_id: "general".into(), app, id: None, kind, body: serde_json::json!({ "channel_id": "general" }), failed }
+}
+
+fn demo_app_replies(waffle: &mut Waffle) {
+    use crate::{app_commands::{EPHEMERAL, LOADING}, discord::SendState, interactions::InteractionKind};
+    let (wavebot, quizzy, mira, me) = (app_user("900001", "Wavebot"), app_user("900002", "Quizzy"), user("31000020", "Mira"), me_user());
+    let thinking = Message { id: "pending-demo-think".into(), nonce: Some("demo-think".into()), state: SendState::Sending, flags: LOADING, interaction: used(&mira, "play"), ..app_post("", &wavebot, 4, "") };
+    let reply = Message { interaction: used(&mira, "queue"), ..app_post("9101", &wavebot, 3, "Now playing **Midnight Arcade** by Neon Harbor in **Lounge**. 3 songs in the queue.") };
+    let only_you = Message { interaction: used(&me, "play"), flags: EPHEMERAL, ..app_post("9102", &wavebot, 2, "Join a voice channel first, then try /play again.") };
+    let failed = Message { id: "pending-demo-fail".into(), nonce: Some("demo-fail".into()), state: SendState::Failed, interaction: used(&me, "trivia"), ..app_post("", &quizzy, 1, "") };
+    waffle.interactions.insert("demo-think".into(), pending(&wavebot, InteractionKind::Command, false));
+    waffle.interactions.insert("demo-fail".into(), pending(&quizzy, InteractionKind::Command, true));
+    append(waffle, vec![thinking, reply, only_you, failed]);
+}
+
+fn button(style: crate::app_commands::ButtonStyle, label: &str, custom_id: &str) -> crate::app_commands::Component {
+    let url = (style == crate::app_commands::ButtonStyle::Link).then(|| "https://example.com/rules".to_owned());
+    let custom_id = url.is_none().then(|| custom_id.to_owned());
+    crate::app_commands::Component::Button(crate::app_commands::Button { style, label: Some(label.into()), emoji: None, custom_id, url, disabled: false })
+}
+
+fn demo_components(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<Waffle>) {
+    use crate::{
+        app_commands::{Button, ButtonStyle::*, Component, Select, SelectKind, SelectOption},
+        interactions::InteractionKind,
+    };
+    let (pollster, quizzy) = (app_user("900003", "Pollster"), app_user("900002", "Quizzy"));
+    let results = Component::Button(Button { style: Secondary, label: Some("Results (after vote)".into()), emoji: None, custom_id: Some("results".into()), url: None, disabled: true });
+    let shop = Component::Button(Button { style: Premium, label: Some("Map pack".into()), emoji: Some("🗺️".into()), custom_id: Some("shop".into()), url: None, disabled: false });
+    let vote = Message {
+        components: vec![
+            Component::Row(vec![button(Primary, "Vote Ashen Peaks", "ashen"), button(Secondary, "Drowned Harbor", "harbor"), button(Success, "Ready", "ready"), button(Danger, "Leave lobby", "leave"), button(Link, "Rules", "")]),
+            Component::Row(vec![results, button(Secondary, "Checking…", "check"), shop]),
+            Component::Row(vec![button(Secondary, "Shuffle teams", "shuffle")]),
+        ],
+        ..app_post("9201", &pollster, 3, "Map vote for tonight's scrim is open.")
+    };
+    let option = |emoji: &str, label: &str, value: &str, description: Option<&str>| SelectOption { label: label.into(), value: value.into(), description: description.map(Into::into), emoji: Some(emoji.into()), default: false };
+    let categories = Select {
+        kind: SelectKind::String,
+        custom_id: "categories".into(),
+        placeholder: Some("Choose up to 3 categories".into()),
+        options: vec![option("🎮", "Games", "games", Some("Consoles, PC, retro")), option("🎬", "Movies", "movies", Some("Since 1990")), option("🎵", "Music", "music", None), option("🌍", "Geography", "geography", None)],
+        min: 1,
+        max: 3,
+        disabled: false,
+    };
+    let quiz = Message { components: vec![Component::Row(vec![Component::Select(categories)])], ..app_post("9202", &quizzy, 1, "Pick the categories for this round.") };
+    let call = |custom_id: &str| InteractionKind::Component { message_id: "9201".into(), custom_id: custom_id.into() };
+    waffle.interactions.insert("demo-check".into(), pending(&pollster, call("check"), false));
+    waffle.interactions.insert("demo-shuffle".into(), pending(&pollster, call("shuffle"), true));
+    append(waffle, vec![vote, quiz.clone()]);
+    // Once the field has painted, so the menu opens under it.
+    cx.spawn_in(window, async move |this, cx| {
+        cx.background_executor().timer(std::time::Duration::from_millis(600)).await;
+        this.update(cx, |this, cx| this.demo_open_select(quiz, "categories", &["games", "music"], cx)).ok();
+    })
+    .detach();
+}
+
+fn demo_components_v2(waffle: &mut Waffle) {
+    use crate::app_commands::{ButtonStyle::*, COMPONENTS_V2, Component, GalleryItem};
+    let wavebot = app_user("900001", "Wavebot");
+    let text = |t: &str| Component::Text(t.into());
+    let now_playing = Component::Container {
+        accent: Some(0x5865F2),
+        spoiler: false,
+        children: vec![
+            Component::Section {
+                children: vec![text("### Midnight Arcade\nNeon Harbor · 3:41 · requested by Mira\n-# Up next: Glass Desert, Ferris Wheel at Dawn")],
+                accessory: Some(Box::new(Component::Thumbnail { url: avatar_url("3", None), description: None })),
+            },
+            Component::Separator { divider: true, large: false },
+            Component::Row(vec![button(Secondary, "Pause", "pause"), button(Secondary, "Skip", "skip"), button(Secondary, "Shuffle", "shuffle"), button(Danger, "Stop", "stop")]),
+        ],
+    };
+    let item = |id: &str| GalleryItem { url: avatar_url(id, None), description: None, spoiler: false };
+    let album = Component::Container {
+        accent: None,
+        spoiler: false,
+        children: vec![
+            Component::Section { children: vec![text("**Screenshots from tonight**\n3 images · uploaded by Theo")], accessory: Some(Box::new(button(Secondary, "Open album", "album"))) },
+            Component::Separator { divider: false, large: true },
+            Component::Gallery(vec![item("3"), item("8388608"), item("12582912")]),
+        ],
+    };
+    let post = Message { flags: COMPONENTS_V2, components: vec![now_playing, album], ..app_post("9301", &wavebot, 1, "") };
+    append(waffle, vec![post]);
 }
