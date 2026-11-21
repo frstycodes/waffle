@@ -1082,7 +1082,8 @@ pub enum Event {
     Presence { user_id: String, presence: Presence },
     MemberList { guild_id: String, groups: Vec<(String, u32)>, ops: Vec<ListOp> },
     MembersChunk { guild_id: String, members: Vec<(User, Vec<String>)> },
-    Ack { channel_id: String, message_id: u64 },
+    // `manual`: Mark Unread from any of our devices, carrying the mention count after `message_id`.
+    Ack { channel_id: String, message_id: u64, manual: Option<u32> },
     // With the session it belongs to: ours, or another client of ours.
     VoiceState(VoiceState, Option<String>),
     // A DM or group call started or changed; `ringing` is who it rings now.
@@ -1319,6 +1320,18 @@ impl Client {
     pub async fn ack(&self, channel_id: &str, message_id: &str) {
         let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages/{message_id}/ack")).json(&json!({ "token": null }));
         let _ = self.run(req).await;
+    }
+
+    /// Discord's Mark Unread: acks `ack_id`, just before the message marked, with the mentions after it.
+    /// The gateway echoes it to every device as a manual MESSAGE_ACK.
+    pub async fn ack_manual(&self, channel_id: &str, ack_id: u64, mention_count: u32) {
+        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages/{ack_id}/ack")).json(&json!({ "manual": true, "mention_count": mention_count }));
+        let _ = self.run(req).await;
+    }
+
+    /// Clears one mention from Recent Mentions on every device; the channel's read state stays.
+    pub async fn delete_mention(&self, message_id: &str) -> Result<(), String> {
+        self.run(self.request(reqwest::Method::DELETE, &format!("/users/@me/mentions/{message_id}"))).await.map(|_| ())
     }
 
     pub async fn profile(&self, user_id: &str, guild_id: Option<&str>) -> Result<Profile, String> {
@@ -2111,7 +2124,11 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
             guild_id: s(&d["guild_id"]),
             members: d["members"].as_array().into_iter().flatten().map(|m| (parse_member_user(m, &m["user"], d["guild_id"].as_str()), strings(&m["roles"]))).collect(),
         }),
-        "MESSAGE_ACK" => Some(Event::Ack { channel_id: s(&d["channel_id"]), message_id: snowflake(&d["message_id"]) }),
+        "MESSAGE_ACK" => Some(Event::Ack {
+            channel_id: s(&d["channel_id"]),
+            message_id: snowflake(&d["message_id"]),
+            manual: d["manual"].as_bool().unwrap_or(false).then(|| d["mention_count"].as_u64().unwrap_or(0) as u32),
+        }),
         "VOICE_STATE_UPDATE" => Some(Event::VoiceState(parse_voice_state(d), d["session_id"].as_str().map(str::to_owned))),
         "CHANNEL_INFO" => Some(Event::VoiceStartTimes {
             guild_id: s(&d["guild_id"]),
@@ -3407,5 +3424,13 @@ mod tests {
         let invite = parse_invite(&body).unwrap();
         assert_eq!(invite, Invite { guild_id: "9".into(), name: "Dumpling Hall".into(), icon: Some("https://cdn.discordapp.com/icons/9/ff.png?size=96".into()), online: Some(1204), members: Some(8311) });
         assert_eq!(parse_invite(&json!({ "code": "gdm", "channel": { "id": "5", "type": 3 } })), None, "a group DM invite has no server card");
+    }
+
+    #[test]
+    fn a_manual_ack_carries_its_mention_count() {
+        let manual = dispatch("MESSAGE_ACK", &json!({ "channel_id": "7", "message_id": "42", "manual": true, "mention_count": 3, "version": 9 }));
+        assert!(matches!(manual, Some(Event::Ack { message_id: 42, manual: Some(3), .. })));
+        let read = dispatch("MESSAGE_ACK", &json!({ "channel_id": "7", "message_id": "42", "version": 9 }));
+        assert!(matches!(read, Some(Event::Ack { manual: None, .. })));
     }
 }

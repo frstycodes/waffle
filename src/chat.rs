@@ -1149,11 +1149,24 @@ fn set_hovered_message(this: &WeakEntity<Waffle>, id: Option<String>, cx: &mut A
 }
 
 // Right-click opens the message menu; a plain click on the row's own space focuses it. Controls inside
-// stop their clicks, and a drag (selecting text) or a double click isn't a plain click.
+// stop their clicks, and a drag (selecting text) or a double click isn't a plain click. Alt+click anywhere
+// on the row marks it unread, as in Discord: taken in the capture phase, so no link, avatar or image under
+// the pointer also opens.
 fn with_message_menu(row: Stateful<Div>, message: &Message, ctx: &Rc<RowContext>) -> AnyElement {
     let (this, message) = (ctx.this.clone(), message.clone());
     let (focus_this, id) = (this.clone(), message.id.clone());
-    row.on_mouse_down(gpui_kit::MouseButton::Right, move |event, _, cx| {
+    let (unread_this, unread) = (this.clone(), message.clone());
+    row.capture_any_mouse_down(move |event, _, cx| {
+        if event.button != gpui_kit::MouseButton::Left || !event.modifiers.alt {
+            return;
+        }
+        if !crate::message_menu::MessageAction::MarkUnread.allowed(&unread, &Default::default()) {
+            return;
+        }
+        cx.stop_propagation();
+        unread_this.update(cx, |this, cx| this.mark_unread(&unread, cx)).ok();
+    })
+    .on_mouse_down(gpui_kit::MouseButton::Right, move |event, _, cx| {
         let at = event.position;
         this.update(cx, |this, cx| this.open_message_menu(message.clone(), at, cx)).ok();
     })
