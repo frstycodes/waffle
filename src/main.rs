@@ -81,6 +81,7 @@ mod ui;
 mod splash;
 mod stage;
 mod stage_dialogs;
+mod stage_view;
 mod updater;
 mod design_system;
 mod app_icon;
