@@ -33,7 +33,7 @@
   .scrim { border-radius: var(--radius-lg); background: var(--scrim); padding: 40px 16px; display: grid; place-items: center; }
   .dialog { width: min(100%, 600px); max-height: 760px; display: grid; grid-template-rows: auto 1fr auto; background: var(--bg-raised); border-radius: var(--radius-xl); box-shadow: var(--shadow-pop); overflow: hidden; }
   .dhead { display: flex; align-items: center; gap: 12px; padding: 20px 16px 12px 24px; }
-  .dhead .tile { width: 32px; height: 32px; border-radius: 10px; background: linear-gradient(135deg, #5b7cfa, #8a5cf6); color: white; display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; }
+  .dhead .tile { width: 32px; height: 32px; border-radius: 10px; background: linear-gradient(135deg, #3d5bd9, #6a3fd6); color: white; display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; }
   .dhead h3 { margin: 0; font-size: 20px; color: var(--text-strong); line-height: 1.2; }
   .dhead small { display: block; color: var(--text-muted); font-size: 12px; margin-top: 2px; }
   .dhead > div { flex: 1; min-width: 0; }
@@ -44,7 +44,7 @@
 
   /* Grouped settings (ui::group): heading, borderless card, inset hairlines, caption. */
   .group { display: grid; gap: 8px; }
-  .group > h5 { margin: 0; padding: 0 4px; font-size: 14px; font-weight: 600; color: var(--text-strong); }
+  .group > h4 { margin: 0; padding: 0 4px; font-size: 14px; font-weight: 600; color: var(--text-strong); }
   .cap { margin: 0; padding: 0 4px; font-size: 12px; color: var(--text-muted); line-height: 1.45; text-wrap: pretty; }
   .card { display: grid; padding: 4px; border-radius: var(--radius-lg); background: var(--bg-group); }
   :root[data-theme="dark"] .card, :root:not([data-theme]) .card { background: color-mix(in oklch, var(--bg-page) 55%, var(--bg-raised)); }
@@ -152,7 +152,7 @@
         </div>
 
         <div class="group">
-          <h5>Server Notification Settings</h5>
+          <h4>Server Notification Settings</h4>
           <div class="card" role="radiogroup" id="levels">
             <button class="row" role="radio" aria-checked="false" data-level="0"><span class="text"><span class="t">All Messages</span></span><span class="radio"></span></button>
             <button class="row" role="radio" aria-checked="true" data-level="1"><span class="text"><span class="t">Only @mentions</span></span><span class="radio"></span></button>
@@ -176,7 +176,7 @@
         </div>
 
         <div class="group">
-          <h5>Notification Overrides</h5>
+          <h4>Notification Overrides</h4>
           <div class="menuwrap">
             <button class="pick" id="pick"><i data-ic="search"></i><span>Select a channel or category…</span><i data-ic="chevron-down"></i></button>
             <div class="menu" id="pick-menu"></div>
