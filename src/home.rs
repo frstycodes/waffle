@@ -338,7 +338,14 @@ impl Waffle {
             .text_color(palette::text(cx))
             .text_size(px(14.))
             .child(ui::hard_edge(|| false, cx).child(header))
-            .child(div().id("friends-list").flex_1().min_h_0().overflow_y_scrollbar().pt(px(16.)).px_4().pb_6().child(body))
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .child(div().id("friends-list").flex_1().min_w_0().h_full().overflow_y_scrollbar().pt(px(16.)).px_4().pb_6().child(body))
+                    .children(self.active_now_column(window, cx)),
+            )
             .into_any_element()
     }
 

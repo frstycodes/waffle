@@ -177,6 +177,10 @@ pub struct RichPresence {
     pub party: Option<(u64, u64)>,
     // Unix milliseconds the activity started.
     pub started: Option<i64>,
+    // Unix milliseconds it ends: a Spotify track's end, for its progress.
+    pub ends: Option<i64>,
+    // Discord's party id: people sharing one play together (Active Now groups them).
+    pub party_id: Option<String>,
     pub joinable: bool,
 }
 
@@ -2752,11 +2756,15 @@ pub fn app_icon_url(app_id: &str, icon: &str) -> String {
     format!("{CDN}/app-icons/{app_id}/{icon}.png?size=64")
 }
 
-// Large asset keys: "mp:…" is a media proxy path, anything else an app asset id.
+// Large asset keys: "mp:…" is a media proxy path, "spotify:…" an album cover, anything else an app asset id.
 fn activity_image(a: &Value) -> Option<String> {
     let key = a["assets"]["large_image"].as_str()?;
     if let Some(path) = key.strip_prefix("mp:") {
         return Some(format!("https://media.discordapp.net/{path}"));
+    }
+    // Not verified: Spotify covers resolve on Spotify's image CDN, as Discord's activity asset docs describe.
+    if let Some(id) = key.strip_prefix("spotify:") {
+        return Some(format!("https://i.scdn.co/image/{id}"));
     }
     Some(format!("{CDN}/app-assets/{}/{key}.png", a["application_id"].as_str()?))
 }
@@ -2783,6 +2791,8 @@ fn parse_rich(a: &Value) -> Option<RichPresence> {
             _ => None,
         },
         started: a["timestamps"]["start"].as_i64(),
+        ends: a["timestamps"]["end"].as_i64(),
+        party_id: a["party"]["id"].as_str().map(str::to_owned),
         joinable: a["party"]["id"].is_string() && (a["flags"].as_u64().unwrap_or(0) & JOIN != 0 || a["secrets"]["join"].is_string()),
     })
 }
