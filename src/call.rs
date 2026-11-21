@@ -21,6 +21,7 @@ use crate::{
     menu::{Entry, item, submenu},
     palette::{self, stage},
     settings::Page,
+    soundboard,
     ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, RADIUS_XS, Squircle},
     voice::{self, Stage},
 };
@@ -459,8 +460,17 @@ impl Waffle {
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_stream_menu(e.position, cx))),
             false => panel_action("panel-share", Glyph::ShareScreen, ready("Share your screen"), connected, cx).when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_screen_share(cx)))),
         };
-        let activities = panel_action("panel-activities", Glyph::Activities, ready("Activities and soundboard"), connected, cx)
-            .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.show_toast("Activities and the soundboard aren't in Waffle yet", cx))));
+        let activities = panel_action("panel-activities", Glyph::Activities, ready("Activities"), connected, cx)
+            .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.show_toast("Activities aren't in Waffle yet", cx))));
+        let access = self.soundboard_access();
+        let soundboard = (access != soundboard::Access::Hidden).then(|| {
+            let on = connected && access == soundboard::Access::Ready;
+            panel_action("panel-soundboard", Glyph::Soundboard, if connected { access.tip() } else { wait }, on, cx)
+                .relative()
+                .when(self.soundboard_open(), |b| b.bg(palette::press(cx)))
+                .child(self.soundboard_probe(soundboard::PANEL_CONTROL))
+                .when(on, |b| b.on_click(cx.listener(|this, _, window, cx| this.open_soundboard(Some(soundboard::PANEL_CONTROL), window, cx))))
+        });
         let voice = div()
             .h(px(VOICE_HEIGHT))
             .flex_none()
@@ -472,7 +482,7 @@ impl Waffle {
             .relative()
             .child(ui::inset_rule(PANEL_PAD, cx))
             .child(top)
-            .child(div().flex().gap(px(6.)).child(camera).child(share).child(activities));
+            .child(div().flex().gap(px(6.)).child(camera).child(share).children(soundboard).child(activities));
         Some(voice.into_any_element())
     }
 
@@ -1282,6 +1292,7 @@ impl Waffle {
             })
             .child(name)
             .children(off_chip)
+            .children((!is_stream).then(|| self.soundboard_tile_effect(&state.user_id, cx)).flatten())
             .cursor_pointer()
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_card(&card, cx)))
             .when(is_stream && watching && !me && !small && !fill, |d| {
@@ -1355,8 +1366,16 @@ impl Waffle {
             control("call-share-options", Glyph::ChevronUpBold, "Stream options", if self.menu.is_some() && sharing { Control::Open } else { Control::Rest }, sharing)
                 .when(sharing, |b| b.on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_stream_menu(e.position, cx)))),
         );
-        let activities = control("call-activities", Glyph::ActivitiesFill, "Activities and soundboard", Control::Rest, connected)
-            .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.show_toast("Activities and the soundboard aren't in Waffle yet", cx))));
+        let activities = control("call-activities", Glyph::ActivitiesFill, "Activities", Control::Rest, connected)
+            .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.show_toast("Activities aren't in Waffle yet", cx))));
+        let access = self.soundboard_access();
+        let soundboard = (access != soundboard::Access::Hidden).then(|| {
+            let on = connected && access == soundboard::Access::Ready;
+            control("call-soundboard", Glyph::Soundboard, access.tip(), if self.soundboard_open() { Control::Open } else { Control::Rest }, on)
+                .relative()
+                .child(self.soundboard_probe(soundboard::CALL_CONTROL))
+                .when(on, |b| b.on_click(cx.listener(|this, _, window, cx| this.open_soundboard(Some(soundboard::CALL_CONTROL), window, cx))))
+        });
         let more = control("call-more", Glyph::More, "More options", Control::Rest, true).on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_call_more(e.position, cx)));
         let leave = self.leave_control(cx);
         // Full screen at the bar's right end, as Discord's.
@@ -1375,7 +1394,7 @@ impl Waffle {
             .items_center()
             .gap(px(8.))
             .child(control_group().child(mic).child(camera))
-            .child(control_group().child(share).child(activities).child(more))
+            .child(control_group().child(share).children(soundboard).child(activities).child(more))
             .child(leave)
             .child(div().absolute().right_0().top(px((CONTROLS_HEIGHT - 32.) / 2.)).flex().gap(px(4.)).children(volume).child(fullscreen))
     }
@@ -1431,7 +1450,9 @@ impl Waffle {
                     let channel = call.channel.id.clone();
                     entries.push(item("Invite to voice", move |this, window, cx| this.show_invite(guild.clone(), channel.clone(), window, cx)).icon(Glyph::GroupPlus).entry());
                 }
-                entries.push(item("Soundboard", |this, _, cx| this.show_toast("The soundboard isn't in Waffle yet", cx)).icon(Glyph::Soundboard).entry());
+                if this.soundboard_access() == soundboard::Access::Ready {
+                    entries.push(item("Soundboard", |this, window, cx| this.open_soundboard(Some(soundboard::CALL_CONTROL), window, cx)).icon(Glyph::Soundboard).entry());
+                }
                 if this.call_focus.is_some() {
                     let hidden = this.call_strip_hidden;
                     entries.push(

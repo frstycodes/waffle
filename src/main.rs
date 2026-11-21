@@ -75,6 +75,7 @@ mod viewer;
 mod hotkeys;
 mod key_hook;
 mod sounds;
+mod soundboard;
 #[cfg(target_os = "windows")]
 mod tray;
 mod text_file;
@@ -872,6 +873,7 @@ pub struct Waffle {
     games: games::Games,
     emoji_picker: Option<EmojiTarget>,
     emoji_search: Entity<SearchState>,
+    soundboard: soundboard::Soundboard,
     switcher: Option<usize>,
     switcher_input: Entity<SearchState>,
     // The read position when the open channel was opened: messages after it sit under the NEW line.
@@ -965,6 +967,7 @@ impl Waffle {
         // Typing filters the picker and switcher; the views read the inputs' text on render.
         let emoji_search = cx.new(|cx| SearchState::new(window, cx).placeholder("Find the perfect emoji"));
         cx.subscribe_in(&emoji_search, window, Self::on_emoji_search).detach();
+        let soundboard = soundboard::Soundboard::new(window, cx);
         let feed_focus = cx.focus_handle();
         // Esc closing a focused popup (search, ⌘K) leaves nothing focused, and app keys only reach the root
         // through the focus path, so take focus back.
@@ -1184,6 +1187,7 @@ impl Waffle {
             pip: Default::default(),
             emoji_picker: None,
             emoji_search,
+            soundboard,
             switcher: None,
             switcher_input,
             unread_marker: None,
@@ -1601,6 +1605,9 @@ impl Waffle {
             Event::Call { channel_id, ringing } => self.on_dm_call(channel_id, ringing, cx),
             Event::CallEnded { channel_id } => self.on_dm_call_ended(&channel_id),
             Event::VoiceServer(_) => {}
+            Event::VoiceEffect(effect) => self.on_voice_effect(effect, cx),
+            Event::SoundboardSounds { guild_id, sounds, all } => self.soundboard.store_sounds(guild_id, sounds, all),
+            Event::SoundboardSoundDelete { guild_id, sound_id } => self.soundboard.remove_sound(&guild_id, &sound_id),
             Event::VoiceStartTimes { guild_id, times, all } => {
                 if all
                     && let Some(guild) = self.guilds.iter().find(|g| g.id == guild_id)
@@ -2899,6 +2906,7 @@ impl Waffle {
         self.camera_on_connect = false;
         self.stop_ringing_out();
         let Some(call) = self.call.take() else { return false };
+        self.soundboard.leave_call();
         self.call_focus = None;
         self.call_chat = false;
         self.call_previews = Default::default();
@@ -2927,6 +2935,7 @@ impl Waffle {
                 call.connected = true;
                 call.stage = voice::Stage::Connected;
                 sounds::play(connected_cue(self.call_switched));
+                self.fetch_soundboard(cx);
                 if std::mem::take(&mut self.camera_on_connect) {
                     self.toggle_camera(cx);
                 }

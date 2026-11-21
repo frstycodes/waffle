@@ -334,6 +334,9 @@ pub mod perm {
     pub const SEND_POLLS: u64 = 1 << 49;
     pub const PIN_MESSAGES: u64 = 1 << 51;
     pub const CONNECT: u64 = 1 << 20;
+    pub const SPEAK: u64 = 1 << 21;
+    pub const USE_SOUNDBOARD: u64 = 1 << 42;
+    pub const USE_EXTERNAL_SOUNDS: u64 = 1 << 45;
 }
 
 impl Guild {
@@ -667,6 +670,96 @@ impl Emoji {
             None => self.name.clone(),
         }
     }
+}
+
+// The pseudo server Discord files its own soundboard sounds under.
+pub const DEFAULT_SOUNDS: &str = "0";
+
+// A soundboard sound: a server's, or one of Discord's own (`guild_id` "0").
+#[derive(Clone, Debug, PartialEq)]
+pub struct SoundboardSound {
+    pub id: String,
+    pub name: String,
+    pub guild_id: String,
+    // 0..=1, set by whoever uploaded it.
+    pub volume: f32,
+    pub emoji: Option<Emoji>,
+    // False once the server lost the boost level that held it.
+    pub available: bool,
+}
+
+impl SoundboardSound {
+    pub fn parse(v: &Value) -> Option<Self> {
+        Some(SoundboardSound {
+            id: id_string(&v["sound_id"])?,
+            name: v["name"].as_str().unwrap_or_default().to_owned(),
+            guild_id: id_string(&v["guild_id"]).unwrap_or_else(|| DEFAULT_SOUNDS.into()),
+            volume: v["volume"].as_f64().unwrap_or(1.) as f32,
+            emoji: sound_emoji(&v["emoji_id"], &v["emoji_name"]),
+            available: v["available"].as_bool().unwrap_or(true),
+        })
+    }
+
+    pub fn url(&self) -> String {
+        soundboard_url(&self.id)
+    }
+
+    pub fn is_default(&self) -> bool {
+        self.guild_id == DEFAULT_SOUNDS
+    }
+}
+
+pub fn soundboard_url(sound_id: &str) -> String {
+    format!("{CDN}/soundboard-sounds/{sound_id}")
+}
+
+// Someone played a sound or an emoji in a voice channel (VOICE_CHANNEL_EFFECT_SEND).
+#[derive(Clone, Debug, PartialEq)]
+pub struct VoiceEffect {
+    pub channel_id: String,
+    pub user_id: String,
+    pub sound_id: Option<String>,
+    // 0..=1; Discord's client falls back to 1.
+    pub sound_volume: f32,
+    pub emoji: Option<Emoji>,
+    // 0 premium, 1 basic.
+    pub animation_type: Option<u8>,
+    // Not verified: what the id selects; Discord's client passes it to its premium animation.
+    pub animation_id: Option<u64>,
+    // The sound's name.
+    pub name: Option<String>,
+    pub source_guild_id: Option<String>,
+}
+
+fn parse_voice_effect(d: &Value) -> Option<VoiceEffect> {
+    Some(VoiceEffect {
+        channel_id: id_string(&d["channel_id"])?,
+        user_id: id_string(&d["user_id"])?,
+        sound_id: id_string(&d["sound_id"]),
+        sound_volume: d["sound_volume"].as_f64().unwrap_or(1.) as f32,
+        emoji: d["emoji"].is_object().then(|| sound_emoji(&d["emoji"]["id"], &d["emoji"]["name"])).flatten(),
+        animation_type: d["animation_type"].as_u64().map(|t| t as u8),
+        animation_id: d["animation_id"].as_u64(),
+        name: d["name"].as_str().map(str::to_owned),
+        source_guild_id: id_string(&d["source_guild_id"]),
+    })
+}
+
+// Snowflakes arrive as strings, but Discord's default sounds have small numeric ids that may come as numbers.
+// Not verified: which form the default sounds use on the wire; both are read.
+fn id_string(v: &Value) -> Option<String> {
+    match v {
+        Value::String(s) => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
+// A sound's emoji: a server's by id, or a Unicode one by its character.
+fn sound_emoji(id: &Value, name: &Value) -> Option<Emoji> {
+    let id = id_string(id);
+    let name = name.as_str().unwrap_or_default().to_owned();
+    (id.is_some() || !name.is_empty()).then_some(Emoji { id, name, animated: false })
 }
 
 /// Someone who reacted, with the handle the Reactions dialog shows under their name (`User` keeps only the
@@ -1061,6 +1154,11 @@ pub enum Event {
     CallEnded { channel_id: String },
     // Raw voice server info (endpoint, token) for the voice engine.
     VoiceServer(Value),
+    // A sound or emoji played in a voice channel.
+    VoiceEffect(VoiceEffect),
+    // A server's whole soundboard (`all`), or sounds added or changed on it.
+    SoundboardSounds { guild_id: String, sounds: Vec<SoundboardSound>, all: bool },
+    SoundboardSoundDelete { guild_id: String, sound_id: String },
     Disconnected(String),
     // A dropped connection picked its session back up: nothing to reload.
     Resumed,
@@ -1108,6 +1206,34 @@ impl Client {
     // Discord's REQUEST_CHANNEL_INFO (op 43): voice channel statuses and start times, answered by CHANNEL_INFO.
     pub fn request_channel_info(&self, guild_id: &str) {
         self.gateway(json!({ "op": 43, "d": { "guild_id": guild_id, "fields": ["status", "voice_start_time"] } }));
+    }
+
+    // Discord's REQUEST_SOUNDBOARD_SOUNDS (op 31): each server's soundboard, answered by SOUNDBOARD_SOUNDS.
+    pub fn request_soundboard_sounds(&self, guild_ids: &[String]) {
+        self.gateway(json!({ "op": 31, "d": { "guild_ids": guild_ids } }));
+    }
+
+    pub async fn default_soundboard_sounds(&self) -> Result<Vec<SoundboardSound>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, "/soundboard-default-sounds")).await?;
+        Ok(body.as_array().into_iter().flatten().filter_map(SoundboardSound::parse).collect())
+    }
+
+    // Plays `sound` to everyone in the voice channel. Dropping the future cancels the request, as
+    // Discord's client does when you leave the channel before it went out.
+    pub async fn send_soundboard_sound(&self, channel_id: &str, sound: &SoundboardSound) -> Result<(), String> {
+        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/send-soundboard-sound")).json(&soundboard_play_body(sound));
+        let mut send = AbortOnDrop(runtime().spawn(send(req)));
+        (&mut send.0).await.map_err(|e| e.to_string())?.map(|_| ())
+    }
+
+    // The sound file from the CDN: an mp3 or ogg, which its URL doesn't say.
+    pub async fn soundboard_file(&self, sound_id: &str) -> Result<bytes::Bytes, String> {
+        let get = self.http.get(soundboard_url(sound_id));
+        let mut fetch = AbortOnDrop(runtime().spawn(async move {
+            let res = get.send().await?.error_for_status()?;
+            res.bytes().await
+        }));
+        (&mut fetch.0).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())
     }
 
     pub fn request_member_list(&self, guild_id: &str, channel_id: &str) {
@@ -1685,6 +1811,16 @@ fn message_body(content: &str, nonce: &str, reply_to: Option<&str>, ping_author:
 
 // Not verified: this is the body as the API reference describes a forward (a type-1 reference and no
 // content); it hasn't been checked against a request from Discord's own client.
+// Discord's play body: the sound and its emoji, and the sound's server unless it's one of Discord's own.
+fn soundboard_play_body(sound: &SoundboardSound) -> Value {
+    let emoji = sound.emoji.as_ref();
+    let mut body = json!({ "sound_id": sound.id, "emoji_id": emoji.and_then(|e| e.id.clone()), "emoji_name": emoji.map(|e| e.name.clone()).filter(|n| !n.is_empty()) });
+    if !sound.is_default() {
+        body["source_guild_id"] = json!(sound.guild_id);
+    }
+    body
+}
+
 fn forward_body(original: &Message, guild_id: Option<&str>, nonce: &str) -> Value {
     let mut reference = json!({ "type": 1, "message_id": original.id, "channel_id": original.channel_id });
     if let Some(guild_id) = guild_id {
@@ -2094,6 +2230,18 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
         "VOICE_SERVER_UPDATE" => Some(Event::VoiceServer(d.clone())),
         "CALL_CREATE" | "CALL_UPDATE" => Some(Event::Call { channel_id: s(&d["channel_id"]), ringing: strings(&d["ringing"]) }),
         "CALL_DELETE" => Some(Event::CallEnded { channel_id: s(&d["channel_id"]) }),
+        "VOICE_CHANNEL_EFFECT_SEND" => parse_voice_effect(d).map(Event::VoiceEffect),
+        // Not verified: the reply's shape, `{ guild_id, soundboard_sounds }`, is the public API's.
+        "SOUNDBOARD_SOUNDS" | "GUILD_SOUNDBOARD_SOUNDS_UPDATE" => Some(Event::SoundboardSounds {
+            guild_id: id_string(&d["guild_id"])?,
+            sounds: d["soundboard_sounds"].as_array().into_iter().flatten().filter_map(SoundboardSound::parse).collect(),
+            all: true,
+        }),
+        "GUILD_SOUNDBOARD_SOUND_CREATE" | "GUILD_SOUNDBOARD_SOUND_UPDATE" => {
+            let sound = SoundboardSound::parse(d)?;
+            Some(Event::SoundboardSounds { guild_id: sound.guild_id.clone(), sounds: vec![sound], all: false })
+        }
+        "GUILD_SOUNDBOARD_SOUND_DELETE" => Some(Event::SoundboardSoundDelete { guild_id: id_string(&d["guild_id"])?, sound_id: id_string(&d["sound_id"])? }),
         _ => None,
     }
 }
@@ -3378,5 +3526,51 @@ mod tests {
         let invite = parse_invite(&body).unwrap();
         assert_eq!(invite, Invite { guild_id: "9".into(), name: "Dumpling Hall".into(), icon: Some("https://cdn.discordapp.com/icons/9/ff.png?size=96".into()), online: Some(1204), members: Some(8311) });
         assert_eq!(parse_invite(&json!({ "code": "gdm", "channel": { "id": "5", "type": 3 } })), None, "a group DM invite has no server card");
+    }
+
+    #[test]
+    fn voice_effect_reads_the_sound_and_its_emoji() {
+        let d = json!({
+            "channel_id": "10", "guild_id": "1", "user_id": "7", "sound_id": "33", "sound_volume": 0.5,
+            "emoji": { "id": null, "name": "🦆" }, "animation_type": 1, "animation_id": 4, "name": "quack", "source_guild_id": "2"
+        });
+        let Some(Event::VoiceEffect(effect)) = dispatch("VOICE_CHANNEL_EFFECT_SEND", &d) else { panic!("not an effect") };
+        assert_eq!(effect, VoiceEffect {
+            channel_id: "10".into(),
+            user_id: "7".into(),
+            sound_id: Some("33".into()),
+            sound_volume: 0.5,
+            emoji: Some(Emoji::unicode("🦆")),
+            animation_type: Some(1),
+            animation_id: Some(4),
+            name: Some("quack".into()),
+            source_guild_id: Some("2".into()),
+        });
+        let bare = parse_voice_effect(&json!({ "channel_id": "10", "user_id": "7", "emoji": { "id": "55", "name": "pog" } })).unwrap();
+        assert_eq!((bare.sound_id, bare.sound_volume, bare.emoji), (None, 1., Some(Emoji { id: Some("55".into()), name: "pog".into(), animated: false })), "an emoji alone, at full volume");
+    }
+
+    #[test]
+    fn soundboard_sounds_reply_and_updates() {
+        let d = json!({ "guild_id": "1", "soundboard_sounds": [
+            { "sound_id": "33", "name": "quack", "volume": 0.8, "emoji_id": null, "emoji_name": "🦆", "guild_id": "1", "available": true },
+            { "name": "no id" }
+        ] });
+        let Some(Event::SoundboardSounds { guild_id, sounds, all }) = dispatch("SOUNDBOARD_SOUNDS", &d) else { panic!("not sounds") };
+        assert_eq!((guild_id.as_str(), all), ("1", true));
+        assert_eq!(sounds, vec![SoundboardSound { id: "33".into(), name: "quack".into(), guild_id: "1".into(), volume: 0.8, emoji: Some(Emoji::unicode("🦆")), available: true }]);
+        let Some(Event::SoundboardSounds { all: false, sounds, .. }) = dispatch("GUILD_SOUNDBOARD_SOUND_UPDATE", &json!({ "sound_id": "33", "name": "honk", "guild_id": "1" })) else { panic!("not an update") };
+        assert_eq!(sounds[0].name, "honk");
+        assert!(matches!(dispatch("GUILD_SOUNDBOARD_SOUND_DELETE", &json!({ "sound_id": "33", "guild_id": "1" })), Some(Event::SoundboardSoundDelete { sound_id, .. }) if sound_id == "33"));
+    }
+
+    #[test]
+    fn default_sounds_are_server_zero_and_play_without_a_source() {
+        let sound = SoundboardSound::parse(&json!({ "sound_id": 1, "name": "quack", "volume": 1.0, "emoji_name": "🦆" })).unwrap();
+        assert_eq!((sound.id.as_str(), sound.is_default()), ("1", true), "a numeric id reads as a string");
+        assert_eq!(soundboard_play_body(&sound), json!({ "sound_id": "1", "emoji_id": null, "emoji_name": "🦆" }));
+        let custom = SoundboardSound { guild_id: "9".into(), emoji: Some(Emoji { id: Some("55".into()), name: String::new(), animated: false }), ..sound };
+        assert_eq!(soundboard_play_body(&custom), json!({ "sound_id": "1", "emoji_id": "55", "emoji_name": null, "source_guild_id": "9" }));
+        assert_eq!(custom.url(), "https://cdn.discordapp.com/soundboard-sounds/1");
     }
 }
