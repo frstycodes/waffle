@@ -1334,7 +1334,12 @@ impl Client {
 
     /// Opens (or finds) the DM channel with a user.
     pub async fn open_dm(&self, user_id: &str) -> Result<Channel, String> {
-        let req = self.request(reqwest::Method::POST, "/users/@me/channels").json(&json!({ "recipients": [user_id] }));
+        self.open_private(&[user_id.to_owned()]).await
+    }
+
+    /// The DM with one recipient, or a new group DM with several (type 3 in the answer).
+    pub async fn open_private(&self, recipients: &[String]) -> Result<Channel, String> {
+        let req = self.request(reqwest::Method::POST, "/users/@me/channels").json(&json!({ "recipients": recipients }));
         let body = self.run(req).await?;
         parse_dm(&body, &Value::Null).ok_or_else(|| "Unexpected response".into())
     }

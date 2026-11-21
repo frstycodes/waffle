@@ -10,7 +10,7 @@ use gpui_kit::{
 use serde::{Deserialize, Serialize};
 
 mod advanced;
-mod profile;
+pub(crate) mod profile;
 pub(crate) mod proto;
 pub(crate) mod registry;
 mod updates;

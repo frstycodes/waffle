@@ -34,6 +34,7 @@ mod mascot;
 mod material;
 mod forum;
 mod forward;
+mod group_dm;
 mod reactions;
 mod requests;
 mod gif;
@@ -629,6 +630,7 @@ pub struct Waffle {
     poll_picks: HashMap<String, Vec<u32>>,
     poll_peek: HashSet<String>,
     forward_dialog: Option<forward::ForwardDialog>,
+    group_dialog: Option<group_dm::GroupDialog>,
     status_flyout: status_menu::Flyout,
     status_input: Entity<SearchState>,
     clear_after: status_menu::ClearAfter,
@@ -1019,6 +1021,7 @@ impl Waffle {
             poll_picks: HashMap::new(),
             poll_peek: HashSet::new(),
             forward_dialog: None,
+            group_dialog: None,
             status_flyout: status_menu::Flyout::default(),
             status_input,
             clear_after: status_menu::ClearAfter::default(),
