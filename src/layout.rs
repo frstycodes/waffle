@@ -64,6 +64,7 @@ impl Waffle {
             .text_color(theme.foreground)
             .text_size(px(16.))
             .on_key_down(cx.listener(Self::on_root_key))
+            .on_action(cx.listener(|this, _: &crate::app_keys::AddServer, window, cx| this.add_server_shortcut(window, cx)))
             .on_modifiers_changed(cx.listener(|this, e: &gpui_kit::ModifiersChangedEvent, _, cx| {
                 if this.shift_held != e.modifiers.shift {
                     this.shift_held = e.modifiers.shift;

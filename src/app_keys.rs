@@ -3,7 +3,7 @@
 // the window's close, which hides Waffle to the tray like Discord (tray.rs).
 use gpui_kit::{App, KeyBinding, actions};
 
-actions!(waffle, [Quit, Restart, FocusSearch, ZoomIn, ZoomOut, ResetZoom]);
+actions!(waffle, [Quit, Restart, FocusSearch, ZoomIn, ZoomOut, ResetZoom, AddServer]);
 
 // Discord's zoom levels.
 const ZOOM_STEPS: [f32; 11] = [0.5, 0.67, 0.75, 0.8, 0.9, 1., 1.1, 1.25, 1.5, 1.75, 2.];
@@ -18,6 +18,8 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("secondary-+", ZoomIn, None),
         KeyBinding::new("secondary--", ZoomOut, None),
         KeyBinding::new("secondary-0", ResetZoom, None),
+        // Discord's "Create or join a server".
+        KeyBinding::new("secondary-shift-n", AddServer, None),
     ]);
     cx.on_action(|_: &Quit, cx| cx.quit());
     // In a call it asks first, then leaves voice (restart.rs).
