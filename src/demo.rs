@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | embed-suppress | drafts | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -44,6 +44,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
     let messages = match scene {
         _ if load => load_messages(),
         "embeds" => embed_messages(),
+        "embed-suppress" => embed_suppress_messages(),
         _ => messages(),
     };
     waffle.feeds.insert("general".into(), Feed { messages: std::sync::Arc::new(messages), loaded: true, ..Default::default() });
@@ -375,6 +376,8 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // and an expired code, a message you can't see (no card), and two still loading.
         "link-previews" => demo_link_previews(waffle),
         "forwarded" => demo_forwarded(waffle),
+        // Your message held hovered, so its article card shows the ✕ without the pointer on it.
+        "embed-suppress" => waffle.hovered_message = Some("301".into()),
         // The dialog with #📷-media picked and a note; gpui's channel reads only, so it shows locked.
         "forward-dialog" => {
             if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "2") {
@@ -1202,6 +1205,52 @@ fn embed_messages() -> Vec<Message> {
         post("205", user("8388608", "Wren"), "2026-11-20T18:12:00Z", vec![video, gallery]),
         poll_post,
         post("207", bot("100663296", "Stressbot"), "2026-11-20T21:00:00Z", vec![worst, black, sensitive]),
+    ]
+}
+
+// Remove embeds and YouTube (design/explore-system-messages.html): your link with an article card (✕ on
+// hover), a bot's embed-only post (no ✕), a message whose embeds were removed (flag 4, so none show),
+// then a YouTube video and a Short, each with Play and Open Link.
+fn embed_suppress_messages() -> Vec<Message> {
+    let post = |id: &str, author: User, ts: &str, content: &str, embeds: Vec<Embed>| Message {
+        id: id.into(),
+        channel_id: "general".into(),
+        guild_id: Some("1".into()),
+        author,
+        timestamp: ts.into(),
+        content: content.into(),
+        embeds,
+        ..Default::default()
+    };
+    let pic = |seed: &str, width: f32, height: f32| Media { url: avatar_url(seed, None), width, height, kind: MediaKind::Image };
+    let article = Embed {
+        url: Some("https://blog.rust-lang.org/2026/11/20/Rust-1.95.0.html".into()),
+        provider: Some("Rust Blog".into()),
+        title: Some("Announcing Rust 1.95.0".into()),
+        description: Some("The Rust team is happy to announce a new version of Rust, 1.95.0. Rust is a programming language empowering everyone to build reliable and efficient software.".into()),
+        ..Default::default()
+    };
+    let mut bot = user("33554432", "Raidbot");
+    bot.bot = true;
+    let raid = Embed { rich: true, color: Some(0xE67E22), title: Some("Raid tonight: Ashen Peaks".into()), description: Some("Sign-ups are open.".into()), ..Default::default() };
+    let youtube = |id: &str, title: &str, still: Media| Embed {
+        video: true,
+        color: Some(0xFF0000),
+        url: Some(format!("https://www.youtube.com/watch?v={id}")),
+        provider: Some("YouTube".into()),
+        provider_url: Some("https://www.youtube.com".into()),
+        title: Some(title.into()),
+        images: vec![still],
+        ..Default::default()
+    };
+    let wren = user("8388608", "Wren");
+    let suppressed = Message { flags: crate::discord::message_flag::SUPPRESS_EMBEDS, ..post("303", wren.clone(), "2026-11-20T22:05:00Z", "no preview on this one https://blog.rust-lang.org/", vec![article.clone()]) };
+    vec![
+        post("301", me_user(), "2026-11-20T22:02:00Z", "this is the one I meant https://blog.rust-lang.org/2026/11/20/Rust-1.95.0.html", vec![article]),
+        post("302", bot, "2026-11-20T22:03:00Z", "", vec![raid]),
+        suppressed,
+        post("304", wren.clone(), "2026-11-20T22:10:00Z", "https://youtu.be/dQw4w9WgXcQ", vec![youtube("dQw4w9WgXcQ", "How waffle irons are made", pic("5", 1280., 720.))]),
+        post("305", wren, "2026-11-20T22:11:00Z", "https://youtube.com/shorts/abc123", vec![youtube("abc123", "honey pour asmr #shorts", pic("6", 720., 1280.))]),
     ]
 }
 
