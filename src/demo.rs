@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | requests | requests-spam | requests-empty | request-open | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -522,6 +522,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             });
         }
         "dm-empty" | "group-empty" | "group-start" | "group-mention" => demo_dm_start(waffle, scene, window, cx),
+        "requests" | "requests-spam" | "requests-empty" | "request-open" => demo_requests(waffle, scene, window, cx),
         "stream-card" => {
             let key = "guild:1:lounge:12582912".to_owned();
             let blender = Activity { kind: ActivityKind::Playing, text: "Blender".into(), more: 0 };
@@ -678,6 +679,47 @@ fn demo_profile(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
 
 // The top of a DM's history: a stranger with nothing said yet, an iconless group with nothing said, and
 // the same group scrolled back to its first messages.
+// Three requests (one with a name far too long for its row) and two spam, each with a profile for its
+// username and mutual servers. `request-open` reads the newest in the chat, its accept bar over the composer.
+fn demo_requests(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
+    use crate::requests::{RequestsTab, snowflake_at};
+    waffle.restore = None;
+    waffle.guild_id = None;
+    let fixtures = [
+        ("29360128", "lunar.moth", "lunar.moth", 2, 120, false),
+        ("33554432", "Gabe", "gabe_k", 1, 60 * 26, false),
+        ("37748736", "Featherstonehaugh Bartholomew the Third of Many Names and Even More Titles", "bart.iii", 0, 60 * 72, false),
+        ("41943040", "Free Nitro", "nitro.gift.2026", 0, 60, true),
+        ("46137344", "crypto_dan", "crypto_dan", 1, 60 * 24 * 5, true),
+    ];
+    if scene != "requests-empty" {
+        let now = chrono::Utc::now().timestamp_millis() as u64;
+        for (id, name, username, mutual, minutes, spam) in fixtures {
+            let person = user(id, name);
+            let mut dm = channel(&format!("request-{id}"), name, ChannelKind::Dm, None);
+            dm.raw_type = 1;
+            dm.recipient = Some(person.clone());
+            dm.recipients = vec![person];
+            dm.last_message_id = Some(snowflake_at(now - minutes * 60_000).to_string());
+            dm.props.message_request = !spam;
+            dm.props.spam = spam;
+            waffle.dm_requests.push(dm);
+            let profile = crate::discord::Profile { username: username.into(), mutual_server_count: mutual, ..Default::default() };
+            waffle.profiles.seed(&crate::profile::profile_key(id, None), profile);
+        }
+    }
+    if scene != "request-open" {
+        let tab = if scene == "requests-spam" { RequestsTab::Spam } else { RequestsTab::Requests };
+        return waffle.open_requests(tab, cx);
+    }
+    let dm = waffle.dm_requests[0].clone();
+    let ago = |mins: i64| (chrono::Utc::now() - chrono::Duration::minutes(mins)).to_rfc3339();
+    let author = dm.recipient.clone().unwrap_or_default();
+    let messages = vec![Message { id: "501".into(), channel_id: dm.id.clone(), author, timestamp: ago(120), content: "hey! saw your post in #art, do you take commissions?".into(), ..Default::default() }];
+    waffle.feeds.insert(dm.id.clone(), Feed { messages: std::sync::Arc::new(messages), loaded: true, ..Default::default() });
+    waffle.open_channel(dm, window, cx);
+}
+
 fn demo_dm_start(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
     let ferris = user("20971520", "ferris");
     let mut stranger = channel("dm-new", "ferris", ChannelKind::Dm, None);

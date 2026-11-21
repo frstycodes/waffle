@@ -84,6 +84,7 @@ impl Waffle {
 
     pub(crate) fn open_home(&mut self, cx: &mut Context<Self>) {
         self.inbox_page = false;
+        self.requests_page = None;
         self.guild_id = None;
         self.channel = None;
         self.call_view = false;
@@ -123,6 +124,7 @@ impl Waffle {
     pub(crate) fn open_inbox_page(&mut self, cx: &mut Context<Self>) {
         self.inbox_open = false;
         self.inbox_page = true;
+        self.requests_page = None;
         if self.inbox.is_none() {
             self.fetch_mentions(cx);
         }
@@ -197,7 +199,7 @@ impl Waffle {
 
     /// The Friends row at the top of the DM list (.ch.navrow).
     pub(crate) fn friends_row(&self, cx: &mut Context<Self>) -> AnyElement {
-        let selected = self.guild_id.is_none() && self.channel.is_none();
+        let selected = self.guild_id.is_none() && self.channel.is_none() && self.requests_page.is_none();
         let pending = self.relationships.iter().filter(|r| r.kind == Relation::Incoming).count() as u32;
         let state = RowState { selected, unread: false, muted: false, strong: false };
         channel_row("friends-row".into(), "friends-row".into(), state, cx)
