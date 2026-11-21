@@ -38,6 +38,7 @@ mod gif;
 mod games;
 mod go_live;
 mod h264;
+mod hidden;
 mod home;
 mod os_image;
 mod overlays;
@@ -712,6 +713,10 @@ pub struct Waffle {
     // Notification settings per server, "@me" for DMs.
     guild_settings: HashMap<String, discord::GuildSettings>,
     ignored: HashSet<String>,
+    // Folds of hidden messages opened with Show, by the run's first message id.
+    shown_folds: HashSet<String>,
+    // The open feed's folds as last drawn; when they change, the list re-measures their rows.
+    fold_layout: std::cell::RefCell<hidden::FoldLayout>,
     // A DM call we started: ring them once the call connects.
     ring_on_connect: Option<String>,
     // The DM call we're ringing out on; its ringtone plays until someone joins, we leave, or a minute passes.
@@ -1076,6 +1081,8 @@ impl Waffle {
             my_account: Default::default(),
             guild_settings: HashMap::new(),
             ignored: HashSet::new(),
+            shown_folds: HashSet::new(),
+            fold_layout: Default::default(),
             ring_on_connect: None,
             ringing_out: None,
             dm_calls: HashMap::new(),
@@ -1687,7 +1694,8 @@ impl Waffle {
             typers.retain(|t| t.user_id != message.author.id);
         }
         let is_dm = self.dms.iter().any(|d| d.id == channel_id);
-        if !mine && !is_open && (self.mentions_me(&message) || is_dm) {
+        let hidden = self.hidden_author(&message.author.id).is_some();
+        if !mine && !is_open && !hidden && (self.mentions_me(&message) || is_dm) {
             self.read_states.entry(channel_id.clone()).or_default().mentions += 1;
         }
         let kind = self.notify_kind(&message, is_open && self.window_active);

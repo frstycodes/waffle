@@ -274,11 +274,10 @@ impl Waffle {
         let me = self.me.as_ref()?.id.as_str();
         let settings = self.guild_settings.get(&guild.id);
         let connected = self.call.as_ref().filter(|c| c.guild_id.as_ref() == Some(&guild.id)).map(|c| c.channel.id.as_str());
-        let blocked = |id: &str| self.ignored.contains(id) || self.relationships.iter().any(|r| r.kind == crate::discord::Relation::Blocked && r.user.id == id);
         let counts = |state: &crate::discord::VoiceState| {
             let Some(channel_id) = state.channel_id.as_deref() else { return false };
             let Some(channel) = guild.channels.iter().find(|c| c.id == channel_id) else { return false };
-            channel.raw_type != 13 && guild.afk_channel_id.as_deref() != Some(channel_id) && guild.can_view(me, channel) && !settings.is_some_and(|s| s.channel_muted(channel_id)) && !blocked(&state.user_id)
+            channel.raw_type != 13 && guild.afk_channel_id.as_deref() != Some(channel_id) && guild.can_view(me, channel) && !settings.is_some_and(|s| s.channel_muted(channel_id)) && self.hidden_author(&state.user_id).is_none()
         };
         media_state(&guild.voice_states, me, connected, settings.is_some_and(|s| s.is_muted()), counts)
     }
