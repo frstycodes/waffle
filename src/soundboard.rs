@@ -1,0 +1,894 @@
+// Discord's soundboard in a call (docs/discord-soundboard-re.md, design/explore-voice-extras.html §3-4): the
+// picker that plays a sound to everyone, hearing the sounds others play, and the emoji that rises on the tile
+// of whoever played one.
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+    time::{Duration, Instant},
+};
+
+use gpui_kit::{
+    Anchor, Animation, AnimationExt, AnyElement, App, Bounds, Context, Entity, FontWeight, Hsla, MouseButton, Pixels, Point, ScrollHandle, SharedString, Task, Window, canvas,
+    component::{Icon, input::InputEvent},
+    div, img, linear_color_stop, linear_gradient, point, prelude::*, px,
+};
+
+use crate::{
+    SearchState, Waffle,
+    discord::{Emoji, SoundboardSound, VoiceEffect, perm},
+    icons::Glyph,
+    overlays::{anchored_at, backdrop},
+    palette,
+    settings::Fill,
+    ui::{self, RADIUS_LG, RADIUS_SM, Squircle},
+};
+
+const FAVORITES_LIMIT: usize = 250;
+const FREQUENT_COUNT: usize = 6;
+const PICKER_SIZE: (f32, f32) = (452., 420.);
+// The tile burst (design §3): six copies, 90ms apart, each rising 220px over 1.8s.
+const BURST_COPIES: usize = 6;
+const BURST_STAGGER: Duration = Duration::from_millis(90);
+const BURST_RISE: Duration = Duration::from_millis(1800);
+const EFFECT_LIFE: Duration = Duration::from_millis(2400);
+const MAX_EFFECTS: usize = 50;
+// How long a sound counts as playing when its file didn't say.
+const FALLBACK_LENGTH: Duration = Duration::from_secs(3);
+
+pub const NITRO_LOCKED: &str = "Use custom soundboard sounds across voice channels. Only with Nitro.";
+
+// What the soundboard knows for this session: every server's sounds and Discord's own, the files fetched so
+// far, what's playing, the effects on tiles, and the picker while it's open.
+pub struct Soundboard {
+    pub(crate) picker: Option<Picker>,
+    pub(crate) search: Entity<SearchState>,
+    guild_sounds: HashMap<String, Vec<SoundboardSound>>,
+    defaults: Vec<SoundboardSound>,
+    defaults_requested: bool,
+    requested: HashSet<String>,
+    clips: HashMap<String, Clip>,
+    // Sound id to when it stops playing.
+    playing: HashMap<String, Instant>,
+    effects: Vec<TileEffect>,
+    next_id: u64,
+    // Plays on their way to Discord; dropping one cancels it, which leaving the call does.
+    sending: HashMap<u64, Task<()>>,
+    // Where each soundboard control was last painted, so the picker opens above the one used.
+    anchors: Rc<RefCell<HashMap<&'static str, Bounds<Pixels>>>>,
+}
+
+pub(crate) struct Picker {
+    from: Option<&'static str>,
+    // Where it opens when no control is named (the shortcut opens it at the pointer, as Discord's).
+    at: Point<Pixels>,
+    volume_open: bool,
+    over_limit: bool,
+    scroll: ScrollHandle,
+}
+
+#[derive(Clone)]
+struct Clip {
+    bytes: bytes::Bytes,
+    length: Duration,
+}
+
+struct TileEffect {
+    id: u64,
+    user_id: String,
+    emoji: Option<Emoji>,
+    // The sound's name while we hear it play.
+    playing: Option<String>,
+}
+
+// Whether you can play sounds in the call, as the voice tray's button says it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Access {
+    // No Use Soundboard or Speak here: Discord hides the button.
+    Hidden,
+    Off(&'static str),
+    Ready,
+}
+
+impl Access {
+    pub fn tip(self) -> &'static str {
+        match self {
+            Access::Off(why) => why,
+            _ => "Open Soundboard",
+        }
+    }
+}
+
+impl Soundboard {
+    pub fn new(window: &mut Window, cx: &mut Context<Waffle>) -> Self {
+        let search = cx.new(|cx| SearchState::new(window, cx).placeholder("Find the perfect sound"));
+        cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify()).detach();
+        Soundboard {
+            picker: None,
+            search,
+            guild_sounds: HashMap::new(),
+            defaults: Vec::new(),
+            defaults_requested: false,
+            requested: HashSet::new(),
+            clips: HashMap::new(),
+            playing: HashMap::new(),
+            effects: Vec::new(),
+            next_id: 0,
+            sending: HashMap::new(),
+            anchors: Rc::default(),
+        }
+    }
+
+    pub fn store_sounds(&mut self, guild_id: String, sounds: Vec<SoundboardSound>, all: bool) {
+        let list = self.guild_sounds.entry(guild_id).or_default();
+        if all {
+            list.clear();
+        }
+        for sound in sounds {
+            match list.iter_mut().find(|s| s.id == sound.id) {
+                Some(old) => *old = sound,
+                None => list.push(sound),
+            }
+        }
+    }
+
+    pub fn remove_sound(&mut self, guild_id: &str, sound_id: &str) {
+        if let Some(list) = self.guild_sounds.get_mut(guild_id) {
+            list.retain(|s| s.id != sound_id);
+        }
+    }
+
+    pub fn close_picker(&mut self) -> bool {
+        self.picker.take().is_some()
+    }
+
+    pub fn stop_playing(&mut self) {
+        crate::sounds::stop_clips();
+        self.playing.clear();
+        for effect in &mut self.effects {
+            effect.playing = None;
+        }
+    }
+
+    // Leaving or switching channel: nothing keeps playing, and plays not yet sent are dropped.
+    pub fn leave_call(&mut self) {
+        self.stop_playing();
+        self.sending.clear();
+        self.effects.clear();
+        self.picker = None;
+    }
+
+    fn sound(&self, id: &str) -> Option<&SoundboardSound> {
+        self.defaults.iter().chain(self.guild_sounds.values().flatten()).find(|s| s.id == id)
+    }
+
+    fn is_playing(&self, sound_id: &str) -> bool {
+        self.playing.get(sound_id).is_some_and(|until| *until > Instant::now())
+    }
+
+    fn next_id(&mut self) -> u64 {
+        self.next_id += 1;
+        self.next_id
+    }
+
+    // A painted control's place, for the picker to open over.
+    fn probe(&self, key: &'static str) -> impl IntoElement {
+        let anchors = self.anchors.clone();
+        canvas(move |bounds, _, _| _ = anchors.borrow_mut().insert(key, bounds), |_, _, _, _| {}).absolute().size_full()
+    }
+}
+
+// Discord's soundboard volume: stored as amplitude, shown (and played at) its perceptual value, both 0..=100
+// for the slider's range (`M` and `w` in its client).
+pub fn perceptual(amplitude: f32) -> f32 {
+    if amplitude < 100. { 100. * (amplitude.max(0.) / 100.).powf(1. / 2.8) } else { 100. * (20. * (amplitude / 100.).log10() / 6. + 1.) }
+}
+
+pub fn amplitude(perceptual: f32) -> f32 {
+    100. * (perceptual.clamp(0., 100.) / 100.).powf(2.8)
+}
+
+pub fn slider_fraction(amplitude: f32) -> f32 {
+    (perceptual(amplitude) / 100.).clamp(0., 1.)
+}
+
+// The gain a sound plays at: its own volume, the soundboard setting, and output volume up to 100%.
+pub fn playback_volume(sound_volume: f32, soundboard_volume: f32, output_volume: f32) -> f32 {
+    (sound_volume * perceptual(soundboard_volume) / 100. * output_volume.min(1.)).min(1.)
+}
+
+// Discord's rule for one sound in a channel: its own server's and Discord's sounds always; another server's
+// with Nitro, where Use External Sounds is allowed (always in DMs).
+pub fn can_use(sound: &SoundboardSound, channel_guild: Option<&str>, nitro: bool, external: bool) -> bool {
+    let home = sound.is_default() || channel_guild == Some(sound.guild_id.as_str());
+    sound.available && (home || (nitro && (channel_guild.is_none() || external)))
+}
+
+impl Waffle {
+    pub(crate) fn soundboard_access(&self) -> Access {
+        let Some(call) = &self.call else { return Access::Hidden };
+        let me = self.me.as_ref().map(|m| m.id.as_str()).unwrap_or_default();
+        let guild = call.guild_id.as_ref().and_then(|id| self.guilds.iter().find(|g| &g.id == id));
+        if let Some(guild) = guild {
+            let needed = perm::USE_SOUNDBOARD | perm::SPEAK;
+            if guild.channel_permissions(me, &call.channel) & needed != needed {
+                return Access::Hidden;
+            }
+            if guild.voice_states.iter().any(|v| v.user_id == me && v.server_muted) {
+                return Access::Off("Soundboard disabled when server muted");
+            }
+        }
+        // GAP: "Soundboard disabled when suppressed" needs the voice state's `suppress`, which VoiceState
+        // doesn't keep yet (it only matters on stage channels, which Waffle doesn't join).
+        if self.deafened {
+            return Access::Off("Soundboard disabled when deafened");
+        }
+        Access::Ready
+    }
+
+    // Not verified: that Nitro Basic (premium type 3) lacks soundboard-everywhere; only full Nitro (2) gets it here.
+    fn has_nitro_soundboard(&self) -> bool {
+        self.my_account.premium_type == 2
+    }
+
+    fn sound_usable(&self, sound: &SoundboardSound) -> bool {
+        let Some(call) = &self.call else { return false };
+        let me = self.me.as_ref().map(|m| m.id.as_str()).unwrap_or_default();
+        let guild = call.guild_id.as_ref().and_then(|id| self.guilds.iter().find(|g| &g.id == id));
+        let external = guild.is_some_and(|g| g.channel_permissions(me, &call.channel) & perm::USE_EXTERNAL_SOUNDS != 0);
+        can_use(sound, call.guild_id.as_deref(), self.has_nitro_soundboard(), external)
+    }
+
+    fn sound_gain(&self, sound_volume: f32) -> f32 {
+        playback_volume(sound_volume, self.prefs.soundboard_volume, self.prefs.output_volume)
+    }
+
+    // Each server's soundboard over the gateway, once per session, and Discord's own sounds once, as its
+    // client does when the picker opens and when voice connects.
+    pub(crate) fn fetch_soundboard(&mut self, cx: &mut Context<Self>) {
+        let Some(client) = self.client.clone() else { return };
+        let wanted: Vec<String> = self.guilds.iter().map(|g| g.id.clone()).filter(|id| !self.soundboard.requested.contains(id)).collect();
+        if !wanted.is_empty() {
+            client.request_soundboard_sounds(&wanted);
+            self.soundboard.requested.extend(wanted);
+        }
+        if std::mem::replace(&mut self.soundboard.defaults_requested, true) {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let result = client.default_soundboard_sounds().await;
+            this.update(cx, |this, cx| match result {
+                Ok(sounds) => {
+                    this.soundboard.defaults = sounds;
+                    cx.notify();
+                }
+                // Asked again next time the picker opens.
+                Err(_) => this.soundboard.defaults_requested = false,
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    pub(crate) fn toggle_soundboard_key(&mut self, _: &crate::app_keys::ToggleSoundboard, window: &mut Window, cx: &mut Context<Self>) {
+        if self.soundboard.close_picker() {
+            return cx.notify();
+        }
+        self.open_soundboard(None, window, cx);
+    }
+
+    // Opens the picker over the control `from`, or at the pointer.
+    pub(crate) fn open_soundboard(&mut self, from: Option<&'static str>, window: &mut Window, cx: &mut Context<Self>) {
+        if self.soundboard_access() != Access::Ready {
+            return;
+        }
+        self.dismiss_overlay(cx);
+        self.soundboard.picker = Some(Picker { from, at: window.mouse_position(), volume_open: false, over_limit: false, scroll: ScrollHandle::new() });
+        self.soundboard.search.update(cx, |state, cx| {
+            state.set_value("", window, cx);
+            state.focus(window, cx);
+        });
+        self.fetch_soundboard(cx);
+        cx.notify();
+    }
+
+    // Click: plays to everyone in the call, here at once (Discord doesn't wait for its echo), then tells Discord.
+    fn play_soundboard_sound(&mut self, sound: SoundboardSound, cx: &mut Context<Self>) {
+        if self.soundboard_access() != Access::Ready || !self.sound_usable(&sound) {
+            return;
+        }
+        let (Some(call), Some(me)) = (&self.call, self.me.as_ref()) else { return };
+        let (channel_id, me) = (call.channel.id.clone(), me.id.clone());
+        self.play_clip(format!("{me}-{}", sound.id), sound.id.clone(), self.sound_gain(sound.volume), Some(channel_id.clone()), cx);
+        self.add_tile_effect(me, sound.emoji.clone(), Some(sound.name.clone()), cx);
+        let id = sound.id.clone();
+        self.update_prefs(cx, |p| match p.soundboard_uses.iter_mut().find(|(s, _)| *s == id) {
+            Some((_, n)) => *n += 1,
+            None => p.soundboard_uses.push((id, 1)),
+        });
+        let Some(client) = self.client.clone() else { return };
+        let key = self.soundboard.next_id();
+        // A failed play is silent, as Discord's: it has no error UI for it.
+        let send = cx.spawn(async move |this, cx| {
+            let _ = client.send_soundboard_sound(&channel_id, &sound).await;
+            this.update(cx, |this, _| this.soundboard.sending.remove(&key)).ok();
+        });
+        self.soundboard.sending.insert(key, send);
+    }
+
+    // Preview: only you hear it, and Discord isn't told.
+    fn preview_sound(&mut self, sound: &SoundboardSound, cx: &mut Context<Self>) {
+        self.play_clip(format!("preview-{}", sound.id), sound.id.clone(), self.sound_gain(sound.volume), None, cx);
+    }
+
+    // Someone else's sound in our channel: heard unless we're deafened or muted their soundboard (self-mute
+    // doesn't stop it); their emoji rises on their tile either way.
+    pub(crate) fn on_voice_effect(&mut self, effect: VoiceEffect, cx: &mut Context<Self>) {
+        let Some(call) = &self.call else { return };
+        if call.channel.id != effect.channel_id || self.me.as_ref().is_some_and(|m| m.id == effect.user_id) {
+            return;
+        }
+        let heard = !self.deafened && !self.prefs.soundboard_mutes.contains(&effect.user_id);
+        let sound = effect.sound_id.clone().filter(|_| heard);
+        if let Some(sound_id) = &sound {
+            let channel = Some(effect.channel_id.clone());
+            self.play_clip(format!("{}-{sound_id}", effect.user_id), sound_id.clone(), self.sound_gain(effect.sound_volume), channel, cx);
+        }
+        // Discord draws the burst only for an effect that carries its animation.
+        let emoji = effect.emoji.filter(|_| effect.animation_type.is_some() && effect.animation_id.is_some());
+        let name = sound.and_then(|id| effect.name.clone().or_else(|| self.soundboard.sound(&id).map(|s| s.name.clone())));
+        if emoji.is_some() || name.is_some() {
+            self.add_tile_effect(effect.user_id, emoji, name, cx);
+        }
+    }
+
+    // Plays a sound's file, fetching it the first time; `channel` drops it if we've left that call by then.
+    fn play_clip(&mut self, key: String, sound_id: String, gain: f32, channel: Option<String>, cx: &mut Context<Self>) {
+        if gain <= 0. {
+            return;
+        }
+        if let Some(clip) = self.soundboard.clips.get(&sound_id).cloned() {
+            return self.start_clip(key, sound_id, clip, gain, cx);
+        }
+        let Some(client) = self.client.clone() else { return };
+        cx.spawn(async move |this, cx| {
+            let Ok(bytes) = client.soundboard_file(&sound_id).await else { return };
+            let measured = bytes.clone();
+            let length = cx.background_executor().spawn(async move { crate::sounds::clip_length(&measured) }).await;
+            this.update(cx, |this, cx| {
+                let clip = Clip { bytes, length: length.unwrap_or(FALLBACK_LENGTH) };
+                this.soundboard.clips.insert(sound_id.clone(), clip.clone());
+                let here = this.call.as_ref().map(|c| &c.channel.id);
+                if channel.is_none() || channel.as_ref() == here {
+                    this.start_clip(key, sound_id, clip, gain, cx);
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    fn start_clip(&mut self, key: String, sound_id: String, clip: Clip, gain: f32, cx: &mut Context<Self>) {
+        crate::sounds::play_clip(key, clip.bytes, gain);
+        self.soundboard.playing.insert(sound_id, Instant::now() + clip.length);
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(clip.length).await;
+            this.update(cx, |this, cx| {
+                this.soundboard.playing.retain(|_, until| *until > Instant::now());
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn add_tile_effect(&mut self, user_id: String, emoji: Option<Emoji>, playing: Option<String>, cx: &mut Context<Self>) {
+        let id = self.soundboard.next_id();
+        let effects = &mut self.soundboard.effects;
+        effects.push(TileEffect { id, user_id, emoji, playing });
+        let over = effects.len().saturating_sub(MAX_EFFECTS);
+        effects.drain(..over);
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(EFFECT_LIFE).await;
+            this.update(cx, |this, cx| {
+                this.soundboard.effects.retain(|e| e.id != id);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn toggle_favorite(&mut self, sound_id: String, cx: &mut Context<Self>) {
+        let favorite = self.prefs.soundboard_favorites.contains(&sound_id);
+        if !favorite && self.prefs.soundboard_favorites.len() >= FAVORITES_LIMIT {
+            if let Some(picker) = &mut self.soundboard.picker {
+                picker.over_limit = true;
+            }
+            return cx.notify();
+        }
+        self.update_prefs(cx, |p| match favorite {
+            true => p.soundboard_favorites.retain(|id| *id != sound_id),
+            false => p.soundboard_favorites.push(sound_id),
+        });
+    }
+
+    // The soundboard control in the call bar and the voice panel: hidden without permission, off (with
+    // Discord's reason) while deafened or server muted.
+    pub(crate) fn soundboard_probe(&self, key: &'static str) -> impl IntoElement {
+        self.soundboard.probe(key)
+    }
+
+    pub(crate) fn soundboard_open(&self) -> bool {
+        self.soundboard.picker.is_some()
+    }
+
+    // What rises on a person's call tile while their sound plays.
+    pub(crate) fn soundboard_tile_effect(&self, user_id: &str, cx: &App) -> Option<AnyElement> {
+        let effects: Vec<&TileEffect> = self.soundboard.effects.iter().filter(|e| e.user_id == user_id).collect();
+        let latest = effects.iter().rev().find_map(|e| e.playing.clone());
+        if effects.is_empty() {
+            return None;
+        }
+        let bursts: Vec<AnyElement> = match cx.reduce_motion() {
+            true => Vec::new(),
+            false => effects.iter().filter_map(|e| Some(burst(e.id, e.emoji.as_ref()?))).collect(),
+        };
+        let label = latest.map(|name| {
+            div()
+                .absolute()
+                .top(px(8.))
+                .left(px(8.))
+                .max_w(gpui_kit::relative(0.6))
+                .h(px(24.))
+                .px(px(8.))
+                .squircle(8.)
+                .bg(gpui_kit::black().opacity(0.6))
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .text_size(px(12.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(gpui_kit::white())
+                .child(Icon::new(Glyph::Soundboard).size(px(14.)))
+                .child(div().min_w_0().truncate().child(name))
+        });
+        Some(div().absolute().inset_0().overflow_hidden().children(bursts).children(label).into_any_element())
+    }
+
+    pub(crate) fn soundboard_overlay(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let picker = self.soundboard.picker.as_ref()?;
+        let anchored = picker.from.and_then(|key| self.soundboard.anchors.borrow().get(key).copied());
+        let at = match (picker.from, anchored) {
+            (_, Some(b)) => point(b.center().x, b.top() - px(8.)),
+            // The control hasn't painted yet: place it once it has.
+            (Some(_), None) => {
+                window.request_animation_frame();
+                picker.at
+            }
+            (None, None) => picker.at,
+        };
+        let card = div()
+            .id("soundboard")
+            .occlude()
+            .w(px(PICKER_SIZE.0))
+            .h(px(PICKER_SIZE.1))
+            .squircle(RADIUS_LG)
+            .bg(palette::surface(palette::Level::Overlay, cx))
+            .shadow(ui::shadow_pop(cx))
+            .relative()
+            .flex()
+            .flex_col()
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .children(self.picker_content(picker, cx));
+        let card = ui::rise(card.transform_origin(gpui_kit::point(gpui_kit::relative(0.5), gpui_kit::relative(1.))), "soundboard", Duration::ZERO);
+        Some(backdrop("soundboard-backdrop", cx).child(anchored_at(at, Anchor::BottomCenter, card)).into_any_element())
+    }
+
+    fn picker_content(&self, picker: &Picker, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let sections = self.sound_sections(cx);
+        let muted = self.prefs.soundboard_volume <= 0.;
+        let volume = div()
+            .id("soundboard-volume")
+            .size(px(28.))
+            .flex_none()
+            .squircle(8.)
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor_pointer()
+            .text_color(palette::muted(cx))
+            .hover(|s| s.bg(palette::hover(cx)).text_color(palette::strong(cx)))
+            .when(picker.volume_open, |b| b.bg(palette::selected(cx)).text_color(palette::strong(cx)))
+            .child(Icon::new(if muted { Glyph::VolumeOff } else { Glyph::VolumeHigh }).size(px(16.)))
+            .tooltip(|window, cx| ui::tip("Control volume", window, cx))
+            .on_click(cx.listener(|this, _, _, cx| {
+                if let Some(picker) = &mut this.soundboard.picker {
+                    picker.volume_open = !picker.volume_open;
+                }
+                cx.notify();
+            }));
+        let head = div().flex_none().pt(px(12.)).px(px(12.)).pb(px(8.)).child(ui::search_field("soundboard-search", &self.soundboard.search, cx).trailing(volume));
+        let in_view = picker.scroll.top_item();
+        let rail = div()
+            .id("soundboard-rail")
+            .w(px(52.))
+            .flex_none()
+            .px(px(8.))
+            .pt(px(4.))
+            .pb(px(8.))
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(px(6.))
+            .overflow_y_scroll()
+            .border_r_1()
+            .border_color(palette::line(cx))
+            .children(sections.iter().enumerate().flat_map(|(i, section)| {
+                let line = section.first_locked.then(|| div().w(px(20.)).h(px(1.)).flex_none().bg(palette::line(cx)).into_any_element());
+                let scroll = picker.scroll.clone();
+                let (selected, hover) = (palette::accent_soft(cx), palette::hover(cx));
+                let tip: SharedString = if section.locked { NITRO_LOCKED.into() } else { section.name.clone() };
+                let tab = div()
+                    .id(("soundboard-tab", i))
+                    .size(px(36.))
+                    .flex_none()
+                    .squircle(RADIUS_SM)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .text_color(if i == in_view { palette::accent_ink(cx) } else { palette::muted(cx) })
+                    .when(i == in_view, |d| d.bg(selected))
+                    .when(i != in_view, |d| d.bg(palette::selected(cx)).hover(move |s| s.bg(hover)))
+                    .when(section.locked, |d| d.opacity(0.5))
+                    .child(section.lead.render(cx))
+                    .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        scroll.scroll_to_top_of_item(i);
+                        cx.notify();
+                    }));
+                line.into_iter().chain([tab.into_any_element()])
+            }));
+        let over_limit = picker.over_limit.then(|| ui::callout(ui::Notice::Warning, Glyph::Star, "Oh no!", format!("You cannot have more than {FAVORITES_LIMIT} favorites."), cx).mt(px(8.)));
+        let list = div()
+            .id("soundboard-list")
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .overflow_y_scroll()
+            .track_scroll(&picker.scroll)
+            .px(px(12.))
+            .pb(px(12.))
+            .children(sections.into_iter().map(|section| self.sound_section(section, cx)));
+        let volume_card = picker.volume_open.then(|| self.volume_card(cx).into_any_element());
+        let mut content = vec![
+            head.into_any_element(),
+            div()
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .child(rail)
+                .child(div().flex_1().min_w_0().h_full().flex().flex_col().relative().children(over_limit).child(list).child(gpui_kit::component::scroll::Scrollbar::vertical(&picker.scroll)))
+                .into_any_element(),
+        ];
+        content.extend(volume_card);
+        content
+    }
+
+    // "Soundboard Volume" under the search field's speaker: the same value as Settings › Voice & Video.
+    fn volume_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let value = format!("{}%", perceptual(self.prefs.soundboard_volume).round() as i32);
+        let slider = self.range("soundboard-picker-volume".into(), slider_fraction(self.prefs.soundboard_volume), Fill::Accent, |this, f, cx| this.update_prefs(cx, |p| p.soundboard_volume = amplitude(f * 100.)), cx);
+        div()
+            .id("soundboard-volume-card")
+            .occlude()
+            .absolute()
+            .top(px(56.))
+            .right(px(12.))
+            .w(px(240.))
+            .p(px(12.))
+            .squircle(RADIUS_SM + 4.)
+            .bg(palette::surface(palette::Level::Overlay, cx))
+            .shadow(ui::shadow_pop(cx))
+            .border_1()
+            .border_color(palette::line(cx))
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .child(div().flex().justify_between().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child("Soundboard Volume").child(div().text_color(palette::strong(cx)).child(value)))
+            .child(slider)
+    }
+
+    fn sound_section(&self, section: Section, cx: &mut Context<Self>) -> AnyElement {
+        let header = div()
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .pt(px(10.))
+            .pb(px(6.))
+            .px(px(2.))
+            .text_size(px(12.))
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(palette::muted(cx))
+            .child(section.lead.small(cx))
+            .child(section.name.clone());
+        let rows = section.sounds.chunks(3).map(|row| {
+            let tiles = row.iter().map(|s| self.sound_tile(&section.key, s, section.locked, cx).into_any_element());
+            let fillers = (row.len()..3).map(|_| div().flex_1().into_any_element());
+            div().flex().gap(px(6.)).children(tiles.chain(fillers).collect::<Vec<_>>())
+        }).collect::<Vec<_>>();
+        div()
+            .when(section.first_locked, |d| d.mt(px(12.)).border_t_1().border_color(palette::line(cx)))
+            .when(section.locked, |d| d.opacity(0.5))
+            .child(header)
+            .child(div().flex().flex_col().gap(px(6.)).children(rows))
+            .into_any_element()
+    }
+
+    // .snd: emoji and name; hovered, Preview and the star over its right end on a fade into its fill. Playing
+    // draws the accent edge. A locked sound only says why.
+    fn sound_tile(&self, section: &str, sound: &SoundboardSound, locked: bool, cx: &mut Context<Self>) -> impl IntoElement {
+        let group = SharedString::from(format!("snd-{section}-{}", sound.id));
+        let overlay = palette::surface(palette::Level::Overlay, cx);
+        let strong = palette::strong(cx);
+        let (rest, hover) = (ui::mix(overlay, strong, 0.08), ui::mix(overlay, strong, 0.14));
+        let edge = if self.soundboard.is_playing(&sound.id) { palette::accent() } else { gpui_kit::transparent_black() };
+        let tile = div()
+            .id(group.clone())
+            .group(group.clone())
+            .relative()
+            .flex_1()
+            .min_w_0()
+            .h(px(36.))
+            .px(px(8.))
+            .squircle(RADIUS_SM)
+            .border_1()
+            .border_color(edge)
+            .bg(rest)
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .text_size(px(14.))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(strong)
+            .child(div().flex_none().child(emoji_face(sound.emoji.as_ref(), 16.)))
+            .child(div().flex_1().min_w_0().truncate().child(sound.name.clone()));
+        if locked {
+            return tile.cursor(gpui_kit::CursorStyle::OperationNotAllowed).tooltip(|window, cx| ui::tip(NITRO_LOCKED, window, cx));
+        }
+        let favorite = self.prefs.soundboard_favorites.contains(&sound.id);
+        let silent = self.prefs.soundboard_volume <= 0.;
+        let preview_tip = if silent { "Increase your Soundboard volume setting to preview" } else { "Preview" };
+        let previewed = sound.clone();
+        let preview = tool(format!("{group}-preview"), Glyph::VolumeHigh, preview_tip, None, cx).when(!silent, |b| {
+            b.on_click(cx.listener(move |this, _, _, cx| {
+                cx.stop_propagation();
+                this.preview_sound(&previewed, cx);
+            }))
+        });
+        let starred = sound.id.clone();
+        let star = tool(format!("{group}-star"), Glyph::Star, if favorite { "Unfavorite" } else { "Favorite" }, favorite.then(|| palette::accent_ink(cx)), cx).on_click(cx.listener(move |this, _, _, cx| {
+            cx.stop_propagation();
+            this.toggle_favorite(starred.clone(), cx);
+        }));
+        let tools = div()
+            .absolute()
+            .top_0()
+            .bottom_0()
+            .right_0()
+            .pl(px(16.))
+            .pr(px(4.))
+            .flex()
+            .items_center()
+            .gap(px(2.))
+            .bg(linear_gradient(90., linear_color_stop(hover.opacity(0.), 0.), linear_color_stop(hover, 0.25)))
+            .opacity(0.)
+            .group_hover(group.clone(), |s| s.opacity(1.))
+            .child(preview)
+            .child(star);
+        let played = sound.clone();
+        tile.cursor_pointer().hover(move |s| s.bg(hover)).child(tools).on_click(cx.listener(move |this, _, _, cx| this.play_soundboard_sound(played.clone(), cx)))
+    }
+
+    // Favorites, Frequently Used, each server's sounds we may play, the servers we can't below a line, then
+    // Discord's own. A search filters them all by name or emoji, without the first two.
+    fn sound_sections(&self, cx: &App) -> Vec<Section> {
+        let query = self.soundboard.search.read(cx).value().trim().to_lowercase();
+        let matches = |s: &&SoundboardSound| query.is_empty() || s.name.to_lowercase().contains(&query) || s.emoji.as_ref().is_some_and(|e| e.name.to_lowercase().contains(&query));
+        let known = |id: &String| self.soundboard.sound(id).filter(|s| self.sound_usable(s)).cloned();
+        let mut sections = Vec::new();
+        if query.is_empty() {
+            let favorites: Vec<SoundboardSound> = self.prefs.soundboard_favorites.iter().filter_map(known).collect();
+            sections.push(Section::new("favorites", Lead::Glyph(Glyph::Star), "Favorites", favorites));
+            let mut uses = self.prefs.soundboard_uses.clone();
+            uses.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
+            let frequent: Vec<SoundboardSound> = uses.iter().filter_map(|(id, _)| known(id)).take(FREQUENT_COUNT).collect();
+            sections.push(Section::new("frequent", Lead::Glyph(Glyph::Clock), "Frequently Used", frequent));
+        }
+        let call_guild = self.call.as_ref().and_then(|c| c.guild_id.clone());
+        // The call's own server first, then the rest in rail order.
+        let mut guilds: Vec<_> = self.guilds.iter().collect();
+        guilds.sort_by_key(|g| Some(&g.id) != call_guild.as_ref());
+        let (mut open, mut locked) = (Vec::new(), Vec::new());
+        for guild in guilds {
+            let sounds: Vec<SoundboardSound> = self.soundboard.guild_sounds.get(&guild.id).into_iter().flatten().filter(|s| s.available).filter(matches).cloned().collect();
+            if sounds.is_empty() {
+                continue;
+            }
+            let usable = sounds.iter().all(|s| self.sound_usable(s));
+            let section = Section::new(&guild.id, Lead::Server { icon: guild.icon.clone(), name: guild.name.clone() }, &guild.name, sounds);
+            if usable { open.push(section) } else { locked.push(section) }
+        }
+        sections.extend(open);
+        if let Some(first) = locked.first_mut() {
+            first.first_locked = true;
+        }
+        sections.extend(locked.into_iter().map(|s| Section { locked: true, ..s }));
+        let defaults: Vec<SoundboardSound> = self.soundboard.defaults.iter().filter(matches).cloned().collect();
+        sections.push(Section::new("defaults", Lead::Glyph(Glyph::Soundboard), "Discord Sounds", defaults));
+        sections.retain(|s| !s.sounds.is_empty());
+        sections
+    }
+}
+
+struct Section {
+    key: String,
+    lead: Lead,
+    name: SharedString,
+    sounds: Vec<SoundboardSound>,
+    locked: bool,
+    first_locked: bool,
+}
+
+impl Section {
+    fn new(key: &str, lead: Lead, name: &str, sounds: Vec<SoundboardSound>) -> Self {
+        Section { key: key.into(), lead, name: name.to_owned().into(), sounds, locked: false, first_locked: false }
+    }
+}
+
+enum Lead {
+    Glyph(Glyph),
+    Server { icon: Option<String>, name: String },
+}
+
+impl Lead {
+    fn render(&self, cx: &App) -> AnyElement {
+        match self {
+            Lead::Glyph(glyph) => Icon::new(*glyph).size(px(18.)).into_any_element(),
+            Lead::Server { icon, name } => ui::server_tile(icon.as_deref(), name, 36., cx),
+        }
+    }
+
+    fn small(&self, cx: &App) -> AnyElement {
+        match self {
+            Lead::Glyph(glyph) => Icon::new(*glyph).size(px(14.)).into_any_element(),
+            Lead::Server { icon, name } => ui::server_tile(icon.as_deref(), name, 16., cx),
+        }
+    }
+}
+
+// A server's emoji as its image, a Unicode one as text.
+fn emoji_face(emoji: Option<&Emoji>, size: f32) -> AnyElement {
+    match emoji {
+        Some(e) if e.id.is_some() => img(e.url().unwrap_or_default()).size(px(size)).into_any_element(),
+        Some(e) => div().text_size(px(size)).line_height(px(size)).child(e.name.clone()).into_any_element(),
+        None => Icon::new(Glyph::Soundboard).size(px(size)).into_any_element(),
+    }
+}
+
+// The 22px buttons over a hovered sound.
+fn tool(id: String, glyph: Glyph, tip: &'static str, ink: Option<Hsla>, cx: &App) -> gpui_kit::Stateful<gpui_kit::Div> {
+    let strong = palette::strong(cx);
+    div()
+        .id(SharedString::from(id))
+        .size(px(22.))
+        .squircle(6.)
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .text_color(ink.unwrap_or_else(|| palette::muted(cx)))
+        .hover(move |s| s.bg(palette::hover(cx)).text_color(ink.unwrap_or(strong)))
+        .child(Icon::new(glyph).size(px(14.)))
+        .tooltip(move |window, cx| ui::tip(tip, window, cx))
+}
+
+// Copies of the emoji rising from the tile's foot, staggered, each easing out as it fades (design §3 `.burst`).
+fn burst(effect: u64, emoji: &Emoji) -> AnyElement {
+    let total = BURST_RISE + BURST_STAGGER * (BURST_COPIES as u32 - 1);
+    let copies = (0..BURST_COPIES).map(|i| {
+        let lead = (BURST_STAGGER * i as u32).as_secs_f32() / total.as_secs_f32();
+        let span = BURST_RISE.as_secs_f32() / total.as_secs_f32();
+        let left = 10. + 75. * spread(effect, i);
+        div()
+            .absolute()
+            .bottom(px(-40.))
+            .left(gpui_kit::relative(left / 100.))
+            .child(emoji_face(Some(emoji), 32.))
+            .with_animation(("soundboard-burst", (effect * BURST_COPIES as u64 + i as u64) as usize), Animation::new(total), move |el, t| {
+                let t = ((t - lead) / span).clamp(0., 1.);
+                let rise = crate::motion::ease_out().sample(t);
+                let fade = if t < 0.15 { t / 0.15 } else { 1. - (t - 0.15) / 0.85 };
+                el.translate_y(px(-220. * rise)).scale(0.95 + 0.1 * rise).opacity(if t <= 0. { 0. } else { fade })
+            })
+            .into_any_element()
+    });
+    div().absolute().inset_0().children(copies.collect::<Vec<_>>()).into_any_element()
+}
+
+// 0..1, the same for a copy each time its tile paints.
+fn spread(effect: u64, copy: usize) -> f32 {
+    let mut h = effect.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (copy as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h ^= h >> 31;
+    (h % 1000) as f32 / 1000.
+}
+
+// Made-up soundboard for the demo scenes: Night Owls' sounds, gpui's (locked without Nitro), Discord's own.
+pub fn demo(waffle: &mut Waffle, open: bool, window: &mut Window, cx: &mut Context<Waffle>) {
+    let sound = |id: &str, guild: &str, name: &str, emoji: &str| SoundboardSound { id: id.into(), name: name.into(), guild_id: guild.into(), volume: 1., emoji: Some(Emoji::unicode(emoji)), available: true };
+    let board = &mut waffle.soundboard;
+    board.store_sounds("1".into(), vec![sound("101", "1", "airhorn", "📯"), sound("102", "1", "mira laughing extremely loudly", "😂"), sound("103", "1", "sad trombone", "🎺"), sound("104", "1", "bruh", "🚨")], true);
+    board.store_sounds("2".into(), vec![sound("201", "2", "yippee", "🎉"), sound("202", "2", "vine boom", "💥")], true);
+    board.defaults = vec![sound("1", "0", "quack", "🦆"), sound("2", "0", "airhorn", "🔊"), sound("3", "0", "cricket", "🦗"), sound("4", "0", "golf clap", "👏"), sound("5", "0", "sad horn", "👻"), sound("6", "0", "ba dum tss", "🥁")];
+    board.defaults_requested = true;
+    waffle.prefs.soundboard_favorites = vec!["1".into(), "6".into()];
+    waffle.prefs.soundboard_uses = vec![("101".into(), 9), ("103".into(), 4)];
+    waffle.soundboard.playing.insert("1".into(), Instant::now() + Duration::from_secs(3600));
+    if open {
+        waffle.soundboard.picker = Some(Picker { from: Some(CALL_CONTROL), at: point(px(640.), px(640.)), volume_open: false, over_limit: false, scroll: ScrollHandle::new() });
+        waffle.soundboard.search.update(cx, |state, cx| state.focus(window, cx));
+    } else {
+        let id = waffle.soundboard.next_id();
+        waffle.soundboard.effects.push(TileEffect { id, user_id: "8388608".into(), emoji: Some(Emoji::unicode("🦆")), playing: Some("quack".into()) });
+    }
+}
+
+// The probe keys for the controls that open the picker.
+pub const CALL_CONTROL: &str = "call";
+pub const PANEL_CONTROL: &str = "panel";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sound(guild: &str) -> SoundboardSound {
+        SoundboardSound { id: "1".into(), name: "quack".into(), guild_id: guild.into(), volume: 1., emoji: None, available: true }
+    }
+
+    #[test]
+    fn volume_scale_round_trips_and_defaults_to_full() {
+        assert_eq!(perceptual(100.), 100.);
+        assert_eq!(perceptual(0.), 0.);
+        for p in [5., 25., 50., 80.] {
+            assert!((perceptual(amplitude(p)) - p).abs() < 0.01, "{p}");
+        }
+        // Discord's curve: half the slider is about 14% amplitude.
+        assert!((amplitude(50.) - 14.36).abs() < 0.01);
+    }
+
+    #[test]
+    fn playback_volume_follows_discords_formula() {
+        assert_eq!(playback_volume(1., 100., 1.), 1.);
+        assert!((playback_volume(0.5, 100., 1.) - 0.5).abs() < 1e-6);
+        assert!((playback_volume(1., amplitude(50.), 1.) - 0.5).abs() < 1e-4, "the setting plays at its perceptual value");
+        assert!((playback_volume(1., 100., 0.4) - 0.4).abs() < 1e-6, "output volume under 100% lowers it");
+        assert_eq!(playback_volume(1., 100., 2.), 1., "output over 100% doesn't raise it");
+        assert_eq!(playback_volume(0.8, 400., 1.), 1., "capped at 1");
+        assert_eq!(playback_volume(1., 0., 1.), 0., "0 is the soundboard muted");
+    }
+
+    #[test]
+    fn other_servers_sounds_need_nitro_and_external_sounds() {
+        let (home, other, default) = (sound("9"), sound("7"), sound("0"));
+        assert!(can_use(&home, Some("9"), false, false));
+        assert!(can_use(&default, Some("9"), false, false));
+        assert!(!can_use(&other, Some("9"), false, true), "no Nitro");
+        assert!(!can_use(&other, Some("9"), true, false), "Use External Sounds denied");
+        assert!(can_use(&other, Some("9"), true, true));
+        assert!(can_use(&other, None, true, false), "a DM call needs only Nitro");
+        assert!(!can_use(&SoundboardSound { available: false, ..home }, Some("9"), true, true), "unavailable");
+    }
+}

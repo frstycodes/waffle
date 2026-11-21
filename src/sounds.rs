@@ -102,29 +102,79 @@ pub fn stop_ring() {
     }
 }
 
-// One audio thread owns the output device for the life of the app; cues are queued to it. A cue sent
-// with a stop flag loops until the flag is set.
+// A soundboard sound as fetched (mp3 or ogg) at a gain of 0..=1; playing a key again restarts it.
+pub fn play_clip(key: String, bytes: bytes::Bytes, volume: f32) {
+    request(Request::Clip { key, bytes, volume });
+}
+
+pub fn stop_clips() {
+    request(Request::StopClips);
+}
+
+// How long a clip plays: from its header when it says, else by decoding it.
+pub fn clip_length(bytes: &bytes::Bytes) -> Option<Duration> {
+    let decoder = rodio::Decoder::try_from(std::io::Cursor::new(bytes.clone())).ok()?;
+    if let Some(length) = decoder.total_duration() {
+        return Some(length);
+    }
+    let per_second = decoder.sample_rate().get() as f32 * f32::from(decoder.channels().get());
+    Some(Duration::from_secs_f32(decoder.count() as f32 / per_second))
+}
+
 fn send(cue: Cue, looping: Option<Arc<AtomicBool>>) {
-    type Request = (Cue, Option<Arc<AtomicBool>>);
+    request(Request::Cue(cue, looping));
+}
+
+enum Request {
+    // A cue sent with a stop flag loops until the flag is set.
+    Cue(Cue, Option<Arc<AtomicBool>>),
+    Clip { key: String, bytes: bytes::Bytes, volume: f32 },
+    StopClips,
+}
+
+// One audio thread owns the output device for the life of the app; every sound is queued to it.
+fn request(request: Request) {
     static PLAYER: std::sync::OnceLock<std::sync::mpsc::Sender<Request>> = std::sync::OnceLock::new();
     let player = PLAYER.get_or_init(|| {
         let (send, receive) = std::sync::mpsc::channel::<Request>();
         std::thread::spawn(move || {
             let Ok(mut sink) = rodio::DeviceSinkBuilder::open_default_sink() else { return };
             sink.log_on_drop(false);
-            for (cue, looping) in receive {
-                let Ok(sound) = rodio::Decoder::try_from(std::io::Cursor::new(cue.bytes())) else { continue };
-                match looping {
-                    None => sink.mixer().add(sound),
-                    Some(stop) => sink.mixer().add(sound.buffered().repeat_infinite().stoppable().periodic_access(Duration::from_millis(50), move |s| {
-                        if stop.load(Ordering::Relaxed) {
-                            s.stop();
+            let mut clips: std::collections::HashMap<String, Arc<AtomicBool>> = std::collections::HashMap::new();
+            for request in receive {
+                match request {
+                    Request::Cue(cue, looping) => {
+                        let Ok(sound) = rodio::Decoder::try_from(std::io::Cursor::new(cue.bytes())) else { continue };
+                        match looping {
+                            None => sink.mixer().add(sound),
+                            Some(stop) => sink.mixer().add(sound.buffered().repeat_infinite().stoppable().periodic_access(Duration::from_millis(50), stopper(stop))),
                         }
-                    })),
+                    }
+                    Request::Clip { key, bytes, volume } => {
+                        let Ok(sound) = rodio::Decoder::try_from(std::io::Cursor::new(bytes)) else { continue };
+                        let stop = Arc::new(AtomicBool::new(false));
+                        if let Some(old) = clips.insert(key, stop.clone()) {
+                            old.store(true, Ordering::Relaxed);
+                        }
+                        sink.mixer().add(sound.amplify(volume).stoppable().periodic_access(Duration::from_millis(20), stopper(stop)));
+                    }
+                    Request::StopClips => {
+                        for (_, stop) in clips.drain() {
+                            stop.store(true, Ordering::Relaxed);
+                        }
+                    }
                 }
             }
         });
         send
     });
-    let _ = player.send((cue, looping));
+    let _ = player.send(request);
+}
+
+fn stopper<S: Source>(stop: Arc<AtomicBool>) -> impl FnMut(&mut rodio::source::Stoppable<S>) {
+    move |s| {
+        if stop.load(Ordering::Relaxed) {
+            s.stop();
+        }
+    }
 }

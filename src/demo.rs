@@ -632,6 +632,13 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                 _ => {}
             }
         }
+        // The soundboard over the call: favorites, frequently used, Night Owls' sounds, gpui's locked without
+        // Nitro, Discord's own, quack playing. "soundboard-effect": Wren's quack rising on her tile.
+        "soundboard" | "soundboard-effect" => {
+            demo_call(waffle);
+            waffle.call_pointer_inside = true;
+            crate::soundboard::demo(waffle, scene == "soundboard", window, cx);
+        }
         _ => {}
     }
 }

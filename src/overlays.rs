@@ -273,6 +273,7 @@ impl Waffle {
             | self.pins.take().is_some()
             | std::mem::take(&mut self.inbox_open)
             | self.gif_picker.take().is_some()
+            | self.soundboard.close_picker()
             | self.dismiss_call_menus()
             | self.close_menu();
         if open {
@@ -296,6 +297,7 @@ impl Waffle {
         out.extend(self.pins_overlay(cx));
         out.extend(self.inbox_overlay(window, cx));
         out.extend(self.composer_picker_overlay(window, cx));
+        out.extend(self.soundboard_overlay(window, cx));
         out
     }
 
