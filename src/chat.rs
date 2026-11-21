@@ -484,6 +484,8 @@ impl Waffle {
         let focused = self.composer.read(cx).focus_handle(cx).is_focused(window);
         let (strong, muted) = (palette::strong(cx), palette::muted(cx));
         let open_picker = self.composer_picker();
+        // The draft stays in `composer` underneath; the input row comes back when the guard lifts.
+        let locked = self.locked_row(cx);
         let row = div()
             .min_h(px(48.))
             .py(px(7.))
@@ -494,6 +496,7 @@ impl Waffle {
             .child(ui::icon_button("attach", Glyph::PlusCircle, "Upload a file or create a poll", cx).on_click(cx.listener(|this, _, window, cx| this.open_menu(window.mouse_position(), this.attach_entries(), cx))))
             // XSmall gives the editor 0/4px padding of its own; with these, the design's 4/6.
             .child(div().flex_1().min_w_0().child(Textarea::new(&self.composer).appearance(false).with_size(Size::XSmall).py(px(4.)).px(px(2.)).text_size(px(15.)).line_height(px(22.)).text_color(strong).token(mention_chip(cx))))
+            .children(self.slowmode_chip(cx))
             .children([(ComposerPicker::Gifs, "composer-gif", Glyph::Gif, "Open GIF picker"), (ComposerPicker::Stickers, "composer-sticker", Glyph::Sticker, "Open sticker picker"), (ComposerPicker::Emoji, "composer-emoji", Glyph::Emoji, "Select Emoji")].map(|(picker, id, glyph, label)| {
                 ui::icon_button(id, glyph, label, cx).toggled(open_picker == Some(picker), cx).on_click(cx.listener(move |this, _, window, cx| this.show_composer_picker(picker, window, cx)))
             }));
@@ -513,10 +516,8 @@ impl Waffle {
             // A hairline: one device pixel on Retina; a full point read heavy around the glass.
             .border(px(0.5))
             .border_color(if focused { palette::line_strong(cx) } else { palette::line(cx) })
-            .children(self.autocomplete_popup(cx))
-            .children(self.composer_bar(cx))
-            .children(self.attachment_tray(cx))
-            .child(row);
+            .when(locked.is_none(), |card| card.children(self.autocomplete_popup(cx)).children(self.queued_bar(cx)).children(self.composer_bar(cx)).children(self.attachment_tray(cx)))
+            .child(locked.unwrap_or_else(|| row.into_any_element()));
         let typers = self.typers();
         let names: Vec<&str> = typers.iter().map(|t| t.name.as_str()).collect();
         // A glass pill just above the composer, out of the flow, so the box never moves when someone types.
@@ -637,20 +638,7 @@ impl Waffle {
             (_, Some(_)) => emphasised(&[("Editing message".into(), true)], strong),
             _ => return None,
         };
-        let bar = div()
-            .min_h(px(40.))
-            .py(px(4.))
-            .pl(px(14.))
-            .pr(px(6.))
-            .flex()
-            .items_center()
-            .gap(px(6.))
-            .min_w_0()
-            .border_b_1()
-            .border_color(palette::line(cx))
-            .text_size(px(14.))
-            .text_color(palette::muted(cx))
-            .child(div().flex_1().min_w_0().truncate().child(label));
+        let bar = bar_row(cx).child(div().flex_1().min_w_0().truncate().child(label));
         let bar = match self.replying.is_some() {
             true => bar.child(self.ping_toggle(cx)),
             false => bar.child(key_hint("Esc", "Cancel", cx)).child(key_hint("Enter", "Save", cx)),
@@ -2845,6 +2833,23 @@ pub(crate) fn emphasised(parts: &[(String, bool)], strong: Hsla) -> StyledText {
     StyledText::new(text).with_highlights(runs)
 }
 
+// A strip at the top of the composer: replying, editing, or a send waiting out slowmode.
+pub(crate) fn bar_row(cx: &App) -> Div {
+    div()
+        .min_h(px(40.))
+        .py(px(4.))
+        .pl(px(14.))
+        .pr(px(6.))
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .min_w_0()
+        .border_b_1()
+        .border_color(palette::line(cx))
+        .text_size(px(14.))
+        .text_color(palette::muted(cx))
+}
+
 // A keycap and what it does, for the edit bar.
 fn key_hint(key: &'static str, label: &'static str, cx: &App) -> Div {
     div().flex_none().flex().items_center().gap(px(6.)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(ui::kbd(key, cx)).child(label)
@@ -2974,7 +2979,7 @@ fn unread_label(count: usize, estimated: bool, since: &str) -> String {
     }
 }
 
-fn clock(timestamp: &str) -> String {
+pub(crate) fn clock(timestamp: &str) -> String {
     local(timestamp).map(|t| t.format(time_format(false)).to_string()).unwrap_or_default()
 }
 
