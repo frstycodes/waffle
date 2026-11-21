@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Discord vs Waffle</title>
+<meta name="description" content="Pins, Favorites, Show all channels, role popout, Mod View and member signals: Discord's version beside Waffle's prototype.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&family=Noto+Sans:wght@400..700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="site.css">
+<link rel="stylesheet" href="css/primitives.css">
+<script>try{const p=JSON.parse(localStorage.getItem("waffle-ds")||"{}"),r=document.documentElement;if(p.theme)r.dataset.theme=p.theme}catch{}</script>
+<style>
+  main { max-width: 1440px; }
+  .vs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+  .vs > figure { margin: 0; display: grid; gap: var(--space-2); min-width: 0; }
+  .vs figcaption { font-size: var(--text-xs); color: var(--text-faint); font-weight: var(--weight-semibold); }
+  .vs iframe { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--bg-page); }
+  .diffs { margin: var(--space-3) 0 0; padding-left: 20px; color: var(--text); font-size: var(--text-sm); line-height: 1.5; max-width: 90ch; }
+  .diffs b { color: var(--text-strong); }
+  @media (max-width: 900px) { .vs { grid-template-columns: minmax(0, 1fr); } }
+
+  /* Discord, midnight theme, values from docs/discord-tokens.json. Discord's own look, so it ignores Waffle's theme. */
+  .dc { --d-bg: #000; --d-chat: #101013; --d-float: #0b0b0d; --d-raised: #121214; --d-mod: rgb(152 152 160 / 0.12); --d-mod2: rgb(152 152 160 / 0.2); --d-border: rgb(152 152 160 / 0.2);
+        --d-text: #d3d5d9; --d-strong: #dcdce1; --d-muted: #818491; --d-chan: #7b7e8a; --d-brand: #5865f2; --d-red: #d83a42; --d-redtext: #f26b6b; --d-green: #43a25a;
+        font: 400 14px/1.3 "gg sans", "Noto Sans", sans-serif; color: var(--d-text); background: var(--d-bg); border-radius: 12px; border: 1px solid #26262b; padding: 16px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  .dc i.ph, .dc i.ph-fill, .dc i.ph-bold { font-size: 20px; }
+  .d-list { width: 240px; background: var(--d-bg); display: grid; gap: 2px; align-content: start; }
+  .d-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 8px 4px 10px; font-size: 14px; font-weight: 500; color: var(--d-muted); }
+  .d-head i { font-size: 16px !important; }
+  .d-dm { display: flex; align-items: center; gap: 12px; height: 42px; padding: 0 8px; border-radius: 8px; color: var(--d-chan); }
+  .d-dm.sel { background: var(--d-mod2); color: var(--d-strong); }
+  .d-dm b { font-weight: 500; font-size: 16px; display: block; }
+  .d-dm small { display: block; font-size: 12px; color: var(--d-muted); }
+  .d-av { width: 32px; height: 32px; border-radius: 50%; flex: none; background: var(--c, #5865f2); }
+  .d-pin { margin-left: auto; font-size: 14px !important; color: var(--d-muted); }
+  .d-cat { padding: 16px 8px 4px 8px; font-size: 12px; font-weight: 600; color: var(--d-muted); display: flex; align-items: center; gap: 2px; }
+  .d-cat i { font-size: 12px !important; }
+  .d-ch { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px; border-radius: 6px; color: var(--d-chan); font-size: 16px; font-weight: 500; }
+  .d-ch i { color: var(--d-chan); }
+  .d-ch.sel { background: var(--d-mod2); color: var(--d-strong); }
+  .d-ch.unread { color: var(--d-strong); }
+  .d-badge { margin-left: auto; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--d-red); color: #fff; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+  .d-srvhead { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 16px; font-weight: 600; color: var(--d-strong); border-bottom: 1px solid var(--d-border); }
+  .d-menu { width: 220px; padding: 6px 8px; background: var(--d-float); border: 1px solid var(--d-border); border-radius: 8px; box-shadow: 0 8px 16px rgb(0 0 0 / 0.5); display: grid; }
+  .d-mi { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; padding: 6px 8px; border-radius: 4px; font-size: 14px; font-weight: 500; color: var(--d-text); }
+  .d-mi i { font-size: 18px !important; color: var(--d-text); }
+  .d-mi.danger { color: var(--d-redtext); } .d-mi.danger i { color: var(--d-redtext); }
+  .d-mi.brand { color: #949cf7; }
+  .d-mi.hl { background: var(--d-brand); color: #fff; } .d-mi.hl i { color: #fff; }
+  .d-sep { height: 1px; background: var(--d-border); margin: 4px 4px; }
+  .d-check { width: 18px; height: 18px; border-radius: 4px; background: var(--d-brand); display: grid; place-items: center; } .d-check i { font-size: 12px !important; color: #fff !important; }
+  .d-rail { width: 72px; display: grid; justify-items: center; gap: 8px; padding-top: 12px; align-content: start; }
+  .d-tile { width: 40px; height: 40px; border-radius: 12px; background: var(--d-raised); display: grid; place-items: center; color: var(--d-strong); font-weight: 600; position: relative; }
+  .d-tile.star { color: #f0b232; } .d-tile.sel::before { content: ""; position: absolute; left: -16px; width: 4px; height: 40px; border-radius: 0 4px 4px 0; background: #fff; }
+  .d-tile .d-badge { position: absolute; right: -4px; bottom: -4px; border: 3px solid #000; height: 22px; min-width: 22px; border-radius: 11px; }
+  .d-rule { width: 32px; height: 1px; background: var(--d-border); }
+  .d-modal { width: 440px; background: var(--d-raised); border: 1px solid var(--d-border); border-radius: 12px; padding: 24px; display: grid; gap: 12px; }
+  .d-modal h3 { margin: 0; font-size: 20px; font-weight: 600; color: var(--d-strong); }
+  .d-modal p { margin: 0; color: var(--d-text); font-size: 16px; line-height: 1.375; }
+  .d-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+  .d-btn { height: 38px; padding: 0 16px; border-radius: 8px; border: 0; font: 500 14px "gg sans", "Noto Sans", sans-serif; background: var(--d-mod2); color: var(--d-strong); }
+  .d-btn.primary { background: var(--d-brand); color: #fff; }
+  .d-pop { width: 250px; background: var(--d-float); border: 1px solid var(--d-border); border-radius: 8px; padding: 8px; display: grid; gap: 2px; }
+  .d-pop-head { display: flex; align-items: center; gap: 6px; padding: 4px 8px 8px; font-weight: 600; color: var(--d-strong); }
+  .d-mem { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 8px; border-radius: 6px; font-size: 15px; font-weight: 500; }
+  .d-mem .d-av { width: 28px; height: 28px; }
+  .d-more { padding: 6px 8px; color: var(--d-muted); font-size: 13px; }
+  .d-mention { color: #c9cdfb; background: rgb(88 101 242 / 0.3); border-radius: 3px; padding: 0 2px; font-weight: 500; }
+  .d-mv { width: 340px; background: var(--d-chat); border-left: 1px solid var(--d-border); display: grid; align-content: start; }
+  .d-mv-bar { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--d-border); font-weight: 600; color: var(--d-strong); }
+  .d-kbd { margin-left: auto; font-size: 11px; color: var(--d-muted); border: 1px solid var(--d-border); border-radius: 4px; padding: 1px 5px; }
+  .d-sec { margin: 8px 12px; background: var(--d-raised); border-radius: 8px; padding: 8px 12px; display: grid; gap: 4px; }
+  .d-sec h4 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--d-muted); display: flex; justify-content: space-between; }
+  .d-row { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 14px; }
+  .d-row .v { margin-left: auto; color: var(--d-muted); display: flex; align-items: center; gap: 4px; }
+  .d-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+  .d-role { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border-radius: 4px; background: var(--d-mod); font-size: 12px; font-weight: 500; }
+  .d-role::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--r, #99aab5); }
+  .d-table { width: 100%; min-width: 620px; border: 1px solid var(--d-border); border-radius: 8px; overflow: hidden; font-size: 14px; }
+  .d-tr { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr 1fr 0.7fr 64px; align-items: center; gap: 8px; min-height: 52px; padding: 0 12px; border-top: 1px solid var(--d-border); }
+  .d-tr.h { min-height: 36px; border-top: 0; font-size: 12px; font-weight: 600; color: var(--d-muted); background: var(--d-raised); }
+  .d-who { display: flex; align-items: center; gap: 8px; min-width: 0; } .d-who b { font-weight: 500; color: var(--d-strong); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .d-who small { color: var(--d-muted); font-size: 12px; }
+  .d-sig { display: flex; gap: 4px; } .d-sig i { font-size: 18px !important; color: var(--d-muted); } .d-sig i.red { color: var(--d-redtext); }
+  .d-tools { display: flex; gap: 8px; align-items: center; width: 100%; }
+  .d-search { flex: 1; height: 36px; border-radius: 8px; background: var(--d-raised); border: 1px solid var(--d-border); color: var(--d-muted); display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 14px; }
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div class="layout">
+<nav class="toc" id="toc" aria-label="Page"></nav>
+<main>
+<section id="intro">
+  <h1>Discord vs Waffle</h1>
+  <p class="lede">Discord on the left, Waffle's prototype on the right (live from explore-navigation.html, so it follows the theme switch). Discord's side is a recreation, not a screenshot: labels, order, limits and rules are from its client code (docs/discord-navigation-re.md, docs/discord-moderation-re.md, docs/discord-menus-*.md); colours from its midnight theme tokens; spacing, icons and exact layout from memory, so treat those as approximate. The list under each pair is what differs.</p>
+</section>
+
+<section id="pinned-dms">
+  <h2>Pinned DMs</h2>
+  <div class="vs">
+    <figure><figcaption>Discord</figcaption><div class="dc">
+      <div class="d-list">
+        <div class="d-head">Direct Messages<i class="ph-bold ph-plus"></i></div>
+        <div class="d-dm sel"><span class="d-av" style="--c:#5865f2"></span><div><b>Mira</b><small>Playing Balatro</small></div><i class="ph-fill ph-push-pin d-pin"></i></div>
+        <div class="d-dm"><span class="d-av" style="--c:#3ba55c"></span><div><b>Ranked squad</b><small>4 Members</small></div><span class="d-badge" style="margin-left:auto">5</span><i class="ph-fill ph-push-pin d-pin" style="margin-left:6px"></i></div>
+        <div class="d-dm"><span class="d-av" style="--c:#eb459e"></span><div><b>Theo</b></div></div>
+        <div class="d-dm"><span class="d-av" style="--c:#faa61a"></span><div><b>Ana</b><small>Listening to Spotify</small></div></div>
+        <div class="d-dm"><span class="d-av" style="--c:#99aab5"></span><div><b>Jun</b></div></div>
+      </div>
+      <div class="d-menu">
+        <div class="d-mi">Mark As Read</div><div class="d-sep"></div>
+        <div class="d-mi hl">Unpin<i class="ph ph-push-pin-slash"></i></div><div class="d-mi">Add to Favorites<i class="ph ph-caret-right"></i></div><div class="d-sep"></div>
+        <div class="d-mi">Profile</div><div class="d-mi">Call</div><div class="d-mi">Add Note</div><div class="d-mi">Close DM</div><div class="d-sep"></div>
+        <div class="d-mi">Mute @Mira<i class="ph ph-caret-right"></i></div><div class="d-sep"></div>
+        <div class="d-mi">Copy User ID<i class="ph ph-identification-badge"></i></div>
+      </div>
+    </div></figure>
+    <figure><figcaption>Waffle</figcaption><iframe src="explore-navigation.html?only=pinned-dms&bare" height="520" title="Waffle pinned DMs"></iframe></figure>
+  </div>
+  <ul class="diffs">
+    <li><b>Menu:</b> Discord pairs Pin with <b>Add to favorites</b> in one group; Waffle now does too. Discord's Pin icon trails the label (its menus put icons at the end); Waffle's lead, as all Waffle menus do.</li>
+    <li><b>Row:</b> same rule (pin at the end, no divider, pinned first by recency). Discord keeps the pin beside a mention badge; Waffle does too.</li>
+  </ul>
+</section>
+
+<section id="pinned-channels">
+  <h2>Pinned channels</h2>
+  <div class="vs">
+    <figure><figcaption>Discord</figcaption><div class="dc">
+      <div class="d-list" style="width:240px">
+        <div class="d-srvhead">Night Shift<i class="ph-bold ph-caret-down" style="font-size:16px"></i></div>
+        <div class="d-cat">Pinned Channels</div>
+        <div class="d-ch"><i class="ph ph-megaphone"></i>announcements</div>
+        <div class="d-ch sel"><i class="ph ph-hash"></i>general</div>
+        <div class="d-ch" style="margin-top:8px"><i class="ph ph-hash"></i>welcome</div>
+        <div class="d-cat"><i class="ph-bold ph-caret-down"></i>Information</div>
+        <div class="d-ch"><i class="ph ph-book-open-text"></i>rules</div>
+        <div class="d-cat"><i class="ph-bold ph-caret-down"></i>Text</div>
+        <div class="d-ch unread"><i class="ph ph-hash"></i>clips<span class="d-badge">2</span></div>
+        <div class="d-ch"><i class="ph ph-hash"></i>memes</div>
+      </div>
+      <div class="d-menu">
+        <div class="d-mi">Mark As Read</div><div class="d-sep"></div>
+        <div class="d-mi">Add to Favorites<i class="ph ph-caret-right"></i></div><div class="d-sep"></div>
+        <div class="d-mi">Invite to Channel</div><div class="d-mi hl">Unpin Channel</div><div class="d-mi">Remove from Channel List</div><div class="d-mi">Copy Link</div><div class="d-sep"></div>
+        <div class="d-mi">Mute Channel<i class="ph ph-caret-right"></i></div><div class="d-mi">Notification Settings<i class="ph ph-caret-right"></i></div><div class="d-sep"></div>
+        <div class="d-mi">Copy Channel ID<i class="ph ph-identification-badge"></i></div>
+      </div>
+      <div class="d-modal"><h3>Trying to reorder a pinned channel?</h3><p>Unpin this channel before reordering. Pinning is only for you, but channel order applies to everyone.</p><div class="d-btns"><button class="d-btn">Cancel</button><button class="d-btn primary">Unpin Channel</button></div></div>
+    </div></figure>
+    <figure><figcaption>Waffle</figcaption><iframe src="explore-navigation.html?only=pinned-channels&bare" height="1040" title="Waffle pinned channels"></iframe></figure>
+  </div>
+  <ul class="diffs">
+    <li><b>Menu order:</b> Discord puts Add to favorites alone right under Mark as read, and Pin channel to top in the Invite / Remove from channel list / Copy link group. Waffle now uses the same groups.</li>
+    <li><b>Section header:</b> Discord's "Pinned Channels" has no collapse caret; Waffle's matches. Discord's has no hover "+" either; same.</li>
+    <li><b>Dialog:</b> same copy and buttons.</li>
+  </ul>
+</section>
+
+<section id="favorites">
+  <h2>Favorites</h2>
+  <div class="vs">
+    <figure><figcaption>Discord</figcaption><div class="dc">
+      <div style="display:flex">
+        <div class="d-rail"><div class="d-tile"><i class="ph-fill ph-discord-logo"></i></div><div class="d-tile star sel"><i class="ph-fill ph-star"></i><span class="d-badge">2</span></div><div class="d-rule"></div><div class="d-tile" style="background:#a3324e">NS</div><div class="d-tile" style="background:#24609e">PC</div></div>
+        <div class="d-list" style="width:220px">
+          <div class="d-srvhead">Favorites<i class="ph-bold ph-caret-down" style="font-size:16px"></i></div>
+          <div class="d-ch sel" style="margin-top:8px"><i class="ph ph-hash"></i>general</div>
+          <div class="d-ch unread"><i class="ph ph-hash"></i>ranked lfg<span class="d-badge">2</span></div>
+          <div class="d-cat"><i class="ph-bold ph-caret-down"></i>Work</div>
+          <div class="d-ch"><i class="ph ph-hash"></i>standup</div>
+          <div class="d-ch"><i class="ph ph-speaker-high"></i>Huddle</div>
+        </div>
+      </div>
+      <div class="d-menu">
+        <div class="d-mi">Mark As Read</div><div class="d-sep"></div>
+        <div class="d-mi">Change Nickname</div><div class="d-mi">Move To<i class="ph ph-caret-right"></i></div><div class="d-mi">Go to Server</div><div class="d-sep"></div>
+        <div class="d-mi">Mute Channel<i class="ph ph-caret-right"></i></div><div class="d-sep"></div>
+        <div class="d-mi danger">Remove from Favorites</div>
+      </div>
+      <div class="d-menu">
+        <div class="d-mi">Thread Settings</div><div class="d-sep"></div>
+        <div class="d-mi danger">Hide Favorites</div>
+      </div>
+    </div></figure>
+    <figure><figcaption>Waffle</figcaption><iframe src="explore-navigation.html?only=favorites&bare" height="860" title="Waffle Favorites"></iframe></figure>
+  </div>
+  <ul class="diffs">
+    <li><b>Origin server:</b> Waffle shows each favourite's server name at the row's end; Discord shows none in the row (from memory). Keep it: it's Waffle's look, not a behaviour change, and favourites from two servers can share a name.</li>
+    <li><b>Move to:</b> Discord's favourite menu has a <b>Move to</b> submenu (into one of your categories); Waffle now has it.</li>
+    <li><b>Header menu:</b> Discord's Favorites dropdown holds Thread settings and <b>Hide favorites</b>; Waffle now has Create category and Hide favorites; Thread settings is left out (it auto-adds threads, which Waffle won't do).</li>
+    <li><b>Rail:</b> same place (after Home, before the DM bubbles) and the same summed mention badge.</li>
+  </ul>
+</section>
+
+<section id="show-all">
+  <h2>Show all channels</h2>
+  <div class="vs">
+    <figure><figcaption>Discord</figcaption><div class="dc">
+      <div class="d-menu" style="width:230px">
+        <div class="d-mi">Server Boost<i class="ph-fill ph-diamond"></i></div><div class="d-sep"></div>
+        <div class="d-mi brand">Invite to Server<i class="ph-fill ph-user-plus"></i></div><div class="d-mi">Server Settings<i class="ph-fill ph-gear"></i></div><div class="d-mi">Create Channel<i class="ph-fill ph-plus-circle"></i></div><div class="d-sep"></div>
+        <div class="d-mi">Show All Channels<span class="d-check"><i class="ph-bold ph-check"></i></span></div><div class="d-mi">Notification Settings<i class="ph-fill ph-bell"></i></div><div class="d-mi">Privacy Settings<i class="ph-fill ph-shield"></i></div><div class="d-sep"></div>
+        <div class="d-mi">Edit Per-server Profile<i class="ph-fill ph-pencil-simple"></i></div><div class="d-mi">Hide Muted Channels<span class="d-check" style="background:transparent;border:1px solid var(--d-muted)"></span></div><div class="d-sep"></div>
+        <div class="d-mi danger">Leave Server<i class="ph-fill ph-sign-out"></i></div>
+      </div>
+    </div></figure>
+    <figure><figcaption>Waffle</figcaption><iframe src="explore-navigation.html?only=show-all&bare" height="520" title="Waffle Show all channels"></iframe></figure>
+  </div>
+  <ul class="diffs">
+    <li><b>Grouping:</b> Discord groups Show all channels with Notification settings and Privacy settings, and Hide muted channels with Edit per-server profile. Waffle keeps its own shorter menu; the new check goes in Waffle's notification group, matching Discord's neighbour.</li>
+    <li><b>Check style:</b> Discord's checks are filled boxes at the end; Waffle uses its own check primitive. Look, not behaviour.</li>
+  </ul>
+</section>
+
+<section id="role-popout">
+  <h2>Role mention popout</h2>
+  <div class="vs">
+    <figure><figcaption>Discord</figcaption><div class="dc">
+      <div style="display:flex;gap:12px;align-items:flex-start;width:300px"><span class="d-av" style="--c:#eb459e;width:40px;height:40px"></span><div><b style="color:var(--d-strong);font-weight:500">Rosa</b> <small style="color:var(--d-muted)">9:12 PM</small><div><span class="d-mention" style="color:#3fb95f;background:rgb(63 185 95 / 0.18)">@Moderator</span> can someone check #clips</div></div></div>
+      <div class="d-pop">
+        <div class="d-pop-head">Moderator<span style="color:var(--d-muted);font-weight:400">&nbsp;— 14</span></div>
+        <div class="d-mem"><span class="d-av" style="--c:#faa61a"></span><span style="color:#3fb95f">Ana</span></div>
+        <div class="d-mem"><span class="d-av" style="--c:#99aab5"></span><span style="color:#3fb95f">Jun</span></div>
+        <div class="d-mem"><span class="d-av" style="--c:#5865f2"></span><span style="color:#3fb95f">Mira</span></div>
+        <div class="d-mem"><span class="d-av" style="--c:#eb459e"></span><span style="color:#3fb95f">Rosa</span><i class="ph-fill ph-crown" style="color:#f0b232;font-size:14px"></i></div>
+        <div class="d-mem"><span class="d-av" style="--c:#3ba55c"></span><span style="color:#3fb95f">Theo</span></div>
+        <div class="d-more">+9 more</div>
+      </div>
+    </div></figure>
+    <figure><figcaption>Waffle</figcaption><iframe src="explore-navigation.html?only=role-popout&bare" height="420" title="Waffle role popout"></iframe></figure>
+  </div>
+  <ul class="diffs">
+    <li><b>Header:</b> Discord shows the role's icon only when it has one, with no colour dot; Waffle now matches.</li>
+    <li><b>Rows:</b> Discord's rows are its member-list rows, so they keep the owner crown and boost mark; Waffle now reuses its member-list row.</li>
+  </ul>
+</section>
+
+<section id="mod-view">
+  <h2>Mod View</h2>
+  <div class="vs">
+    <figure><figcaption>Discord</figcaption><div class="dc" style="padding:0;overflow:hidden">
+      <div class="d-mv">
+        <div class="d-mv-bar">Mod View<i class="ph ph-arrow-clockwise" style="font-size:18px;color:var(--d-muted)"></i><span class="d-kbd">esc</span></div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 16px"><span class="d-av" style="--c:#3ba55c;width:48px;height:48px"></span><div><b style="color:var(--d-strong);font-size:16px">Theo</b><div style="color:var(--d-muted);font-size:13px">theo.exe</div></div><i class="ph ph-x" style="margin-left:auto;color:var(--d-muted)"></i></div>
+        <div style="display:flex;gap:8px;padding:0 16px 8px"><span class="d-tile" style="width:36px;height:36px;border-radius:8px"><i class="ph ph-chat-circle"></i></span><span class="d-tile" style="width:36px;height:36px;border-radius:8px"><i class="ph ph-sign-out"></i></span><span class="d-tile" style="width:36px;height:36px;border-radius:8px"><i class="ph ph-prohibit"></i></span><span class="d-tile" style="width:36px;height:36px;border-radius:8px"><i class="ph ph-timer"></i></span><span class="d-tile" style="width:36px;height:36px;border-radius:8px"><i class="ph ph-identification-badge"></i></span></div>
+        <div class="d-sec"><h4>Signals</h4><div class="d-row">Unusual DM Activity<span class="v">3 days ago</span></div><div class="d-row">Timed Out<span class="v" style="color:var(--d-redtext)">42:10</span></div></div>
+        <div class="d-sec"><h4>Server Activity</h4><div class="d-row">Messages<span class="v">1,284<i class="ph ph-caret-right" style="font-size:14px"></i></span></div><div class="d-row">Links<span class="v">37<i class="ph ph-caret-right" style="font-size:14px"></i></span></div><div class="d-row">Media<span class="v">112<i class="ph ph-caret-right" style="font-size:14px"></i></span></div><div class="d-row">Audit Log<span class="v">4<i class="ph ph-caret-right" style="font-size:14px"></i></span></div></div>
+        <div class="d-sec"><h4>Mod Permissions<span style="color:#949cf7">All (6)</span></h4><div class="d-pills"><span class="d-role">Manage Messages</span><span class="d-role">Timeout Members</span><span class="d-role">Mention @everyone</span></div></div>
+        <div class="d-sec"><h4>Roles</h4><div class="d-pills"><span class="d-role" style="--r:#3fb95f">Moderator</span><span class="d-role" style="--r:#4a8fe0">Streamers</span><span class="d-role" style="background:transparent">+</span></div></div>
+        <div class="d-sec"><h4>Account</h4><div class="d-row">Passed Verification Level<span class="v" style="color:var(--d-green)"><i class="ph-bold ph-check"></i></span></div><div class="d-row">Agreed to Rules<span class="v" style="color:var(--d-green)"><i class="ph-bold ph-check"></i></span></div><div class="d-row">Discord Join Date<span class="v">Mar 4, 2019</span></div><div class="d-row">Server Join Date<span class="v">Aug 14, 2026</span></div><div class="d-row">Join Method<span class="v">nightshift</span></div><div style="color:var(--d-muted);font-size:12px">Invited by @Rosa</div></div>
+      </div>
+    </div></figure>
+    <figure><figcaption>Waffle</figcaption><iframe src="explore-navigation.html?only=mod-view&bare" height="700" title="Waffle Mod View"></iframe></figure>
+  </div>
+  <ul class="diffs">
+    <li><b>Close:</b> Discord's close X sits by the member's name, and the title bar shows an <code>esc</code> keycap; Waffle puts close in the panel header like its other panels and shows no keycap. Look, not behaviour: Esc works the same.</li>
+    <li><b>Sections:</b> Discord boxes each section on a raised card; Waffle separates them by headings only, as its panels do.</li>
+    <li><b>Same:</b> section order, labels, the action row and its per-button gates, Esc closing / stepping back.</li>
+  </ul>
+</section>
+
+<section id="member-signals">
+  <h2>Members: signals</h2>
+  <div class="vs" style="grid-template-columns: minmax(0, 1fr)">
+    <figure><figcaption>Discord</figcaption><div class="dc" style="overflow-x:auto">
+      <div class="d-tools"><b style="color:var(--d-strong);font-size:16px;margin-right:auto">Recent Members</b><div class="d-search" style="flex:0 1 220px"><i class="ph ph-magnifying-glass" style="font-size:16px"></i>Search by username or id</div><span class="d-btn" style="display:inline-flex;align-items:center;gap:4px"><i class="ph ph-sort-descending" style="font-size:16px"></i>Sort</span><span class="d-btn" style="display:inline-flex;align-items:center;background:var(--d-red);color:#fff">Prune</span></div>
+      <div class="d-table">
+        <div class="d-tr h"><span>Name</span><span>Member Since</span><span>Joined Discord</span><span>Join Method</span><span>Roles</span><span>Signals</span><span></span></div>
+        <div class="d-tr"><div class="d-who"><span class="d-av" style="--c:#5865f2"></span><div><b>Mira</b><small>mira.wav</small></div></div><span>2 years ago</span><span>7 years ago</span><span>nightshift</span><span class="d-role" style="--r:#3fb95f">Moderator</span><span class="d-sig"></span><span class="d-sig"><i class="ph ph-shield"></i><i class="ph ph-dots-three-vertical"></i></span></div>
+        <div class="d-tr"><div class="d-who"><span class="d-av" style="--c:#3ba55c"></span><div><b>Theo</b><small>theo.exe</small></div></div><span>3 months ago</span><span>7 years ago</span><span>Vanity URL</span><span class="d-role" style="--r:#4a8fe0">Streamers</span><span class="d-sig"><i class="ph-fill ph-chat-circle-dots"></i><i class="ph-fill ph-timer red"></i></span><span class="d-sig"><i class="ph ph-shield"></i><i class="ph ph-dots-three-vertical"></i></span></div>
+        <div class="d-tr"><div class="d-who"><span class="d-av" style="--c:#99aab5"></span><div><b>free_nitro_drop</b><small>free_nitro_drop</small></div></div><span>&lt;1 day ago</span><span>&lt;1 day ago</span><span>x7Kq2</span><span style="color:var(--d-muted)">—</span><span class="d-sig"><i class="ph-fill ph-user-circle-minus red"></i><i class="ph-fill ph-chat-circle-slash"></i></span><span class="d-sig"><i class="ph ph-shield"></i><i class="ph ph-dots-three-vertical"></i></span></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;color:var(--d-muted);font-size:13px">Showing <span class="d-btn" style="height:28px;display:inline-flex;align-items:center">12</span> members of <b style="color:var(--d-strong)">1,284</b></div>
+    </div></figure>
+    <figure><figcaption>Waffle</figcaption><iframe src="explore-navigation.html?only=member-signals&bare" height="520" title="Waffle member signals"></iframe></figure>
+  </div>
+  <ul class="diffs">
+    <li><b>Columns:</b> Discord also has <b>Join method</b> (from <code>members/supplemental</code>) and <b>Roles</b>; Waffle now has both.</li>
+    <li><b>Signals filter:</b> Discord puts it in the Signals column header's menu, not a toolbar chip. Waffle's toolbar chip is a look choice; the filter itself is the same OR'd set.</li>
+    <li><b>Paging:</b> Discord pages 12 / 25 / 50 / 100 and titles the list "Recent members" until you search. Waffle now has both.</li>
+    <li><b>Checkbox column:</b> Discord's is for bulk actions behind an experiment; Waffle dropped them, since it has no bulk actions.</li>
+  </ul>
+</section>
+</main>
+</div>
+<script src="site.js"></script>
+<script>
+  // The frames follow this page's theme, not their own saved one.
+  function syncFrames() {
+    const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    for (const f of document.querySelectorAll(".vs iframe")) { const u = new URL(f.getAttribute("src"), location.href); if (u.searchParams.get("theme") === (dark ? "dark" : "light")) continue; u.searchParams.set("theme", dark ? "dark" : "light"); f.src = u.href; }
+  }
+  syncFrames(); document.addEventListener("wave:prefs", syncFrames); document.getElementById("top").addEventListener("click", () => setTimeout(syncFrames));
+</script>
+</body>
+</html>

@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pins and Favorites</title>
+<meta name="description" content="Pinned DMs and channels, Favorites, Show all channels, the role popout, Mod View and member signals.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&family=Fragment+Mono&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="site.css">
+<link rel="stylesheet" href="css/primitives.css">
+<link rel="stylesheet" href="css/navigation.css">
+<link rel="stylesheet" href="css/messages.css">
+<link rel="stylesheet" href="css/overlays.css">
+<link rel="stylesheet" href="css/menus.css">
+<link rel="stylesheet" href="css/panels.css">
+<link rel="stylesheet" href="css/server-settings.css">
+<script>try{const p=JSON.parse(localStorage.getItem("waffle-ds")||"{}"),r=document.documentElement;if(p.theme)r.dataset.theme=p.theme}catch{}</script>
+<style>
+  .xn-row { display: flex; flex-wrap: wrap; gap: var(--space-6); align-items: flex-start; }
+  .xn-frame { width: 240px; height: 460px; flex: none; display: flex; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--line-strong); }
+  .xn-frame.wide { width: 308px; }
+  .xn-frame .rail { width: 68px; flex: none; }
+  .xn-frame .side { flex: 1; min-width: 0; }
+  .pin-mark { margin-left: auto; color: var(--text-faint); font-size: 14px; flex: none; }
+  .dm:hover .pin-mark { display: none; }
+  .srv.fav { background: var(--bg-sidebar); color: var(--warning-ink, var(--accent-ink)); font-size: 22px; }
+  .fav-empty { display: grid; gap: var(--space-2); justify-items: center; text-align: center; padding: var(--space-8) var(--space-4); color: var(--text-muted); font-size: var(--text-sm); }
+  .fav-empty i { font-size: 32px; color: var(--text-faint); }
+  .fav-origin { margin-left: auto; color: var(--text-faint); font-size: var(--text-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+  .rp { width: 260px; padding: var(--space-2); gap: 2px; }
+  .rp-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px 8px; font-weight: var(--weight-semibold); color: var(--text-strong); }
+  .rp-head small { color: var(--text-faint); font-weight: var(--weight-regular); }
+  .rp-more { padding: 6px 8px; color: var(--text-faint); font-size: var(--text-sm); }
+  .rolem { color: var(--role); background: color-mix(in oklch, var(--role) 16%, transparent); border-radius: 4px; padding: 0 2px; font-weight: var(--weight-medium); cursor: pointer; }
+  .mv { --pw: 320px; height: 620px; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--line-strong); }
+  .mv-who { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) var(--space-4) var(--space-2); }
+  .mv-who b { display: block; color: var(--text-strong); }
+  .mv-who span { color: var(--text-muted); font-size: var(--text-sm); }
+  .mv-acts { display: flex; gap: var(--space-2); padding: 0 var(--space-4) var(--space-3); border-bottom: 1px solid var(--line); }
+  .mv-sec { padding: var(--space-3) var(--space-4); display: grid; gap: var(--space-2); }
+  .mv-sec h3 { margin: 0; font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--text-faint); display: flex; justify-content: space-between; }
+  .mv-line { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; padding: 0 var(--space-2); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--text); }
+  .mv-line.go { cursor: pointer; } .mv-line.go:hover { background: var(--hover); }
+  .mv-line .v { margin-left: auto; color: var(--text-muted); font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 4px; }
+  .mv-line .v.danger { color: var(--danger-ink); }
+  .mv-line .v.ok { color: var(--success-ink, var(--text-muted)); }
+  .mv-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+  .sig { display: inline-flex; gap: 6px; color: var(--text-muted); font-size: 16px; }
+  .sig .danger { color: var(--danger-ink); }
+  .ss-table--sig .ss-tr { grid-template-columns: minmax(180px, 2fr) minmax(96px, 1fr) minmax(96px, 1fr) minmax(110px, 1.1fr) minmax(120px, 1.2fr) 64px 32px; }
+  .ss-table--sig .ss-roles-cell { flex-wrap: nowrap; overflow: hidden; }
+  .ss-table--sig .ss-when { font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .xn-tablewrap { overflow-x: auto; }
+  .xn-tools { position: relative; }
+  .xn-pop { position: absolute; top: calc(100% + 6px); right: 196px; z-index: 2; }
+  /* One ruled box: a border (an inset shadow would be painted over by the header band), header band, full-width dividers, 40px rows. */
+  .ss-table--sig { padding: 0; border-radius: var(--radius-md); background: transparent; border: 1px solid var(--line-strong); overflow: hidden; }
+  .ss-table--sig .ss-tr { border-radius: 0; min-height: 40px; padding: 4px 14px; }
+  .ss-table--sig .ss-tr + .ss-tr::before { left: 0; right: 0; opacity: 1 !important; }
+  .ss-table--sig .ss-thead { background: var(--bg-group); min-height: 32px; }
+  .ss-table--sig .ss-who .av { --size: 24px !important; }
+  .ss-table--sig .ss-who > div { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+  .ss-table--sig .ss-who > div > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .xn-foot { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3); color: var(--text-muted); font-size: var(--text-sm); }
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div class="layout">
+<nav class="toc" id="toc" aria-label="Page"></nav>
+<main>
+<section id="intro">
+  <h1>Pins and Favorites</h1>
+  <p class="lede">Parity gaps 2.1, 2.2 and 2.16, built to Discord's behaviour (docs/discord-navigation-re.md, docs/discord-moderation-re.md) in Waffle's look. Back and Forward already ship as keys only (Cmd+[ and ], Alt+arrows elsewhere, mouse buttons 4 and 5); the one change there is that Friends joins the history, as Discord's <code>/channels/@me</code> route does. No buttons.</p>
+</section>
+
+<section id="pinned-dms">
+  <h2>Pinned DMs</h2>
+  <p class="lede">Right-click a DM or group DM: <b>Pin</b> / <b>Unpin</b>. Pinned conversations sit first, both groups newest message first, no manual order. No header or divider, only a pin at the row's end (it gives way to the close button on hover). Synced through the DM's override flag, so it carries across devices. No limit.</p>
+  <div class="xn-row">
+    <div class="xn-frame"><aside class="side" aria-label="Direct messages"><div class="chlist" id="dms"></div></aside></div>
+    <div class="menu" role="menu" id="dm-menu"></div>
+  </div>
+</section>
+
+<section id="pinned-channels">
+  <h2>Pinned channels</h2>
+  <p class="lede">Channel menu: <b>Pin channel to top</b> / <b>Unpin channel</b> (not for threads or categories). Pinned channels leave their category and gather under <b>Pinned channels</b>, above the uncategorised ones, in server order with voice after text. They always show, whatever the mute, collapse or Show all channels state. Pins are only yours. Try pinning and unpinning below.</p>
+  <div class="xn-row">
+    <div class="xn-frame"><aside class="side" aria-label="Night Shift channels"><header class="srvhead"><button aria-expanded="false" aria-haspopup="menu" data-static><span>Night Shift</span><i class="ph-bold ph-caret-down"></i></button></header><div class="chlist" id="chans"></div></aside></div>
+    <div class="menu" role="menu" id="ch-menu"></div>
+  </div>
+  <h3>Dragging a pinned channel</h3>
+  <p class="note">Pinned rows don't drag and nothing drops onto them. Trying it asks:</p>
+  <div class="dialog dialog--md" role="dialog" aria-labelledby="unpin-t" style="position: static">
+    <div class="dhead"><h3 id="unpin-t">Trying to reorder a pinned channel?</h3><button class="iconbtn" aria-label="Close"><i class="ph ph-x"></i></button></div>
+    <div class="dbody"><p>Unpin this channel before reordering. Pinning is only for you, but channel order applies to everyone.</p></div>
+    <div class="dfoot" style="display:flex; justify-content:flex-end; gap: var(--space-2); padding: var(--space-3) var(--space-4)"><button class="btn">Cancel</button><button class="btn btn--primary">Unpin channel</button></div>
+  </div>
+</section>
+
+<section id="favorites">
+  <h2>Favorites</h2>
+  <p class="lede">A star tile after Home in the rail, shown once you've favourited something. Its badge sums mentions across its channels. Channel menu: <b>Add to favorites</b> / <b>Remove from favorites</b>. Inside Favorites, rows carry a nickname you set (<b>Change nickname</b>), can sit in your own categories (<b>Create category</b>, <b>Move to</b>, <b>Rename category</b>), and offer <b>Go to server</b>. The Favorites header menu holds <b>Create category</b> and <b>Hide favorites</b>. Synced through settings-proto field 15. The limit is 3 channels without Nitro and 200 with it.</p>
+  <div class="xn-row">
+    <div class="xn-frame wide"><nav class="rail" aria-label="Servers" id="rail"></nav><aside class="side" aria-label="Favorites"><header class="srvhead"><button aria-haspopup="menu" data-static><span>Favorites</span><i class="ph-bold ph-caret-down"></i></button></header><div class="chlist" id="favs"></div></aside></div>
+    <div class="xn-frame wide"><nav class="rail" aria-label="Servers" id="rail2"></nav><aside class="side" aria-label="Favorites, empty"><header class="srvhead"><button data-static><span>Favorites</span><i class="ph-bold ph-caret-down"></i></button></header><div class="fav-empty"><i class="ph ph-star"></i><b>Favorites will show up here!</b><span>Right-click any channel and pick Add to favorites.</span></div></aside></div>
+    <div class="menu" role="menu" id="fav-menu"></div>
+    <div class="menu" role="menu" aria-label="Favorites menu"><button class="mi" role="menuitem"><i class="ph ph-folder-plus"></i><div>Create category</div></button><hr><button class="mi danger" role="menuitem"><i class="ph ph-eye-slash"></i><div>Hide favorites</div></button></div>
+  </div>
+  <h3>Over the limit</h3>
+  <div class="dialog dialog--md" role="alertdialog" aria-labelledby="lim-t" style="position: static">
+    <div class="dhead"><h3 id="lim-t">Oh no!</h3></div>
+    <div class="dbody"><p>You cannot have more than 3 favorite channels. Get Nitro to favorite up to 200.</p></div>
+    <div class="dfoot" style="display:flex; justify-content:flex-end; padding: var(--space-3) var(--space-4)"><button class="btn btn--primary">Okay</button></div>
+  </div>
+</section>
+
+<section id="show-all">
+  <h2>Show all channels</h2>
+  <p class="lede">A check in the server menu of Community servers. Unticked, the list keeps only channels you've added (and anything selected, mentioning you or with active threads, plus pins). Channel menu then offers <b>Add to channel list</b> / <b>Remove from channel list</b>. Unticking it the first time adds every text and voice channel to your list, so nothing vanishes at once.</p>
+  <div class="xn-row">
+    <div class="menu srvmenu" role="menu" style="position: static">
+      <button class="mi" role="menuitem"><i class="ph ph-user-plus"></i><div>Invite people</div></button>
+      <button class="mi" role="menuitem"><i class="ph ph-gear-six"></i><div>Server settings</div></button>
+      <hr>
+      <button class="mi" role="menuitemcheckbox" aria-checked="true" id="showall"><i class="ph ph-eye"></i><div>Show all channels</div><span class="check" aria-checked="true" style="margin-left:auto"><i class="ph-bold ph-check"></i></span></button>
+      <button class="mi" role="menuitem"><i class="ph ph-bell"></i><div>Notification settings</div></button>
+      <button class="mi" role="menuitem"><i class="ph ph-eye-slash"></i><div>Hide muted channels</div></button>
+      <hr>
+      <button class="mi danger" role="menuitem"><i class="ph ph-sign-out"></i><div>Leave server</div></button>
+    </div>
+    <div class="xn-frame"><aside class="side"><header class="srvhead"><button data-static><span>Night Shift</span><i class="ph-bold ph-caret-down"></i></button></header><div class="chlist" id="optin"></div></aside></div>
+  </div>
+</section>
+
+<section id="role-popout">
+  <h2>Role mention popout</h2>
+  <p class="lede">Clicking an <code>@role</code> opens a card to its right: the role's icon (only when it has one) and name, its member count, then the members you have loaded with that role, by display name; "+N more" when the count runs past them. @everyone lists everyone loaded, without a count. @here and unknown roles open nothing. Rows are member-list rows (owner crown, boost mark) that open the profile on click and the member menu on right-click.</p>
+  <div class="xn-row">
+    <div class="msg" style="max-width: 360px"><span class="av" data-av="Rosa" style="--size: 40px"></span><div><div><b>Rosa</b> <small class="muted">Today at 9:12 PM</small></div><div><span class="rolem" style="--role: #3fb95f">@Moderator</span> can someone check #clips</div></div></div>
+    <div class="pop rp" role="dialog" aria-label="Moderator, 14 members">
+      <div class="rp-head">Moderator<small>&nbsp;— 14</small></div>
+      <div id="rp-rows"></div>
+      <div class="rp-more">+9 more</div>
+    </div>
+  </div>
+</section>
+
+<section id="mod-view">
+  <h2>Mod View</h2>
+  <p class="lede">For anyone who can moderate (Administrator, Manage server, Kick, Ban, Time out, Manage roles or Manage nicknames). Opened from the member menu's <b>Open in Mod View</b> or the profile card; it takes the right panel's place. Esc closes it, or steps back from a sub-page. Buttons you can't use are dimmed, not hidden.</p>
+  <div class="xn-row">
+    <div class="panel mv" aria-label="Mod View">
+      <div class="panel-head"><span class="panel-title">Mod View</span><button class="iconbtn" aria-label="Refresh"><i class="ph ph-arrow-clockwise"></i></button><button class="iconbtn" aria-label="Close"><i class="ph ph-x"></i></button></div>
+      <div class="pscroll" style="overflow:auto">
+        <div class="mv-who"><span class="av" data-av="Theo" style="--size: 48px"><span class="status dnd"></span></span><div><b>Theo</b><span>theo.exe</span></div></div>
+        <div class="mv-acts">
+          <button class="iconbtn" aria-label="Message" title="Message"><i class="ph ph-chat-circle"></i></button>
+          <button class="iconbtn" aria-label="Kick" title="Kick"><i class="ph ph-sign-out"></i></button>
+          <button class="iconbtn" aria-label="Ban" title="Ban"><i class="ph ph-prohibit"></i></button>
+          <button class="iconbtn" aria-label="Remove timeout" title="Remove timeout"><i class="ph ph-timer"></i></button>
+          <button class="iconbtn" aria-label="Copy ID" title="Copy ID"><i class="ph ph-identification-card"></i></button>
+        </div>
+        <div class="mv-sec"><h3>Signals</h3>
+          <div class="mv-line"><i class="ph ph-chat-circle-dots"></i>Unusual DM activity<span class="v">3 days ago</span></div>
+          <div class="mv-line"><i class="ph ph-timer"></i>Timed out<span class="v danger">42:10</span></div>
+        </div>
+        <div class="mv-sec"><h3>Server activity</h3>
+          <div class="mv-line go"><i class="ph ph-chat-text"></i>Messages<span class="v">1,284<i class="ph ph-caret-right"></i></span></div>
+          <div class="mv-line go"><i class="ph ph-link"></i>Links<span class="v">37<i class="ph ph-caret-right"></i></span></div>
+          <div class="mv-line go"><i class="ph ph-image"></i>Media<span class="v">112<i class="ph ph-caret-right"></i></span></div>
+          <div class="mv-line go"><i class="ph ph-scroll"></i>Audit log<span class="v">4<i class="ph ph-caret-right"></i></span></div>
+        </div>
+        <div class="mv-sec"><h3>Mod permissions<button class="btn btn--link">All (6)</button></h3>
+          <div class="mv-pills"><span class="role" style="--role:#99a0a6"><i class="ph-fill ph-shield"></i>Manage messages</span><span class="role" style="--role:#99a0a6"><i class="ph-fill ph-shield"></i>Time out members</span><span class="role" style="--role:#99a0a6">Mention @everyone</span></div>
+        </div>
+        <div class="mv-sec"><h3>Roles</h3>
+          <div class="mv-pills"><span class="role" style="--role:#3fb95f" title="Highest role">Moderator</span><span class="role" style="--role:#4a8fe0">Streamers</span><button class="iconbtn iconbtn--sm" aria-label="Add role"><i class="ph-bold ph-plus"></i></button></div>
+        </div>
+        <div class="mv-sec"><h3>Account</h3>
+          <div class="mv-line">Passed verification level<span class="v ok"><i class="ph-bold ph-check"></i></span></div>
+          <div class="mv-line">Agreed to rules<span class="v ok"><i class="ph-bold ph-check"></i></span></div>
+          <div class="mv-line">Discord join date<span class="v">Mar 4, 2019</span></div>
+          <div class="mv-line">Server join date<span class="v">Aug 14, 2026</span></div>
+          <div class="mv-line">Join method<span class="v"><i class="ph ph-link"></i>nightshift</span></div>
+          <div class="muted" style="font-size: var(--text-xs); padding: 0 var(--space-2)">Invited by @Rosa</div>
+        </div>
+      </div>
+    </div>
+    <div class="panel mv" aria-label="Moderator action log">
+      <div class="panel-head"><button class="iconbtn" aria-label="Back"><i class="ph ph-arrow-left"></i></button><span class="panel-title">Moderator action log</span><button class="iconbtn" aria-label="Close"><i class="ph ph-x"></i></button></div>
+      <div class="mv-sec">
+        <div class="mv-line"><i class="ph ph-timer"></i><div><b>Timed out for 1 hour</b><div class="muted" style="font-size: var(--text-xs)">Today at 8:30 PM · @Rosa · spam in #clips</div></div></div>
+        <div class="mv-line"><i class="ph ph-user-gear"></i><div><b>Roles updated: +Streamers</b><div class="muted" style="font-size: var(--text-xs)">Nov 2, 2026 · @Mira</div></div></div>
+        <div class="mv-line"><i class="ph ph-pencil-simple"></i><div><b>Nickname changed</b><div class="muted" style="font-size: var(--text-xs)">Oct 9, 2026 · @Theo</div></div></div>
+      </div>
+      <p class="note" style="padding: 0 var(--space-4)">Messages, Links and Media open the search panel on that member's messages, 25 a page.</p>
+    </div>
+  </div>
+</section>
+
+<section id="member-signals">
+  <h2>Members: signals</h2>
+  <p class="lede">Server settings, Members: opening it lists recent members (newest first) under "Recent members" until you search, 12, 25, 50 or 100 a page. Join method and roles sit beside the dates. A Signals column marks each row; the Signals filter keeps any member with one (filters within it are OR). Sort: Member since or Joined Discord, newest or oldest first. Discord has no "new account" flag; account age is the Joined Discord column.</p>
+  <div id="mtable">
+  <h3 style="margin: 0 0 var(--space-2)">Recent members</h3>
+  <div class="ss-tools xn-tools" style="margin-bottom: var(--space-3)">
+    <div class="input" style="flex:1"><i class="ph ph-magnifying-glass"></i><input placeholder="Search by username or id" aria-label="Search members"></div>
+    <button class="chip" aria-haspopup="menu" aria-expanded="false" id="sigchip"><i class="ph ph-shield-warning"></i>Signals<i class="ph-bold ph-caret-down"></i></button>
+    <button class="chip" aria-haspopup="menu"><i class="ph ph-sort-descending"></i>Member since, newest<i class="ph-bold ph-caret-down"></i></button>
+    <div class="menu xn-pop" role="menu" aria-label="Signals" id="sigmenu" hidden>
+      <button class="mi" role="menuitemcheckbox" aria-checked="true"><span class="check" aria-checked="true"><i class="ph-bold ph-check"></i></span><div>Unusual DM activity</div></button>
+      <button class="mi" role="menuitemcheckbox" aria-checked="false"><span class="check" aria-checked="false"><i class="ph-bold ph-check"></i></span><div>Timed out</div></button>
+      <button class="mi" role="menuitemcheckbox" aria-checked="false"><span class="check" aria-checked="false"><i class="ph-bold ph-check"></i></span><div>Unusual account activity</div></button>
+      <button class="mi" role="menuitemcheckbox" aria-checked="false"><span class="check" aria-checked="false"><i class="ph-bold ph-check"></i></span><div>Quarantined</div></button>
+    </div>
+  </div>
+  <div class="xn-tablewrap"><div class="ss-table ss-table--sig" id="members" style="min-width: 860px"></div></div>
+  <div class="xn-foot">Showing <button class="chip" aria-haspopup="listbox">12<i class="ph-bold ph-caret-down"></i></button> members of <b>1,284</b><span style="margin-left:auto"></span><button class="iconbtn" aria-label="Previous page" disabled><i class="ph ph-caret-left"></i></button><button class="iconbtn" aria-label="Next page"><i class="ph ph-caret-right"></i></button></div>
+  </div>
+</section>
+</main>
+</div>
+<script>
+const DMS = [
+  { n: "Mira", s: "Playing Balatro", pinned: true, t: 5 },
+  { n: "Ranked squad", s: "4 members", group: ["Theo", "Ana"], pinned: true, t: 1, count: 5 },
+  { n: "Theo", s: "", t: 9 },
+  { n: "Ana", s: "Listening to Spotify", t: 7 },
+  { n: "Jun", s: "", t: 3 },
+];
+const CH = [
+  { id: 1, n: "welcome", cat: null, i: "hash" },
+  { id: 2, n: "rules", cat: "Information", i: "book-open-text" },
+  { id: 3, n: "announcements", cat: "Information", i: "megaphone", pinned: true },
+  { id: 4, n: "general", cat: "Text", i: "hash", pinned: true, sel: true },
+  { id: 5, n: "clips", cat: "Text", i: "hash", count: 2 },
+  { id: 6, n: "memes", cat: "Text", i: "hash", muted: true },
+  { id: 7, n: "Lounge", cat: "Voice", i: "speaker-high" },
+];
+const q = s => document.querySelector(s);
+const item = (icon, label, extra = "") => `<button class="mi" role="menuitem"${extra}><i class="ph ph-${icon}"></i><div>${label}</div></button>`;
+
+function dms() {
+  const sorted = [...DMS].sort((a, b) => (!!b.pinned - !!a.pinned) || (b.t - a.t));
+  q("#dms").innerHTML = sorted.map((d, k) => `<div class="dm${k === 0 ? " sel" : ""}${d.count ? " unread" : ""}" data-n="${d.n}">${d.group ? `<span class="gav"><span class="av" data-av="${d.group[0]}"></span><span class="av" data-av="${d.group[1]}"></span></span>` : `<span class="av" data-av="${d.n}"></span>`}<a class="nm" href="#"><b>${d.n}</b>${d.s ? `<small>${d.s}</small>` : ""}</a>${d.count ? `<span class="count">${d.count}</span>` : ""}${d.pinned ? `<i class="ph-fill ph-push-pin pin-mark" aria-label="Pinned"></i>` : ""}<button class="x" aria-label="Close" title="Close"><i class="ph ph-x"></i></button></div>`).join("");
+  q("#dms").querySelectorAll(".dm").forEach(r => r.oncontextmenu = e => { e.preventDefault(); dmMenu(r.dataset.n); });
+  window.paintAvatars?.();
+}
+function dmMenu(n) {
+  const d = DMS.find(x => x.n === n);
+  q("#dm-menu").innerHTML = `<div class="mhead" style="padding:6px 10px;color:var(--text-faint);font-size:var(--text-xs)">${n}</div>` + item("check-circle", "Mark as read") + "<hr>" + item("push-pin" + (d.pinned ? "-slash" : ""), d.pinned ? "Unpin" : "Pin", ` data-pin="${n}"`) + item("star", "Add to favorites") + "<hr>" + item("user", "Profile") + item("bell-slash", "Mute") + "<hr>" + item("x", "Close DM");
+  q("#dm-menu [data-pin]").onclick = () => { d.pinned = !d.pinned; dms(); dmMenu(n); };
+}
+
+function chans(target, opts = {}) {
+  const pinned = CH.filter(c => c.pinned);
+  const row = c => `<div class="ch${c.sel ? " sel" : ""}${c.count ? " unread" : ""}${c.muted ? " muted" : ""}" data-id="${c.id}"><i class="ph ph-${c.i}"></i><a class="nm" href="#">${c.n}</a>${c.count ? `<span class="count">${c.count}</span>` : ""}</div>`;
+  const shown = c => !c.pinned && (!opts.optIn || c.added || c.sel || c.count);
+  let html = "";
+  if (pinned.length) html += `<div class="catgroup" style="margin-bottom: var(--space-4)"><div class="cathead"><span class="cat" style="margin-top:0">Pinned channels</span></div>${pinned.sort((a, b) => (a.i === "speaker-high") - (b.i === "speaker-high") || a.id - b.id).map(row).join("")}</div>`;
+  html += CH.filter(c => !c.cat && shown(c)).map(row).join("");
+  for (const cat of [...new Set(CH.map(c => c.cat).filter(Boolean))]) {
+    const rows = CH.filter(c => c.cat === cat && shown(c));
+    if (rows.length) html += `<div class="catgroup"><div class="cathead"><button class="cat" aria-expanded="true"><i class="ph-bold ph-caret-down"></i>${cat}</button></div>${rows.map(row).join("")}</div>`;
+  }
+  q(target).innerHTML = html;
+  if (!opts.optIn) q(target).querySelectorAll(".ch").forEach(r => r.oncontextmenu = e => { e.preventDefault(); chMenu(+r.dataset.id); });
+}
+function chMenu(id) {
+  const c = CH.find(x => x.id === id);
+  q("#ch-menu").innerHTML = `<div class="mhead" style="padding:6px 10px;color:var(--text-faint);font-size:var(--text-xs)">#${c.n}</div>` + item("check-circle", "Mark as read") + "<hr>" + item("star", "Add to favorites") + "<hr>" + item("user-plus", "Invite to channel") + item("push-pin" + (c.pinned ? "-slash" : ""), c.pinned ? "Unpin channel" : "Pin channel to top", ` data-pin`) + item("eye-slash", "Remove from channel list") + item("link", "Copy link") + "<hr>" + item("bell-slash", "Mute channel") + item("bell", "Notification settings");
+  q("#ch-menu [data-pin]").onclick = () => { c.pinned = !c.pinned; chans("#chans"); chMenu(id); };
+}
+
+function rail(target, count) {
+  q(target).innerHTML = `<button class="srv home" aria-label="Direct messages"><i class="ph-fill ph-chats-circle" style="font-size:22px"></i></button><button class="srv fav${target === "#rail" ? " sel" : ""}" aria-label="Favorites${count ? `, ${count} mentions` : ""}" title="Favorites"><i class="ph-fill ph-star"></i>${count ? `<span class="count">${count}</span>` : ""}</button><span style="width:24px;height:2px;border-radius:1px;background:var(--line-strong)"></span><button class="srv a1" aria-label="Night Shift">NS</button><button class="srv a2" aria-label="Pixel Club">PC</button>`;
+}
+function favs() {
+  const f = [
+    { n: "general", o: "Night Shift", i: "hash", sel: true },
+    { n: "lfg", nick: "ranked lfg", o: "Pixel Club", i: "hash", count: 2 },
+    { cat: "Work", rows: [{ n: "standup", o: "Studio", i: "hash" }, { n: "Huddle", o: "Studio", i: "speaker-high" }] },
+  ];
+  const row = c => `<div class="ch${c.sel ? " sel" : ""}${c.count ? " unread" : ""}"><i class="ph ph-${c.i}"></i><a class="nm" href="#">${c.nick || c.n}</a>${c.count ? `<span class="count">${c.count}</span>` : `<span class="fav-origin">${c.o}</span>`}</div>`;
+  q("#favs").innerHTML = f.map(c => c.cat ? `<div class="catgroup"><div class="cathead"><button class="cat" aria-expanded="true"><i class="ph-bold ph-caret-down"></i>${c.cat}</button></div>${c.rows.map(row).join("")}</div>` : row(c)).join("");
+  q("#fav-menu").innerHTML = `<div class="mhead" style="padding:6px 10px;color:var(--text-faint);font-size:var(--text-xs)">#ranked lfg, in Favorites</div>` + item("check-circle", "Mark as read") + item("pencil-simple", "Change nickname") + `<button class="mi has-sub" role="menuitem"><i class="ph ph-folder-simple"></i><div>Move to</div><i class="ph ph-caret-right chev"></i></button>` + item("arrow-square-out", "Go to server") + "<hr>" + item("bell-slash", "Mute channel") + "<hr>" + `<button class="mi danger" role="menuitem"><i class="ph ph-star"></i><div>Remove from favorites</div></button>`;
+}
+
+function rolePopout() {
+  q("#rp-rows").innerHTML = ["Ana", "Jun", "Mira", "Rosa", "Theo"].map(n => `<div class="mem"><span class="av" data-av="${n}"></span><span class="nm" style="color:#3fb95f;font-weight:var(--weight-medium)">${n}</span>${n === "Rosa" ? `<i class="ph-fill ph-crown" style="color:var(--warning-ink, #c68a00)" aria-label="Server owner"></i>` : ""}</div>`).join("");
+}
+
+function members() {
+  const M = [
+    ["Mira", "mira.wav", "2 years ago", "7 years ago", [], "nightshift", [["Moderator", "#3fb95f"]]],
+    ["Theo", "theo.exe", "3 months ago", "7 years ago", ["dm", "timeout"], "Vanity URL", [["Streamers", "#4a8fe0"], ["Member", "#99a0a6"]]],
+    ["free_nitro_drop", "free_nitro_drop", "6 minutes ago", "1 hour ago", ["spam", "quarantine"], "x7Kq2", []],
+    ["Bartholomew Featherstonehaugh-Wright", "bartholomew.featherstonehaugh.wright", "2 hours ago", "2 days ago", ["dm"], "Server Discovery", [["Member", "#99a0a6"]]],
+  ];
+  const S = { dm: ["chat-circle-dots", "Sent excessive DMs to non-friend server members in last 24 hrs", ""], timeout: ["timer", "Timed out for 42:10", "danger"], spam: ["user-circle-minus", "Engaged in suspected spam activity", "danger"], quarantine: ["chat-circle-slash", "User can't talk in server until they change their member name", ""] };
+  q("#members").innerHTML = `<div class="ss-tr ss-thead"><span>Name</span><button class="ss-sortbtn">Member since<i class="ph-bold ph-arrow-down"></i></button><span>Joined Discord</span><span>Join method</span><span>Roles</span><span>Signals</span><span></span></div>` + M.map(([n, u, since, age, sig, how, roles]) => `<div class="ss-tr"><div class="ss-who"><span class="av" data-av="${n}"></span><div><b>${n}</b><span>${u}</span></div></div><div class="ss-when">${since}</div><div class="ss-when">${age}</div><div class="ss-when">${how}</div><div class="ss-roles-cell">${roles.length ? `<span class="role" style="--role: ${roles[0][1]}">${roles[0][0]}</span>${roles.length > 1 ? `<span class="ss-more">+${roles.length - 1}</span>` : ""}` : `<span class="muted" style="font-size: var(--text-xs)">None</span>`}</div><div class="sig">${sig.map(k => `<i class="ph-fill ph-${S[k][0]} ${S[k][2]}" title="${S[k][1]}" aria-label="${S[k][1]}"></i>`).join("")}</div><button class="iconbtn" aria-label="Open in Mod View" title="Open Mod View"><i class="ph ph-shield"></i></button></div>`).join("");
+}
+
+q("#sigchip").onclick = () => { const m = q("#sigmenu"); m.hidden = !m.hidden; q("#sigchip").setAttribute("aria-expanded", !m.hidden); };
+dms(); dmMenu("Mira"); chans("#chans"); chMenu(4); rail("#rail", 2); rail("#rail2", 0); favs(); rolePopout(); members();
+CH.find(c => c.id === 5).added = true; chans("#optin", { optIn: true });
+</script>
+<script src="site.js"></script>
+<script>
+  // ?bare drops the page chrome, so compare-navigation.html can frame one section beside Discord's.
+  if (new URLSearchParams(location.search).has("bare")) {
+    document.head.insertAdjacentHTML("beforeend", "<style>#top, .toc, main > section > h2, main > section > .lede { display: none } .layout { display: block } main { padding: 16px; max-width: none }</style>");
+  }
+</script>
+</body>
+</html>
