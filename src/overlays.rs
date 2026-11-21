@@ -16,6 +16,7 @@ use crate::{
     Channel, ChannelKind, Waffle, EmojiTarget, SearchState,
     discord::{Emoji, Message, User},
     icons::Glyph,
+    illustration::Illustration,
     layout::avatar_with_status,
     palette,
     ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, RADIUS_XS, Squircle},
@@ -336,7 +337,7 @@ impl Waffle {
         match &self.inbox {
             None | Some(None) => mention_skeletons(cx),
             Some(Some(Err(error))) => div().p_4().text_color(theme.danger).child(error.clone()).into_any_element(),
-            Some(Some(Ok(list))) if list.is_empty() => div().p_6().text_color(theme.muted_foreground).child("You're all caught up!").into_any_element(),
+            Some(Some(Ok(list))) if list.is_empty() => crate::ui::empty_state("mentions-empty", Illustration::InboxEmpty, "You're all caught up!", "Mentions of you and your roles land here.", cx).into_any_element(),
             Some(Some(Ok(list))) => {
                 let shown: Vec<Message> = list.iter().take(limit.unwrap_or(usize::MAX)).cloned().collect();
                 let ctx = self.row_context_everywhere(&shown, 380., cx);
@@ -485,7 +486,7 @@ impl Waffle {
         let body: AnyElement = match pins {
             None => div().p_4().text_color(theme.muted_foreground).child("Loading pins…").into_any_element(),
             Some(Err(error)) => div().p_4().text_color(theme.danger).child(error.clone()).into_any_element(),
-            Some(Ok(list)) if list.is_empty() => div().p_6().flex().flex_col().items_center().gap_2().text_color(theme.muted_foreground).child("This channel doesn't have any pinned messages… yet.").into_any_element(),
+            Some(Ok(list)) if list.is_empty() => crate::ui::empty_state("pins-empty", Illustration::PinsEmpty, "This channel doesn't have any pinned messages… yet.", "Pin a message from its menu to keep it here.", cx).into_any_element(),
             // A list, as the feed: it lays out only the cards in view, so scrolling doesn't redraw every pin.
             Some(Ok(list)) => {
                 // Pins change from the fetch, an unpin and the demo; the list follows here, where they're drawn.
