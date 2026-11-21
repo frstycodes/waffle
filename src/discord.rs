@@ -338,6 +338,11 @@ pub mod perm {
     pub const CONNECT: u64 = 1 << 20;
 }
 
+pub mod message_flag {
+    pub const SUPPRESS_EMBEDS: u64 = 1 << 2;
+    pub const EPHEMERAL: u64 = 1 << 6;
+}
+
 impl Guild {
     // Server-wide permissions (no channel overwrites): owner and Administrator have everything.
     pub fn permissions(&self, me: &str) -> u64 {
@@ -572,6 +577,16 @@ pub struct Embed {
     // An AutoMod safety alert (type auto_moderation_notification): a raid or mention-raid card.
     #[serde(default)]
     pub safety_alert: bool,
+    // Discord's type `rich` (a bot's or webhook's own embed), not an unfurled link.
+    #[serde(default)]
+    pub rich: bool,
+}
+
+impl Embed {
+    // Discord's inline predicate: media shown bare, without the card (and without the card's ✕).
+    pub fn inline(&self) -> bool {
+        (!self.images.is_empty() || self.video) && !self.rich && self.author.is_none() && self.title.is_none()
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -755,6 +770,15 @@ pub struct Message {
     // Who added a bot, on the bot's join notice.
     #[serde(default)]
     pub actor: Option<User>,
+    // How many of `media`'s last entries came from embeds (images, GIFs), so an update can replace them.
+    #[serde(default)]
+    pub embed_media: usize,
+}
+
+impl Message {
+    pub fn embeds_suppressed(&self) -> bool {
+        self.flags & message_flag::SUPPRESS_EMBEDS != 0
+    }
 }
 
 /// A live poll as a message carries it, its counts folded into the answers.
@@ -2361,29 +2385,10 @@ pub fn parse_message(m: &Value) -> Option<Message> {
             _ => files.push(File { name: a["filename"].as_str().unwrap_or("file").to_owned(), url, size: a["size"].as_u64().unwrap_or(0) }),
         }
     }
-    let mut embeds = Vec::new();
-    for e in m["embeds"].as_array().into_iter().flatten() {
-        match e["type"].as_str().unwrap_or("rich") {
-            "image" => media.extend(embed_media(&e["thumbnail"]).or_else(|| embed_media(&e["image"]))),
-            // GIF pickers (Tenor, Giphy) send a looping mp4 with a still thumbnail.
-            "gifv" => {
-                let poster = embed_media(&e["thumbnail"]);
-                let video = e["video"]["url"].as_str();
-                if let (Some(poster), Some(video)) = (poster, video) {
-                    media.push(Media { url: video.to_owned(), width: poster.width, height: poster.height, kind: MediaKind::Gif { poster: poster.url } });
-                }
-            }
-            _ => {
-                let embed = parse_embed(e);
-                // Discord folds embeds that share a url into the first one's gallery.
-                let first = embed.url.as_ref().and_then(|url| embeds.iter_mut().find(|f: &&mut Embed| f.url.as_ref() == Some(url)));
-                match first {
-                    Some(first) => first.images.extend(embed.images.into_iter().take(4usize.saturating_sub(first.images.len()))),
-                    None => embeds.push(embed),
-                }
-            }
-        }
-    }
+    let flags = m["flags"].as_u64().unwrap_or(0);
+    let attachment_media = media.len();
+    let embeds = if flags & message_flag::SUPPRESS_EMBEDS == 0 { parse_embeds(&m["embeds"], &mut media) } else { Vec::new() };
+    let embed_media = media.len() - attachment_media;
     // Reference type 1 is a forward; only 0 (or none, on older messages) is a reply.
     let is_reply = matches!(m["message_reference"]["type"].as_u64(), None | Some(0));
     let reply = (is_reply && m["referenced_message"].is_object()).then(|| parse_message(&m["referenced_message"])).flatten().map(Box::new);
@@ -2420,12 +2425,41 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         forward: parse_forward(m),
         pin_notice: m["type"] == 6,
         kind: m["type"].as_u64().unwrap_or(0) as u8,
-        flags: m["flags"].as_u64().unwrap_or(0),
+        flags,
         reference_channel: m["message_reference"]["channel_id"].as_str().map(str::to_owned),
         reference_deleted: m["message_reference"].is_object() && m.get("referenced_message").is_some_and(Value::is_null),
         // Not verified: the wire key. Discord's web client reads `message.actor`.
         actor: m["actor"].is_object().then(|| parse_user(&m["actor"])),
+        embed_media,
     })
+}
+
+// Image and GIF embeds join `media` (what the gallery pages through); the rest come back as cards.
+fn parse_embeds(list: &Value, media: &mut Vec<Media>) -> Vec<Embed> {
+    let mut embeds = Vec::new();
+    for e in list.as_array().into_iter().flatten() {
+        match e["type"].as_str().unwrap_or("rich") {
+            "image" => media.extend(embed_media(&e["thumbnail"]).or_else(|| embed_media(&e["image"]))),
+            // GIF pickers (Tenor, Giphy) send a looping mp4 with a still thumbnail.
+            "gifv" => {
+                let poster = embed_media(&e["thumbnail"]);
+                let video = e["video"]["url"].as_str();
+                if let (Some(poster), Some(video)) = (poster, video) {
+                    media.push(Media { url: video.to_owned(), width: poster.width, height: poster.height, kind: MediaKind::Gif { poster: poster.url } });
+                }
+            }
+            _ => {
+                let embed = parse_embed(e);
+                // Discord folds embeds that share a url into the first one's gallery.
+                let first = embed.url.as_ref().and_then(|url| embeds.iter_mut().find(|f: &&mut Embed| f.url.as_ref() == Some(url)));
+                match first {
+                    Some(first) => first.images.extend(embed.images.into_iter().take(4usize.saturating_sub(first.images.len()))),
+                    None => embeds.push(embed),
+                }
+            }
+        }
+    }
+    embeds
 }
 
 // A forward's snapshot carries the original's content, media and time but no id, author or channel;
@@ -2455,6 +2489,15 @@ pub fn apply_update(message: &mut Message, d: &Value) {
     if let Some(content) = d["content"].as_str() {
         message.content = content.to_owned();
         message.edited = true;
+    }
+    if let Some(flags) = d["flags"].as_u64() {
+        message.flags = flags;
+    }
+    if d["embeds"].is_array() || message.embeds_suppressed() {
+        message.media.truncate(message.media.len().saturating_sub(message.embed_media));
+        let before = message.media.len();
+        message.embeds = if message.embeds_suppressed() { Vec::new() } else { parse_embeds(&d["embeds"], &mut message.media) };
+        message.embed_media = message.media.len() - before;
     }
 }
 
@@ -2625,6 +2668,7 @@ fn parse_embed(e: &Value) -> Embed {
         timestamp: text(&e["timestamp"]),
         poll: None,
         safety_alert: e["type"] == "auto_moderation_notification",
+        rich: e["type"].as_str().unwrap_or("rich") == "rich",
     }
 }
 
@@ -3272,6 +3316,56 @@ mod tests {
         assert_eq!(m.media[1].kind, MediaKind::Gif { poster: "t.png".into() });
         assert_eq!(m.embeds.len(), 1);
         assert_eq!(m.embeds[0].provider.as_deref(), Some("YouTube"));
+    }
+
+    fn embedded() -> Value {
+        json!({ "id": "1", "channel_id": "c", "author": { "id": "u" }, "content": "look",
+            "attachments": [{ "url": "a.png", "width": 10, "height": 10, "content_type": "image/png" }],
+            "embeds": [
+                { "type": "image", "thumbnail": { "url": "i.png", "width": 50, "height": 50 } },
+                { "type": "article", "url": "https://a", "title": "A" },
+            ] })
+    }
+
+    #[test]
+    fn suppressed_embeds_parse_to_none_and_keep_attachments() {
+        let mut m = embedded();
+        m["flags"] = json!(4);
+        let m = parse_message(&m).unwrap();
+        assert!(m.embeds_suppressed());
+        assert!(m.embeds.is_empty());
+        assert_eq!(m.media.iter().map(|m| m.url.as_str()).collect::<Vec<_>>(), ["a.png"]);
+    }
+
+    #[test]
+    fn update_with_suppress_flag_clears_embeds_and_their_media() {
+        let mut m = parse_message(&embedded()).unwrap();
+        assert_eq!((m.embeds.len(), m.media.len(), m.embed_media), (1, 2, 1));
+        apply_update(&mut m, &json!({ "id": "1", "channel_id": "c", "flags": 4 }));
+        assert!(m.embeds.is_empty());
+        assert_eq!(m.media.iter().map(|m| m.url.as_str()).collect::<Vec<_>>(), ["a.png"]);
+        assert_eq!((m.flags, m.content.as_str(), m.edited), (4, "look", false));
+    }
+
+    #[test]
+    fn late_embeds_update_replaces_the_old_ones() {
+        let mut m = parse_message(&embedded()).unwrap();
+        apply_update(&mut m, &json!({ "id": "1", "channel_id": "c", "embeds": [{ "type": "article", "url": "https://b", "title": "B" }] }));
+        assert_eq!(m.embeds.iter().map(|e| e.title.as_deref()).collect::<Vec<_>>(), [Some("B")]);
+        assert_eq!(m.media.iter().map(|m| m.url.as_str()).collect::<Vec<_>>(), ["a.png"]);
+    }
+
+    #[test]
+    fn inline_embeds_are_bare_media_without_a_title_or_author() {
+        let pic = || json!({ "url": "p", "width": 100, "height": 50 });
+        let inline = |e: Value| parse_embed(&e).inline();
+        assert!(inline(json!({ "type": "video", "thumbnail": pic(), "video": { "url": "v.mp4" } })));
+        assert!(inline(json!({ "type": "article", "image": pic() })));
+        assert!(!inline(json!({ "type": "video", "title": "Clip", "thumbnail": pic(), "video": { "url": "v" } })), "titled: a card");
+        assert!(!inline(json!({ "type": "rich", "image": pic() })), "a bot's embed is always a card");
+        assert!(!inline(json!({ "image": pic() })), "no type means rich");
+        assert!(!inline(json!({ "type": "article", "author": { "name": "x" }, "image": pic() })));
+        assert!(!inline(json!({ "type": "link", "description": "text only" })), "no media");
     }
 
     #[test]
