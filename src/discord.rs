@@ -733,6 +733,16 @@ pub struct Message {
     // Discord's "X pinned a message" notice (type 6): never drawn, it names who pinned `reply_to`.
     #[serde(default)]
     pub pin_notice: bool,
+    // Discord's message type (0 default, 7 join, 18 thread created…); anything outside the user-message
+    // types is a system notice.
+    #[serde(default)]
+    pub kind: u8,
+    // Discord's message flags (SUPPRESS_EMBEDS is 1 << 2).
+    #[serde(default)]
+    pub flags: u64,
+    // The referenced message's channel: a thread-created notice's thread, a thread starter's parent.
+    #[serde(default)]
+    pub reference_channel: Option<String>,
 }
 
 /// A live poll as a message carries it, its counts folded into the answers.
@@ -2389,6 +2399,9 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         poll: m["poll"].is_object().then(|| parse_poll(&m["poll"])),
         forward: parse_forward(m),
         pin_notice: m["type"] == 6,
+        kind: m["type"].as_u64().unwrap_or(0) as u8,
+        flags: m["flags"].as_u64().unwrap_or(0),
+        reference_channel: m["message_reference"]["channel_id"].as_str().map(str::to_owned),
     })
 }
 
