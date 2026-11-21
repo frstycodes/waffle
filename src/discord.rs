@@ -250,16 +250,41 @@ pub struct Guild {
 
 // Your notification settings for one server, or for DMs under the key "@me" (Discord's
 // user_guild_settings). Message notification levels: 0 all, 1 mentions, 2 nothing, 3 inherit.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GuildSettings {
     pub muted: bool,
     // RFC 3339 end of a timed mute; None for "until I turn it back on".
     pub mute_end: Option<String>,
+    // The length the mute was picked for, in seconds (-1 forever); None when Discord sent none.
+    pub mute_window: Option<i64>,
     pub notifications: u8,
     pub suppress_everyone: bool,
     pub suppress_roles: bool,
+    // Discord's highlights setting: 0 unset, 1 disabled (Suppress Highlights on), 2 enabled.
+    pub notify_highlights: u8,
+    pub mute_scheduled_events: bool,
+    pub mobile_push: bool,
     pub hide_muted: bool,
     pub channels: HashMap<String, ChannelSettings>,
+}
+
+// Mobile push is on until turned off, as in Discord.
+impl Default for GuildSettings {
+    fn default() -> Self {
+        Self {
+            muted: false,
+            mute_end: None,
+            mute_window: None,
+            notifications: 0,
+            suppress_everyone: false,
+            suppress_roles: false,
+            notify_highlights: 0,
+            mute_scheduled_events: false,
+            mobile_push: true,
+            hide_muted: false,
+            channels: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -304,9 +329,13 @@ pub fn parse_guild_settings(g: &Value) -> (String, GuildSettings) {
     let settings = GuildSettings {
         muted: g["muted"].as_bool().unwrap_or(false),
         mute_end: g["mute_config"]["end_time"].as_str().map(str::to_owned),
+        mute_window: g["mute_config"]["selected_time_window"].as_i64(),
         notifications: g["message_notifications"].as_u64().unwrap_or(0) as u8,
         suppress_everyone: g["suppress_everyone"].as_bool().unwrap_or(false),
         suppress_roles: g["suppress_roles"].as_bool().unwrap_or(false),
+        notify_highlights: g["notify_highlights"].as_u64().unwrap_or(0) as u8,
+        mute_scheduled_events: g["mute_scheduled_events"].as_bool().unwrap_or(false),
+        mobile_push: g["mobile_push"].as_bool().unwrap_or(true),
         hide_muted: g["hide_muted_channels"].as_bool().unwrap_or(false),
         channels,
     };
