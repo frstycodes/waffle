@@ -45,7 +45,6 @@ impl AppCommand {
     }
 
     /// The path as you see it: each localized part, else the untranslated one.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the composer wires it next: localized names, ATTACHMENT options"))]
     pub fn display_name(&self) -> String {
         let parts: Vec<&str> = self.path.iter().enumerate().map(|(i, part)| self.path_localized.get(i).and_then(Option::as_deref).unwrap_or(part)).collect();
         parts.join(" ")
@@ -119,7 +118,6 @@ pub struct CommandOption {
 }
 
 impl CommandOption {
-    #[expect(dead_code, reason = "the composer wires it next: localized names, ATTACHMENT options")]
     pub fn display_name(&self) -> &str {
         self.name_localized.as_deref().unwrap_or(&self.name)
     }
@@ -328,7 +326,6 @@ pub fn command_body(command: &AppCommand, values: &[(String, Value)], focused: O
 /// A file for an ATTACHMENT option, already uploaded (`Client::stage_files`). The option's value is
 /// the file's index in the list given to `attach_files`, as a number.
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(not(test), expect(dead_code, reason = "the composer wires it next: localized names, ATTACHMENT options"))]
 pub struct CommandAttachment {
     pub filename: String,
     pub uploaded_filename: String,
@@ -336,7 +333,6 @@ pub struct CommandAttachment {
 }
 
 /// Fills a type-2 body's `data.attachments` as Discord's client does: `id` is the index as a string.
-#[cfg_attr(not(test), expect(dead_code, reason = "the composer wires it next: localized names, ATTACHMENT options"))]
 pub fn attach_files(body: &mut Value, files: &[CommandAttachment]) {
     let files: Vec<Value> = files
         .iter()

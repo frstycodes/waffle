@@ -1655,7 +1655,10 @@ impl Waffle {
             Event::AuthFailed => return self.verify_rejected_token(cx),
             Event::InteractionCreate { nonce, id } => self.on_interaction_create(nonce, id, cx),
             Event::InteractionSuccess { nonce } => self.on_interaction_success(nonce, cx),
-            Event::InteractionFailure { nonce, reason_code } => self.interaction_failed(&nonce, reason_code, cx),
+            Event::InteractionFailure { nonce, reason_code } => {
+                self.autocomplete_failed(&nonce, cx);
+                self.interaction_failed(&nonce, reason_code, cx);
+            }
             Event::ModalCreate(modal) => self.open_app_modal(modal, cx),
             Event::Autocomplete { nonce, choices } => self.on_autocomplete(nonce, choices, cx),
         }
