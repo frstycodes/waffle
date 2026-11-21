@@ -34,6 +34,7 @@ mod material;
 mod forum;
 mod forward;
 mod reactions;
+mod requests;
 mod gif;
 mod games;
 mod go_live;
@@ -812,6 +813,8 @@ pub struct Waffle {
     popover_at: gpui_kit::Point<gpui_kit::Pixels>,
     // The full Inbox page in the content column ("See all").
     inbox_page: bool,
+    // The Message Requests page, on its tab; None while it's closed.
+    requests_page: Option<requests::RequestsTab>,
     // The GIF picker: None closed, Some(None) loading, Some(Some(..)) results.
     gif_picker: Option<Option<Result<Vec<Gif>, SharedString>>>,
     // Which tab the GIF picker shows; stickers share its frame.
@@ -1135,6 +1138,7 @@ impl Waffle {
             pending_jump: None,
             popover_at: gpui_kit::Point::default(),
             inbox_page: false,
+            requests_page: None,
             gif_picker: None,
             picker_tab: stickers::PickerTab::default(),
             sticker_packs: None,
@@ -1783,6 +1787,7 @@ impl Waffle {
 
     pub(crate) fn open_channel(&mut self, channel: Channel, window: &mut Window, cx: &mut Context<Self>) {
         self.inbox_page = false;
+        self.requests_page = None;
         // Results belong to the server or DM they searched: another place closes them.
         let scope = match &self.guild_id {
             Some(guild) => format!("guilds/{guild}"),

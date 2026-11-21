@@ -514,6 +514,7 @@ impl Waffle {
             .border(px(0.5))
             .border_color(if focused { palette::line_strong(cx) } else { palette::line(cx) })
             .children(self.autocomplete_popup(cx))
+            .children(self.request_bar(cx))
             .children(self.composer_bar(cx))
             .children(self.attachment_tray(cx))
             .child(row);
