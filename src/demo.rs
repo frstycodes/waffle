@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | blocked-messages | blocked-messages-shown | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | blocked-messages | blocked-messages-shown | updating (the launch splash alone). | guard-slowmode | guard-slowmode-counting | guard-slowmode-queued | guard-immune | guard-no-permission | guard-timeout | guard-blocked-dm
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -532,6 +532,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             });
         }
         "dm-empty" | "group-empty" | "group-start" | "group-mention" => demo_dm_start(waffle, scene, window, cx),
+        "guard-slowmode" | "guard-slowmode-counting" | "guard-slowmode-queued" | "guard-immune" | "guard-no-permission" | "guard-timeout" | "guard-blocked-dm" => demo_guard(waffle, scene, window, cx),
         "stream-card" => {
             let key = "guild:1:lounge:12582912".to_owned();
             let blender = Activity { kind: ActivityKind::Playing, text: "Blender".into(), more: 0 };
@@ -731,6 +732,59 @@ fn demo_dm_start(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut
     }
 }
 
+// The composer's guard, one state per scene. Wren owns Night Owls here, so our permissions are @everyone's
+// (and Council's, for the immune scene).
+fn demo_guard(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
+    use crate::discord::{Overwrite, VIEW_CHANNEL, perm};
+    if scene == "guard-blocked-dm" {
+        let wren = user("8388608", "Wren");
+        waffle.relationships.push(Relationship { user: wren, kind: Relation::Blocked });
+        let dm = waffle.dms.iter().find(|c| c.id == "dm").cloned();
+        waffle.feeds.insert("dm".into(), Feed { loaded: true, ..Default::default() });
+        waffle.restore = None;
+        waffle.guild_id = None;
+        if let Some(dm) = dm {
+            waffle.open_channel(dm, window, cx);
+        }
+        return;
+    }
+    let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") else { return };
+    guild.owner_id = Some("8388608".into());
+    for role in guild.roles.iter_mut() {
+        role.permissions = match role.id.as_str() {
+            "1" => VIEW_CHANNEL | perm::SEND_MESSAGES,
+            "r1" => perm::MANAGE_MESSAGES,
+            _ => 0,
+        };
+    }
+    if scene == "guard-timeout" {
+        guild.timed_out_until = Some(chrono::Utc::now() + chrono::Duration::minutes(52));
+    }
+    if scene == "guard-immune" {
+        guild.my_roles = vec!["r1".into()];
+    }
+    let Some(general) = guild.channels.iter_mut().find(|c| c.id == "general") else { return };
+    match scene {
+        "guard-no-permission" => general.overwrites = vec![
+            Overwrite { id: "1".into(), allow: 0, deny: perm::SEND_MESSAGES, member: false },
+            Overwrite { id: "r1".into(), allow: perm::SEND_MESSAGES, deny: 0, member: false },
+            Overwrite { id: "r2".into(), allow: perm::SEND_MESSAGES, deny: 0, member: false },
+        ],
+        "guard-timeout" => {}
+        _ => general.props.slowmode = 120,
+    }
+    let Some(general) = guild.channels.iter().find(|c| c.id == "general").cloned() else { return };
+    waffle.open_channel(general, window, cx);
+    if scene == "guard-slowmode-counting" || scene == "guard-slowmode-queued" {
+        waffle.start_countdown("general", std::time::Duration::from_secs(118), cx);
+    }
+    if scene == "guard-slowmode-queued" {
+        waffle.drafts.set("general", Draft::new(&InputContent::new("gg, rematch at 9?"), None));
+        waffle.restore_draft(window, cx);
+        waffle.hold_for_slowmode("general", cx);
+    }
+}
+
 // Real Discord applications (id, icon hash from /applications/detectable), so their icons load from the CDN.
 const HADES: (&str, &str) = ("Hades II", "1237101681695522867");
 const FACTORIO: (&str, &str) = ("Factorio", "358422126602223616");
@@ -919,6 +973,7 @@ fn ready(me: User) -> Ready {
         stickers: Vec::new(),
         premium_tier: 1,
         afk_channel_id: None,
+        timed_out_until: None,
     };
     let lounge_states = vec![
         VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "12582912".into(), user: Some(user("12582912", "moss lantern")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: true, camera: false },
@@ -1021,6 +1076,7 @@ fn load_guilds(waffle: &mut Waffle) {
             stickers: Vec::new(),
             premium_tier: 1,
             afk_channel_id: None,
+            timed_out_until: None,
         });
     }
     if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
