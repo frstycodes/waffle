@@ -139,6 +139,7 @@ impl Waffle {
         read.last_read = id - 1;
         read.mentions = mentions;
         self.unread_marker = Some(id - 1);
+        self.held_unread = Some(message.channel_id.clone());
         if let Some(client) = self.client.clone() {
             let channel_id = message.channel_id.clone();
             crate::discord::runtime().spawn(async move { client.ack_manual(&channel_id, ack_id, mentions).await });

@@ -745,6 +745,9 @@ pub struct Waffle {
     window_active: bool,
     // The open channel should land on its first unread once its messages are in.
     unread_scroll_pending: bool,
+    // The channel last marked unread by hand: auto-read leaves it alone until it's opened again or we send there.
+    // Not verified: Discord's exact rule for when the open channel reads itself again after Mark Unread.
+    pub(crate) held_unread: Option<String>,
     dialog: Option<menu::Dialog>,
     create_channel: Option<create_channel::CreateChannel>,
     notification_settings: Option<notification_settings::NotificationSettings>,
@@ -1095,6 +1098,7 @@ impl Waffle {
             watch_on_connect: None,
             window_active: true,
             unread_scroll_pending: false,
+            held_unread: None,
             dialog: None,
             create_channel: None,
             notification_settings: None,
@@ -1768,6 +1772,7 @@ impl Waffle {
 
     pub(crate) fn open_channel(&mut self, channel: Channel, window: &mut Window, cx: &mut Context<Self>) {
         self.inbox_page = false;
+        self.held_unread = None;
         // Results belong to the server or DM they searched: another place closes them.
         let scope = match &self.guild_id {
             Some(guild) => format!("guilds/{guild}"),
@@ -2053,6 +2058,9 @@ impl Waffle {
             return;
         }
         let (Some(client), Some(channel)) = (self.client.clone(), self.channel.as_ref()) else { return };
+        if self.held_unread.as_ref() == Some(&channel.id) {
+            return;
+        }
         let Some(&last) = self.last_message.get(&channel.id) else { return };
         let read = self.read_states.entry(channel.id.clone()).or_default();
         if read.last_read >= last && read.mentions == 0 {
@@ -2093,6 +2101,7 @@ impl Waffle {
 
     /// Enter in the composer: saves the edit in progress, otherwise sends (optimistically).
     fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.held_unread = None;
         let (Some(client), Some(channel), Some(me)) = (self.client.clone(), self.channel.clone(), self.me.clone()) else { return };
         let typed = wire_text(&self.composer.read(cx).content());
         let typed = typed.trim();
