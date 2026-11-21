@@ -790,7 +790,13 @@ impl Waffle {
     // Arrows drive the suggestion list (Tab and Enter accept elsewhere); Esc cancels a reply or edit; Up in an empty box edits your last message.
     fn on_composer_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
-        if self.on_command_key(key, cx) {
+        // Discord's slash lists also move on Ctrl-P / Ctrl-N.
+        let command_key = match (event.keystroke.modifiers.control, key) {
+            (true, "p") => "ctrl-p",
+            (true, "n") => "ctrl-n",
+            _ => key,
+        };
+        if self.on_command_key(command_key, cx) {
             return cx.stop_propagation();
         }
         if self.autocomplete.is_some() {

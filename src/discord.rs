@@ -1261,6 +1261,15 @@ impl Client {
         Ok(files.iter().zip(slots).map(|(f, (_, name))| (f.name.clone(), name)).collect())
     }
 
+    /// The FRECENCY_AND_FAVORITES settings proto (type 2) as bytes: `GET /users/@me/settings-proto/2`
+    /// answers `{settings: base64}`, as Discord's client reads it (`web#594061`).
+    pub async fn frecency_settings(&self) -> Result<Vec<u8>, String> {
+        use base64::Engine;
+        let body = self.run(self.request(reqwest::Method::GET, "/users/@me/settings-proto/2")).await?;
+        let settings = body["settings"].as_str().ok_or("No settings in the answer")?;
+        base64::engine::general_purpose::STANDARD.decode(settings).map_err(|e| e.to_string())
+    }
+
     /// Discord's own packs, for everyone.
     pub async fn sticker_packs(&self) -> Result<Vec<StickerPack>, String> {
         let body = self.run(self.request(reqwest::Method::GET, "/sticker-packs")).await?;

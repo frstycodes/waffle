@@ -45,7 +45,6 @@ impl AppCommand {
     }
 
     /// The path as you see it: each localized part, else the untranslated one.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the composer wires it next: localized names, ATTACHMENT options"))]
     pub fn display_name(&self) -> String {
         let parts: Vec<&str> = self.path.iter().enumerate().map(|(i, part)| self.path_localized.get(i).and_then(Option::as_deref).unwrap_or(part)).collect();
         parts.join(" ")
@@ -119,7 +118,6 @@ pub struct CommandOption {
 }
 
 impl CommandOption {
-    #[expect(dead_code, reason = "the composer wires it next: localized names, ATTACHMENT options")]
     pub fn display_name(&self) -> &str {
         self.name_localized.as_deref().unwrap_or(&self.name)
     }
