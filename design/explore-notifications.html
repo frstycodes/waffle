@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notification Settings</title>
+<meta name="description" content="The server Notification Settings dialog, and removing a mention from the Inbox.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  /* Waffle's tokens (tokens.css), inlined so the page stands alone. */
+  :root { --accent: #efa831; --on-accent: #2a1c00; --danger: #c21f3a; --radius-md: 14px; --radius-lg: 20px; --radius-xl: 28px; --ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+  :root, :root[data-theme="dark"] { color-scheme: dark; --bg-page: oklch(0.210 0.004 260); --bg-raised: oklch(0.250 0.005 260); --bg-group: var(--bg-raised); --bg-overlay: oklch(0.275 0.005 260); --hover: oklch(1 0 0 / 0.05); --press: oklch(1 0 0 / 0.09); --selected: oklch(1 0 0 / 0.08); --line: oklch(1 0 0 / 0.08); --line-strong: oklch(1 0 0 / 0.14); --text-strong: oklch(0.97 0.004 260); --text: oklch(0.88 0.008 260); --text-muted: oklch(0.72 0.012 260); --text-faint: oklch(0.65 0.012 260); --accent-ink: #f6b84d; --accent-soft: oklch(0.78 0.15 75 / 0.16); --track-rest: oklch(0.33 0.008 260); --seg-track: oklch(0 0 0 / 0.3); --seg-thumb: oklch(1 0 0 / 0.15); --shadow-pop: 0 12px 32px oklch(0 0 0 / 0.45), 0 0 0 1px var(--line-strong); --scrim: oklch(0.08 0.004 260 / 0.7); }
+  :root[data-theme="light"] { color-scheme: light; --bg-page: oklch(0.982 0.002 260); --bg-raised: oklch(0.995 0.001 260); --bg-group: oklch(0.960 0.003 260); --bg-overlay: oklch(0.998 0.001 260); --hover: oklch(0.3 0.008 260 / 0.06); --press: oklch(0.3 0.008 260 / 0.1); --selected: oklch(0.3 0.008 260 / 0.09); --line: oklch(0.3 0.008 260 / 0.1); --line-strong: oklch(0.3 0.008 260 / 0.18); --text-strong: oklch(0.20 0.009 260); --text: oklch(0.30 0.009 260); --text-muted: oklch(0.46 0.009 260); --text-faint: oklch(0.49 0.009 260); --accent-ink: #8a5601; --accent-soft: oklch(0.7 0.15 75 / 0.14); --track-rest: oklch(0.86 0.004 260); --seg-track: oklch(0.3 0.008 260 / 0.08); --seg-thumb: oklch(1 0 0); --shadow-pop: 0 12px 32px oklch(0 0 0 / 0.14), 0 0 0 1px var(--line); --scrim: oklch(0.2 0.004 260 / 0.3); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme]) { color-scheme: light; --bg-page: oklch(0.982 0.002 260); --bg-raised: oklch(0.995 0.001 260); --bg-group: oklch(0.960 0.003 260); --bg-overlay: oklch(0.998 0.001 260); --hover: oklch(0.3 0.008 260 / 0.06); --press: oklch(0.3 0.008 260 / 0.1); --selected: oklch(0.3 0.008 260 / 0.09); --line: oklch(0.3 0.008 260 / 0.1); --line-strong: oklch(0.3 0.008 260 / 0.18); --text-strong: oklch(0.20 0.009 260); --text: oklch(0.30 0.009 260); --text-muted: oklch(0.46 0.009 260); --text-faint: oklch(0.49 0.009 260); --accent-ink: #8a5601; --accent-soft: oklch(0.7 0.15 75 / 0.14); --track-rest: oklch(0.86 0.004 260); --seg-track: oklch(0.3 0.008 260 / 0.08); --seg-thumb: oklch(1 0 0); --shadow-pop: 0 12px 32px oklch(0 0 0 / 0.14), 0 0 0 1px var(--line); --scrim: oklch(0.2 0.004 260 / 0.3); } }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg-page); color: var(--text); font-family: "Figtree", system-ui, sans-serif; font-size: 14px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 16px 64px; }
+  header.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  h1 { font-size: 24px; margin: 0; color: var(--text-strong); flex: 1; }
+  h2 { font-size: 16px; color: var(--text-strong); margin: 40px 0 4px; }
+  p.lede { color: var(--text-muted); margin: 0 0 16px; max-width: 72ch; line-height: 1.5; }
+  svg.i { width: 16px; height: 16px; flex: none; display: block; }
+  .btn { font: inherit; font-size: 14px; font-weight: 600; color: var(--text-strong); background: var(--selected); border: 0; border-radius: var(--radius-md); height: 32px; padding: 0 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .btn:hover { background: var(--line-strong); }
+  .btn--primary { background: var(--accent); color: var(--on-accent); }
+  .btn--primary:hover { background: #e29a1d; }
+  .btn:focus-visible, .iconbtn:focus-visible, .row:focus-visible, .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Stage + dialog (ui::dialog). */
+  .scrim { border-radius: var(--radius-lg); background: var(--scrim); padding: 40px 16px; display: grid; place-items: center; }
+  .dialog { width: min(100%, 600px); max-height: 760px; display: grid; grid-template-rows: auto 1fr auto; background: var(--bg-raised); border-radius: var(--radius-xl); box-shadow: var(--shadow-pop); overflow: hidden; }
+  .dhead { display: flex; align-items: center; gap: 12px; padding: 20px 16px 12px 24px; }
+  .dhead .tile { width: 32px; height: 32px; border-radius: 10px; background: linear-gradient(135deg, #5b7cfa, #8a5cf6); color: white; display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; }
+  .dhead h3 { margin: 0; font-size: 20px; color: var(--text-strong); line-height: 1.2; }
+  .dhead small { display: block; color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+  .dhead > div { flex: 1; min-width: 0; }
+  .iconbtn { width: 32px; height: 32px; border: 0; border-radius: 10px; background: transparent; color: var(--text-muted); cursor: pointer; display: grid; place-items: center; flex: none; }
+  .iconbtn:hover { background: var(--hover); color: var(--text-strong); }
+  .dbody { overflow: auto; padding: 8px 24px 16px; display: grid; gap: 20px; align-content: start; }
+  .dfoot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 24px 20px; }
+
+  /* Grouped settings (ui::group): heading, borderless card, inset hairlines, caption. */
+  .group { display: grid; gap: 8px; }
+  .group > h5 { margin: 0; padding: 0 4px; font-size: 14px; font-weight: 600; color: var(--text-strong); }
+  .cap { margin: 0; padding: 0 4px; font-size: 12px; color: var(--text-muted); line-height: 1.45; text-wrap: pretty; }
+  .card { display: grid; padding: 4px; border-radius: var(--radius-lg); background: var(--bg-group); }
+  :root[data-theme="dark"] .card, :root:not([data-theme]) .card { background: color-mix(in oklch, var(--bg-page) 55%, var(--bg-raised)); }
+  .row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 12px; border-radius: 16px; width: 100%; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .row:hover { background: var(--hover); }
+  .row + .row::before { content: ""; position: absolute; top: -0.5px; left: 12px; right: 12px; height: 1px; background: var(--line); }
+  .row:hover::before, .row:hover + .row::before { opacity: 0; }
+  .row .text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+  .row .t { color: var(--text-strong); font-weight: 500; }
+  .row .d { color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+  .row .hint { color: var(--text-muted); font-size: 13px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+  .row .lead { color: var(--text-muted); }
+
+  .switch { width: 40px; height: 24px; border-radius: 12px; background: var(--track-rest); position: relative; flex: none; transition: background 150ms; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: white; box-shadow: 0 1px 2px oklch(0 0 0 / 0.3); transition: transform 220ms var(--ease-out); }
+  [aria-checked="true"] > .switch { background: var(--accent); }
+  [aria-checked="true"] > .switch::after { transform: translateX(16px); }
+  .radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line-strong); flex: none; display: grid; place-items: center; }
+  [aria-checked="true"] > .radio { border-color: var(--accent); }
+  [aria-checked="true"] > .radio::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+
+  .locked { opacity: 0.45; pointer-events: none; }
+  /* Muted-until line under the mute row, in a reserved slot. */
+  .mute-end { display: none; }
+  .muted .mute-end { display: flex; }
+
+  /* Overrides: a picker field, then one row per channel. */
+  .pick { width: 100%; height: 40px; border-radius: var(--radius-md); border: 0; background: var(--selected); color: var(--text-muted); font: inherit; display: flex; align-items: center; gap: 8px; padding: 0 12px; cursor: pointer; text-align: left; }
+  .pick:hover { background: var(--line-strong); color: var(--text-strong); }
+  .pick span { flex: 1; }
+  .ov { cursor: default; }
+  .ov:hover { background: transparent; }
+  .ov .name { flex: 1; min-width: 0; display: grid; gap: 1px; }
+  .ov .name b { color: var(--text-strong); font-weight: 500; display: flex; gap: 6px; align-items: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .ov .name small { color: var(--text-muted); font-size: 12px; }
+  .seg { display: inline-flex; padding: 2px; border-radius: 12px; background: var(--seg-track); flex: none; }
+  .seg button { font: inherit; font-size: 13px; font-weight: 600; height: 28px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  .seg button:hover { color: var(--text-strong); }
+  .seg button[aria-pressed="true"] { background: var(--seg-thumb); color: var(--text-strong); box-shadow: 0 1px 3px oklch(0 0 0 / 0.25); }
+  .seg button.inherit[aria-pressed="true"] { color: var(--text-muted); }
+  .tgl { width: 32px; height: 32px; border-radius: 10px; border: 0; background: transparent; color: var(--text-muted); display: grid; place-items: center; cursor: pointer; }
+  .tgl:hover { background: var(--hover); color: var(--text-strong); }
+  .tgl[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+
+  /* Channel picker menu (menu.rs look). */
+  .menuwrap { position: relative; }
+  .menu { position: absolute; z-index: 5; top: 44px; left: 0; right: 0; max-height: 260px; overflow: auto; padding: 6px; border-radius: var(--radius-lg); background: var(--bg-overlay); box-shadow: var(--shadow-pop); display: none; }
+  .menu.open { display: block; }
+  .menu .search { height: 32px; width: 100%; border-radius: 10px; border: 0; background: var(--selected); color: var(--text-strong); font: inherit; padding: 0 10px; margin-bottom: 4px; }
+  .menu .mi { display: flex; align-items: center; gap: 8px; height: 33px; padding: 0 10px; border-radius: 10px; color: var(--text); cursor: pointer; }
+  .menu .mi:hover { background: var(--hover); color: var(--text-strong); }
+  .menu .mh { font-size: 12px; color: var(--text-muted); padding: 8px 10px 4px; font-weight: 600; }
+
+  /* Inbox mention card with its remove button (section 2). */
+  .inbox { width: min(100%, 480px); background: var(--bg-overlay); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); padding: 8px; display: grid; gap: 8px; }
+  .mention { position: relative; border-radius: 16px; background: var(--bg-raised); padding: 10px 12px 12px; }
+  .mention .where { display: flex; gap: 6px; align-items: center; color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
+  .mention .msg { display: grid; grid-template-columns: 32px 1fr; gap: 0 10px; }
+  .mention .av { width: 32px; height: 32px; border-radius: 50%; background: #6aa0d8; }
+  .mention .n { color: var(--text-strong); font-weight: 600; }
+  .mention .ts { color: var(--text-faint); font-size: 12px; margin-left: 6px; font-weight: 400; }
+  .mention .b { color: var(--text-strong); font-size: 15px; margin-top: 2px; line-height: 1.4; }
+  .mention .b .at { background: var(--accent-soft); color: var(--accent-ink); border-radius: 6px; padding: 0 3px; font-weight: 600; }
+  .mention .actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; opacity: 0; transition: opacity 120ms; }
+  .mention:hover .actions, .mention:focus-within .actions { opacity: 1; }
+  .mention.gone { animation: out 180ms var(--ease-out) forwards; }
+  @keyframes out { to { opacity: 0; transform: scale(0.97); } }
+  .note { color: var(--text-muted); font-size: 13px; line-height: 1.5; max-width: 72ch; }
+  kbd { font: inherit; font-size: 12px; font-weight: 600; padding: 1px 6px; border-radius: 6px; background: var(--selected); color: var(--text-strong); }
+</style>
+</head>
+<body>
+<script>try{const t=localStorage.getItem("notif-theme");if(t)document.documentElement.dataset.theme=t}catch{}</script>
+<main>
+  <header class="top">
+    <h1>Notification Settings</h1>
+    <button class="btn" id="theme"><i data-ic="dark-light"></i>Light / dark</button>
+  </header>
+  <p class="lede">Discord's server Notification Settings dialog, item for item, in Waffle's grouped-settings look. Opened from the server menu and the server dropdown. Every change saves at once, like Discord; Done only closes. Mute the server to see what it locks: the levels, Suppress Highlights (held on) and Mobile Push (held off), and every override.</p>
+
+  <h2>1 · The dialog</h2>
+  <div class="scrim">
+    <div class="dialog" role="dialog" aria-labelledby="dlg-t" id="dlg">
+      <div class="dhead">
+        <div class="tile">NS</div>
+        <div><h3 id="dlg-t">Notification Settings</h3><small>Night Shift</small></div>
+        <button class="iconbtn" aria-label="Close"><i data-ic="xmark"></i></button>
+      </div>
+      <div class="dbody">
+        <div class="group" id="mute-group">
+          <div class="card">
+            <button class="row" role="switch" aria-checked="false" id="mute">
+              <span class="text"><span class="t">Mute Night Shift</span><span class="d">Muting a server prevents unread indicators and notifications from appearing unless you are mentioned.</span></span>
+              <span class="switch"></span>
+            </button>
+            <div class="menuwrap mute-end">
+              <button class="row" id="mute-for">
+                <span class="lead"><i data-ic="clock"></i></span>
+                <span class="text"><span class="t">Mute duration</span><span class="d" id="mute-end">Muted until you turn it back on</span></span>
+                <span class="hint"><span id="mute-pick">Until I turn it back on</span> <i data-ic="chevron-down"></i></span>
+              </button>
+              <div class="menu" id="mute-menu" style="top: 52px"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <h5>Server Notification Settings</h5>
+          <div class="card" role="radiogroup" id="levels">
+            <button class="row" role="radio" aria-checked="false" data-level="0"><span class="text"><span class="t">All Messages</span></span><span class="radio"></span></button>
+            <button class="row" role="radio" aria-checked="true" data-level="1"><span class="text"><span class="t">Only @mentions</span></span><span class="radio"></span></button>
+            <button class="row" role="radio" aria-checked="false" data-level="2"><span class="text"><span class="t">Nothing</span></span><span class="radio"></span></button>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="card">
+            <button class="row" role="switch" aria-checked="true"><span class="text"><span class="t">Suppress @everyone and @here</span></span><span class="switch"></span></button>
+            <button class="row" role="switch" aria-checked="false"><span class="text"><span class="t">Suppress All Role @mentions</span></span><span class="switch"></span></button>
+            <button class="row" role="switch" aria-checked="false" data-muted="on"><span class="text"><span class="t">Suppress Highlights</span><span class="d">Highlights provide occasional updates when your friends are chatting in busy servers, and more.</span></span><span class="switch"></span></button>
+            <button class="row" role="switch" aria-checked="false"><span class="text"><span class="t">Mute New Events</span></span><span class="switch"></span></button>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="card">
+            <button class="row" role="switch" aria-checked="true" data-muted="off"><span class="text"><span class="t">Mobile Push Notifications</span></span><span class="switch"></span></button>
+          </div>
+        </div>
+
+        <div class="group">
+          <h5>Notification Overrides</h5>
+          <div class="menuwrap">
+            <button class="pick" id="pick"><i data-ic="search"></i><span>Select a channel or category…</span><i data-ic="chevron-down"></i></button>
+            <div class="menu" id="pick-menu"></div>
+          </div>
+          <div class="card" id="overrides"></div>
+          <p class="cap">Add a channel to override its default notification settings. A channel left on its default shows the server's level.</p>
+        </div>
+      </div>
+      <div class="dfoot"><button class="btn btn--primary">Done</button></div>
+    </div>
+  </div>
+
+  <h2>2 · Clearing a mention from the Inbox</h2>
+  <p class="lede">Hovering a mention shows Jump and Discord's checkmark, "Mark As Read". It removes the mention for good (on every device) without marking the channel read; the card leaves in place and the list closes the gap. Mentions are kept 7 days.</p>
+  <div class="inbox" id="inbox"></div>
+
+  <h2>3 · Mark Unread</h2>
+  <p class="note">No new UI: the existing "Mark unread" item, <kbd>⌥</kbd> + click on a message and <kbd>⌥</kbd> <kbd>↩</kbd> on a focused one all move the read line to just above that message <em>and</em> now tell Discord (an ack of the message before it with <code>manual: true</code> and how many mentions sit below), so it stays unread on your other devices. The channel's unread pill and the "NEW" divider show as they do today. Two shortcuts join the Keybinds page: <kbd>⌘</kbd> <kbd>I</kbd> toggles the Inbox and <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>E</kbd> marks its top unread channel read.</p>
+</main>
+<script>
+  // Reicon glyphs (icons-data.js), inlined so the page stands alone.
+  const ICONS = {"check":"<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path d=\"M21.5303 5.46967C21.8232 5.76256 21.8232 6.23744 21.5303 6.53033L9.53033 18.5303C9.23744 18.8232 8.76256 18.8232 8.46967 18.5303L2.46967 12.5303C2.17678 12.2374 2.17678 11.7626 2.46967 11.4697C2.76256 11.1768 3.23744 11.1768 3.53033 11.4697L9 16.9393L20.4697 5.46967C20.7626 5.17678 21.2374 5.17678 21.5303 5.46967Z\" fill=\"currentColor\"/></g>","dark-light":"<g stroke=\"none\"><g fill=\"currentColor\"><path d=\"M12 16V8a4 4 0 1 0 0 8m0-8a4 4 0 1 1 0 8v5.667c5.339 0 9.667-4.328 9.667-9.667S17.339 2.333 12 2.333z\"/><path d=\"M12 1.333c5.881 0 10.667 4.786 10.667 10.667S17.88 22.667 12 22.667S1.333 17.88 1.333 12S6.12 1.333 12 1.333m0 19.334c4.779 0 8.667-3.888 8.667-8.667S16.779 3.333 12 3.333S3.333 7.221 3.333 12S7.221 20.667 12 20.667\"/></g></g>","xmark":"<g stroke=\"none\"><g fill=\"currentColor\"><path d=\"M5.333 19.667a1 1 0 0 1-.707-1.708L17.96 4.627a1 1 0 1 1 1.415 1.414L6.04 19.373a1 1 0 0 1-.707.294\"/><path d=\"M18.667 19.667a1 1 0 0 1-.707-.294L4.627 6.04A1 1 0 1 1 6.04 4.625L19.373 17.96a1 1 0 0 1-.706 1.708Z\"/></g></g>","clock":"<g stroke=\"none\"><g fill=\"none\"><g clip-path=\"url(#SVGBgS7qSkY)\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M.25 12C.25 5.51 5.51.25 12 .25S23.75 5.51 23.75 12S18.49 23.75 12 23.75S.25 18.49.25 12m12.5-6a.75.75 0 0 0-1.5 0v6a.75.75 0 0 0 .352.636l4 2.5a.75.75 0 1 0 .796-1.272l-3.648-2.28z\" clip-rule=\"evenodd\"/></g><defs><clipPath id=\"SVGBgS7qSkY\"><path fill=\"currentColor\" d=\"M0 0h24v24H0z\"/></clipPath></defs></g></g>","chevron-down":"<g stroke=\"none\"><path fill=\"currentColor\" d=\"M12 18a1 1 0 0 1-.707-.293L2.96 9.373A1 1 0 1 1 4.375 7.96L12 15.585l7.627-7.626a1 1 0 1 1 1.415 1.414l-8.334 8.334a1 1 0 0 1-.706.293Z\"/></g>","search":"<g stroke=\"none\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M21.788 21.788a.723.723 0 0 0 0-1.022L18.122 17.1a9.157 9.157 0 1 0-1.022 1.022l3.666 3.666a.723.723 0 0 0 1.022 0\" clip-rule=\"evenodd\"/></g>","folder":"<g stroke=\"none\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M2.07 5.258C2 5.626 2 6.068 2 6.95V14c0 3.771 0 5.657 1.172 6.828S6.229 22 10 22h4c3.771 0 5.657 0 6.828-1.172S22 17.771 22 14v-2.202c0-2.632 0-3.949-.77-4.804a3 3 0 0 0-.224-.225C20.151 6 18.834 6 16.202 6h-.374c-1.153 0-1.73 0-2.268-.153a4 4 0 0 1-.848-.352C12.224 5.224 11.816 4.815 11 4l-.55-.55c-.274-.274-.41-.41-.554-.53a4 4 0 0 0-2.18-.903C7.53 2 7.336 2 6.95 2c-.883 0-1.324 0-1.692.07A4 4 0 0 0 2.07 5.257M12.25 10a.75.75 0 0 1 .75-.75h5a.75.75 0 0 1 0 1.5h-5a.75.75 0 0 1-.75-.75\" clip-rule=\"evenodd\"/></g>","bullhorn":"<g stroke=\"none\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M21.25 16.838v-4.716a2.251 2.251 0 0 0 0-4.244V3.162a1.912 1.912 0 0 0-2.938-1.613l-2.144 1.364A11.75 11.75 0 0 1 9.86 4.75H6.5a5.25 5.25 0 0 0 0 10.5h.183l1.685 6.322a1.25 1.25 0 0 0 1.208.928h1.674c.69 0 1.25-.56 1.25-1.25v-5.7c1.295.299 2.536.817 3.668 1.537l2.144 1.364a1.912 1.912 0 0 0 2.938-1.613M19.338 2.75a.4.4 0 0 0-.22.064L16.973 4.18a13.3 13.3 0 0 1-4.223 1.75v8.138a13.3 13.3 0 0 1 4.224 1.752l2.143 1.365a.41.41 0 0 0 .633-.348V3.162a.41.41 0 0 0-.412-.412\" clip-rule=\"evenodd\"/></g>","volume-high":"<g stroke=\"none\"><g fill=\"currentColor\"><path d=\"M18 16.75a.75.75 0 0 1-.6-1.2a5.94 5.94 0 0 0 0-7.1a.75.75 0 0 1 1.2-.9c1.96 2.62 1.96 6.28 0 8.9c-.15.2-.37.3-.6.3\"/><path d=\"M19.828 19.25a.75.75 0 0 1-.6-1.2c2.67-3.56 2.67-8.54 0-12.1a.75.75 0 0 1 1.2-.9c3.07 4.09 3.07 9.81 0 13.9c-.14.2-.37.3-.6.3M14.02 3.782c-1.12-.62-2.55-.46-4.01.45l-2.92 1.83c-.2.12-.43.19-.66.19H5c-2.42 0-3.75 1.33-3.75 3.75v4c0 2.42 1.33 3.75 3.75 3.75h1.43c.23 0 .46.07.66.19l2.92 1.83c.88.55 1.74.82 2.54.82a3 3 0 0 0 1.47-.37c1.11-.62 1.73-1.91 1.73-3.63v-9.18c0-1.72-.62-3.01-1.73-3.63\"/></g></g>","volume-slash":"<g stroke=\"none\"><g fill=\"currentColor\"><path d=\"M18 16.75a.75.75 0 0 1-.6-1.2a5.93 5.93 0 0 0 .72-5.84a.75.75 0 0 1 .4-.98c.38-.16.82.02.98.4c1.02 2.42.67 5.23-.9 7.33c-.15.19-.37.29-.6.29\"/><path d=\"M19.828 19.25a.75.75 0 0 1-.6-1.2c2.14-2.85 2.61-6.67 1.23-9.96a.75.75 0 0 1 .4-.98c.38-.16.82.02.98.4c1.59 3.78 1.05 8.16-1.41 11.44c-.14.2-.37.3-.6.3m-5.788-6.292c.63-.63 1.71-.18 1.71.71v2.93c0 1.72-.62 3.01-1.73 3.63a3 3 0 0 1-1.47.37c-.8 0-1.66-.27-2.54-.82l-.64-.4c-.54-.34-.63-1.1-.18-1.55zm7.73-10.729c-.3-.3-.79-.3-1.09 0l-4.95 4.95c-.06-1.6-.66-2.8-1.72-3.39c-1.12-.62-2.55-.46-4.01.45l-2.91 1.82c-.2.12-.43.19-.66.19H5c-2.42 0-3.75 1.33-3.75 3.75v4c0 2.42 1.33 3.75 3.75 3.75h.16l-2.94 2.94c-.3.3-.3.79 0 1.09c.16.14.35.22.55.22s.39-.08.54-.23l18.46-18.46c.31-.3.31-.78 0-1.08\"/></g></g>","bell":"<g stroke=\"none\"><path fill=\"currentColor\" d=\"M8.352 20.242A4.63 4.63 0 0 0 12 22a4.63 4.63 0 0 0 3.648-1.758a27.2 27.2 0 0 1-7.296 0M18.75 9v.704c0 .845.24 1.671.692 2.374l1.108 1.723c1.011 1.574.239 3.713-1.52 4.21a25.8 25.8 0 0 1-14.06 0c-1.759-.497-2.531-2.636-1.52-4.21l1.108-1.723a4.4 4.4 0 0 0 .693-2.374V9c0-3.866 3.022-7 6.749-7s6.75 3.134 6.75 7\"/></g>"};
+  const icon = (name) => {
+    const body = ICONS[name] || "";
+    return `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
+  };
+  const paint = (root = document) => root.querySelectorAll("i[data-ic]").forEach((el) => { el.outerHTML = icon(el.dataset.ic); });
+  paint();
+
+  document.getElementById("theme").onclick = () => {
+    const now = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    const next = now === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("notif-theme", next); } catch {}
+  };
+
+  // Switches toggle; the mute switch reveals its "muted until" row.
+  document.querySelectorAll('[role="switch"]').forEach((el) => el.addEventListener("click", () => {
+    el.setAttribute("aria-checked", el.getAttribute("aria-checked") !== "true");
+    if (el.id === "mute") lock(el.getAttribute("aria-checked") === "true");
+  }));
+  let guildMuted = false;
+  function lock(on) {
+    guildMuted = on;
+    document.getElementById("mute-group").classList.toggle("muted", on);
+    document.getElementById("levels").classList.toggle("locked", on);
+    document.querySelectorAll("[data-muted]").forEach((el) => {
+      el.classList.toggle("locked", on);
+      if (on) { el.dataset.was = el.getAttribute("aria-checked"); el.setAttribute("aria-checked", el.dataset.muted === "on"); }
+      else { el.setAttribute("aria-checked", el.dataset.was); delete el.dataset.was; }
+    });
+    drawOverrides();
+  }
+  document.querySelectorAll('#levels [role="radio"]').forEach((el) => el.addEventListener("click", () => {
+    document.querySelectorAll('#levels [role="radio"]').forEach((r) => r.setAttribute("aria-checked", r === el));
+    drawOverrides();
+  }));
+
+  const MUTE = [["For 15 Minutes", 15], ["For 1 Hour", 60], ["For 3 Hours", 180], ["For 8 Hours", 480], ["For 24 Hours", 1440], ["Until I turn it back on", 0]];
+  const muteMenu = document.getElementById("mute-menu");
+  muteMenu.innerHTML = MUTE.map(([l, m]) => `<div class="mi" data-m="${m}">${l}</div>`).join("");
+  document.getElementById("mute-for").onclick = (e) => { e.stopPropagation(); muteMenu.classList.toggle("open"); };
+  muteMenu.onclick = (e) => {
+    const mi = e.target.closest(".mi"); if (!mi) return;
+    const m = +mi.dataset.m, row = document.getElementById("mute-for");
+    const end = new Date(Date.now() + m * 60000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    document.getElementById("mute-end").textContent = m ? `Muted until ${end}` : "Muted until you turn it back on";
+    document.getElementById("mute-pick").textContent = mi.textContent;
+    muteMenu.classList.remove("open");
+  };
+
+  // Overrides.
+  const CHANNELS = [["Night Shift", [["Text Channels", "category"], ["general", "text"], ["clips", "text"], ["announcements", "news"]]], ["Voice", [["Lounge", "voice"]]]];
+  const glyph = { category: "folder", text: "hash", news: "bullhorn", voice: "volume-high" };
+  const overrides = [{ name: "announcements", kind: "news", parent: "Text Channels", level: 0, muted: false }, { name: "Voice", kind: "category", parent: "", count: 1, level: 2, muted: false }, { name: "clips", kind: "text", parent: "Text Channels", level: 3, muted: true }];
+  const guildLevel = () => +document.querySelector('#levels [aria-checked="true"]').dataset.level;
+  const LEVELS = [[0, "All"], [1, "Mentions"], [2, "Nothing"]];
+  const hashIcon = `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2" d="M9 4L7 20M17 4l-2 16M4 9h16M3 15h16"/></svg>`;
+  const kindIcon = (k) => k === "text" ? hashIcon : icon(glyph[k]);
+  function drawOverrides() {
+    const box = document.getElementById("overrides");
+    if (!overrides.length) { box.innerHTML = `<div class="row ov"><span class="text"><span class="d">Add a channel to override its default notification settings</span></span></div>`; return; }
+    box.innerHTML = overrides.map((o, i) => `
+      <div class="row ov${guildMuted ? " locked" : ""}">
+        <span class="lead">${kindIcon(o.kind)}</span>
+        <span class="name"><b>${o.name}</b><small>${o.kind === "category" ? `${o.count} channel${o.count === 1 ? "" : "s"}` : o.parent ? "in " + o.parent : "No Category"}</small></span>
+        <span class="seg" role="group" aria-label="Notifications for ${o.name}">${LEVELS.map(([v, l]) => `<button aria-pressed="${!guildMuted && (o.level === 3 ? guildLevel() : o.level) === v}" data-i="${i}" data-v="${v}">${l}</button>`).join("")}</span>
+        <button class="tgl" aria-pressed="${o.muted}" aria-label="${o.muted ? "Unmute" : "Mute"} ${o.name}" data-mute="${i}">${icon(o.muted ? "volume-slash" : "bell")}</button>
+        <button class="tgl" aria-label="Remove notification override for ${o.name}" data-rm="${i}">${icon("xmark")}</button>
+      </div>`).join("");
+  }
+  document.getElementById("overrides").onclick = (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.v) overrides[+b.dataset.i].level = +b.dataset.v;
+    if (b.dataset.mute) overrides[+b.dataset.mute].muted = !overrides[+b.dataset.mute].muted;
+    if (b.dataset.rm) overrides.splice(+b.dataset.rm, 1);
+    drawOverrides();
+  };
+  const pickMenu = document.getElementById("pick-menu");
+  function drawPicker(q = "") {
+    const taken = new Set(overrides.map((o) => o.name));
+    pickMenu.innerHTML = `<input class="search" placeholder="Search channels" value="${q}">` + CHANNELS.map(([h, list]) => {
+      const rows = list.filter(([n]) => !taken.has(n) && n.toLowerCase().includes(q.toLowerCase()));
+      return rows.length ? `<div class="mh">${h}</div>` + rows.map(([n, k]) => `<div class="mi" data-n="${n}" data-k="${k}">${kindIcon(k)}${n}</div>`).join("") : "";
+    }).join("");
+  }
+  document.getElementById("pick").onclick = (e) => { e.stopPropagation(); drawPicker(); pickMenu.classList.toggle("open"); pickMenu.querySelector("input").focus(); };
+  pickMenu.addEventListener("input", (e) => { drawPicker(e.target.value); const i = pickMenu.querySelector("input"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); });
+  pickMenu.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const mi = e.target.closest(".mi"); if (!mi) return;
+    overrides.push({ name: mi.dataset.n, kind: mi.dataset.k, parent: mi.dataset.k === "voice" ? "" : "Text Channels", count: 3, level: 3, muted: false });
+    pickMenu.classList.remove("open"); drawOverrides();
+  });
+  document.addEventListener("click", () => { pickMenu.classList.remove("open"); muteMenu.classList.remove("open"); });
+  drawOverrides();
+
+  // Inbox.
+  const MENTIONS = [["Mika", "#general", "3:12 PM", "hey <span class=at>@frosty</span> can you look at the build before we ship?"], ["Ren", "#clips", "Yesterday", "<span class=at>@frosty</span> this one's yours"], ["Ana", "#announcements", "Mon", "<span class=at>@everyone</span> server maintenance tonight at 11"]];
+  const inbox = document.getElementById("inbox");
+  inbox.innerHTML = MENTIONS.map(([n, c, t, b], i) => `
+    <div class="mention" tabindex="0">
+      <div class="where">${hashIcon}${c.slice(1)} · Night Shift</div>
+      <div class="msg"><span class="av" style="background: oklch(0.7 0.12 ${i * 110})"></span><div><span class="n">${n}</span><span class="ts">${t}</span><div class="b">${b}</div></div></div>
+      <div class="actions"><button class="btn" style="height:28px">Jump</button><button class="iconbtn" aria-label="Mark As Read" title="Mark As Read">${icon("check")}</button></div>
+    </div>`).join("");
+  inbox.addEventListener("click", (e) => {
+    const rm = e.target.closest('[aria-label="Mark As Read"]'); if (!rm) return;
+    const card = rm.closest(".mention"); card.classList.add("gone");
+    card.addEventListener("animationend", () => card.remove(), { once: true });
+  });
+</script>
+</body>
+</html>
