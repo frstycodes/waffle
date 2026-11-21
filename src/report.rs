@@ -4,7 +4,7 @@
 // to signed-out reporters (free text, dropdowns, content URLs) and the settings upsells aren't drawn.
 use std::collections::{HashMap, HashSet};
 
-use gpui_kit::{AnyElement, Context, FontWeight, SharedString, Window, component::Icon, div, prelude::*, px};
+use gpui_kit::{AnyElement, Context, FontWeight, SharedString, Window, component::Icon, div, img, prelude::*, px};
 use reqwest::Method;
 use serde_json::{Map, Value, json};
 
@@ -12,7 +12,7 @@ use crate::{
     Waffle,
     discord::{Message, Relation, User, perm},
     icons::Glyph,
-    mascot::{Mood, mascot_at},
+    illustration::Illustration,
     overlays::backdrop,
     palette,
     ui::{self, Check, RADIUS_MD, Squircle},
@@ -254,7 +254,7 @@ impl Waffle {
                 div().flex().flex_col().gap(px(8.)).children((0..4usize).map(|i| ui::skeleton(("report-loading", i), RADIUS_MD, cx).h(px(44.)).w_full())),
             ),
             Load::Failed => ui::dialog_body().child(head(SharedString::from("Report"), None, close, cx)).child(
-                ui::empty_state("report-failed", Mood::Waiting, "Couldn't load the report menu", "Discord didn't send it. Close this and try again in a moment.", cx),
+                ui::empty_state("report-failed", Illustration::LoadFailed, "Couldn't load the report menu", "Discord didn't send it. Close this and try again in a moment.", cx),
             ),
             Load::Ready(menu) => self.report_node(dialog, menu, close, window, cx),
         };
@@ -270,7 +270,7 @@ impl Waffle {
         let subheader = node.subheader.as_deref().and_then(|s| markdown(s, cx));
         let mut body = ui::dialog_body();
         if success {
-            body = body.child(div().flex().justify_center().pt(px(8.)).child(mascot_at("report-success", Mood::Happy, 1., cx)));
+            body = body.child(div().flex().justify_center().pt(px(8.)).child(img(Illustration::ReportSent.path()).w(px(200.)).h(px(150.))));
         }
         body = body.child(head(node.header.clone().into(), subheader, close, cx).when(success, |h| h.text_center()));
         if let Some(info) = node.info.as_deref().and_then(|s| markdown(s, cx)) {
