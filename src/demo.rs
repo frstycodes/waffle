@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | sidebar-voice-chat | call-previews | call-previews-unread | call-chat | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -608,6 +608,9 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                 waffle.set_call_fullscreen(true, window, cx);
             }
         }
+        // Text chat in the voice channel we're in: the sidebar's rows, the stage's message previews (with a
+        // mention, or unread only) and the chat open beside the call.
+        "sidebar-voice-chat" | "call-previews" | "call-previews-unread" | "call-chat" => demo_voice_chat(waffle, scene, window, cx),
         "call" | "call-info" | "call-devices" | "call-watch" | "call-focus" | "pip" => {
             demo_call(waffle);
             // As if the pointer rests on the stage, so its chrome shows.
@@ -777,6 +780,50 @@ fn demo_call(waffle: &mut Waffle) {
     });
     waffle.call_view = true;
     waffle.restore = None;
+}
+
+// In hangout: two unread messages there (a mention of us in the previews scenes), and two mentions
+// waiting in study-hall, whose other unread stays hidden since we aren't in it.
+fn demo_voice_chat(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
+    demo_call(waffle);
+    waffle.call_pointer_inside = true;
+    let said = |id: &str, author: User, content: &str| Message {
+        id: id.into(),
+        channel_id: "lounge".into(),
+        guild_id: Some("1".into()),
+        author,
+        content: content.into(),
+        timestamp: "2026-11-22T21:41:00Z".into(),
+        ..Default::default()
+    };
+    let (wren, moss, toma) = (user("8388608", "Wren"), user("12582912", "moss lantern"), user("16777216", "toma reed"));
+    waffle.feeds.insert("lounge".into(), Feed { messages: std::sync::Arc::new(vec![said("500", toma, "who's carrying tonight")]), loaded: true, ..Default::default() });
+    waffle.read_states.insert("lounge".into(), ReadState { last_read: 500, mentions: 0 });
+    waffle.read_states.insert("hub".into(), ReadState { last_read: 100, mentions: 2 });
+    waffle.last_message.insert("hub".into(), 900);
+    let mut arrivals = vec![
+        said("501", wren.clone(), "anyone up for ranked after this?"),
+        said("502", moss, "give me ten minutes, I'm finishing a render that has been stuck at 97% for the better part of an hour and I refuse to cancel it now"),
+    ];
+    if matches!(scene, "call-previews" | "call-chat") {
+        let mut mention = said("503", wren, "<@4194304> get in here, we need a fourth");
+        mention.mentions = vec![me_user()];
+        arrivals.push(mention);
+    }
+    for message in arrivals {
+        waffle.on_event(Event::MessageCreate(Box::new(message)), cx);
+    }
+    // Held as if hovered, so the cards outlast their 10 s.
+    waffle.call_previews.freeze(true, std::time::Instant::now());
+    match scene {
+        "sidebar-voice-chat" => waffle.call_view = false,
+        "call-chat" => {
+            if let Some(lounge) = waffle.call.as_ref().map(|c| c.channel.clone()) {
+                waffle.open_call_chat(lounge, window, cx);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn demo_thread() -> Channel {

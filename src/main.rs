@@ -13,6 +13,7 @@ mod cache;
 mod captcha;
 mod query;
 mod call;
+mod call_previews;
 mod channel_menu;
 mod channel_settings;
 mod dm_call;
@@ -591,6 +592,8 @@ enum Edge {
     Panel,
     // The nav column of the settings views (app, server, channel), one width for all three.
     Settings,
+    // The voice channel's chat beside the call, growing leftward.
+    CallChat,
 }
 
 struct Drag {
@@ -787,6 +790,10 @@ pub struct Waffle {
     call_fullscreen: bool,
     // The voice channel's own chat, open beside the call.
     call_chat: bool,
+    // New messages in the call's voice channel, floating over the stage while its chat is closed.
+    call_previews: call_previews::CallPreviews,
+    // When the call channel's unread count last changed, for the chat button's highlight.
+    call_unread_at: Option<Instant>,
     // Voice channel → when its current session began (Unix seconds), from CHANNEL_INFO.
     voice_start: HashMap<String, u64>,
     // Servers whose channel info we've asked for since connecting.
@@ -1118,6 +1125,8 @@ impl Waffle {
             stream_volumes: HashMap::new(),
             call_fullscreen: false,
             call_chat: false,
+            call_previews: Default::default(),
+            call_unread_at: None,
             voice_start: HashMap::new(),
             channel_info_requested: HashSet::new(),
             avatar_colors: HashMap::new(),
@@ -1686,6 +1695,8 @@ impl Waffle {
         if let Some(typers) = self.typing.get_mut(&channel_id) {
             typers.retain(|t| t.user_id != message.author.id);
         }
+        let own_send = self.feeds.get(&channel_id).is_some_and(|f| f.messages.iter().any(|m| m.state != SendState::Sent && m.nonce.is_some() && m.nonce == message.nonce));
+        self.note_call_message(&message, own_send, cx);
         let is_dm = self.dms.iter().any(|d| d.id == channel_id);
         if !mine && !is_open && (self.mentions_me(&message) || is_dm) {
             self.read_states.entry(channel_id.clone()).or_default().mentions += 1;
@@ -2831,6 +2842,10 @@ impl Waffle {
             }
         })
         .detach();
+        // Loaded now, so the chat button can count what arrives before the chat is first opened.
+        if guild_id.is_some() {
+            self.prefetch(&channel.id, cx);
+        }
         self.call = Some(Call { session, guild_id, channel, connected: false, stage: voice::Stage::AwaitingEndpoint, stats: None, level: (SILENCE_DB, false), speaking: HashSet::new(), last_spoke: HashMap::new(), cameras: HashMap::new(), camera_on: false, watching: Vec::new(), focus: None, ended: Vec::new(), sharing: None, share_label: None, share_source: None, live_since: None, self_view: None, joined: Instant::now(), _events: task });
         cx.notify();
     }
@@ -2885,6 +2900,9 @@ impl Waffle {
         self.stop_ringing_out();
         let Some(call) = self.call.take() else { return false };
         self.call_focus = None;
+        self.call_chat = false;
+        self.call_previews = Default::default();
+        self.call_unread_at = None;
         if call.guild_id.is_none() {
             let name = self.dms.iter().find(|d| d.id == call.channel.id).map_or_else(|| call.channel.name.clone(), |d| d.name.clone());
             self.show_call_ended(name, call.joined.elapsed().as_secs(), cx);

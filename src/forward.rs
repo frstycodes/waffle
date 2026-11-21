@@ -287,7 +287,7 @@ fn picked_count(picked: usize) -> String {
 }
 
 // "1 image", "2 files", "Sticker": what a message without text carries.
-fn attachment_summary(message: &Message) -> Option<(Glyph, String)> {
+pub(crate) fn attachment_summary(message: &Message) -> Option<(Glyph, String)> {
     let count = |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
     let videos = message.media.iter().filter(|m| matches!(m.kind, MediaKind::Video { .. })).count();
     match (message.media.len(), message.files.len()) {
