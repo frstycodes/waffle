@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | system-messages | system-messages-open | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -44,6 +44,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
     let messages = match scene {
         _ if load => load_messages(),
         "embeds" => embed_messages(),
+        "system-messages" | "system-messages-open" => system_messages(),
         _ => messages(),
     };
     waffle.feeds.insert("general".into(), Feed { messages: std::sync::Arc::new(messages), loaded: true, ..Default::default() });
@@ -53,6 +54,11 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
     }
     waffle.on_event(Event::Typing { channel_id: "general".into(), user_id: "8388608".into(), name: Some("Wren".into()) }, cx);
     match scene {
+        // The run of four joins opened to each join's own line.
+        "system-messages-open" => {
+            let first = waffle.feeds.get("general").and_then(|f| f.messages.iter().find(|m| m.kind == 7).map(|m| m.id.clone()));
+            waffle.open_join_runs.extend(first);
+        }
         // An account big enough that the rail, the channel list and the member list all scroll.
         "busy" => {
             let servers: Vec<Guild> = (1..=24u8).map(|n| {
@@ -909,6 +915,7 @@ fn ready(me: User) -> Ready {
         stickers: Vec::new(),
         premium_tier: 1,
         afk_channel_id: None,
+        system_channel_flags: 0,
     };
     let lounge_states = vec![
         VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "12582912".into(), user: Some(user("12582912", "moss lantern")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: true, camera: false },
@@ -1011,6 +1018,7 @@ fn load_guilds(waffle: &mut Waffle) {
             stickers: Vec::new(),
             premium_tier: 1,
             afk_channel_id: None,
+            system_channel_flags: 0,
         });
     }
     if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
@@ -1202,6 +1210,96 @@ fn embed_messages() -> Vec<Message> {
         post("205", user("8388608", "Wren"), "2026-11-20T18:12:00Z", vec![video, gallery]),
         poll_post,
         post("207", bot("100663296", "Stressbot"), "2026-11-20T21:00:00Z", vec![worst, black, sensitive]),
+    ]
+}
+
+// design/explore-system-messages.html's notices: a folded run of four joins, a lone join with its wave
+// button, bot joins, boosts, threads, a follow, stage lines, group adds and leaves, a rename, discovery, a
+// poll result, AutoMod, thread starters (whole, deleted, not loaded) and a type Discord draws nothing for.
+fn system_messages() -> Vec<Message> {
+    let at = |minute: u32| format!("2026-11-21T12:{minute:02}:00Z");
+    // Real snowflakes from the times, so each join picks its line the way Discord does.
+    let id = |minute: u32| {
+        let ms = chrono::DateTime::parse_from_rfc3339(&at(minute)).map_or(0, |t| t.timestamp_millis() as u64);
+        (((ms - 1_420_070_400_000) << 22) | u64::from(minute)).to_string()
+    };
+    let notice = |minute: u32, kind: u8, author: &User, content: &str| Message {
+        id: id(minute),
+        channel_id: "general".into(),
+        guild_id: Some("1".into()),
+        author: author.clone(),
+        content: content.into(),
+        timestamp: at(minute),
+        kind,
+        ..Default::default()
+    };
+    let bot = |id: &str, name: &str| User { bot: true, ..user(id, name) };
+    let field = |name: &str, value: &str| (name.to_owned(), value.to_owned(), false);
+    let (ana, jun, rosa, kai, mira, theo) = (user("20971520", "Ana"), user("25165824", "Jun"), user("29360128", "Rosa"), user("33554432", "Kai"), user("37748736", "Mira"), user("41943040", "Theo"));
+    let me = me_user();
+    let parent = Message { content: "ok who's doing the patch 7 tier list, I'll start: honey is S tier".into(), ..notice(0, 0, &jun, "") };
+
+    let mut carl = notice(7, 7, &bot("46137344", "Carl-bot"), "");
+    carl.actor = Some(theo.clone());
+    let mut thread = notice(12, 18, &jun, "gpui list virtualisation");
+    thread.reference_channel = Some("t1".into());
+    let mut added = notice(20, 1, &ana, "");
+    added.mentions = vec![rosa.clone()];
+    let mut poll = notice(24, 46, &ana, "");
+    poll.reply_to = Some(id(0));
+    poll.embeds = vec![Embed {
+        poll: Some(crate::discord::PollResult { question: "Best waffle topping for the Friday stream, honey or the questionable syrup?".into(), winner: Some(("Honey".into(), Some(Emoji::unicode("🍯")))), winner_votes: 7, total_votes: 12 }),
+        ..Default::default()
+    }];
+    let mut automod = notice(26, 24, &rosa, "");
+    automod.embeds = vec![Embed {
+        description: Some("free nitro at discord-gift.ru hurry".into()),
+        fields: vec![
+            field("rule_name", "Block scam links"),
+            field("channel_id", "general"),
+            field("keyword", "discord-gift"),
+            field("keyword_matched_content", "discord-gift"),
+            field("flagged_message_id", &id(25)),
+            field("timeout_duration", "600"),
+        ],
+        ..Default::default()
+    }];
+    let mut starter = notice(28, 21, &jun, "");
+    starter.reply = Some(Box::new(parent.clone()));
+    starter.reply_to = Some(parent.id.clone());
+    let mut deleted = notice(29, 21, &jun, "");
+    deleted.reference_deleted = true;
+    vec![
+        parent,
+        notice(1, 7, &ana, ""),
+        notice(2, 7, &jun, ""),
+        notice(3, 7, &rosa, ""),
+        notice(4, 7, &kai, ""),
+        Message { content: "welcome all four of you!".into(), ..notice(5, 0, &me, "") },
+        notice(6, 7, &mira, ""),
+        carl,
+        notice(8, 7, &bot("50331648", "Statsy"), ""),
+        notice(9, 8, &rosa, ""),
+        notice(10, 10, &kai, "2"),
+        notice(11, 22, &theo, ""),
+        thread,
+        notice(13, 12, &theo, "Rust News #announcements"),
+        notice(14, 27, &theo, "Friday Q&A"),
+        notice(15, 29, &mira, ""),
+        notice(16, 30, &kai, ""),
+        notice(17, 31, &theo, "Friday Q&A: patch 7"),
+        notice(18, 28, &theo, "Friday Q&A: patch 7"),
+        notice(19, 4, &theo, "late-night-games"),
+        added,
+        notice(21, 2, &jun, ""),
+        notice(22, 14, &theo, ""),
+        notice(23, 15, &theo, ""),
+        poll,
+        automod,
+        notice(27, 36, &theo, "2026-11-22T09:44:00Z"),
+        starter,
+        deleted,
+        notice(30, 21, &jun, ""),
     ]
 }
 
