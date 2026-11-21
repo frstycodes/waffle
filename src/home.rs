@@ -17,7 +17,7 @@ use serde_json::json;
 
 use crate::{
     Waffle, SearchState,
-    discord::{Relation, Relationship, Status},
+    discord::{Channel, Relation, Relationship, Status},
     icons::Glyph,
     layout::avatar_with_status,
     mascot::Mood,
@@ -87,6 +87,30 @@ impl Waffle {
         self.guild_id = None;
         self.channel = None;
         self.call_view = false;
+        cx.notify();
+    }
+
+    // A DM opened or changed: it lands in the DM list or in Message Requests by its request state, so an
+    // accepted request moves over. An update without recipients keeps the ones we know.
+    pub(crate) fn upsert_dm(&mut self, mut dm: Channel, cx: &mut Context<Self>) {
+        let known = self.dms.iter().chain(&self.dm_requests).find(|d| d.id == dm.id);
+        if dm.recipients.is_empty()
+            && let Some(known) = known
+        {
+            dm.recipients = known.recipients.clone();
+            dm.recipient = known.recipient.clone();
+        }
+        let at = self.dms.iter().position(|d| d.id == dm.id);
+        self.dms.retain(|d| d.id != dm.id);
+        self.dm_requests.retain(|d| d.id != dm.id);
+        if let Some(open) = self.channel.as_mut().filter(|c| c.id == dm.id) {
+            *open = dm.clone();
+        }
+        match (dm.is_request(), at) {
+            (true, _) => self.dm_requests.insert(0, dm),
+            (false, Some(at)) => self.dms.insert(at, dm),
+            (false, None) => self.dms.insert(0, dm),
+        }
         cx.notify();
     }
 

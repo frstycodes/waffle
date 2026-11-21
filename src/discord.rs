@@ -491,6 +491,22 @@ pub struct ChannelProps {
     pub video_full: bool,
     // Minutes until an idle thread hides (default_auto_archive_duration); 0 when Discord sent none.
     pub archive_after: u32,
+    // A group DM's owner, the only one who may remove members.
+    #[serde(default)]
+    pub owner_id: Option<String>,
+    // A DM from someone we aren't friends with, waiting in Message Requests (is_message_request).
+    #[serde(default)]
+    pub message_request: bool,
+    // Filtered into Message Requests' Spam tab (is_spam).
+    #[serde(default)]
+    pub spam: bool,
+}
+
+impl Channel {
+    // Waits in Message Requests (either tab) instead of the DM list.
+    pub fn is_request(&self) -> bool {
+        self.props.message_request || self.props.spam
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1038,6 +1054,11 @@ pub enum Event {
     MemberUpdate { guild_id: String, user: User, roles: Vec<String> },
     // A friend, block or request was added, changed or removed (`None` kind = removed).
     RelationshipChange { user_id: String, relationship: Option<Relationship> },
+    // A DM or group DM was opened, changed (name, icon, owner, request state) or closed.
+    DmUpsert(Channel),
+    DmDelete(String),
+    // Someone joined or left a group DM (CHANNEL_RECIPIENT_ADD / _REMOVE).
+    RecipientChange { channel_id: String, user: User, added: bool },
     // Our membership of a thread changed (joined or left).
     ThreadJoined { id: String, joined: bool },
     GuildSettings((String, GuildSettings)),
@@ -2019,6 +2040,9 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
         "READY" => Some(Event::Ready(Box::new(parse_ready(d)))),
         "USER_SETTINGS_UPDATE" => Some(Event::UserSettings(d.clone())),
         "GUILD_CREATE" => parse_guild(d).map(Event::GuildCreate),
+        "CHANNEL_CREATE" | "CHANNEL_UPDATE" if d["guild_id"].is_null() && matches!(d["type"].as_u64(), Some(1 | 3)) => parse_dm(d, &Value::Null).map(Event::DmUpsert),
+        "CHANNEL_DELETE" if d["guild_id"].is_null() => Some(Event::DmDelete(d["id"].as_str()?.to_owned())),
+        "CHANNEL_RECIPIENT_ADD" | "CHANNEL_RECIPIENT_REMOVE" => Some(Event::RecipientChange { channel_id: d["channel_id"].as_str()?.to_owned(), user: parse_user(&d["user"]), added: kind == "CHANNEL_RECIPIENT_ADD" }),
         "CHANNEL_CREATE" | "CHANNEL_UPDATE" | "THREAD_CREATE" | "THREAD_UPDATE" => {
             let guild_id = d["guild_id"].as_str()?.to_owned();
             parse_channel(d, &guild_id).map(|channel| Event::ChannelUpsert { guild_id, channel })
@@ -2302,7 +2326,12 @@ fn parse_dm(c: &Value, users: &Value) -> Option<Channel> {
         thread: None,
         raw_type: c["type"].as_u64().unwrap_or(1) as u8,
         overwrites: Vec::new(),
-        props: Default::default(),
+        props: Box::new(ChannelProps {
+            owner_id: c["owner_id"].as_str().map(str::to_owned),
+            message_request: c["is_message_request"].as_bool().unwrap_or(false),
+            spam: c["is_spam"].as_bool().unwrap_or(false),
+            ..Default::default()
+        }),
     })
 }
 
@@ -2988,6 +3017,19 @@ mod tests {
         assert_eq!(left.face(), DmFace::One(avatar_url("1", Some("x"))));
         let alone = parse_dm(&json!({ "id": "g", "type": 3, "name": "squad", "recipients": [] }), &users).unwrap();
         assert_eq!(alone.face(), DmFace::Letters("squad".into()));
+    }
+
+    #[test]
+    fn dm_events_and_request_flags() {
+        let Some(Event::DmUpsert(dm)) = dispatch("CHANNEL_CREATE", &json!({ "id": "d", "type": 1, "is_message_request": true, "recipients": [{ "id": "1", "username": "a" }] })) else { panic!("a DM create is a DmUpsert") };
+        assert!(dm.props.message_request && !dm.props.spam && dm.is_request());
+        let Some(Event::DmUpsert(group)) = dispatch("CHANNEL_UPDATE", &json!({ "id": "g", "type": 3, "owner_id": "1", "is_spam": true, "recipients": [] })) else { panic!("a group update is a DmUpsert") };
+        assert_eq!(group.props.owner_id.as_deref(), Some("1"));
+        assert!(group.is_request());
+        assert!(matches!(dispatch("CHANNEL_DELETE", &json!({ "id": "d", "type": 1 })), Some(Event::DmDelete(id)) if id == "d"));
+        assert!(matches!(dispatch("CHANNEL_CREATE", &json!({ "id": "c", "type": 0, "guild_id": "s" })), Some(Event::ChannelUpsert { .. })));
+        let Some(Event::RecipientChange { channel_id, user, added }) = dispatch("CHANNEL_RECIPIENT_REMOVE", &json!({ "channel_id": "g", "user": { "id": "2", "username": "b" } })) else { panic!("recipient remove") };
+        assert_eq!((channel_id.as_str(), user.id.as_str(), added), ("g", "2", false));
     }
 
     #[test]

@@ -645,6 +645,8 @@ pub struct Waffle {
     // Every user seen as their server shows them, keyed by guild then user, for voice rows and tiles.
     members: HashMap<String, HashMap<String, User>>,
     dms: Vec<Channel>,
+    // DMs waiting in Message Requests, requests and spam both; kept out of `dms` until accepted.
+    dm_requests: Vec<Channel>,
     // None shows direct messages.
     guild_id: Option<String>,
     channel: Option<Channel>,
@@ -1024,6 +1026,7 @@ impl Waffle {
             drag_motion: Default::default(),
             members: HashMap::new(),
             dms: Vec::new(),
+            dm_requests: Vec::new(),
             guild_id: None,
             channel: None,
             last_channel: HashMap::new(),
@@ -1300,6 +1303,7 @@ impl Waffle {
         self.channel = None;
         self.guilds.clear();
         self.dms.clear();
+        self.dm_requests.clear();
         self.feeds.clear();
         self.settings = None;
         self.status = Status::SignedOut(Login::Preparing);
@@ -1378,7 +1382,7 @@ impl Waffle {
                 }
                 self.guilds = ready.guilds;
                 self.folders = ready.folders;
-                self.dms = ready.dms;
+                (self.dm_requests, self.dms) = ready.dms.into_iter().partition(Channel::is_request);
                 self.dms.sort_by_key(|c| std::cmp::Reverse(self.last_message.get(&c.id).copied().unwrap_or(0)));
                 self.read_states = ready.read_states.into_iter().collect();
                 self.relationships = ready.relationships;
@@ -1445,6 +1449,26 @@ impl Waffle {
                         relationship.user = user;
                     }
                     self.relationships.push(relationship);
+                }
+            }
+            Event::DmUpsert(dm) => self.upsert_dm(dm, cx),
+            Event::DmDelete(id) => {
+                self.dms.retain(|d| d.id != id);
+                self.dm_requests.retain(|d| d.id != id);
+                if self.channel.as_ref().is_some_and(|c| c.id == id) {
+                    self.open_home(cx);
+                }
+            }
+            Event::RecipientChange { channel_id, user, added } => {
+                if !added && self.me.as_ref().is_some_and(|me| me.id == user.id) {
+                    return self.on_event(Event::DmDelete(channel_id), cx);
+                }
+                let open = self.channel.as_mut().filter(|c| c.id == channel_id);
+                for dm in self.dms.iter_mut().filter(|d| d.id == channel_id).chain(open) {
+                    dm.recipients.retain(|r| r.id != user.id);
+                    if added {
+                        dm.recipients.push(user.clone());
+                    }
                 }
             }
             Event::ThreadJoined { id, joined } => {
