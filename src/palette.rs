@@ -49,6 +49,8 @@ struct Tokens {
     idle: u32,
     info_ink: u32,
     warning_ink: u32,
+    // Discord's boost pink, the one identity colour Waffle keeps: oklch(0.55 0.2 350) light, (0.78 0.16 350) dark.
+    boost_ink: u32,
     // The unfilled part of sliders, progress and switches; opaque so overlapping pieces never double up.
     track: u32,
     // Translucent fills over any surface: white in the dark theme, ink in the light one.
@@ -84,6 +86,7 @@ const DARK: Tokens = Tokens {
     idle: 0xF2B036,
     info_ink: 0x65B4E9,
     warning_ink: 0xF3B94C,
+    boost_ink: 0xFF89C6,
     track: 0x33353A,
     ink_wash: 0xFFFFFF,
     hover: 0.05,
@@ -117,6 +120,7 @@ const LIGHT: Tokens = Tokens {
     idle: 0xDA950B,
     info_ink: 0x0068A7,
     warning_ink: 0x975800,
+    boost_ink: 0xBF2A82,
     track: 0xD1D4DA,
     ink_wash: 0x2B2E32,
     hover: 0.06,
@@ -554,6 +558,10 @@ pub fn info_ink(cx: &App) -> Hsla {
 
 pub fn warning_ink(cx: &App) -> Hsla {
     hex(tokens(cx).warning_ink)
+}
+
+pub fn boost_ink(cx: &App) -> Hsla {
+    hex(tokens(cx).boost_ink)
 }
 
 // Presence colours. Status is never colour alone: `ui::status` gives each its shape.

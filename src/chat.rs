@@ -27,6 +27,7 @@ use crate::{
     motion,
     overlays::ComposerPicker,
     palette::{self, Level},
+    system_message::{Sentence, notice_line},
     ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, RADIUS_XS, Squircle},
 };
 
@@ -39,7 +40,7 @@ const GROUP_GAP_SECS: i64 = 7 * 60;
 const MAX_IMAGE: (f32, f32) = (400., 320.);
 const COLUMN: f32 = 432.;
 const GALLERY_GAP: f32 = 4.;
-const AVATAR: f32 = 40.;
+pub(crate) const AVATAR: f32 = 40.;
 // The avatar column plus the gap to the content column: where replies and continuations line up.
 const CONTENT_INSET: f32 = AVATAR + 16.;
 // The unread bar's room at the feed's top: 8 above it, its 36, 8 below.
@@ -338,8 +339,11 @@ impl Waffle {
             let message = &messages[ix];
             let previous = ix.checked_sub(1).map(|i| &messages[i]);
             let new_day = day(&message.timestamp) != previous.and_then(|p| day(&p.timestamp));
-            let starts_group = new_day || message.reply.is_some() || previous.is_none_or(|p| p.call.is_some() || p.pin_notice || !continues(p, message));
-            let row = message_row(message, starts_group, &ctx, cx);
+            let starts_group = new_day || message.reply.is_some() || previous.is_none_or(|p| crate::system_message::is_notice(p) || !continues(p, message));
+            let row = match crate::system_message::is_notice(message) {
+                true => crate::system_message::row(&messages, ix, &ctx, cx),
+                false => message_row(message, starts_group, &ctx, cx),
+            };
             // One accent line above the first message after your read position.
             let first_unread = ctx.unread_marker.is_some_and(|read| crate::order(&message.id) > read && previous.is_none_or(|p| crate::order(&p.id) <= read));
             let start = ctx.dm_start.as_ref().filter(|_| ix == 0).map(|s| crate::dm_start::dm_start_header(s, ctx.this.clone(), cx));
@@ -467,6 +471,7 @@ impl Waffle {
             threads: channel.is_some_and(|c| c.kind == ChannelKind::Text && self.can_in(&c.id, crate::discord::perm::CREATE_PUBLIC_THREADS)),
             poll_picks: self.poll_picks.clone(),
             poll_peek: self.poll_peek.clone(),
+            notices: self.notice_facts(messages, channel),
         })
     }
 
@@ -843,7 +848,7 @@ impl Waffle {
 
 impl RowContext {
     // The name this server shows for someone: their nickname once the member is known.
-    fn name_of(&self, user: &User) -> String {
+    pub(crate) fn name_of(&self, user: &User) -> String {
         self.names.get(&user.id).cloned().unwrap_or_else(|| user.name.clone())
     }
 
@@ -853,7 +858,7 @@ impl RowContext {
 }
 
 pub(crate) struct RowContext {
-    me: Option<User>,
+    pub(crate) me: Option<User>,
     // Files going out with pending messages, by nonce, and their tile pictures.
     uploads: HashMap<String, crate::UploadJob>,
     previews: HashMap<std::path::PathBuf, Option<std::sync::Arc<gpui_kit::RenderImage>>>,
@@ -865,7 +870,7 @@ pub(crate) struct RowContext {
     style_ground: Option<Hsla>,
     colors: HashMap<String, Hsla>,
     mentions_me: std::collections::HashSet<String>,
-    channel_names: HashMap<String, String>,
+    pub(crate) channel_names: HashMap<String, String>,
     role_names: HashMap<String, String>,
     mention_fill: Hsla,
     mention_hover: Hsla,
@@ -894,6 +899,7 @@ pub(crate) struct RowContext {
     column: f32,
     poll_picks: HashMap<String, Vec<u32>>,
     poll_peek: std::collections::HashSet<String>,
+    pub(crate) notices: crate::system_message::Facts,
 }
 
 // More than a few rows below the viewport: the feed is scrolled away from its newest message.
@@ -904,12 +910,6 @@ pub(crate) fn away_from_present(visible_end: usize, count: usize) -> bool {
 // An avatar column and a content column; a continuation shows its time in the gutter on hover, and the
 // toolbar floats at the row's top right.
 fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
-    if let Some(call) = &message.call {
-        return call_line(message, call, ctx, cx);
-    }
-    if message.pin_notice {
-        return pin_line(message, ctx, cx);
-    }
     let media = media_grid(message, ctx, cx);
     let group = SharedString::from(format!("msg-{}", message.id));
     let mine = ctx.me.as_ref().is_some_and(|me| me.id == message.author.id);
@@ -1070,12 +1070,12 @@ fn fit_frame((width, height): (f32, f32), (max_w, max_h): (f32, f32)) -> (f32, f
 }
 
 // Rows sit 8px in from the feed's edges, so their hover fill reads as a rounded card; a mention is flush.
-fn inset(row: AnyElement, flush: bool) -> AnyElement {
+pub(crate) fn inset(row: AnyElement, flush: bool) -> AnyElement {
     div().w_full().when(!flush, |d| d.px(px(8.))).child(row).into_any_element()
 }
 
 // Name in its top role's colour, tags, the time, and a pin when pinned.
-fn message_head(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> impl IntoElement + use<> {
+pub(crate) fn message_head(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> impl IntoElement + use<> {
     let name_color = ctx.colors.get(&message.author.id).copied().unwrap_or(palette::strong(cx));
     let name = ctx.name_of(&message.author);
     let runs = ctx.style_ground.zip(message.author.name_style.as_ref()).map(|(ground, style)| name_runs(&name, style, ground)).unwrap_or_default();
@@ -1100,7 +1100,7 @@ fn message_head(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> impl IntoE
 }
 
 // Clicking an avatar or name opens their profile popout at the pointer, as in Discord.
-fn profile_trigger(id: String, user: &User, ctx: &Rc<RowContext>) -> Stateful<Div> {
+pub(crate) fn profile_trigger(id: String, user: &User, ctx: &Rc<RowContext>) -> Stateful<Div> {
     let (this, user) = (ctx.this.clone(), user.clone());
     let (menu_this, menu_user) = (this.clone(), user.clone());
     div()
@@ -1300,88 +1300,86 @@ fn only_media_link(message: &Message) -> bool {
 }
 
 // A DM call's record: one line in the history. A call you missed is the only red one, and it offers Call back.
-fn call_line(message: &Message, call: &crate::discord::CallRecord, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+pub(crate) fn call_line(message: &Message, call: &crate::discord::CallRecord, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     let me = ctx.me.as_ref().map(|m| m.id.as_str()).unwrap_or_default();
-    let author = ctx.name_of(&message.author);
     let missed = call.ended.is_some() && message.author.id != me && !call.participants.iter().any(|p| p == me);
     let lasted = call.ended.as_deref().and_then(|end| Some((local(end)? - local(&message.timestamp)?).num_seconds())).map(crate::dm_call::lasted);
-    let (text, action) = match (missed, lasted) {
-        (true, Some(lasted)) => (format!("You missed a call from {author} that lasted {lasted}."), Some("Call back")),
-        (true, None) => (format!("You missed a call from {author}."), Some("Call back")),
-        (false, Some(lasted)) => (format!("{author} started a call that lasted {lasted}."), None),
-        (false, None) => (format!("{author} started a call."), Some("Join")),
+    let s = Sentence::new(&message.id, cx);
+    let (sentence, action) = match (missed, lasted) {
+        (true, Some(lasted)) => (s.text("You missed a call from ").name(&message.author, ctx).text(&format!(" that lasted {lasted}.")), Some("Call back")),
+        (true, None) => (s.text("You missed a call from ").name(&message.author, ctx).text("."), Some("Call back")),
+        (false, Some(lasted)) => (s.name(&message.author, ctx).text(&format!(" started a call that lasted {lasted}.")), None),
+        (false, None) => (s.name(&message.author, ctx).text(" started a call."), Some("Join")),
     };
     let ink = if missed { palette::danger_ink(cx) } else { palette::positive_ink(cx) };
-    let (this, channel_id) = (ctx.this.clone(), message.channel_id.clone());
-    let action = action.map(|label| {
-        ui::button(SharedString::from(format!("call-line-{}", message.id)), ui::Tone::Link, cx).child(label).on_click(move |_, _, cx| { cx.stop_propagation();
-            this.update(cx, |this, cx| this.answer_dm_call(&channel_id, cx)).ok();
-        })
-    });
-    div()
-        .id(SharedString::from(format!("msg-{}", message.id)))
-        .w_full()
-        .px(px(16.))
-        .py(px(4.))
-        .flex()
-        .items_center()
-        .gap(px(16.))
-        .text_size(px(14.))
-        .child(div().w(px(AVATAR)).flex_none().flex().justify_center().child(Icon::new(Glyph::Phone).size(px(18.)).text_color(ink)))
-        .child(div().min_w_0().text_color(palette::muted(cx)).child(text))
-        .child(div().flex_none().text_size(px(12.)).text_color(palette::faint(cx)).child(clock(&message.timestamp)))
-        .children(action)
-        .into_any_element()
+    let sentence = match action {
+        Some(label) => {
+            let (this, channel_id) = (ctx.this.clone(), message.channel_id.clone());
+            let link = sentence.link(label).text_color(palette::accent_ink(cx)).on_click(move |_, _, cx| { cx.stop_propagation();
+                this.update(cx, |this, cx| this.answer_dm_call(&channel_id, cx)).ok();
+            });
+            sentence.text(" \u{2014} ").part(link)
+        }
+        None => sentence,
+    };
+    notice_line(&message.id, Glyph::Phone, ink, sentence, Some(format_stamp(&message.timestamp)), Vec::new(), cx)
 }
 
-// Discord's pin notice, one line like a call record: who pinned, a link to the message, a link to the pins.
-fn pin_line(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
-    let strong = palette::strong(cx);
-    let link = |id: String, label: &'static str| div().id(SharedString::from(id)).cursor_pointer().font_weight(FontWeight::MEDIUM).text_color(strong).hover(|s| s.underline()).child(label);
+// Discord's pin notice: who pinned, a link to the message, a link to the pins.
+pub(crate) fn pin_line(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+    let s = Sentence::new(&message.id, cx).name(&message.author, ctx).text(" pinned ");
     let (this, target) = (ctx.this.clone(), message.reply_to.clone());
-    let jump = link(format!("pin-jump-{}", message.id), "a message").on_click(move |_, _, cx| { cx.stop_propagation();
+    let jump = s.link("a message").on_click(move |_, _, cx| { cx.stop_propagation();
         let Some(id) = target.clone() else { return };
         this.update(cx, |this, cx| this.jump_to(id, cx)).ok();
     });
+    let s = s.part(jump).text(" to this channel. See all ");
     let this = ctx.this.clone();
-    let pins = link(format!("pin-list-{}", message.id), "pinned messages").on_mouse_down(gpui_kit::MouseButton::Left, move |_, _, cx| { cx.stop_propagation();
+    let pins = s.link("pinned messages").on_mouse_down(gpui_kit::MouseButton::Left, move |_, _, cx| { cx.stop_propagation();
         this.update(cx, |this, cx| {
             this.popover_at = gpui_kit::point(px(this.pins_button_x.get()), px(0.));
             this.open_pins(cx);
         })
         .ok();
     });
-    let name = profile_trigger(format!("pin-name-{}", message.id), &message.author, ctx).font_weight(FontWeight::MEDIUM).text_color(strong).hover(|s| s.underline()).child(ctx.name_of(&message.author));
-    // A group's spacing, as any message that starts one, so it sits as far from its neighbours.
-    let line = div()
-        .id(SharedString::from(format!("msg-{}", message.id)))
-        .w_full()
-        .px(px(16.))
-        .mt(px(12.))
-        .pt(px(4.))
-        .pb(px(2.))
+    let sentence = s.part(pins).text(".");
+    notice_line(&message.id, Glyph::Pin, palette::muted(cx), sentence, Some(format_stamp(&message.timestamp)), Vec::new(), cx)
+}
+
+// A poll-result notice's cards, under its line.
+pub(crate) fn poll_results(message: &Message, ctx: &RowContext, cx: &App) -> Vec<AnyElement> {
+    message.embeds.iter().enumerate().filter_map(|(i, e)| Some(poll_result(e.poll.as_ref()?, message.reply_to.as_deref(), &format!("poll-result-{}-{i}", message.id), ctx, cx))).collect()
+}
+
+// A thread starter's parent message, whole but inert: no toolbar, reactions or thread chip, as Discord draws it.
+pub(crate) fn starter_message(parent: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Div {
+    let body = div()
+        .flex_1()
+        .min_w_0()
         .flex()
-        .items_center()
-        .gap(px(16.))
-        .text_size(px(14.))
-        .child(div().w(px(AVATAR)).flex_none().flex().justify_center().child(Icon::new(Glyph::Pin).size(px(18.)).text_color(palette::muted(cx))))
+        .flex_col()
+        .text_size(px(16.))
+        .text_color(palette::text(cx))
+        .child(message_head(parent, ctx, cx))
+        .children(content(parent, ctx, cx))
+        .children(parent.forward.as_ref().map(|original| forward_card(original, ctx, cx)))
+        .children(media_grid(parent, ctx, cx))
+        .children(parent.stickers.iter().map(|s| crate::stickers::in_chat(s, cx)))
+        .children(parent.poll.as_ref().map(|p| poll_card(parent, p, ctx, cx)))
+        .children(parent.embeds.iter().filter(|_| ctx.embeds).enumerate().map(|(i, e)| embed_card(e, parent.reply_to.as_deref(), format!("starter-embed-{}-{i}", parent.id), ctx, cx)))
+        .children(files(parent, ctx, cx));
+    div()
+        .flex()
+        .flex_col()
+        .line_height(gpui_kit::relative(1.45))
+        .children(parent.reply.as_ref().map(|reply| reply_preview(reply, parent.reply_to.clone(), ctx, cx)))
         .child(
             div()
-                .min_w_0()
                 .flex()
-                .flex_wrap()
-                .items_baseline()
-                .gap_x(px(4.))
-                .text_color(palette::muted(cx))
-                .child(name)
-                .child("pinned")
-                .child(jump)
-                .child("to this channel. See all")
-                .child(pins)
-                .child(div().ml(px(-4.)).child("."))
-                .child(div().ml(px(4.)).text_size(px(12.)).text_color(palette::faint(cx)).child(clock(&message.timestamp))),
-        );
-    inset(line.into_any_element(), false)
+                .gap(px(16.))
+                .child(profile_trigger(format!("starter-avatar-{}", parent.id), &parent.author, ctx).flex_none().mt(px(2.)).child(ui::avatar(parent.author.avatar.clone(), AVATAR)))
+                .child(body),
+        )
 }
 
 pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyElement> {
@@ -2922,11 +2920,11 @@ fn continues(previous: &Message, message: &Message) -> bool {
     previous.author.id == message.author.id && (b - a).num_seconds() < GROUP_GAP_SECS
 }
 
-fn local(timestamp: &str) -> Option<DateTime<Local>> {
+pub(crate) fn local(timestamp: &str) -> Option<DateTime<Local>> {
     Some(DateTime::parse_from_rfc3339(timestamp).ok()?.with_timezone(&Local))
 }
 
-fn day(timestamp: &str) -> Option<NaiveDate> {
+pub(crate) fn day(timestamp: &str) -> Option<NaiveDate> {
     Some(local(timestamp)?.date_naive())
 }
 
@@ -2974,7 +2972,7 @@ fn unread_label(count: usize, estimated: bool, since: &str) -> String {
     }
 }
 
-fn clock(timestamp: &str) -> String {
+pub(crate) fn clock(timestamp: &str) -> String {
     local(timestamp).map(|t| t.format(time_format(false)).to_string()).unwrap_or_default()
 }
 
