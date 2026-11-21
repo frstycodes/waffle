@@ -28,11 +28,12 @@ impl Waffle {
         match self.right_panel {
             RightPanel::Search(_) => true,
             RightPanel::Hidden => false,
-            _ => self.guild_id.is_some(),
+            RightPanel::Members => self.guild_id.is_some() || self.open_group().is_some(),
+            RightPanel::Activity => self.guild_id.is_some(),
         }
     }
 
-    // The side panel's width while it shows. A DM has no member list; its side panel is only ever search results.
+    // The side panel's width while it shows. A 1:1 DM has no member list; its side panel is only ever search results.
     pub fn panel_column_width(&self) -> Option<f32> {
         match &self.right_panel {
             _ if !self.panel_shown() => None,
@@ -48,6 +49,7 @@ impl Waffle {
         // query with a way back to the members.
         let (head, body, foot): (Div, AnyElement, Option<AnyElement>) = match &self.right_panel {
             RightPanel::Hidden => return None,
+            RightPanel::Members if self.guild_id.is_none() => (self.panel_head("Members".into(), false, cx), self.group_member_list(cx), self.group_invite_foot(cx)),
             RightPanel::Members => (self.panel_head("Members".into(), false, cx), self.member_list(window, cx), None),
             RightPanel::Activity => (self.panel_head("Activity".into(), true, cx), self.activity_cards(usize::MAX, cx), None),
             RightPanel::Search(results) => {
@@ -102,6 +104,32 @@ impl Waffle {
             this.right_panel = RightPanel::Members;
             cx.notify();
         }))
+    }
+
+    // A group DM's members, you among them, the owner crowned. Its people have no roles or server: just online
+    // and offline, as Discord lists a group.
+    fn group_member_list(&self, cx: &mut Context<Self>) -> AnyElement {
+        let Some(group) = self.open_group() else { return div().into_any_element() };
+        let people = self.me.iter().chain(&group.recipients);
+        let rows: Vec<AnyElement> = people
+            .map(|user| Member { user: user.clone(), roles: Vec::new(), presence: self.presences.get(&user.id).cloned().unwrap_or_default() })
+            .map(|member| self.member_row(&member, cx))
+            .collect();
+        div().flex().flex_col().gap(px(2.)).child(group_label(format!("Members · {}", rows.len()), cx)).children(rows).into_any_element()
+    }
+
+    // "Invite to Group DM" under the list while the group has room.
+    fn group_invite_foot(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let group = self.open_group()?.clone();
+        if group.recipients.len() + 1 >= crate::group_dm::LIMIT {
+            return None;
+        }
+        let invite = ui::button("group-invite", ui::Tone::Ghost, cx)
+            .w_full()
+            .child(Icon::new(Glyph::GroupPlus).size(px(18.)))
+            .child("Invite to Group DM")
+            .on_click(cx.listener(move |this, _, window, cx| this.open_group_picker(Some(group.clone()), window, cx)));
+        Some(div().px_2().child(invite).into_any_element())
     }
 
     // Who is here, grouped by top role, then online and offline (navigation.css .members).
@@ -272,7 +300,10 @@ impl Waffle {
             false => self.role_color(self.guild_id.as_ref(), &member.user.id, Some(&member.roles), dark).unwrap_or(strong),
         };
         let surface = palette::surface(palette::Level::Sidebar, cx);
-        let owner = self.guild().is_some_and(|g| g.owner_id.as_ref() == Some(&member.user.id));
+        let owner = match self.guild() {
+            Some(guild) => guild.owner_id.as_ref() == Some(&member.user.id),
+            None => self.open_group().is_some_and(|g| g.props.owner_id.as_ref() == Some(&member.user.id)),
+        };
         let selected = self.profile_card.as_ref().is_some_and(|p| p.user.id == member.user.id);
         let crown = ui::mix(palette::status_in(Status::Idle, cx), strong, 0.4);
         let name_line = |key: String| {
@@ -321,7 +352,8 @@ impl Waffle {
             })
             .on_mouse_down(gpui_kit::MouseButton::Right, {
                 let (user, guild_id) = (member.user.clone(), self.guild_id.clone());
-                cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_user_menu(user.clone(), guild_id.clone(), crate::user_menu::Surface::ServerChat, e.position, cx))
+                let surface = if guild_id.is_some() { crate::user_menu::Surface::ServerChat } else { crate::user_menu::Surface::Group };
+                cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_user_menu(user.clone(), guild_id.clone(), surface, e.position, cx))
             })
             .into_any_element()
     }
