@@ -1,6 +1,5 @@
 // Voice messages and audio attachments: the whole file decoded to PCM, played through the shared
 // output at any speed with the pitch kept (WSOLA time-stretch).
-#![allow(dead_code, reason = "the voice message player lands in a parallel change; drop this once it uses the API")]
 
 use std::{
     f32::consts::TAU,
