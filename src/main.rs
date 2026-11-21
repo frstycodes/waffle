@@ -42,6 +42,7 @@ mod home;
 mod os_image;
 mod overlays;
 mod overwrites;
+mod audio;
 mod playback;
 mod poll;
 mod inbox;
