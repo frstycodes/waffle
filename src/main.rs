@@ -6,6 +6,7 @@ mod attachments;
 mod app_keys;
 mod crash;
 mod create_channel;
+mod modify_attachment;
 mod restart;
 mod feed_keys;
 mod auth;
@@ -746,7 +747,10 @@ pub struct Waffle {
     unread_scroll_pending: bool,
     dialog: Option<menu::Dialog>,
     create_channel: Option<create_channel::CreateChannel>,
+    modify_attachment: Option<modify_attachment::ModifyAttachment>,
     dialog_input: Entity<SearchState>,
+    // Modify Attachment's Description (Alt Text).
+    alt_input: Entity<TextareaState>,
     // A short notice at the bottom, e.g. why a moderation action failed.
     toast: Option<SharedString>,
     // The Friends page's Add friend tab: the username field and how the last request went.
@@ -848,6 +852,10 @@ pub struct Waffle {
     hovered_row: Option<String>,
     // The message under the pointer, which shows its toolbar and, on a continuation, its time.
     hovered_message: Option<String>,
+    // The attachment tile under the pointer (a waiting file, a sent picture), which shows its actions.
+    hovered_tile: Option<String>,
+    // The sent picture whose ALT popout is open, as `{message id}#{index}`.
+    alt_popout: Option<String>,
     // The message with keyboard focus in the feed (feed_keys.rs); kept only while `feed_focus` holds focus.
     focused_message: Option<String>,
     feed_focus: FocusHandle,
@@ -972,17 +980,26 @@ impl Waffle {
         let dialog_input = cx.new(|cx| SearchState::new(window, cx));
         // Enter in the field submits its dialog; the input keeps the key from reaching the dialog itself.
         cx.subscribe_in(&dialog_input, window, |this: &mut Self, _, event: &InputEvent, window, cx| {
+            // Modify Attachment locks its spoiler box while the name starts with SPOILER_.
+            if matches!(event, InputEvent::Change) && this.modify_attachment.is_some() {
+                cx.notify();
+            }
             if !matches!(event, InputEvent::PressEnter { .. }) {
                 return;
             }
             if this.create_channel.is_some() {
                 return this.submit_create_channel(cx);
             }
+            if this.modify_attachment.is_some() {
+                return this.save_modify_attachment(cx);
+            }
             if this.dialog.as_ref().is_some_and(|d| d.input) {
                 this.confirm_dialog(window, cx);
             }
         })
         .detach();
+        let alt_input = cx.new(|cx| TextareaState::new(window, cx).placeholder("Add a description").auto_grow(3, 8));
+        cx.subscribe_in(&alt_input, window, Self::on_alt_input).detach();
         let status_input = cx.new(|cx| SearchState::new(window, cx).placeholder("What's on your mind?"));
         cx.subscribe_in(&status_input, window, Self::on_status_input).detach();
         let add_friend_input = cx.new(|cx| SearchState::new(window, cx).placeholder("username"));
@@ -1095,7 +1112,9 @@ impl Waffle {
             unread_scroll_pending: false,
             dialog: None,
             create_channel: None,
+            modify_attachment: None,
             dialog_input,
+            alt_input,
             toast: None,
             add_friend_input,
             add_friend_note,
@@ -1160,6 +1179,8 @@ impl Waffle {
             updates: updater::Updates::default(),
             hovered_row: None,
             hovered_message: None,
+            hovered_tile: None,
+            alt_popout: None,
             focused_message: None,
             feed_focus,
             call_focus: None,

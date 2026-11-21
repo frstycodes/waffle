@@ -12,9 +12,12 @@ use crate::discord::{MAX_FILES, Upload};
 #[derive(Clone, Debug, PartialEq)]
 pub struct PendingFile {
     pub path: PathBuf,
+    // What the message names it; Modify Attachment can change it before sending.
     pub name: String,
     pub size: u64,
     pub spoiler: bool,
+    // Alt text, for pictures and videos.
+    pub description: Option<String>,
 }
 
 impl PendingFile {
@@ -22,17 +25,16 @@ impl PendingFile {
     pub fn new(path: PathBuf) -> Option<Self> {
         let meta = std::fs::metadata(&path).ok().filter(|m| m.is_file())?;
         let name = path.file_name()?.to_string_lossy().into_owned();
-        Some(Self { path, name, size: meta.len(), spoiler: false })
+        Some(Self { path, name, size: meta.len(), spoiler: false, description: None })
     }
 
     pub fn kind(&self) -> FileKind {
         FileKind::of(&self.path)
     }
 
-    // Discord marks a spoiler by the file's name.
+    // The name goes as typed: a spoiler travels as the message's `is_spoiler`, not a `SPOILER_` prefix.
     pub fn upload(&self) -> Upload {
-        let name = if self.spoiler { format!("SPOILER_{}", self.name) } else { self.name.clone() };
-        Upload { path: self.path.clone(), name, size: self.size, sent: Arc::new(AtomicU64::new(0)) }
+        Upload { path: self.path.clone(), name: self.name.clone(), size: self.size, description: self.description.clone(), spoiler: self.spoiler, sent: Arc::new(AtomicU64::new(0)) }
     }
 }
 
@@ -142,7 +144,7 @@ mod tests {
     use super::*;
 
     fn file(name: &str, size: u64) -> PendingFile {
-        PendingFile { path: PathBuf::from(format!("/tmp/{name}")), name: name.into(), size, spoiler: false }
+        PendingFile { path: PathBuf::from(format!("/tmp/{name}")), name: name.into(), size, spoiler: false, description: None }
     }
 
     #[test]
@@ -197,11 +199,12 @@ mod tests {
     }
 
     #[test]
-    fn spoilers_are_marked_by_name() {
+    fn spoilers_keep_their_name() {
         let mut f = file("cat.png", 1);
-        assert_eq!(f.upload().name, "cat.png");
         f.spoiler = true;
-        assert_eq!(f.upload().name, "SPOILER_cat.png");
+        let upload = f.upload();
+        assert_eq!(upload.name, "cat.png");
+        assert!(upload.spoiler);
     }
 
     #[test]

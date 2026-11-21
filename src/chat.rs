@@ -450,6 +450,9 @@ impl Waffle {
             flash: self.flash.clone(),
             editing: self.editing.as_ref().map(|m| m.id.clone()),
             hovered: self.hovered_message.clone(),
+            hovered_tile: self.hovered_tile.clone(),
+            alt_popout: self.alt_popout.clone(),
+            image_descriptions: self.prefs.show_image_descriptions,
             focused: self.focused_message.clone(),
             copied: self.copied.clone(),
             revealed: self.revealed.clone(),
@@ -684,46 +687,88 @@ impl Waffle {
             }))
     }
 
-    // Files waiting to send: borderless wells inside the composer, never cards in a card. Each shows
-    // the OS's own picture of it (a thumbnail, else its type's icon), its name and size, a spoiler toggle
-    // and a remove button.
+    // Files waiting to send, as cards in a borderless well inside the composer (design: direction A): the
+    // picture on top (the OS's thumbnail, else the type's icon), its name and size under it. Discord's
+    // three actions float at the picture's corner while the card is hovered.
     fn attachment_tray(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
         if self.pending_files.is_empty() {
             return None;
         }
-        let (selected, strong, faint) = (palette::selected(cx), palette::strong(cx), palette::faint(cx));
-        let chips = self.pending_files.iter().enumerate().map(|(i, file)| {
-            let preview = file_picture(self.file_previews.get(&file.path).cloned().flatten(), file.kind(), 48., file.spoiler, cx);
-            let (spoiler_glyph, spoiler_tip) = match file.spoiler {
-                true => (Glyph::EyeSlash, "Remove Spoiler"),
-                false => (Glyph::Eye, "Mark as Spoiler"),
-            };
-            div()
-                .w(px(240.))
-                .flex_none()
-                .py(px(6.))
-                .pl(px(6.))
-                .pr(px(4.))
-                .flex()
-                .items_center()
-                .gap(px(10.))
-                .squircle(RADIUS_MD)
-                .bg(selected)
-                .child(preview)
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap(px(2.))
-                        .child(div().truncate().text_size(px(14.)).font_weight(FontWeight::MEDIUM).text_color(strong).child(file.name.clone()))
-                        .child(div().truncate().text_size(px(12.)).text_color(faint).child(format_size(file.size))),
-                )
+        let cards: Vec<AnyElement> = self.pending_files.iter().enumerate().map(|(i, file)| self.tray_card(i, file, cx)).collect();
+        Some(div().id("composer-tray").flex().items_end().gap(px(8.)).p(px(10.)).overflow_x_scroll().border_b_1().border_color(palette::line(cx)).children(cards))
+    }
+
+    fn tray_card(&self, i: usize, file: &crate::attachments::PendingFile, cx: &mut Context<Self>) -> AnyElement {
+        let key = format!("tray-{i}");
+        let hovered = self.hovered_tile.as_deref() == Some(key.as_str());
+        let track = track_tile_hover(cx.weak_entity(), key);
+        let picture = self.file_previews.get(&file.path).cloned().flatten();
+        let veiled = file.spoiler && file.kind() != crate::attachments::FileKind::Other;
+        let has_alt = file.description.as_deref().is_some_and(|d| !d.is_empty());
+        let tags = div()
+            .absolute()
+            .left(px(6.))
+            .bottom(px(6.))
+            .flex()
+            .gap(px(3.))
+            .when(has_alt, |t| t.child(media_label("Alt")))
+            .when(file.spoiler, |t| t.child(media_label("Spoiler")));
+        let well = div()
+            .relative()
+            .h(px(140.))
+            .flex_none()
+            .overflow_hidden()
+            .squircle(RADIUS_MD)
+            .bg(palette::surface(Level::Raised, cx))
+            .text_color(palette::muted(cx))
+            .flex()
+            .items_center()
+            .justify_center()
+            .map(|w| match picture {
+                // Thumbnails fill the well; icons keep their own transparent margins.
+                Some(image) => w.child(ui::media(image, ui::all(RADIUS_MD)).size_full().object_fit(gpui_kit::ObjectFit::Cover)),
+                None => w.child(Icon::new(file.kind().glyph()).size(px(40.))),
+            })
+            .when(veiled, |w| w.child(spoiler_veil()))
+            .child(tags);
+        let meta = div()
+            .px(px(6.))
+            .pb(px(2.))
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap(px(1.))
+            .child(div().truncate().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(file.name.clone()))
+            .child(div().text_size(px(12.)).text_color(palette::faint(cx)).child(format_size(file.size)));
+        let (spoiler_glyph, spoiler_tip) = match file.spoiler {
+            true => (Glyph::EyeSlash, "Remove Spoiler"),
+            false => (Glyph::Eye, "Spoiler Attachment"),
+        };
+        let actions = hovered.then(|| {
+            floating_bar(SharedString::from(format!("tray-actions-{i}")), cx)
+                .top(px(12.))
+                .right(px(12.))
+                .on_hover(track_tile_hover(cx.weak_entity(), format!("tray-{i}")))
                 .child(ui::icon_button(SharedString::from(format!("spoiler-file-{i}")), spoiler_glyph, spoiler_tip, cx).small().on_click(cx.listener(move |this, _, _, cx| this.toggle_spoiler(i, cx))))
+                .child(ui::icon_button(SharedString::from(format!("modify-file-{i}")), Glyph::Pen, "Modify Attachment", cx).small().on_click(cx.listener(move |this, _, window, cx| this.open_modify_pending(i, window, cx))))
                 .child(ui::icon_button(SharedString::from(format!("remove-file-{i}")), Glyph::X, "Remove Attachment", cx).small().on_click(cx.listener(move |this, _, _, cx| this.remove_file(i, cx))))
         });
-        Some(div().id("composer-tray").flex().gap(px(8.)).p(px(10.)).overflow_x_scroll().border_b_1().border_color(palette::line(cx)).children(chips))
+        div()
+            .id(SharedString::from(format!("tray-card-{i}")))
+            .relative()
+            .w(px(184.))
+            .flex_none()
+            .p(px(6.))
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .squircle(RADIUS_LG)
+            .bg(palette::selected(cx))
+            .on_hover(track)
+            .child(well)
+            .child(meta)
+            .children(actions)
+            .into_any_element()
     }
 
     // While files are dragged over the chat: the whole pane says where they'll go, and takes the drop
@@ -873,6 +918,11 @@ pub(crate) struct RowContext {
     flash: Option<String>,
     editing: Option<String>,
     hovered: Option<String>,
+    // The attachment tile under the pointer, and the picture whose ALT popout is open.
+    hovered_tile: Option<String>,
+    alt_popout: Option<String>,
+    // Settings › Chat › Show image descriptions.
+    image_descriptions: bool,
     focused: Option<String>,
     copied: Option<String>,
     revealed: Rc<std::cell::RefCell<std::collections::HashSet<String>>>,
@@ -1720,12 +1770,16 @@ pub(crate) fn animated_image(source: impl Into<gpui_kit::ImageSource>) -> Statef
 
 // Media at its own shape: one alone fits 400×320; several tile the 432px column (2 side by side,
 // 3 one tall and two stacked, 4 two by two, 5 or more two over three with the last counting the rest).
+// With Show image descriptions on, a lone picture's alt text runs under it as a caption; in a gallery
+// each described picture gets an ALT button that opens it.
 fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<AnyElement> {
     let first = message.media.first()?;
     if message.media.len() == 1 {
         let scale = (MAX_IMAGE.0.min(ctx.column) / first.width).min(MAX_IMAGE.1 / first.height).min(1.);
         let (w, h) = (first.width * scale, first.height * scale);
-        return Some(div().mt(px(8.)).flex_none().w(px(w)).h(px(h)).child(media_tile(message, 0, (w, h), ui::all(RADIUS_LG), ctx, cx)).into_any_element());
+        let caption = shown_alt(message, 0, ctx).map(|alt| div().mt(px(4.)).max_w(px(w)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(alt));
+        let frame = media_frame(message, 0, (w, h), ui::all(RADIUS_LG), ctx, cx).flex_none().w(px(w)).h(px(h));
+        return Some(div().mt(px(8.)).flex().flex_col().child(frame).children(caption).into_any_element());
     }
     // Laid out for the feed's column, then scaled down to fit a narrower one.
     let k = (ctx.column / COLUMN).min(1.);
@@ -1734,17 +1788,23 @@ fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<A
     let tiles: Vec<Tile> = tiles.into_iter().map(|t| Tile { x: t.x * k, y: t.y * k, w: t.w * k, h: t.h * k }).collect();
     let rest = message.media.len() - tiles.len();
     let mut grid = div().mt(px(8.)).relative().flex_none().w(px(width)).h(px(height));
+    let mut popout = None;
     for (i, tile) in tiles.iter().enumerate() {
         let corners = gallery_corners(*tile, width, height, RADIUS_LG);
         let counts_rest = rest > 0 && i + 1 == tiles.len();
+        let alt = shown_alt(message, i, ctx).filter(|_| !counts_rest && !matches!(message.media[i].kind, MediaKind::Video { .. }));
+        let key = format!("{}#{i}", message.id);
+        if let Some(text) = alt.clone().filter(|_| ctx.alt_popout.as_deref() == Some(key.as_str())) {
+            // Over the gallery, rising from the tile's ALT button; drawn last so later tiles don't cover it.
+            popout = Some(alt_popout(&key, text, ctx, cx).left(px(tile.x + 6.)).bottom(px(height - tile.y - tile.h + 34.)));
+        }
         grid = grid.child(
-            div()
+            media_frame(message, i, (tile.w, tile.h), corners, ctx, cx)
                 .absolute()
                 .left(px(tile.x))
                 .top(px(tile.y))
                 .w(px(tile.w))
                 .h(px(tile.h))
-                .child(media_tile(message, i, (tile.w, tile.h), corners, ctx, cx))
                 .when(counts_rest, |t| {
                     t.child(
                         ui::edge(div(), corners)
@@ -1759,18 +1819,112 @@ fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<A
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(format!("+{rest}")),
                     )
-                }),
+                })
+                .when(alt.is_some(), |t| t.child(alt_button(key, ctx))),
         );
     }
-    Some(grid.into_any_element())
+    Some(grid.children(popout).into_any_element())
 }
 
-// One picture, video or GIF, rounded to `corners`; a click opens the viewer at it.
+// A gallery tile or lone item with what floats over it: on your own message, Modify Attachment while
+// it's hovered (pictures and videos you uploaded, not GIF embeds).
+fn media_frame(message: &Message, i: usize, size: (f32, f32), corners: Corners<Pixels>, ctx: &Rc<RowContext>, cx: &mut App) -> Stateful<Div> {
+    let item = &message.media[i];
+    let key = format!("media-{}-{i}", message.id);
+    let mine = ctx.me.as_ref().is_some_and(|me| me.id == message.author.id) && message.state == SendState::Sent;
+    let editable = mine && item.id.is_some() && !matches!(item.kind, MediaKind::Gif { .. });
+    let hovered = ctx.hovered_tile.as_deref() == Some(key.as_str());
+    let modify = (editable && hovered).then(|| {
+        let (this, msg) = (ctx.this.clone(), message.clone());
+        floating_bar(SharedString::from(format!("media-actions-{}-{i}", message.id)), cx)
+            .top(px(6.))
+            .right(px(6.))
+            .on_hover(track_tile_hover(ctx.this.clone(), key.clone()))
+            .child(ui::icon_button(SharedString::from(format!("modify-media-{}-{i}", message.id)), Glyph::Pen, "Modify Attachment", cx).on_click(move |_, window, cx| {
+                cx.stop_propagation();
+                this.update(cx, |this, cx| this.open_modify_sent(msg.clone(), i, window, cx)).ok();
+            }))
+    });
+    div()
+        .id(SharedString::from(format!("media-frame-{}-{i}", message.id)))
+        .relative()
+        .when(editable, |f| f.on_hover(track_tile_hover(ctx.this.clone(), key)))
+        .child(media_tile(message, i, size, corners, ctx, cx))
+        .children(modify)
+}
+
+// The alt text to show for item `i`: the setting is on, there is some, and it isn't a hidden spoiler.
+fn shown_alt(message: &Message, i: usize, ctx: &RowContext) -> Option<String> {
+    let item = message.media.get(i)?;
+    let hidden = item.spoiler && !ctx.revealed.borrow().contains(&spoiler_key(message, i));
+    item.description.clone().filter(|alt| ctx.image_descriptions && !alt.is_empty() && !hidden)
+}
+
+fn spoiler_key(message: &Message, i: usize) -> String {
+    format!("{}#media-{i}", message.id)
+}
+
+// Discord's ALT button at a gallery tile's bottom left; it opens and closes the description's popout.
+fn alt_button(key: String, ctx: &RowContext) -> Stateful<Div> {
+    let open = ctx.alt_popout.as_deref() == Some(key.as_str());
+    let this = ctx.this.clone();
+    media_label("ALT")
+        .id(SharedString::from(format!("alt-{key}")))
+        .occlude()
+        .absolute()
+        .left(px(6.))
+        .bottom(px(6.))
+        .cursor_pointer()
+        .tooltip(|window, cx| Tooltip::new("Image Description (Alt Text)").build(window, cx))
+        // On press, judged by the state it was drawn with: the popout's own press-outside close fires too.
+        .on_mouse_down(gpui_kit::MouseButton::Left, move |_, _, cx| {
+            cx.stop_propagation();
+            let next = (!open).then(|| key.clone());
+            this.update(cx, |this, cx| {
+                this.alt_popout = next;
+                cx.notify();
+            })
+            .ok();
+        })
+}
+
+// "Image Description (Alt Text)" over the gallery; a press anywhere else closes it.
+fn alt_popout(key: &str, text: String, ctx: &RowContext, cx: &App) -> Stateful<Div> {
+    let (this, key) = (ctx.this.clone(), key.to_owned());
+    div()
+        .id(SharedString::from(format!("alt-popout-{key}")))
+        .occlude()
+        .absolute()
+        .w(px(260.))
+        .px(px(14.))
+        .py(px(12.))
+        .flex()
+        .flex_col()
+        .gap(px(4.))
+        .squircle(RADIUS_MD)
+        .bg(palette::surface(Level::Overlay, cx))
+        .shadow(ui::shadow_pop(cx))
+        .child(div().text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child("Image Description (Alt Text)"))
+        .child(div().text_size(px(14.)).line_height(gpui_kit::relative(1.45)).text_color(palette::text(cx)).child(text))
+        .on_mouse_down_out(move |_, _, cx| {
+            this.update(cx, |this, cx| {
+                if this.alt_popout.as_deref() == Some(key.as_str()) {
+                    this.alt_popout = None;
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+}
+
+// One picture, video or GIF, rounded to `corners`; a click opens the viewer at it. A spoiler stays
+// veiled until clicked.
 fn media_tile(message: &Message, i: usize, (w, h): (f32, f32), corners: Corners<Pixels>, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     let item = &message.media[i];
+    let veil = (item.spoiler && !ctx.revealed.borrow().contains(&spoiler_key(message, i))).then(|| reveal_veil(message, i, corners, ctx));
     // A video plays where it is; clicks on it belong to its player.
     if let MediaKind::Video { poster } = &item.kind {
-        return div().size_full().child(crate::video::tile(format!("{}-{i}", message.id), &item.url, poster, cx)).into_any_element();
+        return div().relative().size_full().child(crate::video::tile(format!("{}-{i}", message.id), &item.url, poster, cx)).children(veil).into_any_element();
     }
     // Fetched at the size it's drawn rather than full resolution; the viewer still opens the original.
     let sized = |url: &str| crate::discord::sized_image(url, w, h, (item.width, item.height));
@@ -1786,6 +1940,7 @@ fn media_tile(message: &Message, i: usize, (w, h): (f32, f32), corners: Corners<
     let (this, url) = (ctx.this.clone(), item.url.clone());
     ui::edge(div(), corners)
         .id(SharedString::from(format!("media-{}-{i}", message.id)))
+        .relative()
         .size_full()
         // A cover-fit picture whose real shape differs from the one Discord reported spills past the tile.
         .overflow_hidden()
@@ -1793,15 +1948,79 @@ fn media_tile(message: &Message, i: usize, (w, h): (f32, f32), corners: Corners<
         .cursor_pointer()
         .hover(|s| s.opacity(0.92))
         .child(picture)
+        .children(veil)
         .on_click(move |_, window, cx| { cx.stop_propagation();
             this.update(cx, |this, cx| this.open_viewer(&url, window, cx)).ok();
         })
         .into_any_element()
 }
 
+// A spoiler's cover: blurred and dimmed, labelled, and a click lifts it (and nothing else).
+fn reveal_veil(message: &Message, i: usize, corners: Corners<Pixels>, ctx: &RowContext) -> AnyElement {
+    let (reveal, key, this) = (ctx.revealed.clone(), spoiler_key(message, i), ctx.this.clone());
+    let (channel_id, id) = (message.channel_id.clone(), message.id.clone());
+    ui::edge(spoiler_veil(), corners)
+        .id(SharedString::from(format!("veil-{key}")))
+        .occlude()
+        .cursor_pointer()
+        .child(media_label("SPOILER").px(px(10.)).h(px(28.)).text_size(px(12.)))
+        .on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            reveal.borrow_mut().insert(key.clone());
+            // Its alt caption may appear, which changes the row's height.
+            this.update(cx, |this, cx| {
+                this.message_mut(&channel_id, &id);
+                cx.notify();
+            })
+            .ok();
+        })
+        .into_any_element()
+}
+
+// What covers a spoiler picture: a blur and a dim over it.
+fn spoiler_veil() -> Div {
+    div().absolute().inset_0().flex().items_center().justify_center().bg(on_media(0.3)).backdrop_blur(px(24.))
+}
+
 // A label over media (GIF, a duration): fixed dark values, since it sits on pictures in both themes.
 fn media_tag(text: &'static str) -> Div {
-    div().absolute().h(px(20.)).px(px(6.)).flex().items_center().gap(px(4.)).squircle(RADIUS_XS).bg(on_media(0.72)).text_color(gpui_kit::white()).text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).child(text)
+    media_label(text).absolute()
+}
+
+// The same label placed by its parent (a row of tags).
+fn media_label(text: &'static str) -> Div {
+    div().h(px(20.)).px(px(6.)).flex().items_center().gap(px(4.)).squircle(RADIUS_XS).bg(on_media(0.72)).text_color(gpui_kit::white()).text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).child(text)
+}
+
+// A small bar of icon buttons floating over a picture's corner: it takes the pointer, so its caller
+// keeps the hover with the bar's own `on_hover`.
+fn floating_bar(id: SharedString, cx: &App) -> Stateful<Div> {
+    div().id(id).occlude().absolute().p(px(2.)).flex().gap(px(2.)).squircle(RADIUS_SM).bg(palette::surface(Level::Overlay, cx)).shadow(ui::shadow_pop(cx))
+}
+
+fn track_tile_hover(this: WeakEntity<Waffle>, key: String) -> impl Fn(&bool, &mut Window, &mut App) + 'static {
+    move |hovered, window, cx| {
+        // A tile and its bar both report; as with message rows, leaves apply now and enters after the event.
+        if *hovered {
+            let (this, key) = (this.clone(), key.clone());
+            window.defer(cx, move |_, cx| set_hovered_tile(&this, Some(key), cx));
+            return;
+        }
+        let leaving = this.read_with(cx, |this, _| this.hovered_tile.as_ref() == Some(&key)).unwrap_or(false);
+        if leaving {
+            set_hovered_tile(&this, None, cx);
+        }
+    }
+}
+
+fn set_hovered_tile(this: &WeakEntity<Waffle>, key: Option<String>, cx: &mut App) {
+    this.update(cx, |this, cx| {
+        if this.hovered_tile != key {
+            this.hovered_tile = key;
+            cx.notify();
+        }
+    })
+    .ok();
 }
 
 // The design's media scrim, oklch(0.14 0.004 260), at `alpha`.
@@ -2380,7 +2599,7 @@ fn upload_cards(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Vec<AnyEle
             let sent = file.sent.load(std::sync::atomic::Ordering::Relaxed).min(file.size);
             let fraction = if file.size == 0 { 1. } else { sent as f32 / file.size as f32 };
             let kind = crate::attachments::FileKind::of(&file.path);
-            let picture = file_picture(ctx.previews.get(&file.path).cloned().flatten(), kind, 40., false, cx);
+            let picture = file_picture(ctx.previews.get(&file.path).cloned().flatten(), kind, 40., file.spoiler, cx);
             let status = match job.error.is_some() {
                 true => format_size(file.size),
                 false => format!("{} of {}", format_size(sent), format_size(file.size)),
@@ -2427,11 +2646,7 @@ fn file_picture(picture: Option<std::sync::Arc<gpui_kit::RenderImage>>, kind: cr
     let well = match picture {
         // Thumbnails fill the tile; icons keep their own transparent margins.
         Some(image) => well.child(ui::media(image, ui::all(RADIUS_XS)).size_full().object_fit(gpui_kit::ObjectFit::Cover)),
-        None => well.bg(palette::surface(Level::Raised, cx)).text_color(palette::muted(cx)).flex().items_center().justify_center().child(Icon::new(match kind {
-            crate::attachments::FileKind::Video => Glyph::Video,
-            crate::attachments::FileKind::Image => Glyph::Image,
-            crate::attachments::FileKind::Other => Glyph::File,
-        }).size(px(side * 0.5))),
+        None => well.bg(palette::surface(Level::Raised, cx)).text_color(palette::muted(cx)).flex().items_center().justify_center().child(Icon::new(kind.glyph()).size(px(side * 0.5))),
     };
     well.when(spoiler, |w| {
         w.child(div().absolute().inset_0().bg(palette::surface(Level::Sidebar, cx).opacity(0.85)).backdrop_blur(px(8.)).flex().items_center().justify_center().text_color(palette::strong(cx)).child(Icon::new(Glyph::EyeSlash).size(px(side * 0.4))))
@@ -2474,7 +2689,7 @@ fn file_card(message: &Message, file: &crate::discord::File, cx: &App) -> AnyEle
                         .child(file.name.clone())
                         .on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&open) }),
                 )
-                .child(div().text_size(px(12.)).text_color(faint).child(format_size(file.size))),
+                .child(div().flex().items_center().gap(px(6.)).text_size(px(12.)).text_color(faint).child(format_size(file.size)).when(file.spoiler, |d| d.child(ui::tag("Spoiler", cx)))),
         )
         .child(ui::icon_button(SharedString::from(format!("download-{}-{}", message.id, file.name)), Glyph::Download, "Download", cx).on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&download) }))
         .into_any_element()
@@ -3062,7 +3277,7 @@ mod tests {
 
     #[test]
     fn bare_media_links_are_hidden() {
-        let gif = crate::discord::Media { url: "https://t/x.mp4".into(), width: 1., height: 1., kind: crate::discord::MediaKind::Image };
+        let gif = crate::discord::Media { url: "https://t/x.mp4".into(), width: 1., height: 1., kind: crate::discord::MediaKind::Image, ..Default::default() };
         let msg = |content: &str, media: bool| Message { content: content.into(), media: if media { vec![gif.clone()] } else { vec![] }, ..Default::default() };
         assert!(only_media_link(&msg("https://klipy.com/gifs/x", true)));
         assert!(!only_media_link(&msg("look https://klipy.com/gifs/x", true)));

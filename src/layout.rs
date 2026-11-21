@@ -96,7 +96,7 @@ impl Waffle {
             && let Some(call) = self.render_call_with_chat(window, cx)
         {
             let (overlays, call_overlays) = (self.render_overlays(window, cx), self.render_call_overlays(window, cx));
-            let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)));
+            let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_modify_attachment(window, cx)));
             crate::gif::set_covered(!overlays.is_empty() || !call_overlays.is_empty() || menu.is_some() || dialog.is_some());
             return root
                 .child(call)
@@ -120,7 +120,7 @@ impl Waffle {
         };
         // Anything drawn over the chat pauses its GIFs (the GIF layer paints above the whole app).
         let (overlays, call_overlays) = (self.render_overlays(window, cx), self.render_call_overlays(window, cx));
-        let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)));
+        let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_modify_attachment(window, cx)));
         let (viewer, settings) = (self.viewer_overlay(window, cx), self.render_settings(window, cx));
         let channel_settings = self.render_channel_settings(window, cx);
         let server_settings = self.render_server_settings(window, cx);

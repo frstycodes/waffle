@@ -371,6 +371,10 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // an archive, a long name), one upload part way and one Discord refused. `-drop` holds the drop
         // zone up as if files were dragged over.
         "attachments" | "attachments-drop" => demo_attachments(waffle, window, cx),
+        // Alt text and spoilers (gap 1.18): three files waiting (a picture, a spoilered one with a
+        // description, a PDF), your own two described pictures and someone's single described one, with
+        // Show image descriptions on.
+        "uploads" => demo_uploads(waffle, window, cx),
         // Discord's own links: a message card, a channel chip, invites to a joined server, another server
         // and an expired code, a message you can't see (no card), and two still loading.
         "link-previews" => demo_link_previews(waffle),
@@ -394,7 +398,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                 let mut messages = feed.messages.as_ref().clone();
                 if let Some(last) = messages.iter_mut().find(|m| m.id == "102") {
                     last.media = [("3", 1200., 600.), ("5", 600., 900.), ("2", 800., 800.), ("4", 700., 1100.)]
-                        .map(|(id, width, height)| Media { url: avatar_url(id, None), width, height, kind: MediaKind::Image })
+                        .map(|(id, width, height)| Media { url: avatar_url(id, None), width, height, kind: MediaKind::Image, ..Default::default() })
                         .to_vec();
                 }
                 feed.messages = std::sync::Arc::new(messages);
@@ -1091,7 +1095,7 @@ fn embed_messages() -> Vec<Message> {
         u
     };
     let post = |id: &str, author: User, ts: &str, embeds: Vec<Embed>| Message { id: id.into(), channel_id: "general".into(), guild_id: Some("1".into()), author, timestamp: ts.into(), embeds, ..Default::default() };
-    let pic = |seed: &str, width: f32, height: f32| Media { url: avatar_url(seed, None), width, height, kind: MediaKind::Image };
+    let pic = |seed: &str, width: f32, height: f32| Media { url: avatar_url(seed, None), width, height, kind: MediaKind::Image, ..Default::default() };
     let field = |name: &str, value: &str, inline: bool| (name.to_owned(), value.to_owned(), inline);
     let now = chrono::Utc::now();
     let ago = |min: i64| (now - chrono::Duration::minutes(min)).to_rfc3339();
@@ -1224,8 +1228,8 @@ fn messages() -> Vec<Message> {
     first.reactions = vec![Reaction { emoji: Emoji::unicode("🔥"), count: 3, me: true }, Reaction { emoji: Emoji::unicode("👀"), count: 1, me: false }];
     let mut image = message("102", zoe.clone(), &["r2"], "2026-11-13T17:20:00Z", "look at this");
     image.media = vec![
-        Media { url: avatar_url("3", None), width: 256., height: 256., kind: MediaKind::Image },
-        Media { url: "https://example.com/clip.mp4".into(), width: 256., height: 256., kind: MediaKind::Video { poster: avatar_url("4", None) } },
+        Media { url: avatar_url("3", None), width: 256., height: 256., kind: MediaKind::Image, ..Default::default() },
+        Media { url: "https://example.com/clip.mp4".into(), width: 256., height: 256., kind: MediaKind::Video { poster: avatar_url("4", None) }, ..Default::default() },
     ];
     image.embeds = vec![Embed {
         url: Some("https://www.rust-lang.org".into()),
@@ -1233,7 +1237,7 @@ fn messages() -> Vec<Message> {
         provider: Some("rust-lang.org".into()),
         title: Some("Rust Programming Language".into()),
         description: Some("A language empowering everyone to build reliable and efficient software.".into()),
-        thumbnail: Some(Media { url: avatar_url("1", None), width: 80., height: 80., kind: MediaKind::Image }),
+        thumbnail: Some(Media { url: avatar_url("1", None), width: 80., height: 80., kind: MediaKind::Image, ..Default::default() }),
         ..Default::default()
     }, Embed {
         color: Some(0x43B581),
@@ -1303,8 +1307,8 @@ fn demo_search(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut C
 fn demo_search_results(waffle: &mut Waffle, filters_open: bool, window: &mut Window, cx: &mut Context<Waffle>) {
     let mut hits: Vec<Message> = messages().into_iter().rev().take(3).collect();
     // Real shapes: the avatars are square, the banner is 600×240.
-    let avatar = |id: &str| Media { url: avatar_url(id, None), width: 256., height: 256., kind: MediaKind::Image };
-    let banner = Media { url: "demo/banner.png".into(), width: 600., height: 240., kind: MediaKind::Image };
+    let avatar = |id: &str| Media { url: avatar_url(id, None), width: 256., height: 256., kind: MediaKind::Image, ..Default::default() };
+    let banner = Media { url: "demo/banner.png".into(), width: 600., height: 240., kind: MediaKind::Image, ..Default::default() };
     for (i, hit) in hits.iter_mut().enumerate() {
         hit.author = user("8388608", "Wren");
         hit.media = match i {
@@ -1329,7 +1333,7 @@ fn demo_search_dm(waffle: &mut Waffle, results: bool, window: &mut Window, cx: &
     waffle.guild_id = None;
     waffle.open_channel(dm, window, cx);
     if results {
-        let picture = Media { url: "demo/banner.png".into(), width: 600., height: 240., kind: MediaKind::Image };
+        let picture = Media { url: "demo/banner.png".into(), width: 600., height: 240., kind: MediaKind::Image, ..Default::default() };
         let hit = |id: &str, author: User, content: &str, media: Vec<Media>| Message { id: id.into(), channel_id: "dm".into(), author, timestamp: "2026-11-12T21:40:00+00:00".into(), content: content.into(), media, ..Default::default() };
         let hits = vec![hit("501", user("8388608", "Wren"), "here's the photo from the ridge", vec![picture]), hit("502", me_user(), "photo dump later tonight?", Vec::new())];
         waffle.right_panel = crate::RightPanel::Search(Box::new(crate::search_results::Results::demo(hits, 2, 1, false)));
@@ -1427,7 +1431,7 @@ fn demo_attachments(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<W
             .map(|(path, done)| {
                 let size = std::fs::metadata(path).map_or(0, |m| m.len());
                 let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
-                Upload { path: (*path).clone(), name, size, sent: Arc::new(AtomicU64::new((size as f64 * done) as u64)) }
+                Upload { path: (*path).clone(), name, size, description: None, spoiler: false, sent: Arc::new(AtomicU64::new((size as f64 * done) as u64)) }
             })
             .collect(),
         content: String::new(),
@@ -1453,11 +1457,52 @@ fn demo_attachments(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<W
     waffle.push_local(post("demo-up-2", "", SendState::Failed), cx);
 }
 
+fn demo_uploads(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<Waffle>) {
+    let _ = crate::discord::DEMO_MEDIA.set(demo_media);
+    // Set without saving: the fixture never writes the real settings file.
+    waffle.prefs.show_image_descriptions = true;
+    let dir = std::env::temp_dir().join("waffle-demo-uploads");
+    let _ = std::fs::create_dir_all(&dir);
+    let picture = |name: &str, n: usize| {
+        let path = dir.join(name);
+        let _ = std::fs::write(&path, demo_picture(n, 1200, 800));
+        path
+    };
+    let pdf = dir.join("lantern-festival-flyer.pdf");
+    let _ = std::fs::write(&pdf, vec![b'x'; 120_000]);
+    waffle.add_files(vec![picture("pier.png", 2), picture("the-ending.png", 6), pdf], window, cx);
+    if let Some(ending) = waffle.pending_files.get_mut(1) {
+        ending.spoiler = true;
+        ending.description = Some("The final boss, mid-fall.".into());
+    }
+    let Some(feed) = waffle.feeds.get_mut("general") else { return };
+    let mut messages = feed.messages.as_ref().clone();
+    let described = |n: usize, id: &str, alt: &str| Media { id: Some(id.into()), description: Some(alt.into()), ..demo_item(n) };
+    let post = |id: &str, author: User, content: &str, media: Vec<Media>| Message {
+        id: id.into(),
+        channel_id: "general".into(),
+        guild_id: Some("1".into()),
+        author,
+        content: content.into(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        media,
+        ..Default::default()
+    };
+    messages.push(post(
+        "120",
+        me_user(),
+        "pier at dusk",
+        vec![described(0, "a120", "A wooden pier running into calm water at dusk, the sun low on the left."), described(1, "a121", "A rowing boat tied up under the pier.")],
+    ));
+    messages.push(post("121", user("8388608", "Wren"), "", vec![described(2, "a122", "A green hillside under a flat grey sky, a single bench at the top.")]));
+    feed.messages = std::sync::Arc::new(messages);
+}
+
 fn demo_text_files(waffle: &mut Waffle, scene: &str) {
     use crate::{discord::File, text_file::TextFile};
     let notes: String = PATCH_NOTES.repeat(3);
     let hello = "fn main() {\n    let name = std::env::args().nth(1).unwrap_or(\"world\".into());\n    println!(\"hello, {name}\");\n}\n";
-    let file = |name: &str, size: usize| File { name: name.into(), url: format!("https://cdn.discordapp.com/attachments/demo/{name}"), size: size as u64 };
+    let file = |name: &str, size: usize| File { name: name.into(), url: format!("https://cdn.discordapp.com/attachments/demo/{name}"), size: size as u64, ..Default::default() };
     let (long, short, binary) = (file("message.txt", notes.len()), file("hello.rs", hello.len()), file("crash-dump.log", 48_213));
     {
         let mut texts = waffle.text_files.borrow_mut();
@@ -1489,7 +1534,7 @@ fn demo_forwarded(waffle: &mut Waffle) {
         guild_id: Some("1".into()),
         content: "caught this on stream last night".into(),
         timestamp: (chrono::Utc::now() - chrono::Duration::days(1)).to_rfc3339(),
-        media: vec![Media { url: avatar_url("3", None), width: 320., height: 200., kind: MediaKind::Image }],
+        media: vec![Media { url: avatar_url("3", None), width: 320., height: 200., kind: MediaKind::Image, ..Default::default() }],
         ..Default::default()
     };
     let post = |id: &str, content: &str, forward: Option<Box<Message>>| Message {
@@ -1523,7 +1568,7 @@ fn demo_link_previews(waffle: &mut Waffle) {
         author: user("8388608", "Wren"),
         timestamp: (chrono::Utc::now() - chrono::Duration::hours(3)).to_rfc3339(),
         content: "Season 7 notes are up: placements drop to **5 matches**, duo queue opens at every rank, and Foundry is back with the smaller mid. Ping <@4194304> if your rank looks off after the reset, we're collecting reports in one thread so nothing gets lost.".into(),
-        media: vec![Media { url: "brand/icons/sticker.png".into(), width: 512., height: 512., kind: MediaKind::Image }],
+        media: vec![Media { url: "brand/icons/sticker.png".into(), width: 512., height: 512., kind: MediaKind::Image, ..Default::default() }],
         ..Default::default()
     };
     {
@@ -1594,9 +1639,9 @@ fn demo_item(n: usize) -> Media {
     let (width, height) = DEMO_SIZES[n];
     if n % 4 == 3 {
         let url = format!("https://cdn.discordapp.com/attachments/demo/{n}/clip-{n}.mp4");
-        return Media { kind: MediaKind::Video { poster: format!("https://media.discordapp.net/attachments/demo/{n}/clip-{n}.mp4?format=jpeg") }, url, width, height };
+        return Media { kind: MediaKind::Video { poster: format!("https://media.discordapp.net/attachments/demo/{n}/clip-{n}.mp4?format=jpeg") }, url, width, height, ..Default::default() };
     }
-    Media { url: format!("https://cdn.discordapp.com/attachments/demo/{n}/photo-{n}.png"), width, height, kind: MediaKind::Image }
+    Media { url: format!("https://cdn.discordapp.com/attachments/demo/{n}/photo-{n}.png"), width, height, kind: MediaKind::Image, ..Default::default() }
 }
 
 // Serves the viewer scene's media without the network: a clip from testdata, and for pictures and

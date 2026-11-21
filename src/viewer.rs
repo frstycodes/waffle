@@ -360,7 +360,7 @@ mod tests {
 
     #[test]
     fn stage_fits_the_window_without_passing_2x() {
-        let media = |w, h| Media { url: String::new(), width: w, height: h, kind: MediaKind::Image };
+        let media = |w, h| Media { url: String::new(), width: w, height: h, kind: MediaKind::Image, ..Default::default() };
         assert_eq!(stage_size(&media(4000., 2000.), (1400., 900.)), (1200., 600.));
         assert_eq!(stage_size(&media(100., 100.), (1400., 900.)), (200., 200.));
     }
