@@ -246,6 +246,75 @@ pub struct Guild {
     pub premium_tier: u8,
     // People idling here don't count as voice activity (Discord's server icon badge skips it).
     pub afk_channel_id: Option<String>,
+    // Discord's guild features ("COMMUNITY", "NEWS", …): NEWS gates announcement Publish and Follow.
+    pub features: Vec<String>,
+    // Scheduled events, from READY / GUILD_CREATE and the GUILD_SCHEDULED_EVENT_* events.
+    pub events: Vec<ScheduledEvent>,
+}
+
+// A guild scheduled event (docs/discord-events-re.md). Status 1 scheduled, 2 active, 3 completed, 4 canceled;
+// entity type 1 stage, 2 voice, 3 somewhere else (`location`).
+#[derive(Clone, Debug, Default)]
+pub struct ScheduledEvent {
+    pub id: String,
+    pub guild_id: String,
+    pub channel_id: Option<String>,
+    pub creator_id: Option<String>,
+    pub creator: Option<User>,
+    pub name: String,
+    pub description: Option<String>,
+    // Cover image hash; the url is `event_cover_url`.
+    pub image: Option<String>,
+    // ISO 8601, as Discord sends them.
+    pub start: String,
+    pub end: Option<String>,
+    pub status: u8,
+    pub entity_type: u8,
+    pub location: Option<String>,
+    // How many marked Interested, and whether we did; neither comes with the event itself.
+    pub interested: u32,
+    pub me_interested: bool,
+    // Discord's recurrence_rule as sent (start, frequency, interval, by_weekday, by_n_weekday, …).
+    pub recurrence: Option<Value>,
+}
+
+impl ScheduledEvent {
+    pub const SCHEDULED: u8 = 1;
+    pub const ACTIVE: u8 = 2;
+    pub const COMPLETED: u8 = 3;
+    pub const CANCELED: u8 = 4;
+    pub const STAGE: u8 = 1;
+    pub const VOICE: u8 = 2;
+    pub const EXTERNAL: u8 = 3;
+
+    pub fn upcoming(&self) -> bool {
+        !matches!(self.status, Self::COMPLETED | Self::CANCELED)
+    }
+
+    pub fn cover_url(&self) -> Option<String> {
+        self.image.as_ref().map(|hash| format!("{CDN}/guild-events/{}/{hash}.png?size=1024", self.id))
+    }
+}
+
+pub fn parse_scheduled_event(e: &Value) -> Option<ScheduledEvent> {
+    Some(ScheduledEvent {
+        id: e["id"].as_str()?.to_owned(),
+        guild_id: e["guild_id"].as_str()?.to_owned(),
+        channel_id: e["channel_id"].as_str().map(str::to_owned),
+        creator_id: e["creator_id"].as_str().map(str::to_owned),
+        creator: e["creator"].is_object().then(|| parse_user(&e["creator"])),
+        name: e["name"].as_str().unwrap_or_default().to_owned(),
+        description: e["description"].as_str().filter(|d| !d.is_empty()).map(str::to_owned),
+        image: e["image"].as_str().map(str::to_owned),
+        start: e["scheduled_start_time"].as_str().unwrap_or_default().to_owned(),
+        end: e["scheduled_end_time"].as_str().map(str::to_owned),
+        status: e["status"].as_u64().unwrap_or(1) as u8,
+        entity_type: e["entity_type"].as_u64().unwrap_or(0) as u8,
+        location: e["entity_metadata"]["location"].as_str().map(str::to_owned),
+        interested: e["user_count"].as_u64().unwrap_or(0) as u32,
+        me_interested: false,
+        recurrence: e["recurrence_rule"].is_object().then(|| e["recurrence_rule"].clone()),
+    })
 }
 
 // Your notification settings for one server, or for DMs under the key "@me" (Discord's
@@ -334,6 +403,9 @@ pub mod perm {
     pub const SEND_POLLS: u64 = 1 << 49;
     pub const PIN_MESSAGES: u64 = 1 << 51;
     pub const CONNECT: u64 = 1 << 20;
+    pub const READ_MESSAGE_HISTORY: u64 = 1 << 16;
+    pub const MANAGE_EVENTS: u64 = 1 << 33;
+    pub const CREATE_EVENTS: u64 = 1 << 44;
 }
 
 impl Guild {
@@ -491,6 +563,34 @@ pub struct ChannelProps {
     pub video_full: bool,
     // Minutes until an idle thread hides (default_auto_archive_duration); 0 when Discord sent none.
     pub archive_after: u32,
+    // Forum and media channels (docs/discord-forums-re.md): the tags a post can carry, whether one is
+    // required (flag 16), and the defaults for Sort & View.
+    pub tags: Vec<ForumTag>,
+    pub require_tag: bool,
+    // default_sort_order 1: newest post first instead of latest activity.
+    pub sort_by_creation: bool,
+    // default_forum_layout 2 (gallery); media channels are always a gallery.
+    pub gallery: bool,
+    // default_tag_setting "match_all" instead of "match_some".
+    pub match_all: bool,
+    pub default_reaction: Option<Emoji>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ForumTag {
+    pub id: String,
+    pub name: String,
+    pub emoji: Option<Emoji>,
+    // Only people with Manage Threads may apply it.
+    pub moderated: bool,
+}
+
+fn parse_forum_emoji(id: &Value, name: &Value) -> Option<Emoji> {
+    match (id.as_str(), name.as_str()) {
+        (Some(id), name) => Some(Emoji { id: Some(id.to_owned()), name: name.unwrap_or_default().to_owned(), animated: false }),
+        (None, Some(name)) if !name.is_empty() => Some(Emoji { id: None, name: name.to_owned(), animated: false }),
+        _ => None,
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -517,6 +617,11 @@ pub struct ThreadMeta {
     // Our thread-member settings: muted, and the notification flags (2 all, 4 mentions, 8 nothing).
     pub muted: bool,
     pub flags: u64,
+    // A forum post's tags (ids into its forum's `ChannelProps::tags`), and whether it's pinned (channel flag 2).
+    #[serde(default)]
+    pub applied_tags: Vec<String>,
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -733,6 +838,18 @@ pub struct Message {
     // Discord's "X pinned a message" notice (type 6): never drawn, it names who pinned `reply_to`.
     #[serde(default)]
     pub pin_notice: bool,
+    // Discord's message type (0 default, 19 reply, …) and flags (1 crossposted, 2 is a crosspost,
+    // 8 its source was deleted).
+    #[serde(default)]
+    pub kind: u8,
+    #[serde(default)]
+    pub flags: u64,
+}
+
+impl Message {
+    pub const CROSSPOSTED: u64 = 1;
+    pub const IS_CROSSPOST: u64 = 2;
+    pub const SOURCE_MESSAGE_DELETED: u64 = 8;
 }
 
 /// A live poll as a message carries it, its counts folded into the answers.
@@ -1034,6 +1151,10 @@ pub enum Event {
     // A channel or thread created or changed in a server.
     ChannelUpsert { guild_id: String, channel: Channel },
     ChannelDelete { guild_id: String, id: String },
+    // A scheduled event created or changed, deleted, or someone marked / unmarked Interested.
+    ScheduledEvent(ScheduledEvent),
+    ScheduledEventDelete { guild_id: String, id: String },
+    ScheduledEventUser { guild_id: String, event_id: String, user_id: String, added: bool },
     // A member's roles, nickname or server avatar changed.
     MemberUpdate { guild_id: String, user: User, roles: Vec<String> },
     // A friend, block or request was added, changed or removed (`None` kind = removed).
@@ -2024,6 +2145,14 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
             parse_channel(d, &guild_id).map(|channel| Event::ChannelUpsert { guild_id, channel })
         }
         "CHANNEL_DELETE" | "THREAD_DELETE" => Some(Event::ChannelDelete { guild_id: d["guild_id"].as_str()?.to_owned(), id: d["id"].as_str()?.to_owned() }),
+        "GUILD_SCHEDULED_EVENT_CREATE" | "GUILD_SCHEDULED_EVENT_UPDATE" => parse_scheduled_event(d).map(Event::ScheduledEvent),
+        "GUILD_SCHEDULED_EVENT_DELETE" => Some(Event::ScheduledEventDelete { guild_id: d["guild_id"].as_str()?.to_owned(), id: d["id"].as_str()?.to_owned() }),
+        "GUILD_SCHEDULED_EVENT_USER_ADD" | "GUILD_SCHEDULED_EVENT_USER_REMOVE" => Some(Event::ScheduledEventUser {
+            guild_id: s(&d["guild_id"]),
+            event_id: s(&d["guild_scheduled_event_id"]),
+            user_id: s(&d["user_id"]),
+            added: kind == "GUILD_SCHEDULED_EVENT_USER_ADD",
+        }),
         "GUILD_MEMBER_UPDATE" => Some(Event::MemberUpdate {
             guild_id: d["guild_id"].as_str()?.to_owned(),
             user: parse_member_user(d, &d["user"], d["guild_id"].as_str()),
@@ -2207,6 +2336,8 @@ fn parse_guild(g: &Value) -> Option<Guild> {
         my_roles: Vec::new(),
         premium_tier: props["premium_tier"].as_u64().or(g["premium_tier"].as_u64()).unwrap_or(0) as u8,
         afk_channel_id: props["afk_channel_id"].as_str().or(g["afk_channel_id"].as_str()).map(str::to_owned),
+        features: strings(if props["features"].is_array() { &props["features"] } else { &g["features"] }),
+        events: g["guild_scheduled_events"].as_array().into_iter().flatten().filter_map(parse_scheduled_event).collect(),
     })
 }
 
@@ -2238,6 +2369,8 @@ pub(crate) fn parse_channel(c: &Value, guild_id: &str) -> Option<Channel> {
         owner_id: c["owner_id"].as_str().map(str::to_owned),
         muted: c["member"]["muted"].as_bool().unwrap_or(false),
         flags: c["member"]["flags"].as_u64().unwrap_or(0),
+        applied_tags: strings(&c["applied_tags"]),
+        pinned: c["flags"].as_u64().unwrap_or(0) & 2 != 0,
     });
     let overwrites: Vec<Overwrite> = c["permission_overwrites"]
         .as_array()
@@ -2269,6 +2402,24 @@ pub(crate) fn parse_channel(c: &Value, guild_id: &str) -> Option<Channel> {
             rtc_region: c["rtc_region"].as_str().map(str::to_owned),
             video_full: c["video_quality_mode"].as_u64() == Some(2),
             archive_after: c["default_auto_archive_duration"].as_u64().unwrap_or(0) as u32,
+            tags: c["available_tags"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|t| {
+                    Some(ForumTag {
+                        id: t["id"].as_str()?.to_owned(),
+                        name: t["name"].as_str().unwrap_or_default().to_owned(),
+                        emoji: parse_forum_emoji(&t["emoji_id"], &t["emoji_name"]),
+                        moderated: t["moderated"].as_bool().unwrap_or(false),
+                    })
+                })
+                .collect(),
+            require_tag: c["flags"].as_u64().unwrap_or(0) & 16 != 0,
+            sort_by_creation: c["default_sort_order"].as_u64() == Some(1),
+            gallery: c["type"].as_u64() == Some(16) || c["default_forum_layout"].as_u64() == Some(2),
+            match_all: c["default_tag_setting"].as_str() == Some("match_all"),
+            default_reaction: parse_forum_emoji(&c["default_reaction_emoji"]["emoji_id"], &c["default_reaction_emoji"]["emoji_name"]),
         }),
     })
 }
@@ -2389,6 +2540,8 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         poll: m["poll"].is_object().then(|| parse_poll(&m["poll"])),
         forward: parse_forward(m),
         pin_notice: m["type"] == 6,
+        kind: m["type"].as_u64().unwrap_or(0) as u8,
+        flags: m["flags"].as_u64().unwrap_or(0),
     })
 }
 
@@ -2419,6 +2572,9 @@ pub fn apply_update(message: &mut Message, d: &Value) {
     if let Some(content) = d["content"].as_str() {
         message.content = content.to_owned();
         message.edited = true;
+    }
+    if let Some(flags) = d["flags"].as_u64() {
+        message.flags = flags;
     }
 }
 
@@ -3067,6 +3223,8 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            features: Vec::new(),
+            events: Vec::new(),
             threads: Vec::new(),
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -3104,6 +3262,8 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            features: Vec::new(),
+            events: Vec::new(),
             threads: vec![thread],
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -3145,6 +3305,8 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            features: Vec::new(),
+            events: Vec::new(),
             threads: Vec::new(),
             my_roles: vec!["mods".into()],
             default_notifications: Default::default(),

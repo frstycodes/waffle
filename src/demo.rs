@@ -909,6 +909,8 @@ fn ready(me: User) -> Ready {
         stickers: Vec::new(),
         premium_tier: 1,
         afk_channel_id: None,
+        features: Vec::new(),
+        events: Vec::new(),
     };
     let lounge_states = vec![
         VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "12582912".into(), user: Some(user("12582912", "moss lantern")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: true, camera: false },
@@ -1011,6 +1013,8 @@ fn load_guilds(waffle: &mut Waffle) {
             stickers: Vec::new(),
             premium_tier: 1,
             afk_channel_id: None,
+            features: Vec::new(),
+            events: Vec::new(),
         });
     }
     if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {

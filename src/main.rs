@@ -1414,6 +1414,28 @@ impl Waffle {
                 }
                 guild.channels.sort_by_key(|c| c.position);
             }
+            Event::ScheduledEvent(event) => {
+                let Some(guild) = self.guilds.iter_mut().find(|g| g.id == event.guild_id) else { return };
+                match guild.events.iter_mut().find(|e| e.id == event.id) {
+                    // Updates carry neither the counts nor our own Interested: keep what we know.
+                    Some(existing) => *existing = discord::ScheduledEvent { interested: existing.interested, me_interested: existing.me_interested, creator: event.creator.clone().or(existing.creator.take()), ..event },
+                    None => guild.events.push(event),
+                }
+            }
+            Event::ScheduledEventDelete { guild_id, id } => {
+                if let Some(guild) = self.guilds.iter_mut().find(|g| g.id == guild_id) {
+                    guild.events.retain(|e| e.id != id);
+                }
+            }
+            Event::ScheduledEventUser { guild_id, event_id, user_id, added } => {
+                let mine = self.me.as_ref().is_some_and(|me| me.id == user_id);
+                if let Some(event) = self.guilds.iter_mut().filter(|g| g.id == guild_id).flat_map(|g| g.events.iter_mut()).find(|e| e.id == event_id) {
+                    event.interested = if added { event.interested + 1 } else { event.interested.saturating_sub(1) };
+                    if mine {
+                        event.me_interested = added;
+                    }
+                }
+            }
             Event::ChannelDelete { guild_id, id } => {
                 if let Some(guild) = self.guilds.iter_mut().find(|g| g.id == guild_id) {
                     guild.channels.retain(|c| c.id != id);
