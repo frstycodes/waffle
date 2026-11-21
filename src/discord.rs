@@ -2293,6 +2293,7 @@ pub(crate) fn parse_channel(c: &Value, guild_id: &str) -> Option<Channel> {
             rtc_region: c["rtc_region"].as_str().map(str::to_owned),
             video_full: c["video_quality_mode"].as_u64() == Some(2),
             archive_after: c["default_auto_archive_duration"].as_u64().unwrap_or(0) as u32,
+            ..Default::default()
         }),
     })
 }
