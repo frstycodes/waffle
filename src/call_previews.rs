@@ -258,7 +258,10 @@ fn preview_card(preview: &Preview, ctx: &std::rc::Rc<crate::chat::RowContext>, c
         true => ui::shadow(palette::oklch(0.78, 0.15, 75.).opacity(0.5), 0., 0., 0., 1., true),
         false => ui::shadow(stage::wash(0.08), 0., 0., 0., 1., false),
     });
-    let body = crate::chat::content(message, ctx, cx).or_else(|| {
+    // GAP: plain text, not the rich renderer: that inks mentions and links for the app theme, which
+    // turns dark on this always-dark card in light mode. Discord renders rich content here.
+    let text = crate::chat::plain_text(&message.content, ctx);
+    let body = (!text.trim().is_empty()).then(|| text.into_any_element()).or_else(|| {
         let (glyph, label) = crate::forward::attachment_summary(message)?;
         Some(div().flex().items_center().gap(px(6.)).text_color(stage::muted()).child(Icon::new(glyph).size(px(16.))).child(label).into_any_element())
     });
