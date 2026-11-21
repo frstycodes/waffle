@@ -1411,12 +1411,12 @@ impl Client {
     /// A call Discord may answer with a captcha (joining a server, sending a friend request): its page goes
     /// out on `captcha_url` for the browser, and the call is retried with the solved key, as the sign-in
     /// does (`auth::exchange_ticket`). Other failures read as `send` words them.
-    pub async fn call_with_captcha(&self, method: reqwest::Method, path: String, body: Option<Value>, captcha_url: mpsc::UnboundedSender<String>) -> Result<Value, String> {
+    pub async fn call_with_captcha(&self, method: reqwest::Method, path: String, body: Option<Value>, captcha_url: mpsc::UnboundedSender<String>) -> Result<Value, ApiError> {
         let client = self.clone();
-        runtime().spawn(async move { client.captcha_loop(method, &path, body, captcha_url).await }).await.map_err(|e| e.to_string())?
+        runtime().spawn(async move { client.captcha_loop(method, &path, body, captcha_url).await }).await.map_err(|e| ApiError::from(e.to_string()))?
     }
 
-    async fn captcha_loop(&self, method: reqwest::Method, path: &str, body: Option<Value>, captcha_url: mpsc::UnboundedSender<String>) -> Result<Value, String> {
+    async fn captcha_loop(&self, method: reqwest::Method, path: &str, body: Option<Value>, captcha_url: mpsc::UnboundedSender<String>) -> Result<Value, ApiError> {
         let mut solved: Option<(crate::captcha::Challenge, String)> = None;
         for _ in 0..3 {
             let mut req = self.request(method.clone(), path);
@@ -1436,13 +1436,13 @@ impl Client {
             }
             let Some(challenge) = crate::captcha::Challenge::from_response(&body) else {
                 eprintln!("http: {status} {path} (code {}): {body}", body["code"]);
-                return Err(error_text(status.as_u16(), &body));
+                return Err(ApiError { status: status.as_u16(), code: body["code"].as_u64(), text: error_text(status.as_u16(), &body) });
             };
             let pending = crate::captcha::serve(&challenge).await?;
             let _ = captcha_url.unbounded_send(pending.url.clone());
             solved = Some((challenge, pending.solved().await?));
         }
-        Err("Discord kept asking for a captcha".into())
+        Err(ApiError::from("Discord kept asking for a captcha".to_owned()))
     }
 
     /// Marks several channels read at once (a server's "Mark As Read").
@@ -1627,6 +1627,27 @@ fn retry_wait(status: u16, body: &Value, header_wait: Option<f64>, idempotent: b
 }
 
 const SESSION_EXPIRED: &str = "Your session has expired. Sign in again.";
+
+// A failed call as Discord answered it: the HTTP status (0 when no answer came), its JSON error code, and
+// the text `error_text` words it as. For callers that word errors themselves (Add Friend).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ApiError {
+    pub status: u16,
+    pub code: Option<u64>,
+    pub text: String,
+}
+
+impl From<String> for ApiError {
+    fn from(text: String) -> Self {
+        ApiError { status: 0, code: None, text }
+    }
+}
+
+impl From<ApiError> for String {
+    fn from(error: ApiError) -> Self {
+        error.text
+    }
+}
 
 fn error_text(status: u16, body: &Value) -> String {
     match status {

@@ -17,7 +17,7 @@ use serde_json::json;
 
 use crate::{
     Waffle, SearchState,
-    discord::{Channel, Relation, Relationship, Status},
+    discord::{ApiError, Channel, Relation, Relationship, Status},
     icons::Glyph,
     layout::avatar_with_status,
     mascot::Mood,
@@ -455,7 +455,7 @@ impl Waffle {
             this.update(cx, |this, cx| {
                 this.add_friend_result = Some(match result {
                     Ok(_) => Ok(format!("Success! Your friend request to {username} was sent.").into()),
-                    Err(error) => Err(error.into()),
+                    Err(error) => Err(add_friend_error(&error, &username).into()),
                 });
                 cx.notify();
             })
@@ -541,6 +541,21 @@ impl Waffle {
     }
 }
 
+// Discord's inline copy per relationship error code. No answer at all, or a signed-out session, keeps its
+// own words rather than blaming the username.
+fn add_friend_error(error: &ApiError, username: &str) -> String {
+    match (error.status, error.code) {
+        (0 | 401, _) => error.text.clone(),
+        (429, _) => "You're sending requests too quickly. Wait a moment and try again.".into(),
+        (_, Some(80000)) => format!("{username} is not accepting friend requests."),
+        (_, Some(80007)) => "You're already friends with that user!".into(),
+        (_, Some(30002)) => "You've hit the 1,000 friend limit. Remove a friend to add someone new.".into(),
+        (_, Some(30078)) => "You've maxed out your pending outgoing friend requests.".into(),
+        (_, Some(40068 | 340007)) => "Your account has limited access".into(),
+        _ => "Hm, didn't work. Double check that the username is correct.".into(),
+    }
+}
+
 // A friend row's action (.friend .acts .iconbtn): a raised 36px tile with a hairline; `tone` is the
 // ink it hovers to (accept green, ignore coral).
 fn friend_action(id: (&'static str, &str), icon: Icon, tooltip: &'static str, tone: Option<Hsla>, cx: &App) -> Stateful<Div> {
@@ -561,4 +576,24 @@ fn friend_action(id: (&'static str, &str), icon: Icon, tooltip: &'static str, to
         .hover(move |s| s.text_color(ink))
         .child(icon.size(px(20.)))
         .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn error(status: u16, code: Option<u64>) -> ApiError {
+        ApiError { status, code, text: "raw".into() }
+    }
+
+    #[test]
+    fn add_friend_errors_use_discords_copy() {
+        assert_eq!(add_friend_error(&error(400, Some(80000)), "rosa"), "rosa is not accepting friend requests.");
+        assert_eq!(add_friend_error(&error(400, Some(80007)), "rosa"), "You're already friends with that user!");
+        assert_eq!(add_friend_error(&error(400, Some(30002)), "rosa"), "You've hit the 1,000 friend limit. Remove a friend to add someone new.");
+        assert_eq!(add_friend_error(&error(429, None), "rosa"), "You're sending requests too quickly. Wait a moment and try again.");
+        assert_eq!(add_friend_error(&error(400, Some(80004)), "rosa"), "Hm, didn't work. Double check that the username is correct.");
+        assert_eq!(add_friend_error(&error(404, None), "rosa"), "Hm, didn't work. Double check that the username is correct.");
+        assert_eq!(add_friend_error(&error(0, None), "rosa"), "raw");
+    }
 }
