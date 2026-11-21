@@ -748,6 +748,7 @@ pub struct Waffle {
     unread_scroll_pending: bool,
     dialog: Option<menu::Dialog>,
     create_channel: Option<create_channel::CreateChannel>,
+    stage_topic: Option<stage_dialogs::StageTopic>,
     dialog_input: Entity<SearchState>,
     // A short notice at the bottom, e.g. why a moderation action failed.
     toast: Option<SharedString>,
@@ -974,6 +975,9 @@ impl Waffle {
         let dialog_input = cx.new(|cx| SearchState::new(window, cx));
         // Enter in the field submits its dialog; the input keeps the key from reaching the dialog itself.
         cx.subscribe_in(&dialog_input, window, |this: &mut Self, _, event: &InputEvent, window, cx| {
+            if this.stage_topic.is_some() {
+                return this.stage_topic_input(event, window, cx);
+            }
             if !matches!(event, InputEvent::PressEnter { .. }) {
                 return;
             }
@@ -1097,6 +1101,7 @@ impl Waffle {
             unread_scroll_pending: false,
             dialog: None,
             create_channel: None,
+            stage_topic: None,
             dialog_input,
             toast: None,
             add_friend_input,
