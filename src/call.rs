@@ -587,7 +587,7 @@ impl Waffle {
         if states.is_empty()
             && let Some(me) = &self.me
         {
-            return vec![VoiceState { guild_id: None, channel_id: Some(call.channel.id.clone()), user_id: me.id.clone(), user: Some(me.clone()), muted: self.muted, deafened: self.deafened, server_muted: false, server_deafened: false, streaming: false, camera: false }];
+            return vec![VoiceState { guild_id: None, channel_id: Some(call.channel.id.clone()), user_id: me.id.clone(), user: Some(me.clone()), muted: self.muted, deafened: self.deafened, server_muted: false, server_deafened: false, streaming: false, camera: false, suppress: false, requested_at: None }];
         }
         states
     }
@@ -2244,7 +2244,7 @@ mod order_tests {
     use super::*;
 
     fn person(id: &str, streaming: bool, camera: bool) -> VoiceState {
-        VoiceState { guild_id: None, channel_id: Some("c".into()), user_id: id.into(), user: None, muted: false, deafened: false, server_muted: false, server_deafened: false, streaming, camera }
+        VoiceState { guild_id: None, channel_id: Some("c".into()), user_id: id.into(), user: None, muted: false, deafened: false, server_muted: false, server_deafened: false, streaming, camera, suppress: false, requested_at: None }
     }
 
     #[test]
