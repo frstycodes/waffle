@@ -344,10 +344,14 @@ pub mod perm {
 impl Guild {
     // Server-wide permissions (no channel overwrites): owner and Administrator have everything.
     pub fn permissions(&self, me: &str) -> u64 {
-        if self.owner_id.as_deref() == Some(me) {
+        self.permissions_with(me, &self.my_roles)
+    }
+
+    fn permissions_with(&self, user: &str, roles: &[String]) -> u64 {
+        if self.owner_id.as_deref() == Some(user) {
             return u64::MAX;
         }
-        let bits = self.roles.iter().filter(|r| r.id == self.id || self.my_roles.contains(&r.id)).fold(0, |acc, r| acc | r.permissions);
+        let bits = self.roles.iter().filter(|r| r.id == self.id || roles.contains(&r.id)).fold(0, |acc, r| acc | r.permissions);
         if bits & perm::ADMINISTRATOR != 0 { u64::MAX } else { bits }
     }
 
@@ -358,11 +362,16 @@ impl Guild {
     // Discord's order: server permissions, then the @everyone overwrite, then all our roles' overwrites
     // together, then one for us personally. Threads follow their parent channel.
     pub fn channel_permissions(&self, me: &str, channel: &Channel) -> u64 {
+        self.channel_permissions_with(me, &self.my_roles, channel)
+    }
+
+    // `user` holding `roles`: our own permissions with `my_roles`, someone else's with theirs from the member list.
+    pub fn channel_permissions_with(&self, user: &str, roles: &[String], channel: &Channel) -> u64 {
         // Roles not loaded yet: don't hide anything rather than hide everything.
         if self.roles.is_empty() {
             return u64::MAX;
         }
-        let base = self.permissions(me);
+        let base = self.permissions_with(user, roles);
         if base == u64::MAX {
             return base;
         }
@@ -375,9 +384,9 @@ impl Guild {
         if let Some(o) = channel.overwrites.iter().find(|o| o.id == self.id) {
             bits = apply(bits, o.allow, o.deny);
         }
-        let (allow, deny) = channel.overwrites.iter().filter(|o| self.my_roles.contains(&o.id)).fold((0, 0), |(a, d), o| (a | o.allow, d | o.deny));
+        let (allow, deny) = channel.overwrites.iter().filter(|o| roles.contains(&o.id)).fold((0, 0), |(a, d), o| (a | o.allow, d | o.deny));
         bits = apply(bits, allow, deny);
-        if let Some(o) = channel.overwrites.iter().find(|o| o.id == me) {
+        if let Some(o) = channel.overwrites.iter().find(|o| o.id == user) {
             bits = apply(bits, o.allow, o.deny);
         }
         bits
@@ -389,7 +398,11 @@ impl Guild {
     }
 
     pub fn is_stage_moderator(&self, me: &str, channel: &Channel) -> bool {
-        self.channel_permissions(me, channel) & perm::STAGE_MODERATOR == perm::STAGE_MODERATOR
+        self.is_stage_moderator_with(me, &self.my_roles, channel)
+    }
+
+    pub fn is_stage_moderator_with(&self, user: &str, roles: &[String], channel: &Channel) -> bool {
+        self.channel_permissions_with(user, roles, channel) & perm::STAGE_MODERATOR == perm::STAGE_MODERATOR
     }
 
     pub fn channel(&self, id: &str) -> Option<&Channel> {

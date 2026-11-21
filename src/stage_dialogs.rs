@@ -180,7 +180,7 @@ pub(crate) fn last_moderator_speaker(guild: &Guild, channel_id: &str, me: &str, 
     if guild.stage(channel_id).is_none() || !speakers.contains(&me) || !guild.is_stage_moderator(me, channel) {
         return false;
     }
-    let moderator = |user: &str| Guild { my_roles: roles.and_then(|r| r.get(user)).cloned().unwrap_or_default(), ..guild.clone() }.is_stage_moderator(user, channel);
+    let moderator = |user: &str| guild.is_stage_moderator_with(user, roles.and_then(|r| r.get(user)).map_or(&[][..], Vec::as_slice), channel);
     !speakers.into_iter().filter(|&u| u != me).any(moderator)
 }
 

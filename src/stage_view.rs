@@ -112,8 +112,8 @@ impl Waffle {
             return guild.is_stage_moderator(user_id, channel);
         }
         // GAP: someone the member list hasn't loaded yet reads as holding no roles.
-        let roles = self.member_roles.get(&guild.id).and_then(|r| r.get(user_id)).cloned().unwrap_or_default();
-        Guild { my_roles: roles, ..guild.clone() }.is_stage_moderator(user_id, channel)
+        let roles = self.member_roles.get(&guild.id).and_then(|r| r.get(user_id)).map_or(&[][..], Vec::as_slice);
+        guild.is_stage_moderator_with(user_id, roles, channel)
     }
 
     fn requests_open(&self, channel_id: &str, cx: &Context<Self>) -> bool {
