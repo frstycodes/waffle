@@ -45,6 +45,7 @@ pub enum Toggle {
     DesktopNotifications,
     DockBadge,
     Clock24,
+    ImageDescriptions,
     AutoDownloadUpdates,
     RenderEmbeds,
     RenderReactions,
@@ -137,6 +138,7 @@ pub static SETTINGS: &[Setting] = &[
     // Chat
     s("render-embeds", Chat, "Display", "Show embeds and link previews", None, &["links", "preview", "unfurl", "embeds"], Switch(Toggle::RenderEmbeds)),
     s("render-reactions", Chat, "Display", "Show emoji reactions", None, &["reactions", "emoji"], Switch(Toggle::RenderReactions)),
+    s("image-descriptions", Chat, "Display", "Show image descriptions", Some("Image descriptions are used to describe images for screen readers."), &["alt text", "alt", "description", "accessibility", "screen reader"], Switch(Toggle::ImageDescriptions)),
     s("clock-24", Chat, "Display", "Use a 24-hour clock", Some("For message times"), &["time", "timestamp", "am pm", "clock", "24h"], Switch(Toggle::Clock24)),
     // Notifications
     s("desktop-notifications", Notifications, "Desktop", "Desktop notifications", Some("For DMs, mentions and what your server settings ask for"), &["alerts", "banner", "popup", "toast", "notify"], Switch(Toggle::DesktopNotifications)),
