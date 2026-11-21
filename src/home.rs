@@ -19,6 +19,7 @@ use crate::{
     Waffle, SearchState,
     discord::{ApiError, Channel, Relation, Relationship, Status},
     icons::Glyph,
+    illustration::Illustration,
     layout::avatar_with_status,
     mascot::Mood,
     palette,
@@ -315,13 +316,20 @@ impl Waffle {
         };
         let body = match (people.is_empty(), tab) {
             (_, FriendsTab::AddFriend) => self.add_friend_page(cx),
-            (true, FriendsTab::Online) => ui::empty_state("friends-empty", Mood::Idle, "No one's around right now", "Your friends are offline. Say hi anyway, they'll see it when they're back.", cx)
+            (true, FriendsTab::Online) => ui::empty_state("friends-empty", Illustration::FriendsOnline, "No one's around to play with Waffle.", "Your friends are offline. Say hi anyway, they'll see it when they're back.", cx)
                 .child(ui::button("show-all-friends", Tone::Secondary, cx).mt_2().child("Show all friends").on_click(cx.listener(|this, _, _, cx| {
                     this.friends_tab = FriendsTab::All;
                     cx.notify();
                 })))
                 .into_any_element(),
-            (true, _) => ui::empty_state("friends-empty", Mood::Idle, format!("No one under {heading}"), "Friends, requests and blocks show up here as they happen.", cx).into_any_element(),
+            (true, FriendsTab::All) => ui::empty_state("friends-empty", Illustration::FriendsAll, "Waffle is waiting on friends. You don't have to though!", "Add someone by their username to start chatting.", cx)
+                .child(ui::button("empty-add-friend", Tone::Primary, cx).mt_2().child("Add friend").on_click(cx.listener(|this, _, _, cx| {
+                    this.friends_tab = FriendsTab::AddFriend;
+                    cx.notify();
+                })))
+                .into_any_element(),
+            (true, FriendsTab::Pending) => ui::empty_state("friends-empty", Illustration::FriendsPending, "There are no pending friend requests. Here's Waffle for now.", "Requests you send and receive show up here.", cx).into_any_element(),
+            (true, FriendsTab::Blocked) => ui::empty_state("friends-empty", Illustration::FriendsBlocked, "You can't unblock Waffle.", "People you block show up here.", cx).into_any_element(),
             (false, _) => {
                 let label = div().pt_2().px_2().pb_1().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(format!("{heading} · {}", people.len()));
                 let rows: Vec<AnyElement> = people.iter().map(|r| self.friend_row(r, cx)).collect();

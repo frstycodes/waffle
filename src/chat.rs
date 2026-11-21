@@ -70,7 +70,7 @@ impl Waffle {
             },
             Some(Feed { loaded: true, messages, .. }) if messages.is_empty() => empty_state("empty", Mood::Happy, "No messages yet", "Be the first to say something.", cx),
             Some(Feed { loaded: true, .. }) => self.render_messages(top, cx).into_any_element(),
-            Some(Feed { error: Some(error), .. }) => empty_state("failed", Mood::Idle, "Couldn't load messages", error.clone(), cx),
+            Some(Feed { error: Some(error), .. }) => empty_state("failed", crate::illustration::Illustration::LoadFailed, "Couldn't load messages", error.clone(), cx),
             _ => skeleton(cx),
         };
         let chat = div()
@@ -2917,8 +2917,8 @@ fn day_divider(timestamp: &str, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-fn empty_state(id: &'static str, mood: Mood, title: &'static str, detail: impl Into<SharedString>, cx: &App) -> AnyElement {
-    div().size_full().flex().items_center().justify_center().child(ui::empty_state(id, mood, title, detail, cx)).into_any_element()
+fn empty_state(id: &'static str, art: impl Into<ui::Art>, title: &'static str, detail: impl Into<SharedString>, cx: &App) -> AnyElement {
+    div().size_full().flex().items_center().justify_center().child(ui::empty_state(id, art, title, detail, cx)).into_any_element()
 }
 
 fn continues(previous: &Message, message: &Message) -> bool {
