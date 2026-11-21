@@ -209,7 +209,7 @@ mod tests {
     use super::*;
 
     fn option(name: &str, kind: OptionKind, required: bool) -> CommandOption {
-        CommandOption { kind, name: name.into(), description: String::new(), required, choices: Vec::new(), autocomplete: false }
+        CommandOption { kind, name: name.into(), required, ..Default::default() }
     }
 
     fn command(id: &str, path: &str, options: Vec<CommandOption>) -> AppCommand {
@@ -318,7 +318,7 @@ mod tests {
         let picked = ArgValue { text: "Midnight".into(), picked: Some(json!("id-7")) };
         assert_eq!(resolve(&option("q", OptionKind::String, true), &picked), Ok(Some(json!("id-7"))));
         let mut sized = option("size", OptionKind::String, true);
-        sized.choices = vec![crate::app_commands::Choice { name: "Large".into(), value: json!("l") }];
+        sized.choices = vec![crate::app_commands::Choice { name: "Large".into(), name_localized: None, value: json!("l") }];
         assert_eq!(resolve(&sized, &text("large")), Ok(Some(json!("l"))));
         assert!(resolve(&sized, &text("huge")).is_err());
         assert!(resolve(&option("f", OptionKind::Attachment, false), &text("")).is_err());

@@ -952,7 +952,6 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
     }
     // A Components V2 message lays out its own media and files.
     let v2 = message.flags & crate::app_commands::COMPONENTS_V2 != 0;
-    let loading = message.flags & crate::app_commands::LOADING != 0;
     let ephemeral = components::is_ephemeral(message);
     let media = media_grid(message, ctx, cx).filter(|_| !v2);
     let group = SharedString::from(format!("msg-{}", message.id));
@@ -986,7 +985,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .text_size(px(16.))
         .text_color(ink)
         .children(content(message, ctx, cx))
-        .when(loading, |b| b.child(components::thinking(message, ctx, cx)))
+        .children(components::interaction_status(message, ctx, cx))
         .children(message.forward.as_ref().map(|original| forward_card(original, ctx, cx)))
         .children(media.map(|m| div().when(pending, |d| d.opacity(0.6)).child(m)))
         .children(message.stickers.iter().map(|s| div().when(pending, |d| d.opacity(0.6)).child(crate::stickers::in_chat(s, cx))))
@@ -998,10 +997,8 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .children(upload_cards(message, ctx, cx))
         .children(components::message_components(message, ctx, cx))
         .children(reactions(message, ctx, cx).filter(|_| ctx.reactions))
-        .when(message.state == SendState::Failed, |b| match components::is_failed_stand_in(message) {
-            true => b.child(components::stand_in_failure(message, ctx, cx)),
-            false => b.child(send_failure(message, ctx, cx)),
-        })
+        // A command's stand-in says why in its status line.
+        .when(message.state == SendState::Failed && !components::is_failed_stand_in(message), |b| b.child(send_failure(message, ctx, cx)))
         .when(ephemeral, |b| b.child(components::only_you(message, ctx, cx)))
         // Where a jump landed: a squiggle under the message, gone with the flash.
         .when(landed, |b| b.child(div().absolute().left_0().right_0().bottom(px(-6.)).h(px(8.)).child(ui::squiggle(SharedString::from(format!("squiggle-{}", message.id)), message.id.parse().unwrap_or(0), palette::accent_ink(cx), JUMP_FLASH))));

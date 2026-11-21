@@ -747,6 +747,9 @@ pub struct Message {
     // The app that sent it (or whose interaction it answers); `None` from a person.
     #[serde(default)]
     pub application_id: Option<String>,
+    // Why our command's stand-in failed: Discord's `interactionError`, shown in its first 3 seconds.
+    #[serde(default)]
+    pub interaction_error: Option<String>,
 }
 
 /// A live poll as a message carries it, its counts folded into the answers.
@@ -1083,7 +1086,8 @@ pub enum Event {
     // for it, which the app's reply carries in `interaction_metadata.id`.
     InteractionCreate { nonce: String, id: String },
     InteractionSuccess { nonce: String },
-    InteractionFailure { nonce: String },
+    // `reason_code` is Discord's ReasonCodes enum (2 = the app didn't answer in time).
+    InteractionFailure { nonce: String, reason_code: Option<u64> },
     ModalCreate(crate::app_commands::Modal),
     Autocomplete { nonce: String, choices: Vec<crate::app_commands::Choice> },
 }
@@ -1204,18 +1208,58 @@ impl Client {
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
     }
 
-    /// Not verified: a server's index lists every app's commands there; a DM's comes from the channel.
+    /// The server's index (a DM's comes from the channel) merged with your user-installed apps' index,
+    /// as Discord's client merges them. Either alone still lists; both failing is the context's error.
     pub async fn command_index(&self, channel_id: &str, guild_id: Option<&str>) -> Result<crate::app_commands::CommandIndex, String> {
+        use crate::app_commands::{CommandIndex, parse_index};
         let path = match guild_id {
             Some(g) => format!("/guilds/{g}/application-command-index"),
             None => format!("/channels/{channel_id}/application-command-index"),
         };
-        self.run(self.request(reqwest::Method::GET, &path)).await.map(|v| crate::app_commands::parse_index(&v))
+        let context = runtime().spawn(fetch_index(self.request(reqwest::Method::GET, &path)));
+        let user = runtime().spawn(fetch_index(self.request(reqwest::Method::GET, "/users/@me/application-command-index")));
+        let (context, user) = futures::join!(context, user);
+        let (context, user) = (context.map_err(|e| e.to_string())?.map(|v| parse_index(&v)), user.map_err(|e| e.to_string())?.map(|v| parse_index(&v)));
+        match (context, user) {
+            (Ok(context), Ok(user)) => Ok(CommandIndex::merge(context, user)),
+            (Ok(only), Err(_)) | (Err(_), Ok(only)) => Ok(only),
+            (Err(error), Err(_)) => Err(error),
+        }
     }
 
     /// Answers 204; what happens next arrives as INTERACTION_* dispatches matched by the body's nonce.
-    pub async fn interact(&self, body: Value) -> Result<(), String> {
-        self.run(self.request(reqwest::Method::POST, "/interactions").json(&body)).await.map(|_| ())
+    /// No retries: a refusal is the interaction's failure. Component presses and autocomplete give up
+    /// after 3 s, as Discord's client does; commands and modal submits wait.
+    pub async fn interact(&self, body: Value) -> Result<(), InteractError> {
+        let mut req = self.request(reqwest::Method::POST, "/interactions").json(&body);
+        if matches!(body["type"].as_u64(), Some(3 | 4)) {
+            req = req.timeout(Duration::from_secs(3));
+        }
+        runtime().spawn(send_interaction(req)).await.unwrap_or_else(|_| Err(InteractError::default()))
+    }
+
+    /// Uploads files for an app command's ATTACHMENT options the way messages do (Cloud Uploads): a slot
+    /// per file, a PUT of each, and the uploaded names to pass to `app_commands::attach_files`.
+    #[expect(dead_code, reason = "the composer wires it next: localized names, ATTACHMENT options")]
+    pub async fn stage_files(&self, channel_id: &str, files: &[Upload]) -> Result<Vec<crate::app_commands::CommandAttachment>, String> {
+        let uploaded = self.put_uploads(channel_id, files).await?;
+        Ok(uploaded
+            .into_iter()
+            .map(|(filename, uploaded_filename)| crate::app_commands::CommandAttachment { spoiler: filename.starts_with("SPOILER_"), filename, uploaded_filename })
+            .collect())
+    }
+
+    // Each file's name and the name Discord stored its upload under.
+    async fn put_uploads(&self, channel_id: &str, files: &[Upload]) -> Result<Vec<(String, String)>, String> {
+        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/attachments")).json(&attachments_request(files));
+        let slots = self.run(req).await?;
+        let slots = parse_upload_slots(&slots, files.len())?;
+        for (file, (url, _)) in files.iter().zip(&slots) {
+            // Cancel drops this future; the guard stops the PUT with it.
+            let mut put = AbortOnDrop(runtime().spawn(put_file(self.http.clone(), url.clone(), file.path.clone(), file.sent.clone())));
+            (&mut put.0).await.map_err(|e| e.to_string())??;
+        }
+        Ok(files.iter().zip(slots).map(|(f, (_, name))| (f.name.clone(), name)).collect())
     }
 
     /// Discord's own packs, for everyone.
@@ -1234,15 +1278,7 @@ impl Client {
     /// Uploads): upload URLs for every file, a PUT of each to its URL, then the message naming them.
     /// Each file's `sent` counts its bytes as they go out.
     pub async fn upload(&self, channel_id: &str, files: &[Upload], content: &str, nonce: &str, reply_to: Option<&str>, ping_author: bool) -> Result<Message, String> {
-        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/attachments")).json(&attachments_request(files));
-        let slots = self.run(req).await?;
-        let slots = parse_upload_slots(&slots, files.len())?;
-        for (file, (url, _)) in files.iter().zip(&slots) {
-            // Cancel drops this future; the guard stops the PUT with it.
-            let mut put = AbortOnDrop(runtime().spawn(put_file(self.http.clone(), url.clone(), file.path.clone(), file.sent.clone())));
-            (&mut put.0).await.map_err(|e| e.to_string())??;
-        }
-        let uploaded: Vec<(String, String)> = files.iter().zip(slots).map(|(f, (_, name))| (f.name.clone(), name)).collect();
+        let uploaded = self.put_uploads(channel_id, files).await?;
         let body = message_body(content, nonce, reply_to, ping_author, &uploaded);
         let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
@@ -1644,6 +1680,97 @@ fn retry_wait(status: u16, body: &Value, header_wait: Option<f64>, idempotent: b
         500 | 502 | 503 | 504 if idempotent && retries == 0 => Some(Duration::from_secs(1)),
         _ => None,
     }
+}
+
+// Discord's client tries a command index this many times before it gives up.
+const INDEX_TRIES: u32 = 3;
+
+// A command index GET: 202 (Discord still building it) waits 5 s, 429 waits `retry_after`.
+async fn fetch_index(req: reqwest::RequestBuilder) -> Result<Value, String> {
+    let mut req = req;
+    let mut tries = 1;
+    loop {
+        let again = req.try_clone();
+        let res = req.send().await.map_err(|e| e.to_string())?;
+        let status = res.status().as_u16();
+        let header_wait = res.headers().get(reqwest::header::RETRY_AFTER).and_then(|v| v.to_str().ok()?.parse::<f64>().ok());
+        let body: Value = res.json().await.unwrap_or(Value::Null);
+        if let (Some(wait), Some(next)) = (index_wait(status, &body, header_wait).filter(|_| tries < INDEX_TRIES), again) {
+            tokio::time::sleep(wait).await;
+            req = next;
+            tries += 1;
+            continue;
+        }
+        return match status {
+            // Not Discord's wording: its client shows no text for an index that never finished building.
+            202 => Err("Commands are still loading. Try again in a moment.".into()),
+            200..=299 => Ok(body),
+            _ => Err(error_text(status, &body)),
+        };
+    }
+}
+
+fn index_wait(status: u16, body: &Value, header_wait: Option<f64>) -> Option<Duration> {
+    match status {
+        202 => Some(Duration::from_secs(5)),
+        429 => Some(Duration::from_secs_f64(body["retry_after"].as_f64().or(header_wait).unwrap_or(1.).max(0.))),
+        _ => None,
+    }
+}
+
+/// Why `POST /interactions` was refused, as Discord's client reads it (`web#964363`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct InteractError {
+    pub status: Option<u16>,
+    // Discord's error code (`body.code`), its `errorCode`.
+    pub code: Option<u64>,
+    // The server's words, shown on a command's stand-in.
+    pub message: Option<String>,
+    // The command index is out of date: refetch it before the next command.
+    pub stale_index: bool,
+    // Seconds, on a 429.
+    pub retry_after: Option<f64>,
+}
+
+const INVALID_FORM_BODY: u64 = 50035;
+// Not verified: Discord's UNKNOWN_INTEGRATION is believed to be API code 10005.
+const UNKNOWN_INTEGRATION: u64 = 10005;
+
+async fn send_interaction(req: reqwest::RequestBuilder) -> Result<(), InteractError> {
+    let res = req.send().await.map_err(|_| InteractError::default())?;
+    let status = res.status().as_u16();
+    let body: Value = res.json().await.unwrap_or(Value::Null);
+    if (200..300).contains(&status) {
+        return Ok(());
+    }
+    eprintln!("http: {status} /interactions (code {}): {body}", body["code"]);
+    Err(interact_error(status, &body))
+}
+
+fn interact_error(status: u16, body: &Value) -> InteractError {
+    let code = body["code"].as_u64();
+    let retry_after = body["retry_after"].as_f64();
+    if !(400..500).contains(&status) || body.is_null() {
+        return InteractError { status: Some(status), code, retry_after, ..Default::default() };
+    }
+    if code == Some(INVALID_FORM_BODY) && body["errors"].is_object() {
+        let first = first_form_error(&body["errors"]);
+        let stale = first.is_some_and(|e| matches!(e["code"].as_str(), Some("INTERACTION_APPLICATION_COMMAND_INVALID_VERSION" | "INTERACTION_APPLICATION_COMMAND_INVALID")));
+        return InteractError { status: Some(status), code: None, message: first.and_then(|e| e["message"].as_str()).map(str::to_owned), stale_index: stale, retry_after };
+    }
+    let message = body["message"].as_str().map(str::to_owned);
+    if code == Some(UNKNOWN_INTEGRATION) {
+        return InteractError { status: Some(status), code: None, message, stale_index: true, retry_after };
+    }
+    InteractError { status: Some(status), code, message, stale_index: false, retry_after }
+}
+
+// The first `_errors[0]` anywhere in Discord's nested form errors, depth first.
+fn first_form_error(errors: &Value) -> Option<&Value> {
+    if let Some(first) = errors["_errors"].get(0) {
+        return Some(first);
+    }
+    errors.as_object()?.iter().filter(|(key, _)| *key != "_errors").find_map(|(_, inner)| inner.is_object().then(|| first_form_error(inner)).flatten())
 }
 
 const SESSION_EXPIRED: &str = "Your session has expired. Sign in again.";
@@ -2093,7 +2220,7 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
         "MESSAGE_CREATE" => parse_message(d).map(|m| Event::MessageCreate(Box::new(m))),
         "INTERACTION_CREATE" => Some(Event::InteractionCreate { nonce: d["nonce"].as_str()?.to_owned(), id: s(&d["id"]) }),
         "INTERACTION_SUCCESS" => Some(Event::InteractionSuccess { nonce: d["nonce"].as_str()?.to_owned() }),
-        "INTERACTION_FAILURE" => Some(Event::InteractionFailure { nonce: d["nonce"].as_str()?.to_owned() }),
+        "INTERACTION_FAILURE" => Some(Event::InteractionFailure { nonce: d["nonce"].as_str()?.to_owned(), reason_code: d["reason_code"].as_u64() }),
         "INTERACTION_MODAL_CREATE" => crate::app_commands::parse_modal(d).map(Event::ModalCreate),
         "APPLICATION_COMMAND_AUTOCOMPLETE_RESPONSE" => Some(Event::Autocomplete { nonce: d["nonce"].as_str()?.to_owned(), choices: crate::app_commands::parse_choices(d) }),
         "MESSAGE_UPDATE" => Some(Event::MessageUpdate(d.clone())),
@@ -2439,6 +2566,7 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         components: crate::app_commands::parse_components(&m["components"]),
         flags: m["flags"].as_u64().unwrap_or(0),
         application_id: m["application_id"].as_str().map(str::to_owned),
+        interaction_error: None,
     })
 }
 
@@ -2922,6 +3050,30 @@ mod tests {
         }
         assert_eq!(error_text(403, &json!({ "message": "Missing Permissions", "code": 50013 })), "Missing Permissions");
         assert_eq!(error_text(404, &Value::Null), "404 Not Found");
+    }
+
+    #[test]
+    fn command_index_waits_on_202_and_429() {
+        assert_eq!(index_wait(202, &Value::Null, None), Some(Duration::from_secs(5)));
+        assert_eq!(index_wait(429, &json!({ "retry_after": 1.5 }), None), Some(Duration::from_millis(1500)));
+        assert_eq!(index_wait(200, &Value::Null, None), None);
+        assert_eq!(index_wait(500, &Value::Null, None), None);
+    }
+
+    #[test]
+    fn interaction_refusals_read_as_discords_client_reads_them() {
+        let stale = json!({ "code": 50035, "message": "Invalid Form Body",
+            "errors": { "data": { "_errors": [{ "code": "INTERACTION_APPLICATION_COMMAND_INVALID_VERSION", "message": "This command is outdated, please try again in a few minutes" }] } } });
+        let e = interact_error(400, &stale);
+        assert!(e.stale_index);
+        assert_eq!(e.message.as_deref(), Some("This command is outdated, please try again in a few minutes"));
+        assert_eq!(e.code, None);
+        let other = interact_error(403, &json!({ "code": 50001, "message": "Missing Access" }));
+        assert_eq!((other.code, other.message.as_deref(), other.stale_index), (Some(50001), Some("Missing Access"), false));
+        assert!(interact_error(400, &json!({ "code": 10005, "message": "Unknown Integration" })).stale_index);
+        let limited = interact_error(429, &json!({ "message": "You are being rate limited.", "retry_after": 2.0 }));
+        assert_eq!((limited.status, limited.retry_after), (Some(429), Some(2.0)));
+        assert_eq!(interact_error(500, &Value::Null), InteractError { status: Some(500), ..Default::default() });
     }
 
     #[test]

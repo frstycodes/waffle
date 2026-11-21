@@ -1,7 +1,11 @@
 // What an app's reply carries (design/explore-app-commands.html, sections 3 to 5): who used which
 // command, the thinking line, the "Only you can see this" footer, a stand-in that never got an answer,
 // rows of buttons and selects, and Components V2 layouts.
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use gpui_kit::{
     AnyElement, App, Bounds, Context, Div, Entity, FontWeight, Hsla, Pixels, Point, SharedString, Window,
@@ -20,7 +24,7 @@ use crate::{
     chat::{self, Paging, RowContext},
     discord::{Channel, ChannelKind, Emoji, File, Media, MediaKind, Message, SendState, User},
     icons::Glyph,
-    interactions::InteractionKind,
+    interactions::{self, CommandStatus, InteractionKind},
     menu::{self, Entry},
     palette::{self, Level},
     ui::{self, RADIUS_LG, RADIUS_MD, Squircle},
@@ -66,39 +70,44 @@ pub(crate) struct ComponentView {
     open: Option<ControlKey>,
     picks: HashMap<ControlKey, Vec<String>>,
     calls: HashMap<ControlKey, Call>,
+    // Messages with an interaction in flight: all their controls are disabled.
+    busy: HashSet<String>,
     anchors: Anchors,
 }
 
 struct Call {
-    nonce: String,
-    failed: bool,
-    app: String,
+    // Discord's line once it failed.
+    failure: Option<String>,
 }
 
 impl Waffle {
     pub(crate) fn component_view(&self) -> ComponentView {
         let calls = self
             .interactions
-            .iter()
-            .filter_map(|(nonce, p)| match &p.kind {
-                InteractionKind::Component { message_id, custom_id } => Some(((message_id.clone(), custom_id.clone()), Call { nonce: nonce.clone(), failed: p.failed, app: p.app.name.clone() })),
+            .values()
+            .filter_map(|p| match &p.kind {
+                InteractionKind::Component { message_id, custom_id } => Some(((message_id.clone(), custom_id.clone()), Call { failure: p.failure.clone() })),
                 _ => None,
             })
             .collect();
-        ComponentView { open: self.component_state.open.clone().filter(|_| self.menu.is_some()), picks: self.component_state.picks.clone(), calls, anchors: self.component_state.anchors.clone() }
+        let busy = self
+            .interactions
+            .values()
+            .filter_map(|p| match &p.kind {
+                InteractionKind::Component { message_id, .. } if !p.failed() => Some(message_id.clone()),
+                _ => None,
+            })
+            .collect();
+        ComponentView { open: self.component_state.open.clone().filter(|_| self.menu.is_some()), picks: self.component_state.picks.clone(), calls, busy, anchors: self.component_state.anchors.clone() }
     }
 
     // A button press or a select's picks, sent to the app that owns the message.
     fn use_component(&mut self, message: &Message, component: &Component, values: Vec<String>, cx: &mut Context<Self>) {
         let Some(custom_id) = custom_id(component) else { return };
-        if let Some((nonce, p)) = self.component_interaction(&message.id, &custom_id) {
-            if !p.failed {
-                return;
-            }
-            // A failed try on the same control gives way to this one.
-            let nonce = nonce.to_owned();
-            self.interactions.remove(&nonce);
+        if self.message_busy(&message.id) {
+            return;
         }
+        self.forget_failed_on(&message.id);
         let application_id = message.application_id.clone().unwrap_or_else(|| message.author.id.clone());
         let nonce = crate::nonce();
         let guild_id = message.guild_id.clone().or_else(|| self.guild_id.clone());
@@ -338,17 +347,28 @@ pub(crate) fn used_command(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
     )
 }
 
-// "<App> is thinking…" with the mini wave, while the app works on its answer.
-pub(crate) fn thinking(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
-    div()
-        .flex()
-        .items_center()
-        .gap(px(8.))
-        .italic()
-        .text_color(palette::muted(cx))
-        .child(ui::bars(SharedString::from(format!("thinking-{}", message.id)), palette::accent_ink(cx), 14.))
-        .child(format!("{} is thinking…", ctx.name_of(&message.author)))
-        .into_any_element()
+// The line under a command's stand-in or a deferred reply: Discord's "Sending command...", "{app} is
+// thinking...", or why it never answered.
+pub(crate) fn interaction_status(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyElement> {
+    let waiting = |text: String| {
+        div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .italic()
+            .text_color(palette::muted(cx))
+            .child(ui::bars(SharedString::from(format!("thinking-{}", message.id)), palette::accent_ink(cx), 14.))
+            .child(text)
+            .into_any_element()
+    };
+    // Discord names the app by its bot's username.
+    let app = Some(message.author.username.clone()).filter(|u| !u.is_empty()).unwrap_or_else(|| ctx.name_of(&message.author));
+    Some(match interactions::command_status(message, interactions::now_ms())? {
+        CommandStatus::Sending => waiting("Sending command...".into()),
+        CommandStatus::Thinking => waiting(format!("{app} is thinking...")),
+        CommandStatus::TimedOut => failure_line(interactions::DID_NOT_RESPOND.into(), cx),
+        CommandStatus::Failed(why) => failure_line(why, cx),
+    })
 }
 
 pub(crate) fn is_ephemeral(message: &Message) -> bool {
@@ -357,7 +377,7 @@ pub(crate) fn is_ephemeral(message: &Message) -> bool {
 
 // Our command's local stand-in, which the app never answered: only we ever saw it.
 pub(crate) fn is_failed_stand_in(message: &Message) -> bool {
-    message.state == SendState::Failed && message.interaction.is_some() && message.id.starts_with("pending-")
+    message.state == SendState::Failed && interactions::is_stand_in(message)
 }
 
 // An ephemeral reply's tint: a 4% wash of the strong ink.
@@ -388,34 +408,23 @@ pub(crate) fn only_you(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Any
         .into_any_element()
 }
 
-// In place of the send-failure line on a command's stand-in: which app, and Try again.
-pub(crate) fn stand_in_failure(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
-    let title = format!("{} didn't answer in time.", ctx.name_of(&message.author));
-    failure(format!("stand-in-{}", message.id), title, "It may be offline.".into(), message.nonce.clone().unwrap_or_default(), ctx, cx)
-}
-
-// A danger-tinted block with what failed and Try again, which resends under a fresh nonce.
-fn failure(id: String, title: String, detail: String, nonce: String, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
-    let this = ctx.this();
+// Discord's red failure line: an error icon and what went wrong. No retry.
+fn failure_line(text: String, cx: &App) -> AnyElement {
     div()
-        .mt(px(6.))
-        .py(px(6.))
-        .pl(px(12.))
-        .pr(px(6.))
+        .mt(px(4.))
         .flex()
         .items_center()
-        .gap(px(8.))
-        .squircle(RADIUS_MD)
-        .bg(palette::danger_tint())
-        .text_size(px(14.))
-        .text_color(palette::text(cx))
-        .child(div().flex_none().text_color(palette::danger_ink(cx)).child(Icon::new(Glyph::Warning).size(px(16.))))
-        .child(div().flex_1().min_w_0().flex().flex_wrap().gap_x(px(4.)).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title)).child(detail))
-        .child(ui::button(SharedString::from(id), ui::Tone::Ghost, cx).small().h(px(28.)).child("Try again").on_click(move |_, _, cx| {
-            cx.stop_propagation();
-            this.update(cx, |this, cx| this.retry_interaction(&nonce, cx)).ok();
-        }))
+        .gap(px(6.))
+        .text_color(palette::danger_ink(cx))
+        .child(Icon::new(Glyph::WarningCircle).size(px(16.)).flex_none())
+        .child(div().min_w_0().child(text))
         .into_any_element()
+}
+
+// Under a row or section: the line for the failed interaction on one of its controls.
+fn failed_line<'a>(message: &Message, controls: impl IntoIterator<Item = &'a Component>, ctx: &RowContext, cx: &App) -> Option<AnyElement> {
+    let failure = controls.into_iter().filter_map(custom_id).find_map(|id| ctx.components.calls.get(&(message.id.clone(), id)).and_then(|c| c.failure.clone()))?;
+    Some(failure_line(failure, cx))
 }
 
 // Under the message body: rows of buttons and selects, or (with COMPONENTS_V2) the whole message.
@@ -439,7 +448,7 @@ fn component(message: &Message, c: &Component, path: String, width: f32, ctx: &R
         Component::Text(text) => chat::rich_text(&format!("component-{}-{path}", message.id), text, ctx, cx),
         Component::Thumbnail { url, .. } => thumbnail(message, url),
         Component::Gallery(items) => gallery(message, items, &path, width, ctx, cx),
-        Component::File { url, name } => file(message, url, name.as_deref(), cx),
+        Component::File { url, name, .. } => file(message, url, name.as_deref(), cx),
         Component::Separator { divider, large } => separator(*divider, *large, cx),
         Component::Container { accent, spoiler, children } => container(message, *accent, children, &path, width, ctx, cx)
             .when(*spoiler, |c| c.children(chat::veil(format!("spoiler-{}-{path}", message.id), "Spoiler", ui::all(RADIUS_LG), ctx)))
@@ -450,24 +459,26 @@ fn component(message: &Message, c: &Component, path: String, width: f32, ctx: &R
 // Up to five buttons, wrapping, or one select; a failed press says so under the row with a retry.
 fn action_row(message: &Message, children: &[Component], path: &str, width: f32, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     let controls: Vec<AnyElement> = children.iter().enumerate().map(|(i, c)| component(message, c, format!("{path}-{i}"), width, ctx, cx)).collect();
-    let failed = children.iter().filter_map(custom_id).find_map(|id| ctx.components.calls.get(&(message.id.clone(), id)).filter(|c| c.failed));
+    let failed = failed_line(message, children, ctx, cx);
     div()
         .flex()
         .flex_col()
         .child(div().flex().flex_wrap().gap(px(8.)).children(controls))
-        .children(failed.map(|call| failure(format!("retry-{}-{path}", message.id), "This interaction failed.".into(), format!("{} didn't answer.", call.app), call.nonce.clone(), ctx, cx)))
+        .children(failed)
         .into_any_element()
 }
 
 fn button(message: &Message, b: &Button, path: &str, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
     let call = b.custom_id.as_ref().and_then(|id| ctx.components.calls.get(&(message.id.clone(), id.clone())));
-    let busy = call.is_some_and(|c| !c.failed);
+    let busy = call.is_some_and(|c| c.failure.is_none());
+    // Another control on this message is in flight.
+    let blocked = !busy && ctx.components.busy.contains(&message.id);
     let label = b.label.clone().unwrap_or_default();
     let link = b.style == ButtonStyle::Link;
     let (this, m, press) = (ctx.this(), message.clone(), b.clone());
     ui::button(SharedString::from(format!("component-{}-{path}", message.id)), tone(b.style), cx)
         .small()
-        .disabled(b.disabled || message.state != SendState::Sent)
+        .disabled(b.disabled || blocked || message.state != SendState::Sent)
         .children(b.emoji.as_deref().map(|e| menu::emoji_face(&as_emoji(e), 18.)))
         .when(!label.is_empty(), |c| c.child(label.clone()))
         .when(link, |c| c.child(Icon::new(Glyph::Open).size(px(14.))))
@@ -486,13 +497,14 @@ fn button(message: &Message, b: &Button, path: &str, ctx: &Rc<RowContext>, cx: &
 fn select_field(message: &Message, s: &Select, path: &str, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
     let key = (message.id.clone(), s.custom_id.clone());
     let open = ctx.components.open.as_ref() == Some(&key);
-    let busy = ctx.components.calls.get(&key).is_some_and(|c| !c.failed);
+    let busy = ctx.components.calls.get(&key).is_some_and(|c| c.failure.is_none());
+    let blocked = !busy && ctx.components.busy.contains(&message.id);
     let picked = picked_labels(s, ctx.components.picks.get(&key), ctx);
     let shown = picked.clone().or_else(|| s.placeholder.clone()).unwrap_or_else(|| "Make a selection".into());
     let (anchors, anchor_key) = (ctx.components.anchors.clone(), key.clone());
     let (this, m, select) = (ctx.this(), message.clone(), s.clone());
     let field = ui::select(SharedString::from(format!("component-{}-{path}", message.id)), None, shown.clone(), open, cx)
-        .disabled(s.disabled || message.state != SendState::Sent)
+        .disabled(s.disabled || blocked || message.state != SendState::Sent)
         .when(picked.is_none(), |f| f.text_color(palette::faint(cx)))
         .when(busy, |f| f.loading(Some(shown)))
         .on_click(move |event, window, cx| {
@@ -518,14 +530,15 @@ fn picked_labels(s: &Select, picks: Option<&Vec<String>>, ctx: &RowContext) -> O
 // Text on the left; a thumbnail or a button beside it on the right.
 fn section(message: &Message, children: &[Component], accessory: Option<&Component>, path: &str, width: f32, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     let text: Vec<AnyElement> = children.iter().enumerate().map(|(i, c)| component(message, c, format!("{path}-{i}"), width, ctx, cx)).collect();
+    let failed = failed_line(message, accessory, ctx, cx);
     let accessory = accessory.map(|a| component(message, a, format!("{path}-a"), width, ctx, cx));
-    div()
+    let row = div()
         .flex()
         .items_start()
         .gap(px(14.))
         .child(div().flex_1().min_w_0().flex().flex_col().gap(px(4.)).text_color(palette::strong(cx)).children(text))
-        .children(accessory.map(|a| div().flex_none().child(a)))
-        .into_any_element()
+        .children(accessory.map(|a| div().flex_none().child(a)));
+    div().flex().flex_col().child(row).children(failed).into_any_element()
 }
 
 fn thumbnail(message: &Message, url: &str) -> AnyElement {

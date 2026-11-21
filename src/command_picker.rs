@@ -1,7 +1,7 @@
 // The `/` picker above the composer, and the hint bar while a command is typed out as
 // `/name option:value`. The composer stays plain text: everything here is read back from it.
 
-use std::{collections::HashMap, ops::Range, sync::Arc, time::Duration};
+use std::{collections::{HashMap, HashSet}, ops::Range, sync::Arc, time::Duration};
 
 use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, Context, Div, FontWeight, HighlightStyle, IntoElement, ScrollHandle, SharedString, StyledText, Task, Window,
@@ -34,6 +34,8 @@ const LIST_HEIGHT: f32 = 340.;
 pub(crate) struct CommandPicker {
     // By server, or by channel in a DM: the index Discord sent for it.
     indexes: HashMap<String, IndexState>,
+    // Scopes whose index went out of date (a gateway reconnect, a bad-version error): refetched on next use.
+    stale: HashSet<String>,
     open: bool,
     // Esc closed the picker over this `/` text; it stays closed until the text stops being a command.
     dismissed: bool,
@@ -106,6 +108,11 @@ impl CommandPicker {
 
     pub(crate) fn is_open(&self) -> bool {
         self.open
+    }
+
+    /// Discord marks every index stale on each gateway (re)connect and after a bad-version error.
+    pub(crate) fn mark_indexes_stale(&mut self) {
+        self.stale = self.indexes.keys().cloned().collect();
     }
 
     pub(crate) fn set_index(&mut self, scope: impl Into<String>, index: CommandIndex) {
@@ -232,7 +239,7 @@ impl Waffle {
 
     fn ensure_command_index(&mut self, cx: &mut Context<Self>) {
         let Some((key, _, _)) = self.command_scope() else { return };
-        if !self.command_picker.indexes.contains_key(&key) {
+        if !self.command_picker.indexes.contains_key(&key) || self.command_picker.stale.remove(&key) {
             self.fetch_command_index(cx);
         }
     }

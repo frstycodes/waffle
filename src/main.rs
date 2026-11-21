@@ -1357,6 +1357,7 @@ impl Waffle {
             Event::Ready(ready) => {
                 let ready = *ready;
                 self.channel_info_requested.clear();
+                self.command_picker.mark_indexes_stale();
                 self.auth_retried = false;
                 // Demo scenes set their own place; the last channel a real session saved would override it.
                 if self.me.is_none() && std::env::var_os("WAFFLE_DEMO").is_none() {
@@ -1503,11 +1504,17 @@ impl Waffle {
                     self.open_joined_guild(id, cx);
                 }
             }
-            Event::MessageCreate(message) => self.on_message(*message, cx),
+            Event::MessageCreate(message) => {
+                self.watch_deferred(&message.id, message.flags, cx);
+                self.on_message(*message, cx);
+            }
             Event::MessageUpdate(patch) => {
                 let (channel_id, id) = (patch["channel_id"].as_str().unwrap_or_default(), patch["id"].as_str().unwrap_or_default());
                 if let Some(m) = self.message_mut(channel_id, id) {
                     discord::apply_update(m, &patch);
+                }
+                if let Some(flags) = self.message_mut(channel_id, id).map(|m| m.flags) {
+                    self.watch_deferred(id, flags, cx);
                 }
             }
             Event::MessageDelete { channel_id, id } => self.remove_message(&channel_id, &id),
@@ -1641,11 +1648,14 @@ impl Waffle {
                 self.splash_stage(0, "Reconnecting…", cx);
                 self.status = Status::Reconnecting(reason.into());
             }
-            Event::Resumed => self.status = Status::Online,
+            Event::Resumed => {
+                self.status = Status::Online;
+                self.command_picker.mark_indexes_stale();
+            }
             Event::AuthFailed => return self.verify_rejected_token(cx),
-            Event::InteractionCreate { nonce, id } => self.on_interaction_create(nonce, id),
+            Event::InteractionCreate { nonce, id } => self.on_interaction_create(nonce, id, cx),
             Event::InteractionSuccess { nonce } => self.on_interaction_success(nonce, cx),
-            Event::InteractionFailure { nonce } => self.interaction_failed(&nonce, cx),
+            Event::InteractionFailure { nonce, reason_code } => self.interaction_failed(&nonce, reason_code, cx),
             Event::ModalCreate(modal) => self.open_app_modal(modal, cx),
             Event::Autocomplete { nonce, choices } => self.on_autocomplete(nonce, choices, cx),
         }
@@ -1833,6 +1843,7 @@ impl Waffle {
         // Before the reset: the draft keeps the command typed into it.
         self.stash_draft(cx);
         self.command_picker.reset();
+        self.clear_failed_interactions();
         self.channel = Some(channel);
         self.editing = None;
         self.restore_draft(window, cx);
