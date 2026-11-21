@@ -83,6 +83,7 @@ mod updater;
 mod design_system;
 mod app_icon;
 mod voice;
+mod voice_status;
 mod window_controls;
 
 use std::{
@@ -583,6 +584,7 @@ enum EmojiTarget {
     // An answer's emoji in the poll creator, by row.
     PollAnswer(usize),
     ForwardNote,
+    VoiceStatus,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -789,6 +791,9 @@ pub struct Waffle {
     call_chat: bool,
     // Voice channel → when its current session began (Unix seconds), from CHANNEL_INFO.
     voice_start: HashMap<String, u64>,
+    // Voice channel → its status as Discord sends it (custom emoji as `<:name:id>`); absent when it has none.
+    voice_status: HashMap<String, String>,
+    voice_status_dialog: Option<voice_status::VoiceStatusDialog>,
     // Servers whose channel info we've asked for since connecting.
     channel_info_requested: HashSet<String>,
     // Each call participant's avatar colour for their tile; None while loading or when it failed.
@@ -1119,6 +1124,8 @@ impl Waffle {
             call_fullscreen: false,
             call_chat: false,
             voice_start: HashMap::new(),
+            voice_status: HashMap::new(),
+            voice_status_dialog: None,
             channel_info_requested: HashSet::new(),
             avatar_colors: HashMap::new(),
             pins: None,
@@ -1607,6 +1614,7 @@ impl Waffle {
                     };
                 }
             }
+            Event::VoiceStatuses { guild_id, statuses, all } => self.on_voice_statuses(&guild_id, statuses, all, cx),
             Event::StreamUpdate { key, viewers, paused } => {
                 match paused {
                     true => self.stream_paused.insert(key.clone()),

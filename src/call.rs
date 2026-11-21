@@ -957,7 +957,7 @@ impl Waffle {
             .gap(px(8.))
             .text_color(stage::strong())
             .child(Icon::new(glyph).size(px(20.)).text_color(stage::muted()))
-            .child(div().min_w_0().truncate().text_size(px(16.)).font_weight(FontWeight::MEDIUM).child(title))
+            .child(div().min_w_0().flex().flex_col().child(div().min_w_0().truncate().text_size(px(16.)).line_height(px(18.)).font_weight(FontWeight::MEDIUM).child(title)).children(self.call_status_line(&call.channel, cx)))
             .child(timer)
             .children(health)
             .child(div().flex_1())
