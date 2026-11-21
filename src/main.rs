@@ -1539,7 +1539,13 @@ impl Waffle {
                 }
                 self.apply_members(&guild_id);
             }
-            Event::Ack { channel_id, message_id } => {
+            Event::Ack { channel_id, message_id, manual: Some(mentions) } => {
+                if self.channel.as_ref().is_some_and(|c| c.id == channel_id) {
+                    self.unread_marker = Some(message_id);
+                }
+                self.read_states.insert(channel_id, ReadState { last_read: message_id, mentions });
+            }
+            Event::Ack { channel_id, message_id, manual: None } => {
                 let read = self.read_states.entry(channel_id).or_default();
                 read.last_read = read.last_read.max(message_id);
                 read.mentions = 0;
@@ -2699,7 +2705,7 @@ impl Waffle {
     // Whether the message pings one of our roles in its server.
     fn mentions_role(&self, message: &Message) -> bool {
         let Some(me) = &self.me else { return false };
-        let mine = message.guild_id.as_ref().and_then(|g| self.member_roles.get(g)).and_then(|r| r.get(&me.id));
+        let mine = self.guild_of(message).and_then(|g| self.member_roles.get(&g)).and_then(|r| r.get(&me.id));
         mine.is_some_and(|roles| message.mention_roles.iter().any(|r| roles.contains(r)))
     }
 

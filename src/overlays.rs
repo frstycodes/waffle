@@ -129,11 +129,20 @@ impl Waffle {
         cx.notify();
     }
 
-    /// Moves the read line to just before this message, as Discord's "Mark Unread".
+    /// Moves the read line to just before this message, as Discord's "Mark Unread", and tells Discord, so the
+    /// channel stays unread on your other devices.
     pub(crate) fn mark_unread(&mut self, message: &Message, cx: &mut Context<Self>) {
         let Ok(id) = message.id.parse::<u64>() else { return };
-        self.read_states.entry(message.channel_id.clone()).or_default().last_read = id - 1;
+        let loaded = self.feeds.get(&message.channel_id).map(|f| f.messages.clone()).unwrap_or_default();
+        let (ack_id, mentions) = manual_ack(&loaded, id, |m| self.counts_as_mention(m));
+        let read = self.read_states.entry(message.channel_id.clone()).or_default();
+        read.last_read = id - 1;
+        read.mentions = mentions;
         self.unread_marker = Some(id - 1);
+        if let Some(client) = self.client.clone() {
+            let channel_id = message.channel_id.clone();
+            crate::discord::runtime().spawn(async move { client.ack_manual(&channel_id, ack_id, mentions).await });
+        }
         cx.notify();
     }
 
@@ -932,4 +941,43 @@ fn pin_card(m: &Message, ctx: &std::rc::Rc<crate::chat::RowContext>, cx: &mut Ap
         .child(crate::chat::search_hit(m, ctx, cx).flex_1().min_w_0())
         .child(div().flex_none().mt(px(-4.)).mr(px(-4.)).flex().gap(px(4.)).opacity(0.).group_hover(group, |s| s.opacity(1.)).child(jump).child(unpin))
         .into_any_element()
+}
+
+// Discord's Mark Unread: it acks the newest loaded message before the one marked (or the millisecond
+// before it) and counts the loaded messages after that ack which `counts` as mentions.
+fn manual_ack(loaded: &[Message], marked: u64, counts: impl Fn(&Message) -> bool) -> (u64, u32) {
+    let ack = loaded.iter().map(|m| crate::order(&m.id)).filter(|id| *id < marked).max().unwrap_or_else(|| previous_millisecond(marked));
+    let mentions = loaded.iter().filter(|m| crate::order(&m.id) > ack && counts(m)).count();
+    (ack, mentions as u32)
+}
+
+// The lowest snowflake one millisecond before `id`: the timestamp sits above bit 22.
+fn previous_millisecond(id: u64) -> u64 {
+    ((id >> 22).saturating_sub(1)) << 22
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn message(id: u64, mentions_me: bool) -> Message {
+        Message { id: id.to_string(), content: if mentions_me { "@me".into() } else { String::new() }, ..Default::default() }
+    }
+
+    #[test]
+    fn previous_millisecond_drops_a_millisecond_and_the_low_bits() {
+        let id = (1_000 << 22) | 0x3F_FFFF;
+        assert_eq!(previous_millisecond(id), 999 << 22);
+        assert_eq!(previous_millisecond(5), 0, "an id in the epoch's first millisecond can't go lower");
+    }
+
+    #[test]
+    fn mark_unread_acks_the_message_before_and_counts_mentions_after_it() {
+        let mentions = |m: &Message| !m.content.is_empty();
+        let loaded = [message(10 << 22, true), message(20 << 22, false), message(30 << 22, true), message(40 << 22, true)];
+        assert_eq!(manual_ack(&loaded, 30 << 22, mentions), (20 << 22, 2), "the newest older message, and the marked one counts");
+        assert_eq!(manual_ack(&loaded, 20 << 22, mentions), (10 << 22, 2));
+        assert_eq!(manual_ack(&loaded, 10 << 22, mentions), (9 << 22, 3), "nothing older loaded: the millisecond before");
+        assert_eq!(manual_ack(&[], 10 << 22, mentions), (9 << 22, 0));
+    }
 }
