@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | group-dm | group-picker | group-edit | group-leave | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -522,6 +522,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             });
         }
         "dm-empty" | "group-empty" | "group-start" | "group-mention" => demo_dm_start(waffle, scene, window, cx),
+        "group-dm" | "group-picker" | "group-edit" | "group-leave" => demo_group(waffle, scene, window, cx),
         "stream-card" => {
             let key = "guild:1:lounge:12582912".to_owned();
             let blender = Activity { kind: ActivityKind::Playing, text: "Blender".into(), more: 0 };
@@ -718,6 +719,43 @@ fn demo_dm_start(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut
             .ok();
         })
         .detach();
+    }
+}
+
+// A five-member group you own, its member list on; the picker (two friends picked), Edit Group and Leave
+// Group over it. The friends list runs long so the picker scrolls, one name long enough to truncate.
+fn demo_group(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
+    let rosa = user("12582912", "moss lantern");
+    let members = [user("8388608", "Wren"), rosa.clone(), user("20971520", "ferris"), user("29360128", "Bartholomew Featherstonehaugh-Wright")];
+    let friends = members.iter().cloned().chain([user("33554432", "saik"), user("37748736", "Laryke"), user("41943040", "h y p r"), user("46137344", "pouyas"), user("50331648", "valse")]);
+    waffle.relationships.retain(|r| r.kind != Relation::Friend);
+    waffle.relationships.extend(friends.map(|user| Relationship { user, kind: Relation::Friend }));
+    let mut group = channel("road-trip", "road trip", ChannelKind::Dm, None);
+    group.raw_type = 3;
+    group.recipients = members.to_vec();
+    group.props.owner_id = Some(me_user().id);
+    waffle.dms.insert(0, group.clone());
+    let ago = |mins: i64| (chrono::Utc::now() - chrono::Duration::minutes(mins)).to_rfc3339();
+    let messages = vec![
+        Message { id: "501".into(), channel_id: group.id.clone(), author: rosa, timestamp: ago(40), content: "who's driving the first leg".into(), ..Default::default() },
+        Message { id: "502".into(), channel_id: group.id.clone(), author: me_user(), timestamp: ago(3), content: "me, then Wren after lunch".into(), ..Default::default() },
+    ];
+    waffle.feeds.insert(group.id.clone(), Feed { messages: std::sync::Arc::new(messages), loaded: true, ..Default::default() });
+    waffle.restore = None;
+    waffle.guild_id = None;
+    waffle.open_channel(group.clone(), window, cx);
+    waffle.right_panel = crate::RightPanel::Members;
+    match scene {
+        "group-picker" => {
+            waffle.open_home(cx);
+            waffle.open_group_picker(None, window, cx);
+            for pick in [user("8388608", "Wren"), user("33554432", "saik")] {
+                waffle.toggle_group_pick(pick, window, cx);
+            }
+        }
+        "group-edit" => waffle.open_edit_group(group.id, window, cx),
+        "group-leave" => waffle.ask_leave_group(group.id, cx),
+        _ => {}
     }
 }
 
