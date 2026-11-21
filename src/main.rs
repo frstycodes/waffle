@@ -6,6 +6,7 @@ mod attachments;
 mod app_keys;
 mod crash;
 mod create_channel;
+mod create_server;
 mod restart;
 mod feed_keys;
 mod auth;
@@ -45,6 +46,7 @@ mod overwrites;
 mod playback;
 mod poll;
 mod inbox;
+mod invite;
 mod status_menu;
 mod stickers;
 mod memory;
@@ -746,6 +748,8 @@ pub struct Waffle {
     unread_scroll_pending: bool,
     dialog: Option<menu::Dialog>,
     create_channel: Option<create_channel::CreateChannel>,
+    create_server: Option<create_server::CreateServer>,
+    invite: Option<invite::Invite>,
     dialog_input: Entity<SearchState>,
     // A short notice at the bottom, e.g. why a moderation action failed.
     toast: Option<SharedString>,
@@ -1095,6 +1099,8 @@ impl Waffle {
             unread_scroll_pending: false,
             dialog: None,
             create_channel: None,
+            create_server: None,
+            invite: None,
             dialog_input,
             toast: None,
             add_friend_input,

@@ -246,6 +246,9 @@ pub struct Guild {
     pub premium_tier: u8,
     // People idling here don't count as voice activity (Discord's server icon badge skips it).
     pub afk_channel_id: Option<String>,
+    // Discord's guild feature flags (COMMUNITY, NEWS, INVITES_DISABLED...), which gate channel types and invites.
+    pub features: Vec<String>,
+    pub vanity_url_code: Option<String>,
 }
 
 // Your notification settings for one server, or for DMs under the key "@me" (Discord's
@@ -337,6 +340,10 @@ pub mod perm {
 }
 
 impl Guild {
+    pub fn has_feature(&self, feature: &str) -> bool {
+        self.features.iter().any(|f| f == feature)
+    }
+
     // Server-wide permissions (no channel overwrites): owner and Administrator have everything.
     pub fn permissions(&self, me: &str) -> u64 {
         if self.owner_id.as_deref() == Some(me) {
@@ -2207,6 +2214,8 @@ fn parse_guild(g: &Value) -> Option<Guild> {
         my_roles: Vec::new(),
         premium_tier: props["premium_tier"].as_u64().or(g["premium_tier"].as_u64()).unwrap_or(0) as u8,
         afk_channel_id: props["afk_channel_id"].as_str().or(g["afk_channel_id"].as_str()).map(str::to_owned),
+        features: props["features"].as_array().or(g["features"].as_array()).into_iter().flatten().filter_map(|f| f.as_str().map(str::to_owned)).collect(),
+        vanity_url_code: props["vanity_url_code"].as_str().or(g["vanity_url_code"].as_str()).map(str::to_owned),
     })
 }
 
@@ -3067,6 +3076,8 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            features: Vec::new(),
+            vanity_url_code: None,
             threads: Vec::new(),
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -3104,6 +3115,8 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            features: Vec::new(),
+            vanity_url_code: None,
             threads: vec![thread],
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -3145,6 +3158,8 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            features: Vec::new(),
+            vanity_url_code: None,
             threads: Vec::new(),
             my_roles: vec!["mods".into()],
             default_notifications: Default::default(),

@@ -134,6 +134,7 @@ impl Waffle {
             .child(separator)
             .children(items)
 
+            .child(rail_action("rail-add-server", Icon::new(Glyph::Plus), "Add a Server", cx).on_click(cx.listener(|this, _, window, cx| this.open_create_server(window, cx))))
             .child(rail_action("rail-discover", Nav::Compass.icon(), "Discover servers", cx).on_click(|_, _, cx| cx.open_url("https://discord.com/servers")))
     }
 

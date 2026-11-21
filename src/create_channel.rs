@@ -170,3 +170,7 @@ fn type_row(i: usize, glyph: Glyph, name: &'static str, hint: &'static str, on: 
             cx.notify();
         }))
 }
+
+pub(crate) fn demo(waffle: &mut Waffle, _scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
+    waffle.open_create_channel("1".into(), 0, Some("c0".into()), window, cx);
+}

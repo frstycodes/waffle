@@ -476,19 +476,8 @@ impl Waffle {
         self.rest(Method::POST, format!("/guilds/{guild_id}/channels"), Some(body), |_, _| {}, cx);
     }
 
-    // Discord's invite modal, simplified: a week-long invite link to copy.
     pub(crate) fn show_invite(&mut self, guild_id: String, channel_id: String, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(client) = self.client.clone() else { return };
-        let name = self.guilds.iter().find(|g| g.id == guild_id).map(|g| g.name.clone()).unwrap_or_default();
-        cx.spawn_in(window, async move |this, cx| {
-            let invite = client.call(Method::POST, format!("/channels/{channel_id}/invites"), Some(json!({ "max_age": 604_800, "max_uses": 0 }))).await;
-            this.update_in(cx, |this, window, cx| match invite.ok().and_then(|i| i["code"].as_str().map(|c| format!("https://discord.gg/{c}"))) {
-                Some(link) => this.prompt(format!("Invite friends to {name}"), "Send this link to a friend. It expires in 7 days.", &link, "Copy", |this, link, _, cx| this.copy_text(link, cx), window, cx),
-                None => this.show_toast("You don't have permission to create invites here", cx),
-            })
-            .ok();
-        })
-        .detach();
+        self.open_invite(guild_id, channel_id, window, cx);
     }
 
     pub(crate) fn open_server_menu(&mut self, guild_id: String, at: Point<Pixels>, dropdown: bool, cx: &mut Context<Self>) {
