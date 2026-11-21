@@ -1300,6 +1300,11 @@ impl Client {
         let _ = self.run(req).await;
     }
 
+    /// Clears one mention from Recent Mentions on every device; the channel's read state stays.
+    pub async fn delete_mention(&self, message_id: &str) -> Result<(), String> {
+        self.run(self.request(reqwest::Method::DELETE, &format!("/users/@me/mentions/{message_id}"))).await.map(|_| ())
+    }
+
     pub async fn profile(&self, user_id: &str, guild_id: Option<&str>) -> Result<Profile, String> {
         let mut path = format!("/users/{user_id}/profile?with_mutual_guilds=true&with_mutual_friends=true");
         if let Some(guild) = guild_id {

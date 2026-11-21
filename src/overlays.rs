@@ -146,6 +146,26 @@ impl Waffle {
         cx.notify();
     }
 
+    /// Clears a mention from the Inbox for good, without reading its channel; it comes back if Discord refuses.
+    pub(crate) fn mark_mention_read(&mut self, message_id: String, cx: &mut Context<Self>) {
+        let Some(Some(Ok(list))) = &mut self.inbox else { return };
+        let Some(at) = list.iter().position(|m| m.id == message_id) else { return };
+        let removed = list.remove(at);
+        cx.notify();
+        let Some(client) = self.client.clone() else { return };
+        cx.spawn(async move |this, cx| {
+            let Err(error) = client.delete_mention(&message_id).await else { return };
+            this.update(cx, |this, cx| {
+                if let Some(Some(Ok(list))) = &mut this.inbox {
+                    list.insert(at.min(list.len()), removed);
+                }
+                this.show_toast(format!("Couldn't mark that mention read: {error}"), cx);
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     pub(crate) fn message_link(&self, message: &Message) -> String {
         let place = message.guild_id.clone().or_else(|| self.guild_id.clone()).unwrap_or_else(|| "@me".into());
         format!("https://discord.com/channels/{place}/{}/{}", message.channel_id, message.id)
@@ -349,35 +369,54 @@ impl Waffle {
             Some(Some(Ok(list))) => {
                 let shown: Vec<Message> = list.iter().take(limit.unwrap_or(usize::MAX)).cloned().collect();
                 let ctx = self.row_context_everywhere(&shown, 380., cx);
-                div()
-                .flex()
-                .flex_col()
-                .gap_2()
-                .children(shown.iter().map(|m| {
-                    let place = match self.place_of(m.guild_id.as_deref(), &m.channel_id) {
-                        Some((Some(guild_id), channel)) => self.guilds.iter().find(|g| g.id == guild_id).map(|g| format!("#{} · {}", channel.name, g.name)).unwrap_or_default(),
-                        Some((None, channel)) => channel.name.clone(),
-                        None => String::new(),
-                    };
-                    let (guild_id, channel_id, message_id) = (m.guild_id.clone(), m.channel_id.clone(), m.id.clone());
-                    div()
-                        .id(SharedString::from(format!("inbox-{}", m.id)))
-                        .p_3()
-                        .squircle(RADIUS_XS)
-                        .bg(palette::surface(palette::Level::Raised, cx))
-                        .cursor_pointer()
-                        .hover(|s| s.bg(palette::hover(cx)))
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .child(div().text_size(px(12.)).text_color(theme.muted_foreground).child(place))
-                        .child(div().flex().items_center().gap_2().child(crate::ui::avatar(m.author.avatar.clone(), 24.)).child(div().font_weight(FontWeight::NORMAL).child(m.author.name.clone())))
-                        .child(div().text_size(px(14.)).line_clamp(3).children(crate::chat::content(m, &ctx, cx)))
-                        .on_click(cx.listener(move |this, _, window, cx| this.open_message(guild_id.clone(), &channel_id, message_id.clone(), window, cx)))
-                }))
-                .into_any_element()
+                // The demo shows the first card as hovered, its actions up.
+                let demo = cfg!(debug_assertions) && std::env::var("WAFFLE_DEMO").as_deref() == Ok("inbox-mark-read");
+                div().flex().flex_col().gap_2().children(shown.iter().enumerate().map(|(i, m)| self.mention_card(m, &ctx, demo && i == 0, cx))).into_any_element()
             }
         }
+    }
+
+    // A mention, opening its message on click; on hover Jump and Discord's checkmark, Mark As Read, sit in a
+    // slot of their own beside the author.
+    fn mention_card(&self, m: &Message, ctx: &std::rc::Rc<crate::chat::RowContext>, revealed: bool, cx: &mut Context<Self>) -> gpui_kit::Stateful<gpui_kit::Div> {
+        let place = match self.place_of(m.guild_id.as_deref(), &m.channel_id) {
+            Some((Some(guild_id), channel)) => self.guilds.iter().find(|g| g.id == guild_id).map(|g| format!("#{} · {}", channel.name, g.name)).unwrap_or_default(),
+            Some((None, channel)) => channel.name.clone(),
+            None => String::new(),
+        };
+        let group = SharedString::from(format!("inbox-{}", m.id));
+        let open = {
+            let (guild_id, channel_id, message_id) = (m.guild_id.clone(), m.channel_id.clone(), m.id.clone());
+            move |this: &mut Self, window: &mut Window, cx: &mut Context<Self>| this.open_message(guild_id.clone(), &channel_id, message_id.clone(), window, cx)
+        };
+        let jump_open = open.clone();
+        let jump = ui::button(SharedString::from(format!("inbox-jump-{}", m.id)), ui::Tone::Secondary, cx).small().child("Jump").on_click(cx.listener(move |this, _, window, cx| {
+            cx.stop_propagation();
+            jump_open(this, window, cx);
+        }));
+        let message_id = m.id.clone();
+        let read = ui::icon_button(SharedString::from(format!("inbox-read-{}", m.id)), Glyph::Checkmark, "Mark As Read", cx).small().on_click(cx.listener(move |this, _, _, cx| {
+            cx.stop_propagation();
+            this.mark_mention_read(message_id.clone(), cx);
+        }));
+        let actions = div().flex_none().my(px(-3.)).flex().items_center().gap(px(2.)).child(jump).child(read);
+        let actions = if revealed { actions } else { actions.opacity(0.).group_hover(group.clone(), |s| s.opacity(1.)) };
+        let author = div().flex().items_center().gap_2().child(ui::avatar(m.author.avatar.clone(), 24.)).child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::NORMAL).child(m.author.name.clone())).child(actions);
+        div()
+            .id(group.clone())
+            .group(group)
+            .p_3()
+            .squircle(RADIUS_XS)
+            .bg(palette::surface(palette::Level::Raised, cx))
+            .cursor_pointer()
+            .hover(|s| s.bg(palette::hover(cx)))
+            .flex()
+            .flex_col()
+            .gap_1()
+            .child(div().text_size(px(12.)).text_color(cx.theme().muted_foreground).child(place))
+            .child(author)
+            .child(div().text_size(px(14.)).line_clamp(3).children(crate::chat::content(m, ctx, cx)))
+            .on_click(cx.listener(move |this, _, window, cx| open(this, window, cx)))
     }
 
     /// Where a composer popover's right edge sits from the window's: the composer's own right edge, which
