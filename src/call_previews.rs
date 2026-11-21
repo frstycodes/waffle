@@ -204,14 +204,14 @@ impl Waffle {
         let messages: Vec<Message> = self.call_previews.leaving.iter().map(|(p, _)| p.message.clone()).chain(shown.iter().map(|p| p.message.clone())).collect();
         let ctx = self.row_context_everywhere(&messages, WIDTH - AVATAR - 28., cx);
         let leaving = self.call_previews.leaving.iter().map(|(p, _)| {
-            preview_card(p, &ctx, cx)
+            preview_card(p, &ctx)
                 .with_animation(SharedString::from(format!("call-preview-out-{}", p.message.id)), Animation::new(EXIT), |card, t| card.opacity(1. - t).top(px(-GAP * t)))
                 .into_any_element()
         });
         let leaving: Vec<AnyElement> = leaving.collect();
         let cards = shown.iter().map(|p| {
             let (channel, id) = (p.message.channel_id.clone(), p.message.id.clone());
-            preview_card(p, &ctx, cx)
+            preview_card(p, &ctx)
                 .cursor_pointer()
                 .hover(|s| s.bg(palette::oklch(0.28, 0.005, 260.).opacity(0.96)))
                 .on_click(cx.listener(move |this, _, window, cx| this.open_preview(&channel, id.clone(), window, cx)))
@@ -251,7 +251,7 @@ impl Waffle {
 }
 
 // .preview: avatar, name, and the message clamped to two lines; dark in both themes, as the stage.
-fn preview_card(preview: &Preview, ctx: &std::rc::Rc<crate::chat::RowContext>, cx: &mut Context<Waffle>) -> gpui_kit::Stateful<gpui_kit::Div> {
+fn preview_card(preview: &Preview, ctx: &std::rc::Rc<crate::chat::RowContext>) -> gpui_kit::Stateful<gpui_kit::Div> {
     let message = &preview.message;
     let mut shadows = vec![ui::shadow(gpui_kit::black().opacity(0.35), 0., 4., 16., 0., false)];
     shadows.push(match preview.mention {
