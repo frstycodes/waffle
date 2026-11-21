@@ -246,6 +246,8 @@ pub struct Guild {
     pub premium_tier: u8,
     // People idling here don't count as voice activity (Discord's server icon badge skips it).
     pub afk_channel_id: Option<String>,
+    // Which join, boost and reminder notices the server hides or keeps quiet (Discord's SystemChannelFlags).
+    pub system_channel_flags: u64,
 }
 
 // Your notification settings for one server, or for DMs under the key "@me" (Discord's
@@ -567,6 +569,9 @@ pub struct Embed {
     // A closed poll's result (type poll_result); the other fields stay empty.
     #[serde(default)]
     pub poll: Option<PollResult>,
+    // An AutoMod safety alert (type auto_moderation_notification): a raid or mention-raid card.
+    #[serde(default)]
+    pub safety_alert: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -743,6 +748,13 @@ pub struct Message {
     // The referenced message's channel: a thread-created notice's thread, a thread starter's parent.
     #[serde(default)]
     pub reference_channel: Option<String>,
+    // Discord sends `referenced_message: null` when the referenced message was deleted, and leaves the
+    // field out when it couldn't load it; a thread starter words the two differently.
+    #[serde(default)]
+    pub reference_deleted: bool,
+    // Who added a bot, on the bot's join notice.
+    #[serde(default)]
+    pub actor: Option<User>,
 }
 
 /// A live poll as a message carries it, its counts folded into the answers.
@@ -1166,6 +1178,13 @@ impl Client {
         let mut body = message_body("", nonce, reply_to, ping_author, &[]);
         body["sticker_ids"] = json!([sticker_id]);
         let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
+        self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
+    }
+
+    /// Discord's "Wave to say hi!": a sticker sent as a reply to a join notice, pinging the joiner.
+    pub async fn greet(&self, channel_id: &str, guild_id: &str, message_id: &str, sticker_id: &str) -> Result<Message, String> {
+        let body = json!({ "sticker_ids": [sticker_id], "message_reference": { "guild_id": guild_id, "channel_id": channel_id, "message_id": message_id } });
+        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/greet")).json(&body);
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
     }
 
@@ -2217,6 +2236,7 @@ fn parse_guild(g: &Value) -> Option<Guild> {
         my_roles: Vec::new(),
         premium_tier: props["premium_tier"].as_u64().or(g["premium_tier"].as_u64()).unwrap_or(0) as u8,
         afk_channel_id: props["afk_channel_id"].as_str().or(g["afk_channel_id"].as_str()).map(str::to_owned),
+        system_channel_flags: props["system_channel_flags"].as_u64().or(g["system_channel_flags"].as_u64()).unwrap_or(0),
     })
 }
 
@@ -2402,6 +2422,9 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         kind: m["type"].as_u64().unwrap_or(0) as u8,
         flags: m["flags"].as_u64().unwrap_or(0),
         reference_channel: m["message_reference"]["channel_id"].as_str().map(str::to_owned),
+        reference_deleted: m["message_reference"].is_object() && m.get("referenced_message").is_some_and(Value::is_null),
+        // Not verified: the wire key. Discord's web client reads `message.actor`.
+        actor: m["actor"].is_object().then(|| parse_user(&m["actor"])),
     })
 }
 
@@ -2601,6 +2624,7 @@ fn parse_embed(e: &Value) -> Embed {
         footer_icon: text(&e["footer"]["proxy_icon_url"]).or_else(|| text(&e["footer"]["icon_url"])),
         timestamp: text(&e["timestamp"]),
         poll: None,
+        safety_alert: e["type"] == "auto_moderation_notification",
     }
 }
 
@@ -3080,6 +3104,7 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            system_channel_flags: 0,
             threads: Vec::new(),
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -3117,6 +3142,7 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            system_channel_flags: 0,
             threads: vec![thread],
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -3158,6 +3184,7 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            system_channel_flags: 0,
             threads: Vec::new(),
             my_roles: vec!["mods".into()],
             default_notifications: Default::default(),
