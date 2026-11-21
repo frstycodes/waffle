@@ -375,6 +375,10 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // and an expired code, a message you can't see (no card), and two still loading.
         "link-previews" => demo_link_previews(waffle),
         "forwarded" => demo_forwarded(waffle),
+        // Report Message on someone else's message, through a sample menu (Discord's real one is server-sent).
+        // `-submit` stops at Submit with Also block ticked; `-sent` is the thank-you node; `-user` reports a person.
+        // Signed out, nothing is sent.
+        "report" | "report-submit" | "report-sent" | "report-user" => demo_report(waffle, scene, cx),
         // The dialog with #📷-media picked and a note; gpui's channel reads only, so it shows locked.
         "forward-dialog" => {
             if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "2") {
@@ -1507,6 +1511,53 @@ fn demo_text_files(waffle: &mut Waffle, scene: &str) {
 }
 
 // Wren forwards a clip from #📷-media into #👋-general, with a note under it.
+fn demo_report(waffle: &mut Waffle, scene: &str, cx: &mut Context<Waffle>) {
+    use crate::report::{ReportMenu, ReportTarget};
+    let Some(message) = waffle.feeds.get("general").and_then(|f| f.messages.iter().find(|m| m.id == "102").cloned()) else { return };
+    let target = match scene {
+        "report-user" => ReportTarget::User { user: Box::new(message.author.clone()), guild_id: Some("1".into()) },
+        _ => ReportTarget::Message(Box::new(message)),
+    };
+    waffle.open_report(target, cx);
+    waffle.report_menu_loaded(ReportMenu::parse(&sample_report_menu()), cx);
+    if scene == "report" || scene == "report-user" {
+        return;
+    }
+    waffle.report_step("2".into(), Some("Spam".into()), cx);
+    waffle.report_step("10".into(), Some("Unsolicited ads or links".into()), cx);
+    if let Some(dialog) = waffle.report_dialog.as_mut() {
+        dialog.also_block = true;
+    }
+    if scene == "report-sent" {
+        waffle.report_sent(true, cx);
+    }
+}
+
+// Discord's shape (docs/discord-report-re.md §7) with made-up reasons and copy.
+fn sample_report_menu() -> serde_json::Value {
+    let preview = serde_json::json!({ "type": "message_preview", "name": "message_preview", "data": null });
+    serde_json::json!({
+        "version": "demo", "language": "en", "root_node_id": 1, "success_node_id": 90, "fail_node_id": 91,
+        "nodes": {
+            "1": { "id": 1, "header": "What's wrong with this message?", "subheader": "Pick the closest match. Reports are anonymous.", "elements": [preview, { "type": "user_preview", "name": "user_preview" }],
+                   "children": [["Spam", 2], ["Abuse or harassment", 3], ["Harmful content", 4], ["Something else", 5]] },
+            "2": { "id": 2, "header": "What kind of spam?", "elements": [], "children": [["Unsolicited ads or links", 10], ["Scam or phishing", 10], ["Flooding the chat", 10]] },
+            "3": { "id": 3, "header": "Who is it aimed at?", "elements": [], "children": [["Me", 10], ["Someone else", 10], ["A group of people", 10]] },
+            "4": { "id": 4, "header": "What does it show?", "elements": [], "children": [["Violence or gore", 10], ["Sexual content", 10], ["Self-harm", 11]] },
+            "5": { "id": 5, "header": "Tell us more", "elements": [
+                     { "type": "checkbox", "name": "details", "should_submit_data": true, "data": [["imp", "Impersonation", "Pretending to be someone else", false], ["pii", "Private information", "", false]] }
+                   ], "button": { "type": "next", "target": 10 } },
+            "10": { "id": 10, "header": "Submit your report", "subheader": "We'll look at this message and what it's in reply to.", "elements": [preview, { "type": "breadcrumbs", "name": "breadcrumbs" }], "button": { "type": "submit" } },
+            "11": { "id": 11, "header": "You're not alone", "info": "If someone is in danger, contact local emergency services. Crisis lines are listed at [discord.com/safety](https://discord.com/safety).",
+                    "elements": [{ "type": "external_link", "name": "help", "data": { "url": "https://discord.com/safety", "link_text": "Safety Center", "link_description": "Resources and crisis lines" } }],
+                    "button": { "type": "next", "target": 10 } },
+            "90": { "id": 90, "header": "Thanks for letting us know", "subheader": "We'll review it against the Community Guidelines.", "button": { "type": "done" },
+                    "elements": [{ "type": "success", "name": "success" }, { "type": "breadcrumbs", "name": "breadcrumbs" }, { "type": "block_users", "name": "block" }, { "type": "ignore_users", "name": "ignore" }, { "type": "delete_message", "name": "delete" }] },
+            "91": { "id": 91, "header": "Something went wrong", "elements": [], "button": { "type": "done" } }
+        }
+    })
+}
+
 fn demo_forwarded(waffle: &mut Waffle) {
     let Some(feed) = waffle.feeds.get_mut("general") else { return };
     let wren = user("8388608", "Wren");
