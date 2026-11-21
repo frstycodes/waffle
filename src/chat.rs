@@ -136,14 +136,19 @@ impl Waffle {
                 .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_threads_popout(id.clone(), e.position, cx)))
         });
         // Mute and notification level for this channel, the same entries as its right-click menu; the bell
-        // shows a slash while it's muted.
+        // shows a slash while it's muted. Shift+click mutes or unmutes without the menu, as Discord's does.
         let bell = self.guild_id.clone().filter(|_| matches!(channel.kind, ChannelKind::Text | ChannelKind::Voice)).map(|guild_id| {
             let muted = self.guild_settings.get(&guild_id).is_some_and(|s| s.channel_muted(&channel.id));
             let (label, glyph) = if muted { ("Unmute or change notifications", Glyph::BellSlash) } else { ("Notification Settings", Glyph::Bell) };
             let open = channel.clone();
             ui::icon_button("notify-button", glyph, label, cx)
                 .occlude()
-                .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_notify_menu(open.clone(), guild_id.clone(), e.position, cx)))
+                .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| {
+                    if e.modifiers.shift {
+                        return this.patch_channel_override(guild_id.clone(), &open.id, serde_json::json!({ "muted": !muted }), cx);
+                    }
+                    this.open_notify_menu(open.clone(), guild_id.clone(), e.position, cx)
+                }))
         });
         let pins_x = self.pins_button_x.clone();
         let pins = ui::icon_button("pins-button", Glyph::Pin, "Pinned Messages", cx)

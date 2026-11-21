@@ -40,6 +40,7 @@ mod go_live;
 mod h264;
 mod home;
 mod os_image;
+mod notification_settings;
 mod overlays;
 mod overwrites;
 mod playback;
@@ -746,6 +747,7 @@ pub struct Waffle {
     unread_scroll_pending: bool,
     dialog: Option<menu::Dialog>,
     create_channel: Option<create_channel::CreateChannel>,
+    notification_settings: Option<notification_settings::NotificationSettings>,
     dialog_input: Entity<SearchState>,
     // A short notice at the bottom, e.g. why a moderation action failed.
     toast: Option<SharedString>,
@@ -1095,6 +1097,7 @@ impl Waffle {
             unread_scroll_pending: false,
             dialog: None,
             create_channel: None,
+            notification_settings: None,
             dialog_input,
             toast: None,
             add_friend_input,
