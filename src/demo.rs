@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | blocked-messages | blocked-messages-shown | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -44,6 +44,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
     let messages = match scene {
         _ if load => load_messages(),
         "embeds" => embed_messages(),
+        "blocked-messages" | "blocked-messages-shown" => blocked_messages(),
         _ => messages(),
     };
     waffle.feeds.insert("general".into(), Feed { messages: std::sync::Arc::new(messages), loaded: true, ..Default::default() });
@@ -80,6 +81,15 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                 waffle.drafts.set("general", Draft::new(&open, None));
             }
             waffle.restore_draft(window, cx);
+        }
+        // Vex is blocked and Dune ignored: Vex's three messages fold into one line, Dune's one into another,
+        // and Wren's reply to Vex doesn't quote it. "-shown" opens Vex's run.
+        "blocked-messages" | "blocked-messages-shown" => {
+            waffle.relationships.push(Relationship { user: user(VEX, "Vex"), kind: Relation::Blocked });
+            waffle.ignored.insert(DUNE.into());
+            if scene == "blocked-messages-shown" {
+                waffle.shown_folds.insert("302".into());
+            }
         }
         "gallery" => waffle.open_viewer(&avatar_url("3", None), window, cx),
         // Twenty made-up pictures and clips on one message, the viewer open at the tenth.
@@ -1264,6 +1274,36 @@ fn messages() -> Vec<Message> {
         // Discord keeps each line and its indent.
         Message { pinned: true, ..message("106", abyss, &["r2"], "2026-11-14T08:20:00Z", "the build so far:\n    Brightline 8-core CPU\n    Coldfront 240 mm cooler\n    32 GB memory\n<@4194304>") },
         pin_notice,
+    ]
+}
+
+const VEX: &str = "33554432";
+const DUNE: &str = "41943040";
+
+// One person's run between others', for blocked-messages: Wren, Vex three times, moss lantern, Dune once, Wren.
+fn blocked_messages() -> Vec<Message> {
+    let message = |id: &str, author: User, ts: &str, content: &str| Message {
+        id: id.into(),
+        channel_id: "general".into(),
+        guild_id: Some("1".into()),
+        author,
+        content: content.into(),
+        timestamp: ts.into(),
+        ..Default::default()
+    };
+    let (wren, moss, vex, dune) = (user("8388608", "Wren"), user("12582912", "moss lantern"), user(VEX, "Vex"), user(DUNE, "Dune"));
+    let taunt = message("304", vex.clone(), "2026-11-14T21:42:00Z", "@kiwi answer me");
+    let mut reply = message("307", wren.clone(), "2026-11-14T21:46:00Z", "ok starting at 10 sharp");
+    reply.reply_to = Some(taunt.id.clone());
+    reply.reply = Some(Box::new(taunt.clone()));
+    vec![
+        message("301", wren, "2026-11-14T21:40:00Z", "who's still in the lobby"),
+        message("302", vex.clone(), "2026-11-14T21:41:00Z", "lol you're all trash"),
+        message("303", vex, "2026-11-14T21:41:30Z", "come 1v1 me"),
+        taunt,
+        message("305", moss, "2026-11-14T21:43:00Z", "me, give me 2 minutes"),
+        message("306", dune, "2026-11-14T21:44:00Z", "did anyone see my last clip"),
+        reply,
     ]
 }
 
