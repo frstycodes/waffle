@@ -155,7 +155,7 @@ impl Waffle {
         let page = match &results.hits {
             None => return div().min_h(px(32.)).px_2().flex().items_center().gap_2().text_color(muted).child(ui::bars("search-wait", muted, 12.)).child("Searching…").into_any_element(),
             Some(Err(error)) => return div().px_2().text_color(palette::danger_ink(cx)).child(error.clone()).into_any_element(),
-            Some(Ok(page)) if page.messages.is_empty() => return ui::empty_state("search-empty", crate::mascot::Mood::Idle, "No results", "Try fewer words or remove a filter.", cx).into_any_element(),
+            Some(Ok(page)) if page.messages.is_empty() => return ui::empty_state("search-empty", crate::illustration::Illustration::SearchEmpty, "We searched far and wide.", "Unfortunately, no results were found.", cx).into_any_element(),
             Some(Ok(page)) => page,
         };
         let ctx = self.row_context(&page.messages, None, false, HIT_COLUMN, cx);
