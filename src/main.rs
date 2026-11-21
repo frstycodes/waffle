@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod accounts;
+mod active_now;
 mod attachments;
 mod app_keys;
 mod crash;
@@ -756,6 +757,8 @@ pub struct Waffle {
     add_friend_input: Entity<SearchState>,
     add_friend_note: Entity<TextareaState>,
     add_friend_result: Option<Result<SharedString, SharedString>>,
+    // Set while a one-second repaint runs for Active Now's play clocks.
+    active_now_ticking: Rc<std::cell::Cell<bool>>,
     // The gateway refused the token once and REST accepted it; set until the next READY.
     auth_retried: bool,
     // The background updater: its status (a staged update installs on Restart or the next launch).
@@ -1106,6 +1109,7 @@ impl Waffle {
             add_friend_input,
             add_friend_note,
             add_friend_result: None,
+            active_now_ticking: Rc::default(),
             auth_retried: false,
             share_picker: None,
             share_choice: None,

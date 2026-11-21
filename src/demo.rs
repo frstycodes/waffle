@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | requests | requests-spam | requests-empty | request-open | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | requests | requests-spam | requests-empty | request-open | active-now | active-now-empty | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -400,6 +400,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                 feed.messages = std::sync::Arc::new(messages);
             }
         }
+        "active-now" | "active-now-empty" => demo_active_now(waffle, scene == "active-now-empty", cx),
         "home" | "add-friend" => {
             waffle.restore = None;
             waffle.open_home(cx);
@@ -637,6 +638,44 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
     }
 }
 
+// The Friends page's Active Now: Wren and moss lantern in the hangout (moss on Go Live), rosa an hour into
+// Celeste, mikey partway through a track. Empty: nobody in voice or doing anything.
+fn demo_active_now(waffle: &mut Waffle, empty: bool, cx: &mut Context<Waffle>) {
+    waffle.restore = None;
+    waffle.open_home(cx);
+    if empty {
+        waffle.guilds.iter_mut().for_each(|g| g.voice_states.clear());
+        return;
+    }
+    let now = chrono::Utc::now().timestamp_millis();
+    let celeste = crate::discord::RichPresence {
+        kind: ActivityKind::Playing,
+        name: "Celeste".into(),
+        app_id: Some("celeste".into()),
+        details: Some("Chapter 7".into()),
+        state: Some("The Summit".into()),
+        image: Some("brand/icons/riso.png".into()),
+        started: Some(now - 72 * 60_000 - 4_000),
+        ..Default::default()
+    };
+    let track = crate::discord::RichPresence {
+        kind: ActivityKind::Listening,
+        name: "Spotify".into(),
+        details: Some("Midnight City".into()),
+        state: Some("M83; Anthony Gonzalez".into()),
+        image: Some("brand/icons/paper.png".into()),
+        started: Some(now - 100_000),
+        ends: Some(now + 143_000),
+        party_id: Some("spotify:29360128".into()),
+        ..Default::default()
+    };
+    for (id, name, rich) in [("25165824", "rosa", celeste), ("29360128", "mikey", track)] {
+        let activity = Activity { kind: rich.kind, text: rich.name.clone(), more: 0 };
+        waffle.presences.insert(id.into(), Presence { status: Presence_::Online, activity: Some(activity), rich: Some(rich), ..Default::default() });
+        waffle.relationships.push(Relationship { user: user(id, name), kind: Relation::Friend });
+    }
+}
+
 // Wren's popout with every section filled: theme, decoration, tag, badges, mutuals, an emoji bio, games and a joinable party.
 fn demo_profile(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
     let started = chrono::Utc::now().timestamp_millis() - 7 * 60_000 - 2_000;
@@ -650,6 +689,7 @@ fn demo_profile(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
         party: Some((4, 4)),
         started: Some(started),
         joinable: true,
+        ..Default::default()
     };
     let playing = Activity { kind: ActivityKind::Playing, text: rich.name.clone(), more: 0 };
     waffle.presences.insert("8388608".into(), Presence { status: Presence_::Dnd, custom: None, activity: Some(playing), rich: Some(rich), ..Default::default() });
