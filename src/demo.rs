@@ -175,7 +175,8 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             demo_polls(waffle);
             waffle.poll_picks.insert("195".into(), vec![1]);
         }
-        // Quizzy's "Suggest a question" form, and the same after a Submit with Answer empty that Quizzy refused.
+        // Quizzy's "Suggest a question" form: text fields, a user select starting at its default, a text-channel
+        // select, and a file field; then the same after a Submit with Answer empty that Quizzy refused.
         "app-modal" | "app-modal-error" => {
             waffle.open_app_modal(quizzy_modal(), cx);
             if scene == "app-modal-error" {
@@ -430,14 +431,17 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // and an expired code, a message you can't see (no card), and two still loading.
         "link-previews" => demo_link_previews(waffle),
         "forwarded" => demo_forwarded(waffle),
-        // An app thinking, its reply, an ephemeral reply and a command it never answered.
+        // An app thinking, its reply, an ephemeral reply, one with Discord's reason line, and a command it
+        // never answered.
         "app-replies" => demo_app_replies(waffle),
-        // Every button style (one disabled, one spinning, one failed), a user select, and a multi-select open
-        // with two picks (`-users`: the user select open, its search field on top).
+        // Every button style (one disabled, one spinning at its own width, one failed, a premium one priced
+        // and one unavailable), a user select starting at its default, a voice-only channel select, and a
+        // multi-select open with two picks and no Done (`-users`: the user select open, its search on top).
         "components" | "components-users" => demo_components(waffle, scene == "components-users", window, cx),
-        // An accented container with a section (its `-#` subtext), thumbnail, separator and buttons; a gallery
-        // container with a spoilered item and a file of unknown size; a lone gallery item spanning its
-        // container; a spoiler container.
+        // An accented container with a section (its `-#` subtext, reduced text), a wide thumbnail kept at its
+        // shape, separator and buttons; a gallery container at its items' own sizes with a spoilered item, a
+        // file with its size and a spoilered one; a section with a spoilered thumbnail; a lone gallery item
+        // spanning its container; a spoiler container.
 
         "components-v2" => demo_components_v2(waffle),
         // The dialog with #📷-media picked and a note; gpui's channel reads only, so it shows locked.
@@ -940,7 +944,14 @@ fn channel(id: &str, name: &str, kind: ChannelKind, parent: Option<&str>) -> Cha
         recipients: Vec::new(),
         icon: None,
         thread: None,
-        raw_type: 0,
+        raw_type: match kind {
+            ChannelKind::Voice => 2,
+            ChannelKind::Category => 4,
+            ChannelKind::Dm => 1,
+            ChannelKind::Thread => 11,
+            ChannelKind::Forum => 15,
+            ChannelKind::Text | ChannelKind::Other => 0,
+        },
         overwrites: Vec::new(),
         props: Default::default(),
     }
@@ -1718,7 +1729,7 @@ fn demo_custom_status() -> crate::discord::CustomStatus {
 
 // design/messages.html's two boards, the second with your vote in and its longest answer wrapping.
 fn quizzy_modal() -> crate::app_commands::Modal {
-    use crate::app_commands::{App, Modal, ModalComponent, TextInput};
+    use crate::app_commands::{App, DefaultValue, FileUpload, Modal, ModalComponent, Select, SelectKind, TextInput};
     let input = |custom_id: &str, label: &str, paragraph: bool, placeholder: Option<&str>, value: Option<&str>, required: bool, max: Option<u32>| {
         let input = TextInput { custom_id: custom_id.into(), paragraph, placeholder: placeholder.map(Into::into), value: value.map(Into::into), required, min: None, max, ..Default::default() };
         ModalComponent::Label { label: label.into(), description: None, component: Box::new(ModalComponent::TextInput(input)) }
@@ -1734,8 +1745,19 @@ fn quizzy_modal() -> crate::app_commands::Modal {
             input("question", "Question", false, None, Some("Which game shipped first: Doom or Myst?"), true, Some(200)),
             input("answer", "Answer", false, Some("The right answer"), None, true, None),
             input("why", "Why it's fun (optional)", true, Some("A line on why people will like it"), None, false, Some(400)),
+            labelled("Credit", Some("Who thought of it"), ModalComponent::Select(Select { default_values: vec![DefaultValue { id: "4194304".into(), kind: "user".into() }], ..entity_select(SelectKind::User, "credit", 1) })),
+            labelled("Post it in", None, ModalComponent::Select(Select { channel_types: vec![0], placeholder: Some("A text channel".into()), ..entity_select(SelectKind::Channel, "where", 1) })),
+            labelled("Picture", Some("Shown with the question"), ModalComponent::FileUpload(FileUpload { custom_id: "picture".into(), required: false, min: None, max: Some(2) })),
         ],
     }
+}
+
+fn labelled(label: &str, description: Option<&str>, component: crate::app_commands::ModalComponent) -> crate::app_commands::ModalComponent {
+    crate::app_commands::ModalComponent::Label { label: label.into(), description: description.map(Into::into), component: Box::new(component) }
+}
+
+fn entity_select(kind: crate::app_commands::SelectKind, custom_id: &str, max: u32) -> crate::app_commands::Select {
+    crate::app_commands::Select { kind, custom_id: custom_id.into(), placeholder: None, options: Vec::new(), min: 1, max, disabled: false, required: false, default_values: Vec::new(), channel_types: Vec::new() }
 }
 
 fn demo_polls(waffle: &mut Waffle) {
@@ -1901,10 +1923,15 @@ fn demo_app_replies(waffle: &mut Waffle) {
     let thinking = Message { id: "pending-demo-think".into(), nonce: Some("demo-think".into()), state: SendState::Sending, flags: LOADING, interaction: used(&mira, "play"), ..app_post("", &wavebot, 4, "") };
     let reply = Message { interaction: used(&mira, "queue"), ..app_post("9101", &wavebot, 3, "Now playing **Midnight Arcade** by Neon Harbor in **Lounge**. 3 songs in the queue.") };
     let only_you = Message { interaction: used(&me, "play"), flags: EPHEMERAL, ..app_post("9102", &wavebot, 2, "Join a voice channel first, then try /play again.") };
+    let mut limited = used(&me, "skip");
+    if let Some(meta) = limited.as_mut() {
+        meta.ephemerality_reason = Some(4);
+    }
+    let slowed = Message { interaction: limited, flags: EPHEMERAL, ..app_post("9103", &wavebot, 2, "Skipped **Midnight Arcade**.") };
     let failed = Message { id: "pending-demo-fail".into(), nonce: Some("demo-fail".into()), state: SendState::Failed, interaction: used(&me, "trivia"), ..app_post("", &quizzy, 1, "") };
     waffle.interactions.insert("demo-think".into(), pending(&wavebot, InteractionKind::Command, false));
     waffle.interactions.insert("demo-fail".into(), pending(&quizzy, InteractionKind::Command, true));
-    append(waffle, vec![thinking, reply, only_you, failed]);
+    append(waffle, vec![thinking, reply, only_you, slowed, failed]);
 }
 
 fn button(style: crate::app_commands::ButtonStyle, label: &str, custom_id: &str) -> crate::app_commands::Component {
@@ -1920,11 +1947,13 @@ fn demo_components(waffle: &mut Waffle, users_open: bool, window: &mut Window, c
     };
     let (pollster, quizzy) = (app_user("900003", "Pollster"), app_user("900002", "Quizzy"));
     let results = Component::Button(Button { style: Secondary, label: Some("Results (after vote)".into()), emoji: None, custom_id: Some("results".into()), url: None, disabled: true, sku_id: None });
-    let shop = Component::Button(Button { style: Premium, label: Some("Map pack".into()), emoji: Some("🗺️".into()), custom_id: Some("shop".into()), url: None, disabled: false, sku_id: Some("demo-sku".into()) });
+    let premium = |sku: &str| Component::Button(Button { style: Premium, label: None, emoji: None, custom_id: None, url: None, disabled: false, sku_id: Some(sku.into()) });
+    waffle.demo_sku("demo-sku-maps", crate::components::Sku::Ready("Map pack - $4.99".into()));
+    waffle.demo_sku("demo-sku-gone", crate::components::Sku::Unavailable);
     let vote = Message {
         components: vec![
             Component::Row(vec![button(Primary, "Vote Ashen Peaks", "ashen"), button(Secondary, "Drowned Harbor", "harbor"), button(Success, "Ready", "ready"), button(Danger, "Leave lobby", "leave"), button(Link, "Rules", "")]),
-            Component::Row(vec![results, button(Secondary, "Checking…", "check"), shop]),
+            Component::Row(vec![results, button(Secondary, "Checking", "check"), premium("demo-sku-maps"), premium("demo-sku-gone")]),
             Component::Row(vec![button(Secondary, "Shuffle teams", "shuffle")]),
         ],
         ..app_post("9201", &pollster, 3, "Map vote for tonight's scrim is open.")
@@ -1943,8 +1972,13 @@ fn demo_components(waffle: &mut Waffle, users_open: bool, window: &mut Window, c
         channel_types: Vec::new(),
     };
     let quiz = Message { components: vec![Component::Row(vec![Component::Select(categories)])], ..app_post("9202", &quizzy, 1, "Pick the categories for this round.") };
-    let host = Select { kind: SelectKind::User, custom_id: "host".into(), placeholder: Some("Who reads the questions?".into()), options: Vec::new(), min: 1, max: 1, disabled: false, required: false, default_values: Vec::new(), channel_types: Vec::new() };
-    let hosts = Message { components: vec![Component::Row(vec![Component::Select(host)])], ..app_post("9203", &quizzy, 0, "Pick tonight's host.") };
+    // Wren is the default host; the member cache knows Wren, so the field reads the name.
+    let wren = user("8388608", "Wren");
+    waffle.members.entry("1".into()).or_default().insert(wren.id.clone(), wren.clone());
+    let default_host = vec![crate::app_commands::DefaultValue { id: wren.id.clone(), kind: "user".into() }];
+    let host = Select { kind: SelectKind::User, custom_id: "host".into(), placeholder: Some("Who reads the questions?".into()), options: Vec::new(), min: 1, max: 1, disabled: false, required: false, default_values: default_host, channel_types: Vec::new() };
+    let room = Select { kind: SelectKind::Channel, custom_id: "room".into(), placeholder: Some("Which voice channel?".into()), options: Vec::new(), min: 1, max: 1, disabled: false, required: false, default_values: Vec::new(), channel_types: vec![2] };
+    let hosts = Message { components: vec![Component::Row(vec![Component::Select(host)]), Component::Row(vec![Component::Select(room)])], ..app_post("9203", &quizzy, 0, "Pick tonight's host and room.") };
     let call = |custom_id: &str| InteractionKind::Component { message_id: "9201".into(), custom_id: custom_id.into() };
     waffle.interactions.insert("demo-check".into(), pending(&pollster, call("check"), false));
     waffle.interactions.insert("demo-shuffle".into(), pending(&pollster, call("shuffle"), true));
@@ -1968,29 +2002,38 @@ fn demo_components_v2(waffle: &mut Waffle) {
         children: vec![
             Component::Section {
                 children: vec![text("### Midnight Arcade\nNeon Harbor · 3:41 · requested by Mira\n-# Up next: Glass Desert, Ferris Wheel at Dawn")],
-                accessory: Some(Box::new(Component::Thumbnail { url: avatar_url("3", None), description: None, spoiler: false, width: None, height: None })),
+                accessory: Some(Box::new(Component::Thumbnail { url: avatar_url("3", None), description: None, spoiler: false, width: Some(640), height: Some(360) })),
             },
             Component::Separator { divider: true, large: false },
             Component::Row(vec![button(Secondary, "Pause", "pause"), button(Secondary, "Skip", "skip"), button(Secondary, "Shuffle", "shuffle"), button(Danger, "Stop", "stop")]),
         ],
     };
-    let item = |id: &str, spoiler: bool| GalleryItem { url: avatar_url(id, None), description: None, spoiler, width: None, height: None };
+    let item = |id: &str, spoiler: bool, (w, h): (u32, u32)| GalleryItem { url: avatar_url(id, None), description: None, spoiler, width: Some(w), height: Some(h) };
     let album = Component::Container {
         accent: None,
         spoiler: false,
         children: vec![
             Component::Section { children: vec![text("**Screenshots from tonight**\n-# 3 images · uploaded by Theo")], accessory: Some(Box::new(button(Secondary, "Open album", "album"))) },
-            Component::Gallery(vec![item("3", false), item("8388608", false), item("12582912", true)]),
-            Component::File { url: "https://example.com/setlist.txt".into(), name: Some("setlist.txt".into()), size: None, spoiler: false },
+            Component::Gallery(vec![item("3", false, (1200, 800)), item("8388608", false, (800, 1200)), item("12582912", true, (1000, 1000))]),
+            Component::File { url: "https://example.com/setlist.txt".into(), name: Some("setlist.txt".into()), size: Some(18_432), spoiler: false },
+            Component::File { url: "https://example.com/scores.csv".into(), name: Some("final-scores.csv".into()), size: Some(2_310_144), spoiler: true },
         ],
+    };
+    let reveal = Component::Container {
+        accent: None,
+        spoiler: false,
+        children: vec![Component::Section {
+            children: vec![text("**Mystery guest**\nRevealed at the end of round three.")],
+            accessory: Some(Box::new(Component::Thumbnail { url: avatar_url("16777216", None), description: None, spoiler: true, width: Some(300), height: Some(400) })),
+        }],
     };
     let ending = Component::Container {
         accent: None,
         spoiler: true,
         children: vec![text("## Tonight's winner\nTheo took the crown with 42 points."), Component::Row(vec![button(Secondary, "Rematch", "rematch")])],
     };
-    let cover = Component::Container { accent: None, spoiler: false, children: vec![text("**Tonight's poster**"), Component::Gallery(vec![item("4194304", false)])] };
-    let post = Message { flags: COMPONENTS_V2, components: vec![now_playing, album, cover, ending], ..app_post("9301", &wavebot, 1, "") };
+    let cover = Component::Container { accent: None, spoiler: false, children: vec![text("**Tonight's poster**"), Component::Gallery(vec![item("4194304", false, (1600, 900))])] };
+    let post = Message { flags: COMPONENTS_V2, components: vec![now_playing, album, reveal, cover, ending], ..app_post("9301", &wavebot, 1, "") };
 
     append(waffle, vec![post]);
 }

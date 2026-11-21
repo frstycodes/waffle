@@ -1238,9 +1238,8 @@ impl Client {
         runtime().spawn(send_interaction(req)).await.unwrap_or_else(|_| Err(InteractError::default()))
     }
 
-    /// Uploads files for an app command's ATTACHMENT options the way messages do (Cloud Uploads): a slot
+    /// Uploads files for an app command's ATTACHMENT options or a form's file fields the way messages do (Cloud Uploads): a slot
     /// per file, a PUT of each, and the uploaded names to pass to `app_commands::attach_files`.
-    #[expect(dead_code, reason = "the composer wires it next: localized names, ATTACHMENT options")]
     pub async fn stage_files(&self, channel_id: &str, files: &[Upload]) -> Result<Vec<crate::app_commands::CommandAttachment>, String> {
         let uploaded = self.put_uploads(channel_id, files).await?;
         Ok(uploaded

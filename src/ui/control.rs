@@ -68,6 +68,8 @@ pub struct Control {
     disabled: bool,
     highlighted: bool,
     loading: Option<SharedString>,
+    // In flight with its size kept: the content hidden under the mini wave (Discord's loading button).
+    busy: bool,
     ring: Option<Hsla>,
 }
 
@@ -177,7 +179,7 @@ pub(super) fn tab_option(id: impl Into<ElementId>, kind: TabKind, on: bool, glyp
 impl Control {
     fn new(id: impl Into<ElementId>, kind: Kind, look: Look) -> Self {
         let id = id.into();
-        Self { base: div().id(id.clone()), id, children: Vec::new(), kind, size: Size::Medium, look, glyph: None, disabled: false, highlighted: false, loading: None, ring: None }
+        Self { base: div().id(id.clone()), id, children: Vec::new(), kind, size: Size::Medium, look, glyph: None, disabled: false, highlighted: false, loading: None, busy: false, ring: None }
     }
 
     fn base_style(mut self, f: impl FnOnce(Stateful<Div>) -> Stateful<Div>) -> Self {
@@ -256,6 +258,12 @@ impl Control {
     // Busy: the mini wave and `label` in place of the content, until the caller clears it.
     pub fn loading(mut self, label: Option<impl Into<SharedString>>) -> Self {
         self.loading = label.map(Into::into);
+        self
+    }
+
+    // Busy without changing size: the content stays in place, invisible, under the mini wave.
+    pub fn busy(mut self, busy: bool) -> Self {
+        self.busy = busy;
         self
     }
 
@@ -340,6 +348,7 @@ impl RenderOnce for Control {
         let caller = base.style().clone();
         let square = matches!(self.kind, Kind::Icon | Kind::Round(_) | Kind::Swatch);
         let round = matches!(self.kind, Kind::Round(_));
+        let gap = if matches!(self.kind, Kind::Chip | Kind::Tab(_)) { 6. } else { 8. };
         base = base
             .when(caller.position.is_none(), |b| b.relative())
             .when(caller.flex_grow.is_none() && caller.flex_shrink.is_none(), |b| b.flex_none())
@@ -352,7 +361,7 @@ impl RenderOnce for Control {
             .when(caller.corner_radii.top_left.is_none(), |b| b.rounded(px(radius)))
             .when(caller.corner_shape.is_none() && !round, |b| b.corner_shape(SQUIRCLE))
             .when_some(scale.filter(|s| *s < 1.), |b, s| b.scale(s))
-            .when(caller.gap.width.is_none(), |b| b.gap(px(if matches!(self.kind, Kind::Chip | Kind::Tab(_)) { 6. } else { 8. })))
+            .when(caller.gap.width.is_none(), |b| b.gap(px(gap)))
             .when_some(type_and_padding, |b, (pad, size, weight)| {
                 b.when(caller.padding.left.is_none(), |b| b.px(px(pad)))
                     .when(caller.text.font_size.is_none(), |b| b.text_size(px(size)))
@@ -364,10 +373,15 @@ impl RenderOnce for Control {
             .when_some(self.ring, |b, ring| b.shadow(halo(ring, look.rest)))
             .when(!self.disabled, |b| b.cursor_pointer())
             .when(self.disabled && !faint_row, |b| b.opacity(0.45));
-        base.child(hit_area(&self.id, &pointer, self.disabled, window))
-            .when_some(self.glyph, |b, glyph| b.child(Icon::new(glyph).size(px(icon))))
-            .when_some(self.loading.clone(), |b, label| b.child(super::bars(part(&self.id, "busy"), ink, 12.)).child(label))
-            .when(self.loading.is_none(), |b| b.children(self.children))
+        let base = base.child(hit_area(&self.id, &pointer, self.disabled, window)).when_some(self.glyph, |b, glyph| b.child(Icon::new(glyph).size(px(icon))));
+        let bars = super::bars(part(&self.id, "busy"), ink, 12.);
+        match (self.loading, self.busy) {
+            (Some(label), _) => base.child(bars).child(label),
+            (None, true) => base
+                .child(div().flex().items_center().gap(px(gap)).invisible().children(self.children))
+                .child(div().absolute().inset_0().flex().items_center().justify_center().child(bars)),
+            (None, false) => base.children(self.children),
+        }
     }
 }
 

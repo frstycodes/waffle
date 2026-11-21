@@ -1,9 +1,12 @@
 // A form an app asked us to fill in (INTERACTION_MODAL_CREATE), drawn in Waffle's dialog. Behaviour and
-// copy follow Discord's client: the warning about who gets the form, its per-field validation, and one
-// error line at the top when the app refuses a submit.
+// copy follow Discord's client: the warning about who gets the form, its per-field validation, selects
+// that open the same menus as a message's, file fields staged on Submit, and one error line at the top
+// when the app refuses a submit.
+
+use std::{collections::HashMap, path::PathBuf};
 
 use gpui_kit::{
-    AnyElement, Context, Entity, FocusHandle, Focusable, FontWeight, HighlightStyle, MouseButton, SharedString, StyledText, Window,
+    AnyElement, Context, Entity, FocusHandle, Focusable, FontWeight, HighlightStyle, MouseButton, PathPromptOptions, SharedString, StyledText, Window,
     component::input::{Input, InputEvent, InputState, Textarea, TextareaState},
     div,
     prelude::*,
@@ -12,9 +15,10 @@ use gpui_kit::{
 
 use crate::{
     Waffle,
-    app_commands::{self, Block, Field, FieldValue, Modal, ModalComponent, Origin, SelectKind, SelectOption, TextInput},
+    app_commands::{self, Block, Field, FieldValue, FileUpload, Modal, ModalComponent, Origin, SelectKind, SelectOption, TextInput},
+    attachments::PendingFile,
     icons::Glyph,
-    interactions::InteractionKind,
+    interactions::{InteractionKind, MODAL_FAILED, PendingInteraction},
     palette,
     ui::{self, Check, Tone},
 };
@@ -39,6 +43,10 @@ pub(crate) struct AppModal {
     problems: Vec<Option<String>>,
     // The nonce of the last submit: in flight while `interactions` holds it, refused once it's failed.
     sent: Option<String>,
+    // Each file field's picked files, by field index; Submit stages them before it sends.
+    files: HashMap<usize, Vec<PendingFile>>,
+    // Submit is uploading the files; the interaction goes out once they're up.
+    staging: bool,
 }
 
 enum Editor {
@@ -73,9 +81,9 @@ impl Waffle {
     pub(crate) fn open_app_modal(&mut self, modal: Modal, cx: &mut Context<Self>) {
         self.answered_by_modal(modal.nonce.as_deref(), &modal.id, cx);
         self.take_app_modal();
-        let initial: Vec<FieldValue> = modal.fields().iter().map(Field::initial).collect();
+        let initial: Vec<FieldValue> = modal.fields().iter().map(|f| self.field_initial(&modal.channel_id, f)).collect();
         let count = initial.len();
-        self.app_modal = Some(AppModal { modal, editors: Vec::new(), built: false, values: initial.clone(), initial, problems: vec![None; count], sent: None });
+        self.app_modal = Some(AppModal { modal, editors: Vec::new(), built: false, values: initial.clone(), initial, problems: vec![None; count], sent: None, files: HashMap::new(), staging: false });
         cx.notify();
     }
 
@@ -111,8 +119,32 @@ impl Waffle {
         cx.notify();
     }
 
+    // A field's starting value; a user, role, channel or mentionable select starts at its `default_values`
+    // that resolve here, as Discord's does.
+    fn field_initial(&self, channel_id: &str, field: &Field) -> FieldValue {
+        match field.component {
+            ModalComponent::Select(s) if s.kind != SelectKind::String => {
+                let picks = self.modal_select_defaults(channel_id, s);
+                if picks.is_empty() { FieldValue::Unset } else { FieldValue::Picks(picks) }
+            }
+            _ => field.initial(),
+        }
+    }
+
+    pub(crate) fn app_modal_channel(&self) -> Option<&str> {
+        self.app_modal.as_ref().map(|m| m.modal.channel_id.as_str())
+    }
+
+    // A select field's picks, for its menu.
+    pub(crate) fn app_modal_picks(&self, ix: usize) -> Vec<String> {
+        match self.app_modal.as_ref().and_then(|m| m.values.get(ix)) {
+            Some(FieldValue::Picks(p)) => p.clone(),
+            _ => Vec::new(),
+        }
+    }
+
     // A pick in a select, radio or checkbox group, or a checkbox flip.
-    fn pick_app_modal(&mut self, ix: usize, value: Option<String>, cx: &mut Context<Self>) {
+    pub(crate) fn pick_app_modal(&mut self, ix: usize, value: Option<String>, cx: &mut Context<Self>) {
         let Some(m) = self.app_modal.as_mut() else { return };
         let Some(field) = m.modal.fields().get(ix).map(|f| f.component.clone()) else { return };
         let current = m.values.get(ix).cloned().unwrap_or(FieldValue::Unset);
@@ -139,23 +171,89 @@ impl Waffle {
             }
             return cx.notify();
         }
-        let (app, body, nonce) = {
-            let nonce = crate::nonce();
-            let channel_id = m.modal.channel_id.as_str();
-            let guild_id = self.guilds.iter().find(|g| g.channels.iter().any(|c| c.id == channel_id)).map(|g| g.id.as_str());
-            let origin = Origin { channel_id, guild_id, session_id: &self.gateway_session, nonce: &nonce };
-            (m.modal.application.clone(), app_commands::modal_body(&m.modal, &values, &origin), nonce)
-        };
+        // Discord uploads the form's files first, then sends the submit naming them.
+        let uploads: Vec<_> = (0..values.len()).flat_map(|ix| m.files.get(&ix).into_iter().flatten()).map(PendingFile::upload).collect();
+        let (modal, channel_id, nonce) = (m.modal.clone(), m.modal.channel_id.clone(), crate::nonce());
         self.forget_refused_submit();
         if let Some(m) = self.app_modal.as_mut() {
             m.problems = vec![None; m.problems.len()];
             m.sent = Some(nonce.clone());
+            m.staging = !uploads.is_empty();
         }
-        self.interact(nonce, app, InteractionKind::Modal, body, cx);
+        if uploads.is_empty() {
+            return self.send_app_modal(&modal, &values, &[], nonce, cx);
+        }
+        let Some(client) = self.client.clone() else { return };
+        // GAP: Discord gives staging 2 minutes before it fails the submit; Waffle waits for the uploads.
+        cx.spawn(async move |this, cx| {
+            let staged = client.stage_files(&channel_id, &uploads).await;
+            this.update(cx, |this, cx| {
+                let Some(m) = this.app_modal.as_mut().filter(|m| m.sent.as_ref() == Some(&nonce)) else { return };
+                m.staging = false;
+                match staged {
+                    Ok(staged) => this.send_app_modal(&modal, &values, &staged, nonce, cx),
+                    Err(_) => {
+                        let failed = PendingInteraction { channel_id, app: modal.application.clone(), id: None, kind: InteractionKind::Modal, failure: Some(MODAL_FAILED.to_owned()) };
+                        this.interactions.insert(nonce, failed);
+                        cx.notify();
+                    }
+                }
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn send_app_modal(&mut self, modal: &Modal, values: &[FieldValue], uploads: &[app_commands::CommandAttachment], nonce: String, cx: &mut Context<Self>) {
+        let channel_id = modal.channel_id.as_str();
+        let guild_id = self.guilds.iter().find(|g| g.channels.iter().any(|c| c.id == channel_id)).map(|g| g.id.clone());
+        let origin = Origin { channel_id, guild_id: guild_id.as_deref(), session_id: &self.gateway_session, nonce: &nonce };
+        let body = app_commands::modal_body(modal, values, uploads, &origin);
+        self.interact(nonce, modal.application.clone(), InteractionKind::Modal, body, cx);
+    }
+
+    // Browse: files join the field up to its max, within your upload limit.
+    fn browse_app_modal_files(&mut self, ix: usize, max: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let paths = cx.prompt_for_paths(PathPromptOptions { files: true, directories: false, multiple: max > 1, prompt: None });
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(paths))) = paths.await else { return };
+            this.update(cx, |this, cx| this.add_app_modal_files(ix, max, paths, cx)).ok();
+        })
+        .detach();
+    }
+
+    fn add_app_modal_files(&mut self, ix: usize, max: usize, paths: Vec<PathBuf>, cx: &mut Context<Self>) {
+        let limit = self.app_modal_upload_limit();
+        let Some(m) = self.app_modal.as_mut() else { return };
+        let files = m.files.entry(ix).or_default();
+        let refused = crate::attachments::admit(files, paths.into_iter().filter_map(PendingFile::new).collect(), limit);
+        files.truncate(max);
+        sync_file_value(m, ix);
+        self.on_app_modal_change(cx);
+        // After the recheck, which would clear it: why a file was left out.
+        if let Some(slot) = refused.and_then(|why| Some((self.app_modal.as_mut()?.problems.get_mut(ix)?, why))) {
+            *slot.0 = Some(slot.1);
+        }
+    }
+
+    // Your per-file upload limit in the form's channel.
+    fn app_modal_upload_limit(&self) -> u64 {
+        let guild_tier = self.app_modal_channel().and_then(|c| self.guilds.iter().find(|g| g.channels.iter().any(|ch| ch.id == c))).map_or(0, |g| g.premium_tier);
+        crate::discord::upload_limit(self.my_account.premium_type, guild_tier)
+    }
+
+    fn remove_app_modal_file(&mut self, ix: usize, file: usize, cx: &mut Context<Self>) {
+        let Some(m) = self.app_modal.as_mut() else { return };
+        if let Some(files) = m.files.get_mut(&ix).filter(|f| file < f.len()) {
+            files.remove(file);
+        }
+        sync_file_value(m, ix);
+        self.on_app_modal_change(cx);
     }
 
     fn app_modal_busy(&self) -> bool {
-        self.app_modal_submit().is_some_and(|failed| !failed)
+        self.app_modal.as_ref().is_some_and(|m| m.staging) || self.app_modal_submit().is_some_and(|failed| !failed)
     }
 
     // The last submit's state: Some(false) in flight, Some(true) refused, None when there's none to wait on.
@@ -196,12 +294,12 @@ impl Waffle {
         self.build_app_modal_editors(window, cx);
         let m = self.app_modal.as_ref()?;
         // Sent and no longer tracked: the app took it.
-        if m.sent.is_some() && self.app_modal_submit().is_none() {
+        if m.sent.is_some() && !m.staging && self.app_modal_submit().is_none() {
             self.app_modal = None;
             return None;
         }
         let submit = self.app_modal_submit();
-        let busy = submit == Some(false);
+        let busy = self.app_modal_busy();
         let refused = submit == Some(true);
         let app = &m.modal.application;
         let values = app_modal_values(m, cx);
@@ -215,7 +313,12 @@ impl Waffle {
                     field_ix += 1;
                     let editor = m.editors.get(ix).and_then(Option::as_ref);
                     let value = values.get(ix).cloned().unwrap_or(FieldValue::Unset);
-                    blocks.push(field_row(ix, &field, editor, &value, m.problems.get(ix).cloned().flatten(), cx));
+                    let control = match field.component {
+                        ModalComponent::Select(s) => Some(self.modal_select(ix, s, &picks_of(&value), cx)),
+                        ModalComponent::FileUpload(f) => Some(self.file_field(ix, f, m.files.get(&ix).map_or(&[], Vec::as_slice), cx)),
+                        _ => None,
+                    };
+                    blocks.push(field_row(ix, &field, editor, control, &value, m.problems.get(ix).cloned().flatten(), cx));
                 }
             }
         }
@@ -351,16 +454,15 @@ fn notice(app: &str, cx: &gpui_kit::App) -> impl IntoElement {
         .child(div().min_w_0().child(StyledText::new(text).with_highlights(vec![(lead.len()..lead.len() + app.len(), bold)])))
 }
 
-fn field_row(ix: usize, field: &Field, editor: Option<&Editor>, value: &FieldValue, problem: Option<String>, cx: &mut Context<Waffle>) -> AnyElement {
-    let control = match (field.component, editor) {
-        (ModalComponent::TextInput(_), Some(editor)) => text_frame(ix, editor, problem.is_some(), cx),
-        (ModalComponent::Select(s), _) if s.kind == SelectKind::String => choices(ix, &s.options, s.max > 1, value, cx),
-        (ModalComponent::RadioGroup(g), _) => choices(ix, &g.options, false, value, cx),
-        (ModalComponent::CheckboxGroup(g), _) => choices(ix, &g.options, true, value, cx),
-        (ModalComponent::Checkbox { .. }, _) => checkbox(ix, *value == FieldValue::Checked(true), cx),
-        // GAP: user, role, channel and mentionable selects and file uploads need pickers Waffle's form
-        // doesn't have yet; they go out unset.
-        _ => div().text_size(px(14.)).text_color(palette::muted(cx)).child("Waffle can't fill in this field yet.").into_any_element(),
+// `control` is a select's or file field's, drawn by the caller, which knows the server and the files.
+fn field_row(ix: usize, field: &Field, editor: Option<&Editor>, control: Option<AnyElement>, value: &FieldValue, problem: Option<String>, cx: &mut Context<Waffle>) -> AnyElement {
+    let control = match (field.component, editor, control) {
+        (_, _, Some(control)) => control,
+        (ModalComponent::TextInput(_), Some(editor), _) => text_frame(ix, editor, problem.is_some(), cx),
+        (ModalComponent::RadioGroup(g), _, _) => choices(ix, &g.options, false, value, cx),
+        (ModalComponent::CheckboxGroup(g), _, _) => choices(ix, &g.options, true, value, cx),
+        (ModalComponent::Checkbox { .. }, _, _) => checkbox(ix, *value == FieldValue::Checked(true), cx),
+        _ => div().into_any_element(),
     };
     ui::field_marked(field.label.to_owned(), field.required(), cx)
         .children(field.description.map(|d| div().text_size(px(12.)).text_color(palette::muted(cx)).child(d.to_owned())))
@@ -376,6 +478,94 @@ fn text_frame(ix: usize, editor: &Editor, error: bool, cx: &gpui_kit::App) -> An
         Editor::Line(s) => ui::text_field(id, Input::new(s).appearance(false), &focus).error(error).into_any_element(),
         Editor::Paragraph(s) => ui::text_area(id, Textarea::new(s).appearance(false).px_0().text_size(px(16.)), &focus).error(error).into_any_element(),
     }
+}
+
+fn picks_of(value: &FieldValue) -> Vec<String> {
+    match value {
+        FieldValue::Picks(p) => p.clone(),
+        _ => Vec::new(),
+    }
+}
+
+// A file field's value: the files' paths, or unset with none (sent as null).
+fn sync_file_value(m: &mut AppModal, ix: usize) {
+    let paths: Vec<String> = m.files.get(&ix).into_iter().flatten().map(|f| f.path.to_string_lossy().into_owned()).collect();
+    if let Some(slot) = m.values.get_mut(ix) {
+        *slot = if paths.is_empty() { FieldValue::Unset } else { FieldValue::Picks(paths) };
+    }
+}
+
+impl Waffle {
+    // Discord's file upload field: one file at a max of one shows as its row; otherwise the drop zone (or,
+    // full, "File upload limit reached") over the picked files, each removable.
+    // GAP: no dropping files onto it; browse only.
+    fn file_field(&self, ix: usize, field: &FileUpload, files: &[PendingFile], cx: &mut Context<Self>) -> AnyElement {
+        // Not verified: Discord's default when the app sends no `max_values`.
+        let max = field.max.unwrap_or(1).max(1) as usize;
+        let rows: Vec<AnyElement> = files.iter().enumerate().map(|(i, f)| file_row(ix, i, f, cx)).collect();
+        if max == 1 && files.len() == 1 {
+            return div().flex().flex_col().children(rows).into_any_element();
+        }
+        let size = crate::chat::format_size(self.app_modal_upload_limit());
+        let zone = if files.len() >= max {
+            drop_zone(Glyph::CheckCircle, div().text_color(palette::strong(cx)).child("File upload limit reached"), "Remove some files to upload new ones.".to_owned(), cx)
+        } else {
+            let browse = ui::button(SharedString::from(format!("app-modal-browse-{ix}")), Tone::Link, cx)
+                .child("browse")
+                .on_click(cx.listener(move |this, _, window, cx| this.browse_app_modal_files(ix, max, window, cx)));
+            let lead = div().flex().flex_wrap().items_center().gap(px(4.)).child(drop_lead(max)).child(browse);
+            drop_zone(Glyph::Upload, lead, upload_hint(field.min.unwrap_or(1), max as u32, &size), cx)
+        };
+        div().flex().flex_col().gap(px(8.)).child(zone).children(rows).into_any_element()
+    }
+}
+
+// Discord's "Drop {maxValues} here or browse".
+// Not verified: the plural's words; the message table holds it flattened.
+fn drop_lead(max: usize) -> String {
+    if max == 1 { "Drop a file here or".to_owned() } else { format!("Drop up to {max} files here or") }
+}
+
+// Discord's line under the drop zone (`fw`, no file types).
+// Not verified: the words of "{maxValues}" (a plural in Discord's table).
+fn upload_hint(min: u32, max: u32, size: &str) -> String {
+    if min > 1 {
+        return if min == max { format!("Upload {min} files under {size}.") } else { format!("Upload {min}–{max} files under {size}.") };
+    }
+    let count = if max == 1 { "a file".to_owned() } else { format!("up to {max} files") };
+    format!("Upload {count} under {size}.")
+}
+
+fn drop_zone(glyph: Glyph, lead: gpui_kit::Div, hint: String, cx: &gpui_kit::App) -> AnyElement {
+    div()
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap(px(4.))
+        .p(px(16.))
+        .rounded(px(8.))
+        .border_1()
+        .border_dashed()
+        .border_color(palette::line(cx))
+        .text_size(px(14.))
+        .text_color(palette::muted(cx))
+        .child(div().text_color(palette::strong(cx)).child(gpui_kit::component::Icon::new(glyph).size(px(20.))))
+        .child(lead)
+        .child(div().text_size(px(12.)).child(hint))
+        .into_any_element()
+}
+
+// A picked file: its name and Discord's Remove.
+fn file_row(ix: usize, i: usize, file: &PendingFile, cx: &mut Context<Waffle>) -> AnyElement {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .py(px(4.))
+        .child(div().flex_none().text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::File).size(px(18.))))
+        .child(div().flex_1().min_w_0().truncate().text_size(px(14.)).text_color(palette::strong(cx)).child(file.name.clone()))
+        .child(ui::icon_button(SharedString::from(format!("app-modal-file-{ix}-{i}")), Glyph::Trash, "Remove", cx).small().on_click(cx.listener(move |this, _, _, cx| this.remove_app_modal_file(ix, i, cx))))
+        .into_any_element()
 }
 
 // A select, radio or checkbox group's options as rows: a tick for several, a radio for one.
@@ -575,6 +765,15 @@ mod tests {
         assert_eq!(picked(&radio, &FieldValue::Picks(vec!["a".into()]), Some("a".into())), FieldValue::Picks(vec!["a".into()]));
         let check = ModalComponent::Checkbox { custom_id: "c".into(), default: false };
         assert_eq!(picked(&check, &FieldValue::Checked(false), None), FieldValue::Checked(true));
+    }
+
+    #[test]
+    fn file_fields_word_their_limits_as_discord_does() {
+        assert_eq!(upload_hint(1, 1, "10.0 MB"), "Upload a file under 10.0 MB.");
+        assert_eq!(upload_hint(1, 3, "10.0 MB"), "Upload up to 3 files under 10.0 MB.");
+        assert_eq!(upload_hint(2, 2, "10.0 MB"), "Upload 2 files under 10.0 MB.");
+        assert_eq!(upload_hint(2, 4, "10.0 MB"), "Upload 2–4 files under 10.0 MB.");
+        assert_eq!(drop_lead(1), "Drop a file here or");
     }
 
     #[test]

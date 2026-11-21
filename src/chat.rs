@@ -39,7 +39,7 @@ const GROUP_GAP_SECS: i64 = 7 * 60;
 const MAX_IMAGE: (f32, f32) = (400., 320.);
 const COLUMN: f32 = 432.;
 // Text sizes: a message's body, Discord's "-# " subtext, an embed's text.
-const BODY_TEXT: f32 = 16.;
+pub(crate) const BODY_TEXT: f32 = 16.;
 const SUBTEXT: f32 = 13.;
 const EMBED_TEXT: f32 = 14.;
 const GALLERY_GAP: f32 = 4.;
@@ -474,7 +474,7 @@ impl Waffle {
             threads: channel.is_some_and(|c| c.kind == ChannelKind::Text && self.can_in(&c.id, crate::discord::perm::CREATE_PUBLIC_THREADS)),
             poll_picks: self.poll_picks.clone(),
             poll_peek: self.poll_peek.clone(),
-            components: self.component_view(),
+            components: self.component_view(messages),
         })
     }
 
@@ -1446,7 +1446,7 @@ pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Opti
     let revealed = ctx.revealed.borrow().contains(&message.id);
     let has_spoiler = message.content.contains("||");
     let text = hide_spoilers(&readable(&message.content, ctx), revealed);
-    let mut blocks = text_blocks(&format!("md-{}", message.id), &text, ctx, cx);
+    let mut blocks = text_blocks(&format!("md-{}", message.id), &text, BODY_TEXT, ctx, cx);
     let last = blocks.pop();
     let (reveal, id) = (ctx.revealed.clone(), message.id.clone());
     let refresh = ctx.this.clone();
@@ -1477,18 +1477,19 @@ pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Opti
     )
 }
 
-// Discord markdown outside a message's own content (a Components V2 text block), with its mentions.
-pub(crate) fn rich_text(id: &str, text: &str, ctx: &RowContext, cx: &App) -> AnyElement {
-    div().w_full().min_w_0().flex().flex_col().children(text_blocks(id, &readable(text, ctx), ctx, cx)).into_any_element()
+// Discord markdown outside a message's own content (a Components V2 text block), with its mentions, its
+// body at `size`.
+pub(crate) fn rich_text(id: &str, text: &str, size: f32, ctx: &RowContext, cx: &App) -> AnyElement {
+    div().w_full().min_w_0().flex().flex_col().children(text_blocks(id, &readable(text, ctx), size, ctx, cx)).into_any_element()
 }
 
 // A message body's markdown in order, its "-# " subtext lines small and muted between the rest.
-fn text_blocks(id: &str, text: &str, ctx: &RowContext, cx: &App) -> Vec<AnyElement> {
+fn text_blocks(id: &str, text: &str, body: f32, ctx: &RowContext, cx: &App) -> Vec<AnyElement> {
     split_subtext(text)
         .into_iter()
         .enumerate()
         .map(|(i, (subtext, part))| {
-            let size = if subtext { SUBTEXT } else { BODY_TEXT };
+            let size = if subtext { SUBTEXT } else { body };
             // Capped at the row's width so long lines wrap instead of running off the side.
             // A code block spans the message's width, as Discord's do; plain text wraps to its own.
             let block = div().min_w_0().max_w_full().when(part.contains("```"), |d| d.w_full());

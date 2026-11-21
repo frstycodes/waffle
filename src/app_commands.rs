@@ -328,15 +328,14 @@ pub fn command_body(command: &AppCommand, values: &[(String, Value)], focused: O
 /// A file for an ATTACHMENT option, already uploaded (`Client::stage_files`). The option's value is
 /// the file's index in the list given to `attach_files`, as a number.
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(not(test), expect(dead_code, reason = "the composer wires it next: localized names, ATTACHMENT options"))]
 pub struct CommandAttachment {
     pub filename: String,
     pub uploaded_filename: String,
     pub spoiler: bool,
 }
 
-/// Fills a type-2 body's `data.attachments` as Discord's client does: `id` is the index as a string.
-#[cfg_attr(not(test), expect(dead_code, reason = "the composer wires it next: localized names, ATTACHMENT options"))]
+/// Fills a type-2 or type-5 body's `data.attachments` as Discord's client does: `id` is the index as a
+/// string. Not verified: that a modal's uploads (`O.OW`) take the same shape as a command's.
 pub fn attach_files(body: &mut Value, files: &[CommandAttachment]) {
     let files: Vec<Value> = files
         .iter()
@@ -372,29 +371,39 @@ pub fn component_body(application_id: &str, message_id: &str, message_flags: u64
 }
 
 /// Type 5: the modal's own tree echoed back with each field's value; `values` follows `Modal::fields`.
-pub fn modal_body(modal: &Modal, values: &[FieldValue], origin: &Origin) -> Value {
+/// `uploads` are the file upload fields' files, staged in field order; each field sends its files'
+/// indexes into them, and they go out as `data.attachments` (left out when there are none).
+pub fn modal_body(modal: &Modal, values: &[FieldValue], uploads: &[CommandAttachment], origin: &Origin) -> Value {
     let mut values = values.iter();
-    let components = submitted(&modal.components, &mut values);
-    envelope(5, &modal.application.id, origin, json!({ "id": modal.id, "custom_id": modal.custom_id, "components": components }))
+    let components = submitted(&modal.components, &mut values, &mut 0);
+    let mut body = envelope(5, &modal.application.id, origin, json!({ "id": modal.id, "custom_id": modal.custom_id, "components": components }));
+    if !uploads.is_empty() {
+        attach_files(&mut body, uploads);
+    }
+    body
 }
 
-// Discord's shapes: a field never given a value goes out as `null` (a checkbox as `false`). A file
-// upload always goes out unset: Waffle can't stage files in a modal yet.
-fn submitted<'a>(components: &[ModalComponent], values: &mut impl Iterator<Item = &'a FieldValue>) -> Vec<Value> {
+// Discord's shapes: a field never given a value goes out as `null` (a checkbox as `false`). `next_upload`
+// counts the files earlier upload fields claimed.
+fn submitted<'a>(components: &[ModalComponent], values: &mut impl Iterator<Item = &'a FieldValue>, next_upload: &mut usize) -> Vec<Value> {
     components
         .iter()
         .map(|c| match c {
-            ModalComponent::Row(children) => json!({ "type": 1, "components": submitted(children, values) }),
+            ModalComponent::Row(children) => json!({ "type": 1, "components": submitted(children, values, next_upload) }),
             ModalComponent::Label { component, .. } => {
-                let inner = submitted(std::slice::from_ref(component.as_ref()), values);
+                let inner = submitted(std::slice::from_ref(component.as_ref()), values, next_upload);
                 json!({ "type": 18, "component": inner[0] })
             }
             ModalComponent::Text(_) => json!({ "type": 10 }),
             ModalComponent::TextInput(t) => json!({ "type": 4, "custom_id": t.custom_id, "value": values.next().and_then(FieldValue::text) }),
             ModalComponent::Select(s) => json!({ "type": s.kind.wire(), "custom_id": s.custom_id, "values": values.next().and_then(FieldValue::picks) }),
             ModalComponent::FileUpload(f) => {
-                values.next();
-                json!({ "type": 19, "custom_id": f.custom_id, "values": null })
+                let indexes = values.next().and_then(FieldValue::picks).map(|files| {
+                    let start = *next_upload;
+                    *next_upload += files.len();
+                    (start..*next_upload).collect::<Vec<_>>()
+                });
+                json!({ "type": 19, "custom_id": f.custom_id, "values": indexes })
             }
             ModalComponent::RadioGroup(g) => json!({ "type": 21, "custom_id": g.custom_id, "value": values.next().and_then(FieldValue::picks).and_then(|p| p.first().cloned()) }),
             ModalComponent::CheckboxGroup(g) => json!({ "type": 22, "custom_id": g.custom_id, "values": values.next().and_then(FieldValue::picks) }),
@@ -1076,7 +1085,7 @@ mod tests {
         assert!(fields[0].required() && !fields[1].required());
         assert_eq!(fields[2].initial(), FieldValue::Picks(vec!["a".into()]));
         assert!(matches!(modal.blocks()[1], Block::Text("Pick carefully")));
-        let body = modal_body(&modal, &[FieldValue::Text("Doom or Myst?".into()), FieldValue::Unset, FieldValue::Picks(vec!["a".into()]), FieldValue::Checked(true)], &origin());
+        let body = modal_body(&modal, &[FieldValue::Text("Doom or Myst?".into()), FieldValue::Unset, FieldValue::Picks(vec!["a".into()]), FieldValue::Checked(true)], &[], &origin());
         assert_eq!(body["type"], 5);
         assert_eq!(body["application_id"], "9");
         assert_eq!(
@@ -1089,6 +1098,26 @@ mod tests {
                 { "type": 18, "component": { "type": 23, "custom_id": "ok", "value": true } }
             ])
         );
+        assert!(body["data"].get("attachments").is_none(), "no uploads: no attachments");
+    }
+
+    #[test]
+    fn modal_file_fields_send_indexes_into_the_uploads() {
+        let modal = parse_modal(&json!({
+            "id": "i1", "channel_id": "c", "custom_id": "report", "application": { "id": "9" },
+            "components": [
+                { "type": 18, "label": "Screenshots", "component": { "type": 19, "custom_id": "shots", "max_values": 3 } },
+                { "type": 18, "label": "Other", "component": { "type": 19, "custom_id": "none" } },
+                { "type": 18, "label": "Log", "component": { "type": 19, "custom_id": "log" } }
+            ]
+        }))
+        .unwrap();
+        let file = |name: &str| CommandAttachment { filename: name.into(), uploaded_filename: format!("up/{name}"), spoiler: false };
+        let values = [FieldValue::Picks(vec!["/a.png".into(), "/b.png".into()]), FieldValue::Unset, FieldValue::Picks(vec!["/log.txt".into()])];
+        let body = modal_body(&modal, &values, &[file("a.png"), file("b.png"), file("log.txt")], &origin());
+        let fields: Vec<&Value> = body["data"]["components"].as_array().unwrap().iter().map(|l| &l["component"]["values"]).collect();
+        assert_eq!(fields, [&json!([0, 1]), &Value::Null, &json!([2])]);
+        assert_eq!(body["data"]["attachments"][2], json!({ "id": "2", "filename": "log.txt", "uploaded_filename": "up/log.txt" }));
     }
 
     #[test]
