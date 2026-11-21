@@ -277,6 +277,7 @@ impl Waffle {
             })
             .ok();
         }, window, cx);
+        let new_group = ui::icon_button("new-group-dm", Glyph::ThreadNew, "New Group DM", cx).occlude().on_click(cx.listener(|this, _, window, cx| this.open_group_picker(None, window, cx)));
         let header = div()
             .occlude()
             .h(px(crate::layout::HEADER_HEIGHT))
@@ -302,7 +303,7 @@ impl Waffle {
                     .child("Friends"),
             )
             .child(div().min_w_0().overflow_hidden().occlude().child(tabs))
-            .child(div().ml_auto().child(self.caption_clearance(true)));
+            .child(div().ml_auto().flex().items_center().child(new_group).child(self.caption_clearance(true)));
         let heading = match tab {
             FriendsTab::Online => "Online",
             FriendsTab::All => "All friends",
