@@ -991,6 +991,10 @@ pub struct AccountSettings {
     pub friends_all: bool,
     pub friends_mutual_friends: bool,
     pub friends_mutual_guilds: bool,
+    // From the settings proto (settings::proto): DmSpamFilterV2, 0 while unset.
+    pub dm_spam_filter: u8,
+    // Message Requests on: `default_message_request_restricted` off.
+    pub message_requests: bool,
 }
 
 impl Default for AccountSettings {
@@ -1005,6 +1009,8 @@ impl Default for AccountSettings {
             friends_all: true,
             friends_mutual_friends: true,
             friends_mutual_guilds: true,
+            dm_spam_filter: 0,
+            message_requests: true,
         }
     }
 }
@@ -2154,6 +2160,8 @@ fn parse_ready(d: &Value) -> Ready {
         account_settings: {
             let mut settings = AccountSettings::default();
             settings.apply(&d["user_settings"]);
+            // Not verified: READY carries the settings proto as base64 under `user_settings_proto`.
+            settings.apply_proto(d["user_settings_proto"].as_str().unwrap_or_default());
             settings
         },
         guild_settings: d["user_guild_settings"]["entries"].as_array().or(d["user_guild_settings"].as_array()).into_iter().flatten().map(parse_guild_settings).collect(),
