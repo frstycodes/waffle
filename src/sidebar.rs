@@ -809,21 +809,33 @@ impl Waffle {
         let carried = self.drag_motion.row(&channel.id);
         let welcomes = channel.kind == ChannelKind::Voice && self.welcomes_voice_drop(channel, guild);
         let row = channel_row(SharedString::from(channel.id.clone()), group.clone(), state, cx).children(self.drag_motion.spot(&channel.id));
+        // A voice channel's status (or the way to set one) is a second line inside the row's fill and hit area.
+        let status_line = self.voice_row_status(channel, cx);
         let row = match carried {
             RowDrag::Hole => hole(row.bg(gpui_kit::transparent_black()), cx),
-            _ => row
-                .when(carried == RowDrag::Hidden, |r| r.invisible())
-                .when(welcomes, |r| r.bg(palette::accent_soft(cx)).text_color(palette::strong(cx)))
-                .child(channel_glyph(channel).size(px(18.)).flex_none().text_color(match (welcomes, selected) {
-                    (true, _) => palette::accent_ink(cx),
-                    (false, true) => palette::muted(cx),
-                    (false, false) => faint,
-                }))
-                .child(ui::truncating(format!("channel-name-{}", channel.id), channel.name.clone()).flex_1())
-                .children(elapsed)
-                .children(meta.filter(|_| !actions_shown).map(|icon| div().flex_none().flex().text_color(faint).child(icon)))
-                .when(actions_shown, |r| r.child(self.row_actions(channel, guild, cx)))
-                .when(mentions > 0, |r| r.child(ui::count_badge(mentions))),
+            _ => {
+                let line = div()
+                    .w_full()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(channel_glyph(channel).size(px(18.)).flex_none().text_color(match (welcomes, selected) {
+                        (true, _) => palette::accent_ink(cx),
+                        (false, true) => palette::muted(cx),
+                        (false, false) => faint,
+                    }))
+                    .child(ui::truncating(format!("channel-name-{}", channel.id), channel.name.clone()).flex_1())
+                    .children(elapsed)
+                    .children(meta.filter(|_| !actions_shown).map(|icon| div().flex_none().flex().text_color(faint).child(icon)))
+                    .when(actions_shown, |r| r.child(self.row_actions(channel, guild, cx)))
+                    .when(mentions > 0, |r| r.child(ui::count_badge(mentions)));
+                let row = row.when(carried == RowDrag::Hidden, |r| r.invisible()).when(welcomes, |r| r.bg(palette::accent_soft(cx)).text_color(palette::strong(cx)));
+                match status_line {
+                    Some(status) => row.h_auto().py(px(6.)).flex_col().items_stretch().gap(px(2.)).child(line.min_h(px(20.))).child(status),
+                    None => row.child(line.h_full()),
+                }
+            }
         };
         let row = self.track_row_hover(self.channel_draggable(row, channel, guild, cx), &channel.id, !is_voice, cx);
         let keep = selected || unread;

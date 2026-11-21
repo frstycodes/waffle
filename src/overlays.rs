@@ -163,6 +163,10 @@ impl Waffle {
                 }
                 cx.notify();
             }
+            EmojiTarget::VoiceStatus => {
+                let shown = self.shown_emoji(&emoji);
+                self.insert_voice_status_emoji(shown, window, cx);
+            }
             EmojiTarget::ForwardNote => {
                 let shown = self.shown_emoji(&emoji);
                 if let Some(dialog) = &self.forward_dialog {
@@ -254,7 +258,7 @@ impl Waffle {
     /// Closes whichever floating surface is open; true if one was.
     pub(crate) fn dismiss_overlay(&mut self, cx: &mut Context<Self>) -> bool {
         // The note's picker sits over the forward dialog: closing it leaves the dialog and its picks.
-        if matches!(self.emoji_picker, Some(EmojiTarget::ForwardNote)) {
+        if matches!(self.emoji_picker, Some(EmojiTarget::ForwardNote | EmojiTarget::VoiceStatus)) {
             self.emoji_picker = None;
             cx.notify();
             return true;
@@ -266,6 +270,7 @@ impl Waffle {
             | self.status_editor.take().is_some()
             | self.poll_creator.take().is_some()
             | self.forward_dialog.take().is_some()
+            | self.voice_status_dialog.take().is_some()
             | self.reactions_dialog.take().is_some()
             | self.emoji_picker.take().is_some()
             | self.switcher.take().is_some()
@@ -290,6 +295,7 @@ impl Waffle {
         out.extend(self.status_editor_overlay(window, cx));
         out.extend(self.poll_creator_overlay(window, cx));
         out.extend(self.forward_overlay(window, cx));
+        out.extend(self.voice_status_overlay(window, cx));
         out.extend(self.reactions_overlay(window, cx));
         out.extend(self.emoji_overlay(window, cx));
         out.extend(self.switcher_overlay(window, cx));

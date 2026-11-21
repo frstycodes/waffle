@@ -332,6 +332,7 @@ pub mod perm {
     pub const CREATE_PUBLIC_THREADS: u64 = 1 << 35;
     pub const MODERATE_MEMBERS: u64 = 1 << 40;
     pub const SEND_POLLS: u64 = 1 << 49;
+    pub const SET_VOICE_CHANNEL_STATUS: u64 = 1 << 48;
     pub const PIN_MESSAGES: u64 = 1 << 51;
     pub const CONNECT: u64 = 1 << 20;
     pub const SPEAK: u64 = 1 << 21;
@@ -1124,6 +1125,8 @@ pub enum Event {
     StreamUpdate { key: String, viewers: Vec<String>, paused: bool },
     // When each voice channel's current session began (Unix seconds); `all` replaces the server's list.
     VoiceStartTimes { guild_id: String, times: Vec<(String, Option<u64>)>, all: bool },
+    // Each voice channel's status ("" for none); `all` replaces the server's list, as CHANNEL_INFO does.
+    VoiceStatuses { guild_id: String, statuses: Vec<(String, String)>, all: bool },
     // A channel or thread created or changed in a server.
     ChannelUpsert { guild_id: String, channel: Channel },
     ChannelDelete { guild_id: String, id: String },
@@ -1385,6 +1388,12 @@ impl Client {
 
     pub async fn edit_message(&self, channel_id: &str, id: &str, content: &str) -> Result<(), String> {
         let req = self.request(reqwest::Method::PATCH, &format!("/channels/{channel_id}/messages/{id}")).json(&json!({ "content": content }));
+        self.run(req).await.map(|_| ())
+    }
+
+    // `PUT /channels/{id}/voice-status`, 204 on success; "" clears it. Discord's refusal comes back as its message.
+    pub async fn set_voice_channel_status(&self, channel_id: &str, status: &str) -> Result<(), String> {
+        let req = self.request(reqwest::Method::PUT, &format!("/channels/{channel_id}/voice-status")).json(&json!({ "status": status }));
         self.run(req).await.map(|_| ())
     }
 
@@ -2220,11 +2229,14 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
         }),
         "MESSAGE_ACK" => Some(Event::Ack { channel_id: s(&d["channel_id"]), message_id: snowflake(&d["message_id"]) }),
         "VOICE_STATE_UPDATE" => Some(Event::VoiceState(parse_voice_state(d), d["session_id"].as_str().map(str::to_owned))),
-        "CHANNEL_INFO" => Some(Event::VoiceStartTimes {
-            guild_id: s(&d["guild_id"]),
-            times: d["channels"].as_array().into_iter().flatten().map(|c| (s(&c["id"]), c["voice_start_time"].as_u64())).collect(),
-            all: true,
-        }),
+        "CHANNEL_INFO" => {
+            let channels = || d["channels"].as_array().into_iter().flatten();
+            Some(Event::Batch(vec![
+                Event::VoiceStartTimes { guild_id: s(&d["guild_id"]), times: channels().map(|c| (s(&c["id"]), c["voice_start_time"].as_u64())).collect(), all: true },
+                Event::VoiceStatuses { guild_id: s(&d["guild_id"]), statuses: channels().map(|c| (s(&c["id"]), s(&c["status"]))).collect(), all: true },
+            ]))
+        }
+        "VOICE_CHANNEL_STATUS_UPDATE" => Some(Event::VoiceStatuses { guild_id: s(&d["guild_id"]), statuses: vec![(s(&d["id"]), s(&d["status"]))], all: false }),
         "VOICE_CHANNEL_START_TIME_UPDATE" => Some(Event::VoiceStartTimes { guild_id: s(&d["guild_id"]), times: vec![(s(&d["id"]), d["voice_start_time"].as_u64())], all: false }),
         "STREAM_UPDATE" => Some(Event::StreamUpdate { key: s(&d["stream_key"]), viewers: strings(&d["viewer_ids"]), paused: d["paused"].as_bool().unwrap_or(false) }),
         "VOICE_SERVER_UPDATE" => Some(Event::VoiceServer(d.clone())),
@@ -2977,6 +2989,19 @@ pub fn snowflake(v: &Value) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn channel_info_carries_start_times_and_statuses() {
+        let info = json!({ "guild_id": "g", "channels": [{ "id": "a", "status": "lofi <:waffle:42>", "voice_start_time": 1700 }, { "id": "b", "status": null }] });
+        let Some(Event::Batch(events)) = dispatch("CHANNEL_INFO", &info) else { panic!("a batch") };
+        let [Event::VoiceStartTimes { guild_id, times, all: true }, Event::VoiceStatuses { statuses, all: true, .. }] = events.as_slice() else { panic!("times then statuses") };
+        assert_eq!(guild_id, "g");
+        assert_eq!(times, &[("a".to_owned(), Some(1700)), ("b".to_owned(), None)]);
+        assert_eq!(statuses, &[("a".to_owned(), "lofi <:waffle:42>".to_owned()), ("b".to_owned(), String::new())]);
+        let update = json!({ "id": "a", "guild_id": "g", "status": "" });
+        let Some(Event::VoiceStatuses { guild_id, statuses, all: false }) = dispatch("VOICE_CHANNEL_STATUS_UPDATE", &update) else { panic!("one status") };
+        assert_eq!((guild_id.as_str(), statuses), ("g", vec![("a".to_owned(), String::new())]));
+    }
 
     #[test]
     fn display_name_styles_parse_with_member_override() {
