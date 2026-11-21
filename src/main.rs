@@ -43,6 +43,7 @@ mod os_image;
 mod overlays;
 mod overwrites;
 mod playback;
+mod audio_player;
 mod poll;
 mod inbox;
 mod status_menu;

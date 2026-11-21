@@ -190,6 +190,10 @@ pub struct Prefs {
     pub zoom: f32,
     // The server voice channel (guild, channel) a restart left, offered back once the new session is ready.
     pub rejoin_voice: Option<(String, String)>,
+    // Discord's one playback speed for every voice message.
+    pub voice_rate: f32,
+    // Where each voice message was left, by attachment id, oldest first; Discord keeps 25.
+    pub voice_resume: Vec<(String, f32)>,
 }
 
 const KEYBINDS_VERSION: u32 = 1;
@@ -247,6 +251,8 @@ impl Default for Prefs {
             search_history: HashMap::new(),
             zoom: 1.,
             rejoin_voice: None,
+            voice_rate: 1.,
+            voice_resume: Vec::new(),
         }
     }
 }

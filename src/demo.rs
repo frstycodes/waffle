@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | voice-messages | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -367,6 +367,9 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // A long message.txt (Discord's file for a message past 2,000 characters), a short code file, and
         // a .log that isn't text, which stays a file card. The fixtures stand in for the CDN fetch.
         "text-files" | "text-expanded" | "text-viewer" => demo_text_files(waffle, scene),
+        // Voice messages (fresh, one left part-way, a short one, one missing its waveform and length) and two
+        // audio files, all playing made-up tones.
+        "voice-messages" => demo_voice_messages(waffle),
         // Made-up files of each kind waiting in the composer (a picture, a spoilered one, a video, a PDF,
         // an archive, a long name), one upload part way and one Discord refused. `-drop` holds the drop
         // zone up as if files were dragged over.
@@ -1453,11 +1456,66 @@ fn demo_attachments(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<W
     waffle.push_local(post("demo-up-2", "", SendState::Failed), cx);
 }
 
+// File name and length of each demo audio file; the voice messages say their length up front, but
+// `voice-message-3.ogg` doesn't, to show the `--:--` it waits on.
+const DEMO_AUDIO: [(&str, f32); 6] = [
+    ("voice-message.ogg", 12.4),
+    ("voice-message-1.ogg", 96.),
+    ("voice-message-2.ogg", 1.6),
+    ("voice-message-3.ogg", 8.),
+    ("late night demo – rough mix v3 (final final).mp3", 225.),
+    ("ping.wav", 7.),
+];
+
+fn demo_voice_messages(waffle: &mut Waffle) {
+    use crate::discord::File;
+    let _ = crate::discord::DEMO_MEDIA.set(demo_media);
+    let file = |i: usize, voice: bool| {
+        let (name, secs) = DEMO_AUDIO[i];
+        let waveform = if voice && i != 3 { (0..64).map(|k| (128. + 110. * ((k as f32 / 3.) + i as f32).sin() * ((k * 7 + i) % 5) as f32 / 4.) as u8).collect() } else { Vec::new() };
+        let length = (voice && i != 3).then_some(secs);
+        File { name: name.into(), url: format!("https://cdn.discordapp.com/attachments/demo/{name}"), size: (secs * 16_000.) as u64, id: format!("demo-audio-{i}"), duration_secs: length, waveform }
+    };
+    crate::audio_player::demo_spot(&mut waffle.prefs, "demo-audio-1", 31.);
+    let Some(feed) = waffle.feeds.get_mut("general") else { return };
+    let mut messages = feed.messages.as_ref().clone();
+    let people = [user("12582912", "moss lantern"), user("8388608", "Wren"), user("4194304", "juniper")];
+    let post = |i: usize, voice: bool| Message {
+        id: format!("audio-{i}"),
+        channel_id: "general".into(),
+        guild_id: Some("1".into()),
+        author: people[i % people.len()].clone(),
+        timestamp: "2026-11-14T08:20:00Z".into(),
+        files: vec![file(i, voice)],
+        voice,
+        ..Default::default()
+    };
+    messages.extend((0..4).map(|i| post(i, true)));
+    messages.extend((4..6).map(|i| post(i, false)));
+    feed.messages = std::sync::Arc::new(messages);
+}
+
+// A mono 16-bit WAV of a voice-like hum: a low tone whose loudness swells like syllables.
+fn demo_tone(secs: f32) -> Vec<u8> {
+    const RATE: u32 = 22_050;
+    let samples = (secs * RATE as f32) as u32;
+    let mut out = Vec::with_capacity(44 + samples as usize * 2);
+    let header: [&[u8]; 13] = [b"RIFF", &(36 + samples * 2).to_le_bytes(), b"WAVEfmt ", &16u32.to_le_bytes(), &1u16.to_le_bytes(), &1u16.to_le_bytes(), &RATE.to_le_bytes(), &(RATE * 2).to_le_bytes(), &2u16.to_le_bytes(), &16u16.to_le_bytes(), b"data", &(samples * 2).to_le_bytes(), &[]];
+    header.iter().for_each(|part| out.extend_from_slice(part));
+    for n in 0..samples {
+        let t = n as f32 / RATE as f32;
+        let swell = (t * 3.1).sin().abs() * 0.6 + 0.1;
+        let tone = (t * 220. * std::f32::consts::TAU).sin() * 0.6 + (t * 330. * std::f32::consts::TAU).sin() * 0.3;
+        out.extend_from_slice(&((tone * swell * 12_000.) as i16).to_le_bytes());
+    }
+    out
+}
+
 fn demo_text_files(waffle: &mut Waffle, scene: &str) {
     use crate::{discord::File, text_file::TextFile};
     let notes: String = PATCH_NOTES.repeat(3);
     let hello = "fn main() {\n    let name = std::env::args().nth(1).unwrap_or(\"world\".into());\n    println!(\"hello, {name}\");\n}\n";
-    let file = |name: &str, size: usize| File { name: name.into(), url: format!("https://cdn.discordapp.com/attachments/demo/{name}"), size: size as u64 };
+    let file = |name: &str, size: usize| File { name: name.into(), url: format!("https://cdn.discordapp.com/attachments/demo/{name}"), size: size as u64, ..Default::default() };
     let (long, short, binary) = (file("message.txt", notes.len()), file("hello.rs", hello.len()), file("crash-dump.log", 48_213));
     {
         let mut texts = waffle.text_files.borrow_mut();
@@ -1604,6 +1662,9 @@ fn demo_item(n: usize) -> Media {
 fn demo_media(url: &str) -> Option<bytes::Bytes> {
     let rest = url.split("/attachments/demo/").nth(1)?;
     let (path, query) = rest.split_once('?').unwrap_or((rest, ""));
+    if let Some(&(_, secs)) = DEMO_AUDIO.iter().find(|(name, _)| *name == path) {
+        return Some(demo_tone(secs).into());
+    }
     if path.ends_with(".mp4") && !query.contains("format=") {
         return std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/testdata/video-aac.mp4")).ok().map(Into::into);
     }

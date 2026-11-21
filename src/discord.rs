@@ -586,11 +586,27 @@ pub struct Folder {
     pub guild_ids: Vec<String>,
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct File {
     pub name: String,
     pub url: String,
     pub size: u64,
+    #[serde(default)]
+    pub id: String,
+    // A voice message's length and loudness, as Discord sends them with the recording.
+    #[serde(default)]
+    pub duration_secs: Option<f32>,
+    // One loudness byte per sample (0-255), up to 256; empty when missing or not valid base64.
+    #[serde(default)]
+    pub waveform: Vec<u8>,
+}
+
+impl File {
+    // Discord plays a file inline by its name alone, not its content type.
+    pub fn is_audio(&self) -> bool {
+        let lower = self.name.to_ascii_lowercase();
+        !self.url.is_empty() && [".mp3", ".m4a", ".ogg", ".opus", ".wav", ".flac"].iter().any(|ext| lower.ends_with(ext))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -733,6 +749,9 @@ pub struct Message {
     // Discord's "X pinned a message" notice (type 6): never drawn, it names who pinned `reply_to`.
     #[serde(default)]
     pub pin_notice: bool,
+    // IS_VOICE_MESSAGE: its audio files play in the voice player, and it can't be edited.
+    #[serde(default)]
+    pub voice: bool,
 }
 
 /// A live poll as a message carries it, its counts folded into the answers.
@@ -2328,7 +2347,7 @@ pub fn parse_message(m: &Value) -> Option<Message> {
                 media.push(Media { url, width: w as f32, height: h as f32, kind: MediaKind::Video { poster } })
             }
             (Some(w), Some(h)) => media.push(Media { url, width: w as f32, height: h as f32, kind: MediaKind::Image }),
-            _ => files.push(File { name: a["filename"].as_str().unwrap_or("file").to_owned(), url, size: a["size"].as_u64().unwrap_or(0) }),
+            _ => files.push(parse_file(a, url)),
         }
     }
     let mut embeds = Vec::new();
@@ -2389,7 +2408,22 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         poll: m["poll"].is_object().then(|| parse_poll(&m["poll"])),
         forward: parse_forward(m),
         pin_notice: m["type"] == 6,
+        voice: m["flags"].as_u64().unwrap_or(0) & IS_VOICE_MESSAGE != 0,
     })
+}
+
+const IS_VOICE_MESSAGE: u64 = 1 << 13;
+
+fn parse_file(a: &Value, url: String) -> File {
+    use base64::Engine;
+    File {
+        name: a["filename"].as_str().unwrap_or("file").to_owned(),
+        url,
+        size: a["size"].as_u64().unwrap_or(0),
+        id: a["id"].as_str().unwrap_or_default().to_owned(),
+        duration_secs: a["duration_secs"].as_f64().map(|d| d as f32),
+        waveform: a["waveform"].as_str().and_then(|w| base64::engine::general_purpose::STANDARD.decode(w).ok()).unwrap_or_default(),
+    }
 }
 
 // A forward's snapshot carries the original's content, media and time but no id, author or channel;
@@ -3214,6 +3248,21 @@ mod tests {
         let body = forward_body(&original, Some("g"), "n");
         assert_eq!(body["message_reference"], json!({ "type": 1, "message_id": "9", "channel_id": "src", "guild_id": "g" }));
         assert!(body.get("content").is_none());
+    }
+
+    #[test]
+    fn reads_voice_messages() {
+        let m = parse_message(&json!({ "id": "1", "channel_id": "c", "author": { "id": "u" }, "flags": 8192,
+            "attachments": [{ "id": "9", "filename": "voice-message.ogg", "url": "https://cdn/v.ogg", "size": 9000, "duration_secs": 4.2, "waveform": "AP8=" }] }))
+        .unwrap();
+        assert!(m.voice);
+        let file = &m.files[0];
+        assert_eq!((file.id.as_str(), file.duration_secs, file.waveform.as_slice()), ("9", Some(4.2), [0u8, 255].as_slice()));
+        assert!(file.is_audio());
+        let plain = parse_message(&json!({ "id": "2", "channel_id": "c", "author": { "id": "u" },
+            "attachments": [{ "filename": "notes.PDF", "url": "u", "size": 1, "waveform": "not base64!" }] }))
+        .unwrap();
+        assert!(!plain.voice && !plain.files[0].is_audio() && plain.files[0].waveform.is_empty());
     }
 
     #[test]

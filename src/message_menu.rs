@@ -65,6 +65,9 @@ impl Waffle {
             let link = this.message_link(&m);
             this.copy_text(link, cx)
         }).icon(Glyph::Link).entry());
+        if let Some(url) = message.files.first().filter(|_| message.voice).map(|f| f.url.clone()) {
+            out.push(item("Save file", move |_, _, cx| cx.open_url(&url)).icon(Glyph::Download).entry());
+        }
         if cfg!(target_os = "macos") && !message.content.is_empty() {
             let text = message.content.clone();
             out.push(item("Speak message", move |_, _, _| speak(&text)).icon(Glyph::Soundboard).entry());
@@ -146,7 +149,7 @@ impl MessageAction {
             SendState::Sent => {}
         }
         match self {
-            Self::Edit => facts.mine,
+            Self::Edit => facts.mine && !message.voice,
             Self::Reply | Self::React | Self::MarkUnread => true,
             Self::Forward => message.call.is_none(),
             Self::Thread => facts.threads && message.thread.is_none(),
