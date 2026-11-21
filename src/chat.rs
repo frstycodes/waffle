@@ -85,7 +85,10 @@ impl Waffle {
             // The feed stops under the header, a hard edge.
             .child(header)
             // The composer floats over the feed, which scrolls on under its glass.
-            .child(div().relative().flex_1().min_h_0().child(body).children(unread_bar).child(self.render_composer(window, cx)));
+            .child(div().relative().flex_1().min_h_0().child(body).children(unread_bar).children(self.guide_action_bar(&channel, cx)).child(match self.composer_gate(&channel, window, cx) {
+                Some(gate) => gate,
+                None => self.render_composer(window, cx).into_any_element(),
+            }));
         // The members column beside the feed runs to the window's top with a header of its own on the same line.
         let panel = self.panel_column_width().map(|w| self.part(crate::part::Column::Panel, gpui_kit::StyleRefinement::default().w(px(w)).h_full().flex_none(), cx));
         let drop_zone = self.drop_zone(&channel, cx);

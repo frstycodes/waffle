@@ -875,6 +875,9 @@ fn merge_settings(settings: &mut GuildSettings, body: &Value) {
     if let Some(on) = body["hide_muted_channels"].as_bool() {
         settings.hide_muted = on;
     }
+    if let Some(flags) = body["flags"].as_u64() {
+        settings.flags = flags;
+    }
     for (id, change) in body["channel_overrides"].as_object().into_iter().flatten() {
         let channel = settings.channels.entry(id.clone()).or_insert_with(|| crate::discord::ChannelSettings { notifications: 3, ..Default::default() });
         if let Some(muted) = change["muted"].as_bool() {
@@ -883,6 +886,9 @@ fn merge_settings(settings: &mut GuildSettings, body: &Value) {
         }
         if let Some(level) = change["message_notifications"].as_u64() {
             channel.notifications = level as u8;
+        }
+        if let Some(flags) = change["flags"].as_u64() {
+            channel.flags = flags;
         }
     }
 }
