@@ -74,6 +74,7 @@ impl Waffle {
             Toggle::AutoDownloadUpdates => self.prefs.auto_download_updates,
             Toggle::RenderEmbeds => account.render_embeds,
             Toggle::RenderReactions => account.render_reactions,
+            Toggle::TtsCommand => self.prefs.tts_command,
             Toggle::DeveloperMode => account.developer_mode,
             Toggle::ShareActivity => account.show_current_game,
             Toggle::DmsFromServerMembers => !account.default_guilds_restricted,
@@ -98,6 +99,7 @@ impl Waffle {
                 self.list.remeasure();
                 return self.update_prefs(cx, |p| p.show_image_descriptions = on);
             }
+            Toggle::TtsCommand => return self.update_prefs(cx, |p| p.tts_command = on),
             Toggle::AutoDownloadUpdates => return self.set_auto_download(on, cx),
             Toggle::RenderEmbeds => {
                 account.render_embeds = on;

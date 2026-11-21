@@ -168,7 +168,7 @@ impl Waffle {
     pub(crate) fn send_gif(&mut self, url: String, window: &mut Window, cx: &mut Context<Self>) {
         self.gif_picker = None;
         self.composer.update(cx, |state, cx| state.set_value(url, window, cx));
-        self.submit(window, cx);
+        self.submit(false, window, cx);
     }
 
     /// The Friends row at the top of the DM list (.ch.navrow).

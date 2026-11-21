@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | send-options | tts | poll | poll-creator | drafts | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -319,6 +319,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             })
             .detach()
         }
+        "send-options" | "tts" => demo_send_options(waffle, scene, window, cx),
         "hover" => waffle.hovered_message = Some("105".into()),
         // Keyboard focus on the code message; "-menu" also opens your own message's menu, with its key caps.
         // "-delete": D on your own message, its confirm up with the D cap.
@@ -1437,6 +1438,7 @@ fn demo_attachments(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<W
         content: String::new(),
         reply_to: None,
         ping: true,
+        options: Default::default(),
         error: error.map(str::to_owned),
     };
     waffle.uploads.insert("demo-up-1".into(), job(&[(&paths[0], 1.0), (&paths[4], 0.42)], None));
@@ -1743,6 +1745,42 @@ fn demo_stickers(waffle: &mut Waffle) {
         std::sync::Arc::make_mut(&mut feed.messages).extend([wave, lottie]);
     }
     waffle.list.reset(waffle.feeds.get("general").map_or(0, |f| f.messages.len()));
+}
+
+// "send-options": a 1,270-member server, the newest message sent @silent, and Hold Up! over a composer
+// holding "@everyone brackets are up". "tts": the composer holding "/tts", its one suggestion up.
+fn demo_send_options(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
+    let groups = vec![("r1".into(), 20), ("online".into(), 150), ("offline".into(), 1100)];
+    waffle.on_event(Event::MemberList { guild_id: "1".into(), groups, ops: Vec::new() }, cx);
+    if let Some(feed) = waffle.feeds.get_mut("general") {
+        let mut messages = feed.messages.as_ref().clone();
+        if let Some(last) = messages.last_mut() {
+            last.flags = crate::discord::SUPPRESS_NOTIFICATIONS;
+        }
+        feed.messages = std::sync::Arc::new(messages);
+    }
+    let typed = if scene == "tts" { "/tts" } else { "@everyone brackets are up" };
+    // Typed once the window is up, as `mention` does; the popup follows, since typing closes it.
+    cx.spawn_in(window, async move |this, cx| {
+        cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+        this.update_in(cx, |this, window, cx| {
+            this.composer.update(cx, |state, cx| {
+                state.set_value(typed, window, cx);
+                state.focus(window, cx);
+            })
+        })
+        .ok();
+        cx.background_executor().timer(std::time::Duration::from_millis(100)).await;
+        this.update(cx, |this, cx| {
+            match typed {
+                "/tts" => this.autocomplete = this.suggest(typed),
+                _ => this.hold_up = this.hold_up_for(typed),
+            }
+            cx.notify();
+        })
+        .ok();
+    })
+    .detach();
 }
 
 // Puts `reactions` on the newest message in #general, where the feed opens; returns its id.

@@ -132,7 +132,7 @@ impl Waffle {
             for (channel_id, label) in &places {
                 let mut sent = client.forward_message(channel_id, &message, guild_id.as_deref(), &crate::nonce()).await.map(drop);
                 if sent.is_ok() && !note.is_empty() {
-                    sent = client.send_message(channel_id, &note, &crate::nonce(), None, false).await.map(drop);
+                    sent = client.send_message(channel_id, &note, &crate::nonce(), None, false, Default::default()).await.map(drop);
                 }
                 if sent.is_err() {
                     failed.push(label.clone());
