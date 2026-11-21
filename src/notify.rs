@@ -30,7 +30,8 @@ fn decide(dm: bool, level: u8, mentioned: bool, muted: bool) -> Notify {
 impl Waffle {
     pub(crate) fn notify_kind(&self, message: &Message, focused_here: bool) -> Notify {
         let Some(me) = &self.me else { return Notify::None };
-        if message.author.id == me.id || focused_here || self.my_status == Status::Dnd {
+        // @silent: no sound and no desktop notification; it still counts as a mention.
+        if message.author.id == me.id || focused_here || self.my_status == Status::Dnd || message.silent() {
             return Notify::None;
         }
         let key = message.guild_id.clone().unwrap_or_else(|| "@me".into());

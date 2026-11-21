@@ -182,6 +182,8 @@ pub struct Prefs {
     pub desktop_notifications: bool,
     pub dock_badge: bool,
     pub clock_24h: bool,
+    // Discord's "Allow playback and usage of /tts command" (textAndImages.enableTtsCommand), kept locally.
+    pub tts_command: bool,
     // Off: the updater still checks and says so, but downloads only when asked.
     pub auto_download_updates: bool,
     // Recent message searches per account id, newest first.
@@ -243,6 +245,7 @@ impl Default for Prefs {
             desktop_notifications: true,
             dock_badge: true,
             clock_24h: false,
+            tts_command: true,
             auto_download_updates: true,
             search_history: HashMap::new(),
             zoom: 1.,

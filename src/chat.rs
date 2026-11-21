@@ -514,6 +514,7 @@ impl Waffle {
             .border(px(0.5))
             .border_color(if focused { palette::line_strong(cx) } else { palette::line(cx) })
             .children(self.autocomplete_popup(cx))
+            .children(self.hold_up_popout(cx))
             .children(self.composer_bar(cx))
             .children(self.attachment_tray(cx))
             .child(row);
@@ -769,11 +770,55 @@ impl Waffle {
             return cx.stop_propagation();
         }
         match key {
+            "escape" if self.hold_up.is_some() => self.hold_up = None,
             "escape" if self.replying.is_some() || self.editing.is_some() => self.cancel_compose(window, cx),
             "up" if !self.has_draft && self.edit_last(window, cx) => {}
             _ => return,
         }
         cx.stop_propagation();
+    }
+
+    // Discord's "Hold Up!" before a mass ping, anchored above the composer: Esc edits, Enter sends.
+    fn hold_up_popout(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
+        let hold_up = self.hold_up.as_ref()?;
+        let (strong, muted) = (palette::strong(cx), palette::muted(cx));
+        let body = emphasised(&[("By using ".into(), false), (hold_up.mention.into(), true), (hold_up.after_mention(), false)], strong);
+        let edit = ui::button("hold-up-edit", ui::Tone::Secondary, cx).gap(px(8.)).child("Edit Message").child(ui::kbd("Esc", cx)).on_click(cx.listener(|this, _, window, cx| {
+            this.hold_up = None;
+            this.composer.update(cx, |state, cx| state.focus(window, cx));
+            cx.notify();
+        }));
+        let send = ui::button("hold-up-send", ui::Tone::Primary, cx).gap(px(8.)).child("Send Now").child(ui::kbd("Enter", cx)).on_click(cx.listener(|this, _, window, cx| this.submit(true, window, cx)));
+        Some(
+            div()
+                .id("hold-up")
+                .occlude()
+                .absolute()
+                .left(px(-1.))
+                .right(px(-1.))
+                .bottom(gpui_kit::relative(1.))
+                .mb(px(9.))
+                .py(px(16.))
+                .px(px(18.))
+                .flex()
+                .flex_col()
+                .gap(px(10.))
+                .squircle(RADIUS_LG)
+                .bg(palette::surface(Level::Overlay, cx))
+                .shadow(ui::shadow_pop(cx))
+                .text_size(px(14.))
+                .text_color(palette::text(cx))
+                .child(
+                    div().flex().items_center().gap(px(8.)).text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(strong)
+                        .child(div().text_color(palette::accent_ink(cx)).child(Icon::new(Glyph::Megaphone).size(px(20.))))
+                        .child("Hold Up!"),
+                )
+                .child(div().line_height(px(20.)).child(body))
+                .child(div().flex().items_center().gap(px(6.)).text_size(px(12.)).text_color(muted).child(Icon::new(Glyph::Info).size(px(14.))).child("Maybe try mentioning a role or individual users instead?"))
+                .child(div().flex().flex_wrap().gap(px(8.)).child(edit).child(send))
+                .transform_origin(point(gpui_kit::relative(0.5), gpui_kit::relative(1.)))
+                .with_animation("hold-up", Animation::new(ui::DUR_POP).with_easing(gpui_kit::ease_out_quint()), |el, t| el.opacity(t).scale(0.95 + 0.05 * t)),
+        )
     }
 
     // Suggestions above the composer: its width, 8px above it, rising from it.
@@ -783,6 +828,7 @@ impl Waffle {
         let heading: SharedString = match auto.token.chars().next() {
             Some('#') => "Text Channels".into(),
             Some(':') => format!("Emoji matching {}", auto.token).into(),
+            Some('/') => "Built-in".into(),
             _ => "Members".into(),
         };
         let rows = auto.items.iter().enumerate().map(|(i, item)| {
@@ -790,8 +836,11 @@ impl Waffle {
                 crate::SuggestLead::Avatar(url) => ui::avatar(url.clone(), 28.).into_any_element(),
                 crate::SuggestLead::Channel => div().size(px(28.)).flex_none().rounded_full().bg(selected).text_color(muted).flex().items_center().justify_center().child(Icon::new(Glyph::Hashtag).size(px(16.))).into_any_element(),
                 crate::SuggestLead::Emoji(emoji) => div().size(px(28.)).flex_none().flex().items_center().justify_center().child(crate::menu::emoji_face(emoji, 22.)).into_any_element(),
+                crate::SuggestLead::Command(glyph) => div().size(px(28.)).flex_none().flex().items_center().justify_center().text_color(muted).child(Icon::new(*glyph).size(px(20.))).into_any_element(),
             };
-            let detail = item.detail.clone().map(|d| div().flex_none().max_w(px(180.)).truncate().text_size(px(12.)).text_color(muted).child(d));
+            // A command's description fills the row; a server name keeps to the end.
+            let command = matches!(item.lead, crate::SuggestLead::Command(_));
+            let detail = item.detail.clone().map(|d| div().when(command, |d| d.min_w_0()).when(!command, |d| d.flex_none().max_w(px(180.))).truncate().text_size(px(12.)).text_color(muted).child(d));
             div()
                 .id(SharedString::from(format!("suggest-{i}")))
                 .min_h(px(40.))
@@ -806,7 +855,7 @@ impl Waffle {
                 .when(i == auto.selected, |r| r.bg(selected))
                 .when(i != auto.selected, |r| r.hover(move |s| s.bg(hover)))
                 .child(lead)
-                .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::MEDIUM).text_color(strong).child(item.label.clone()))
+                .child(div().when(command, |l| l.flex_none()).when(!command, |l| l.flex_1().min_w_0().truncate()).font_weight(FontWeight::MEDIUM).text_color(strong).child(item.label.clone()))
                 .children(detail)
                 .on_click(cx.listener(move |this, _, window, cx| {
                     if let Some(auto) = &mut this.autocomplete {
@@ -1095,8 +1144,20 @@ fn message_head(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> impl IntoE
         )
         .children(message.author.tag.as_ref().map(|tag| guild_tag(tag, cx)))
         .when(message.author.bot, |h| h.child(ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px(px(6.)).gap(px(3.)).child(Icon::new(Glyph::Checkmark).size(px(11.))).child("APP")))
+        .when(message.silent(), |h| h.child(silent_mark(&message.id, cx)))
         .child(div().flex_none().relative().top(px(1.)).whitespace_nowrap().text_size(px(12.)).text_color(palette::faint(cx)).child(format_stamp(&message.timestamp)))
         .when(message.pinned, |h| h.child(div().flex_none().self_center().text_color(palette::muted(cx)).child(Icon::new(Glyph::Pin).size(px(14.)))))
+}
+
+// @silent's sleeping bell beside the name.
+fn silent_mark(id: &str, cx: &App) -> impl IntoElement + use<> {
+    div()
+        .id(SharedString::from(format!("silent-{id}")))
+        .flex_none()
+        .self_center()
+        .text_color(palette::faint(cx))
+        .tooltip(|window, cx| Tooltip::new("This is a @silent message.").build(window, cx))
+        .child(Icon::new(Glyph::BellZ).size(px(16.)))
 }
 
 // Clicking an avatar or name opens their profile popout at the pointer, as in Discord.

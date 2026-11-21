@@ -334,6 +334,8 @@ pub mod perm {
     pub const SEND_POLLS: u64 = 1 << 49;
     pub const PIN_MESSAGES: u64 = 1 << 51;
     pub const CONNECT: u64 = 1 << 20;
+    pub const SEND_TTS_MESSAGES: u64 = 1 << 12;
+    pub const MENTION_EVERYONE: u64 = 1 << 17;
 }
 
 impl Guild {
@@ -733,6 +735,46 @@ pub struct Message {
     // Discord's "X pinned a message" notice (type 6): never drawn, it names who pinned `reply_to`.
     #[serde(default)]
     pub pin_notice: bool,
+    #[serde(default)]
+    pub flags: u64,
+    // Sent with /tts: read aloud to whoever has the channel open.
+    #[serde(default)]
+    pub tts: bool,
+}
+
+// Message flag SUPPRESS_NOTIFICATIONS: sent with @silent, so nobody gets a push or desktop notification.
+pub const SUPPRESS_NOTIFICATIONS: u64 = 1 << 12;
+
+impl Message {
+    pub fn silent(&self) -> bool {
+        self.flags & SUPPRESS_NOTIFICATIONS != 0
+    }
+
+    pub fn send_options(&self) -> SendOptions {
+        SendOptions { silent: self.silent(), tts: self.tts }
+    }
+}
+
+/// Per-send options Create Message carries beside the content: @silent's flag and /tts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SendOptions {
+    pub silent: bool,
+    pub tts: bool,
+}
+
+impl SendOptions {
+    pub fn flags(self) -> u64 {
+        if self.silent { SUPPRESS_NOTIFICATIONS } else { 0 }
+    }
+
+    fn apply(self, body: &mut Value) {
+        if self.silent {
+            body["flags"] = json!(self.flags());
+        }
+        if self.tts {
+            body["tts"] = json!(true);
+        }
+    }
 }
 
 /// A live poll as a message carries it, its counts folded into the answers.
@@ -1137,8 +1179,9 @@ impl Client {
     }
 
     /// `ping_author`: whether a reply mentions the person replied to (Discord's "@ ON / OFF").
-    pub async fn send_message(&self, channel_id: &str, content: &str, nonce: &str, reply_to: Option<&str>, ping_author: bool) -> Result<Message, String> {
-        let body = message_body(content, nonce, reply_to, ping_author, &[]);
+    pub async fn send_message(&self, channel_id: &str, content: &str, nonce: &str, reply_to: Option<&str>, ping_author: bool, options: SendOptions) -> Result<Message, String> {
+        let mut body = message_body(content, nonce, reply_to, ping_author, &[]);
+        options.apply(&mut body);
         let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
     }
@@ -1192,7 +1235,8 @@ impl Client {
     /// One message carrying all the files, as Discord's own client sends it (docs.discord.food, Cloud
     /// Uploads): upload URLs for every file, a PUT of each to its URL, then the message naming them.
     /// Each file's `sent` counts its bytes as they go out.
-    pub async fn upload(&self, channel_id: &str, files: &[Upload], content: &str, nonce: &str, reply_to: Option<&str>, ping_author: bool) -> Result<Message, String> {
+    /// `reply`: the message replied to, and whether the reply pings its author.
+    pub async fn upload(&self, channel_id: &str, files: &[Upload], content: &str, nonce: &str, reply: Option<(&str, bool)>, options: SendOptions) -> Result<Message, String> {
         let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/attachments")).json(&attachments_request(files));
         let slots = self.run(req).await?;
         let slots = parse_upload_slots(&slots, files.len())?;
@@ -1202,7 +1246,8 @@ impl Client {
             (&mut put.0).await.map_err(|e| e.to_string())??;
         }
         let uploaded: Vec<(String, String)> = files.iter().zip(slots).map(|(f, (_, name))| (f.name.clone(), name)).collect();
-        let body = message_body(content, nonce, reply_to, ping_author, &uploaded);
+        let mut body = message_body(content, nonce, reply.map(|(id, _)| id), reply.is_some_and(|(_, ping)| ping), &uploaded);
+        options.apply(&mut body);
         let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
     }
@@ -2380,6 +2425,8 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         mentions: m["mentions"].as_array().into_iter().flatten().map(parse_user).collect(),
         mention_roles: strings(&m["mention_roles"]),
         mention_everyone: m["mention_everyone"].as_bool().unwrap_or(false),
+        flags: m["flags"].as_u64().unwrap_or(0),
+        tts: m["tts"].as_bool().unwrap_or(false),
         nonce: m["nonce"].as_str().map(str::to_owned),
         state: SendState::Sent,
         pinned: m["pinned"].as_bool().unwrap_or(false),
@@ -2849,6 +2896,18 @@ mod tests {
         assert!(notice.pin_notice);
         assert_eq!(notice.reply_to.as_deref(), Some("3"));
         assert!(!parse_message(&json!({ "id": "3", "channel_id": "1", "type": 0, "author": { "id": "5" } })).expect("parses").pin_notice);
+    }
+
+    #[test]
+    fn send_options_ride_on_the_body_and_come_back_parsed() {
+        let mut body = message_body("hi", "n", None, false, &[]);
+        SendOptions { silent: true, tts: true }.apply(&mut body);
+        assert_eq!((body["flags"].as_u64(), body["tts"].as_bool()), (Some(4096), Some(true)));
+        let mut plain = message_body("hi", "n", None, false, &[]);
+        SendOptions::default().apply(&mut plain);
+        assert!(plain.get("flags").is_none() && plain.get("tts").is_none());
+        let sent = parse_message(&json!({ "id": "1", "channel_id": "c", "author": { "id": "u" }, "flags": 4096, "tts": true })).expect("parses");
+        assert_eq!(sent.send_options(), SendOptions { silent: true, tts: true });
     }
 
     fn upload(name: &str, size: u64) -> Upload {

@@ -48,6 +48,7 @@ pub enum Toggle {
     AutoDownloadUpdates,
     RenderEmbeds,
     RenderReactions,
+    TtsCommand,
     DeveloperMode,
     ShareActivity,
     DmsFromServerMembers,
@@ -137,6 +138,7 @@ pub static SETTINGS: &[Setting] = &[
     // Chat
     s("render-embeds", Chat, "Display", "Show embeds and link previews", None, &["links", "preview", "unfurl", "embeds"], Switch(Toggle::RenderEmbeds)),
     s("render-reactions", Chat, "Display", "Show emoji reactions", None, &["reactions", "emoji"], Switch(Toggle::RenderReactions)),
+    s("tts-command", Chat, "Display", "Allow playback and usage of /tts command", Some("Using the /tts command speaks your message out loud. Turn this off if you prefer to see /tts messages as text only."), &["tts", "text to speech", "speak", "read aloud", "voice"], Switch(Toggle::TtsCommand)),
     s("clock-24", Chat, "Display", "Use a 24-hour clock", Some("For message times"), &["time", "timestamp", "am pm", "clock", "24h"], Switch(Toggle::Clock24)),
     // Notifications
     s("desktop-notifications", Notifications, "Desktop", "Desktop notifications", Some("For DMs, mentions and what your server settings ask for"), &["alerts", "banner", "popup", "toast", "notify"], Switch(Toggle::DesktopNotifications)),
