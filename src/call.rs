@@ -60,13 +60,21 @@ const STAGE_GROUP: &str = "call-stage";
 // The stage's header band, the app's one header line.
 const FOCUS_HEAD: f32 = 48.;
 const CONTROLS_IDLE: Duration = Duration::from_secs(3);
-const CHAT_WIDTH: f32 = 340.;
+// The voice channel's chat beside the call: at least 450 wide, leaving the stage 550 (Discord's numbers).
+pub(crate) const CHAT_MIN_WIDTH: f32 = 450.;
+const CHAT_STAGE_ROOM: f32 = 550.;
 // The connection popover's colour bands (its legend): under 80 ms, 80 to 120, over 120.
 const PING_FAIR: u32 = 80;
 const PING_BAD: u32 = 120;
 // When the panel says "Poor connection": a bad average ping, or this much packet loss.
 const LOSS_POOR_PCT: f32 = 5.;
 const METER_BARS: usize = 28;
+
+// The chat's width for a window this wide: what was asked for, within Discord's bounds. A window too
+// narrow for both keeps the minimum.
+pub(crate) fn chat_width(wanted: f32, window: f32) -> f32 {
+    wanted.min(window - CHAT_STAGE_ROOM).max(CHAT_MIN_WIDTH)
+}
 
 // The stage's tile area (left, top, width, height), between its header and controls.
 fn tile_area(stage: (f32, f32)) -> (f32, f32, f32, f32) {
@@ -619,7 +627,8 @@ impl Waffle {
         let chat_open = self.call_chat_shown();
         let drawer = chat_open.then(|| self.call_chat_drawer(&call_channel, window, cx));
         let call = self.render_call(window, cx)?;
-        Some(div().size_full().flex().child(div().flex_1().min_w_0().h_full().child(call)).children(drawer).into_any_element())
+        let previews = self.render_call_previews(cx);
+        Some(div().size_full().flex().child(div().relative().flex_1().min_w_0().h_full().child(call).children(previews)).children(drawer).into_any_element())
     }
 
     fn call_chat_drawer(&mut self, channel: &discord::Channel, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -627,7 +636,8 @@ impl Waffle {
         let messages = self.render_messages(0., cx).into_any_element();
         let composer = self.render_composer(window, cx).into_any_element();
         div()
-            .w(px(CHAT_WIDTH))
+            .relative()
+            .w(px(self.call_chat_width(window)))
             .flex_none()
             .h_full()
             .flex()
@@ -657,21 +667,23 @@ impl Waffle {
             )
             .child(div().relative().flex_1().min_h_0().child(messages))
             .child(composer)
+            .child(self.resize_handle(crate::Edge::CallChat, cx))
             .with_animation("call-chat-in", Animation::new(Duration::from_millis(220)), |d, t| d.opacity(t.min(1.)).ml(px((1. - crate::motion::back_out(t)) * 24.)))
             .into_any_element()
     }
 
-    // Opens the voice channel's text chat beside the call, as Discord's chat button does.
-    fn toggle_call_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.call_chat = !self.call_chat;
-        if self.call_chat
-            && let Some(channel) = self.call.as_ref().map(|c| c.channel.clone())
-            && self.channel.as_ref().is_none_or(|c| c.id != channel.id)
-        {
-            self.open_channel(channel, window, cx);
-            self.call_view = true;
+    // Shows or hides the voice channel's text chat beside the call, as Discord's chat button does.
+    pub(crate) fn toggle_call_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.call_chat_shown() {
+            self.call_chat = false;
+            return cx.notify();
         }
-        cx.notify();
+        let Some(channel) = self.call.as_ref().map(|c| c.channel.clone()) else { return };
+        self.open_call_chat(channel, window, cx);
+    }
+
+    pub(crate) fn call_chat_width(&self, window: &Window) -> f32 {
+        chat_width(self.prefs.call_chat_width, f32::from(window.viewport_size().width))
     }
 
     // .call: the stage, dark in both themes. The header, the tiles and the control bar; a focused
@@ -693,7 +705,7 @@ impl Waffle {
             return Some(self.focus_stage(big, &tiles, shown, cx));
         }
         let viewport = window.viewport_size();
-        let chat = if self.call_chat_shown() { CHAT_WIDTH } else { 0. };
+        let chat = if self.call_chat_shown() { self.call_chat_width(window) } else { 0. };
         let stage_size = match self.call_fullscreen {
             true => (f32::from(viewport.width) - chat, f32::from(viewport.height)),
             false => (f32::from(viewport.width) - RAIL_WIDTH - self.channels_width - chat, f32::from(viewport.height) - 1.),
@@ -870,7 +882,7 @@ impl Waffle {
             .child(self.caption_clearance(!self.call_chat_shown()))
     }
 
-    fn call_chat_shown(&self) -> bool {
+    pub(crate) fn call_chat_shown(&self) -> bool {
         self.call_chat && self.call.as_ref().is_some_and(|call| self.channel.as_ref().is_some_and(|c| c.id == call.channel.id))
     }
 
@@ -949,7 +961,12 @@ impl Waffle {
         let stop = watching.map(|_| stage_button("stop-watching", if several { "Stop all" } else { "Stop watching" }).occlude().on_click(cx.listener(|this, _, _, cx| this.stop_watching(cx))));
         // A DM call's stage is opened from its window; this is the way back to the chat (Esc too).
         let back = call.guild_id.is_none().then(|| stage_button("back-to-chat", "Back to chat").occlude().on_click(cx.listener(|this, _, window, cx| this.back_to_chat(window, cx))));
-        let chat_open = self.call_chat;
+        let chat_open = self.call_chat_shown();
+        let chat_button = stage_icon_button("call-chat", Glyph::ChatRound, if chat_open { "Hide Chat" } else { "Show Chat" }, chat_open || self.call_chat_highlighted())
+            .relative()
+            .children(self.call_chat_badge())
+            .occlude()
+            .on_click(cx.listener(|this, _, window, cx| this.toggle_call_chat(window, cx)));
         div()
             .h(px(HEAD_HEIGHT))
             .flex()
@@ -965,12 +982,19 @@ impl Waffle {
             .children(stop)
             .child(who)
             .child(div().w(px(1.)).h(px(20.)).mx(px(2.)).flex_none().bg(stage::wash(0.14)))
-            .child(
-                stage_icon_button("call-chat", Glyph::ChatRound, if chat_open { "Chat: hide the channel's messages" } else { "Chat: show the channel's messages beside the call" }, chat_open)
-                    .occlude()
-                    .on_click(cx.listener(|this, _, window, cx| this.toggle_call_chat(window, cx))),
-            )
+            .child(chat_button)
             .into_any_element()
+    }
+
+    // On the chat button: mentions in red, else unread in grey, only for the voice channel we're in.
+    fn call_chat_badge(&self) -> Option<Div> {
+        let (mentions, unread) = self.call_chat_counts()?;
+        let badge = match (mentions, unread) {
+            (0, 0) => return None,
+            (0, unread) => ui::count_pill(unread, stage::faint(), stage::bg()),
+            (mentions, _) => ui::count_badge(mentions),
+        };
+        Some(div().absolute().right(px(-4.)).bottom(px(-4.)).rounded_full().border_2().border_color(stage::bg()).child(badge))
     }
 
     // The chevron above the filmstrip that folds it away and back, as Discord's.
@@ -1419,6 +1443,11 @@ impl Waffle {
                         .icon(Glyph::Users)
                         .entry(),
                     );
+                }
+                if call.guild_id.is_some() {
+                    let id = call.channel.id.clone();
+                    let on = this.call_previews_enabled(&id);
+                    entries.push(item("Show New Message Previews", move |this, _, cx| this.toggle_call_previews(&id, cx)).checked(on).entry());
                 }
                 entries
             },

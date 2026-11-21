@@ -787,15 +787,19 @@ impl Waffle {
         if muted && !selected && settings.is_some_and(|s| s.hide_muted) {
             return Vec::new();
         }
-        let unread = self.unread(&channel.id) && !muted;
-        let mentions = self.mention_count(&channel.id);
+        let is_voice = channel.kind == ChannelKind::Voice;
         let in_call = self.call.as_ref().is_some_and(|c| c.channel.id == channel.id);
+        // A voice channel's chat marks it unread only while you're in it; mentions show always, as Discord's.
+        let unread = self.unread(&channel.id) && !muted && (!is_voice || in_call);
+        let mentions = self.mention_count(&channel.id);
+        let hovered = self.hovered_row.as_deref() == Some(channel.id.as_str());
+        // In the channel with no count beside them, its buttons stay out without hover.
+        let actions_shown = selected || hovered || (is_voice && in_call && mentions == 0);
         let state = RowState { selected, unread, muted, strong: in_call };
         let elapsed = self.call.as_ref().filter(|c| c.channel.id == channel.id && c.connected).and_then(|_| self.voice_elapsed(&channel.id)).map(|secs| {
             div().flex_none().text_size(px(12.)).font_weight(FontWeight::NORMAL).text_color(palette::positive_ink(cx)).child(crate::call::clock(secs))
         });
         let group: SharedString = format!("ch-{}", channel.id).into();
-        let hovered = self.hovered_row.as_deref() == Some(channel.id.as_str());
         // An unsent draft outranks the muted bell in the meta slot.
         let meta = match self.drafts.has(&channel.id) {
             true => Some(draft_mark()),
@@ -817,11 +821,10 @@ impl Waffle {
                 }))
                 .child(ui::truncating(format!("channel-name-{}", channel.id), channel.name.clone()).flex_1())
                 .children(elapsed)
-                .children(meta.filter(|_| !selected && !hovered).map(|icon| div().flex_none().flex().text_color(faint).child(icon)))
-                .when(selected || hovered, |r| r.child(self.row_actions(channel, guild, cx)))
+                .children(meta.filter(|_| !actions_shown).map(|icon| div().flex_none().flex().text_color(faint).child(icon)))
+                .when(actions_shown, |r| r.child(self.row_actions(channel, guild, cx)))
                 .when(mentions > 0, |r| r.child(ui::count_badge(mentions))),
         };
-        let is_voice = channel.kind == ChannelKind::Voice;
         let row = self.track_row_hover(self.channel_draggable(row, channel, guild, cx), &channel.id, !is_voice, cx);
         let keep = selected || unread;
         if !is_voice {
@@ -840,6 +843,11 @@ impl Waffle {
         let row = self
             .voice_drop_zone(row, channel.id.clone().into(), channel, cx)
             .on_click(cx.listener(move |this, _, window, cx| {
+                // With mentions waiting, Discord joins and opens the chat.
+                if this.mention_count(&join.id) > 0 {
+                    this.show_call(join.clone(), window, cx);
+                    return this.open_call_chat(join.clone(), window, cx);
+                }
                 let in_call = this.call.as_ref().map(|c| c.channel.id.as_str());
                 match voice_row_click(in_call, &join.id) {
                     VoiceRowClick::Join => this.join_voice(join.clone(), cx),
@@ -942,8 +950,17 @@ impl Waffle {
         }))
     }
 
-    // Invite and options, shown in the row's meta slot while it's hovered or selected.
+    // Open Chat (voice channels you may join), invite and options, shown in the row's meta slot while
+    // it's hovered or selected.
     fn row_actions(&self, channel: &Channel, guild: &Guild, cx: &mut Context<Self>) -> Div {
+        let can_chat = channel.kind == ChannelKind::Voice && self.can_in(&channel.id, crate::discord::perm::CONNECT);
+        let open_chat = can_chat.then(|| {
+            let open = channel.clone();
+            row_action(SharedString::from(format!("open-chat-{}", channel.id)), Icon::new(Glyph::ChatRound), "Open Chat", cx).on_click(cx.listener(move |this, _, window, cx| {
+                cx.stop_propagation();
+                this.open_call_chat(open.clone(), window, cx);
+            }))
+        });
         let (gid, cid) = (guild.id.clone(), channel.id.clone());
         let (menu_channel, menu_guild) = (channel.clone(), guild.id.clone());
         let invite = row_action(SharedString::from(format!("invite-{}", channel.id)), Icon::new(Glyph::GroupPlus), "Invite people", cx)
@@ -959,6 +976,7 @@ impl Waffle {
             .flex_none()
             .flex()
             .gap(px(2.))
+            .children(open_chat)
             .child(invite)
             .child(options)
     }

@@ -74,9 +74,11 @@ impl Waffle {
             .on_mouse_down(MouseButton::Navigate(NavigationDirection::Forward), cx.listener(|this, _, window, cx| this.navigate(true, window, cx)))
             .on_mouse_move(cx.listener(Self::on_drag_move))
             .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
-                if this.drag.take().is_some() {
-                    cx.notify();
+                let Some(drag) = this.drag.take() else { return };
+                if drag.edge == Edge::CallChat {
+                    this.prefs.save();
                 }
+                cx.notify();
             }));
         self.restore_last_channel(window, cx);
         if let Status::SignedOut(login) = &self.status {
@@ -269,6 +271,12 @@ impl Waffle {
             self.step_channel(if keystroke.key == "up" { -1 } else { 1 }, window, cx);
             return cx.stop_propagation();
         }
+        // Esc closes the voice channel's chat once its messages are scrolled to the bottom, as Discord's.
+        if keystroke.key == "escape" && self.call_view && self.call_chat_shown() && !self.scrolled_up {
+            self.call_chat = false;
+            cx.notify();
+            return cx.stop_propagation();
+        }
         // Esc with nothing else to close marks the channel read and returns to the newest message, as Discord does.
         if keystroke.key == "escape" && self.viewer.is_none() {
             if let Some(id) = self.channel.as_ref().map(|c| c.id.clone()) {
@@ -305,7 +313,7 @@ impl Waffle {
         )
     }
 
-    fn on_drag_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_drag_move(&mut self, event: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
         let Some(drag) = &self.drag else { return };
         let dx = f32::from(event.position.x) - drag.start_x;
         match drag.edge {
@@ -313,6 +321,7 @@ impl Waffle {
             // The member list grows leftward.
             Edge::Panel => self.panel_width = (drag.start_width - dx).clamp(PANEL_RANGE.0, PANEL_RANGE.1),
             Edge::Settings => self.settings_width = (drag.start_width + dx).clamp(SETTINGS_RANGE.0, SETTINGS_RANGE.1),
+            Edge::CallChat => self.prefs.call_chat_width = crate::call::chat_width(drag.start_width - dx, f32::from(window.viewport_size().width)),
         }
         cx.notify();
     }
@@ -321,29 +330,32 @@ impl Waffle {
     /// dragging (.panel-grip). Dragging it resizes the column.
     pub(crate) fn resize_handle(&self, edge: Edge, cx: &mut Context<Self>) -> impl IntoElement {
         let active = self.drag.as_ref().is_some_and(|d| d.edge == edge);
+        let grows_left = matches!(edge, Edge::Panel | Edge::CallChat);
         let accent = palette::accent();
         div()
             .id(match edge {
                 Edge::Channels => "resize-channels",
                 Edge::Panel => "resize-panel",
                 Edge::Settings => "resize-settings",
+                Edge::CallChat => "resize-call-chat",
             })
             .absolute()
             .top_0()
             .bottom_0()
             .w(px(8.))
-            .when(edge != Edge::Panel, |h| h.right(px(-4.)))
-            .when(edge == Edge::Panel, |h| h.left(px(-4.)))
+            .when(!grows_left, |h| h.right(px(-4.)))
+            .when(grows_left, |h| h.left(px(-4.)))
             .group("resize-grip")
             .cursor_col_resize()
             .child(div().ml(px(3.)).w(px(2.)).h_full().rounded(px(2.)).when(active, |l| l.bg(accent)).when(!active, |l| l.group_hover("resize-grip", |l| l.bg(accent.opacity(0.6)))))
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                     let start_width = match edge {
                         Edge::Channels => this.channels_width,
                         Edge::Panel => this.panel_width,
                         Edge::Settings => this.settings_width,
+                        Edge::CallChat => this.call_chat_width(window),
                     };
                     this.drag = Some(Drag { edge, start_x: f32::from(event.position.x), start_width });
                     cx.stop_propagation();

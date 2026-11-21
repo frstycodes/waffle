@@ -165,6 +165,10 @@ pub struct Prefs {
     pub emoji_uses: Vec<(crate::discord::Emoji, u32)>,
     pub sticker_uses: Vec<(crate::discord::Sticker, u32)>,
     pub mention_filters: crate::inbox::MentionFilters,
+    // The voice channel chat's width beside the call, and the voice channels whose new message
+    // previews are off (Discord's "Show New Message Previews", local only).
+    pub call_chat_width: f32,
+    pub call_previews_off: Vec<String>,
     // Go Live quality: height (0 = source), frame rate, and whether the source's sound goes too.
     pub stream_resolution: u32,
     pub stream_fps: u32,
@@ -233,6 +237,8 @@ impl Default for Prefs {
             emoji_uses: Vec::new(),
             sticker_uses: Vec::new(),
             mention_filters: crate::inbox::MentionFilters::default(),
+            call_chat_width: crate::call::CHAT_MIN_WIDTH,
+            call_previews_off: Vec::new(),
             stream_resolution: 720,
             stream_fps: 30,
             stream_audio: true,
@@ -673,6 +679,7 @@ impl Waffle {
             Action::ToggleVoiceMode => self.update_prefs(cx, |p| p.push_to_talk = !p.push_to_talk),
             Action::ToggleScreenShare => self.toggle_share_keybind(cx),
             Action::Disconnect => self.leave_voice(cx),
+            Action::ToggleVoiceChannelChat => self.toggle_call_chat_keybind(cx),
             Action::Unassigned => {}
         }
         cx.notify();
