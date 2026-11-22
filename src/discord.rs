@@ -3124,6 +3124,7 @@ mod tests {
             threads: Vec::new(),
             my_roles: Vec::new(),
             default_notifications: Default::default(),
+            ..Default::default()
         };
         fn visible(g: &Guild) -> Vec<&str> {
             g.channels.iter().filter(|c| g.can_view("me", c)).map(|c| c.id.as_str()).collect()
@@ -3161,6 +3162,7 @@ mod tests {
             threads: vec![thread],
             my_roles: Vec::new(),
             default_notifications: Default::default(),
+            ..Default::default()
         };
         let can = |g: &Guild, me: &str, id: &str| g.channel_permissions(me, g.channel(id).unwrap()) & perm::MANAGE_MESSAGES != 0;
         let all = ["open", "locked", "mine", "everyone", "t"];
@@ -3202,6 +3204,7 @@ mod tests {
             threads: Vec::new(),
             my_roles: vec!["mods".into()],
             default_notifications: Default::default(),
+            ..Default::default()
         };
         let to = |g: &Guild, me: &str, who: &str| ["b", "full", "locked", "closed"].into_iter().filter(|id| g.can_move(me, who, g.channel(id).unwrap())).collect::<Vec<_>>();
 
@@ -3430,7 +3433,7 @@ mod tests {
     fn invites_read_their_server_and_counts() {
         let body = json!({ "code": "waffle", "guild": { "id": "9", "name": "Dumpling Hall", "icon": "ff" }, "approximate_member_count": 8311, "approximate_presence_count": 1204 });
         let invite = parse_invite(&body).unwrap();
-        assert_eq!(invite, Invite { guild_id: "9".into(), name: "Dumpling Hall".into(), icon: Some("https://cdn.discordapp.com/icons/9/ff.png?size=96".into()), online: Some(1204), members: Some(8311) });
+        assert_eq!(invite, Invite { guild_id: "9".into(), name: "Dumpling Hall".into(), icon: Some("https://cdn.discordapp.com/icons/9/ff.png?size=96".into()), online: Some(1204), members: Some(8311), ..Default::default() });
         assert_eq!(parse_invite(&json!({ "code": "gdm", "channel": { "id": "5", "type": 3 } })), None, "a group DM invite has no server card");
     }
 }

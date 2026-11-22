@@ -399,7 +399,8 @@ impl Waffle {
             let key = id.clone();
             self.server_call(api::done_actions(&id), move |this, result, _| {
                 if let Ok(v) = result {
-                    this.join.done_actions.insert(key, parse_done_actions(&v));
+                    // Merge: a to-do ticked while this was in flight stays ticked.
+                    this.join.done_actions.entry(key).or_default().extend(parse_done_actions(&v));
                 }
             }, cx);
         }
