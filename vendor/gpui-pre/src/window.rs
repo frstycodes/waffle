@@ -4082,7 +4082,7 @@ impl Window {
             // via the `visible_on_hover` method). Since mouse listeners are not active in this
             // case, instead update the tooltip's visibility here.
             let is_visible =
-                (tooltip_request.tooltip.check_visible_and_update)(tooltip_bounds, self, cx);
+                (tooltip_request.tooltip.check_visible_and_update)(tooltip_bounds, tooltip_request.tooltip.anchor, self, cx);
             if !is_visible {
                 continue;
             }

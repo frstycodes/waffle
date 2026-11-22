@@ -5,7 +5,7 @@
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use gpui_kit::prelude::*;
-use gpui_kit::{AnyView, App, Context, MouseMoveEvent, Pixels, Point, TestAppContext, VisualTestContext, Window, div, point, px};
+use gpui_kit::{AnyView, App, Context, MouseMoveEvent, Pixels, Point, TestAppContext, TooltipPlacement, VisualTestContext, Window, div, point, px};
 
 type Drawn = Rc<RefCell<Vec<&'static str>>>;
 
@@ -29,7 +29,7 @@ struct Rail {
 impl Render for Rail {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let tile = |id: &'static str, drawn: Drawn| {
-            div().id(id).size(px(50.)).tooltip_show_delay(Duration::ZERO).hoverable_tooltip(move |_: &mut Window, cx: &mut App| -> AnyView {
+            div().id(id).size(px(50.)).tooltip_show_delay(Duration::ZERO).tooltip_placement(TooltipPlacement::Side).hoverable_tooltip(move |_: &mut Window, cx: &mut App| -> AnyView {
                 let drawn = drawn.clone();
                 cx.new(|_| Tip { id, drawn }).into()
             })
@@ -63,6 +63,39 @@ fn moving_up_shows_the_hovered_tooltip_at_once(cx: &mut TestAppContext) {
     move_to(cx, point(px(25.), px(125.)));
     wait(cx, 0);
     assert_eq!(showing(&drawn), "c");
+}
+
+// The hoverable delay holds a tooltip only while the pointer is on its way into it.
+#[gpui_kit::test]
+fn a_hoverable_tooltip_closes_at_once_unless_the_pointer_heads_into_it(cx: &mut TestAppContext) {
+    let drawn: Drawn = Rc::default();
+    let (_, cx) = cx.add_window_view({
+        let drawn = drawn.clone();
+        move |_, _| Rail { drawn }
+    });
+    let drawn_now = |drawn: &Drawn, cx: &mut VisualTestContext| {
+        drawn.borrow_mut().clear();
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+        drawn.borrow().last().copied()
+    };
+
+    // Down off the column, away from its tooltip (which opens to the right): it closes now, not in 500ms.
+    move_to(cx, point(px(25.), px(25.)));
+    wait(cx, 0);
+    assert_eq!(drawn_now(&drawn, cx), Some("a"));
+    move_to(cx, point(px(25.), px(300.)));
+    wait(cx, 200);
+    assert_eq!(drawn_now(&drawn, cx), None, "gone well inside the hover delay");
+
+    // Across the gap into it: it stays while the pointer is on the tooltip.
+    move_to(cx, point(px(25.), px(25.)));
+    wait(cx, 400);
+    move_to(cx, point(px(51.), px(25.)));
+    wait(cx, 0);
+    move_to(cx, point(px(70.), px(25.)));
+    wait(cx, 600);
+    assert_eq!(drawn_now(&drawn, cx), Some("a"), "the tooltip stays up while the pointer is on it");
 }
 
 fn move_to(cx: &mut VisualTestContext, position: Point<Pixels>) {
