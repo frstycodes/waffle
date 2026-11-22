@@ -413,7 +413,7 @@ impl Waffle {
             .flex()
             .items_center()
             .gap_3()
-            .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Keyboard combos"))
+            .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Keyboard combos"))
             .child(key_caps(&platform_combo(COMBOS_KEY), cx))
             .child(div().flex_1())
             .child(ui::icon_button("combos-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.set_keyboard_combos(false, cx))));

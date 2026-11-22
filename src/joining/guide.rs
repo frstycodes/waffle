@@ -106,7 +106,7 @@ impl Waffle {
                         .flex_col()
                         .gap_1()
                         .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(name))
-                        .child(div().text_size(px(15.)).line_height(px(22.)).text_color(palette::text(cx)).child(message)),
+                        .child(div().text_size(ui::TEXT_LEAD).line_height(ui::LINE_LEAD).text_color(palette::text(cx)).child(message)),
                 ),
         )
     }
@@ -329,7 +329,7 @@ fn todo_row(guild: &Guild, todo: &MemberAction, done: bool, cx: &mut Context<Waf
                 .flex()
                 .flex_col()
                 .child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(title_ink).child(todo.title.clone()))
-                .child(div().truncate().text_size(px(13.)).text_color(palette::muted(cx)).child(name)),
+                .child(div().truncate().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(name)),
         )
         .child(state)
         .when_some(channel, |row, channel| row.on_click(cx.listener(move |this, _, window, cx| this.open_channel(channel.clone(), window, cx))))
@@ -357,7 +357,7 @@ fn resource_card(ix: usize, channel: &Channel, title: &str, description: Option<
         .hover(move |s| s.bg(hover))
         .cursor_pointer()
         .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.to_owned()))
-        .children(description.map(|d| div().text_size(px(13.)).line_height(px(18.)).text_color(palette::muted(cx)).child(d)))
+        .children(description.map(|d| div().text_size(ui::TEXT_DETAIL).line_height(ui::LINE_DETAIL).text_color(palette::muted(cx)).child(d)))
         .on_click(cx.listener(move |this, _, window, cx| this.open_channel(channel.clone(), window, cx)))
 }
 

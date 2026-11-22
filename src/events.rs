@@ -1589,7 +1589,7 @@ impl Waffle {
             .items_center()
             .gap_2p5()
             .child(div().text_color(palette::muted(cx)).child(Icon::new(Glyph::Calendar).size(ui::ICON_XL)))
-            .child(div().flex_1().min_w_0().truncate().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
+            .child(div().flex_1().min_w_0().truncate().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
             .children(create)
             .child(ui::icon_button("events-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))));
         let now = Local::now();
@@ -1655,7 +1655,7 @@ impl Waffle {
             .border_color(palette::line(cx))
             .children(cover)
             .child(head)
-            .child(div().mt_0p5().text_size(px(18.)).line_height(px(22.)).font_weight(FontWeight::SEMIBOLD).text_color(if canceled { muted } else { strong }).child(event.name.clone()))
+            .child(div().mt_0p5().text_size(px(18.)).line_height(ui::LINE_LEAD).font_weight(FontWeight::SEMIBOLD).text_color(if canceled { muted } else { strong }).child(event.name.clone()))
             .children(event.description.as_deref().map(|d| description_view(&format!("event-card-md-{}", event.id), d, cx).max_h_10().overflow_hidden()))
             .child(self.card_foot(event, actions, cx));
         if !actions {
@@ -1842,7 +1842,7 @@ impl Waffle {
             .flex()
             .items_start()
             .gap_3()
-            .child(div().flex_1().min_w_0().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(event.name.clone()))
+            .child(div().flex_1().min_w_0().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(event.name.clone()))
             .child(ui::icon_button("event-details-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))));
         let items = [ui::Tab::new("Event Info"), ui::Tab::new(format!("{} Interested", event.interested))];
         let this = cx.entity().downgrade();
@@ -1972,7 +1972,7 @@ impl Waffle {
             .child(ui::button("event-start-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))))
             .child(ui::button("event-start-go", Tone::Primary, cx).child("Start Event").on_click(cx.listener(|this, _, _, cx| this.start_event(cx))));
         let body = ui::dialog_body()
-            .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(event.name.clone()))
+            .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(event.name.clone()))
             .child(div().text_color(palette::muted(cx)).child("You are about to start this Private event"))
             .children(notify)
             .child(foot);
@@ -2000,7 +2000,7 @@ impl Waffle {
                     .flex()
                     .flex_col()
                     .gap_0p5()
-                    .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
+                    .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
                     .children(subtitle.map(|s| div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(s))),
             )
             .child(ui::icon_button("event-wizard-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))));
@@ -2174,7 +2174,7 @@ impl Waffle {
 // A description as Discord renders it: markdown, line breaks kept, custom emoji as images (the profile bio's way).
 fn description_view(id: &str, text: &str, cx: &App) -> gpui_kit::Div {
     let view = TextView::markdown(SharedString::from(id.to_owned()), crate::chat::inline_emoji(&crate::chat::discord_breaks(text)));
-    div().min_w_0().text_size(ui::TEXT_SM).line_height(px(20.)).text_color(palette::text(cx)).child(view)
+    div().min_w_0().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(palette::text(cx)).child(view)
 }
 
 // The status line's column: the coloured lead and the rest on one line, the repeat under it.
@@ -2193,10 +2193,10 @@ fn when_column(when: &When, repeat: Option<String>, ink: Hsla, cx: &gpui_kit::Ap
         .flex()
         .flex_col()
         .text_size(ui::TEXT_SM)
-        .line_height(px(20.))
+        .line_height(ui::LINE_SM)
         .text_color(muted)
         .child(line)
-        .children(repeat.map(|r| div().flex().items_center().gap_1().text_size(ui::TEXT_XS).line_height(px(18.)).child(Icon::new(Glyph::Repeat).size(px(13.))).child(r)))
+        .children(repeat.map(|r| div().flex().items_center().gap_1().text_size(ui::TEXT_XS).line_height(ui::LINE_DETAIL).child(Icon::new(Glyph::Repeat).size(px(13.))).child(r)))
         .into_any_element()
 }
 

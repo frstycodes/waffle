@@ -10,7 +10,6 @@ use gpui_kit::{
     component::input::{Input, InputEvent, InputState, Textarea, TextareaState},
     div,
     prelude::*,
-    px,
 };
 
 use crate::{
@@ -432,7 +431,7 @@ fn head(app: &app_commands::App, title: &str, cx: &mut Context<Waffle>) -> impl 
         .items_center()
         .gap_3()
         .child(ui::server_tile(app.icon.as_deref(), &app.name, 24., cx))
-        .child(div().flex_1().min_w_0().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.to_owned()))
+        .child(div().flex_1().min_w_0().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.to_owned()))
         .child(ui::icon_button("app-modal-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_app_modal(cx))))
 }
 

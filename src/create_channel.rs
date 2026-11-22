@@ -466,7 +466,7 @@ fn dialog_head(title: &'static str, icon: Option<Icon>, sub: Option<SharedString
     div()
         .flex()
         .items_start()
-        .child(div().flex_1().min_w_0().flex().flex_col().gap_0p5().child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(title)).children(sub))
+        .child(div().flex_1().min_w_0().flex().flex_col().gap_0p5().child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(title)).children(sub))
         .child(ui::icon_button("create-channel-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_create_channel(cx))))
 }
 
@@ -505,8 +505,8 @@ fn type_row(kind: u64, private: bool, on: bool, window: &mut Window, cx: &mut Co
                 .flex()
                 .flex_col()
                 .gap_0p5()
-                .child(div().flex().items_center().gap_1p5().text_color(strong).child(type_icon(kind, private && allows_private(kind)).size(px(18.))).child(div().font_weight(FontWeight::MEDIUM).child(name)))
-                .child(div().text_size(ui::TEXT_XS).line_height(px(16.)).text_color(muted).child(hint)),
+                .child(div().flex().items_center().gap_1p5().text_color(strong).child(type_icon(kind, private && allows_private(kind)).size(ui::ICON_LG)).child(div().font_weight(FontWeight::MEDIUM).child(name)))
+                .child(div().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(muted).child(hint)),
         )
         .on_click(cx.listener(move |this, _, window, cx| this.set_channel_kind(kind, window, cx)))
 }

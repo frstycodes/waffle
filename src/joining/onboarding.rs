@@ -608,7 +608,7 @@ fn rules_list(rules: &[String], scroll: &ScrollHandle, cx: &App) -> Div {
                     .justify_center()
                     .child((i + 1).to_string()),
             )
-            .child(div().flex_1().min_w_0().text_size(px(15.)).line_height(relative(1.45)).text_color(palette::strong(cx)).child(rule.clone()))
+            .child(div().flex_1().min_w_0().text_size(ui::TEXT_LEAD).line_height(relative(1.45)).text_color(palette::strong(cx)).child(rule.clone()))
             .when(i < last, |d| d.child(ui::inset_rule(12., cx).left_12()))
     });
     let group = palette::surface(palette::Level::Group, cx);
@@ -659,7 +659,7 @@ fn option_grid(guild: &Guild, prompt: &Prompt, picked: &HashSet<String>, cx: &mu
                 .flex()
                 .flex_col()
                 .gap_0p5()
-                .child(div().text_size(px(15.)).line_height(px(TITLE_LINE)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(option.title.clone()))
+                .child(div().text_size(ui::TEXT_LEAD).line_height(px(TITLE_LINE)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(option.title.clone()))
                 .when_some(option.description.clone(), |d, desc| d.child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(desc)))
                 .when(!gets.is_empty(), |d| d.child(div().mt_0p5().flex().flex_wrap().items_center().gap_1().text_size(ui::TEXT_XS).text_color(ink).children(gets)));
             let edge = if on { palette::accent().opacity(0.7) } else { palette::line(cx) };

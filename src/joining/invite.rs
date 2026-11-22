@@ -170,7 +170,7 @@ impl Waffle {
                     .flex()
                     .flex_col()
                     .child(div().font_weight(FontWeight::SEMIBOLD).child("Server Settings"))
-                    .child(div().text_size(px(13.)).text_color(muted).child("You can customize these at any time")),
+                    .child(div().text_size(ui::TEXT_DETAIL).text_color(muted).child("You can customize these at any time")),
             )
             .child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD).text_color(muted).rotate(gpui_kit::Radians(angle.to_radians())))
             .on_click(cx.listener(|this, _, _, cx| this.edit_invite(cx, |v| v.settings_open = !v.settings_open)));

@@ -145,7 +145,7 @@ impl Waffle {
                     .child(div().text_color(palette::muted(cx)).child("Answer questions to get access to more channels and roles.")),
             )
             .children(prompts.into_iter().map(|prompt| self.prompt_card(&guild.id, prompt, &picked, cx)))
-            .when(saved, |d| d.child(div().flex().items_center().gap_1p5().text_size(px(13.)).text_color(palette::muted(cx)).child(Icon::new(Glyph::Checkmark).size(ui::ICON_SM)).child("Saved")))
+            .when(saved, |d| d.child(div().flex().items_center().gap_1p5().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(Icon::new(Glyph::Checkmark).size(ui::ICON_SM)).child("Saved")))
             .into_any_element()
     }
 
@@ -176,7 +176,7 @@ impl Waffle {
                     .flex_col()
                     .gap_0p5()
                     .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(prompt.title.clone()))
-                    .child(div().text_size(px(13.)).text_color(palette::muted(cx)).child(if prompt.single_select { "Pick one" } else { "Choose all that apply." })),
+                    .child(div().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(if prompt.single_select { "Pick one" } else { "Choose all that apply." })),
             )
             .child(div().flex().flex_wrap().gap_2().children(chips))
             .into_any_element()
@@ -239,7 +239,7 @@ impl Waffle {
             .gap_3()
             .child(div().flex().items_center().gap_3().child(div().flex_1().min_w_0().child(ui::search_field("browse-search", &search, cx))).child(tally))
             .children(cards)
-            .child(div().text_size(px(13.)).text_color(palette::muted(cx)).child("Tip: Channels with mentions will always appear on your channel list, even if you hide them."))
+            .child(div().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child("Tip: Channels with mentions will always appear on your channel list, even if you hide them."))
             .into_any_element()
     }
 
@@ -269,7 +269,7 @@ impl Waffle {
                 .pt_2p5()
                 .px_3()
                 .pb_1p5()
-                .child(div().flex_1().min_w_0().truncate().text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(category.name.clone()))
+                .child(div().flex_1().min_w_0().truncate().text_size(ui::TEXT_DETAIL).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(category.name.clone()))
                 .child(
                     div()
                         .id(SharedString::from(format!("follow-category-{}", category.id)))
@@ -277,7 +277,7 @@ impl Waffle {
                         .items_center()
                         .gap_2()
                         .cursor_pointer()
-                        .text_size(px(13.))
+                        .text_size(ui::TEXT_DETAIL)
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(palette::text(cx))
                         .child(ui::check_live(SharedString::from(format!("follow-category-check-{}", category.id)), state, window, cx))
@@ -311,7 +311,7 @@ impl Waffle {
             .flex()
             .flex_col()
             .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(channel.name.clone()))
-            .when_some(channel.topic.clone().filter(|t| !t.is_empty()), |d, topic| d.child(div().truncate().text_size(px(13.)).text_color(palette::muted(cx)).child(topic)));
+            .when_some(channel.topic.clone().filter(|t| !t.is_empty()), |d, topic| d.child(div().truncate().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(topic)));
         div()
             .id(SharedString::from(format!("browse-{}", channel.id)))
             .w_full()

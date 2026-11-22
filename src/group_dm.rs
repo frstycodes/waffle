@@ -603,7 +603,7 @@ fn dialog_head(title: impl Into<SharedString>, subtitle: Option<SharedString>, c
         .flex()
         .flex_col()
         .gap_1()
-        .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.into()))
+        .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.into()))
         .children(subtitle.map(|s| div().text_color(palette::muted(cx)).child(s)));
     div().flex().items_start().gap_3().child(text).child(ui::icon_button("group-dialog-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_group_dialog(cx))))
 }

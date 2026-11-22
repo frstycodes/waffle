@@ -213,7 +213,7 @@ fn rules_head(guild: &Guild, applies: bool, cx: &mut Context<Waffle>) -> impl In
                 .flex()
                 .flex_col()
                 .gap_0p5()
-                .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
+                .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
                 .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(subtitle)),
         )
         .child(ui::icon_button("rules-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| {
@@ -239,7 +239,7 @@ fn rules_list(form: &Form, scroll: &gpui_kit::ScrollHandle, cx: &mut Context<Waf
             .gap_3()
             .when(i > 0, |row| row.child(div().absolute().top_0().left_12().right_3().h(ui::HAIRLINE).bg(line)))
             .child(number(i + 1, cx))
-            .child(div().flex_1().min_w_0().text_size(px(15.)).line_height(px(22.)).text_color(strong).child(rule.clone()))
+            .child(div().flex_1().min_w_0().text_size(ui::TEXT_LEAD).line_height(ui::LINE_LEAD).text_color(strong).child(rule.clone()))
     }).collect();
     div()
         .flex()
@@ -303,7 +303,7 @@ fn agree_row(view: &RulesView, window: &mut Window, cx: &mut Context<Waffle>) ->
         .border_1()
         .border_color(edge)
         .cursor_pointer()
-        .text_size(px(15.))
+        .text_size(ui::TEXT_LEAD)
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(palette::strong(cx))
         .child(div().w_6().flex_none().flex().justify_center().child(check))

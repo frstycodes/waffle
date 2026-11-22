@@ -359,7 +359,7 @@ fn intent_step(cx: &mut Context<Waffle>) -> Div {
         .child(to_customize("create-server-intent-friends", Glyph::Heart, 55., "For me and my friends", cx))
         .child(to_customize("create-server-intent-community", Glyph::Users, 205., "For a club or community", cx));
     let skip = ui::button("create-server-skip", Tone::Link, cx).child("skip this question").on_click(cx.listener(|this, _, window, cx| this.create_server_step(Step::Customize, window, cx)));
-    let hint = div().flex().flex_wrap().justify_center().items_center().gap_1().text_size(px(13.)).text_color(palette::muted(cx)).child("Not sure? You can").child(skip).child("for now.");
+    let hint = div().flex().flex_wrap().justify_center().items_center().gap_1().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child("Not sure? You can").child(skip).child("for now.");
     let back = back_button(cx);
     ui::dialog_body()
         .child(head("Tell us more about your server", "In order to help you with your setup, is your new server for just a few friends or a larger community?", cx))
@@ -434,8 +434,8 @@ fn head(title: &'static str, subtitle: &'static str, cx: &mut Context<Waffle>) -
                 .flex()
                 .flex_col()
                 .gap_1()
-                .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
-                .child(div().text_size(ui::TEXT_SM).line_height(px(20.)).text_color(palette::muted(cx)).child(subtitle)),
+                .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
+                .child(div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(palette::muted(cx)).child(subtitle)),
         )
         .child(ui::icon_button("create-server-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_create_server(cx))))
 }
@@ -479,7 +479,7 @@ fn card_row(id: &'static str, tile: impl IntoElement, label: &'static str, detai
         .flex_col()
         .gap_0p5()
         .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(label))
-        .children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(px(16.)).text_color(palette::muted(cx)).child(d)));
+        .children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::muted(cx)).child(d)));
     div()
         .id(id)
         .flex()
@@ -511,7 +511,7 @@ fn template_row(i: usize, template: &Template, expanded: bool, off: bool, cx: &m
         .gap_x_2p5()
         .gap_y_1()
         .text_size(ui::TEXT_XS)
-        .line_height(px(16.))
+        .line_height(ui::LINE_XS)
         .text_color(palette::muted(cx))
         .children(chans.into_iter().map(|(glyph, name)| channel_chip(glyph, name, faint)))
         .when(clamped, |d| d.max_h(px(34.)).overflow_hidden().child(fade(group.clone(), palette::surface(palette::Level::Raised, cx), hover)));
@@ -614,7 +614,7 @@ fn invite_example(i: usize, example: &'static str, invite: &Entity<InputState>, 
     let invite = invite.clone();
     div()
         .id(("create-server-example", i))
-        .text_size(px(13.))
+        .text_size(ui::TEXT_DETAIL)
         .font_weight(FontWeight::MEDIUM)
         .text_color(strong)
         .cursor_pointer()

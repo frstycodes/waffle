@@ -303,7 +303,7 @@ impl Waffle {
                 let (to, label_owned) = (to.clone(), label.clone());
                 ui::menu_row(SharedString::from(format!("report-child-{}-{i}", dialog.node)), cx)
                     .min_h_11()
-                    .text_size(px(15.))
+                    .text_size(ui::TEXT_LEAD)
                     .text_color(palette::strong(cx))
                     .child(div().flex_1().min_w_0().child(label.clone()))
                     .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_LG)))
@@ -540,7 +540,7 @@ fn head(title: SharedString, subheader: Option<AnyElement>, close: ui::Control, 
         .flex()
         .flex_col()
         .gap_1()
-        .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
+        .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
         .children(subheader.map(|s| div().text_color(palette::muted(cx)).child(s)));
     div().flex().items_start().gap_3().child(text).child(close)
 }

@@ -121,7 +121,7 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Win
         .window_control_area(gpui_kit::WindowControlArea::Drag)
         .child(div().flex_1())
         .children(lead)
-        .child(div().max_w_full().truncate().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
+        .child(div().max_w_full().truncate().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
         .child(div().max_w(px(TEXT_WIDTH)).text_color(muted).child(detail))
         .children(reason)
         .children(card.map(|card| div().mt_1().child(card)))

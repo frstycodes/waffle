@@ -436,7 +436,7 @@ fn invite_head(guild: &Guild, channel: &Channel, cx: &mut Context<Waffle>) -> An
                 .flex()
                 .flex_col()
                 .gap_1()
-                .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("Invite friends to {}", guild.name)))
+                .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("Invite friends to {}", guild.name)))
                 .child(land),
         )
         .child(ui::icon_button("invite-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_invite_dialog(cx))))
@@ -494,7 +494,7 @@ fn link_section(invite: &Invite, paused: bool, editable: bool, cx: &mut Context<
         .hover(|s| s.underline())
         .child("Edit invite link")
         .on_click(cx.listener(|this, _, _, cx| this.edit_invite_dialog(|i| (i.draft, i.select) = (Some(i.settings), None), cx)));
-    let hint = div().flex().flex_wrap().gap_x_1().text_size(px(13.)).line_height(px(18.)).text_color(palette::muted(cx)).child(line).when(url.is_some() && editable, |d| d.child(edit));
+    let hint = div().flex().flex_wrap().gap_x_1().text_size(ui::TEXT_DETAIL).line_height(ui::LINE_DETAIL).text_color(palette::muted(cx)).child(line).when(url.is_some() && editable, |d| d.child(edit));
     div()
         .flex()
         .flex_col()
