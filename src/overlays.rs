@@ -260,6 +260,12 @@ impl Waffle {
             cx.notify();
             return true;
         }
+        // The full-size avatar closes alone, back to the popout it opened from.
+        if let Some(card) = self.profile_card.as_mut().filter(|c| c.avatar_full) {
+            card.avatar_full = false;
+            cx.notify();
+            return true;
+        }
         let text_viewer = self.text_files.borrow_mut().viewer.take().is_some();
         let open = text_viewer
             | self.profile_card.take().is_some()
