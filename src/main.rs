@@ -1675,6 +1675,7 @@ impl Waffle {
     }
 
     fn on_message(&mut self, message: Message, cx: &mut Context<Self>) {
+        self.note_message_sent(&message, cx);
         let channel_id = message.channel_id.clone();
         let mine = self.me.as_ref().is_some_and(|me| me.id == message.author.id);
         let is_open = self.channel.as_ref().is_some_and(|c| c.id == channel_id);
