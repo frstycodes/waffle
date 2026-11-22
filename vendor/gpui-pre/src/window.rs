@@ -4151,7 +4151,8 @@ impl Window {
         crate::div()
             .child(tooltip.view.clone())
             .transform_origin(origin)
-            .opacity((t / 0.5).min(1.))
+            // Opaque within three frames, so it reads as instant; the pop carries the motion.
+            .opacity((t / 0.15).min(1.))
             .scale(0.8 + 0.2 * pop)
             .rotate(radians(-0.08 * (1. - pop)))
             .into_any_element()

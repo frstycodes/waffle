@@ -65,6 +65,33 @@ fn moving_up_shows_the_hovered_tooltip_at_once(cx: &mut TestAppContext) {
     assert_eq!(showing(&drawn), "c");
 }
 
+// No delay set: a tooltip shows the moment its element is hovered, the first one included.
+struct Plain {
+    drawn: Drawn,
+}
+
+impl Render for Plain {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let drawn = self.drawn.clone();
+        div().id("plain").size(px(50.)).tooltip(move |_: &mut Window, cx: &mut App| -> AnyView {
+            let drawn = drawn.clone();
+            cx.new(|_| Tip { id: "plain", drawn }).into()
+        })
+    }
+}
+
+#[gpui_kit::test]
+fn a_tooltip_shows_at_once_by_default(cx: &mut TestAppContext) {
+    let drawn: Drawn = Rc::default();
+    let (_, cx) = cx.add_window_view({
+        let drawn = drawn.clone();
+        move |_, _| Plain { drawn }
+    });
+    move_to(cx, point(px(25.), px(25.)));
+    wait(cx, 0);
+    assert_eq!(drawn.borrow().last().copied(), Some("plain"), "shown with no time passed");
+}
+
 // The hoverable delay holds a tooltip only while the pointer is on its way into it.
 #[gpui_kit::test]
 fn a_hoverable_tooltip_closes_at_once_unless_the_pointer_heads_into_it(cx: &mut TestAppContext) {

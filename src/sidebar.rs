@@ -482,7 +482,6 @@ impl Waffle {
                             None => ui::tip(name.clone(), window, cx),
                         }
                     })
-                    .tooltip_show_delay(Duration::ZERO)
                     .tooltip_placement(TooltipPlacement::Side),
             )
             .when(mentions > 0 && badge_scale > 0.01, |item| item.child(rail_count(mentions, badge_scale, crate::material::behind_sidebar(rail))))
@@ -1869,7 +1868,6 @@ fn rail_action(id: &'static str, icon: Icon, tooltip: &'static str, cx: &App) ->
         .hover(move |s| s.bg(raised).text_color(strong))
         .child(icon.size(ui::ICON_XL))
         .tooltip(move |window, cx| ui::tip(tooltip, window, cx))
-        .tooltip_show_delay(Duration::ZERO)
         .tooltip_placement(TooltipPlacement::Side)
 }
 
