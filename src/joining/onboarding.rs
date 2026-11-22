@@ -712,7 +712,8 @@ fn option_emoji(emoji: &OptionEmoji) -> Option<AnyElement> {
         return Some(slot.child(img(url).size(px(22.)).object_fit(ObjectFit::Contain)).into_any_element());
     }
     let name = emoji.name.clone()?;
-    Some(slot.text_size(px(20.)).line_height(px(TITLE_LINE)).child(name).into_any_element())
+    // The emoji font draws above the line box's middle: nudged down to the title's optical centre.
+    Some(slot.child(div().relative().top(px(2.)).text_size(px(20.)).line_height(px(TITLE_LINE)).child(name)).into_any_element())
 }
 
 fn role_color(color: u32, cx: &App) -> Hsla {
