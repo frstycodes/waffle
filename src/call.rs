@@ -685,7 +685,7 @@ impl Waffle {
         let menus_closed = self.device_menu.is_none() && self.menu.is_none();
         let rest = match self.focused_stream() {
             Some(_) => self.call_idle(),
-            None => !self.call_pointer_inside && menus_closed,
+            None => !self.call_pointer_inside && !self.call_pointer_on_chrome && menus_closed,
         };
         let shown = gpui_kit::base::transition("call-chrome", if rest { 0. } else { 1. }, gpui_kit::base::Transition::new(ui::DUR_PANEL), window, cx);
         let focused = self.call_focus.as_ref().and_then(|key| tiles.iter().find(|t| tile_key(t) == *key));
@@ -728,14 +728,16 @@ impl Waffle {
                 }
                 cx.notify();
             }))
-            .on_mouse_move(cx.listener(|this, _: &gpui_kit::MouseMoveEvent, _, cx| {
-                let was_idle = this.call_idle() || !this.call_pointer_inside;
-                this.call_pointer_at = Instant::now();
-                this.call_pointer_inside = true;
-                if was_idle {
-                    cx.notify();
-                }
-            }))
+            .on_mouse_move(cx.listener(|this, _: &gpui_kit::MouseMoveEvent, _, cx| this.stage_pointer_moved(cx)))
+    }
+
+    fn stage_pointer_moved(&mut self, cx: &mut Context<Self>) {
+        let was_idle = self.call_idle() || !self.call_pointer_inside;
+        self.call_pointer_at = Instant::now();
+        self.call_pointer_inside = true;
+        if was_idle {
+            cx.notify();
+        }
     }
 
     // .call.focused: the header as a 48px band (over the stream in full screen), the focused card
@@ -769,7 +771,7 @@ impl Waffle {
                 d.child(div().id("filmstrip").flex_none().flex().overflow_x_scroll().pt(px(STRIP_GAP)).px(px(STAGE_PAD)).child(div().mx_auto().flex_none().flex().gap(px(STRIP_GAP)).children(cards)))
                     .child(div().h(px(band)).flex_none())
             })
-            .children(floating.map(|head| div().id("call-head-float").occlude().absolute().top(px(-drift)).left_0().right_0().h(px(FOCUS_HEAD + 24.)).opacity(shown).bg(scrim(180.)).child(head)))
+            .children(floating.map(|head| keeps_chrome(div().id("call-head-float"), cx).occlude().absolute().top(px(-drift)).left_0().right_0().h(px(FOCUS_HEAD + 24.)).opacity(shown).bg(scrim(180.)).child(head)))
             .child(
                 div()
                     .absolute()
@@ -871,7 +873,7 @@ impl Waffle {
 
     // Still pointer for a while, and nothing open that belongs to the bar.
     fn call_idle(&self) -> bool {
-        self.call_pointer_at.elapsed() > CONTROLS_IDLE && self.device_menu.is_none() && self.menu.is_none()
+        !self.call_pointer_on_chrome && self.call_pointer_at.elapsed() > CONTROLS_IDLE && self.device_menu.is_none() && self.menu.is_none()
     }
 
     // The header line over the stage: it drags the window, and clears Windows' caption buttons while the
@@ -978,9 +980,9 @@ impl Waffle {
                     Tooltip::new(tip).build(window, cx)
                 })
         });
-        let stop = watching.map(|_| stage_button("stop-watching", if several { "Stop all" } else { "Stop watching" }).occlude().on_click(cx.listener(|this, _, _, cx| this.stop_watching(cx))));
+        let stop = watching.map(|_| keeps_chrome(stage_button("stop-watching", if several { "Stop all" } else { "Stop watching" }), cx).occlude().on_click(cx.listener(|this, _, _, cx| this.stop_watching(cx))));
         // A DM call's stage is opened from its window; this is the way back to the chat (Esc too).
-        let back = call.guild_id.is_none().then(|| stage_button("back-to-chat", "Back to chat").occlude().on_click(cx.listener(|this, _, window, cx| this.back_to_chat(window, cx))));
+        let back = call.guild_id.is_none().then(|| keeps_chrome(stage_button("back-to-chat", "Back to chat"), cx).occlude().on_click(cx.listener(|this, _, window, cx| this.back_to_chat(window, cx))));
         let chat_open = self.call_chat;
         div()
             .h(px(HEAD_HEIGHT))
@@ -998,7 +1000,7 @@ impl Waffle {
             .child(who)
             .child(div().w(px(1.)).h(px(20.)).mx(px(2.)).flex_none().bg(stage::wash(0.14)))
             .child(
-                stage_icon_button("call-chat", Glyph::ChatRound, if chat_open { "Chat: hide the channel's messages" } else { "Chat: show the channel's messages beside the call" }, chat_open)
+                keeps_chrome(stage_icon_button("call-chat", Glyph::ChatRound, if chat_open { "Chat: hide the channel's messages" } else { "Chat: show the channel's messages beside the call" }, chat_open), cx)
                     .occlude()
                     .on_click(cx.listener(|this, _, window, cx| this.toggle_call_chat(window, cx))),
             )
@@ -1441,8 +1443,7 @@ impl Waffle {
         });
         // Floats over the focused card in Focus layout: without occluding, a press on any control
         // also reached the card under it, whose toggle re-focused (and re-watched) what Stop watching ended.
-        div()
-            .id("call-controls")
+        keeps_chrome(div().id("call-controls"), cx)
             .occlude()
             .relative()
             .h(px(CONTROLS_HEIGHT))
@@ -1901,6 +1902,20 @@ impl Waffle {
             false => p.local_mutes.retain(|u| *u != user_id),
         });
     }
+}
+
+// Chrome that occludes takes the pointer from the stage under it, whose hover and moves drive the
+// autohide; it reports them itself so the chrome stays up while the pointer is on it.
+fn keeps_chrome(surface: Stateful<Div>, cx: &mut Context<Waffle>) -> Stateful<Div> {
+    surface
+        .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
+            this.call_pointer_on_chrome = *hovered;
+            match *hovered {
+                true => this.stage_pointer_moved(cx),
+                false => cx.notify(),
+            }
+        }))
+        .on_mouse_move(cx.listener(|this, _: &gpui_kit::MouseMoveEvent, _, cx| this.stage_pointer_moved(cx)))
 }
 
 fn call_backdrop(id: &'static str, cx: &mut Context<Waffle>) -> Stateful<Div> {

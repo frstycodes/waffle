@@ -810,6 +810,8 @@ pub struct Waffle {
     // When the pointer last moved over the call view; the bar and header fade out after a while.
     call_pointer_at: Instant,
     call_pointer_inside: bool,
+    // On the stage's own chrome (controls, header buttons): it stays up while the pointer rests there.
+    call_pointer_on_chrome: bool,
     call_strip_hidden: bool,
     // Our stream's self-view: shown, and which corner of the stage it sits in.
     // Our local volume for each streamer's Go Live (0..=2), kept across watches.
@@ -1161,6 +1163,7 @@ impl Waffle {
             stream_live_since: HashMap::new(),
             call_pointer_at: Instant::now(),
             call_pointer_inside: false,
+            call_pointer_on_chrome: false,
             // Discord's focused view hides everyone else behind the pill on the stream's bottom edge.
             call_strip_hidden: true,
             preview_generation: 0,
