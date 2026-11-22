@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profiles and Presence</title>
+<meta name="description" content="Profile popout additions, the profile editor's two tabs, and where you share activity per server.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<style>
+  /* Waffle's tokens (tokens.css), inlined so the page stands alone. */
+  :root { --accent: #efa831; --on-accent: #2a1c00; --online: oklch(0.74 0.16 155); --idle: oklch(0.80 0.15 78); --dnd: oklch(0.58 0.21 25); --danger: #c21f3a; --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --r-xs: 8px; --r-sm: 11px; --r-md: 14px; --r-lg: 20px; --r-xl: 28px; }
+  :root, :root[data-theme="dark"] { color-scheme: dark; --bg-sidebar: oklch(0.180 0.004 260); --bg-page: oklch(0.210 0.004 260); --bg-raised: oklch(0.250 0.005 260); --bg-group: oklch(0.250 0.005 260); --bg-overlay: oklch(0.275 0.005 260); --hover: oklch(1 0 0 / 0.05); --press: oklch(1 0 0 / 0.09); --selected: oklch(1 0 0 / 0.08); --line: oklch(1 0 0 / 0.08); --line-strong: oklch(1 0 0 / 0.14); --text-strong: oklch(0.97 0.004 260); --text: oklch(0.88 0.008 260); --text-muted: oklch(0.72 0.012 260); --text-faint: oklch(0.65 0.012 260); --accent-ink: #f6b84d; --accent-soft: oklch(0.78 0.15 75 / 0.16); --danger-ink: #ff7a8c; --online-ink: oklch(0.78 0.15 155); --info-ink: oklch(0.74 0.11 240); --warning-ink: oklch(0.82 0.14 80); --track: oklch(0.33 0.008 260); --shadow-pop: 0 12px 32px oklch(0 0 0 / 0.45), 0 0 0 1px var(--line-strong); --scrim: oklch(0.08 0.004 260 / 0.7); }
+  :root[data-theme="light"] { color-scheme: light; --bg-sidebar: oklch(0.948 0.004 260); --bg-page: oklch(0.982 0.002 260); --bg-raised: oklch(0.995 0.001 260); --bg-group: oklch(0.960 0.003 260); --bg-overlay: oklch(0.998 0.001 260); --hover: oklch(0.3 0.008 260 / 0.06); --press: oklch(0.3 0.008 260 / 0.1); --selected: oklch(0.3 0.008 260 / 0.09); --line: oklch(0.3 0.008 260 / 0.1); --line-strong: oklch(0.3 0.008 260 / 0.18); --text-strong: oklch(0.20 0.009 260); --text: oklch(0.30 0.009 260); --text-muted: oklch(0.46 0.009 260); --text-faint: oklch(0.49 0.009 260); --accent-ink: #8a5601; --accent-soft: oklch(0.7 0.15 75 / 0.14); --danger-ink: #b0182f; --online-ink: oklch(0.48 0.13 155); --info-ink: oklch(0.5 0.13 240); --warning-ink: oklch(0.52 0.12 70); --track: oklch(0.86 0.004 260); --shadow-pop: 0 12px 32px oklch(0 0 0 / 0.14), 0 0 0 1px var(--line); --scrim: oklch(0.2 0.004 260 / 0.45); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme]) { color-scheme: light; --bg-sidebar: oklch(0.948 0.004 260); --bg-page: oklch(0.982 0.002 260); --bg-raised: oklch(0.995 0.001 260); --bg-group: oklch(0.960 0.003 260); --bg-overlay: oklch(0.998 0.001 260); --hover: oklch(0.3 0.008 260 / 0.06); --press: oklch(0.3 0.008 260 / 0.1); --selected: oklch(0.3 0.008 260 / 0.09); --line: oklch(0.3 0.008 260 / 0.1); --line-strong: oklch(0.3 0.008 260 / 0.18); --text-strong: oklch(0.20 0.009 260); --text: oklch(0.30 0.009 260); --text-muted: oklch(0.46 0.009 260); --text-faint: oklch(0.49 0.009 260); --accent-ink: #8a5601; --accent-soft: oklch(0.7 0.15 75 / 0.14); --danger-ink: #b0182f; --online-ink: oklch(0.48 0.13 155); --info-ink: oklch(0.5 0.13 240); --warning-ink: oklch(0.52 0.12 70); --track: oklch(0.86 0.004 260); --shadow-pop: 0 12px 32px oklch(0 0 0 / 0.14), 0 0 0 1px var(--line); --scrim: oklch(0.2 0.004 260 / 0.45); } }
+
+  * { box-sizing: border-box; }
+  @supports (corner-shape: superellipse(1.4)) { .sq { corner-shape: superellipse(1.4); } }
+  body { margin: 0; background: var(--bg-page); color: var(--text); font: 14px/1.45 "Figtree", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 96px; }
+  header.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 28px; margin: 0; color: var(--text-strong); flex: 1; }
+  h2 { font-size: 20px; color: var(--text-strong); margin: 48px 0 4px; }
+  h3 { font-size: 16px; color: var(--text-strong); margin: 24px 0 8px; }
+  p.lede, p.note { color: var(--text-muted); margin: 0 0 16px; max-width: 76ch; }
+  p.note { font-size: 12px; margin-top: 12px; }
+  code { font-size: 12px; background: var(--selected); padding: 1px 5px; border-radius: 6px; }
+  .board { background: var(--bg-sidebar); border-radius: var(--r-xl); padding: 24px; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  button { font: inherit; color: inherit; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: var(--r-md); background: var(--selected); color: var(--text-strong); font-weight: 500; cursor: pointer; white-space: nowrap; transition: transform 120ms var(--ease-out), background 150ms; }
+  .btn:hover { background: var(--press); }
+  .btn:active { transform: scale(0.97); }
+  .btn.sm { height: 28px; padding: 0 10px; border-radius: var(--r-sm); }
+  .btn.primary { background: var(--accent); color: var(--on-accent); }
+  .btn.link { background: none; color: var(--info-ink); padding: 0 4px; }
+  .btn.link:hover { text-decoration: underline; }
+  .btn i { font-size: 16px; }
+  .iconbtn { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: var(--r-sm); background: none; color: var(--text-muted); cursor: pointer; }
+  .iconbtn:hover { background: var(--hover); color: var(--text-strong); }
+  .iconbtn i { font-size: 18px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Avatar: a hue-tinted circle with initials (stands in for a real picture). */
+  .av { --s: 40px; width: var(--s); height: var(--s); border-radius: 50%; flex: none; position: relative; display: grid; place-items: center; font-weight: 700; color: #fff; font-size: calc(var(--s) * 0.38); background: linear-gradient(160deg, oklch(0.72 0.12 var(--h, 30)), oklch(0.52 0.14 calc(var(--h, 30) + 30))); }
+  .status { position: absolute; right: -2px; bottom: -2px; width: 30%; height: 30%; border-radius: 50%; background: var(--online); box-shadow: 0 0 0 calc(var(--s) * 0.07) var(--ring, var(--bg-overlay)); }
+
+  /* ---------- Profile popout ---------- */
+  .pop { width: 320px; border-radius: var(--r-lg); background: var(--bg-overlay); box-shadow: var(--shadow-pop); overflow: hidden; position: relative; isolation: isolate; }
+  .pop .banner { height: 120px; background: linear-gradient(135deg, oklch(0.6 0.13 var(--bh, 20)), oklch(0.45 0.14 calc(var(--bh, 20) + 40))); }
+  .pop .banner.plain { height: 64px; }
+  .pop .head { padding: 0 16px; margin-top: -46px; display: flex; align-items: flex-end; justify-content: space-between; }
+  .pop .head .av { --s: 80px; box-shadow: 0 0 0 6px var(--bg-overlay); cursor: zoom-in; }
+  .pop .head .av:hover::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: oklch(0 0 0 / 0.25); }
+  .pop .body { padding: 10px 16px 16px; display: grid; gap: 12px; }
+  .pop .name b { display: block; font-size: 20px; line-height: 24px; color: var(--text-strong); font-weight: 600; }
+  .pop .name span { color: var(--text); }
+  .badges { display: flex; gap: 2px; padding: 4px; border-radius: var(--r-sm); background: var(--selected); width: max-content; }
+  .badges i { font-size: 18px; width: 22px; text-align: center; }
+  .blk { display: grid; gap: 6px; }
+  .blk > b { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+  .blk p { margin: 0; color: var(--text); white-space: pre-line; overflow-wrap: anywhere; }
+  .since { display: flex; align-items: center; gap: 10px; color: var(--text); flex-wrap: wrap; }
+  .since span { display: inline-flex; align-items: center; gap: 6px; }
+  .since .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--text-faint); }
+  .mark { width: 18px; height: 18px; border-radius: 6px; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; background: oklch(0.55 0.13 var(--h, 260)); flex: none; }
+  .mark.waffle { background: var(--accent); color: var(--on-accent); }
+  .conns { display: flex; flex-wrap: wrap; gap: 6px; }
+  .conn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 4px; border-radius: var(--r-sm); background: var(--selected); color: var(--text-strong); font-weight: 500; cursor: pointer; border: 0; max-width: 100%; }
+  .conn:hover { background: var(--press); }
+  .conn .brand { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; color: #fff; background: var(--c); flex: none; font-size: 13px; }
+  .conn .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .conn .seal { color: var(--info-ink); font-size: 14px; }
+  .acts { display: grid; gap: 8px; }
+  .act { padding: 12px; border-radius: var(--r-md); background: var(--selected); display: grid; gap: 10px; }
+  .act .top { display: flex; align-items: center; justify-content: space-between; font-weight: 500; color: var(--text-strong); }
+  .act .row { display: flex; gap: 12px; align-items: center; min-width: 0; }
+  .act .art { width: 56px; height: 56px; border-radius: var(--r-sm); flex: none; background: linear-gradient(140deg, oklch(0.62 0.14 var(--h)), oklch(0.4 0.12 calc(var(--h) + 50))); position: relative; }
+  .act .art.lg { width: 72px; height: 72px; }
+  .act .facts { min-width: 0; display: grid; gap: 1px; }
+  .act .facts b { color: var(--text-strong); font-weight: 600; }
+  .act .facts span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .act .clock { color: var(--online-ink); display: inline-flex; gap: 4px; align-items: center; font-variant-numeric: tabular-nums; }
+  .act.compact { padding: 8px 10px; gap: 0; }
+  .act.compact .art { width: 40px; height: 40px; }
+  .bar { height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; margin-top: 4px; }
+  .bar i { display: block; height: 100%; width: 38%; background: var(--text-strong); border-radius: 2px; }
+  .recent { display: grid; gap: 2px; }
+  .rrow { display: flex; align-items: center; gap: 10px; padding: 6px; margin: 0 -6px; border-radius: var(--r-sm); cursor: pointer; }
+  .rrow:hover { background: var(--hover); }
+  .rrow .art { width: 32px; height: 32px; border-radius: 9px; flex: none; background: linear-gradient(140deg, oklch(0.62 0.14 var(--h)), oklch(0.4 0.12 calc(var(--h) + 50))); }
+  .rrow div { min-width: 0; line-height: 1.3; }
+  .rrow b { color: var(--text-strong); font-weight: 500; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rrow small { color: var(--text-muted); font-size: 12px; }
+  .msgbox { height: 40px; border-radius: var(--r-md); background: var(--selected); display: flex; align-items: center; padding: 0 12px; color: var(--text-faint); }
+  .tip { position: relative; }
+  .tip[data-tip]:hover::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); left: 50%; translate: -50% 0; white-space: nowrap; background: var(--bg-raised); color: var(--text-strong); box-shadow: var(--shadow-pop); padding: 4px 8px; border-radius: 8px; font-size: 12px; font-weight: 500; z-index: 5; pointer-events: none; }
+
+  /* Profile effect: the bought overlay, drawn over the whole card and never catching the pointer. */
+  .effect { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
+  .effect i { position: absolute; top: -12px; width: 6px; height: 6px; border-radius: 2px; background: oklch(0.85 0.12 var(--h)); opacity: 0.85; animation: fall var(--d) linear infinite; animation-delay: var(--dl); }
+  @keyframes fall { to { transform: translateY(560px) rotate(300deg); } }
+  @media (prefers-reduced-motion: reduce) { .effect i { animation: none; top: var(--y); } }
+
+  /* Full-size avatar viewer. */
+  .viewer { position: fixed; inset: 0; background: var(--scrim); display: grid; place-items: center; z-index: 50; opacity: 0; pointer-events: none; transition: opacity 200ms var(--ease-out); }
+  .viewer.open { opacity: 1; pointer-events: auto; }
+  .viewer .av { --s: min(512px, 70vmin); transform: scale(0.96); transition: transform 220ms var(--ease-out); cursor: default; }
+  .viewer.open .av { transform: none; }
+  .viewer .close { position: absolute; top: 16px; right: 16px; color: #fff; background: oklch(0 0 0 / 0.4); }
+  .viewer .open-link { position: absolute; bottom: 24px; color: #fff; background: oklch(0 0 0 / 0.45); }
+
+  /* ---------- Settings page ---------- */
+  .sheet { width: 100%; background: var(--bg-page); border-radius: var(--r-xl); box-shadow: var(--shadow-pop); padding: 28px 32px 0; position: relative; overflow: hidden; }
+  .sheet .sheet-title { font-size: 28px; margin: 0 0 16px; color: var(--text-strong); }
+  .tabs { display: flex; gap: 4px; padding: 3px; background: var(--selected); border-radius: var(--r-md); width: max-content; position: relative; margin-bottom: 20px; }
+  .tabs button { position: relative; z-index: 1; height: 30px; padding: 0 14px; border: 0; border-radius: var(--r-sm); background: none; cursor: pointer; font-weight: 500; color: var(--text-muted); }
+  .tabs button[aria-selected="true"] { background: var(--bg-overlay); color: var(--text-strong); box-shadow: 0 1px 3px oklch(0 0 0 / 0.2); }
+  .editor { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 32px; padding-bottom: 96px; }
+  @media (max-width: 860px) { .editor { grid-template-columns: 1fr; } }
+  .grp { margin-bottom: 24px; }
+  .grp > b { display: block; font-size: 14px; font-weight: 600; color: var(--text-strong); margin: 0 0 8px 4px; }
+  .card { background: var(--bg-group); border-radius: var(--r-lg); padding: 4px 16px; }
+  .fld { padding: 12px 0; display: grid; gap: 6px; }
+  .fld + .fld { border-top: 1px solid var(--line); }
+  .fld label, .fld .lbl { font-weight: 500; color: var(--text-strong); display: flex; align-items: center; gap: 6px; justify-content: space-between; }
+  .inp { height: 36px; border-radius: var(--r-md); background: var(--bg-page); border: 1px solid var(--line); display: flex; align-items: center; padding: 0 12px; }
+  .inp:focus-within { border-color: color-mix(in oklch, var(--text-strong) 30%, transparent); }
+  .inp input, textarea { all: unset; flex: 1; min-width: 0; color: var(--text-strong); }
+  textarea { display: block; width: 100%; min-height: 84px; padding: 10px 12px; border-radius: var(--r-md); background: var(--bg-page); border: 1px solid var(--line); white-space: pre-wrap; box-sizing: border-box; }
+  .hint { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--text-muted); }
+  .hint .count { font-variant-numeric: tabular-nums; }
+  .hint .count.over { color: var(--danger-ink); font-weight: 600; }
+  .media { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .history { display: flex; gap: 8px; flex-wrap: wrap; }
+  .history .slot { --s: 48px; width: 48px; height: 48px; border-radius: 50%; position: relative; cursor: pointer; border: 0; padding: 0; }
+  .history .slot.empty { background: none; border: 1.5px dashed var(--line-strong); cursor: default; }
+  .history .slot.on { box-shadow: 0 0 0 2px var(--bg-group), 0 0 0 4px var(--accent); }
+  .history .slot .x { position: absolute; top: -4px; right: -4px; width: 20px; height: 20px; border-radius: 50%; background: var(--bg-raised); color: var(--text-strong); box-shadow: var(--shadow-pop); display: none; place-items: center; font-size: 12px; }
+  .history .slot:not(.empty):hover .x { display: grid; }
+  .swatches { display: flex; gap: 8px; }
+  .swatches button { width: 32px; height: 32px; border-radius: 10px; border: 0; background: var(--c); cursor: pointer; display: grid; place-items: center; color: #fff; }
+  .swatches button[aria-pressed="false"] i { opacity: 0; }
+  .select { height: 36px; border-radius: var(--r-md); background: var(--bg-page); border: 1px solid var(--line); display: flex; align-items: center; gap: 8px; padding: 0 10px; cursor: pointer; width: 100%; text-align: left; }
+  .select .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .select .caret { color: var(--text-muted); }
+  .tag { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 6px; background: var(--selected); color: var(--text-strong); font-size: 12px; font-weight: 600; }
+  .nitro { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+  .nitro div { flex: 1; min-width: 0; }
+  .nitro small { display: block; color: var(--text-muted); font-size: 12px; }
+  .nitro > i { font-size: 20px; color: var(--text-muted); }
+  .aside { position: sticky; top: 16px; align-self: start; display: grid; gap: 8px; }
+  .aside > b { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+  .inherit { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); font-size: 12px; }
+  .inherit i { font-size: 14px; }
+  .unsaved { position: absolute; left: 24px; right: 24px; bottom: 16px; display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-radius: var(--r-lg); background: var(--bg-raised); box-shadow: var(--shadow-pop); translate: 0 120%; transition: translate 260ms cubic-bezier(0.32, 0.72, 0, 1); }
+  .unsaved.show { translate: 0 0; }
+  .unsaved .what { flex: 1; min-width: 0; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .unsaved .what span { color: var(--text-muted); }
+  .unsaved.shake { animation: shake 360ms var(--ease-out); box-shadow: var(--shadow-pop), 0 0 0 2px var(--warning-ink); }
+  @keyframes shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
+  [hidden] { display: none !important; }
+
+  /* ---------- Activity privacy ---------- */
+  .page { width: 100%; max-width: 720px; }
+  .switch { width: 40px; height: 24px; border-radius: 12px; border: 0; background: var(--track); position: relative; cursor: pointer; flex: none; transition: background 150ms; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 18px; border-radius: 9px; background: #fff; box-shadow: 0 1px 2px oklch(0 0 0 / 0.3); transition: translate 200ms var(--ease-out); }
+  .switch[aria-checked="true"] { background: var(--online); }
+  .switch[aria-checked="true"]::after { translate: 10px 0; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row > div { flex: 1; min-width: 0; }
+  .row b { color: var(--text-strong); font-weight: 500; display: block; }
+  .row small { color: var(--text-muted); font-size: 12px; display: block; }
+  .srv { width: 32px; height: 32px; border-radius: 10px; flex: none; display: grid; place-items: center; font-weight: 700; color: #fff; font-size: 12px; background: oklch(0.55 0.13 var(--h)); }
+  .warn { display: flex; gap: 8px; align-items: center; color: var(--warning-ink); font-size: 12px; padding: 8px 4px 0; }
+  .caption { color: var(--text-muted); font-size: 12px; margin: 8px 4px 0; }
+  .seg { display: inline-flex; padding: 2px; border-radius: var(--r-sm); background: var(--selected); }
+  .seg button { border: 0; background: none; height: 26px; padding: 0 10px; border-radius: 9px; cursor: pointer; color: var(--text-muted); font-weight: 500; }
+  .seg button[aria-pressed="true"] { background: var(--bg-overlay); color: var(--text-strong); box-shadow: 0 1px 3px oklch(0 0 0 / 0.2); }
+  /* Current activity stack, after Discord's popout: the first card, an 8px sliver of the next under it. */
+  .stack { list-style: none; margin: 0; padding: 0; position: relative; display: grid; gap: 8px; }
+  .stack.many:not(.open) { padding-bottom: 8px; }
+  .stack .first { position: relative; z-index: 2; }
+  .stack.many:not(.open) .first .act { box-shadow: 0 1px 3px oklch(0 0 0 / 0.25); background: var(--bg-raised); transition: transform 200ms var(--ease-out); }
+  .stack.many:not(.open):hover .first .act { transform: translateY(-2px); }
+  .stack .rest { display: none; }
+  .stack.open .rest { display: block; animation: unfold 200ms var(--ease-out); }
+  .stack .peek { position: absolute; top: 100%; left: 0; right: 0; height: 8px; margin-top: -8px; padding-inline: 8px; overflow: hidden; transition: height 0s 200ms, transform 200ms var(--ease-out); }
+  .stack.many:not(.open):hover .peek { height: 12px; transform: translateY(-2px); transition: transform 200ms var(--ease-out); }
+  .stack.open .peek, .stack:not(.many) .peek { display: none; }
+  .peek-card { all: unset; display: block; box-sizing: border-box; width: 100%; height: 24px; margin-top: -16px; border-radius: var(--r-md); background: var(--selected); cursor: pointer; transition: transform 200ms var(--ease-out), background 150ms; }
+  .stack.many:hover .peek-card { transform: translateY(4px); background: var(--press); }
+  @keyframes unfold { from { opacity: 0; transform: translateY(-6px) scale(0.98); } }
+  .collapse { justify-self: start; }
+
+  /* Discord's popout, drawn from its web client's markup and CSS for comparison only (not Waffle's look). */
+  .dc { --dc-bg: #232428; --dc-card: #2b2d31; --dc-text: #dbdee1; --dc-muted: #949ba4; width: 300px; border-radius: 8px; background: var(--dc-bg); color: var(--dc-text); overflow: hidden; font: 14px/1.3 system-ui, sans-serif; box-shadow: 0 8px 16px oklch(0 0 0 / 0.24); }
+  .dc .bn { height: 105px; background: #5865f2; }
+  .dc .av { --s: 80px; margin: -40px 0 0 16px; box-shadow: 0 0 0 6px var(--dc-bg); }
+  .dc .in { padding: 12px 16px 16px; display: grid; gap: 12px; }
+  .dc .nm b { display: block; font-size: 20px; color: #f2f3f5; }
+  .dc .nm span { color: var(--dc-muted); }
+  .dc .dc-h { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: #f2f3f5; }
+  .dc ul { list-style: none; margin: 0; padding: 0 0 8px; position: relative; }
+  .dc .c { position: relative; z-index: 2; padding: 12px; border-radius: 8px; background: var(--dc-card); box-shadow: 0 1px 3px oklch(0 0 0 / 0.3); display: flex; gap: 12px; transition: transform 200ms ease-in-out; }
+  .dc ul:hover .c { transform: translateY(-2px); }
+  .dc .c i { width: 60px; height: 60px; border-radius: 8px; background: linear-gradient(140deg, #f07c3a, #7a2f8a); flex: none; }
+  .dc .c div { min-width: 0; display: grid; gap: 2px; align-content: center; }
+  .dc .c small { color: var(--dc-muted); font-size: 12px; }
+  .dc .bk { position: absolute; top: 100%; left: 0; right: 0; margin-top: -8px; height: 8px; padding-inline: 8px; overflow: hidden; cursor: pointer; transition: transform 200ms ease-in-out, height 0s 200ms; }
+  .dc ul:hover .bk { height: 12px; transform: translateY(-2px); transition: transform 200ms ease-in-out; }
+  .dc .bk span { display: block; height: 24px; margin-top: -16px; border-radius: 8px; background: #2e3035; transition: transform 200ms ease-in-out; }
+  .dc ul:hover .bk span { transform: translateY(4px); background: #35373c; }
+  .vs { display: grid; gap: 8px; justify-items: start; }
+  .vs > b { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+</style>
+<script>try{const t=localStorage.getItem("pp-theme");if(t)document.documentElement.dataset.theme=t}catch{}</script>
+</head>
+<body>
+<main>
+<header class="top">
+  <h1>Profiles and presence</h1>
+  <button class="btn" id="theme"><i class="ph ph-circle-half"></i>Light / dark</button>
+</header>
+<p class="lede">Parity §3.1 to §3.3, trimmed to what main doesn't have yet. Already shipped (#89): Registered Games with Add it! and detection switches, and the popout's one activity card with Show more. Behaviour, limits and wording follow Discord (<code>docs/discord-profile-presence-re.md</code>); the look is Waffle's own. Skipped: game profile pages and stats widgets (Discord's data endpoint wasn't traced), Spotify Listen Along, and everything Nitro-only, which still opens Discord.</p>
+
+<!-- ============ 1. Popout ============ -->
+<h2>Profile popout</h2>
+<p class="lede">New blocks, in Discord's order: Member Since (Discord date from the account id, server date from when they joined), Friends Since (friends only), Connections. The activity card that follows them is main's, unchanged. Click the avatar for full size. The falling flecks stand in for a profile effect: Discord's layered overlay drawn over the whole card, never catching the pointer.</p>
+<div class="board">
+  <div class="pop sq" id="pop-full">
+    <div class="effect" aria-hidden="true" id="fx"></div>
+    <div class="banner" style="--bh: 330"></div>
+    <div class="head">
+      <button class="av" style="--h: 330; border: 0; padding: 0" data-view="Mira" aria-label="View Mira's avatar full size">MI<span class="status" style="--ring: var(--bg-overlay)"></span></button>
+      <div class="badges" aria-label="Badges"><i class="ph-fill ph-diamond" style="color: oklch(0.7 0.15 300)" title="Nitro subscriber"></i><i class="ph-fill ph-lightning" style="color: var(--accent)" title="Early supporter"></i></div>
+    </div>
+    <div class="body">
+      <div class="name"><b>Mira</b><span>mira.wav · she/her</span></div>
+      <div class="blk"><b>About me</b><p>Montage editor for Night Shift. Clips, speedruns and too much coffee.</p></div>
+      <div class="blk"><b>Member Since</b>
+        <div class="since"><span class="tip" data-tip="Discord"><span class="mark waffle"><i class="ph-fill ph-discord-logo"></i></span>Mar 4, 2021</span><span class="dot"></span><span class="tip" data-tip="Night Shift"><span class="mark" style="--h: 300">NS</span>Jun 18, 2022</span></div></div>
+      <div class="blk"><b>Friends Since</b><div class="since"><span>Aug 9, 2023</span></div></div>
+      <div class="blk"><b>Connections</b>
+        <div class="conns">
+          <button class="conn tip" data-tip="Open on Spotify"><span class="brand" style="--c: #1db954"><i class="ph-fill ph-spotify-logo"></i></span><span class="n">mira.wav</span><i class="ph-fill ph-seal-check seal" aria-label="Verified"></i></button>
+          <button class="conn tip" data-tip="Open on Twitch"><span class="brand" style="--c: #9146ff"><i class="ph-fill ph-twitch-logo"></i></span><span class="n">mirawav_clips</span><i class="ph-fill ph-seal-check seal" aria-label="Verified"></i></button>
+          <button class="conn tip" data-tip="Open on Steam"><span class="brand" style="--c: #2a475e"><i class="ph-fill ph-steam-logo"></i></span><span class="n">MiraTheMontageEditor</span></button>
+        </div></div>
+      <div class="msgbox">Message @Mira</div>
+    </div>
+  </div>
+
+  <div class="pop sq">
+    <div class="banner plain" style="--bh: 40"></div>
+    <div class="head"><button class="av" style="--h: 40; border: 0; padding: 0" data-view="Bartholomew" aria-label="View Bartholomew's avatar full size">BA<span class="status" style="background: var(--text-faint)"></span></button></div>
+    <div class="body">
+      <div class="name"><b style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Bartholomew Featherstonehaugh-Wright</b><span>bart.fw</span></div>
+      <div class="blk"><b>Member Since</b><div class="since"><span class="tip" data-tip="Discord"><span class="mark waffle"><i class="ph-fill ph-discord-logo"></i></span>Today</span></div></div>
+      <div class="msgbox">Message @Bartholomew…</div>
+    </div>
+  </div>
+
+  <div class="pop sq">
+    <div class="banner plain" style="--bh: 250"></div>
+    <div class="head"><button class="av" style="--h: 250; border: 0; padding: 0" aria-label="View Wavebot's avatar full size">WB</button></div>
+    <div class="body">
+      <div class="name"><b>Wavebot</b><span>wavebot · <span class="tag" style="vertical-align: 1px">APP</span></span></div>
+      <div class="blk"><b>Created On</b><div class="since"><span><span class="mark waffle"><i class="ph-fill ph-discord-logo"></i></span>Feb 2, 2019</span></div></div>
+    </div>
+  </div>
+</div>
+<p class="note">Worst cases: a stranger with no server in common shows only the Discord date; a bot says Created On. Connections keep each service's real mark on its brand colour; verified ones get the seal, and the tooltip says where clicking goes. Activity cards stack with no "+N" (Discord's full profile lists every one; the compact popout's rule wasn't traced). Recent activity hides any game that's already live above it.</p>
+
+<h3>Optional: Show more as Discord's peek</h3>
+<p class="lede">What Discord's popout does, read from its web client (modules <code>646986</code> and <code>80330</code>, CSS <code>container_M2WrKU</code>): under a "Current activity" heading it renders only the <b>first</b> card (a stream, then activities, then voice). With more than one, a second card peeks 8px out from under it, inset 8px each side. Hovering lifts the first card 2px and the peek grows to 12px (200ms ease-in-out). Clicking the peek ("View More") opens the full profile on its Activity tab. No count, no dots, no carousel. Recent activity lives only in the full profile, not the popout.</p>
+<div class="board">
+  <div class="vs"><b>Discord (drawn from its markup and CSS)</b>
+    <div class="dc"><div class="bn"></div><span class="av" style="--h: 330">MI</span>
+      <div class="in"><div class="nm"><b>Mira</b><span>mira.wav</span></div>
+        <div><div class="dc-h">Current activity</div><ul><li><div class="c"><i></i><div><b>Hades II</b><small>Fields of Mourning</small><small>1:12:04</small></div></div></li><li class="bk" title="View More"><span></span></li></ul></div>
+      </div></div></div>
+  <div class="vs"><b>Waffle: the peek replaces Show more, still unfolding in place</b>
+    <div class="pop sq"><div class="banner plain" style="--bh: 330"></div><div class="head"><span class="av" style="--h: 330">MI</span></div>
+      <div class="body"><div class="name"><b>Mira</b><span>mira.wav</span></div>
+        <div class="blk"><b>Current activity</b>
+          <ul class="stack" data-stack>
+            <li class="first"><div class="act sq"><div class="top"><span>Playing</span></div><div class="row"><span class="art" style="--h: 20"></span><div class="facts"><b>Hades II</b><span>Fields of Mourning</span></div></div></div></li>
+            <li class="rest"><div class="act sq"><div class="top"><span>Listening to Spotify</span></div><div class="row"><span class="art" style="--h: 160"></span><div class="facts"><b>Midnight Arcade</b><span>by Neon Harbor</span></div></div></div></li>
+            <li class="rest"><div class="act sq"><div class="top"><span>Watching</span></div><div class="row"><span class="art" style="--h: 260"></span><div class="facts"><b>Twitch</b><span>speedrun.wav</span></div></div></div></li>
+            <li class="peek"><button class="peek-card sq" aria-label="View More: 2 more activities"></button></li>
+          </ul></div>
+      </div></div></div>
+</div>
+<p class="note">Main already shows one card and lists the rest in place behind a Show more button. This only swaps that button for Discord's peeking card; clicking it still unfolds in place, since Waffle has no full-profile dialog. Say if you'd rather keep the button.</p>
+
+<!-- ============ 2. Editor ============ -->
+<h2>Editing your profile</h2>
+<p class="lede">Settings › Profiles, Discord's two tabs. The preview is the real popout and updates as you type. Nothing saves until Save changes; the bar names what changed. Switching tab or server with unsaved changes is refused and the bar shakes, as Discord does. Items only Nitro can set (decoration, nameplate, effect, frame, theme, banner image) share one row that opens Discord.</p>
+<div class="board">
+  <div class="sheet sq">
+    <h3 class="sheet-title">Profiles</h3>
+    <div class="tabs" role="tablist" aria-label="Which profile"><button role="tab" aria-selected="true" data-tab="main">Main Profile</button><button role="tab" aria-selected="false" data-tab="server">Per-server Profiles</button></div>
+    <div class="editor">
+      <div>
+        <div id="tab-main">
+          <div class="grp"><b>Identity</b><div class="card sq">
+            <div class="fld"><label for="e-name">Display name</label><div class="inp"><input id="e-name" maxlength="32" value="Juno" data-key="Display name" data-count="32"></div><div class="hint"><span>Shown instead of your username</span><span class="count"></span></div></div>
+            <div class="fld"><label for="e-pron">Pronouns</label><div class="inp"><input id="e-pron" maxlength="40" value="" placeholder="Add your pronouns" data-key="Pronouns" data-count="40"></div><div class="hint"><span></span><span class="count"></span></div></div>
+          </div></div>
+          <div class="grp"><b>Avatar</b><div class="card sq">
+            <div class="fld"><div class="media"><span class="av" style="--s: 64px; --h: 30" id="e-av">JU</span><button class="btn sm"><i class="ph ph-upload-simple"></i>Change avatar</button><button class="btn sm link">Remove avatar</button></div></div>
+            <div class="fld"><span class="lbl">Recent avatars</span>
+              <div class="history" id="history">
+                <button class="slot av on" style="--h: 30" aria-label="Current avatar">JU</button>
+                <button class="slot av" style="--h: 190" aria-label="Use this avatar">JU<span class="x" role="button" aria-label="Remove from recent avatars"><i class="ph-bold ph-x"></i></span></button>
+                <button class="slot av" style="--h: 120" aria-label="Use this avatar">JU<span class="x" role="button" aria-label="Remove from recent avatars"><i class="ph-bold ph-x"></i></span></button>
+                <button class="slot av" style="--h: 280" aria-label="Use this avatar">JU<span class="x" role="button" aria-label="Remove from recent avatars"><i class="ph-bold ph-x"></i></span></button>
+                <span class="slot empty"></span><span class="slot empty"></span>
+              </div>
+              <div class="hint"><span>Your last 6 avatars. Pick one to use it again; no new upload.</span></div></div>
+          </div></div>
+          <div class="grp"><b>Banner colour</b><div class="card sq"><div class="fld"><div class="swatches" id="swatches" role="group" aria-label="Banner colour">
+            <button aria-pressed="true" aria-label="Rose" style="--c: oklch(0.6 0.13 20)" data-h="20"><i class="ph-bold ph-check"></i></button>
+            <button aria-pressed="false" aria-label="Moss" style="--c: oklch(0.55 0.12 150)" data-h="150"><i class="ph-bold ph-check"></i></button>
+            <button aria-pressed="false" aria-label="Tide" style="--c: oklch(0.55 0.12 235)" data-h="235"><i class="ph-bold ph-check"></i></button>
+            <button aria-pressed="false" aria-label="Sand" style="--c: oklch(0.7 0.1 70)" data-h="70"><i class="ph-bold ph-check"></i></button>
+          </div></div></div></div>
+          <div class="grp"><b>About me</b><div class="card sq"><div class="fld"><textarea id="e-bio" maxlength="190" data-key="About me" data-count="190">Plays support. Will heal you, will not carry you.</textarea><div class="hint"><span>You can use markdown and links if you'd like.</span><span class="count"></span></div></div></div></div>
+          <div class="grp"><b>Server tag</b><div class="card sq"><div class="fld">
+            <div style="position: relative"><button class="select" id="tag-btn" aria-haspopup="listbox"><span class="tag" id="tag-val"><i class="ph-fill ph-moon-stars"></i>NITE</span><span class="grow" id="tag-name">Night Shift</span><i class="ph ph-caret-down caret"></i></button>
+              <div class="menu" id="tag-menu" hidden role="listbox">
+                <button data-tag="NITE" data-g="Night Shift"><span class="tag"><i class="ph-fill ph-moon-stars"></i>NITE</span>Night Shift</button>
+                <button data-tag="CLIP" data-g="Clip Club"><span class="tag"><i class="ph-fill ph-film-strip"></i>CLIP</span>Clip Club</button>
+                <button data-tag="" data-g="No tag"><i class="ph ph-prohibit" style="color: var(--text-muted)"></i>No tag</button>
+              </div></div>
+            <div class="hint"><span>Choose a server tag to rep next to your name across Discord.</span></div></div></div></div>
+          <div class="grp"><b>Nitro</b><div class="card sq">
+            <div class="nitro"><i class="ph ph-sparkle"></i><div><b style="color: var(--text-strong); font-weight: 500">Decoration, nameplate, effect, frame and theme</b><small>Discord only lets Nitro set these. Yours show here as they are.</small></div><button class="btn sm"><i class="ph ph-arrow-square-out"></i>Set on Discord</button></div>
+          </div></div>
+        </div>
+
+        <div id="tab-server" hidden>
+          <p class="lede" style="margin: 0 0 12px 4px">Show who you are with different profiles for each of your servers.</p>
+          <div class="grp"><div style="position: relative"><button class="select" style="background: var(--bg-group); border: 0; height: 44px"><span class="srv" style="--h: 300; width: 28px; height: 28px">NS</span><span class="grow" style="color: var(--text-strong); font-weight: 500">Night Shift</span><i class="ph ph-caret-down caret"></i></button></div></div>
+          <div class="grp"><b>Night Shift profile</b><div class="card sq">
+            <div class="fld"><label for="s-nick">Server nickname</label><div class="inp"><input id="s-nick" maxlength="32" placeholder="Juno" data-key="Server nickname" data-count="32"></div><div class="hint"><span class="inherit"><i class="ph ph-arrow-bend-up-left"></i>Empty uses your display name, Juno</span><span class="count"></span></div></div>
+            <div class="fld"><label for="s-pron">Pronouns</label><div class="inp"><input id="s-pron" maxlength="40" placeholder="Uses your main pronouns" data-key="Server pronouns" data-count="40"></div><div class="hint"><span></span><span class="count"></span></div></div>
+          </div></div>
+          <div class="grp"><b>Nitro</b><div class="card sq"><div class="nitro"><i class="ph ph-sparkle"></i><div><b style="color: var(--text-strong); font-weight: 500">Server avatar, banner, bio and nameplate</b><small>Discord only lets Nitro set these per server.</small></div><button class="btn sm"><i class="ph ph-arrow-square-out"></i>Set on Discord</button></div></div></div>
+        </div>
+      </div>
+
+      <div class="aside"><b id="prev-title">Preview</b>
+        <div class="pop sq" style="box-shadow: 0 0 0 1px var(--line)">
+          <div class="banner" id="p-banner" style="--bh: 20; height: 96px"></div>
+          <div class="head"><span class="av" style="--h: 30" id="p-av">JU<span class="status" style="background: var(--idle)"></span></span><button class="btn sm"><i class="ph ph-pencil-simple"></i>Edit profile</button></div>
+          <div class="body">
+            <div class="name"><b id="p-name">Juno</b><span id="p-sub">juno.wav</span> <span class="tag" id="p-tag"><i class="ph-fill ph-moon-stars"></i>NITE</span></div>
+            <div class="blk"><b>About me</b><p id="p-bio"></p></div>
+            <div class="blk"><b>Member Since</b><div class="since"><span><span class="mark waffle"><i class="ph-fill ph-discord-logo"></i></span>Nov 2, 2020</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="unsaved" id="unsaved" role="status"><span class="what">Careful, you have unsaved changes: <span id="changed"></span></span><button class="btn sm link" id="reset">Reset</button><button class="btn sm primary" id="save">Save changes</button></div>
+  </div>
+</div>
+<p class="note">Limits: display name and nickname 32, pronouns 40, About me 190 (Discord trials 300 behind an experiment; Waffle takes 190 until the server accepts more). Counters show the count and turn red only at the limit. Removing a recent avatar is instant with Undo rather than Discord's confirm. The server tag menu lists only servers with a tag.</p>
+
+<!-- ============ 3. Activity privacy ============ -->
+<h2>Where you share activity</h2>
+<p class="lede">Joins the existing Activity privacy page under "Share my activity". Discord's default for new servers, then one switch per server. With sharing off, the per-server switches dim and say they're ignored.</p>
+<div class="board">
+  <div class="page">
+    <div class="grp"><b>What activity I share</b><div class="card sq"><div class="row"><div><b>Share my activity</b><small>Activity information from games and connected apps you use</small></div><span class="switch" id="share-all" role="switch" aria-checked="true" tabindex="0" aria-label="Share my activity"></span></div></div></div>
+    <div class="grp"><b>Where I share activity</b><div class="card sq">
+      <div class="row"><div><b>When joining a server</b><small>Whether new servers see your activity</small></div>
+        <div style="position: relative; width: 260px"><button class="select" id="def-btn"><span class="grow" id="def-val">Share in all servers</span><i class="ph ph-caret-down caret"></i></button>
+          <div class="menu" id="def-menu" hidden><button>Share in all servers</button><button>Share in servers with 200 or fewer members</button><button>Do not share in any servers</button></div></div></div>
+      <div id="servers">
+        <div class="row"><span class="srv" style="--h: 300">NS</span><div><b>Night Shift</b></div><span class="switch" role="switch" aria-checked="true" tabindex="0" aria-label="Share activity in Night Shift"></span></div>
+        <div class="row"><span class="srv" style="--h: 60">CC</span><div><b>Clip Club</b></div><span class="switch" role="switch" aria-checked="false" tabindex="0" aria-label="Share activity in Clip Club"></span></div>
+        <div class="row"><span class="srv" style="--h: 160">GL</span><div><b style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Garden of the Very Long Server Name That Never Ends</b></div><span class="switch" role="switch" aria-checked="true" tabindex="0" aria-label="Share activity in Garden"></span></div>
+      </div>
+    </div><div class="warn" id="ignored" hidden><i class="ph-fill ph-warning"></i>Server settings ignored when not sharing</div></div>
+  </div>
+</div>
+</main>
+
+<div class="viewer" id="viewer" role="dialog" aria-label="Avatar"><button class="iconbtn close" aria-label="Close"><i class="ph ph-x"></i></button><span class="av" style="--h: 330" id="viewer-av">MI</span><button class="btn sm open-link"><i class="ph ph-arrow-square-out"></i>Open in browser</button></div>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+$("#theme").onclick = () => {
+  const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === "dark" : !matchMedia("(prefers-color-scheme: light)").matches;
+  root.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("pp-theme", root.dataset.theme); } catch {}
+};
+
+// Effect flecks.
+const fx = $("#fx");
+for (let i = 0; i < 18; i++) { const f = document.createElement("i"); f.style.cssText = `left:${Math.random() * 100}%;--h:${300 + Math.random() * 80};--d:${5 + Math.random() * 5}s;--dl:${-Math.random() * 10}s;--y:${Math.random() * 500}px`; fx.append(f); }
+
+
+// Full-size avatar.
+const viewer = $("#viewer");
+$$("[data-view]").forEach(b => b.onclick = () => { $("#viewer-av").textContent = b.textContent.trim().slice(0, 2); $("#viewer-av").style.setProperty("--h", b.style.getPropertyValue("--h")); viewer.classList.add("open"); });
+viewer.onclick = e => { if (e.target === viewer || e.target.closest(".close")) viewer.classList.remove("open"); };
+addEventListener("keydown", e => { if (e.key === "Escape") viewer.classList.remove("open"); });
+
+// Activity stacks: the peek unfolds the rest in place.
+$$("[data-stack]").forEach(st => {
+  const rest = st.querySelectorAll(".rest").length; st.classList.toggle("many", rest > 0);
+  const less = Object.assign(document.createElement("button"), { className: "btn sm link collapse", textContent: "Show less", hidden: true });
+  st.after(less);
+  st.querySelector(".peek-card").onclick = () => { st.classList.add("open"); less.hidden = false; };
+  less.onclick = () => { st.classList.remove("open"); less.hidden = true; };
+});
+
+// Editor: counters, preview, unsaved bar.
+const fields = $$("[data-key]"), initial = new Map(fields.map(f => [f, f.value]));
+let banner = "20", tag = ["NITE", "Night Shift"]; const start = { banner, tag: tag[0] };
+const count = f => { const c = f.closest(".fld").querySelector(".count"); if (!c) return; const n = [...f.value].length, max = +f.dataset.count; c.textContent = f.value ? `${n}/${max}` : ""; c.classList.toggle("over", n >= max); };
+function sync() {
+  const v = id => $(id).value.trim();
+  $("#p-name").textContent = v("#e-name") || "juno.wav";
+  $("#p-sub").textContent = ["juno.wav", v("#e-pron")].filter(Boolean).join(" · ");
+  $("#p-bio").textContent = v("#e-bio"); $("#p-bio").parentElement.hidden = !v("#e-bio");
+  $("#p-banner").style.setProperty("--bh", banner);
+  $("#p-tag").hidden = !tag[0]; $("#p-tag").lastChild.textContent = tag[0];
+  const changed = fields.filter(f => f.value !== initial.get(f)).map(f => f.dataset.key);
+  if (banner !== start.banner) changed.push("Banner colour");
+  if (tag[0] !== start.tag) changed.push("Server tag");
+  $("#changed").textContent = changed.join(", ");
+  $("#unsaved").classList.toggle("show", changed.length > 0);
+  return changed.length;
+}
+fields.forEach(f => { f.addEventListener("input", () => { count(f); sync(); }); count(f); });
+$$("#swatches button").forEach(b => b.onclick = () => { $$("#swatches button").forEach(x => x.setAttribute("aria-pressed", x === b)); banner = b.dataset.h; sync(); });
+$("#tag-btn").onclick = () => $("#tag-menu").hidden = !$("#tag-menu").hidden;
+$$("#tag-menu button").forEach(b => b.onclick = () => { tag = [b.dataset.tag, b.dataset.g]; $("#tag-val").hidden = !tag[0]; $("#tag-val").lastChild.textContent = tag[0]; $("#tag-name").textContent = tag[1]; $("#tag-menu").hidden = true; sync(); });
+$("#reset").onclick = () => { fields.forEach(f => { f.value = initial.get(f); count(f); }); banner = start.banner; tag = ["NITE", "Night Shift"]; $$("#swatches button").forEach(x => x.setAttribute("aria-pressed", x.dataset.h === banner)); $("#tag-val").hidden = false; $("#tag-val").lastChild.textContent = "NITE"; $("#tag-name").textContent = "Night Shift"; sync(); };
+$("#save").onclick = () => { $("#save").textContent = "Saving…"; setTimeout(() => { fields.forEach(f => initial.set(f, f.value)); start.banner = banner; start.tag = tag[0]; $("#save").textContent = "Save changes"; sync(); }, 600); };
+$$(".tabs button").forEach(b => b.onclick = () => {
+  if (b.getAttribute("aria-selected") === "true") return;
+  if (sync()) { const u = $("#unsaved"); u.classList.remove("shake"); void u.offsetWidth; u.classList.add("shake"); return; }
+  $$(".tabs button").forEach(x => x.setAttribute("aria-selected", x === b));
+  $("#tab-main").hidden = b.dataset.tab !== "main"; $("#tab-server").hidden = b.dataset.tab !== "server";
+  $("#prev-title").textContent = b.dataset.tab === "main" ? "Preview" : "Preview for Night Shift";
+});
+$$("#history .slot:not(.empty)").forEach(s => s.onclick = e => {
+  if (e.target.closest(".x")) { s.replaceWith(Object.assign(document.createElement("span"), { className: "slot empty" })); return; }
+  $$("#history .slot").forEach(x => x.classList.toggle("on", x === s)); $("#e-av").style.setProperty("--h", s.style.getPropertyValue("--h")); $("#p-av").style.setProperty("--h", s.style.getPropertyValue("--h"));
+});
+sync();
+
+// Switches.
+$$(".switch").forEach(s => { const flip = () => { s.setAttribute("aria-checked", s.getAttribute("aria-checked") !== "true"); if (s.id === "share-all") { const off = s.getAttribute("aria-checked") === "false"; $("#servers").style.opacity = off ? 0.5 : 1; $("#ignored").hidden = !off; } }; s.onclick = flip; s.onkeydown = e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); flip(); } }; });
+
+$("#def-btn").onclick = () => $("#def-menu").hidden = !$("#def-menu").hidden;
+$$("#def-menu button").forEach(b => b.onclick = () => { $("#def-val").textContent = b.textContent; $("#def-menu").hidden = true; });
+</script>
+</body>
+</html>

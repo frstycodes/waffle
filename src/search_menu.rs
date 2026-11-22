@@ -535,7 +535,7 @@ fn has_glyph(kind: &str) -> Glyph {
         "sound" => Glyph::VolumeHigh,
         "sticker" => Glyph::Emoji,
         "poll" => Glyph::Checks,
-        "forward" => Glyph::ArrowRightBold,
+        "forward" => Glyph::ArrowRight,
         _ => Glyph::File,
     }
 }

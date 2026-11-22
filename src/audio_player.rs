@@ -57,7 +57,7 @@ pub fn tile(message: &Message, file: &File, waffle: WeakEntity<Waffle>, cx: &mut
     if let Some(player) = cx.try_global::<Players>().and_then(|p| p.players.get(&key)).cloned() {
         return player.into_any_element();
     }
-    let (file, voice) = (file.clone(), message.voice);
+    let (file, voice) = (file.clone(), message.is_voice());
     let player = cx.new(|cx| AudioPlayer::new(key.clone(), file, voice, waffle, cx));
     cx.default_global::<Players>().players.insert(key, player.clone());
     player.into_any_element()
