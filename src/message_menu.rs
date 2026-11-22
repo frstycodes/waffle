@@ -176,6 +176,21 @@ impl MessageAction {
         }
     }
 
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Edit => "Edit message",
+            Self::Reply => "Reply",
+            Self::Forward => "Forward",
+            Self::Thread => "Create thread",
+            Self::React => "Add reaction",
+            Self::CopyText => "Copy text",
+            Self::Pin => "Pin message",
+            Self::MarkUnread => "Mark unread",
+            Self::Delete => "Delete message",
+            Self::CopyId => "Copy message ID",
+        }
+    }
+
     pub fn for_combo(combo: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|a| a.keys().contains(&combo))
     }
@@ -196,19 +211,20 @@ impl Waffle {
     }
 
     fn action_item(&self, action: MessageAction, message: &Message) -> crate::menu::Item {
-        let (label, glyph) = match action {
-            MessageAction::Edit => ("Edit message", Glyph::Pen),
-            MessageAction::Reply => ("Reply", Glyph::Reply),
-            MessageAction::Forward => ("Forward", Glyph::Forward),
-            MessageAction::Thread => ("Create thread", Glyph::Thread),
-            MessageAction::React => ("Add reaction", Glyph::Emoji),
-            MessageAction::CopyText => ("Copy text", Glyph::Copy),
-            MessageAction::Pin if message.pinned => ("Unpin message", Glyph::PinSlash),
-            MessageAction::Pin => ("Pin message", Glyph::Pin),
-            MessageAction::MarkUnread => ("Mark unread", Glyph::Envelope),
-            MessageAction::Delete => ("Delete message", Glyph::Trash),
-            MessageAction::CopyId => ("Copy message ID", Glyph::Id),
+        let glyph = match action {
+            MessageAction::Edit => Glyph::Pen,
+            MessageAction::Reply => Glyph::Reply,
+            MessageAction::Forward => Glyph::Forward,
+            MessageAction::Thread => Glyph::Thread,
+            MessageAction::React => Glyph::Emoji,
+            MessageAction::CopyText => Glyph::Copy,
+            MessageAction::Pin if message.pinned => Glyph::PinSlash,
+            MessageAction::Pin => Glyph::Pin,
+            MessageAction::MarkUnread => Glyph::Envelope,
+            MessageAction::Delete => Glyph::Trash,
+            MessageAction::CopyId => Glyph::Id,
         };
+        let label = if action == MessageAction::Pin && message.pinned { "Unpin message" } else { action.label() };
         let m = message.clone();
         let row = item(label, move |this, window, cx| this.run_message_action(action, &m, false, window, cx)).icon(glyph).shortcut(action.keys()[0]);
         if action == MessageAction::Delete { row.danger() } else { row }

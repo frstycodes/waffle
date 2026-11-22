@@ -229,7 +229,7 @@ impl Waffle {
     }
 
     // Opens the DM's call as the server voice stage, with the DM under it for Back to chat.
-    fn open_dm_stage(&mut self, channel: Channel, window: &mut gpui_kit::Window, cx: &mut Context<Self>) {
+    pub(crate) fn open_dm_stage(&mut self, channel: Channel, window: &mut gpui_kit::Window, cx: &mut Context<Self>) {
         if self.channel.as_ref().is_none_or(|c| c.id != channel.id) {
             self.guild_id = None;
             self.open_channel(channel, window, cx);

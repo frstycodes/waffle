@@ -1513,16 +1513,7 @@ impl Waffle {
         let mut lines = Hairlines::default();
         let rows: Vec<AnyElement> = self.prefs.keybinds.iter().enumerate().map(|(index, keybind)| self.keybind_row(index, keybind, lines.next(), cx)).collect();
         let yours = ui::settings_group("Your keybinds", cx).children(self.input_monitoring_notice(cx)).when(!rows.is_empty(), |g| g.child(ui::settings_card(cx).children(rows)));
-        let mut lines = Hairlines::default();
-        let defaults = DEFAULT_KEYBINDS.iter().map(|&(action, combos)| {
-            ui::settings_row(SharedString::from(format!("default-{action}")), lines.next(), cx).min_h(px(48.)).child(ui::settings_text(action, None::<&str>, cx)).child(combo_caps(combos, cx))
-        });
-        let platform = if cfg!(target_os = "macos") { "Built in and always on." } else { "Built in and always on. Ctrl reads \u{2318} on a Mac." };
-        vec![
-            Section::new(header),
-            Section::keyed("Your keybinds", yours),
-            Section::keyed("Default keybinds", ui::settings_group("Default keybinds", cx).child(ui::settings_card(cx).children(defaults)).child(ui::settings_caption(platform, cx))),
-        ]
+        vec![Section::new(header), Section::keyed("Your keybinds", yours), Section::keyed("Default keybinds", self.default_keybinds(cx))]
     }
 
     // macOS keeps keys from Waffle until it's allowed Input Monitoring; the hook starts once it is.
@@ -2008,15 +1999,6 @@ const MORE_CUES: [(&str, &str, Cue); 12] = [
     ("cue-incoming-ring", "Incoming ring", Cue::CallRinging),
 ];
 
-// Built-in shortcuts, each as one or more combos read "or".
-const DEFAULT_KEYBINDS: [(&str, &[&str]); 5] = [
-    ("Quick switcher", &["cmd+k"]),
-    ("Navigate between channels", &["alt+ArrowUp", "ArrowDown"]),
-    ("Mark channel as read", &["escape"]),
-    ("Previous and next in the image viewer", &["ArrowLeft", "ArrowRight"]),
-    ("Close a popup", &["escape"]),
-];
-
 fn os_name() -> &'static str {
     match std::env::consts::OS {
         "macos" => "macOS",
@@ -2204,14 +2186,6 @@ fn inset_ring(color: Hsla, width: f32) -> BoxShadow {
 // Keycaps for a recorded binding, with the platform's own key names.
 pub(crate) fn key_caps(keys: &str, cx: &App) -> Div {
     div().flex().items_center().gap(px(4.)).children(keys.split('+').map(|key| ui::kbd(key_name(key), cx)))
-}
-
-fn combo_caps(combos: &[&str], cx: &App) -> Div {
-    let muted = palette::muted(cx);
-    div().flex().items_center().gap(px(4.)).flex_none().children(combos.iter().enumerate().flat_map(|(i, combo)| {
-        let or = (i > 0).then(|| div().px(px(2.)).text_size(px(12.)).text_color(muted).child("or").into_any_element());
-        or.into_iter().chain([key_caps(combo, cx).into_any_element()])
-    }))
 }
 
 // ⌘ ⇧ ⌥ ⌃ on macOS, printed names elsewhere; arrows as arrows, letters upper-case.
