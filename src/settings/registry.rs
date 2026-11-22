@@ -126,7 +126,7 @@ pub static SETTINGS: &[Setting] = &[
     on_row(s("avatar", Account, "Account info", "Avatar", None, &["profile picture", "pfp", "photo", "image"], Custom), "change-avatar"),
     on_row(s("banner", Account, "Account info", "Banner", Some("Needs Nitro; without it, Discord sets it"), &["cover", "header image", "background"], Custom), "change-banner"),
     on_row(s("user-id", Account, "Account info", "User ID", Some("Copy it to share or report"), &["id", "copy id", "snowflake"], Custom), "acct-id"),
-    s("profile", Account, "On discord.com", "Bio, pronouns and profile effects", Some("Decorations, effects, nameplates and name styles"), &["bio", "about me", "pronouns", "decoration", "effect", "nameplate", "nitro"], Link(DISCORD)),
+    s("profile", Account, "On discord.com", "Profile effects and decorations", Some("Decorations, effects, nameplates and name styles"), &["decoration", "effect", "nameplate", "nitro"], Link(DISCORD)),
     s("password", Account, "On discord.com", "Password", None, &["change password", "security", "login"], Link(DISCORD)),
     s("two-factor", Account, "On discord.com", "Two-factor authentication", Some("Authenticator app, security keys and backup codes"), &["2fa", "mfa", "authenticator", "security key", "passkey", "backup codes"], Link(DISCORD)),
     s("email-phone", Account, "On discord.com", "Email and phone", None, &["email", "phone", "contact", "verify"], Link(DISCORD)),
@@ -137,6 +137,18 @@ pub static SETTINGS: &[Setting] = &[
     s("billing", Account, "On discord.com", "Nitro and billing", Some("Subscriptions, boosts, gifts and payment methods"), &["nitro", "subscription", "payment", "gift", "boost", "billing", "card"], Link(DISCORD)),
     s("data", Account, "On discord.com", "Request your data", Some("A copy of what Discord stores about you"), &["privacy", "export", "download data", "gdpr", "data and privacy"], Link(DISCORD)),
     s("delete-account", Account, "On discord.com", "Disable or delete account", None, &["delete", "remove account", "deactivate", "close account"], Link(DISCORD)),
+    // Profiles: one group per tab, so a jump opens the right one.
+    on_row(s("profile-display-name", Profiles, "Main Profile", "Display name", Some("Shown instead of your username"), &["name", "global name", "rename"], Custom), "pf-name"),
+    on_row(s("pronouns", Profiles, "Main Profile", "Pronouns", None, &["she", "he", "they", "pronoun"], Custom), "pf-pronouns"),
+    on_row(s("profile-avatar", Profiles, "Main Profile", "Avatar", None, &["profile picture", "pfp", "photo", "image"], Custom), "pf-avatar"),
+    on_row(s("recent-avatars", Profiles, "Main Profile", "Recent avatars", Some("Your last 6 avatars, to use one again"), &["avatar history", "previous avatar", "old pfp"], Custom), "pf-recent"),
+    on_row(s("banner-colour", Profiles, "Main Profile", "Banner colour", Some("Without Nitro, a colour where a banner would be"), &["banner color", "accent", "colour", "color"], Custom), "pf-accent"),
+    on_row(s("about-me", Profiles, "Main Profile", "About me", None, &["bio", "description", "markdown"], Custom), "pf-bio"),
+    on_row(s("server-tag", Profiles, "Main Profile", "Server tag", Some("A server's tag next to your name across Discord"), &["clan", "guild tag", "tag", "badge"], Custom), "pf-tag"),
+    on_row(s("profile-nitro", Profiles, "Main Profile", "Decoration, nameplate, effect, frame and theme", Some("Nitro only; set on Discord"), &["decoration", "nameplate", "effect", "frame", "theme", "nitro"], Custom), "pf-nitro"),
+    on_row(s("server-nickname", Profiles, "Per-server Profiles", "Server nickname", Some("Empty uses your display name"), &["nick", "nickname", "per server", "guild"], Custom), "pf-nick"),
+    on_row(s("server-pronouns", Profiles, "Per-server Profiles", "Server pronouns", None, &["pronouns", "per server"], Custom), "pf-server-pronouns"),
+    on_row(s("server-profile-nitro", Profiles, "Per-server Profiles", "Server avatar, banner, bio and nameplate", Some("Nitro only; set on Discord"), &["server avatar", "server banner", "server bio", "nitro"], Custom), "pf-server-nitro"),
     // Content & social
     s("dm-server-members", ContentSocial, "Direct messages", "Allow DMs from server members", Some("Applies to servers you join from now on"), &["dm", "direct messages", "privacy", "strangers", "message requests"], Switch(Toggle::DmsFromServerMembers)),
     s("message-requests", ContentSocial, "Direct messages", "Message requests", Some("Filter messages from server members you may not know."), &["message requests", "dm", "strangers", "requests", "inbox"], Switch(Toggle::MessageRequests)),
@@ -216,6 +228,7 @@ pub static SETTINGS: &[Setting] = &[
     s("auto-download-updates", Updates, "Automatic updates", "Download updates automatically", Some("Off, Waffle still checks and tells you, then downloads when you ask"), &["update", "upgrade", "auto update", "background", "download", "release"], Switch(Toggle::AutoDownloadUpdates)),
     // Activity privacy
     s("share-activity", ActivityPrivacy, "Activity status", "Share your activity status", Some("What you're playing or listening to, as Discord's apps detect it"), &["game", "playing", "spotify", "rich presence", "status", "activity"], Switch(Toggle::ShareActivity)),
+    s("activity-join-default", ActivityPrivacy, "Where I share activity", "When joining a server", Some("Whether new servers see your activity, then a switch for each server you're in"), &["server", "guild", "per server", "activity", "privacy", "hide", "200 members"], Custom),
     s("registered-games", ActivityPrivacy, "Registered games", "Registered games", Some("Games detected here, each with its own switch, and Add it! for one that isn't"), &["game", "detect", "detection", "add it", "registered", "playing"], Custom),
 ];
 
@@ -284,7 +297,7 @@ fn word_score<P: Scope>(setting: &Setting<P>, word: &str) -> Option<u32> {
 mod tests {
     use super::*;
 
-    const ALL: [Page; 11] = [Account, ContentSocial, Appearance, Accessibility, VoiceVideo, Chat, Notifications, Keybinds, Advanced, Updates, ActivityPrivacy];
+    const ALL: [Page; 12] = [Account, Profiles, ContentSocial, Appearance, Accessibility, VoiceVideo, Chat, Notifications, Keybinds, Advanced, Updates, ActivityPrivacy];
 
     #[test]
     fn ids_and_rows_are_unique() {

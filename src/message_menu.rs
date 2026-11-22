@@ -57,6 +57,7 @@ impl Waffle {
         let facts = self.message_facts(message);
         let action = |a: MessageAction| a.allowed(message, &facts).then(|| self.action_item(a, message).entry());
         out.extend([MessageAction::Edit, MessageAction::Reply, MessageAction::Forward, MessageAction::Thread].into_iter().filter_map(action));
+        out.extend(self.publish_entry(message));
         out.push(Entry::Separator);
 
         // G5: secondary.
@@ -269,7 +270,7 @@ impl Waffle {
             MessageAction::Save => self.toggle_saved(&m, cx),
             MessageAction::Delete if quick || m.state == SendState::Failed => self.delete(m, cx),
             MessageAction::Delete => {
-                self.confirm_delete("Delete message", "Are you sure you want to delete this message?", "Delete", move |this, _, cx| this.delete(m.clone(), cx), cx);
+                self.confirm_delete("Delete message", crate::announcements::delete_body(&m), "Delete", move |this, _, cx| this.delete(m.clone(), cx), cx);
                 self.set_dialog_key(MessageAction::Delete.keys()[0]);
             }
             MessageAction::CopyId => self.copy_text(m.id, cx),

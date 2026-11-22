@@ -260,6 +260,10 @@ pub struct Guild {
     pub premium_tier: u8,
     // People idling here don't count as voice activity (Discord's server icon badge skips it).
     pub afk_channel_id: Option<String>,
+    // Scheduled events, from READY / GUILD_CREATE and the GUILD_SCHEDULED_EVENT_* events.
+    pub events: Vec<ScheduledEvent>,
+    // A Community server's community-updates channel, which can't be an announcement channel.
+    pub public_updates_channel_id: Option<String>,
     // Which join, boost and reminder notices the server hides or keeps quiet (Discord's SystemChannelFlags).
     pub system_channel_flags: u64,
     // Discord's feature flags (COMMUNITY, GUILD_ONBOARDING, MEMBER_VERIFICATION_GATE_ENABLED, ...).
@@ -289,6 +293,92 @@ impl Guild {
     pub fn has_feature(&self, feature: &str) -> bool {
         self.features.iter().any(|f| f == feature)
     }
+}
+
+// A guild scheduled event (docs/discord-events-re.md). Status 1 scheduled, 2 active, 3 completed, 4 canceled;
+// entity type 1 stage, 2 voice, 3 somewhere else (`location`).
+#[derive(Clone, Debug, Default)]
+pub struct ScheduledEvent {
+    pub id: String,
+    pub guild_id: String,
+    pub channel_id: Option<String>,
+    pub creator_id: Option<String>,
+    pub creator: Option<User>,
+    pub name: String,
+    pub description: Option<String>,
+    // Cover image hash; the url is `event_cover_url`.
+    pub image: Option<String>,
+    // ISO 8601, as Discord sends them.
+    pub start: String,
+    pub end: Option<String>,
+    pub status: u8,
+    pub entity_type: u8,
+    pub location: Option<String>,
+    // How many marked Interested, and whether we did; neither comes with the event itself.
+    pub interested: u32,
+    pub me_interested: bool,
+    // Discord's recurrence_rule as sent (start, frequency, interval, by_weekday, by_n_weekday, …).
+    pub recurrence: Option<Value>,
+    // A series' per-occurrence changes (guild_scheduled_event_exceptions): moved or canceled occurrences.
+    pub exceptions: Vec<EventException>,
+}
+
+// One occurrence of a series changed: its id is the occurrence's recurrence id.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct EventException {
+    pub id: String,
+    pub start: Option<String>,
+    pub end: Option<String>,
+    pub canceled: bool,
+}
+
+pub fn parse_event_exception(e: &Value) -> Option<EventException> {
+    Some(EventException {
+        id: e["event_exception_id"].as_str()?.to_owned(),
+        start: e["scheduled_start_time"].as_str().map(str::to_owned),
+        end: e["scheduled_end_time"].as_str().map(str::to_owned),
+        canceled: e["is_canceled"].as_bool().unwrap_or(false),
+    })
+}
+
+impl ScheduledEvent {
+    pub const SCHEDULED: u8 = 1;
+    pub const ACTIVE: u8 = 2;
+    pub const COMPLETED: u8 = 3;
+    pub const CANCELED: u8 = 4;
+    pub const STAGE: u8 = 1;
+    pub const VOICE: u8 = 2;
+    pub const EXTERNAL: u8 = 3;
+
+    pub fn upcoming(&self) -> bool {
+        !matches!(self.status, Self::COMPLETED | Self::CANCELED)
+    }
+
+    pub fn cover_url(&self) -> Option<String> {
+        self.image.as_ref().map(|hash| format!("{CDN}/guild-events/{}/{hash}.png?size=1024", self.id))
+    }
+}
+
+pub fn parse_scheduled_event(e: &Value) -> Option<ScheduledEvent> {
+    Some(ScheduledEvent {
+        id: e["id"].as_str()?.to_owned(),
+        guild_id: e["guild_id"].as_str()?.to_owned(),
+        channel_id: e["channel_id"].as_str().map(str::to_owned),
+        creator_id: e["creator_id"].as_str().map(str::to_owned),
+        creator: e["creator"].is_object().then(|| parse_user(&e["creator"])),
+        name: e["name"].as_str().unwrap_or_default().to_owned(),
+        description: e["description"].as_str().filter(|d| !d.is_empty()).map(str::to_owned),
+        image: e["image"].as_str().map(str::to_owned),
+        start: e["scheduled_start_time"].as_str().unwrap_or_default().to_owned(),
+        end: e["scheduled_end_time"].as_str().map(str::to_owned),
+        status: e["status"].as_u64().unwrap_or(1) as u8,
+        entity_type: e["entity_type"].as_u64().unwrap_or(0) as u8,
+        location: e["entity_metadata"]["location"].as_str().map(str::to_owned),
+        interested: e["user_count"].as_u64().unwrap_or(0) as u32,
+        me_interested: false,
+        recurrence: e["recurrence_rule"].is_object().then(|| e["recurrence_rule"].clone()),
+        exceptions: e["guild_scheduled_event_exceptions"].as_array().into_iter().flatten().filter_map(parse_event_exception).collect(),
+    })
 }
 
 // Your notification settings for one server, or for DMs under the key "@me" (Discord's
@@ -407,6 +497,7 @@ pub mod perm {
     pub const STAGE_MODERATOR: u64 = MANAGE_CHANNELS | MUTE_MEMBERS | MOVE_MEMBERS;
     pub const SEND_MESSAGES: u64 = 1 << 11;
     pub const MANAGE_MESSAGES: u64 = 1 << 13;
+    pub const CHANGE_NICKNAME: u64 = 1 << 26;
     pub const MANAGE_NICKNAMES: u64 = 1 << 27;
     pub const MANAGE_ROLES: u64 = 1 << 28;
     pub const MANAGE_WEBHOOKS: u64 = 1 << 29;
@@ -416,6 +507,9 @@ pub mod perm {
     pub const SEND_POLLS: u64 = 1 << 49;
     pub const PIN_MESSAGES: u64 = 1 << 51;
     pub const CONNECT: u64 = 1 << 20;
+    pub const READ_MESSAGE_HISTORY: u64 = 1 << 16;
+    pub const MANAGE_EVENTS: u64 = 1 << 33;
+    pub const CREATE_EVENTS: u64 = 1 << 44;
     pub const SEND_TTS_MESSAGES: u64 = 1 << 12;
     pub const MENTION_EVERYONE: u64 = 1 << 17;
 }
@@ -638,6 +732,20 @@ pub struct ChannelProps {
     pub video_full: bool,
     // Minutes until an idle thread hides (default_auto_archive_duration); 0 when Discord sent none.
     pub archive_after: u32,
+    // Forum and media channels (docs/discord-forums-re.md): the tags a post can carry, whether one is
+    // required (flag 16), and the defaults for Sort & View.
+    pub tags: Vec<ForumTag>,
+    pub require_tag: bool,
+    // default_sort_order 1: newest post first instead of latest activity.
+    pub sort_by_creation: bool,
+    // default_forum_layout 2 (gallery); media channels are always a gallery.
+    pub gallery: bool,
+    // default_tag_setting "match_all" instead of "match_some".
+    pub match_all: bool,
+    pub default_reaction: Option<Emoji>,
+    // Forum only: what a new post's message starts as.
+    #[serde(default)]
+    pub template: String,
     // A group DM's owner, the only one who may remove members.
     #[serde(default)]
     pub owner_id: Option<String>,
@@ -653,6 +761,23 @@ impl Channel {
     // Waits in Message Requests (either tab) instead of the DM list.
     pub fn is_request(&self) -> bool {
         self.props.message_request || self.props.spam
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ForumTag {
+    pub id: String,
+    pub name: String,
+    pub emoji: Option<Emoji>,
+    // Only people with Manage Threads may apply it.
+    pub moderated: bool,
+}
+
+fn parse_forum_emoji(id: &Value, name: &Value) -> Option<Emoji> {
+    match (id.as_str(), name.as_str()) {
+        (Some(id), name) => Some(Emoji { id: Some(id.to_owned()), name: name.unwrap_or_default().to_owned(), animated: false }),
+        (None, Some(name)) if !name.is_empty() => Some(Emoji { id: None, name: name.to_owned(), animated: false }),
+        _ => None,
     }
 }
 
@@ -680,6 +805,11 @@ pub struct ThreadMeta {
     // Our thread-member settings: muted, and the notification flags (2 all, 4 mentions, 8 nothing).
     pub muted: bool,
     pub flags: u64,
+    // A forum post's tags (ids into its forum's `ChannelProps::tags`), and whether it's pinned (channel flag 2).
+    #[serde(default)]
+    pub applied_tags: Vec<String>,
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -960,12 +1090,25 @@ pub struct Message {
     // Sent with /tts: read aloud to whoever has the channel open.
     #[serde(default)]
     pub tts: bool,
+    // A crosspost's source, from its message_reference: the followed server and channel.
+    #[serde(default)]
+    pub crosspost_from: Option<CrosspostSource>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CrosspostSource {
+    pub guild_id: String,
+    pub channel_id: String,
 }
 
 // Message flag SUPPRESS_NOTIFICATIONS: sent with @silent, so nobody gets a push or desktop notification.
 pub const SUPPRESS_NOTIFICATIONS: u64 = 1 << 12;
 
 impl Message {
+    pub const CROSSPOSTED: u64 = 1;
+    pub const IS_CROSSPOST: u64 = 2;
+    pub const SOURCE_MESSAGE_DELETED: u64 = 8;
+
     pub fn embeds_suppressed(&self) -> bool {
         self.flags & message_flag::SUPPRESS_EMBEDS != 0
     }
@@ -1120,6 +1263,31 @@ pub struct Profile {
     pub mutual_server_count: usize,
     // GAP: the API field behind Discord's Game Collection is unknown, so only the demo fills this (icon URLs).
     pub games: Vec<String>,
+    // When they joined the server the profile was fetched for (`guild_member.joined_at`, ISO 8601).
+    pub joined: Option<String>,
+    pub connections: Vec<Connection>,
+    // The profile effect they wear: its collectible's sku, resolved through `/collectibles-products/{sku}`.
+    pub effect_sku: Option<String>,
+}
+
+// An account linked on their profile (`connected_accounts[]`); `kind` is Discord's platform type ("spotify").
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct Connection {
+    pub kind: String,
+    pub id: String,
+    pub name: String,
+    pub verified: bool,
+}
+
+// One image of a profile effect, placed in the effect's own pixels (`effects[]` of its config).
+#[derive(Clone, Debug, PartialEq)]
+pub struct EffectLayer {
+    pub src: String,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub z: i64,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -1171,6 +1339,8 @@ pub enum Relation {
 pub struct Relationship {
     pub user: User,
     pub kind: Relation,
+    // When it became this relationship (ISO 8601): Friends Since for a friend.
+    pub since: Option<String>,
 }
 
 // One result from Discord's GIF search (its Tenor proxy). `preview` is an animated GIF gpui can draw.
@@ -1260,6 +1430,8 @@ pub struct AccountSettings {
     // Servers whose members can't DM you, and servers that don't see your activity.
     pub restricted_guilds: Vec<String>,
     pub activity_restricted_guilds: Vec<String>,
+    // Whether servers you join go on the activity list: 0 none, 1 those over 200 members, 2 all.
+    pub default_guilds_activity_restricted: u8,
 }
 
 impl Default for AccountSettings {
@@ -1285,6 +1457,7 @@ impl Default for AccountSettings {
             message_requests: true,
             restricted_guilds: Vec::new(),
             activity_restricted_guilds: Vec::new(),
+            default_guilds_activity_restricted: 0,
         }
     }
 }
@@ -1345,6 +1518,16 @@ pub enum Event {
     // A channel or thread created or changed in a server.
     ChannelUpsert { guild_id: String, channel: Channel },
     ChannelDelete { guild_id: String, id: String },
+    // A scheduled event created or changed, deleted, or someone marked / unmarked Interested.
+    ScheduledEvent(ScheduledEvent),
+    ScheduledEventDelete { guild_id: String, id: String },
+    // One occurrence's exception written (Some) or removed (None, by id).
+    ScheduledEventException { guild_id: String, event_id: String, id: String, exception: Option<EventException> },
+    ScheduledEventUser { guild_id: String, event_id: String, user_id: String, added: bool },
+    // FORUM_UNREADS: unread message counts for a forum's posts, (post id, count).
+    ForumUnreads { forum_id: String, counts: Vec<(String, u32)> },
+    // A post someone just started in a forum (THREAD_CREATE with `newly_created`).
+    ForumPostCreated { forum_id: String, post_id: String, owner_id: String },
     // A member's roles, nickname or server avatar changed.
     MemberUpdate { guild_id: String, user: User, roles: Vec<String>, membership: Membership },
     // A friend, block or request was added, changed or removed (`None` kind = removed).
@@ -1442,6 +1625,12 @@ impl Client {
             "op": 14,
             "d": { "guild_id": guild_id, "typing": true, "activities": true, "threads": true, "channels": { channel_id: [[0, 99]] } }
         }));
+    }
+
+    // Discord's REQUEST_FORUM_UNREADS (op 28): unread counts since each ack, answered by FORUM_UNREADS. Callers send at most 180.
+    pub fn request_forum_unreads(&self, guild_id: &str, forum_id: &str, threads: &[(String, u64)]) {
+        let threads: Vec<Value> = threads.iter().map(|(id, ack)| json!({ "thread_id": id, "ack_message_id": ack.to_string() })).collect();
+        self.gateway(json!({ "op": 28, "d": { "guild_id": guild_id, "channel_id": forum_id, "threads": threads } }));
     }
 
     pub fn request_members(&self, guild_id: &str, user_ids: Vec<String>) {
@@ -1738,6 +1927,12 @@ impl Client {
         Ok(parse_profile(user_id, &body))
     }
 
+    // A profile effect's layers, from the collectibles product its sku names.
+    pub async fn profile_effect(&self, sku: &str) -> Result<Vec<EffectLayer>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, &format!("/collectibles-products/{sku}"))).await?;
+        Ok(parse_profile_effect(&body))
+    }
+
     /// Opens (or finds) the DM channel with a user.
     pub async fn open_dm(&self, user_id: &str) -> Result<Channel, String> {
         self.open_private(&[user_id.to_owned()]).await
@@ -1784,6 +1979,48 @@ impl Client {
         self.run(req).await
     }
 
+    /// Your profile as its editor loads it, raw: `GET /users/{id}/profile`, with the server profile when `guild_id` is set.
+    pub async fn my_profile(&self, user_id: &str, guild_id: Option<&str>) -> Result<Value, String> {
+        let guild = guild_id.map(|g| format!("&guild_id={g}")).unwrap_or_default();
+        self.run(self.request(reqwest::Method::GET, &format!("/users/{user_id}/profile?with_mutual_guilds=false{guild}"))).await
+    }
+
+    /// Saves your main profile (PATCH /users/@me/profile): `bio`, `pronouns`, `accent_color`. Returns the profile.
+    pub async fn modify_my_profile(&self, patch: Value) -> Result<Value, String> {
+        self.run(self.request(reqwest::Method::PATCH, "/users/@me/profile").json(&patch)).await
+    }
+
+    /// Saves your profile on one server (PATCH /guilds/{id}/profile/@me): `pronouns`, and for Nitro `bio` and `banner`.
+    pub async fn modify_guild_profile(&self, guild_id: &str, patch: Value) -> Result<Value, String> {
+        self.run(self.request(reqwest::Method::PATCH, &format!("/guilds/{guild_id}/profile/@me")).json(&patch)).await
+    }
+
+    /// Saves your member entry on one server (PATCH /guilds/{id}/members/@me): `nick`, and for Nitro the server avatar.
+    pub async fn modify_my_member(&self, guild_id: &str, patch: Value) -> Result<Value, String> {
+        self.run(self.request(reqwest::Method::PATCH, &format!("/guilds/{guild_id}/members/@me")).json(&patch)).await
+    }
+
+    /// Wears a server's tag next to your name, or none.
+    pub async fn set_server_tag(&self, guild_id: Option<&str>) -> Result<Value, String> {
+        let body = json!({ "identity_guild_id": guild_id, "identity_enabled": guild_id.is_some() });
+        self.run(self.request(reqwest::Method::PUT, "/users/@me/clan").json(&body)).await
+    }
+
+    /// A server's public profile, which carries its tag and badge.
+    // Not verified: `GET /guilds/{id}/profile` and its `tag` / `badge` fields.
+    pub async fn guild_profile(&self, guild_id: &str) -> Result<Value, String> {
+        self.run(self.request(reqwest::Method::GET, &format!("/guilds/{guild_id}/profile"))).await
+    }
+
+    /// Your last avatars: `{avatars: [{id, storage_hash, description}]}`.
+    pub async fn recent_avatars(&self) -> Result<Value, String> {
+        self.run(self.request(reqwest::Method::GET, "/users/@me/avatars")).await
+    }
+
+    pub async fn delete_recent_avatar(&self, avatar_id: &str) -> Result<(), String> {
+        self.run(self.request(reqwest::Method::DELETE, &format!("/users/@me/avatars/{avatar_id}"))).await.map(|_| ())
+    }
+
     /// Saves the rail's order and folders. Loose servers are folders without an id.
     // Not verified: the legacy settings endpoint still accepting `guild_folders` (it accepts `status`).
     pub async fn set_guild_folders(&self, folders: Vec<Folder>) {
@@ -1804,6 +2041,22 @@ impl Client {
             None => req,
         };
         self.run(req).await
+    }
+
+    /// A call whose failure the caller reads itself: Discord's status and body as sent, with none of `call`'s
+    /// retries (a publish's 429 carries the minutes to wait in `retry_after`).
+    pub async fn call_raw(&self, method: reqwest::Method, path: String, body: Option<Value>) -> Result<(u16, Value), String> {
+        let req = self.request(method, &path);
+        let req = match body {
+            Some(body) => req.json(&body),
+            None => req,
+        };
+        let sent = async move {
+            let res = req.send().await.map_err(|e| e.to_string())?;
+            let status = res.status().as_u16();
+            Ok((status, res.json().await.unwrap_or(Value::Null)))
+        };
+        runtime().spawn(sent).await.map_err(|e| e.to_string())?
     }
 
     /// The message a link points at, through the history endpoint (`around`, one message), as Discord's
@@ -1872,6 +2125,20 @@ impl Client {
         let form = fields.into_iter().fold(reqwest::multipart::Form::new(), |form, (key, value)| form.text(key, value));
         let form = form.part("file", reqwest::multipart::Part::bytes(bytes).file_name(file_name));
         self.run(self.request(reqwest::Method::POST, &path).multipart(form)).await
+    }
+
+    // A JSON body with files, as `payload_json` and `files[n]` parts; the body names each by its index.
+    pub async fn call_files(&self, path: String, payload: Value, files: Vec<Upload>) -> Result<Value, String> {
+        let req = self.request(reqwest::Method::POST, &path);
+        let sent = async move {
+            let mut form = reqwest::multipart::Form::new().text("payload_json", payload.to_string());
+            for (i, file) in files.into_iter().enumerate() {
+                let bytes = std::fs::read(&file.path).map_err(|e| format!("{}: {e}", file.name))?;
+                form = form.part(format!("files[{i}]"), reqwest::multipart::Part::bytes(bytes).file_name(file.name));
+            }
+            send(req.multipart(form)).await
+        };
+        runtime().spawn(sent).await.map_err(|e| e.to_string())?
     }
 
     pub async fn ack_bulk(&self, reads: Vec<(String, u64)>) {
@@ -2634,6 +2901,17 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
         "READY" => Some(Event::Ready(Box::new(parse_ready(d)))),
         "USER_SETTINGS_UPDATE" => Some(Event::UserSettings(d.clone())),
         "GUILD_CREATE" => parse_guild(d).map(Event::GuildCreate),
+        "THREAD_CREATE" if d["newly_created"].as_bool() == Some(true) => {
+            let guild_id = d["guild_id"].as_str()?.to_owned();
+            let channel = parse_channel(d, &guild_id)?;
+            let created = Event::ForumPostCreated { forum_id: s(&d["parent_id"]), post_id: channel.id.clone(), owner_id: s(&d["owner_id"]) };
+            Some(Event::Batch(vec![Event::ChannelUpsert { guild_id, channel }, created]))
+        }
+        // Not verified: `threads[].thread_id` and `threads[].count`; only the request's shape was read.
+        "FORUM_UNREADS" => Some(Event::ForumUnreads {
+            forum_id: s(&d["channel_id"]),
+            counts: d["threads"].as_array().into_iter().flatten().filter_map(|t| Some((t["thread_id"].as_str()?.to_owned(), t["count"].as_u64().unwrap_or(0) as u32))).collect(),
+        }),
         "CHANNEL_CREATE" | "CHANNEL_UPDATE" if d["guild_id"].is_null() && matches!(d["type"].as_u64(), Some(1 | 3)) => parse_dm(d, &Value::Null).map(Event::DmUpsert),
         "CHANNEL_DELETE" if d["guild_id"].is_null() => Some(Event::DmDelete(d["id"].as_str()?.to_owned())),
         "CHANNEL_RECIPIENT_ADD" | "CHANNEL_RECIPIENT_REMOVE" => Some(Event::RecipientChange { channel_id: d["channel_id"].as_str()?.to_owned(), user: parse_user(&d["user"]), added: kind == "CHANNEL_RECIPIENT_ADD" }),
@@ -2642,6 +2920,24 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
             parse_channel(d, &guild_id).map(|channel| Event::ChannelUpsert { guild_id, channel })
         }
         "CHANNEL_DELETE" | "THREAD_DELETE" => Some(Event::ChannelDelete { guild_id: d["guild_id"].as_str()?.to_owned(), id: d["id"].as_str()?.to_owned() }),
+        "GUILD_SCHEDULED_EVENT_CREATE" | "GUILD_SCHEDULED_EVENT_UPDATE" => parse_scheduled_event(d).map(Event::ScheduledEvent),
+        // Not verified: the exception payload carries `guild_id` and `event_id` beside the exception's own fields.
+        "GUILD_SCHEDULED_EVENT_EXCEPTION_CREATE" | "GUILD_SCHEDULED_EVENT_EXCEPTION_UPDATE" | "GUILD_SCHEDULED_EVENT_EXCEPTION_DELETE" => {
+            let exception = parse_event_exception(d)?;
+            Some(Event::ScheduledEventException {
+                guild_id: d["guild_id"].as_str()?.to_owned(),
+                event_id: d["event_id"].as_str()?.to_owned(),
+                id: exception.id.clone(),
+                exception: (kind != "GUILD_SCHEDULED_EVENT_EXCEPTION_DELETE").then_some(exception),
+            })
+        }
+        "GUILD_SCHEDULED_EVENT_DELETE" => Some(Event::ScheduledEventDelete { guild_id: d["guild_id"].as_str()?.to_owned(), id: d["id"].as_str()?.to_owned() }),
+        "GUILD_SCHEDULED_EVENT_USER_ADD" | "GUILD_SCHEDULED_EVENT_USER_REMOVE" => Some(Event::ScheduledEventUser {
+            guild_id: s(&d["guild_id"]),
+            event_id: s(&d["guild_scheduled_event_id"]),
+            user_id: s(&d["user_id"]),
+            added: kind == "GUILD_SCHEDULED_EVENT_USER_ADD",
+        }),
         "GUILD_MEMBER_UPDATE" => Some(Event::MemberUpdate {
             guild_id: d["guild_id"].as_str()?.to_owned(),
             user: parse_member_user(d, &d["user"], d["guild_id"].as_str()),
@@ -2657,7 +2953,7 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
                 _ => return None,
             };
             let user = if d["user"].is_object() { parse_user(&d["user"]) } else { User { id: d["id"].as_str()?.to_owned(), ..Default::default() } };
-            Some(Event::RelationshipChange { user_id: d["id"].as_str()?.to_owned(), relationship: Some(Relationship { user, kind }) })
+            Some(Event::RelationshipChange { user_id: d["id"].as_str()?.to_owned(), relationship: Some(Relationship { user, kind, since: d["since"].as_str().map(str::to_owned) }) })
         }
         "RELATIONSHIP_REMOVE" => Some(Event::RelationshipChange { user_id: d["id"].as_str()?.to_owned(), relationship: None }),
         "THREAD_MEMBER_UPDATE" => Some(Event::ThreadJoined { id: d["id"].as_str()?.to_owned(), joined: true }),
@@ -2782,7 +3078,7 @@ fn parse_ready(d: &Value) -> Ready {
                 };
                 // Legacy READY embeds the user; newer shapes reference READY.users by id.
                 let user = if r["user"].is_object() { parse_user(&r["user"]) } else { d["users"].as_array()?.iter().find(|u| u["id"] == r["id"]).map(parse_user)? };
-                Some(Relationship { user, kind })
+                Some(Relationship { user, kind, since: r["since"].as_str().map(str::to_owned) })
             })
             .collect(),
         folders: d["user_settings"]["guild_folders"]
@@ -2847,6 +3143,8 @@ fn parse_guild(g: &Value) -> Option<Guild> {
         splash: props["splash"].as_str().or(g["splash"].as_str()).map(|hash| splash_url(id, hash)),
         rules_channel_id: props["rules_channel_id"].as_str().or(g["rules_channel_id"].as_str()).map(str::to_owned),
         me: Membership::default(),
+        events: g["guild_scheduled_events"].as_array().into_iter().flatten().filter_map(parse_scheduled_event).collect(),
+        public_updates_channel_id: props["public_updates_channel_id"].as_str().or(g["public_updates_channel_id"].as_str()).map(str::to_owned),
     })
 }
 
@@ -2878,6 +3176,8 @@ pub(crate) fn parse_channel(c: &Value, guild_id: &str) -> Option<Channel> {
         owner_id: c["owner_id"].as_str().map(str::to_owned),
         muted: c["member"]["muted"].as_bool().unwrap_or(false),
         flags: c["member"]["flags"].as_u64().unwrap_or(0),
+        applied_tags: strings(&c["applied_tags"]),
+        pinned: c["flags"].as_u64().unwrap_or(0) & 2 != 0,
     });
     let overwrites: Vec<Overwrite> = c["permission_overwrites"]
         .as_array()
@@ -2909,6 +3209,25 @@ pub(crate) fn parse_channel(c: &Value, guild_id: &str) -> Option<Channel> {
             rtc_region: c["rtc_region"].as_str().map(str::to_owned),
             video_full: c["video_quality_mode"].as_u64() == Some(2),
             archive_after: c["default_auto_archive_duration"].as_u64().unwrap_or(0) as u32,
+            tags: c["available_tags"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|t| {
+                    Some(ForumTag {
+                        id: t["id"].as_str()?.to_owned(),
+                        name: t["name"].as_str().unwrap_or_default().to_owned(),
+                        emoji: parse_forum_emoji(&t["emoji_id"], &t["emoji_name"]),
+                        moderated: t["moderated"].as_bool().unwrap_or(false),
+                    })
+                })
+                .collect(),
+            require_tag: c["flags"].as_u64().unwrap_or(0) & 16 != 0,
+            sort_by_creation: c["default_sort_order"].as_u64() == Some(1),
+            gallery: c["type"].as_u64() == Some(16) || c["default_forum_layout"].as_u64() == Some(2),
+            match_all: c["default_tag_setting"].as_str() == Some("match_all"),
+            default_reaction: parse_forum_emoji(&c["default_reaction_emoji"]["emoji_id"], &c["default_reaction_emoji"]["emoji_name"]),
+            template: c["template"].as_str().unwrap_or_default().to_owned(),
             ..Default::default()
         }),
     })
@@ -2994,7 +3313,9 @@ pub fn parse_message(m: &Value) -> Option<Message> {
     let embeds = if flags & message_flag::SUPPRESS_EMBEDS == 0 { parse_embeds(&m["embeds"], &mut media) } else { Vec::new() };
     let embed_media = media.len() - attachment_media;
     // Reference type 1 is a forward; only 0 (or none, on older messages) is a reply.
-    let is_reply = matches!(m["message_reference"]["type"].as_u64(), None | Some(0));
+    // A crosspost's reference points at its source in the followed channel, not at a message it answers.
+    let is_crosspost = m["flags"].as_u64().unwrap_or(0) & Message::IS_CROSSPOST != 0;
+    let is_reply = !is_crosspost && matches!(m["message_reference"]["type"].as_u64(), None | Some(0));
     let reply = (is_reply && m["referenced_message"].is_object()).then(|| parse_message(&m["referenced_message"])).flatten().map(Box::new);
     Some(Message {
         id: m["id"].as_str()?.to_owned(),
@@ -3041,7 +3362,12 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         components: crate::app_commands::parse_components(&m["components"]),
         application_id: m["application_id"].as_str().map(str::to_owned),
         interaction_error: None,
+        crosspost_from: is_crosspost.then(|| crosspost_source(&m["message_reference"])).flatten(),
     })
+}
+
+fn crosspost_source(reference: &Value) -> Option<CrosspostSource> {
+    Some(CrosspostSource { guild_id: reference["guild_id"].as_str()?.to_owned(), channel_id: reference["channel_id"].as_str()?.to_owned() })
 }
 
 // Image and GIF embeds join `media` (what the gallery pages through); the rest come back as cards.
@@ -3367,7 +3693,7 @@ fn parse_presence(p: &Value) -> Presence {
 }
 
 // Field names from the diself crate's model (src/model/user.rs), not from Discord's docs (the endpoint is undocumented).
-fn parse_profile(user_id: &str, body: &Value) -> Profile {
+pub(crate) fn parse_profile(user_id: &str, body: &Value) -> Profile {
     let user = &body["user"];
     let profile = &body["user_profile"];
     let banner = user["banner"].as_str().map(|hash| {
@@ -3400,7 +3726,49 @@ fn parse_profile(user_id: &str, body: &Value) -> Profile {
         mutual_friend_count,
         mutual_server_count: body["mutual_guilds"].as_array().map_or(0, Vec::len),
         games: Vec::new(),
+        joined: body["guild_member"]["joined_at"].as_str().map(str::to_owned),
+        connections: body["connected_accounts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|c| {
+                Some(Connection { kind: c["type"].as_str()?.to_owned(), id: c["id"].as_str()?.to_owned(), name: c["name"].as_str().unwrap_or_default().to_owned(), verified: c["verified"].as_bool() == Some(true) })
+            })
+            .collect(),
+        effect_sku: effect_sku(&body["guild_member_profile"]["collectibles"]).or_else(|| effect_sku(&profile["collectibles"])),
     }
+}
+
+// The unexpired profile effect in a `collectibles[]` list, `{sku_id, type, expires_at}`.
+// Not verified: that the profile effect's collectible type is 1 (Discord's enum value wasn't read).
+fn effect_sku(collectibles: &Value) -> Option<String> {
+    const PROFILE_EFFECT: u64 = 1;
+    let now = chrono::Utc::now();
+    collectibles
+        .as_array()?
+        .iter()
+        .filter(|c| c["type"].as_u64() == Some(PROFILE_EFFECT))
+        .filter(|c| c["expires_at"].as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).is_none_or(|t| t > now))
+        .find_map(|c| c["sku_id"].as_str().map(str::to_owned))
+}
+
+// Not verified: that the product carries the effect's config (`effects[]` of `{src, width, height, position,
+// zIndex, randomizedSources}`) on one of its `items`; a body without it gives no layers and the card draws none.
+// GAP: Discord picks one random `randomizedSources` entry per open; this takes the first.
+fn parse_profile_effect(body: &Value) -> Vec<EffectLayer> {
+    let item = body["items"].as_array().into_iter().flatten().find(|i| i["effects"].is_array());
+    let Some(effects) = item.and_then(|i| i["effects"].as_array()) else { return Vec::new() };
+    let mut layers: Vec<EffectLayer> = effects
+        .iter()
+        .filter_map(|e| {
+            let src = e["randomizedSources"][0]["src"].as_str().or(e["src"].as_str())?.to_owned();
+            let num = |v: &Value| v.as_f64().unwrap_or(0.) as f32;
+            Some(EffectLayer { src, x: num(&e["position"]["x"]), y: num(&e["position"]["y"]), width: num(&e["width"]), height: num(&e["height"]), z: e["zIndex"].as_i64().unwrap_or(0) })
+        })
+        .filter(|l| l.width > 0. && l.height > 0.)
+        .collect();
+    layers.sort_by_key(|l| l.z);
+    layers
 }
 
 pub fn app_icon_url(app_id: &str, icon: &str) -> String {
@@ -3864,6 +4232,8 @@ mod tests {
             premium_tier: 0,
             afk_channel_id: None,
             system_channel_flags: 0,
+            events: Vec::new(),
+            public_updates_channel_id: None,
             threads: Vec::new(),
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -3904,6 +4274,8 @@ mod tests {
             premium_tier: 0,
             afk_channel_id: None,
             system_channel_flags: 0,
+            events: Vec::new(),
+            public_updates_channel_id: None,
             threads: vec![thread],
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -3947,6 +4319,8 @@ mod tests {
             premium_tier: 0,
             afk_channel_id: None,
             system_channel_flags: 0,
+            events: Vec::new(),
+            public_updates_channel_id: None,
             threads: Vec::new(),
             my_roles: vec!["mods".into()],
             default_notifications: Default::default(),
@@ -4189,7 +4563,9 @@ mod tests {
             "mutual_friends": [{ "id": "1", "username": "a" }, { "id": "2", "username": "b" }],
             "mutual_friend_count": 5,
             "mutual_guilds": [{ "id": "g", "nick": null }],
-            "guild_member": { "roles": ["r"] },
+            "guild_member": { "roles": ["r"], "joined_at": "2022-06-18T10:00:00+00:00" },
+            "connected_accounts": [{ "type": "spotify", "id": "s1", "name": "wren", "verified": true }, { "type": "steam", "id": "7656" }, { "name": "no type" }],
+            "guild_member_profile": { "collectibles": [{ "sku_id": "old", "type": 1, "expires_at": "2001-01-01T00:00:00+00:00" }] },
         });
         let p = parse_profile("9", &body);
         assert_eq!(p.username, "aayurene");
@@ -4201,8 +4577,35 @@ mod tests {
         assert_eq!((p.mutual_friends.len(), p.mutual_friend_count, p.mutual_server_count), (2, 5, 1));
         assert!(p.decoration.unwrap().contains("/avatar-decoration-presets/deco.png"));
         assert_eq!(p.roles, ["r"]);
+        assert_eq!(p.joined.as_deref(), Some("2022-06-18T10:00:00+00:00"));
+        assert_eq!(p.connections.iter().map(|c| (c.kind.as_str(), c.name.as_str(), c.verified)).collect::<Vec<_>>(), [("spotify", "wren", true), ("steam", "", false)]);
+        assert_eq!(p.effect_sku, None);
+        let worn = parse_profile("9", &json!({ "user_profile": { "collectibles": [{ "sku_id": "frame", "type": 2 }, { "sku_id": "fx", "type": 1, "expires_at": null }] } }));
+        assert_eq!(worn.effect_sku.as_deref(), Some("fx"));
         let bare = parse_profile("9", &json!({ "user": { "id": "9" }, "user_profile": { "theme_colors": [1] } }));
         assert_eq!((bare.theme, bare.mutual_friend_count, bare.badges.len()), (None, 0, 0));
+    }
+
+    #[test]
+    fn relationships_carry_since() {
+        let since = "2023-08-09T12:00:00+00:00";
+        let Some(Event::RelationshipChange { relationship: Some(r), .. }) = dispatch("RELATIONSHIP_ADD", &json!({ "id": "5", "type": 1, "since": since })) else { panic!("no relationship") };
+        assert_eq!((r.kind, r.since.as_deref()), (Relation::Friend, Some(since)));
+        let ready = parse_ready(&json!({ "user": { "id": "1" }, "relationships": [{ "id": "5", "type": 1, "since": since, "user": { "id": "5" } }] }));
+        assert_eq!(ready.relationships[0].since.as_deref(), Some(since));
+    }
+
+    #[test]
+    fn parses_profile_effect() {
+        let body = json!({ "items": [{ "type": 1, "effects": [
+            { "src": "https://x/top.png", "width": 450, "height": 880, "position": { "x": 0, "y": 0 }, "zIndex": 2 },
+            { "src": "https://x/base.png", "randomizedSources": [{ "src": "https://x/a.png" }], "width": 450, "height": 200, "position": { "x": 0, "y": 40 }, "zIndex": 1 },
+            { "src": "https://x/empty.png" },
+        ]}]});
+        let layers = parse_profile_effect(&body);
+        assert_eq!(layers.iter().map(|l| l.src.as_str()).collect::<Vec<_>>(), ["https://x/a.png", "https://x/top.png"]);
+        assert_eq!((layers[0].y, layers[0].height), (40., 200.));
+        assert!(parse_profile_effect(&json!({ "items": [] })).is_empty());
     }
 
     #[test]

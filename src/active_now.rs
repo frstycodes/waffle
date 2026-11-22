@@ -226,8 +226,8 @@ impl Waffle {
     fn party_card(&self, party: &Party, cx: &mut Context<Self>) -> AnyElement {
         let raised = palette::surface(palette::Level::Raised, cx);
         let names: Vec<&str> = party.members.iter().map(|m| m.name.as_str()).collect();
-        let avatars: Vec<String> = party.members.iter().map(|m| m.avatar.clone()).collect();
-        let faces = ui::capped_stack(&avatars, 3, 32., raised, palette::surface(palette::Level::Group, cx), palette::muted(cx));
+        let people: Vec<ui::Entry> = party.members.iter().map(|m| ui::Entry::person(m.avatar.clone(), m.name.clone())).collect();
+        let faces = ui::listed_stack(SharedString::from(format!("active-now-people-{}", party.key)), "People", people, 3, 32., raised, palette::surface(palette::Level::Group, cx), palette::muted(cx));
         let sub = subtitle(party).map(|s| match s {
             Subtitle::Text(text) => text,
             Subtitle::Since(start) => clock_since(start),
@@ -266,7 +266,7 @@ impl Waffle {
         let guild = self.guilds.iter().find(|g| g.id == guild_id)?;
         let channel = guild.channels.iter().find(|c| c.id == channel_id)?.clone();
         let group = palette::surface(palette::Level::Group, cx);
-        let occupants: Vec<String> = party.occupants.iter().map(|id| self.user_avatar(id)).collect();
+        let occupants: Vec<ui::Entry> = party.occupants.iter().map(|id| ui::Entry::person(self.user_avatar(id), self.user_name(id))).collect();
         let channel_name = channel.name.clone();
         let joined = self.call.as_ref().is_some_and(|c| c.channel.id == channel.id);
         let join = ui::button(SharedString::from(format!("active-now-join-{channel_id}")), Tone::Secondary, cx)
@@ -293,7 +293,7 @@ impl Waffle {
             inner(cx)
                 .child(div().flex_none().text_color(palette::muted(cx)).child(Icon::new(Glyph::VolumeHigh).size(px(20.))))
                 .child(meta)
-                .child(ui::capped_stack(&occupants, 3, 20., group, palette::surface(palette::Level::Raised, cx), palette::muted(cx)))
+                .child(ui::listed_stack(SharedString::from(format!("active-now-voice-{channel_id}")), "In voice", occupants, 3, 20., group, palette::surface(palette::Level::Raised, cx), palette::muted(cx)))
                 // The button keeps its press, so the card's own click (the profile) never fires with it.
                 .child(div().flex_none().on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| cx.stop_propagation()).child(join)),
         )

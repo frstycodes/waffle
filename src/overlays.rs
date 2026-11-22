@@ -290,6 +290,12 @@ impl Waffle {
             cx.notify();
             return true;
         }
+        // The full-size avatar closes alone, back to the popout it opened from.
+        if let Some(card) = self.profile_card.as_mut().filter(|c| c.avatar_full) {
+            card.avatar_full = false;
+            cx.notify();
+            return true;
+        }
         let text_viewer = self.text_files.borrow_mut().viewer.take().is_some();
         let open = text_viewer
             | self.profile_card.take().is_some()
@@ -297,7 +303,9 @@ impl Waffle {
             | self.status_editor.take().is_some()
             | self.poll_creator.take().is_some()
             | self.take_app_modal()
+            | self.close_events()
             | self.forward_dialog.take().is_some()
+            | self.dismiss_announcement_dialog()
             | self.report_dialog.take().is_some()
             | self.group_dialog.take().is_some()
             | self.reactions_dialog.take().is_some()
@@ -324,7 +332,9 @@ impl Waffle {
         out.extend(self.status_editor_overlay(window, cx));
         out.extend(self.poll_creator_overlay(window, cx));
         out.extend(self.app_modal_overlay(window, cx));
+        out.extend(self.events_overlay(window, cx));
         out.extend(self.forward_overlay(window, cx));
+        out.extend(self.announcement_overlay(window, cx));
         out.extend(self.report_overlay(window, cx));
         out.extend(self.group_overlay(window, cx));
         out.extend(self.reactions_overlay(window, cx));

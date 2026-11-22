@@ -43,6 +43,7 @@ const EMOJI_ROW: f32 = 44.;
 const HEADER: f32 = 52.;
 // The search field's 40px and the 4px under it.
 const SEARCH_ROW: f32 = 44.;
+const LABEL: f32 = 26.;
 // Rows sit 1px apart.
 const GAP: f32 = 1.;
 const LEAD: f32 = 18.;
@@ -60,6 +61,8 @@ pub enum Entry {
     Slider { label: SharedString, key: SharedString, value: f32, on_set: SetValue },
     // A field atop the rows that filters them as you type; it holds the keyboard while the menu is open.
     Search(Entity<InputState>),
+    // A group's name over its rows (Sort & View's "Sort by").
+    Label(SharedString),
 }
 
 #[derive(Clone)]
@@ -118,6 +121,10 @@ pub fn submenu(label: impl Into<SharedString>, entries: Vec<Entry>) -> Item {
 
 pub fn slider(label: impl Into<SharedString>, key: impl Into<SharedString>, value: f32, on_set: impl Fn(&mut Waffle, f32, &mut Context<Waffle>) + 'static) -> Entry {
     Entry::Slider { label: label.into(), key: key.into(), value, on_set: Rc::new(on_set) }
+}
+
+pub fn label(text: impl Into<SharedString>) -> Entry {
+    Entry::Label(text.into())
 }
 
 pub fn header(lead: HeadLead, title: impl Into<SharedString>, subtitle: Option<SharedString>) -> Entry {
@@ -211,6 +218,7 @@ impl Entry {
             Entry::Header { .. } => HEADER,
             Entry::Slider { .. } => SLIDER_ROW,
             Entry::Emojis { .. } => EMOJI_ROW,
+            Entry::Label(_) => LABEL,
             Entry::Search(_) => SEARCH_ROW,
         }
     }
@@ -340,6 +348,7 @@ pub struct Dialog {
 // (Discord's "No, just disconnect quietly").
 enum Other {
     Cancel,
+    CancelAs(SharedString),
     None,
     Instead(SharedString, OnConfirm),
 }
@@ -641,8 +650,8 @@ impl Waffle {
                 Entry::Header { lead, title, subtitle } => menu_header(lead, title.clone(), subtitle.clone(), cx).into_any_element(),
                 Entry::Slider { label, key, value, on_set } => self.menu_slider(label.clone(), key.clone(), *value, on_set.clone(), cx).into_any_element(),
                 Entry::Emojis { quick, more } => quick_reactions(quick, more.clone(), cx).into_any_element(),
+                Entry::Label(text) => menu_label(text.clone(), cx).into_any_element(),
                 Entry::Search(input) => div().h(px(SEARCH_ROW)).pb(px(4.)).child(ui::search_field(SharedString::from(format!("menu-search-{path:?}")), input, cx)).into_any_element(),
-
                 Entry::Item(item) => {
                     let mut item_path = path.to_vec();
                     item_path.push(i);
@@ -713,6 +722,13 @@ impl Waffle {
         }
     }
 
+    // The dismiss button's label when it isn't "Cancel" (Discord's "Never Mind").
+    pub(crate) fn set_dialog_cancel(&mut self, label: impl Into<SharedString>) {
+        if let Some(dialog) = &mut self.dialog {
+            dialog.other = Other::CancelAs(label.into());
+        }
+    }
+
     pub(crate) fn set_dialog_note(&mut self, note: impl Into<SharedString>) {
         if let Some(dialog) = &mut self.dialog {
             dialog.note = Some(note.into());
@@ -725,12 +741,16 @@ impl Waffle {
 
     fn dialog_other(&self, cx: &mut Context<Self>) -> Option<ui::Control> {
         let button = |label: SharedString| ui::button("dialog-cancel", ui::Tone::Secondary, cx).child(label);
-        match &self.dialog.as_ref()?.other {
-            Other::None => None,
-            Other::Cancel => Some(button("Cancel".into()).on_click(cx.listener(|this, _, _, cx| {
+        let dismiss = |label: SharedString| {
+            button(label).on_click(cx.listener(|this, _, _, cx| {
                 this.dialog = None;
                 cx.notify();
-            }))),
+            }))
+        };
+        match &self.dialog.as_ref()?.other {
+            Other::None => None,
+            Other::Cancel => Some(dismiss("Cancel".into())),
+            Other::CancelAs(label) => Some(dismiss(label.clone())),
             Other::Instead(label, _) => Some(button(label.clone()).on_click(cx.listener(|this, _, window, cx| {
                 let Some(Dialog { other: Other::Instead(_, action), .. }) = this.dialog.take() else { return };
                 action(this, String::new(), window, cx);
@@ -861,6 +881,10 @@ fn hint_inks(item: &Item, cx: &App) -> (Hsla, Hsla) {
 
 pub(crate) fn separator(cx: &App) -> Div {
     div().h(px(SEPARATOR)).flex_none().py(px(4.)).px(px(8.)).child(div().h(px(1.)).bg(palette::line(cx)))
+}
+
+fn menu_label(text: SharedString, cx: &App) -> Div {
+    div().h(px(LABEL)).flex_none().px(px(10.)).pt(px(8.)).text_size(px(12.)).line_height(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::faint(cx)).child(text)
 }
 
 fn menu_header(lead: &HeadLead, title: SharedString, subtitle: Option<SharedString>, cx: &App) -> Div {

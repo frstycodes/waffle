@@ -13,6 +13,10 @@ const DM_SPAM_FILTER_V2: u64 = 27;
 // PrivacySettings.default_message_request_restricted, a google.protobuf.BoolValue.
 const DEFAULT_MESSAGE_REQUEST_RESTRICTED: u64 = 17;
 const BOOL_VALUE: u64 = 1;
+// PrivacySettings.default_guilds_activity_restricted, enum GuildActivityStatusRestrictionDefault: OFF 0 (share
+// in all servers), ON_FOR_LARGE_GUILDS 1 (only servers of 200 or fewer), ON 2 (no servers).
+// Not verified: which of this and default_guilds_activity_restricted_v2 (29) Discord's select writes today.
+const DEFAULT_GUILDS_ACTIVITY_RESTRICTED: u64 = 14;
 
 // DmSpamFilterV2: DEFAULT_UNSET 0, DISABLED 1, NON_FRIENDS 2, FRIENDS_AND_NON_FRIENDS 3.
 pub const SPAM_FILTER_NON_FRIENDS: u8 = 2;
@@ -35,6 +39,9 @@ impl AccountSettings {
         if let Some(Field::Bytes(restricted)) = find(&bytes, &[PRIVACY, DEFAULT_MESSAGE_REQUEST_RESTRICTED]) {
             self.message_requests = !matches!(find(restricted, &[BOOL_VALUE]), Some(Field::Varint(1..)));
         }
+        if let Some(Field::Varint(level)) = find(&bytes, &[PRIVACY, DEFAULT_GUILDS_ACTIVITY_RESTRICTED]) {
+            self.default_guilds_activity_restricted = level.min(2) as u8;
+        }
     }
 }
 
@@ -47,6 +54,10 @@ pub fn spam_filter(value: u8) -> String {
 pub fn message_requests(on: bool) -> String {
     let restricted = message(DEFAULT_MESSAGE_REQUEST_RESTRICTED, &varint_field(BOOL_VALUE, (!on).into()));
     STANDARD.encode(message(PRIVACY, &restricted))
+}
+
+pub fn guild_activity_default(level: u8) -> String {
+    STANDARD.encode(message(PRIVACY, &varint_field(DEFAULT_GUILDS_ACTIVITY_RESTRICTED, level.min(2).into())))
 }
 
 // The field at `path`, nested messages first. A repeated message merges, so the last value found wins.
@@ -147,6 +158,8 @@ mod tests {
         assert_eq!(read(&spam_filter(1)).dm_spam_filter, 1);
         assert!(!read(&message_requests(false)).message_requests);
         assert!(read(&message_requests(true)).message_requests);
+        assert_eq!(read(&guild_activity_default(1)).default_guilds_activity_restricted, 1);
+        assert_eq!(read(&guild_activity_default(9)).default_guilds_activity_restricted, 2);
     }
 
     #[test]
