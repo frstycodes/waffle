@@ -70,8 +70,41 @@ References: `web#NNNN` = module NNNN of `assets/web.355a76e660bee7a5.js` (also `
   filename in brand colour.
 - Trailing placeholder after the pills: "+{count} optional" (`0mI72g`) or "+{count} more" (`BP8N0K`).
 
-**Deleting (observed, `web#68059` `v`, `web#870748` `D`)**
-- Backspace/Delete in an empty or void pill removes the whole pill. Walking over an empty pill also removes it.
+**Pill boundaries (observed, `web#870748`, `web#317681`, `web#35277`, `web#68059`, `web#113001`)**
+- The pill is a Slate inline element (`isInline` for `applicationCommandOption`, `web#870748`; void only for
+  ATTACHMENT). Its value is the pill's children, so text typed outside a pill is never part of any value: on submit
+  only pills are read (`SQ`, `web#317681`), stray text between or after pills is dropped.
+- The value text is the pill's children trimmed (`pY`, `h`); non-STRING values also drop leading/trailing empty text.
+- Typed `name:` (`pY`, `web#317681`) is scanned only in text **outside** pills (`continue` on pill children), after
+  whitespace, first occurrence per option not already a pill. It becomes a pill whose value is the text after it up
+  to the next pill, the next such key or the end, trimmed (`textToInline`); the caret goes to the end of that value.
+  `name:` typed inside a value stays value text.
+- Outside a pill, the option-name list (provider `K`, `lazy/496533`) matches whenever a command is active, the caret
+  is in no pill and not in the command name (`isAtStart`). Its query is the current word before the caret
+  (`getCurrentWord`); options filter by `displayName.startsWith(query)` and no value yet. Picking calls
+  `insertText("{displayName}:")` over the word, which `pY` turns into an empty pill with the caret in it.
+- Focus mode `AUTO_WHEN_FILTERED` (`web#31498`, `web#152210`): with an empty query no row is focused, so Enter submits
+  and the first Tab only focuses row 0; once a name is typed row 0 is focused and Tab/Enter pick it.
+- Tab: `selectNextCommandOption` (`web#35277`) finds the next pill after the caret (`Editor.next`, excluding the
+  pill the caret is in) and `select(path)`s it, i.e. the **whole value is selected**; none left →
+  `resetSelectionToEditorEnd` (end of the last text node, outside every pill). No wrap.
+- Shift-Tab: `selectPreviousCommandOption` selects the previous pill's whole value; none and the caret past the
+  command text (`[0,0]`) → caret at the end of `/name`; inside the command text it does nothing.
+- Picking a choice (`insertText`, `web#84046`) replaces the pill's children, validates, then
+  `selectNextCommandOption`. Clicking a pill's key selects its whole value (`selectCommandOption(…, true)`).
+- Arrows (`keyboardMove`, `web#113001`/`web#35277`) step one character with Slate's `Editor.before/after`; the edge
+  between outside text and a pill costs no keypress (the caret stays on the side it came from), and an empty pill
+  is stepped over. Waffle differs on purpose: its key chip and end gap have width, so the edges are distinct caret
+  stops (outside before the box, value start, value end, outside after).
+
+**Deleting (observed, `web#68059` `v`, `web#870748` `D`/`M`)**
+- Backspace/Delete in an empty or void pill removes the whole pill (`removeInline`), caret where it stood.
+- At a pill's value edge (Backspace at its start, Delete at its end) the delete steps out and acts on what's beyond:
+  the character before/after the pill, or, when that is another pill (empty text between), enters it: an empty one
+  is removed ("walking over an empty pill"), otherwise its last/first character is deleted, caret inside it.
+- Just outside a pill (Backspace right after it, Delete right before it) the same: it enters the pill.
+- A selection deletes as a range (`deleteFragment`); select-all + delete empties the editor and drops the command.
+- After a delete that changes the first pill, a missing space after `/name` is put back (`M`).
 - If the text stops starting with `/displayName` (you delete into the name), or the editor becomes empty
   (select-all + delete), the command is dropped and the content is flattened back to plain text.
 - Enter inside a STRING pill can insert a newline (`R(e)?r("\n")`, used by insertBreak; inferred: Shift-Enter). Pasting
@@ -93,7 +126,10 @@ References: `web#NNNN` = module NNNN of `assets/web.355a76e660bee7a5.js` (also `
   "No options match your search" (`41014u`). Choice labels use `name_localized ?? name`.
 
 **Validation (observed, `web#300541`, `web#73510`)**
-- Runs live on the active pill and on all pills at submit. Messages:
+- Runs live on the active pill and on all pills at submit. The pill the caret leaves is validated with
+  `allowEmptyValues:false` (`web#870748` `v`), so an empty pill you leave turns red. Submit also passes `false`
+  (`e$(i,!1)`, `web#84046`): an empty pill fails even for an optional option, with the type's generic error (`tE`,
+  `web#73510`); only options with no pill at all are skipped. Messages:
   - missing/empty required: "This option is required. Specify a value." (`JZJQL2`)
   - choices: "Not a valid choice." · boolean: "Pick either true or false." · integer: "Input a valid integer." ·
     number: "Input a valid number." · user: "Not a valid user." · channel: "Not a valid channel." ·
@@ -354,9 +390,9 @@ Waffle paths are relative to `/Users/frsty/dev/dango/.claude/worktrees/slash-com
 15. **Picking inserts only the first required key.** Discord inserts pills for **all** required options at once, caret
     in the first. Waffle inserts one (`src/command_picker.rs:296-307`). Change: insert every required option's token,
     then put the caret in the first value.
-16. **Tab/Shift-Tab.** Discord's Tab and Shift-Tab move between pills; past the last one Tab goes to the end, where the
-    option-name list appears. Waffle's Tab leaves the value and opens the names list, and Shift-Tab does nothing
-    (`src/command_picker.rs:341-354`, `:497-513`). Change: Tab → next option value (wrap to end), Shift-Tab → previous.
+16. **Tab/Shift-Tab and box ends.** Done: each box ends in an atomic end chip (`command_picker::end_token`), so text
+    typed after Tab past the last box is an option-name query, never the value (`command_line::parse`). Tab and
+    Shift-Tab select the next/previous box's whole value from the caret; past the last, the caret goes to the end.
 17. **Picker matching is narrower.** Discord scores 12 tiers (name prefix, subcommand word prefix, name contains,
     option-name prefix/contains, app name prefix/contains, description, app description, fuzzy). Waffle matches name
     prefix/contains and description only (`src/command_picker.rs:1204-1218`). Change: add the option-name, app-name,

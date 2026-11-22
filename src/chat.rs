@@ -583,6 +583,17 @@ impl Waffle {
                     cx.stop_propagation();
                 }
             }))
+            // A slash command's boxes change what Backspace and Delete take; otherwise the field deletes.
+            .capture_action(cx.listener(|this, _: &gpui_kit::component::input::Backspace, window, cx| {
+                if this.on_command_delete(true, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_action(cx.listener(|this, _: &gpui_kit::component::input::Delete, window, cx| {
+                if this.on_command_delete(false, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
             // Before the text field's own Paste, which drops anything that isn't text.
             .capture_action(cx.listener(|this, _: &gpui_kit::component::input::Paste, window, cx| {
                 if this.paste_files(window, cx) {
@@ -1554,17 +1565,21 @@ fn mention_badge(label: SharedString, fill: Hsla, ink: Hsla) -> Div {
 }
 
 // The composer's tokens: mentions in the message badge, a slash command's option names as a quieter
-// chip. The hover fill marks one inside the selection.
+// chip, and the blank end of each option's value. The hover fill marks one inside the selection.
 fn composer_chip(cx: &App) -> impl Fn(&gpui_kit::component::input::InlineTokenContext, &mut Window, &mut App) -> Div + 'static {
     let (fill, selected, ink) = (palette::accent_soft(cx), palette::accent().opacity(0.26), palette::accent_ink(cx));
     let (key_fill, key_selected, key_ink) = (palette::selected(cx), palette::accent_soft(cx), palette::muted(cx));
     move |token, _, _| {
-        let label = token.token().label().clone();
-        if crate::command_picker::is_option_token(token.token()) {
-            let fill = if token.is_selected() { key_selected } else { key_fill };
-            return option_key(label, token.line_height(), fill, key_ink);
+        let chip = token.token();
+        if crate::command_picker::is_end_token(chip) {
+            return div().w(px(crate::command_picker::END_CHIP)).h(token.line_height());
         }
-        mention_badge(label, if token.is_selected() { selected } else { fill }, ink).h(token.line_height()).flex().items_center()
+        if crate::command_picker::is_option_token(chip) {
+            let fill = if token.is_selected() { key_selected } else { key_fill };
+            let name = chip.text().trim_end_matches(':').to_owned();
+            return option_key(name.into(), token.line_height(), fill, key_ink);
+        }
+        mention_badge(chip.label().clone(), if token.is_selected() { selected } else { fill }, ink).h(token.line_height()).flex().items_center()
     }
 }
 

@@ -3411,10 +3411,13 @@ pub(crate) fn complete_text(state: &mut ComposerState, query: &str, text: &str, 
 }
 
 // The draft as Discord takes it: each mention chip becomes its `<@id>` / `<#id>`, kept as the token's id.
+// A slash command's end chip is the space it shows.
 fn wire_text(content: &InputContent) -> String {
     let mut text = content.text().to_string();
     for span in content.tokens().iter().rev() {
-        text.replace_range(span.range(), span.token().id());
+        let token = span.token();
+        let wire = if command_picker::is_end_token(token) { token.text() } else { token.id() };
+        text.replace_range(span.range(), wire);
     }
     text
 }

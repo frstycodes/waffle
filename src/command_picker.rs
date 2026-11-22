@@ -1,5 +1,6 @@
 // The `/` picker above the composer, and the hint bar while a command is typed out as
-// `/name option:value`. The composer stays plain text: everything here is read back from it.
+// `/name option:value`. The composer stays text with chips (each box a key chip, its value, an end chip):
+// everything here is read back from it.
 // Behaviour follows Discord's client (docs/discord-app-commands-re.md, section 1).
 
 use std::{
@@ -21,10 +22,10 @@ use gpui_kit::{
 use serde_json::{Value, json};
 
 use crate::{
-    SuggestLead, Waffle,
+    ComposerState, SuggestLead, Waffle,
     app_commands::{self, AppCommand, Choice, CommandIndex, CommandOption, OptionKind, Origin},
     attachments::{self, PendingFile},
-    command_line::{self, Arg, ArgValue, CommandLine, Problem},
+    command_line::{self, Arg, ArgValue, CommandLine, Mark, Problem},
     drafts::CommandPick,
     icons::Glyph,
     interactions::InteractionKind,
@@ -63,10 +64,11 @@ pub(crate) struct CommandPicker {
     frecency_requested: bool,
     // The command last picked from the list: when two apps share a name, the text means this one.
     preferred: Option<String>,
-    // After Tab past the last box: where the option name being typed starts.
-    naming: Option<usize>,
-    // The row chosen in the hint bar's list (choices, or option names while naming).
+    // The row chosen in the hint bar's list (choices, or option names outside the boxes).
     highlighted: usize,
+    // Discord's option-name list focuses no row until a name is typed (`AUTO_WHEN_FILTERED`): Tab or an
+    // arrow chooses one, and Enter meanwhile runs the command.
+    names_chosen: bool,
     autocomplete: Autocomplete,
     // Options the last Enter found missing or bad: their boxes stay red until they're fixed.
     errored: Vec<usize>,
@@ -119,7 +121,6 @@ impl CommandPicker {
 
     // The composer stopped being a command, or ran one.
     fn forget_typing(&mut self) {
-        self.naming = None;
         self.autocomplete = Autocomplete::default();
         self.errored.clear();
         self.picked.clear();
@@ -145,18 +146,78 @@ impl CommandPicker {
     }
 }
 
-/// An option name's chip in the composer: atomic, so Backspace takes the whole `name:`. Its id is its
-/// text, so sending the text as is (a draft, a channel without the index) keeps `name:`.
-pub(crate) fn option_token(key: &str, label: &str) -> InlineToken {
-    InlineToken::new(key.to_owned(), key.to_owned()).with_label(label.to_owned())
+/// An option name's chip in the composer, the start of its box: atomic, so the whole `name:` goes at
+/// once. Its id is its text, so sending the text as is (a channel without the index) keeps `name:`.
+pub(crate) fn option_token(key: &str) -> InlineToken {
+    InlineToken::new(key.to_owned(), key.to_owned())
+}
+
+pub(crate) fn is_option_token(token: &InlineToken) -> bool {
+    token.id() == token.text()
+}
+
+const END_TOKEN: &str = "option-end";
+
+/// The chip closing an option's value, so text typed past it is outside the box. Its text is a space:
+/// sent or saved as text, the command still reads `/name a:1 b:2`.
+pub(crate) fn end_token() -> InlineToken {
+    InlineToken::new(END_TOKEN, " ")
+}
+
+pub(crate) fn is_end_token(token: &InlineToken) -> bool {
+    token.id() == END_TOKEN
 }
 
 fn key_text(option: &CommandOption) -> String {
     format!("{}:", option.display_name())
 }
 
-pub(crate) fn is_option_token(token: &InlineToken) -> bool {
-    token.id() == token.text()
+// The composer's key and end chips, as the parser reads boxes from them.
+fn marks(content: &InputContent) -> Vec<(Range<usize>, Mark)> {
+    let mark = |t: &InlineToken| match (is_option_token(t), is_end_token(t)) {
+        (true, _) => Some(Mark::Key),
+        (_, true) => Some(Mark::End),
+        _ => None,
+    };
+    content.tokens().iter().filter_map(|span| Some((span.range(), mark(span.token())?))).collect()
+}
+
+// `head` then an empty box for each key, each a key chip and an end chip: Discord's pills for the
+// options a command starts with.
+fn with_boxes(head: &str, keys: &[String]) -> InputContent {
+    let text = keys.iter().fold(head.to_owned(), |text, key| text + key + " ");
+    let mut at = head.len();
+    keys.iter().fold(InputContent::new(text), |content, key| {
+        let key_range = at..at + key.len();
+        at = key_range.end + 1;
+        content.with_token(key_range.clone(), option_token(key)).and_then(|c| c.with_token(key_range.end..at, end_token())).expect("chips match the text they were built with")
+    })
+}
+
+// Empty boxes for `keys` written into the composer at `at`.
+fn insert_boxes(state: &mut ComposerState, at: usize, keys: &[String], window: &mut Window, cx: &mut Context<ComposerState>) {
+    let mut at = at;
+    for key in keys {
+        for token in [option_token(key), end_token()] {
+            let len = token.text().len();
+            state.replace_range_with_token(at..at, token, window, cx).ok();
+            at += len;
+        }
+    }
+}
+
+// Where the caret lands once each range is replaced by text of the given length: shifted by the edits
+// before it, and pulled to the start of one it sits inside or at the end of.
+fn moved_caret(caret: usize, edits: impl Iterator<Item = (Range<usize>, usize)>) -> usize {
+    let (mut at, mut shift) = (caret, 0isize);
+    for (range, len) in edits {
+        if caret > range.end {
+            shift += len as isize - range.len() as isize;
+        } else if caret > range.start {
+            at = range.start;
+        }
+    }
+    at.saturating_add_signed(shift)
 }
 
 /// The composer read as a command: the index it names a command from, the parse and the caret.
@@ -191,17 +252,11 @@ impl Typed {
         self.content.tokens().iter().find(|t| t.range() == arg.value && !is_option_token(t.token())).map(|t| t.token())
     }
 
-    // Discord's option-name list shows while the caret is outside every box: after Tab past the last
-    // one, or after the command name before any. This is the name typed there so far.
-    fn naming(&self, naming: Option<usize>) -> Option<(usize, &str)> {
-        let start = match naming {
-            Some(start) => start,
-            None if self.line.args.is_empty() && self.caret >= self.line.name_end => self.line.name_end,
-            None => return None,
-        };
-        let typed = self.text().get(start..self.caret)?;
-        let name = typed.trim_start();
-        (!name.contains(|c: char| c.is_whitespace() || c == ':')).then_some((self.caret - name.len(), name))
+    // Discord's option-name list shows while the caret is outside every box, past the command name. This
+    // is where the name typed there starts, and the name so far.
+    fn naming(&self) -> Option<(usize, &str)> {
+        let query = self.line.name_query(self.text(), self.caret)?;
+        Some((query.start, &self.text()[query]))
     }
 
     // Discord's filter: options with no value yet whose shown name starts with what's typed (case
@@ -211,11 +266,6 @@ impl Typed {
         let mut open: Vec<usize> = (0..options.len()).filter(|&i| !self.line.has(i) && options[i].display_name().starts_with(query)).collect();
         open.sort_by_key(|&i| !options[i].required);
         open
-    }
-
-    // Where Tab counts from: the box the caret is in, None outside them.
-    fn current_box(&self, naming: Option<usize>) -> Option<usize> {
-        self.naming(naming).map_or_else(|| self.line.arg_at(self.caret), |_| None)
     }
 }
 
@@ -375,13 +425,13 @@ impl Waffle {
         let keys: Vec<String> = command.options.iter().filter(|o| o.required).map(key_text).collect();
         let head = format!("/{} ", command.display_name());
         let caret = head.len() + keys.first().map_or(0, String::len);
-        let text = head + &keys.join(" ");
+        let content = with_boxes(&head, &keys);
         let picker = &mut self.command_picker;
         picker.reset();
         picker.preferred = Some(command.id.clone());
         picker.activated = Some(index);
         self.composer.update(cx, |state, cx| {
-            state.set_value(text, window, cx);
+            state.set_value(content, window, cx);
             state.set_selected_range(caret..caret, cx);
             state.focus(window, cx);
         });
@@ -405,7 +455,6 @@ impl Waffle {
         }
         let Some(typed) = self.typed_command(cx).filter(|_| !self.command_picker.hidden) else { return false };
         match key {
-            "escape" if self.command_picker.naming.is_some() => self.command_picker.naming = None,
             "escape" => self.command_picker.hidden = true,
             "up" | "ctrl-p" => return self.move_highlight(&typed, -1, cx),
             "down" | "ctrl-n" => return self.move_highlight(&typed, 1, cx),
@@ -416,20 +465,23 @@ impl Waffle {
     }
 
     /// Tab: the open list takes it first (a command, option name or choice); otherwise Tab and Shift-Tab
-    /// (`back`) step through the option boxes, and past the last one to the end of the text.
+    /// (`back`) select the next or previous box's whole value, as Discord's `select(editor, path)` does.
+    /// Past the last box Tab puts the caret at the end of the text; before the first, Shift-Tab puts it
+    /// after the command name.
     pub(crate) fn on_command_tab(&mut self, back: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
         if self.picker_visible() {
             return !back && self.pick_selected_command(window, cx);
         }
         let Some(typed) = self.typed_command(cx) else { return false };
-        if !back && self.pick_highlighted(&typed, window, cx) {
+        if !back && self.pick_highlighted(&typed, false, window, cx) {
             return true;
         }
-        let at = typed.current_box(self.command_picker.naming);
-        let target = if back { typed.line.previous_arg(at) } else { typed.line.next_arg(at) };
+        let target = if back { typed.line.previous_arg(typed.caret) } else { typed.line.next_arg(typed.caret) };
         match target {
-            Some(n) => self.select_box(typed.line.args[n].value.end, cx),
-            None => self.caret_to_end(window, cx),
+            Some(n) => self.select_box(typed.line.args[n].inner(), cx),
+            None if !back => self.caret_to_end(window, cx),
+            None if typed.caret > typed.line.name_end => self.select_box(typed.line.name_end..typed.line.name_end, cx),
+            None => {}
         }
         true
     }
@@ -440,19 +492,29 @@ impl Waffle {
             return self.pick_selected_command(window, cx);
         }
         let Some(typed) = self.typed_command(cx) else { return false };
-        if !self.pick_highlighted(&typed, window, cx) && !self.command_picker.staging {
+        if !self.pick_highlighted(&typed, true, window, cx) && !self.command_picker.staging {
             self.run_command(typed, window, cx);
         }
         true
     }
 
-    fn pick_highlighted(&mut self, typed: &Typed, window: &mut Window, cx: &mut Context<Self>) -> bool {
+    fn pick_highlighted(&mut self, typed: &Typed, enter: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
         if self.command_picker.hidden {
             return false;
         }
         let highlighted = self.command_picker.highlighted;
-        if let Some((_, query)) = typed.naming(self.command_picker.naming) {
-            let Some(&option) = typed.open_options(query).get(highlighted) else { return false };
+        if let Some((_, query)) = typed.naming() {
+            let open = typed.open_options(query);
+            if open.is_empty() || (enter && !self.names_on(query)) {
+                return false;
+            }
+            if !self.names_on(query) {
+                self.command_picker.names_chosen = true;
+                self.command_picker.highlighted = 0;
+                cx.notify();
+                return true;
+            }
+            let Some(&option) = open.get(highlighted) else { return false };
             self.pick_name(option, window, cx);
             return true;
         }
@@ -461,6 +523,11 @@ impl Waffle {
         }
         self.pick_choice(highlighted, window, cx);
         true
+    }
+
+    // Whether the option-name list has a row chosen.
+    fn names_on(&self, query: &str) -> bool {
+        !query.is_empty() || self.command_picker.names_chosen
     }
 
     // The caret's option lists something to pick that its value isn't yet: Tab and Enter take it.
@@ -489,7 +556,7 @@ impl Waffle {
         let index = self.ready_index()?;
         let state = self.composer.read(cx);
         let content = state.content();
-        let line = command_line::parse(content.text(), &index.commands, self.command_picker.preferred.as_deref())?;
+        let line = command_line::parse(content.text(), &marks(&content), &index.commands, self.command_picker.preferred.as_deref())?;
         Some(Typed { index, line, caret: state.cursor(), content })
     }
 
@@ -567,16 +634,24 @@ impl Waffle {
     }
 
     /// The caret or selection moved, typing or not: the hint bar and the boxes follow it, and an
-    /// autocomplete option it lands in asks its app for choices.
+    /// autocomplete option it lands in asks its app for choices. A box the caret leaves empty turns red,
+    /// as Discord validates the option it leaves with `allowEmptyValues: false`.
     pub(crate) fn on_composer_selection(&mut self, cx: &mut Context<Self>) {
         let selection = self.composer.read(cx).selected_range();
         if self.command_picker.selection == selection {
             return;
         }
         self.command_picker.selection = selection;
+        self.command_picker.names_chosen = false;
         let Some(typed) = self.typed_command(cx) else { return };
         let focused = typed.arg().map(|(_, a)| a.option);
         if self.command_picker.focused != focused {
+            let left = self.command_picker.focused.and_then(|o| typed.line.args.iter().find(|a| a.option == o));
+            if let Some(left) = left.filter(|a| matches!(command_line::resolve(typed.option(a), &self.arg_value(&typed, a)), Ok(None)))
+                && !self.command_picker.errored.contains(&left.option)
+            {
+                self.command_picker.errored.push(left.option);
+            }
             self.command_picker.focused = focused;
             self.command_picker.highlighted = 0;
             self.schedule_autocomplete(cx);
@@ -594,10 +669,8 @@ impl Waffle {
         let picker = &mut self.command_picker;
         picker.hidden = false;
         picker.highlighted = 0;
-        if typed.naming(picker.naming).is_none() {
-            picker.naming = None;
-        }
-        self.chip_keys(&typed, window, cx);
+        picker.names_chosen = false;
+        self.box_new_keys(&typed, window, cx);
         if self.activate(&typed, window, cx) {
             return true;
         }
@@ -606,26 +679,31 @@ impl Waffle {
         true
     }
 
-    // Keys just typed or pasted as text become chips, the same as picked ones.
-    fn chip_keys(&mut self, typed: &Typed, window: &mut Window, cx: &mut Context<Self>) {
+    // A key typed or pasted as text becomes a box, as Discord's `pY` turns `name:` into a pill: the key a
+    // chip, and an end chip after its value in place of the spaces trailing it. A caret in those spaces
+    // lands at the value's end, inside. Only a newly keyed option is boxed, so undoing a box sticks.
+    fn box_new_keys(&mut self, typed: &Typed, window: &mut Window, cx: &mut Context<Self>) {
         let keyed = std::mem::replace(&mut self.command_picker.keyed, typed.line.args.iter().map(|a| a.option).collect());
         let chipped = |key: &Range<usize>| typed.content.tokens().iter().any(|t| t.range() == *key);
-        let keys: Vec<(Range<usize>, InlineToken)> = typed
-            .line
-            .args
-            .iter()
-            .filter(|a| !keyed.contains(&a.option) && !chipped(&a.key))
-            .map(|a| (a.key.clone(), option_token(&typed.text()[a.key.clone()], typed.option(a).display_name())))
-            .collect();
-        if keys.is_empty() {
+        let mut edits: Vec<(Range<usize>, InlineToken)> = Vec::new();
+        for arg in typed.line.args.iter().filter(|a| !keyed.contains(&a.option)) {
+            if !chipped(&arg.key) {
+                edits.push((arg.key.clone(), option_token(&typed.text()[arg.key.clone()])));
+            }
+            if arg.end.is_none() {
+                edits.push((arg.value.end..arg.extent.end, end_token()));
+            }
+        }
+        if edits.is_empty() {
             return;
         }
-        let caret = typed.caret;
+        let ends = edits.iter().filter(|(_, token)| is_end_token(token)).map(|(range, token)| (range.clone(), token.text().len()));
+        let caret = moved_caret(typed.caret, ends);
+        edits.sort_by_key(|(range, _)| std::cmp::Reverse(range.start));
         self.composer.update(cx, |state, cx| {
-            for (key, token) in keys {
-                state.replace_range_with_token(key, token, window, cx).ok();
+            for (range, token) in edits {
+                state.replace_range_with_token(range, token, window, cx).ok();
             }
-            // A chip has its key's text, so the caret goes back where it was.
             state.set_selected_range(caret..caret, cx);
         });
     }
@@ -647,8 +725,7 @@ impl Waffle {
                 let end = typed.text().len();
                 let caret = end + keys[0].len();
                 self.composer.update(cx, |state, cx| {
-                    state.set_selected_range(end..end, cx);
-                    state.insert(keys.join(" "), window, cx);
+                    insert_boxes(state, end, &keys, window, cx);
                     state.set_selected_range(caret..caret, cx);
                 });
                 return true;
@@ -660,13 +737,12 @@ impl Waffle {
             return false;
         }
         picker.shortcut_taken = true;
-        let at = typed.text().len() - after.trim_start().len();
+        let (at, end) = (typed.text().len() - after.trim_start().len(), typed.text().len());
         let key = key_text(&options[0]);
         let caret = typed.caret + key.len();
-        let token = option_token(&key, options[0].display_name());
         self.composer.update(cx, |state, cx| {
-            state.set_selected_range(at..at, cx);
-            state.replace_with_token(token, window, cx).ok();
+            state.replace_range_with_token(end..end, end_token(), window, cx).ok();
+            state.replace_range_with_token(at..at, option_token(&key), window, cx).ok();
             state.set_selected_range(caret..caret, cx);
         });
         true
@@ -683,44 +759,48 @@ impl Waffle {
     }
 
     // Why the caret's box can't send, as Discord's header says it in place of the description: checked
-    // live once it has a value, or since the last Enter marked it.
+    // live once it has a value, or, empty, since the caret left it or the last Enter marked it.
     fn box_problem(&self, typed: &Typed, arg: &Arg) -> Option<String> {
         let resolved = command_line::resolve(typed.option(arg), &self.arg_value(typed, arg));
         match resolved {
             Err(why) => Some(why),
-            Ok(None) if self.command_picker.errored.contains(&arg.option) => Some(command_line::REQUIRED.into()),
+            Ok(None) if self.command_picker.errored.contains(&arg.option) => Some(command_line::empty_message(typed.option(arg))),
             _ => None,
         }
     }
 
     fn move_highlight(&mut self, typed: &Typed, delta: isize, cx: &mut Context<Self>) -> bool {
-        let count = match typed.naming(self.command_picker.naming) {
-            Some((_, query)) => typed.open_options(query).len(),
-            None => self.option_choices(typed).len(),
+        let (count, unchosen) = match typed.naming() {
+            Some((_, query)) => (typed.open_options(query).len(), !self.names_on(query)),
+            None => (self.option_choices(typed).len(), false),
         };
         if count == 0 {
             return false;
         }
         let picker = &mut self.command_picker;
-        picker.highlighted = (picker.highlighted as isize + delta).rem_euclid(count as isize) as usize;
+        picker.names_chosen = true;
+        picker.highlighted = match unchosen {
+            true if delta < 0 => count - 1,
+            true => 0,
+            false => (picker.highlighted as isize + delta).rem_euclid(count as isize) as usize,
+        };
         cx.notify();
         true
     }
 
-    // Tab onto a box: the caret at the end of its value.
-    fn select_box(&mut self, at: usize, cx: &mut Context<Self>) {
-        self.command_picker.naming = None;
+    // Tab onto a box selects `range`, its whole value, so typing replaces it.
+    fn select_box(&mut self, range: Range<usize>, cx: &mut Context<Self>) {
         self.command_picker.highlighted = 0;
-        self.composer.update(cx, |state, cx| state.set_selected_range(at..at, cx));
+        self.composer.update(cx, |state, cx| state.set_selected_range(range, cx));
         cx.notify();
     }
 
-    // Past the last box, Discord puts the caret at the end of the text, where the option-name list shows.
+    // Past the last box, Discord puts the caret at the end of the text, outside every box, where the
+    // option-name list shows. A command with no box yet gets the space after its name first.
     fn caret_to_end(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(typed) = self.typed_command(cx) else { return };
         let end = typed.text().len();
         let space = !typed.text().ends_with(char::is_whitespace) && !typed.open_options("").is_empty();
-        self.command_picker.naming = (!typed.line.args.is_empty()).then_some(end + usize::from(space));
         self.command_picker.highlighted = 0;
         self.composer.update(cx, |state, cx| {
             state.set_selected_range(end..end, cx);
@@ -731,39 +811,37 @@ impl Waffle {
         cx.notify();
     }
 
-    // The name typed outside the boxes becomes `option`'s chip, the caret after it for the value.
+    // The name typed outside the boxes becomes `option`'s empty box, the caret in it.
     fn pick_name(&mut self, option: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(typed) = self.typed_command(cx) else { return };
-        let Some((start, _)) = typed.naming(self.command_picker.naming) else { return };
-        self.command_picker.naming = None;
-        let option = &typed.command().options[option];
-        let token = option_token(&key_text(option), option.display_name());
+        let Some((start, _)) = typed.naming() else { return };
+        let key = key_text(&typed.command().options[option]);
         let space = !typed.text()[..start].ends_with(char::is_whitespace);
+        let at = start + usize::from(space);
         let caret = typed.caret;
         self.composer.update(cx, |state, cx| {
             state.set_selected_range(start..caret, cx);
-            if space {
-                state.replace(" ", window, cx);
-            }
-            state.replace_with_token(token, window, cx).ok();
+            state.replace(if space { " " } else { "" }, window, cx);
+            insert_boxes(state, at, std::slice::from_ref(&key), window, cx);
+            state.set_selected_range(at + key.len()..at + key.len(), cx);
         });
         cx.notify();
     }
 
-    // Adds `option`'s chip at the end, after a space: the hint bar's optional chips.
+    // Adds `option`'s empty box at the end, the caret in it: the hint bar's optional chips.
     fn add_option(&mut self, option: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(typed) = self.typed_command(cx) else { return };
-        let option = &typed.command().options[option];
-        let token = option_token(&key_text(option), option.display_name());
+        let key = key_text(&typed.command().options[option]);
         let end = typed.text().len();
         let space = !typed.text().ends_with(char::is_whitespace);
-        self.command_picker.naming = None;
+        let at = end + usize::from(space);
         self.composer.update(cx, |state, cx| {
             state.set_selected_range(end..end, cx);
             if space {
                 state.insert(" ", window, cx);
             }
-            state.replace_with_token(token, window, cx).ok();
+            insert_boxes(state, at, std::slice::from_ref(&key), window, cx);
+            state.set_selected_range(at + key.len()..at + key.len(), cx);
             state.focus(window, cx);
         });
         cx.notify();
@@ -779,7 +857,7 @@ impl Waffle {
         if choice.attach {
             return self.choose_command_file(name, window, cx);
         }
-        let range = arg.key.end..arg.value.end.max(arg.key.end);
+        let range = arg.inner();
         let picked = &mut self.command_picker.picked;
         picked.retain(|p| p.option != name);
         if choice.token.is_none() {
@@ -799,10 +877,54 @@ impl Waffle {
 
     fn next_box_after(&mut self, n: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(typed) = self.typed_command(cx) else { return };
-        match typed.line.next_arg(Some(n)) {
-            Some(next) => self.select_box(typed.line.args[next].value.end, cx),
+        match typed.line.args.get(n + 1) {
+            Some(next) => self.select_box(next.inner(), cx),
             None => self.caret_to_end(window, cx),
         }
+    }
+
+    /// Backspace and Delete (`back`: Backspace) where a box changes what they do, as Discord's `v` does
+    /// with its pills: in an empty box, or an attachment's, they remove the box; at a value's edge they
+    /// step out of it and act on what's beyond; just outside a box they step into it, deleting its last
+    /// (or first) character, or removing it when it's empty. True when handled here; false lets the
+    /// composer delete, from a caret this may have moved. A selection is always the composer's.
+    pub(crate) fn on_command_delete(&mut self, back: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let Some(typed) = self.typed_command(cx) else { return false };
+        if !self.composer.read(cx).selected_range().is_empty() {
+            return false;
+        }
+        let caret = typed.caret;
+        let removable = |a: &Arg| a.inner().is_empty() || typed.option(a).kind == OptionKind::Attachment;
+        let mut beyond = caret;
+        if let Some((_, arg)) = typed.arg().filter(|(_, a)| a.end.is_some()) {
+            if removable(arg) {
+                return self.remove_box(arg.span(), window, cx);
+            }
+            let inner = arg.inner();
+            if caret != if back { inner.start } else { inner.end } {
+                return false;
+            }
+            beyond = if back { arg.key.start } else { arg.span().end };
+        }
+        let neighbour = typed.line.args.iter().filter(|a| a.end.is_some()).find(|a| if back { a.span().end == beyond } else { a.key.start == beyond });
+        let into = match neighbour {
+            Some(arg) if removable(arg) => return self.remove_box(arg.span(), window, cx),
+            Some(arg) => if back { arg.inner().end } else { arg.inner().start },
+            None if !back && beyond == typed.text().len() => return true,
+            None => beyond,
+        };
+        if into != caret {
+            self.composer.update(cx, |state, cx| state.set_selected_range(into..into, cx));
+        }
+        false
+    }
+
+    fn remove_box(&mut self, span: Range<usize>, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        self.composer.update(cx, |state, cx| {
+            state.set_selected_range(span, cx);
+            state.replace("", window, cx);
+        });
+        true
     }
 
     // The composer's own file picker, one file, for an ATTACHMENT option: it fills the option's value
@@ -826,7 +948,7 @@ impl Waffle {
         let Some(typed) = self.typed_command(cx) else { return };
         let Some((n, arg)) = typed.line.args.iter().enumerate().find(|(_, a)| typed.option(a).name == option) else { return };
         let token = InlineToken::new(format!("{FILE_TOKEN}{option}"), file.name.clone());
-        let range = arg.key.end..arg.value.end.max(arg.key.end);
+        let range = arg.inner();
         let picker = &mut self.command_picker;
         picker.files.retain(|(o, _)| *o != option);
         picker.files.push((option, file));
@@ -972,28 +1094,30 @@ impl Waffle {
     }
 
     // Enter that can't run, as Discord handles it: a box for every missing required option, every bad
-    // box marked, the caret in the first. Discord shakes the window; Waffle shakes the composer.
+    // box marked, the first one's value selected. Discord shakes the window; Waffle shakes the composer.
     fn block_command(&mut self, typed: &Typed, problems: Vec<Problem>, window: &mut Window, cx: &mut Context<Self>) {
         let missing: Vec<String> = problems.iter().filter(|p| p.missing).map(|p| key_text(&typed.command().options[p.option])).collect();
         if !missing.is_empty() {
             let end = typed.text().len();
-            let space = if typed.text().ends_with(char::is_whitespace) { "" } else { " " };
+            let space = !typed.text().ends_with(char::is_whitespace);
             self.composer.update(cx, |state, cx| {
                 state.set_selected_range(end..end, cx);
-                state.insert(format!("{space}{}", missing.join(" ")), window, cx);
+                if space {
+                    state.insert(" ", window, cx);
+                }
+                insert_boxes(state, end + usize::from(space), &missing, window, cx);
             });
         }
         let first = problems[0].option;
         let picker = &mut self.command_picker;
         picker.errored = problems.iter().map(|p| p.option).collect();
         picker.hidden = false;
-        picker.naming = None;
         picker.shake += 1;
         if let Some(typed) = self.typed_command(cx)
             && let Some(arg) = typed.line.args.iter().find(|a| a.option == first)
         {
-            let at = arg.value.end.max(arg.key.end);
-            self.composer.update(cx, |state, cx| state.set_selected_range(at..at, cx));
+            let value = arg.inner();
+            self.composer.update(cx, |state, cx| state.set_selected_range(value, cx));
         }
         cx.notify();
     }
@@ -1066,7 +1190,7 @@ struct AutocompleteTarget {
 
 impl Waffle {
     fn autocomplete_target(&self, typed: &Typed) -> Option<AutocompleteTarget> {
-        let (n, arg) = typed.arg().filter(|_| self.command_picker.naming.is_none())?;
+        let (n, arg) = typed.arg()?;
         typed.option(arg).autocomplete.then_some(())?;
         let context = command_line::autocomplete_context(typed.command(), &typed.line, n, typed.text());
         Some(AutocompleteTarget { arg: n, query: typed.text()[arg.value.clone()].to_owned(), context })
@@ -1367,7 +1491,7 @@ impl Waffle {
 
     // The hint bar: the option names outside the boxes, or what the caret's option wants and its choices.
     fn options_popup(&self, typed: &Typed, cx: &mut Context<Self>) -> AnyElement {
-        if let Some((_, query)) = typed.naming(self.command_picker.naming)
+        if let Some((_, query)) = typed.naming()
             && !typed.open_options(query).is_empty()
         {
             return self.names_popup(typed, query, cx);
@@ -1413,7 +1537,8 @@ impl Waffle {
             if i == required {
                 rows.push(list_header(if required > 0 { "Other options" } else { "Options" }, cx).into_any_element());
             }
-            rows.push(self.name_row(&command.options[option], option, i == self.command_picker.highlighted, cx).into_any_element());
+            let on = self.names_on(query) && i == self.command_picker.highlighted;
+            rows.push(self.name_row(&command.options[option], option, on, cx).into_any_element());
         }
         let body = div().id("command-option-names").max_h(px(240.)).p(px(6.)).flex().flex_col().gap(px(2.)).overflow_y_scroll().children(rows);
         let foot = popup_foot(cx)
@@ -1491,10 +1616,10 @@ impl Waffle {
 
 /// The transparent space an option's name chip leaves before itself, so neighbouring boxes don't touch.
 pub(crate) const OPTION_GAP: f32 = 8.;
-// How far a box runs past its value's last glyph, into the space before the next option.
+// How far a box runs past its value's last glyph: the start of its end chip.
 const VALUE_PAD: f32 = 5.;
-// An empty value still shows room to type in.
-const EMPTY_VALUE: f32 = 10.;
+/// An end chip's width: the box's padding after its value, then a gap before what follows it.
+pub(crate) const END_CHIP: f32 = VALUE_PAD + 3.;
 const BOX_RADIUS: f32 = 6.;
 const PLACEHOLDER_SIZE: f32 = 13.;
 
@@ -1515,7 +1640,7 @@ impl Waffle {
     /// "+N optional" trails the last box.
     pub(crate) fn option_boxes(&self, cx: &App) -> Option<impl IntoElement + use<>> {
         let typed = self.typed_command(cx)?;
-        let active = typed.current_box(self.command_picker.naming);
+        let active = typed.line.arg_at(typed.caret);
         let errored = &self.command_picker.errored;
         let boxes: Vec<OptionBox> = typed
             .line
@@ -1532,7 +1657,7 @@ impl Waffle {
                     Ok(Some(_)) => false,
                 };
                 let placeholder = (option.kind == OptionKind::Attachment && arg.value.is_empty()).then(|| SharedString::from(ATTACH_FILE));
-                OptionBox { start: arg.key.start, key_end: arg.key.end, value_end: arg.value.end.max(arg.key.end), active: active == Some(n), invalid, placeholder }
+                OptionBox { start: arg.key.start, key_end: arg.key.end, value_end: arg.inner().end, active: active == Some(n), invalid, placeholder }
             })
             .collect();
         let unset = typed.command().options.iter().enumerate().filter(|(i, o)| !o.required && !typed.line.has(*i)).count();
@@ -1552,10 +1677,10 @@ impl Waffle {
             window.with_content_mask(Some(gpui_kit::ContentMask { bounds }), |window| {
                 for (b, start, key_end, end) in placed {
                     let placeholder = b.placeholder.as_ref().map(|p| shaped(p, window));
-                    let right = match (&placeholder, b.value_end == b.key_end) {
-                        (Some(p), _) => key_end.left() + p.width + px(VALUE_PAD + 2.),
-                        (None, true) => key_end.left() + px(EMPTY_VALUE),
-                        (None, false) => end.left() + px(VALUE_PAD),
+                    // An empty value's room is the key chip's own padding and this one.
+                    let right = match &placeholder {
+                        Some(p) => key_end.left() + p.width + px(VALUE_PAD + 2.),
+                        None => end.left() + px(VALUE_PAD),
                     };
                     let edge = if b.invalid { danger } else if b.active { accent } else { line };
                     for rect in box_rows(start, right, end, bounds) {
@@ -2012,10 +2137,27 @@ mod tests {
     }
 
     #[test]
-    fn an_option_chip_sends_its_own_text() {
-        let token = option_token("query:", "query");
-        assert!(is_option_token(&token));
-        assert_eq!((token.text().as_ref(), token.label().as_ref()), ("query:", "query"));
+    fn an_option_chip_sends_its_own_text_and_an_end_chip_a_space() {
+        let token = option_token("query:");
+        assert!(is_option_token(&token) && !is_end_token(&token));
+        assert_eq!(token.text().as_ref(), "query:");
         assert!(!is_option_token(&InlineToken::new("<@42>", "@Ferris")));
+        assert!(is_end_token(&end_token()) && !is_option_token(&end_token()));
+        assert_eq!(end_token().text().as_ref(), " ");
+    }
+
+    #[test]
+    fn a_picked_command_starts_with_empty_closed_boxes() {
+        let content = with_boxes("/play ", &["query:".into(), "volume:".into()]);
+        assert_eq!(content.text().as_ref(), "/play query: volume: ");
+        assert_eq!(marks(&content), [(6..12, Mark::Key), (12..13, Mark::End), (13..20, Mark::Key), (20..21, Mark::End)]);
+    }
+
+    #[test]
+    fn boxing_a_typed_key_keeps_the_caret_in_its_value() {
+        // `/play query:abc  volume:` with the caret after `abc `: the two spaces become the end chip.
+        assert_eq!(moved_caret(16, [(15..17, 1)].into_iter()), 15, "in the spaces: the value's end");
+        assert_eq!(moved_caret(24, [(15..17, 1), (24..24, 1)].into_iter()), 23, "typing at the end: before the new end chip");
+        assert_eq!(moved_caret(12, [(15..17, 1)].into_iter()), 12);
     }
 }

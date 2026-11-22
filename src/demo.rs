@@ -311,11 +311,13 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                 this.suggest_for_option(answer, cx);
             });
         }
-        // Tab past `/play`'s last box: the option-name list for what's still unset.
+        // Tab past `/play`'s last box, then `vo` typed outside it: the option-name list narrowed to
+        // `volume`, the query's value still `Midnight Arcade`.
         "command-options-tab" => {
             waffle.command_picker.set_index("1", demo_commands());
             demo_command_text(window, cx, "/play query:Midnight Arcade", 27, |this, window, cx| {
                 this.on_command_tab(false, window, cx);
+                this.composer.update(cx, |state, cx| state.insert("vo", window, cx));
             });
         }
         // Enter on a command with an empty required box and two bad values: every bad box red, the

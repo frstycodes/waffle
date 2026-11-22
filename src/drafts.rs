@@ -137,6 +137,14 @@ mod tests {
     }
 
     #[test]
+    fn a_typed_commands_boxes_come_back_closed() {
+        let typed = InputContent::new("/play query:abc vol").with_token(6..12, crate::command_picker::option_token("query:")).and_then(|c| c.with_token(15..16, crate::command_picker::end_token())).unwrap();
+        let saved = serde_json::to_string(&Draft::new(&typed, None)).unwrap();
+        let restored: Draft = serde_json::from_str(&saved).unwrap();
+        assert_eq!(restored.content(), typed, "the key chip and the end chip after `abc`, so `vol` stays outside");
+    }
+
+    #[test]
     fn a_chip_that_no_longer_fits_becomes_text() {
         let draft = Draft { text: "hi @Fe".into(), chips: vec![Chip { start: 3, end: 10, id: "<@42>".into(), text: "@Ferris".into() }], ..Default::default() };
         let content = draft.content();

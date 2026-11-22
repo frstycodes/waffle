@@ -1,5 +1,7 @@
-// A slash command typed as plain text, Discord's `/name opt:value opt:value`: which command it runs,
-// where each option's value sits, and whether the values can be sent.
+// A slash command typed as Discord's `/name opt:value opt:value`: which command it runs, where each
+// option's box and value sit, and whether the values can be sent. Discord's composer holds each option
+// as an inline pill whose value lives inside it; Waffle's is text with atomic chips, so a box is its key
+// chip, its value, and an end chip that closes it. Text past the end chip is outside every box.
 
 use std::ops::Range;
 
@@ -25,22 +27,36 @@ pub(crate) struct Arg {
     pub key: Range<usize>,
     // The value with its surrounding spaces trimmed; empty at `key.end` when nothing is typed.
     pub value: Range<usize>,
-    // Where a caret counts as being in this value: from the key's end up to the next key.
+    // Where a caret counts as being in this value: from the key's end up to the end chip, or, for a box
+    // typed as plain text that has none yet, up to the next key.
     pub extent: Range<usize>,
+    // The chip closing the value.
+    pub end: Option<Range<usize>>,
+}
+
+/// What an atomic chip in the composer marks.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Mark {
+    // An option's `name:`.
+    Key,
+    // The end of the value before it.
+    End,
 }
 
 /// Reads `text` as a command from `commands`: the longest command name it starts with, as you see it or
-/// untranslated (`preferred`, an `AppCommand::id`, wins between two apps' same-named commands), then
-/// every ` name:` that names one of its options. A value runs until the next such key, so it can hold
-/// spaces; unknown names are plain text and only an option's first key counts.
-pub(crate) fn parse(text: &str, commands: &[AppCommand], preferred: Option<&str>) -> Option<CommandLine> {
+/// untranslated (`preferred`, an `AppCommand::id`, wins between two apps' same-named commands), then its
+/// option boxes. `marks` are the composer's key and end chips, in text order. A key is a key chip, or a
+/// `name:` typed after a space that names one of the command's options; only an option's first counts.
+/// Its value runs to its end chip, or, for text not boxed yet, to the next key, so it can hold spaces.
+/// Keys typed inside a closed value are value text, as in Discord's pills.
+pub(crate) fn parse(text: &str, marks: &[(Range<usize>, Mark)], commands: &[AppCommand], preferred: Option<&str>) -> Option<CommandLine> {
     let rest = text.strip_prefix('/')?;
     let named = |c: &AppCommand| {
         [c.display_name(), c.name()]
             .into_iter()
             .filter_map(|name| {
                 let after = rest.strip_prefix(name.as_str())?;
-                (after.is_empty() || after.starts_with(char::is_whitespace)).then_some(name.len())
+                (after.is_empty() || after.starts_with(char::is_whitespace) || chip_at(marks, 1 + name.len())).then_some(name.len())
             })
             .max()
     };
@@ -50,36 +66,49 @@ pub(crate) fn parse(text: &str, commands: &[AppCommand], preferred: Option<&str>
         .filter_map(|(i, c)| Some((i, named(c)?)))
         .max_by_key(|&(i, len)| (len, preferred == Some(commands[i].id.as_str()), std::cmp::Reverse(i)))?;
     let name_end = 1 + len;
-    let keys = keys(text, name_end, &commands[command].options);
-    let args = keys
-        .iter()
-        .enumerate()
-        .map(|(n, &(option, ref key))| {
-            let end = keys.get(n + 1).map_or(text.len(), |(_, next)| next.start);
-            Arg { option, key: key.clone(), value: trimmed(text, key.end..end), extent: key.end..end }
-        })
-        .collect();
+    let options = &commands[command].options;
+    let mut args: Vec<Arg> = Vec::new();
+    let mut at = name_end;
+    while let Some((option, key)) = next_key(text, marks, at, options, |i| args.iter().any(|a| a.option == i)) {
+        let arg = boxed(text, marks, options, &args, option, key);
+        at = arg.span().end;
+        args.push(arg);
+    }
     Some(CommandLine { command, name_end, args })
 }
 
-// Every option key after the command name, each option's first only, in text order. A key is the
-// option's name as you see it or untranslated.
-fn keys(text: &str, from: usize, options: &[CommandOption]) -> Vec<(usize, Range<usize>)> {
-    let mut found: Vec<(usize, Range<usize>)> = Vec::new();
+fn chip_at(marks: &[(Range<usize>, Mark)], at: usize) -> bool {
+    marks.iter().any(|(range, mark)| *mark == Mark::Key && range.start == at)
+}
+
+// The first key at or after `from` for an option not `taken`: a key chip wherever it sits, or the
+// option's name as you see it or untranslated, then `:`, starting a word.
+fn next_key(text: &str, marks: &[(Range<usize>, Mark)], from: usize, options: &[CommandOption], taken: impl Fn(usize) -> bool) -> Option<(usize, Range<usize>)> {
     let mut previous = text[..from].chars().next_back();
     for (at, c) in text[from..].char_indices().map(|(i, c)| (from + i, c)) {
-        let starts_word = previous.is_some_and(char::is_whitespace);
+        let starts_word = previous.is_some_and(char::is_whitespace) || chip_at(marks, at);
         previous = Some(c);
         if !starts_word {
             continue;
         }
         let key_len = |o: &CommandOption| [o.display_name(), o.name.as_str()].into_iter().find(|name| text[at..].strip_prefix(name).is_some_and(|r| r.starts_with(':'))).map(str::len);
-        let hit = options.iter().enumerate().filter(|(i, _)| !found.iter().any(|(f, _)| f == i)).find_map(|(i, o)| Some((i, key_len(o)?)));
-        if let Some((i, len)) = hit {
-            found.push((i, at..at + len + 1));
+        if let Some((i, len)) = options.iter().enumerate().filter(|(i, _)| !taken(*i)).find_map(|(i, o)| Some((i, key_len(o)?))) {
+            return Some((i, at..at + len + 1));
         }
     }
-    found
+    None
+}
+
+// `key`'s box: closed by the first end chip after it, unless another key chip comes first; else open,
+// its value running to the next key.
+fn boxed(text: &str, marks: &[(Range<usize>, Mark)], options: &[CommandOption], args: &[Arg], option: usize, key: Range<usize>) -> Arg {
+    let after = |kind: Mark| marks.iter().find(|(range, mark)| *mark == kind && range.start >= key.end).map(|(range, _)| range.clone());
+    let end = after(Mark::End).filter(|end| after(Mark::Key).is_none_or(|next| end.start <= next.start));
+    let extent_end = match &end {
+        Some(end) => end.start,
+        None => next_key(text, marks, key.end, options, |i| i == option || args.iter().any(|a| a.option == i)).map_or(text.len(), |(_, next)| next.start),
+    };
+    Arg { option, value: trimmed(text, key.end..extent_end), extent: key.end..extent_end, end, key }
 }
 
 fn trimmed(text: &str, range: Range<usize>) -> Range<usize> {
@@ -92,8 +121,24 @@ fn trimmed(text: &str, range: Range<usize>) -> Range<usize> {
     start..end
 }
 
+impl Arg {
+    /// The whole box, key chip to end chip.
+    pub(crate) fn span(&self) -> Range<usize> {
+        self.key.start..self.end.as_ref().map_or(self.extent.end, |end| end.end)
+    }
+
+    /// What Tab selects and a pick replaces: the value with its spaces, all of a closed box's.
+    pub(crate) fn inner(&self) -> Range<usize> {
+        match self.end {
+            Some(_) => self.extent.clone(),
+            None => self.key.end..self.value.end,
+        }
+    }
+}
+
 impl CommandLine {
-    /// The arg whose value the caret is in; at the very start of a key it still belongs to the value before.
+    /// The arg whose value the caret is in. A closed box ends where its end chip starts; an open one
+    /// still holds a caret at the very start of the next key.
     pub(crate) fn arg_at(&self, caret: usize) -> Option<usize> {
         self.args.iter().position(|a| a.key.end <= caret && caret <= a.extent.end)
     }
@@ -102,22 +147,32 @@ impl CommandLine {
         self.args.iter().any(|a| a.option == option)
     }
 
-    /// Tab's box from `at` (None: outside every box): the next arg, None past the last (the end of the
-    /// text), and the first from outside.
-    /// Not verified: whether Discord's Tab at the end wraps to the first box.
-    pub(crate) fn next_arg(&self, at: Option<usize>) -> Option<usize> {
-        match at {
+    /// Outside every box and past the command name: the word before the caret, which Discord's option-name
+    /// list filters by (`getCurrentWord`). An end chip is a space, so the word starts after it.
+    pub(crate) fn name_query(&self, text: &str, caret: usize) -> Option<Range<usize>> {
+        if caret <= self.name_end || self.arg_at(caret).is_some() {
+            return None;
+        }
+        let before = &text[..caret];
+        let start = before.char_indices().rev().find(|(_, c)| c.is_whitespace()).map_or(0, |(i, c)| i + c.len_utf8());
+        Some(start.max(self.name_end)..caret)
+    }
+
+    /// Discord's `selectNextCommandOption`: the box after the caret's, or, outside every box, the first
+    /// that starts after the caret. None past the last: Tab then puts the caret at the end of the text.
+    pub(crate) fn next_arg(&self, caret: usize) -> Option<usize> {
+        match self.arg_at(caret) {
             Some(n) => (n + 1 < self.args.len()).then_some(n + 1),
-            None => (!self.args.is_empty()).then_some(0),
+            None => self.args.iter().position(|a| a.key.start >= caret),
         }
     }
 
-    /// Shift-Tab's box: the previous arg, None before the first (the end of the text), the last from outside.
-    /// Not verified: what Discord's Shift-Tab does on the first box.
-    pub(crate) fn previous_arg(&self, at: Option<usize>) -> Option<usize> {
-        match at {
+    /// `selectPreviousCommandOption`: the box before the caret's, or, outside every box, the last that
+    /// ends before the caret. None before the first: Shift-Tab then puts the caret after the command name.
+    pub(crate) fn previous_arg(&self, caret: usize) -> Option<usize> {
+        match self.arg_at(caret) {
             Some(n) => n.checked_sub(1),
-            None => self.args.len().checked_sub(1),
+            None => self.args.iter().rposition(|a| a.span().end <= caret),
         }
     }
 }
@@ -133,8 +188,9 @@ pub(crate) struct Problem {
 
 pub(crate) const REQUIRED: &str = "This option is required. Specify a value.";
 
-/// Every given option's value, or every problem: bad or empty-but-required values in text order, then
-/// each required option never given, in definition order.
+/// Every given option's value, or every problem: bad or empty values in text order, then each required
+/// option never given, in definition order. A box left empty fails even when its option is optional, as
+/// Discord submits with `allowEmptyValues: false`.
 pub(crate) fn validate(command: &AppCommand, line: &CommandLine, value_of: impl Fn(&Arg) -> ArgValue) -> Result<Vec<(String, Value)>, Vec<Problem>> {
     let mut values = Vec::new();
     let mut problems = Vec::new();
@@ -142,8 +198,7 @@ pub(crate) fn validate(command: &AppCommand, line: &CommandLine, value_of: impl 
         let option = &command.options[arg.option];
         match resolve(option, &value_of(arg)) {
             Ok(Some(value)) => values.push((option.name.clone(), value)),
-            Ok(None) if option.required => problems.push(Problem { option: arg.option, missing: false, message: REQUIRED.into() }),
-            Ok(None) => {}
+            Ok(None) => problems.push(Problem { option: arg.option, missing: false, message: empty_message(option) }),
             Err(message) => problems.push(Problem { option: arg.option, missing: false, message }),
         }
     }
@@ -169,6 +224,32 @@ pub(crate) struct ArgValue {
     pub file: Option<usize>,
 }
 
+/// Discord's error for an empty box: required ones ask for a value, optional ones get their type's
+/// generic error (`tE`).
+pub(crate) fn empty_message(option: &CommandOption) -> String {
+    match option.required {
+        true => REQUIRED.into(),
+        false => invalid(option).into(),
+    }
+}
+
+// Discord's generic error per option type (`tE`).
+fn invalid(option: &CommandOption) -> &'static str {
+    if !option.choices.is_empty() {
+        return "Not a valid choice.";
+    }
+    match option.kind {
+        OptionKind::Boolean => "Pick either true or false.",
+        OptionKind::Channel => "Not a valid channel.",
+        OptionKind::Integer => "Input a valid integer.",
+        OptionKind::Number => "Input a valid number.",
+        OptionKind::Role => "Not a valid role.",
+        OptionKind::User => "Not a valid user.",
+        OptionKind::Mentionable => "Not a valid user or role.",
+        _ => "Not a valid value.",
+    }
+}
+
 // JavaScript's Number.MAX_SAFE_INTEGER: Discord's client refuses integers past it.
 const SAFE_INTEGER: f64 = 9_007_199_254_740_991.;
 
@@ -186,38 +267,34 @@ pub(crate) fn resolve(option: &CommandOption, input: &ArgValue) -> Result<Option
     }
     if !option.choices.is_empty() {
         let choice = option.choices.iter().find(|c| c.display_name().eq_ignore_ascii_case(text) || c.name.eq_ignore_ascii_case(text));
-        return choice.map(|c| Some(c.value.clone())).ok_or_else(|| "Not a valid choice.".into());
+        return choice.map(|c| Some(c.value.clone())).ok_or_else(|| invalid(option).into());
     }
     let snowflake = text.bytes().all(|b| b.is_ascii_digit());
     match option.kind {
         OptionKind::Integer => {
-            let n = number(text).filter(|n| n.fract() == 0. && n.abs() <= SAFE_INTEGER).ok_or("Input a valid integer.")?;
+            let n = number(text).filter(|n| n.fract() == 0. && n.abs() <= SAFE_INTEGER).ok_or(invalid(option))?;
             in_range(option, n)?;
             Ok(Some(json!(n as i64)))
         }
         OptionKind::Number => {
-            let n = number(text).ok_or("Input a valid number.")?;
+            let n = number(text).ok_or(invalid(option))?;
             in_range(option, n)?;
             Ok(Some(json!(n)))
         }
         OptionKind::Boolean => match text.to_lowercase().as_str() {
             "true" => Ok(Some(json!(true))),
             "false" => Ok(Some(json!(false))),
-            _ => Err("Pick either true or false.".into()),
+            _ => Err(invalid(option).into()),
         },
         // Not verified: Discord's copy for a channel of a type the option doesn't take; this is its
         // generic one for channels.
-        OptionKind::Channel if snowflake && input.channel_type.is_some_and(|t| !option.channel_types.is_empty() && !option.channel_types.contains(&t)) => Err("Not a valid channel.".into()),
+        OptionKind::Channel if snowflake && input.channel_type.is_some_and(|t| !option.channel_types.is_empty() && !option.channel_types.contains(&t)) => Err(invalid(option).into()),
         OptionKind::User | OptionKind::Channel | OptionKind::Role | OptionKind::Mentionable if snowflake => Ok(Some(json!(text))),
-        OptionKind::User => Err("Not a valid user.".into()),
-        OptionKind::Channel => Err("Not a valid channel.".into()),
-        OptionKind::Role => Err("Not a valid role.".into()),
-        OptionKind::Mentionable => Err("Not a valid user or role.".into()),
         OptionKind::String => {
             in_length(option, text)?;
             Ok(Some(json!(text)))
         }
-        OptionKind::Attachment => Err("Not a valid value.".into()),
+        _ => Err(invalid(option).into()),
     }
 }
 
@@ -306,7 +383,7 @@ mod tests {
     #[test]
     fn values_run_until_the_next_known_key() {
         let text = "/play query:midnight ar  volume:80";
-        let line = parse(text, &commands(), None).unwrap();
+        let line = parse(text, &[], &commands(), None).unwrap();
         assert_eq!(line.command, 0);
         assert_eq!(line.name_end, 5);
         assert_eq!(values(text, &line), [("query".into(), "midnight ar".into()), ("volume".into(), "80".into())]);
@@ -317,26 +394,26 @@ mod tests {
     #[test]
     fn unknown_names_quotes_and_glued_keys_are_plain_text() {
         let text = "/play query:\"a b\" mood:calm xvolume:3";
-        let line = parse(text, &commands(), None).unwrap();
+        let line = parse(text, &[], &commands(), None).unwrap();
         assert_eq!(values(text, &line), [("query".into(), "\"a b\" mood:calm xvolume:3".into())]);
     }
 
     #[test]
     fn only_an_options_first_key_counts() {
         let text = "/play query:a query:b";
-        let line = parse(text, &commands(), None).unwrap();
+        let line = parse(text, &[], &commands(), None).unwrap();
         assert_eq!(values(text, &line), [("query".into(), "a query:b".into())]);
     }
 
     #[test]
     fn the_longest_command_name_wins_and_preferred_breaks_ties() {
-        let line = parse("/music queue clear all:true", &commands(), None).unwrap();
+        let line = parse("/music queue clear all:true", &[], &commands(), None).unwrap();
         assert_eq!(line.command, 2);
-        assert_eq!(parse("/music queue", &commands(), None).unwrap().command, 1);
-        assert_eq!(parse("/music queuex", &commands(), None), None);
-        assert_eq!(parse("play", &commands(), None), None);
-        assert_eq!(parse("/play ", &commands(), Some("4")).unwrap().command, 3);
-        assert_eq!(parse("/play ", &commands(), None).unwrap().command, 0);
+        assert_eq!(parse("/music queue", &[], &commands(), None).unwrap().command, 1);
+        assert_eq!(parse("/music queuex", &[], &commands(), None), None);
+        assert_eq!(parse("play", &[], &commands(), None), None);
+        assert_eq!(parse("/play ", &[], &commands(), Some("4")).unwrap().command, 3);
+        assert_eq!(parse("/play ", &[], &commands(), None).unwrap().command, 0);
     }
 
     #[test]
@@ -345,39 +422,112 @@ mod tests {
         spielen.path_localized = vec![Some("spielen".into())];
         let cmds = vec![spielen];
         let text = "/spielen suche:abc";
-        let line = parse(text, &cmds, None).unwrap();
+        let line = parse(text, &[], &cmds, None).unwrap();
         assert_eq!((line.name_end, line.args[0].option, &text[line.args[0].value.clone()]), (8, 0, "abc"));
-        assert_eq!(parse("/play query:x", &cmds, None).unwrap().args.len(), 1);
+        assert_eq!(parse("/play query:x", &[], &cmds, None).unwrap().args.len(), 1);
     }
 
     #[test]
     fn an_empty_value_sits_at_its_keys_end() {
         let text = "/play query:  ";
-        let line = parse(text, &commands(), None).unwrap();
+        let line = parse(text, &[], &commands(), None).unwrap();
         assert_eq!(line.args[0].value, 12..12);
     }
 
     #[test]
     fn the_caret_belongs_to_the_value_it_sits_in() {
         let text = "/play query:abc volume:8";
-        let line = parse(text, &commands(), None).unwrap();
+        let line = parse(text, &[], &commands(), None).unwrap();
         assert_eq!(line.arg_at(3), None, "in the command name");
         assert_eq!(line.arg_at(12), Some(0));
         assert_eq!(line.arg_at(16), Some(0), "the start of the next key");
         assert_eq!(line.arg_at(text.len()), Some(1));
     }
 
+    // The composer as text and chips: `[name:]` is a key chip, `|` an end chip (a space).
+    fn composed(notation: &str) -> (String, Vec<(Range<usize>, Mark)>) {
+        let (mut text, mut marks, mut key) = (String::new(), Vec::new(), 0);
+        for c in notation.chars() {
+            match c {
+                '[' => key = text.len(),
+                ']' => marks.push((key..text.len(), Mark::Key)),
+                '|' => {
+                    marks.push((text.len()..text.len() + 1, Mark::End));
+                    text.push(' ');
+                }
+                c => text.push(c),
+            }
+        }
+        (text, marks)
+    }
+
+    fn boxes(notation: &str) -> (String, CommandLine) {
+        let (text, marks) = composed(notation);
+        let line = parse(&text, &marks, &commands(), None).unwrap();
+        (text, line)
+    }
+
     #[test]
-    fn tab_walks_the_boxes_and_out_past_the_last() {
-        let line = parse("/play query:a volume:2", &commands(), None).unwrap();
-        assert_eq!(line.next_arg(None), Some(0));
-        assert_eq!(line.next_arg(Some(0)), Some(1));
-        assert_eq!(line.next_arg(Some(1)), None);
-        assert_eq!(line.previous_arg(None), Some(1));
-        assert_eq!(line.previous_arg(Some(1)), Some(0));
-        assert_eq!(line.previous_arg(Some(0)), None);
-        let bare = parse("/music queue", &commands(), None).unwrap();
-        assert_eq!((bare.next_arg(None), bare.previous_arg(None)), (None, None));
+    fn text_typed_after_a_boxs_end_is_no_part_of_its_value() {
+        // `/play query:abc`, Tab past the box, then `vol`: the bug was `abc vol` as the value.
+        let (text, line) = boxes("/play [query:]abc|vol");
+        assert_eq!(values(&text, &line), [("query".into(), "abc".into())]);
+        assert_eq!(line.args[0].end, Some(15..16));
+        assert_eq!(line.arg_at(text.len()), None);
+        assert_eq!(line.name_query(&text, text.len()).map(|r| &text[r]), Some("vol"), "what's typed out there names an option");
+    }
+
+    #[test]
+    fn a_key_typed_outside_opens_a_new_box_and_one_inside_a_value_is_text() {
+        let (text, line) = boxes("/play [query:]abc|volume:8");
+        assert_eq!(values(&text, &line), [("query".into(), "abc".into()), ("volume".into(), "8".into())]);
+        assert_eq!(line.args[1].end, None, "not boxed until the composer adds its end chip");
+        let (text, line) = boxes("/play [query:]a volume:8|");
+        assert_eq!(values(&text, &line), [("query".into(), "a volume:8".into())]);
+    }
+
+    #[test]
+    fn a_closed_box_holds_the_caret_up_to_its_end_chip() {
+        let (text, line) = boxes("/play [query:]ab |[volume:]|x");
+        assert_eq!((line.args[0].extent.clone(), line.args[0].value.clone(), line.args[0].inner()), (12..15, 12..14, 12..15));
+        assert_eq!(line.args[0].span(), 6..16);
+        assert_eq!((line.arg_at(12), line.arg_at(15), line.arg_at(16)), (Some(0), Some(0), None), "value start, before the end chip, after it");
+        let empty = &line.args[1];
+        assert_eq!((empty.value.clone(), empty.inner(), empty.span()), (23..23, 23..23, 16..24));
+        assert_eq!(line.arg_at(23), Some(1));
+        assert_eq!(line.name_query(&text, text.len()).map(|r| &text[r]), Some("x"));
+        assert_eq!(line.name_query(&text, 16).map(|r| &text[r]), Some(""), "between boxes, nothing typed yet");
+        assert_eq!(line.name_query(&text, 5), None, "the command name");
+    }
+
+    #[test]
+    fn a_box_that_lost_its_end_chip_runs_to_the_next_key() {
+        let (text, line) = boxes("/play [query:]abc [volume:]3|");
+        assert_eq!(values(&text, &line), [("query".into(), "abc".into()), ("volume".into(), "3".into())]);
+        assert_eq!((line.args[0].end.clone(), line.args[1].end.clone()), (None, Some(24..25)));
+    }
+
+    #[test]
+    fn a_key_chip_right_after_the_name_still_reads() {
+        let (text, line) = boxes("/play[query:]abc|");
+        assert_eq!((line.command, values(&text, &line)), (0, vec![("query".into(), "abc".into())]));
+    }
+
+    #[test]
+    fn tab_walks_the_boxes_from_the_caret_and_out_past_the_last() {
+        let (text, line) = boxes("/play [query:]a|[volume:]2|vol");
+        let (query, volume, outside) = (12, 21, text.len());
+        assert_eq!(line.next_arg(3), Some(0), "from the command name");
+        assert_eq!(line.next_arg(query), Some(1));
+        assert_eq!(line.next_arg(volume), None, "the end of the text");
+        assert_eq!(line.next_arg(14), Some(1), "between the boxes: the next one");
+        assert_eq!(line.next_arg(outside), None);
+        assert_eq!(line.previous_arg(outside), Some(1), "after the last: the last");
+        assert_eq!(line.previous_arg(volume), Some(0));
+        assert_eq!(line.previous_arg(query), None, "the command name");
+        assert_eq!(line.previous_arg(14), Some(0));
+        let bare = parse("/music queue", &[], &commands(), None).unwrap();
+        assert_eq!((bare.next_arg(12), bare.previous_arg(12)), (None, None));
     }
 
     fn plain(text: &str) -> impl Fn(&Arg) -> ArgValue + '_ {
@@ -388,7 +538,7 @@ mod tests {
     fn enter_reports_every_problem_at_once() {
         let cmds = vec![command("9", "x", vec![option("a", OptionKind::String, true), option("n", OptionKind::Integer, false), option("b", OptionKind::User, true), option("c", OptionKind::Boolean, true)])];
         let text = "/x n:loud a:";
-        let line = parse(text, &cmds, None).unwrap();
+        let line = parse(text, &[], &cmds, None).unwrap();
         let problems = validate(&cmds[0], &line, plain(text)).unwrap_err();
         let summary: Vec<(usize, bool, &str)> = problems.iter().map(|p| (p.option, p.missing, p.message.as_str())).collect();
         assert_eq!(summary, [(1, false, "Input a valid integer."), (0, false, REQUIRED), (2, true, REQUIRED), (3, true, REQUIRED)]);
@@ -398,8 +548,16 @@ mod tests {
     fn values_go_out_once_everything_resolves() {
         let cmds = commands();
         let text = "/play volume:80 query:a song";
-        let line = parse(text, &cmds, None).unwrap();
+        let line = parse(text, &[], &cmds, None).unwrap();
         assert_eq!(validate(&cmds[0], &line, plain(text)), Ok(vec![("volume".into(), json!(80)), ("query".into(), json!("a song"))]));
+    }
+
+    #[test]
+    fn an_empty_box_blocks_enter_even_when_optional() {
+        let (text, line) = boxes("/play [query:]a|[volume:]|");
+        let problems = validate(&commands()[0], &line, plain(&text)).unwrap_err();
+        assert_eq!(problems, [Problem { option: 1, missing: false, message: "Input a valid integer.".into() }]);
+        assert_eq!(empty_message(&commands()[0].options[0]), REQUIRED);
     }
 
     fn text(t: &str) -> ArgValue {
@@ -458,7 +616,7 @@ mod tests {
     fn autocomplete_sends_the_raw_focus_and_keys_its_cache_on_the_rest() {
         let cmds = vec![command("9", "x", vec![option("q", OptionKind::Integer, true), option("n", OptionKind::Integer, false), option("f", OptionKind::Attachment, false)])];
         let text = "/x q:ab n:3 f:pic";
-        let line = parse(text, &cmds, None).unwrap();
+        let line = parse(text, &[], &cmds, None).unwrap();
         assert_eq!(autocomplete_values(&cmds[0], &line, 0, plain(text)), [("q".into(), json!("ab")), ("n".into(), json!(3))]);
         assert_eq!(autocomplete_context(&cmds[0], &line, 0, text), "q\0n=3\0f=pic");
     }
