@@ -11,7 +11,6 @@ use gpui_kit::{
     },
     div,
     prelude::FluentBuilder as _,
-    px,
 };
 
 use crate::{
@@ -152,7 +151,7 @@ impl Waffle {
         let head = div()
             .flex()
             .items_center()
-            .child(div().flex_1().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(strong).child("Modify Attachment"))
+            .child(div().flex_1().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(strong).child("Modify Attachment"))
             .child(ui::icon_button("modify-attachment-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_modify_attachment(cx))));
         let name_focus = gpui_kit::Focusable::focus_handle(self.dialog_input.read(cx), cx);
         let name = ui::text_field("modify-attachment-name", Input::new(&self.dialog_input).appearance(false).disabled(sent), &name_focus).disabled(sent);

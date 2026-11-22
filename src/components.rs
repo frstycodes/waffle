@@ -560,7 +560,7 @@ pub(crate) fn used_command(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
             .items_center()
             .gap_1p5()
             .min_w_0()
-            .text_size(px(13.))
+            .text_size(ui::TEXT_DETAIL)
             .text_color(palette::muted(cx))
             .child(ui::avatar(meta.user.avatar.clone(), 16.))
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(name))

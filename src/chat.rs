@@ -669,7 +669,7 @@ impl Waffle {
     }
 
     fn composer_field(&self, ink: Hsla, cx: &mut Context<Self>) -> AnyElement {
-        let field = Textarea::new(&self.composer).appearance(false).with_size(Size::XSmall).text_size(px(15.)).line_height(px(22.)).text_color(ink).token(composer_chip(cx));
+        let field = Textarea::new(&self.composer).appearance(false).with_size(Size::XSmall).text_size(ui::TEXT_LEAD).line_height(ui::LINE_LEAD).text_color(ink).token(composer_chip(cx));
         // XSmall gives the editor 0/4px padding of its own; with these, the design's 4/6.
         // The option boxes paint after the field: they read where its text landed this frame.
         div().relative().flex_1().min_w_0().child(field.py_1().px_0p5()).children(self.option_boxes(cx)).into_any_element()
@@ -958,7 +958,7 @@ impl Waffle {
                         .child(div().text_color(palette::accent_ink(cx)).child(Icon::new(Glyph::Megaphone).size(ui::ICON_XL)))
                         .child("Hold Up!"),
                 )
-                .child(div().line_height(px(20.)).child(body))
+                .child(div().line_height(ui::LINE_SM).child(body))
                 .child(div().flex().items_center().gap_1p5().text_size(ui::TEXT_XS).text_color(muted).child(Icon::new(Glyph::Info).size(ui::ICON_SM)).child("Maybe try mentioning a role or individual users instead?"))
                 .child(div().flex().flex_wrap().gap_2().child(edit).child(send))
                 .transform_origin(point(gpui_kit::relative(0.5), gpui_kit::relative(1.)))
@@ -1332,7 +1332,7 @@ pub(crate) fn search_hit(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) 
         .min_w_0()
         .flex()
         .flex_col()
-        .text_size(px(15.))
+        .text_size(ui::TEXT_LEAD)
         .line_height(gpui_kit::relative(1.45))
         .text_color(palette::text(cx))
         .child(message_head(message, ctx, cx))
@@ -1936,7 +1936,7 @@ fn composer_chip(cx: &App) -> impl Fn(&gpui_kit::component::input::InlineTokenCo
 // An option name in a typed slash command: the muted left segment of the option's box, which
 // `Waffle::option_boxes` strokes around it and the value typed after it.
 fn option_key(label: SharedString, height: Pixels, fill: Hsla, ink: Hsla) -> Div {
-    let key = div().h_full().px(px(7.)).flex().items_center().rounded_l(px(5.)).bg(fill).text_color(ink).text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).whitespace_nowrap().child(label);
+    let key = div().h_full().px(px(7.)).flex().items_center().rounded_l(px(5.)).bg(fill).text_color(ink).text_size(ui::TEXT_DETAIL).font_weight(FontWeight::SEMIBOLD).whitespace_nowrap().child(label);
     div().h(height).pl(px(crate::command_picker::OPTION_GAP)).pr(px(5.)).flex().child(key)
 }
 
@@ -2885,7 +2885,7 @@ fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Option<&str>, 
                 let (name, value, _) = &embed.fields[i];
                 div()
                     .flex_1()
-                    .flex_basis(px(0.))
+                    .flex_basis(Pixels::ZERO)
                     .min_w_0()
                     .flex()
                     .flex_col()
@@ -3122,9 +3122,9 @@ fn poll_result(poll: &crate::discord::PollResult, poll_message: Option<&str>, ke
     let mark = match emoji {
         Some(e) => match e.url() {
             Some(url) => img(url).size_7().into_any_element(),
-            None => div().text_size(ui::TEXT_XL).line_height(px(28.)).child(e.name).into_any_element(),
+            None => div().text_size(ui::TEXT_XL).line_height(ui::LINE_XL).child(e.name).into_any_element(),
         },
-        None => div().text_size(ui::TEXT_XL).line_height(px(28.)).child("📊").into_any_element(),
+        None => div().text_size(ui::TEXT_XL).line_height(ui::LINE_XL).child("📊").into_any_element(),
     };
     let (this, target) = (ctx.this.clone(), poll_message.map(str::to_owned));
     div()
@@ -3218,7 +3218,7 @@ fn poll_card(message: &Message, poll: &Poll, ctx: &RowContext, cx: &App) -> AnyE
                 .flex()
                 .flex_col()
                 .gap_1()
-                .child(div().text_size(ui::TEXT_MD).line_height(px(20.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(poll.question.clone()))
+                .child(div().text_size(ui::TEXT_MD).line_height(ui::LINE_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(poll.question.clone()))
                 .child(div().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(poll.prompt(now))),
         )
         .child(div().flex().flex_col().gap_1p5().children(options))

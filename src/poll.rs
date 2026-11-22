@@ -9,7 +9,6 @@ use gpui_kit::{
     },
     div,
     prelude::*,
-    px,
 };
 use reqwest::Method;
 use serde_json::json;
@@ -411,7 +410,7 @@ impl Waffle {
                     .flex()
                     .flex_col()
                     .gap_1()
-                    .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Create a poll"))
+                    .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Create a poll"))
                     .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(subtitle)),
             )
             .child(ui::icon_button("poll-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_poll_creator(cx))));

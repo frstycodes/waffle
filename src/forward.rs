@@ -160,7 +160,7 @@ impl Waffle {
                     .flex()
                     .flex_col()
                     .gap_1()
-                    .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Forward message"))
+                    .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Forward message"))
                     .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(format!("{} · {}", self.forward_subtitle(&dialog.message), picked_count(dialog.picked.len())))),
             )
             .child(ui::icon_button("forward-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_forward(cx))));

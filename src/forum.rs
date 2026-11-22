@@ -1035,7 +1035,7 @@ impl Waffle {
                     .flex()
                     .flex_col()
                     .gap_0p5()
-                    .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("New post"))
+                    .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("New post"))
                     .child(div().truncate().text_size(ui::TEXT_SM).text_color(muted).child(format!("in {}", forum.name))),
             )
             .children(reopen)
@@ -1503,7 +1503,7 @@ fn file_chip(file: &PendingFile, cx: &Context<Waffle>) -> Div {
         .gap_1p5()
         .squircle(ui::RADIUS_SM)
         .bg(palette::selected(cx))
-        .text_size(px(13.))
+        .text_size(ui::TEXT_DETAIL)
         .text_color(palette::text(cx))
         .child(Icon::new(glyph).size(ui::ICON_SM).text_color(palette::muted(cx)))
         .child(div().max_w(px(180.)).truncate().child(file.name.clone()))

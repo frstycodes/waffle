@@ -118,7 +118,7 @@ impl Render for ReactorsCard {
                     .p_2p5()
                     .pr_3p5()
                     .child(div().flex_none().child(emoji_face(&self.reaction.emoji, 36.)))
-                    .child(div().min_w_0().text_size(ui::TEXT_SM).line_height(px(20.)).text_color(palette::muted(cx)).child(text)),
+                    .child(div().min_w_0().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(palette::muted(cx)).child(text)),
             )
             .into_any_element()
     }
@@ -357,8 +357,8 @@ impl Waffle {
                     .flex()
                     .items_start()
                     .gap_2()
-                    .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Reactions"))
-                    .child(div().text_size(ui::TEXT_SM).line_height(px(28.)).text_color(palette::muted(cx)).font_features(tabular()).child(grouped(total))),
+                    .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Reactions"))
+                    .child(div().text_size(ui::TEXT_SM).line_height(ui::LINE_XL).text_color(palette::muted(cx)).font_features(tabular()).child(grouped(total))),
             )
             .child(ui::icon_button("reactions-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_reactions(cx))));
         let tabs: Vec<AnyElement> = order.iter().map(|r| reaction_tab(r, r.emoji == selected, cx)).collect();
@@ -431,7 +431,7 @@ impl Waffle {
             .flex()
             .flex_col()
             .child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(name))
-            .when(!detail.is_empty(), |w| w.child(div().truncate().text_size(px(13.)).text_color(palette::muted(cx)).child(detail)));
+            .when(!detail.is_empty(), |w| w.child(div().truncate().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(detail)));
         let remove = removable.then(|| {
             ui::button(SharedString::from(format!("reactor-remove-{id}")), ui::Tone::Secondary, cx)
                 .small()
@@ -465,7 +465,7 @@ fn reaction_tab(reaction: &Reaction, on: bool, cx: &mut Context<Waffle>) -> AnyE
     ui::menu_row(SharedString::from(format!("reactions-tab-{}", emoji.path())), cx)
         .toggled(on, cx)
         .h_10()
-        .text_size(px(15.))
+        .text_size(ui::TEXT_LEAD)
         .font_weight(FontWeight::SEMIBOLD)
         .child(div().w(px(26.)).flex_none().flex().justify_center().child(emoji_face(&emoji, 22.)))
         .child(div().font_features(tabular()).when(reaction.me, |d| d.text_color(palette::accent_ink(cx))).child(grouped(reaction.count.into())))

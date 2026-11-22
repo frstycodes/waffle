@@ -1472,14 +1472,14 @@ impl Waffle {
             .gap_1p5()
             .min_w_0()
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(StyledText::new(format!("/{}", c.display_name())).with_highlights(mark(name, 1))))
-            .when(!args.is_empty(), |d| d.child(div().min_w_0().truncate().text_size(px(13.)).text_color(faint).child(args.join(" "))));
+            .when(!args.is_empty(), |d| d.child(div().min_w_0().truncate().text_size(ui::TEXT_DETAIL).text_color(faint).child(args.join(" "))));
         let what = div()
             .flex_1()
             .min_w_0()
             .flex()
             .flex_col()
             .child(title)
-            .child(div().truncate().text_size(px(13.)).text_color(muted).child(StyledText::new(c.description.clone()).with_highlights(mark(description, 0))));
+            .child(div().truncate().text_size(ui::TEXT_DETAIL).text_color(muted).child(StyledText::new(c.description.clone()).with_highlights(mark(description, 0))));
         let app = app.cloned().unwrap_or_else(|| app_commands::App { id: c.application_id.clone(), name: String::new(), icon: None });
         ui::menu_row(SharedString::from(format!("command-{command}")), cx)
             .highlighted(on)
@@ -1504,8 +1504,8 @@ impl Waffle {
             .gap_1p5()
             .min_w_0()
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(StyledText::new(send_options::TTS).with_highlights(name)))
-            .child(div().min_w_0().truncate().text_size(px(13.)).text_color(faint).child("message"));
-        let what = div().flex_1().min_w_0().flex().flex_col().child(title).child(div().truncate().text_size(px(13.)).text_color(muted).child(send_options::TTS_DESCRIPTION));
+            .child(div().min_w_0().truncate().text_size(ui::TEXT_DETAIL).text_color(faint).child("message"));
+        let what = div().flex_1().min_w_0().flex().flex_col().child(title).child(div().truncate().text_size(ui::TEXT_DETAIL).text_color(muted).child(send_options::TTS_DESCRIPTION));
         ui::menu_row("command-tts", cx)
             .highlighted(on)
             .min_h_11()
@@ -1533,7 +1533,7 @@ impl Waffle {
                     .flex()
                     .flex_col()
                     .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Couldn't load this server's commands"))
-                    .child(div().truncate().text_size(px(13.)).text_color(palette::muted(cx)).child(error.to_owned())),
+                    .child(div().truncate().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(error.to_owned())),
             )
             .child(ui::button("command-index-retry", ui::Tone::Secondary, cx).small().child("Try again").on_click(cx.listener(|this, _, _, cx| this.fetch_command_index(cx))))
     }
@@ -1864,7 +1864,7 @@ fn picker_note(title: impl Into<SharedString>, body: impl Into<SharedString>, cx
         .flex_col()
         .gap_0p5()
         .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title.into()))
-        .child(div().text_size(px(13.)).text_color(palette::muted(cx)).child(body.into()))
+        .child(div().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(body.into()))
 }
 
 // LISTING

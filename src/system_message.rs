@@ -321,7 +321,7 @@ fn sentence_line(sentence: Sentence, stamp: Option<String>, cx: &App) -> Div {
         .flex_wrap()
         .items_center()
         .gap_x(px(WORD_GAP))
-        .line_height(px(22.))
+        .line_height(ui::LINE_LEAD)
         .text_color(palette::muted(cx))
         .children(sentence.parts)
         .children(stamp.map(|s| div().ml_0p5().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(s)))
@@ -581,7 +581,7 @@ fn automod_row(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElem
         .flex()
         .items_center()
         .gap_2()
-        .line_height(px(22.))
+        .line_height(ui::LINE_LEAD)
         .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("AutoMod"))
         .child(ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px_1p5().child("SYSTEM"))
         .child(div().relative().top_px().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(chat::format_stamp(&message.timestamp)));
