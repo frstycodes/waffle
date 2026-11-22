@@ -119,7 +119,7 @@ impl Waffle {
             }
             Toggle::MessageRequests => {
                 account.message_requests = on;
-                return self.save_settings_proto(super::proto::message_requests(on), cx);
+                return self.save_settings_proto(before, super::proto::message_requests(on), cx);
             }
             // Everyone covers the other two, as in Discord: turning it on turns them on.
             Toggle::FriendsAll => {
@@ -162,7 +162,7 @@ impl Waffle {
             }
             Choice::SpamFilter => {
                 self.account_settings.dm_spam_filter = value;
-                return self.save_settings_proto(super::proto::spam_filter(value), cx);
+                return self.save_settings_proto(before, super::proto::spam_filter(value), cx);
             }
         };
         self.save_account_settings(before, patch, cx);
@@ -187,10 +187,9 @@ impl Waffle {
     }
 
     // The same for a setting that lives only in the settings proto: `settings` is the base64 of the change.
-    fn save_settings_proto(&mut self, settings: String, cx: &mut Context<Self>) {
+    pub(super) fn save_settings_proto(&mut self, before: crate::discord::AccountSettings, settings: String, cx: &mut Context<Self>) {
         cx.notify();
         let Some(client) = self.client.clone() else { return };
-        let before = self.account_settings.clone();
         cx.spawn(async move |this, cx| {
             if client.call(reqwest::Method::PATCH, "/users/@me/settings-proto/1".into(), Some(json!({ "settings": settings }))).await.is_err() {
                 let _ = this.update(cx, |this, cx| {
