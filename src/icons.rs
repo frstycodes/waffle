@@ -12,7 +12,7 @@ pub const NEW_TAG: &str = "shapes/new-tag.svg";
 // Reicon (MIT, github.com/dqev/reicon) in its filled weight, like Discord's chrome, plus Waffle's own glyphs
 // (muted, deafened, camera off, GIF...), all written to assets/icons/reicon/ by tools/reicon.py, which also
 // keeps these paths in step with its map (design/icons.html). Order matches `Glyph`.
-const GLYPHS: [(&str, &[u8]); 148] = [
+const GLYPHS: [(&str, &[u8]); 149] = [
     ("icons/hashtag.svg", include_bytes!("../assets/icons/reicon/hashtag2.svg")),
     ("icons/hashtag-lock.svg", include_bytes!("../assets/icons/reicon/lock2.svg")),
     ("icons/volume-high.svg", include_bytes!("../assets/icons/reicon/volume-high.svg")),
@@ -56,6 +56,7 @@ const GLYPHS: [(&str, &[u8]); 148] = [
     ("icons/screen-off.svg", include_bytes!("../assets/icons/reicon/monitor-off.svg")),
     ("icons/door-exit.svg", include_bytes!("../assets/icons/reicon/logout.svg")),
     ("icons/crown.svg", include_bytes!("../assets/icons/reicon/crown.svg")),
+    ("icons/boost.svg", include_bytes!("../assets/icons/reicon/gem.svg")),
     ("icons/id.svg", include_bytes!("../assets/icons/reicon/user-id.svg")),
     ("icons/more.svg", include_bytes!("../assets/icons/reicon/more-h.svg")),
     ("icons/thread.svg", include_bytes!("../assets/icons/reicon/messages3.svg")),
@@ -219,6 +220,7 @@ pub enum Glyph {
     ScreenOff,
     DoorExit,
     Crown,
+    Boost,
     Id,
     More,
     Thread,

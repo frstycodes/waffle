@@ -113,6 +113,7 @@ impl Waffle {
         let Some(guild) = self.guild() else { return div().into_any_element() };
         let Some(list) = self.member_lists.get(&guild.id).filter(|l| !l.is_empty()) else { return members_loading(cx).into_any_element() };
         let mut first = activity.is_none();
+        let spot = RowSpot { width: self.panel_width - MEMBER_LIST_INSET, surface: palette::surface(palette::Level::Sidebar, cx), profile_x: None };
         let rows = list.iter().filter_map(|item| match item {
             ListItem::Group { id, count } => {
                 let count = self.member_groups.get(&guild.id).and_then(|g| g.get(id)).copied().unwrap_or(*count);
@@ -125,7 +126,7 @@ impl Waffle {
                 let spaced = !std::mem::take(&mut first);
                 Some(group_label(format!("{name} · {count}"), cx).when(spaced, |l| l.mt_3()).into_any_element())
             }
-            ListItem::Member(member) => Some(self.member_row(member, cx)),
+            ListItem::Member(member) => Some(self.member_row(member, spot, cx)),
         });
         div().flex().flex_col().gap(px(2.)).children(activity).children(rows.collect::<Vec<_>>()).into_any_element()
     }
@@ -266,7 +267,7 @@ impl Waffle {
 
     // A member (.mem): avatar with status, the name in their top role's colour, one line of activity.
     // Offline dims the avatar and drops the name to faint; the open profile's member keeps the fill.
-    fn member_row(&self, member: &Member, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn member_row(&self, member: &Member, spot: RowSpot, cx: &mut Context<Self>) -> AnyElement {
         let dark = cx.theme().is_dark();
         let offline = member.presence.status == Status::Offline;
         let (strong, faint, hover) = (palette::strong(cx), palette::faint(cx), palette::hover(cx));
@@ -274,7 +275,7 @@ impl Waffle {
             true => faint,
             false => self.role_color(self.guild_id.as_ref(), &member.user.id, Some(&member.roles), dark).unwrap_or(strong),
         };
-        let surface = palette::surface(palette::Level::Sidebar, cx);
+        let surface = spot.surface;
         let owner = self.guild().is_some_and(|g| g.owner_id.as_ref() == Some(&member.user.id));
         let selected = self.profile_card.as_ref().is_some_and(|p| p.user.id == member.user.id);
         let crown = ui::mix(palette::status_in(Status::Idle, cx), strong, 0.4);
@@ -287,6 +288,7 @@ impl Waffle {
                 .child(crate::name_fonts::styled(ui::truncating(key, member.user.name.clone()).font_weight(FontWeight::NORMAL).text_color(name_ink), member.user.name_style.as_ref()))
                 .children(member.user.tag.as_ref().map(|tag| crate::chat::guild_tag(tag, cx)))
                 .when(owner, |r| r.child(Icon::new(Glyph::Crown).size(px(14.)).flex_none().text_color(crown)))
+                .when(member.user.boosting, |r| r.child(Icon::new(Glyph::Boost).size(px(14.)).flex_none().text_color(boost_ink(dark))))
                 .when(member.user.bot, |r| r.child(ui::tag("App", cx)))
         };
         let status = self.member_status(member);
@@ -297,7 +299,7 @@ impl Waffle {
             true => (fill(palette::selected(cx)), None),
             false => (surface, Some(fill(hover))),
         };
-        let plate = member.user.nameplate.as_ref().map(|plate| member_nameplate(plate, names(format!("member-name-mask-{}", member.user.id)), fills, self.panel_width - MEMBER_LIST_INSET, selected, dark));
+        let plate = member.user.nameplate.as_ref().map(|plate| member_nameplate(plate, names(format!("member-name-mask-{}", member.user.id)), fills, spot.width, selected, dark));
         let plated = plate.is_some();
         div()
             .id(SharedString::from(format!("member-{}", member.user.id)))
@@ -320,7 +322,11 @@ impl Waffle {
             .child(names(format!("member-name-{}", member.user.id)).relative().flex_1())
             .on_click({
                 let user = member.user.clone();
-                cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_profile(user.clone(), event.position() - gpui_kit::point(px(320.), px(0.)), cx))
+                cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| {
+                    let at = event.position();
+                    let at = spot.profile_x.map_or(at - gpui_kit::point(px(320.), px(0.)), |x| gpui_kit::point(x, at.y));
+                    this.open_profile(user.clone(), at, cx)
+                })
             })
             .on_mouse_down(gpui_kit::MouseButton::Right, {
                 let (user, guild_id) = (member.user.clone(), self.guild_id.clone());
@@ -390,6 +396,20 @@ impl MemberStatus {
             .when(primary && beside_custom, |d| d.child(div().flex_none().child("•")))
             .children(self.custom.map(|custom| ui::truncating(format!("member-custom-{custom}"), custom)))
     }
+}
+
+// Where a member row is drawn: its width and the surface under it, which a nameplate's mask paints, and
+// the x its profile opens at (None: left of the click, clear of the side panel).
+#[derive(Clone, Copy)]
+pub(crate) struct RowSpot {
+    pub width: f32,
+    pub surface: gpui_kit::Hsla,
+    pub profile_x: Option<gpui_kit::Pixels>,
+}
+
+// Discord's boost pink, deepened on light surfaces so the mark keeps 3:1.
+fn boost_ink(dark: bool) -> gpui_kit::Hsla {
+    if dark { palette::oklch(0.76, 0.17, 335.) } else { palette::oklch(0.56, 0.21, 335.) }
 }
 
 const MEMBER_ROW: f32 = 44.;

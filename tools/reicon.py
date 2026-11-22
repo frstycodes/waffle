@@ -313,6 +313,7 @@ MAP = [
     ("Nav::Restore", "Window", "Restore", "CUSTOM:win-restore"),
     ("Nav::DeafenedFill", "Voice", "Deafened", "CUSTOM:deafened"),
     ("Glyph::ScreenOff", "Voice", "Stop watching or streaming", "CUSTOM:monitor-off"),
+    ("Glyph::Boost", "People", "Server booster", "CUSTOM:gem"),
     ("Glyph::TextLocked", "Channels", "Text channel, private", "CUSTOM:text-locked"),
     ("Glyph::VoiceLocked", "Channels", "Voice channel, private", "CUSTOM:voice-locked"),
     ("Glyph::AnnouncementLocked", "Channels", "Announcement channel, private", "CUSTOM:announcement-locked"),
@@ -432,6 +433,10 @@ def slashed(base):
 # The private-channel badge: a small padlock in the corner, cut from the glyph by a stroke-wide gap.
 LOCK = f'<path d="{sq(14, 16.25, 9, 6.75, 2)}" fill="currentColor"/><path d="M16.25 16.25v-1.5a2.25 2.25 0 0 1 4.5 0v1.5"/>'
 
+GEM = ('<mask id="facets" maskUnits="userSpaceOnUse" x="-2" y="-2" width="28" height="28"><rect x="-2" y="-2" width="28" height="28" fill="#fff"/>'
+       '<path d="M2.5 9.5h19M9 9.5l3 10M15 9.5l-3 10M9.5 4.5 9 9.5M14.5 4.5l.5 5" stroke="#000" stroke-width="1.25"/></mask>'
+       '<path mask="url(#facets)" fill="currentColor" stroke="none" d="M7.25 4h9.5a2 2 0 0 1 1.6.8l2.75 3.67a2 2 0 0 1-.1 2.54l-7.5 8.72a2 2 0 0 1-3.03 0l-7.5-8.72a2 2 0 0 1-.1-2.54L5.65 4.8a2 2 0 0 1 1.6-.8z"/>')
+
 
 def badged(base, badge):
     return (f'<mask id="badge" maskUnits="userSpaceOnUse" x="-2" y="-2" width="28" height="28"><rect x="-2" y="-2" width="28" height="28" fill="#fff"/>'
@@ -450,6 +455,8 @@ def custom(reicon, name):
         "monitor-off": lambda: (f'<mask id="x" maskUnits="userSpaceOnUse" x="-2" y="-2" width="28" height="28"><rect x="-2" y="-2" width="28" height="28" fill="#fff"/>'
                                 f'<path d="M9.75 5 14.25 9.5M14.25 5 9.75 9.5" stroke="#000" stroke-width="2"/></mask><g mask="url(#x)">{glyph(reicon, "monitor")}</g>'),
         "thumbtack-off": lambda: slashed(glyph(reicon, "thumbtack")),
+        # Discord's boost mark: a cut gem, its table and facets as gaps in the fill.
+        "gem": lambda: GEM,
         "gif": lambda: f'<path d="{sq(2.5, 5, 19, 14, 3.5)}"/><path d="M10 10.1a2.1 2.1 0 1 0 .4 2.2H8.6M12.75 9.75v4.5M15.5 14.25v-4.5h2.75M15.5 12h2.25" stroke-width="1.75"/>',
         "more-v": lambda: f'<g transform="rotate(90 12 12)">{glyph(reicon, "more-h")}</g>',
         # The inbox as an outline whose tray (the part below the lip) is filled, from Reicon's filled inbox.

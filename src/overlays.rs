@@ -261,6 +261,7 @@ impl Waffle {
         }
         let text_viewer = self.text_files.borrow_mut().viewer.take().is_some();
         let open = text_viewer
+            | self.role_popout.close()
             | self.profile_card.take().is_some()
             | std::mem::take(&mut self.status_menu)
             | self.status_editor.take().is_some()
@@ -283,6 +284,8 @@ impl Waffle {
 
     pub(crate) fn render_overlays(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let mut out = Vec::new();
+        // Under the profile, which its rows open.
+        out.extend(self.role_popout_overlay(window, cx));
         out.extend(self.profile_overlay(window, cx));
         out.extend(self.text_viewer_overlay(window, cx));
         out.extend(self.status_menu_overlay(cx));

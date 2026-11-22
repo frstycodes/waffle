@@ -147,6 +147,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             })
             .detach(),
         "profile" => demo_profile(waffle, cx),
+        "role-popout" => demo_role_popout(waffle, cx),
         // No theme, banner, badges or games: the plain surface, and the Add role row in view.
         "profile-plain" => {
             demo_profile(waffle, cx);
@@ -379,7 +380,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         "forward-dialog" => {
             if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "2") {
                 guild.owner_id = Some("1".into());
-                guild.roles = vec![Role { id: "2".into(), name: "@everyone".into(), color: 0, position: 0, permissions: crate::discord::VIEW_CHANNEL, managed: false }];
+                guild.roles = vec![Role { id: "2".into(), name: "@everyone".into(), color: 0, position: 0, permissions: crate::discord::VIEW_CHANNEL, managed: false, icon: None }];
             }
             let Some(message) = waffle.feeds.get("general").and_then(|f| f.messages.iter().find(|m| m.id == "102").cloned()) else { return };
             waffle.open_forward(message, window, cx);
@@ -891,9 +892,9 @@ fn ready(me: User) -> Ready {
     let mut media = channel("media", "📷-media", ChannelKind::Text, Some("c0"));
     media.last_message_id = Some("900".into());
     let roles = vec![
-        Role { id: "r1".into(), name: "Council".into(), color: 0xE91E63, position: 3, permissions: 0, managed: false },
-        Role { id: "r2".into(), name: "Rustacean".into(), color: 0xE67E22, position: 2, permissions: 0, managed: false },
-        Role { id: "1".into(), name: "@everyone".into(), color: 0, position: 0, permissions: 0, managed: false },
+        Role { id: "r1".into(), name: "Council".into(), color: 0xE91E63, position: 3, permissions: 0, managed: false, icon: None },
+        Role { id: "r2".into(), name: "Rustacean".into(), color: 0xE67E22, position: 2, permissions: 0, managed: false, icon: None },
+        Role { id: "1".into(), name: "@everyone".into(), color: 0, position: 0, permissions: 0, managed: false, icon: None },
     ];
     let guild = |id: &str, name: &str, channels: Vec<Channel>, voice_states: Vec<VoiceState>| Guild {
         id: id.into(),
@@ -978,7 +979,7 @@ const LOAD_ROLES: usize = 25;
 
 fn load_guilds(waffle: &mut Waffle) {
     let view = crate::discord::VIEW_CHANNEL;
-    let roles: Vec<Role> = (0..LOAD_ROLES).map(|r| Role { id: format!("lr{r}"), name: format!("role {r}"), color: 0x5865F2 + r as u32 * 0x0A0A, position: r as i64, permissions: if r == 0 { view } else { 0 }, managed: false }).collect();
+    let roles: Vec<Role> = (0..LOAD_ROLES).map(|r| Role { id: format!("lr{r}"), name: format!("role {r}"), color: 0x5865F2 + r as u32 * 0x0A0A, position: r as i64, permissions: if r == 0 { view } else { 0 }, managed: false, icon: None }).collect();
     let overwrites = |c: usize| (0..4).map(|o| crate::discord::Overwrite { id: format!("lr{}", (c + o) % LOAD_ROLES), allow: if o == 0 { view } else { 0 }, deny: 0, member: false }).collect::<Vec<_>>();
     let channels = |g: usize, count: usize| -> Vec<Channel> {
         (0..count)
@@ -1765,4 +1766,32 @@ fn demo_mod_view(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
         "users": [{ "id": "12582912", "username": "moss", "global_name": "moss lantern" }, { "id": "4194304", "username": "kiwi.dev", "global_name": "kiwi" }, { "id": "8388608", "username": "wren.wav", "global_name": "Wren" }],
     });
     waffle.demo_mod_view("1".into(), "8388608".into(), audit, cx);
+}
+
+// Wren pings @Rustacean and its card is open: five of its fourteen members loaded (kiwi owns the server,
+// toma and moss boost it), the rest counted under "+9 more".
+fn demo_role_popout(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
+    let member = |id: &str, name: &str, roles: &[&str], boosting: bool| {
+        let mut user = user(id, name);
+        user.boosting = boosting;
+        (user, roles.iter().map(|r| r.to_string()).collect())
+    };
+    let members = vec![
+        member("4194304", "kiwi", &["r1", "r2"], false),
+        member("16777216", "toma reed", &["r2"], true),
+        member("12582912", "moss lantern", &["r2"], true),
+        member("8388608", "Wren", &["r2"], false),
+        member("31000001", "Dhalon", &["r2"], false),
+    ];
+    waffle.on_event(Event::MembersChunk { guild_id: "1".into(), members, facts: Vec::new() }, cx);
+    waffle.presences.insert("31000001".into(), Presence { status: Presence_::Online, ..Default::default() });
+    if let Some(feed) = waffle.feeds.get_mut("general") {
+        let mut messages = feed.messages.as_ref().clone();
+        let at = chrono::Utc::now().to_rfc3339();
+        let author = user("8388608", "Wren");
+        messages.push(Message { id: "990".into(), channel_id: "general".into(), guild_id: Some("1".into()), author, roles: Some(vec!["r2".into()]), content: "<@&r2> can someone check the build".into(), timestamp: at, ..Default::default() });
+        feed.messages = std::sync::Arc::new(messages);
+    }
+    waffle.role_popout.seed_counts("1", [("r2".to_owned(), 14)].into());
+    waffle.open_role_popout(Some("r2".into()), gpui_kit::point(gpui_kit::px(470.), gpui_kit::px(300.)), cx);
 }
