@@ -18,7 +18,7 @@ impl Waffle {
         let status = &self.updates.status;
         let notes_version = status.version().unwrap_or(CURRENT).to_owned();
         let notes = ui::settings_choice(ui::settings_row("whats-new", true, cx).child(ui::settings_text(format!("What's new in {notes_version}"), Some("Release notes on GitHub"), cx)), cx)
-            .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(px(16.))))
+            .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)))
             .on_click(move |_, _, cx: &mut App| cx.open_url(&crate::updater::release_notes(&notes_version)));
         let checked = self.updates.checked_at.map_or_else(|| "Not yet".to_owned(), |at| crate::panel::ago(elapsed_ms(at)));
         let last_checked = ui::settings_row("last-checked", true, cx).child(ui::settings_text("Last checked", None::<&str>, cx)).child(div().text_color(palette::muted(cx)).child(checked));
@@ -39,11 +39,11 @@ impl Waffle {
             .min_w_0()
             .flex()
             .flex_col()
-            .gap(px(2.))
+            .gap_0p5()
             .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(format!("Waffle {CURRENT}")))
-            .child(div().text_size(px(12.)).line_height(px(17.)).text_color(palette::muted(cx)).child(status_line(status, self.updates.updater.is_some())))
-            .children(progress.map(|bar| div().mt(px(6.)).child(bar)));
-        ui::settings_row("update-status", false, cx).child(img(self.prefs.app_icon.asset()).size(px(48.)).flex_none()).child(text).child(self.update_action(cx)).into_any_element()
+            .child(div().text_size(ui::TEXT_XS).line_height(px(17.)).text_color(palette::muted(cx)).child(status_line(status, self.updates.updater.is_some())))
+            .children(progress.map(|bar| div().mt_1p5().child(bar)));
+        ui::settings_row("update-status", false, cx).child(img(self.prefs.app_icon.asset()).size_12().flex_none()).child(text).child(self.update_action(cx)).into_any_element()
     }
 
     fn update_action(&self, cx: &mut Context<Self>) -> AnyElement {

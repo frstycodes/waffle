@@ -6,7 +6,6 @@ use gpui_kit::{
     AnyElement, Context, InteractiveElement, KeyDownEvent, MouseButton, ParentElement, SharedString, StatefulInteractiveElement, Styled, Window,
     component::input::{Input, InputEvent},
     div,
-    px,
 };
 
 use crate::{
@@ -124,21 +123,21 @@ impl Waffle {
             let value = self.dialog_input.read(cx).value();
             (value.trim().is_empty(), value.chars().count())
         };
-        let count = div().flex_none().text_size(px(12.)).text_color(palette::faint(cx)).child(format!("{length}/{TOPIC_MAX}"));
+        let count = div().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(format!("{length}/{TOPIC_MAX}"));
         let focus = gpui_kit::Focusable::focus_handle(self.dialog_input.read(cx), cx);
         let topic = ui::field("Stage Topic", cx).child(ui::text_field("stage-topic-field", Input::new(&self.dialog_input).appearance(false), &focus).trailing(count));
         let head = div()
             .flex()
             .items_start()
-            .gap(px(8.))
+            .gap_2()
             .child(
                 div()
                     .flex_1()
                     .flex()
                     .flex_col()
-                    .gap(px(4.))
-                    .child(div().text_size(px(20.)).line_height(px(24.)).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(strong).child(title))
-                    .child(div().text_size(px(14.)).line_height(px(20.)).text_color(muted).child(subtitle)),
+                    .gap_1()
+                    .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(strong).child(title))
+                    .child(div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(muted).child(subtitle)),
             )
             .child(ui::icon_button("stage-topic-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_stage_topic(cx))));
         let notify = (!form.editing).then(|| {
@@ -153,7 +152,7 @@ impl Waffle {
         });
         let actions = div()
             .flex()
-            .gap(px(8.))
+            .gap_2()
             .child(ui::button("stage-topic-cancel", Tone::Secondary, cx).flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_stage_topic(cx))))
             .child(ui::button("stage-topic-submit", Tone::Primary, cx).flex_1().child(submit).disabled(empty).on_click(cx.listener(|this, _, window, cx| this.submit_stage_topic(window, cx))));
         let body = ui::dialog_body()

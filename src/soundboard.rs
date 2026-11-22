@@ -446,20 +446,20 @@ impl Waffle {
         let label = latest.map(|name| {
             div()
                 .absolute()
-                .top(px(8.))
-                .left(px(8.))
+                .top_2()
+                .left_2()
                 .max_w(gpui_kit::relative(0.6))
-                .h(px(24.))
-                .px(px(8.))
+                .h_6()
+                .px_2()
                 .squircle(8.)
                 .bg(gpui_kit::black().opacity(0.6))
                 .flex()
                 .items_center()
-                .gap(px(6.))
-                .text_size(px(12.))
+                .gap_1p5()
+                .text_size(ui::TEXT_XS)
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(gpui_kit::white())
-                .child(Icon::new(Glyph::Soundboard).size(px(14.)))
+                .child(Icon::new(Glyph::Soundboard).size(ui::ICON_SM))
                 .child(div().min_w_0().truncate().child(name))
         });
         Some(div().absolute().inset_0().overflow_hidden().children(bursts).children(label).into_any_element())
@@ -499,7 +499,7 @@ impl Waffle {
         let muted = self.prefs.soundboard_volume <= 0.;
         let volume = div()
             .id("soundboard-volume")
-            .size(px(28.))
+            .size_7()
             .flex_none()
             .squircle(8.)
             .flex()
@@ -509,7 +509,7 @@ impl Waffle {
             .text_color(palette::muted(cx))
             .hover(|s| s.bg(palette::hover(cx)).text_color(palette::strong(cx)))
             .when(picker.volume_open, |b| b.bg(palette::selected(cx)).text_color(palette::strong(cx)))
-            .child(Icon::new(if muted { Glyph::VolumeOff } else { Glyph::VolumeHigh }).size(px(16.)))
+            .child(Icon::new(if muted { Glyph::VolumeOff } else { Glyph::VolumeHigh }).size(ui::ICON_MD))
             .tooltip(|window, cx| ui::tip("Control volume", window, cx))
             .on_click(cx.listener(|this, _, _, cx| {
                 if let Some(picker) = &mut this.soundboard.picker {
@@ -517,30 +517,30 @@ impl Waffle {
                 }
                 cx.notify();
             }));
-        let head = div().flex_none().pt(px(12.)).px(px(12.)).pb(px(8.)).child(ui::search_field("soundboard-search", &self.soundboard.search, cx).trailing(volume));
+        let head = div().flex_none().pt_3().px_3().pb_2().child(ui::search_field("soundboard-search", &self.soundboard.search, cx).trailing(volume));
         let in_view = picker.scroll.top_item();
         let rail = div()
             .id("soundboard-rail")
             .w(px(52.))
             .flex_none()
-            .px(px(8.))
-            .pt(px(4.))
-            .pb(px(8.))
+            .px_2()
+            .pt_1()
+            .pb_2()
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(6.))
+            .gap_1p5()
             .overflow_y_scroll()
             .border_r_1()
             .border_color(palette::line(cx))
             .children(sections.iter().enumerate().flat_map(|(i, section)| {
-                let line = section.first_locked.then(|| div().w(px(20.)).h(px(1.)).flex_none().bg(palette::line(cx)).into_any_element());
+                let line = section.first_locked.then(|| div().w_5().h(ui::HAIRLINE).flex_none().bg(palette::line(cx)).into_any_element());
                 let scroll = picker.scroll.clone();
                 let (selected, hover) = (palette::accent_soft(cx), palette::hover(cx));
                 let tip: SharedString = if section.locked { NITRO_LOCKED.into() } else { section.name.clone() };
                 let tab = div()
                     .id(("soundboard-tab", i))
-                    .size(px(36.))
+                    .size_9()
                     .flex_none()
                     .squircle(RADIUS_SM)
                     .flex()
@@ -559,7 +559,7 @@ impl Waffle {
                     }));
                 line.into_iter().chain([tab.into_any_element()])
             }));
-        let over_limit = picker.over_limit.then(|| ui::callout(ui::Notice::Warning, Glyph::Star, "Oh no!", format!("You cannot have more than {FAVORITES_LIMIT} favorites."), cx).mt(px(8.)));
+        let over_limit = picker.over_limit.then(|| ui::callout(ui::Notice::Warning, Glyph::Star, "Oh no!", format!("You cannot have more than {FAVORITES_LIMIT} favorites."), cx).mt_2());
         let list = div()
             .id("soundboard-list")
             .flex_1()
@@ -567,8 +567,8 @@ impl Waffle {
             .h_full()
             .overflow_y_scroll()
             .track_scroll(&picker.scroll)
-            .px(px(12.))
-            .pb(px(12.))
+            .px_3()
+            .pb_3()
             .children(sections.into_iter().map(|section| self.sound_section(section, cx)));
         let volume_card = picker.volume_open.then(|| self.volume_card(cx).into_any_element());
         let mut content = vec![
@@ -594,16 +594,16 @@ impl Waffle {
             .occlude()
             .absolute()
             .top(px(56.))
-            .right(px(12.))
+            .right_3()
             .w(px(240.))
-            .p(px(12.))
+            .p_3()
             .squircle(RADIUS_SM + 4.)
             .bg(palette::surface(palette::Level::Overlay, cx))
             .shadow(ui::shadow_pop(cx))
             .flex()
             .flex_col()
-            .gap(px(8.))
-            .child(div().flex().justify_between().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child("Soundboard Volume").child(div().text_color(palette::strong(cx)).child(value)))
+            .gap_2()
+            .child(div().flex().justify_between().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child("Soundboard Volume").child(div().text_color(palette::strong(cx)).child(value)))
             .child(slider)
     }
 
@@ -611,11 +611,11 @@ impl Waffle {
         let header = div()
             .flex()
             .items_center()
-            .gap(px(6.))
-            .pt(px(10.))
-            .pb(px(6.))
-            .px(px(2.))
-            .text_size(px(12.))
+            .gap_1p5()
+            .pt_2p5()
+            .pb_1p5()
+            .px_0p5()
+            .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(palette::muted(cx))
             .child(section.lead.small(cx))
@@ -623,13 +623,13 @@ impl Waffle {
         let rows = section.sounds.chunks(3).map(|row| {
             let tiles = row.iter().map(|s| self.sound_tile(&section.key, s, section.locked, cx).into_any_element());
             let fillers = (row.len()..3).map(|_| div().flex_1().into_any_element());
-            div().flex().gap(px(6.)).children(tiles.chain(fillers).collect::<Vec<_>>())
+            div().flex().gap_1p5().children(tiles.chain(fillers).collect::<Vec<_>>())
         }).collect::<Vec<_>>();
         div()
-            .when(section.first_locked, |d| d.mt(px(12.)).border_t_1().border_color(palette::line(cx)))
+            .when(section.first_locked, |d| d.mt_3().border_t_1().border_color(palette::line(cx)))
             .when(section.locked, |d| d.opacity(0.5))
             .child(header)
-            .child(div().flex().flex_col().gap(px(6.)).children(rows))
+            .child(div().flex().flex_col().gap_1p5().children(rows))
             .into_any_element()
     }
 
@@ -647,16 +647,16 @@ impl Waffle {
             .relative()
             .flex_1()
             .min_w_0()
-            .h(px(36.))
-            .px(px(8.))
+            .h_9()
+            .px_2()
             .squircle(RADIUS_SM)
             .border_1()
             .border_color(edge)
             .bg(rest)
             .flex()
             .items_center()
-            .gap(px(6.))
-            .text_size(px(12.))
+            .gap_1p5()
+            .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::MEDIUM)
             .text_color(strong)
             .child(div().flex_none().child(emoji_face(sound.emoji.as_ref(), 16.)))
@@ -684,11 +684,11 @@ impl Waffle {
             .top_0()
             .bottom_0()
             .right_0()
-            .pl(px(16.))
-            .pr(px(4.))
+            .pl_4()
+            .pr_1()
             .flex()
             .items_center()
-            .gap(px(2.))
+            .gap_0p5()
             .bg(linear_gradient(90., linear_color_stop(hover.opacity(0.), 0.), linear_color_stop(hover, 0.25)))
             .opacity(0.)
             .group_hover(group.clone(), |s| s.opacity(1.))
@@ -762,14 +762,14 @@ enum Lead {
 impl Lead {
     fn render(&self, cx: &App) -> AnyElement {
         match self {
-            Lead::Glyph(glyph) => Icon::new(*glyph).size(px(18.)).into_any_element(),
+            Lead::Glyph(glyph) => Icon::new(*glyph).size(ui::ICON_LG).into_any_element(),
             Lead::Server { icon, name } => ui::server_tile(icon.as_deref(), name, 36., cx),
         }
     }
 
     fn small(&self, cx: &App) -> AnyElement {
         match self {
-            Lead::Glyph(glyph) => Icon::new(*glyph).size(px(14.)).into_any_element(),
+            Lead::Glyph(glyph) => Icon::new(*glyph).size(ui::ICON_SM).into_any_element(),
             Lead::Server { icon, name } => ui::server_tile(icon.as_deref(), name, 16., cx),
         }
     }
@@ -797,7 +797,7 @@ fn tool(id: String, glyph: Glyph, tip: &'static str, ink: Option<Hsla>, cx: &App
         .cursor_pointer()
         .text_color(ink.unwrap_or_else(|| palette::muted(cx)))
         .hover(move |s| s.bg(palette::hover(cx)).text_color(ink.unwrap_or(strong)))
-        .child(Icon::new(glyph).size(px(14.)))
+        .child(Icon::new(glyph).size(ui::ICON_SM))
         .tooltip(move |window, cx| ui::tip(tip, window, cx))
 }
 

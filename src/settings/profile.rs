@@ -2,7 +2,7 @@
 // Discord gates behind Nitro or sells (banners for non-subscribers, animated avatars, decorations, effects,
 // nameplates) goes to Discord instead.
 use base64::Engine;
-use gpui_kit::{AnyElement, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, SharedString, Styled, Window, component::input::{InputEvent, InputState}, div, prelude::FluentBuilder, px};
+use gpui_kit::{AnyElement, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, SharedString, Styled, Window, component::input::{InputEvent, InputState}, div, prelude::FluentBuilder};
 use serde_json::{Value, json};
 
 use crate::{Waffle, palette, ui};
@@ -163,12 +163,12 @@ impl Waffle {
             .min_w_0()
             .flex()
             .flex_col()
-            .gap(px(6.))
+            .gap_1p5()
             .child(super::field_label(label, cx))
             .child(ui::text_field(id, gpui_kit::component::input::Input::new(&edit.input).appearance(false), &edit.input.read(cx).focus_handle(cx)))
             .when_some(edit.password.as_ref(), |d, password| {
                 d.child(ui::text_field("edit-password", gpui_kit::component::input::Input::new(password).appearance(false), &password.read(cx).focus_handle(cx)))
-                    .child(div().text_size(px(12.)).text_color(palette::muted(cx)).child("Discord asks for your password to change your username."))
+                    .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("Discord asks for your password to change your username."))
             })
             .into_any_element()
     }

@@ -8,8 +8,8 @@ use std::{
 
 use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, Context, Div, ElementId, FontFeatures, FontWeight, Hsla, ImageSource, MouseButton, MouseDownEvent, Pixels, Point, SharedString, Stateful, Window,
-    component::{ActiveTheme, Icon, tooltip::Tooltip},
-    div, prelude::*, px, relative, rgb,
+    component::{ActiveTheme, Icon},
+    div, prelude::*, px, relative,
 };
 
 use crate::{
@@ -398,7 +398,7 @@ impl Waffle {
                 .id("voice-place")
                 .h(px(18.))
                 .truncate()
-                .text_size(px(12.))
+                .text_size(ui::TEXT_XS)
                 .text_color(palette::faint(cx))
                 .hover(|s| s.underline())
                 .child(place)
@@ -430,23 +430,23 @@ impl Waffle {
             .id("voice-status")
             .flex_1()
             .min_w_0()
-            .mx(px(-6.))
-            .my(px(-4.))
-            .px(px(6.))
-            .py(px(4.))
+            .mx_neg_1p5()
+            .my_neg_1()
+            .px_1p5()
+            .py_1()
             .squircle(RADIUS_SM)
             .cursor_pointer()
             .hover(move |s| s.bg(hover))
             .when(self.connection_info, |d| d.bg(hover))
-            .child(div().h(px(20.)).flex().items_center().gap(px(6.)).text_size(px(14.)).font_weight(FontWeight::MEDIUM).text_color(tone).child(bars).child(div().truncate().child(link.label())))
+            .child(div().h_5().flex().items_center().gap_1p5().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(tone).child(bars).child(div().truncate().child(link.label())))
             .child(second)
-            .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+            .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.connection_info = !this.connection_info;
                 cx.notify();
             }));
         let leave_tip = if link == Link::Connecting { "Cancel joining" } else { "Disconnect" };
-        let top = div().flex().items_center().gap(px(8.)).child(status).child(ui::icon_button("hang-up", Glyph::CallEnd, leave_tip, cx).on_click(cx.listener(|this, _, _, cx| this.leave_voice(cx))));
+        let top = div().flex().items_center().gap_2().child(status).child(ui::icon_button("hang-up", Glyph::CallEnd, leave_tip, cx).on_click(cx.listener(|this, _, _, cx| this.leave_voice(cx))));
         let wait = if link == Link::Lost { "Available once you're reconnected" } else { "Available once you're connected" };
         let ready = |label: &'static str| if connected { label } else { wait };
         let sharing = call.sharing.is_some();
@@ -478,12 +478,12 @@ impl Waffle {
             .p(px(PANEL_PAD))
             .flex()
             .flex_col()
-            .gap(px(8.))
+            .gap_2()
             .rounded_t(px(RADIUS_MD)).corner_shape(ui::SQUIRCLE)
             .relative()
             .child(ui::inset_rule(PANEL_PAD, cx))
             .child(top)
-            .child(div().flex().gap(px(6.)).child(camera).child(share).children(soundboard).child(activities));
+            .child(div().flex().gap_1p5().child(camera).child(share).children(soundboard).child(activities));
         Some(voice.into_any_element())
     }
 
@@ -497,7 +497,7 @@ impl Waffle {
                 .p(px(PANEL_PAD))
                 .flex()
                 .items_center()
-                .gap(px(8.))
+                .gap_2()
                 .rounded_t(px(RADIUS_MD)).corner_shape(ui::SQUIRCLE)
                 .relative()
                 .child(ui::inset_rule(PANEL_PAD, cx))
@@ -505,7 +505,7 @@ impl Waffle {
                     div()
                         .flex_1()
                         .min_w_0()
-                        .child(div().h(px(20.)).flex().items_center().text_size(px(14.)).font_weight(FontWeight::MEDIUM).text_color(tone).child("Voice disconnected"))
+                        .child(div().h_5().flex().items_center().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(tone).child("Voice disconnected"))
                         .child(why_line(error, tone)),
                 )
                 .child(ui::icon_button("dismiss-voice", Glyph::X, "Dismiss", cx).on_click(cx.listener(|this, _, _, cx| {
@@ -676,14 +676,14 @@ impl Waffle {
                     .h(px(HEADER_HEIGHT))
                     .flex_none()
                     .pl_4()
-                    .pr(px(8.))
+                    .pr_2()
                     .flex()
                     .items_center()
                     .gap_2()
                     .window_control_area(gpui_kit::WindowControlArea::Drag)
                     .border_b_1()
                     .border_color(theme.sidebar_border)
-                    .child(Icon::new(Glyph::VolumeHigh).size(px(20.)).text_color(theme.muted_foreground))
+                    .child(Icon::new(Glyph::VolumeHigh).size(ui::ICON_XL).text_color(theme.muted_foreground))
                     .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(channel.name.clone()))
                     .child(ui::icon_button("call-chat-close", Glyph::X, "Close Chat", cx).occlude().on_click(cx.listener(|this, _, _, cx| {
                         this.call_chat = false;
@@ -822,7 +822,7 @@ impl Waffle {
                     .left_0()
                     .right_0()
                     .bottom(px(-drift))
-                    .pt(px(40.))
+                    .pt_10()
                     .px(px(STAGE_PAD))
                     .pb(px(STAGE_PAD))
                     .opacity(shown)
@@ -952,7 +952,7 @@ impl Waffle {
             .h(px(FOCUS_HEAD))
             .flex_none()
             .pl(px(STAGE_PAD))
-            .pr(px(8.))
+            .pr_2()
             .flex()
             .items_center()
             // Drag area: every control inside it occludes it, or Windows' caption takes its clicks.
@@ -983,37 +983,37 @@ impl Waffle {
         let glyph = Glyph::VolumeHigh;
         let timer = div()
             .h(px(22.))
-            .px(px(8.))
+            .px_2()
             .flex_none()
             .squircle(RADIUS_XS)
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap_1p5()
             .bg(stage::wash(0.08))
             .text_color(stage::muted())
-            .text_size(px(12.))
+            .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::MEDIUM)
             .font_features(tabular())
-            .child(div().size(px(6.)).rounded_full().bg(stage::online()))
+            .child(div().size_1p5().rounded_full().bg(stage::online()))
             .child(clock(call.joined.elapsed().as_secs()));
         let faces: Vec<String> = people.iter().take(3).map(|p| p.user.as_ref().map(|u| u.avatar.clone()).unwrap_or_else(|| self.user_avatar(&p.user_id))).collect();
         let count = people.len();
         let who = div()
             .id("call-people")
-            .h(px(32.))
-            .pl(px(4.))
-            .pr(px(8.))
+            .h_8()
+            .pl_1()
+            .pr_2()
             .flex_none()
             .squircle(RADIUS_SM)
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap_1p5()
             .text_color(stage::muted())
-            .text_size(px(12.))
+            .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::MEDIUM)
             .child(ui::avatar_stack(faces, 22., stage::bg()))
             .child(count.to_string())
-            .tooltip(move |window, cx| Tooltip::new(format!("{count} in {}", if count == 1 { "the call alone" } else { "the call" })).build(window, cx));
+            .tooltip(move |window, cx| ui::tip(format!("{count} in {}", if count == 1 { "the call alone" } else { "the call" }), window, cx));
         let health = watching.filter(|w| !several && !w.arrivals.is_empty()).map(|w| {
             let (health, fps) = stream_health(&w.arrivals, Instant::now());
             let lossy = call.issues.contains(&(w.streamer_id.clone(), voice::issues::STREAM_VIEW_HIGH_PACKET_LOSS));
@@ -1032,10 +1032,10 @@ impl Waffle {
                 .flex_none()
                 .flex()
                 .items_center()
-                .gap(px(6.))
-                .text_size(px(12.))
+                .gap_1p5()
+                .text_size(ui::TEXT_XS)
                 .text_color(stage::muted())
-                .child(div().size(px(6.)).rounded_full().bg(color))
+                .child(div().size_1p5().rounded_full().bg(color))
                 .child(format!("{quality}{label}"))
                 .tooltip(move |window, cx| {
                     // Discord's viewer warnings for the same conditions, with their codes.
@@ -1046,7 +1046,7 @@ impl Waffle {
                     if lossy {
                         tip.push_str(&format!(" {} Error code: {}", issue_line(voice::issues::STREAM_VIEW_HIGH_PACKET_LOSS), voice::issues::STREAM_VIEW_HIGH_PACKET_LOSS));
                     }
-                    Tooltip::new(tip).build(window, cx)
+                    ui::tip(tip, window, cx)
                 })
         });
         let stop = watching.map(|_| keeps_chrome(stage_button("stop-watching", if several { "Stop all" } else { "Stop watching" }), cx).occlude().on_click(cx.listener(|this, _, _, cx| this.stop_watching(cx))));
@@ -1056,17 +1056,17 @@ impl Waffle {
             .h(px(HEAD_HEIGHT))
             .flex()
             .items_center()
-            .gap(px(8.))
+            .gap_2()
             .text_color(stage::strong())
-            .child(Icon::new(glyph).size(px(20.)).text_color(stage::muted()))
-            .child(div().min_w_0().flex().flex_col().child(div().min_w_0().truncate().text_size(px(16.)).line_height(px(18.)).font_weight(FontWeight::MEDIUM).child(title)).children(self.call_status_line(&call.channel, cx)))
+            .child(Icon::new(glyph).size(ui::ICON_XL).text_color(stage::muted()))
+            .child(div().min_w_0().flex().flex_col().child(div().min_w_0().truncate().text_size(ui::TEXT_MD).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).child(title)).children(self.call_status_line(&call.channel, cx)))
             .child(timer)
             .children(health)
             .child(div().flex_1())
             .children(back)
             .children(stop)
             .child(who)
-            .child(div().w(px(1.)).h(px(20.)).mx(px(2.)).flex_none().bg(stage::wash(0.14)))
+            .child(div().w(ui::HAIRLINE).h_5().mx_0p5().flex_none().bg(stage::wash(0.14)))
             .child(self.chat_toggle(cx))
             .into_any_element()
     }
@@ -1090,7 +1090,7 @@ impl Waffle {
             (0, unread) => ui::count_badge(unread),
             (mentions, _) => ui::count_badge(mentions),
         };
-        Some(div().absolute().right(px(-4.)).bottom(px(-4.)).rounded_full().border_2().border_color(stage::bg()).child(badge))
+        Some(div().absolute().right_neg_1().bottom_neg_1().rounded_full().border_2().border_color(stage::bg()).child(badge))
     }
 
     // The chevron above the filmstrip that folds it away and back, as Discord's.
@@ -1099,18 +1099,18 @@ impl Waffle {
         div()
             .id("strip-toggle")
             .h(px(STRIP_TOGGLE))
-            .px(px(10.))
+            .px_2p5()
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap_1p5()
             .rounded_full()
             .bg(gpui_kit::black().opacity(0.6))
             .text_color(gpui_kit::white())
             .cursor_pointer()
             .hover(|s| s.bg(gpui_kit::black().opacity(0.75)))
-            .child(Icon::new(glyph).size(px(14.)))
-            .child(Icon::new(Glyph::Users).size(px(16.)))
-            .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+            .child(Icon::new(glyph).size(ui::ICON_SM))
+            .child(Icon::new(Glyph::Users).size(ui::ICON_MD))
+            .tooltip(move |window, cx| ui::tip(tip, window, cx))
             .on_click(cx.listener(|this, _, _, cx| {
                 cx.stop_propagation();
                 this.call_strip_hidden = !this.call_strip_hidden;
@@ -1208,15 +1208,15 @@ impl Waffle {
             .flex_col()
             .items_center()
             .justify_center()
-            .gap(px(4.))
-            .p(px(12.))
+            .gap_1()
+            .p_3()
             .text_center();
         if small {
-            return card.child(Icon::new(Glyph::ScreenOff).size(px(24.)).text_color(stage::muted())).child(tile_ring(false, false, false, radius)).into_any_element();
+            return card.child(Icon::new(Glyph::ScreenOff).size_6().text_color(stage::muted())).child(tile_ring(false, false, false, radius)).into_any_element();
         }
-        card.child(div().text_size(px(16.)).font_weight(FontWeight::MEDIUM).text_color(stage::strong()).child(heading))
-            .child(div().text_size(px(12.)).text_color(stage::muted()).child(line))
-            .child(div().mt(px(6.)).child(stage_button(SharedString::from(format!("{key}-close")), button).on_click(cx.listener(move |this, _, _, cx| {
+        card.child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(stage::strong()).child(heading))
+            .child(div().text_size(ui::TEXT_XS).text_color(stage::muted()).child(line))
+            .child(div().mt_1p5().child(stage_button(SharedString::from(format!("{key}-close")), button).on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 close(this, cx);
             }))))
@@ -1245,14 +1245,14 @@ impl Waffle {
             this.call_focus = None;
             this.toggle_card(&only, cx);
         }));
-        div().flex().items_center().gap(px(6.)).child(switch).when(alongside, |d| {
+        div().flex().items_center().gap_1p5().child(switch).when(alongside, |d| {
             d.child(
                 watch_button_look()
                     .id("watch-alongside")
                     .w(px(30.))
                     .justify_center()
                     .cursor_pointer()
-                    .child(Icon::new(Glyph::Plus).size(px(16.)))
+                    .child(Icon::new(Glyph::Plus).size(ui::ICON_MD))
                     .tooltip(|window, cx| ui::tip("Watch alongside", window, cx))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
@@ -1327,7 +1327,7 @@ impl Waffle {
         let face: AnyElement = match (is_stream, camera) {
             // A stream that isn't playing, small: Discord's screen glyph on black.
             (true, _) if small && live_frame.is_none() => {
-                div().size_full().squircle(radius).bg(gpui_kit::black()).flex().items_center().justify_center().child(Icon::new(Glyph::Screen).size(px(28.)).text_color(gpui_kit::white())).into_any_element()
+                div().size_full().squircle(radius).bg(gpui_kit::black()).flex().items_center().justify_center().child(Icon::new(Glyph::Screen).size_7().text_color(gpui_kit::white())).into_any_element()
             }
             // Playing, the picture letterboxes on black; the gradient only holds the place before it.
             (true, _) => match fill || live_frame.is_some() || loading {
@@ -1342,11 +1342,11 @@ impl Waffle {
                     .flex_col()
                     .items_center()
                     .justify_center()
-                    .gap(px(8.))
+                    .gap_2()
                     .child(mascot::loader(SharedString::from(format!("stream-loading-{}", state.user_id)), if fill { 64. } else { 40. }, palette::logo(), cx))
                     // Discord's reconnecting overlay, with its error code.
                     .when(watch_state == Some(crate::WatchState::Reconnecting) && !small, |f| {
-                        f.child(div().text_size(px(12.)).text_color(stage::muted()).child(format!("Reconnecting… Error code: {}", crate::STREAM_RECONNECTING)))
+                        f.child(div().text_size(ui::TEXT_XS).text_color(stage::muted()).child(format!("Reconnecting… Error code: {}", crate::STREAM_RECONNECTING)))
                     }),
                 None => f.children(self.stream_preview(&state.user_id).map(|url| ui::media(url, ui::all(radius)).absolute().inset_0().size_full().object_fit(fit))),
             })
@@ -1372,11 +1372,11 @@ impl Waffle {
         let group = SharedString::from(format!("tile-{}-{is_stream}", state.user_id));
         let name = tile_name(
             div()
-                .when(is_stream, |d| d.child(Icon::new(Glyph::Screen).size(px(14.)).text_color(gpui_kit::white())))
+                .when(is_stream, |d| d.child(Icon::new(Glyph::Screen).size(ui::ICON_SM).text_color(gpui_kit::white())))
                 .when(!is_stream && self.stage_moderator(&state.user_id), |d| d.child(crate::stage_view::moderator_mark(&state.user_id)))
                 .when(!is_stream && state.server_muted, |d| d.child(vmark(Glyph::MicOff, None, MarkKind::Server)))
-                .when(!is_stream && !state.server_muted && muted && !deafened, |d| d.child(Icon::new(Glyph::MicOff).size(px(14.)).text_color(stage::off_ink())))
-                .when(!is_stream && deafened, |d| d.child(Icon::new(Glyph::HeadphonesOff).size(px(14.)).text_color(stage::off_ink())))
+                .when(!is_stream && !state.server_muted && muted && !deafened, |d| d.child(Icon::new(Glyph::MicOff).size(ui::ICON_SM).text_color(stage::off_ink())))
+                .when(!is_stream && deafened, |d| d.child(Icon::new(Glyph::HeadphonesOff).size(ui::ICON_SM).text_color(stage::off_ink())))
                 .child(div().min_w_0().truncate().child(label))
                 .when(local_muted, |d| d.child(vmark(Glyph::VolumeOff, Some("Muted for you"), MarkKind::Local))),
         )
@@ -1386,25 +1386,25 @@ impl Waffle {
         let off_chip = (small && !is_stream && (muted || deafened || state.server_muted)).then(|| {
             div()
                 .absolute()
-                .left(px(6.))
-                .bottom(px(6.))
-                .size(px(24.))
+                .left_1p5()
+                .bottom_1p5()
+                .size_6()
                 .squircle(RADIUS_XS)
                 .flex()
                 .items_center()
                 .justify_center()
                 .bg(gpui_kit::black().opacity(0.6))
-                .child(Icon::new(if deafened { Glyph::HeadphonesOff } else { Glyph::MicOff }).size(px(14.)).text_color(stage::off_ink()))
+                .child(Icon::new(if deafened { Glyph::HeadphonesOff } else { Glyph::MicOff }).size(ui::ICON_SM).text_color(stage::off_ink()))
         });
         let issues = self.tile_issues(&state.user_id, is_stream, me);
         let chip_id = SharedString::from(format!("issues-{}-{is_stream}", state.user_id));
         // Our stream's sits beside LIVE: the viewers chip holds the corner.
         let own_issues = (is_stream && me && !issues.is_empty()).then(|| issue_chip(chip_id.clone(), issues.clone()));
-        let issue_chip = (!(is_stream && me) && !issues.is_empty() && !small).then(|| issue_chip(chip_id, issues).absolute().top(px(8.)).right(px(8.)));
+        let issue_chip = (!(is_stream && me) && !issues.is_empty() && !small).then(|| issue_chip(chip_id, issues).absolute().top_2().right_2());
         // Our own stream: its quality beside LIVE, as Discord's "720P 30FPS LIVE".
         let own_live = (is_stream && me && !small).then(|| {
             let quality = format!("{} FPS", quality_label(self.prefs.stream_resolution, self.prefs.stream_fps));
-            div().absolute().left(px(8.)).top(px(8.)).flex().items_center().gap(px(4.)).child(ui::badge(gpui_kit::black().opacity(0.6), gpui_kit::white()).font_features(tabular()).child(quality)).child(ui::live_badge()).children(own_issues)
+            div().absolute().left_2().top_2().flex().items_center().gap_1().child(ui::badge(gpui_kit::black().opacity(0.6), gpui_kit::white()).font_features(tabular()).child(quality)).child(ui::live_badge()).children(own_issues)
         });
         let streamer = state.user_id.clone();
         let menu_user = state.user_id.clone();
@@ -1437,8 +1437,8 @@ impl Waffle {
                 d.child(
                     div()
                         .absolute()
-                        .right(px(8.))
-                        .bottom(px(6.))
+                        .right_2()
+                        .bottom_1p5()
                         .opacity(0.)
                         .group_hover(group.clone(), |s| s.opacity(1.))
                         .child(ui::round_button("card-hide-preview", Glyph::EyeSlash, "Hide preview", 28.).on_click(cx.listener(|this, _, _, cx| {
@@ -1453,11 +1453,11 @@ impl Waffle {
                 d.child(
                     div()
                         .absolute()
-                        .right(px(8.))
-                        .bottom(px(6.))
+                        .right_2()
+                        .bottom_1p5()
                         .flex()
                         .items_center()
-                        .gap(px(6.))
+                        .gap_1p5()
                         .opacity(0.)
                         .group_hover(group.clone(), |s| s.opacity(1.))
                         .child(ui::round_button(SharedString::from(format!("card-volume-{streamer}")), Glyph::VolumeHigh, "Stream volume", 28.).on_mouse_down(
@@ -1564,11 +1564,11 @@ impl Waffle {
             .flex()
             .justify_center()
             .items_center()
-            .gap(px(8.))
+            .gap_2()
             .child(control_group().child(mic).child(camera))
             .child(control_group().child(share).children(soundboard).child(activities).child(more))
             .child(leave)
-            .child(div().absolute().right_0().top(px((CONTROLS_HEIGHT - 32.) / 2.)).flex().gap(px(4.)).children(volume).child(fullscreen))
+            .child(div().absolute().right_0().top(px((CONTROLS_HEIGHT - 32.) / 2.)).flex().gap_1().children(volume).child(fullscreen))
     }
 
     // The one red button. Watching the stream shown big, it stops watching it rather than leaving, as
@@ -1582,7 +1582,7 @@ impl Waffle {
             Some(_) => (Glyph::ScreenOff, "Stop watching"),
             None => (Glyph::CallEnd, "Leave call"),
         };
-        let icon = div().child(Icon::new(glyph).size(px(20.))).with_animation(
+        let icon = div().child(Icon::new(glyph).size(ui::ICON_XL)).with_animation(
             ElementId::Name(SharedString::from(format!("call-leave-{tip}"))),
             Animation::new(ui::DUR_POP).with_easing(|t| crate::motion::ease_out().sample(t)),
             |icon, t| icon.opacity(t).scale(0.25 + 0.75 * t),
@@ -1600,7 +1600,7 @@ impl Waffle {
             .cursor_pointer()
             .hover(|s| s.bg(palette::danger_hover()))
             .child(icon)
-            .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+            .tooltip(move |window, cx| ui::tip(tip, window, cx))
             .on_click(cx.listener(move |this, _, _, cx| match watching.clone() {
                 Some(id) => {
                     this.call_focus = None;
@@ -1713,19 +1713,19 @@ impl Waffle {
         let peak = stats.last_pings.iter().copied().max().unwrap_or(0).max(160) as f32;
         let graph = div()
             .h(px(56.))
-            .p(px(6.))
+            .p_1p5()
             .squircle(RADIUS_SM)
             .bg(palette::surface(palette::Level::Page, cx))
             .flex()
             .items_end()
-            .gap(px(2.))
-            .children(stats.last_pings.iter().map(|&p| div().flex_1().min_w(px(2.)).h(relative((p as f32 / peak).clamp(0.06, 1.))).rounded_t(px(2.)).rounded_b(px(1.)).bg(ping_color(p, cx))));
-        let swatch = |color: Hsla, text: &'static str| div().flex().items_center().gap(px(4.)).child(div().size(px(8.)).rounded(px(2.)).bg(color)).child(text);
+            .gap_0p5()
+            .children(stats.last_pings.iter().map(|&p| div().flex_1().min_w_0p5().h(relative((p as f32 / peak).clamp(0.06, 1.))).rounded_t_xs().rounded_b(px(1.)).bg(ping_color(p, cx))));
+        let swatch = |color: Hsla, text: &'static str| div().flex().items_center().gap_1().child(div().size_2().rounded_xs().bg(color)).child(text);
         let legend = div()
             .flex()
             .flex_wrap()
-            .gap(px(12.))
-            .text_size(px(12.))
+            .gap_3()
+            .text_size(ui::TEXT_XS)
             .text_color(muted)
             .child(swatch(ping_color(0, cx), "Under 80 ms"))
             .child(swatch(ping_color(PING_FAIR, cx), "80–120 ms"))
@@ -1737,7 +1737,7 @@ impl Waffle {
                 .flex()
                 .items_center()
                 .justify_between()
-                .gap(px(12.))
+                .gap_3()
                 .child(div().flex_none().text_color(muted).child(label))
                 .child(div().min_w_0().truncate().text_color(strong).font_weight(FontWeight::MEDIUM).font_features(tabular()).child(value))
         };
@@ -1749,52 +1749,52 @@ impl Waffle {
             .id("connection-card")
             .occlude()
             .absolute()
-            .left(px(8.))
+            .left_2()
             .bottom(px(self.panel_stack_height() + 16.))
             .w(px(300.))
-            .p(px(16.))
+            .p_4()
             .squircle(RADIUS_LG)
             .bg(palette::surface(palette::Level::Overlay, cx))
             .shadow(ui::shadow_pop(cx))
             .flex()
             .flex_col()
-            .gap(px(12.))
-            .text_size(px(14.))
+            .gap_3()
+            .text_size(ui::TEXT_SM)
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(div().flex().items_baseline().justify_between().gap(px(8.)).child(div().text_color(strong).font_weight(FontWeight::MEDIUM).child("Connection")).child(div().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(verdict_ink).child(verdict)))
+            .child(div().flex().items_baseline().justify_between().gap_2().child(div().text_color(strong).font_weight(FontWeight::MEDIUM).child("Connection")).child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(verdict_ink).child(verdict)))
             .child(
                 div()
                     .flex()
                     .flex_col()
-                    .gap(px(4.))
+                    .gap_1()
                     .child(graph)
                     // GAP: the engine keeps its last 20 heartbeat pings, about 13.75s apart, so the graph spans roughly five minutes.
-                    .child(div().flex().justify_between().text_size(px(12.)).text_color(faint).child("5 min ago").child("Now"))
+                    .child(div().flex().justify_between().text_size(ui::TEXT_XS).text_color(faint).child("5 min ago").child("Now"))
                     .child(legend),
             )
             .child(
                 div()
                     .flex()
                     .flex_col()
-                    .gap(px(2.))
+                    .gap_0p5()
                     .child(row("Ping", dash(format!("{} ms", stats.median_ping_ms))))
                     .child(row("Packet loss", dash(stats.outbound_loss_pct.map_or("—".into(), |loss| format!("{loss:.1}%")))))
                     .child(row("Server", dash(stats.endpoint.clone()))),
             )
             .child(
                 div()
-                    .pt(px(12.))
+                    .pt_3()
                     .border_t_1()
                     .border_color(palette::line(cx))
                     .flex()
                     .items_start()
-                    .gap(px(8.))
-                    .text_size(px(12.))
+                    .gap_2()
+                    .text_size(ui::TEXT_XS)
                     .text_color(muted)
-                    .child(Icon::new(Glyph::HashtagLock).size(px(16.)).flex_none().text_color(lock_ink))
+                    .child(Icon::new(Glyph::HashtagLock).size(ui::ICON_MD).flex_none().text_color(lock_ink))
                     .child(div().flex_1().min_w_0().child(secured)),
             )
-            .child(div().text_size(px(12.)).text_color(faint).child("Updated every 2 seconds"))
+            .child(div().text_size(ui::TEXT_XS).text_color(faint).child("Updated every 2 seconds"))
 ;
         // It opens above the user area, so it rises from its bottom-left corner.
         Some(call_backdrop("connection-backdrop", cx).child(ui::rise(card.transform_origin(ui::corner(false, true)), "connection-card", Duration::ZERO)).into_any_element())
@@ -1845,7 +1845,7 @@ impl Waffle {
                         _ => p.input_volume = f.clamp(0., 1.) * 2.,
                     })
                 }, cx)
-                .children(level.map(|db| ui::meter_with((db + 100.) / 100., METER_BARS, ink.lit, ink.line_strong).h(px(14.)).gap(px(2.))))
+                .children(level.map(|db| ui::meter_with((db + 100.) / 100., METER_BARS, ink.lit, ink.line_strong).h_3p5().gap_0p5()))
                 .into_any_element(),
             );
         }
@@ -1853,7 +1853,7 @@ impl Waffle {
             let noise = self.prefs.noise_suppression;
             body.push(
                 choice_row("device-noise", &ink)
-                    .child(div().flex_1().min_w_0().child(div().font_weight(FontWeight::NORMAL).text_color(ink.strong).child("Noise suppression")).child(div().text_size(px(12.)).text_color(ink.muted).child("Filters fans and keys on this device")))
+                    .child(div().flex_1().min_w_0().child(div().font_weight(FontWeight::NORMAL).text_color(ink.strong).child("Noise suppression")).child(div().text_size(ui::TEXT_XS).text_color(ink.muted).child("Filters fans and keys on this device")))
                     .child(ui::switch_live("device-noise-switch", noise, window, cx))
                     .on_click(cx.listener(|this, _, _, cx| this.toggle_noise_suppression(cx)))
                     .into_any_element(),
@@ -1863,9 +1863,9 @@ impl Waffle {
         let settings_label = if kind == DeviceKind::Camera { "Video settings" } else { "Voice settings" };
         body.push(
             choice_row("device-settings", &ink)
-                .child(Icon::new(Glyph::Settings).size(px(18.)).text_color(ink.muted))
+                .child(Icon::new(Glyph::Settings).size(ui::ICON_LG).text_color(ink.muted))
                 .child(div().flex_1().font_weight(FontWeight::NORMAL).text_color(ink.text).child(settings_label))
-                .child(Icon::new(Glyph::ChevronRight).size(px(14.)).text_color(ink.faint))
+                .child(Icon::new(Glyph::ChevronRight).size(ui::ICON_SM).text_color(ink.faint))
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.device_menu = None;
                     this.open_settings(Page::VoiceVideo, window, cx);
@@ -1880,14 +1880,14 @@ impl Waffle {
             .left(px((f32::from(menu.at.x) - 150.).clamp(8., f32::from(viewport.width) - 308.)))
             .bottom(px((f32::from(viewport.height) - f32::from(menu.at.y) + 12.).max(8.)))
             .w(px(300.))
-            .p(px(6.))
+            .p_1p5()
             .squircle(RADIUS_LG)
             .bg(ink.overlay)
             .shadow(ui::shadow_pop_on(ink.line_strong, cx))
             .flex()
             .flex_col()
-            .gap(px(1.))
-            .text_size(px(14.))
+            .gap_px()
+            .text_size(ui::TEXT_SM)
             .text_color(ink.text)
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .children(body);
@@ -1921,12 +1921,12 @@ impl Waffle {
                 }
             }));
         div()
-            .px(px(10.))
-            .pt(px(6.))
-            .pb(px(10.))
+            .px_2p5()
+            .pt_1p5()
+            .pb_2p5()
             .flex()
             .flex_col()
-            .gap(px(8.))
+            .gap_2()
             .child(div().flex().justify_between().font_weight(FontWeight::NORMAL).text_color(ink.text).child(label).child(div().text_color(ink.muted).font_features(tabular()).child(format!("{:.0}%", fraction * 100.))))
             .child(slider)
     }
@@ -2084,7 +2084,7 @@ impl Inks {
 
 // .voicebar .why: the second line, in the status's tone, saying what needs you.
 fn why_line(text: impl Into<SharedString>, tone: Hsla) -> Div {
-    div().h(px(18.)).truncate().text_size(px(12.)).text_color(tone).child(text.into())
+    div().h(px(18.)).truncate().text_size(ui::TEXT_XS).text_color(tone).child(text.into())
 }
 
 // .voicebar .acts .btn: equal-width 32px buttons; disabled until connected, saying why.
@@ -2094,24 +2094,24 @@ fn panel_action(id: &'static str, glyph: Glyph, tip: &'static str, enabled: bool
         .id(id)
         .flex_1()
         .min_w_0()
-        .h(px(32.))
+        .h_8()
         .squircle(RADIUS_SM)
         .flex()
         .items_center()
         .justify_center()
         .bg(fill)
         .text_color(ink)
-        .child(Icon::new(glyph).size(px(18.)))
+        .child(Icon::new(glyph).size(ui::ICON_LG))
         .when(enabled, |b| b.cursor_pointer().hover(move |s| s.bg(press)))
         .when(!enabled, |b| b.opacity(0.45).cursor(gpui_kit::CursorStyle::OperationNotAllowed))
-        .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(tip, window, cx))
 }
 
 // .iconbtn on the stage: muted until hovered; `pressed` holds the selected fill.
 pub(crate) fn stage_icon_button(id: impl Into<ElementId>, glyph: Glyph, tip: &'static str, pressed: bool) -> Stateful<Div> {
     div()
         .id(id)
-        .size(px(32.))
+        .size_8()
         .flex_none()
         .squircle(RADIUS_SM)
         .flex()
@@ -2122,8 +2122,8 @@ pub(crate) fn stage_icon_button(id: impl Into<ElementId>, glyph: Glyph, tip: &'s
         .when(pressed, |b| b.bg(stage::wash(0.08)))
         .hover(|s| s.bg(stage::wash(0.05)).text_color(stage::strong()))
         .active(|s| s.bg(stage::wash(0.09)))
-        .child(Icon::new(glyph).size(px(20.)))
-        .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+        .child(Icon::new(glyph).size(ui::ICON_XL))
+        .tooltip(move |window, cx| ui::tip(tip, window, cx))
 }
 
 // .btn.btn--sm on the stage: the quiet fill.
@@ -2131,17 +2131,17 @@ pub(crate) fn stage_button(id: impl Into<ElementId>, label: &'static str) -> Sta
     div()
         .id(id)
         .h(px(30.))
-        .px(px(10.))
+        .px_2p5()
         .flex_none()
         .squircle(RADIUS_SM)
         .flex()
         .items_center()
-        .gap(px(8.))
+        .gap_2()
         .cursor_pointer()
         .bg(stage::wash(0.08))
         .hover(|s| s.bg(stage::wash(0.09)))
         .text_color(stage::strong())
-        .text_size(px(14.))
+        .text_size(ui::TEXT_SM)
         .font_weight(FontWeight::MEDIUM)
         .whitespace_nowrap()
         .child(label)
@@ -2149,7 +2149,7 @@ pub(crate) fn stage_button(id: impl Into<ElementId>, label: &'static str) -> Sta
 
 // .preview .watch: the light button over a dimmed stream.
 pub(crate) fn watch_button(label: &'static str) -> Div {
-    watch_button_look().px(px(10.)).gap(px(8.)).child(Icon::new(Glyph::Play).size(px(16.))).child(label)
+    watch_button_look().px_2p5().gap_2().child(Icon::new(Glyph::Play).size(ui::ICON_MD)).child(label)
 }
 
 fn watch_button_look() -> Div {
@@ -2161,7 +2161,7 @@ fn watch_button_look() -> Div {
         .bg(stage::strong())
         .hover(|s| s.bg(gpui_kit::white()))
         .text_color(stage::on_ink())
-        .text_size(px(14.))
+        .text_size(ui::TEXT_SM)
         .font_weight(FontWeight::MEDIUM)
 }
 
@@ -2201,7 +2201,7 @@ pub(crate) fn control(id: &'static str, glyph: Glyph, tip: &'static str, state: 
         .child(Icon::new(glyph).size(px(if chevron { 12. } else { 20. })))
         .when(enabled, |b| b.cursor_pointer().hover(move |s| s.bg(hover).text_color(ink)))
         .when(!enabled, |b| b.opacity(0.4).cursor(gpui_kit::CursorStyle::OperationNotAllowed))
-        .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(tip, window, cx))
 }
 
 fn mirrored<E: Styled>(mut el: E) -> E {
@@ -2220,7 +2220,7 @@ pub(crate) fn control_group() -> Div {
         .h(px(CONTROLS_HEIGHT))
         .flex()
         .items_center()
-        .gap(px(2.))
+        .gap_0p5()
         .p(px(DOCK_PAD))
         .squircle(10. + DOCK_PAD)
         .bg(stage::dock())
@@ -2232,17 +2232,17 @@ pub(crate) fn control_group() -> Div {
 fn tile_name(content: Div) -> Div {
     content
         .absolute()
-        .left(px(8.))
-        .bottom(px(8.))
-        .h(px(24.))
-        .px(px(8.))
+        .left_2()
+        .bottom_2()
+        .h_6()
+        .px_2()
         .squircle(RADIUS_XS)
         .bg(gpui_kit::black().opacity(0.6))
         .flex()
         .items_center()
-        .gap(px(6.))
+        .gap_1p5()
         .min_w_0()
-        .text_size(px(12.))
+        .text_size(ui::TEXT_XS)
         .font_weight(FontWeight::MEDIUM)
         .text_color(gpui_kit::white())
 }
@@ -2269,7 +2269,7 @@ fn tile_ring(speaking: bool, sounding: bool, local_muted: bool, radius: f32) -> 
         (false, true) => stage::wash(0.42),
         (false, false) => palette::status(crate::discord::Status::Online),
     };
-    ring.border(px(2.)).border_color(color).child(div().absolute().inset_0().squircle((radius - 2.).max(0.)).border(px(2.)).border_color(stage::bg().opacity(0.6)))
+    ring.border_2().border_color(color).child(div().absolute().inset_0().squircle((radius - 2.).max(0.)).border_2().border_color(stage::bg().opacity(0.6)))
 }
 
 // .chrome over a focused stream: black fading out from the top (180deg) or bottom (0deg) edge.
@@ -2300,18 +2300,18 @@ pub(crate) fn viewer_chip(viewers: Vec<Viewer>, streamer_id: &str) -> Stateful<D
     let chip = div()
         .id(SharedString::from(format!("viewers-{streamer_id}")))
         .absolute()
-        .right(px(8.))
-        .top(px(8.))
-        .h(px(28.))
-        .pl(px(8.))
-        .pr(px(4.))
+        .right_2()
+        .top_2()
+        .h_7()
+        .pl_2()
+        .pr_1()
         .rounded_full()
         .flex()
         .items_center()
-        .gap(px(6.))
+        .gap_1p5()
         .bg(stage::dock())
         .text_color(stage::muted())
-        .child(Icon::new(Glyph::EyeBold).size(px(14.)))
+        .child(Icon::new(Glyph::EyeBold).size(ui::ICON_SM))
         .child(ui::capped_stack(&people, VIEWER_FACES, 20., stage::dock(), stage::overlay(), stage::strong()));
     ui::overflow_list(chip, "Watching", people)
 }
@@ -2335,14 +2335,14 @@ fn vmark(glyph: Glyph, words: Option<&'static str>, kind: MarkKind) -> Div {
         .flex()
         .items_center()
         .justify_center()
-        .gap(px(4.))
-        .text_size(px(11.))
+        .gap_1()
+        .text_size(ui::TEXT_XXS)
         .font_weight(FontWeight::SEMIBOLD)
         .whitespace_nowrap()
         .text_color(gpui_kit::white())
-        .when(words.is_some(), |d| d.pl(px(4.)).pr(px(6.)))
+        .when(words.is_some(), |d| d.pl_1().pr_1p5())
         .when(words.is_none(), |d| d.px(px(3.)))
-        .child(Icon::new(glyph).size(px(12.)))
+        .child(Icon::new(glyph).size(ui::ICON_XS))
         .children(words);
     match kind {
         MarkKind::Server => base.bg(palette::danger()),
@@ -2352,24 +2352,24 @@ fn vmark(glyph: Glyph, words: Option<&'static str>, kind: MarkKind) -> Div {
 
 // .tile.stream: a stream before its first preview arrives.
 pub(crate) fn stream_fill(radius: f32) -> Div {
-    let glow = gpui_kit::linear_gradient(135., gpui_kit::linear_color_stop(Hsla::from(rgb(0x0097A1)).opacity(0.7), 0.), gpui_kit::linear_color_stop(Hsla::from(rgb(0x9D2398)).opacity(0.7), 1.));
-    div().relative().squircle(radius).bg(rgb(0x1D1E39)).child(div().absolute().inset_0().squircle(radius).bg(glow))
+    let glow = gpui_kit::linear_gradient(135., gpui_kit::linear_color_stop(palette::stream_glow().0.opacity(0.7), 0.), gpui_kit::linear_color_stop(palette::stream_glow().1.opacity(0.7), 1.));
+    div().relative().squircle(radius).bg(palette::stream_ground()).child(div().absolute().inset_0().squircle(radius).bg(glow))
 }
 
 // .mlabel
 fn menu_label(text: &'static str, ink: &Inks) -> Div {
-    div().pt(px(6.)).px(px(10.)).pb(px(2.)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(ink.muted).child(text)
+    div().pt_1p5().px_2p5().pb_0p5().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(ink.muted).child(text)
 }
 
 // .devmenu hr
 fn menu_rule(ink: &Inks) -> Div {
-    div().h(px(1.)).mx(px(4.)).my(px(4.)).flex_none().bg(ink.line)
+    div().h(ui::HAIRLINE).mx_1().my_1().flex_none().bg(ink.line)
 }
 
 // .choice.vrow: a 34px menu row holding a radio or a switch.
 fn choice_row(id: impl Into<ElementId>, ink: &Inks) -> Stateful<Div> {
     let hover = ink.hover;
-    div().id(id).min_h(px(34.)).px(px(10.)).py(px(6.)).squircle(RADIUS_SM).flex().items_center().gap(px(10.)).cursor_pointer().hover(move |s| s.bg(hover))
+    div().id(id).min_h(px(34.)).px_2p5().py_1p5().squircle(RADIUS_SM).flex().items_center().gap_2p5().cursor_pointer().hover(move |s| s.bg(hover))
 }
 
 #[derive(Clone)]
@@ -2579,15 +2579,15 @@ fn issue_line(code: u16) -> &'static str {
 fn issue_chip(id: SharedString, codes: Vec<u16>) -> gpui_kit::Stateful<Div> {
     div()
         .id(id)
-        .size(px(24.))
+        .size_6()
         .squircle(RADIUS_XS)
         .flex()
         .items_center()
         .justify_center()
         .bg(gpui_kit::black().opacity(0.6))
-        .child(Icon::new(Glyph::Warning).size(px(14.)).text_color(stage::idle()))
+        .child(Icon::new(Glyph::Warning).size(ui::ICON_SM).text_color(stage::idle()))
         .tooltip(move |window, cx| {
             let tip = codes.iter().map(|code| format!("{} Error code: {code}", issue_line(*code))).collect::<Vec<_>>().join("\n");
-            Tooltip::new(tip).build(window, cx)
+            ui::tip(tip, window, cx)
         })
 }

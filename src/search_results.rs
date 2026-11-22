@@ -118,7 +118,7 @@ impl Waffle {
         let filters = ui::button("search-filters", ui::Tone::Secondary, cx)
             .small()
             .when(results.filters_open, |b| b.bg(palette::selected(cx)))
-            .child(Icon::new(Glyph::Filter).size(px(14.)))
+            .child(Icon::new(Glyph::Filter).size(ui::ICON_SM))
             .child(filters_label)
             .on_click(cx.listener(|this, _, _, cx| {
                 if let Some(results) = this.results() {
@@ -126,7 +126,7 @@ impl Waffle {
                 }
                 cx.notify();
             }));
-        let sort = ui::button("search-sort", ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::ArrowDown).size(px(14.))).child(results.sort.label()).on_click(cx.listener(|this, event: &gpui_kit::ClickEvent, _, cx| {
+        let sort = ui::button("search-sort", ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::ArrowDown).size(ui::ICON_SM)).child(results.sort.label()).on_click(cx.listener(|this, event: &gpui_kit::ClickEvent, _, cx| {
             let current = this.results().map(|r| r.sort).unwrap_or_default();
             let entries = Sort::ALL.into_iter().map(|sort| menu::Entry::Item(menu::item(sort.label(), move |this, _, cx| this.set_search_sort(sort, cx)).radio(sort == current))).collect();
             this.open_menu(event.position(), entries, cx);
@@ -134,6 +134,7 @@ impl Waffle {
         let popover = results.filters_open.then(|| {
             // Under the header, inside the panel's right edge.
             let card = div().absolute().top(px(crate::layout::HEADER_HEIGHT - 6.)).right(px(-(crate::window_controls::WIDTH))).child(self.filters_popover(cx));
+            // lint-allow(raw-floating): hangs at absolute offsets under the header, not anchored; the card occludes itself.
             gpui_kit::deferred(ui::rise(card.transform_origin(ui::corner(true, false)), "search-filters-in", std::time::Duration::ZERO)).with_priority(2)
         });
         div()
@@ -142,7 +143,7 @@ impl Waffle {
             .min_w_0()
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap_1p5()
             .children(popover)
             .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
             .child(filters)
@@ -153,7 +154,7 @@ impl Waffle {
     pub(crate) fn search_body(&self, results: &Results, cx: &mut Context<Self>) -> AnyElement {
         let muted = palette::muted(cx);
         let page = match &results.hits {
-            None => return div().min_h(px(32.)).px_2().flex().items_center().gap_2().text_color(muted).child(ui::bars("search-wait", muted, 12.)).child("Searching…").into_any_element(),
+            None => return div().min_h_8().px_2().flex().items_center().gap_2().text_color(muted).child(ui::bars("search-wait", muted, 12.)).child("Searching…").into_any_element(),
             Some(Err(error)) => return div().px_2().text_color(palette::danger_ink(cx)).child(error.clone()).into_any_element(),
             Some(Ok(page)) if page.messages.is_empty() => return ui::empty_state("search-empty", crate::illustration::Illustration::SearchEmpty, "We searched far and wide.", "Unfortunately, no results were found.", cx).into_any_element(),
             Some(Ok(page)) => page,
@@ -168,7 +169,7 @@ impl Waffle {
             out.push(self.hit_card(hit, &ctx, cx));
         }
         // flex_none: in the panel's scrolling column, cards would otherwise shrink to fit and clip their pictures.
-        div().flex_none().flex().flex_col().gap(px(8.)).children(out.into_iter().map(|el| div().flex_none().child(el))).into_any_element()
+        div().flex_none().flex().flex_col().gap_2().children(out.into_iter().map(|el| div().flex_none().child(el))).into_any_element()
     }
 
     // A run of hits from one channel opens with its name, and its category at the right.
@@ -178,16 +179,16 @@ impl Waffle {
         let category = channel.and_then(|c| c.parent_id.as_ref()).and_then(|p| guild?.channels.iter().find(|c| &c.id == p));
         let muted = palette::muted(cx);
         div()
-            .pt(px(8.))
-            .px(px(4.))
+            .pt_2()
+            .px_1()
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap_1p5()
             .text_color(palette::strong(cx))
             .font_weight(FontWeight::SEMIBOLD)
-            .child(div().text_color(muted).child(Icon::new(Glyph::Hashtag).size(px(16.))))
+            .child(div().text_color(muted).child(Icon::new(Glyph::Hashtag).size(ui::ICON_MD)))
             .child(div().flex_1().min_w_0().truncate().child(channel.map_or_else(|| "unknown channel".to_owned(), |c| c.name.clone())))
-            .children(category.map(|c| div().flex_none().flex().items_center().gap(px(4.)).text_size(px(12.)).font_weight(FontWeight::NORMAL).text_color(muted).child(Icon::new(Glyph::Folder).size(px(14.))).child(c.name.clone())))
+            .children(category.map(|c| div().flex_none().flex().items_center().gap_1().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(muted).child(Icon::new(Glyph::Folder).size(ui::ICON_SM)).child(c.name.clone())))
             .into_any_element()
     }
 
@@ -200,7 +201,7 @@ impl Waffle {
         let message_id = hit.id.clone();
         div()
             .id(SharedString::from(format!("hit-{}", hit.id)))
-            .p(px(12.))
+            .p_3()
             .squircle(RADIUS_MD)
             .bg(page)
             .border_1()
@@ -229,7 +230,7 @@ impl Waffle {
         }
         let current = results.page;
         let step = |id: &'static str, label: &'static str, back: bool, to: usize, enabled: bool, cx: &mut Context<Self>| {
-            let chevron = Icon::new(if back { Glyph::ChevronLeft } else { Glyph::ChevronRight }).size(px(14.));
+            let chevron = Icon::new(if back { Glyph::ChevronLeft } else { Glyph::ChevronRight }).size(ui::ICON_SM);
             let button = ui::button(id, ui::Tone::Ghost, cx).small().disabled(!enabled);
             let button = if back { button.child(chevron).child(label) } else { button.child(label).child(chevron) };
             button.on_click(cx.listener(move |this, _, _, cx| {
@@ -240,7 +241,7 @@ impl Waffle {
         };
         let (accent, hover, text, faint) = (palette::accent(), palette::hover(cx), palette::text(cx), palette::faint(cx));
         let numbers = search::pages(current, count).into_iter().enumerate().map(|(i, page)| {
-            let cell = div().min_w(px(28.)).h(px(28.)).px(px(4.)).flex().items_center().justify_center().rounded_full().text_size(px(14.));
+            let cell = div().min_w_7().h_7().px_1().flex().items_center().justify_center().rounded_full().text_size(ui::TEXT_SM);
             match page {
                 None => cell.id(("search-gap", i)).text_color(faint).child("…").into_any_element(),
                 Some(page) if page == current => cell.id(("search-page", page)).bg(accent).text_color(gpui_kit::white()).font_weight(FontWeight::SEMIBOLD).child(page.to_string()).into_any_element(),
@@ -253,7 +254,7 @@ impl Waffle {
                 .flex()
                 .items_center()
                 .justify_center()
-                .gap(px(2.))
+                .gap_0p5()
                 .child(previous)
                 .children(numbers)
                 .child(next)
@@ -292,19 +293,19 @@ impl Waffle {
                         let avatar = matches!(key, Key::From | Key::Mentions).then(|| avatars.get(value).cloned()).flatten();
                         let token = format!("{word}:{value}");
                         let remove = ui::icon_button(SharedString::from(format!("filter-x-{token}")), Glyph::X, "Remove", cx).small().on_click(cx.listener(move |this, _, window, cx| this.toggle_search_filter(&token, true, window, cx)));
-                        token_chip(word, label, avatar, true, cx).pr(px(2.)).child(remove).into_any_element()
+                        token_chip(word, label, avatar, true, cx).pr_0p5().child(remove).into_any_element()
                     })
                     .chain(std::iter::once(ui::chip(SharedString::from(format!("filter-add-{word}")), Some(Glyph::Plus), "Add", false, cx).small().on_click(cx.listener(move |this, _, window, cx| this.type_search_filter(key, window, cx))).into_any_element()))
                     .collect(),
             };
             div()
-                .px(px(10.))
-                .py(px(8.))
+                .px_2p5()
+                .py_2()
                 .flex()
                 .flex_col()
-                .gap(px(6.))
-                .child(div().flex().items_center().gap(px(8.)).text_color(strong).child(div().text_color(muted).child(Icon::new(crate::search_menu::key_glyph(key)).size(px(16.)))).child(key.title()))
-                .child(div().flex().flex_wrap().gap(px(6.)).children(values))
+                .gap_1p5()
+                .child(div().flex().items_center().gap_2().text_color(strong).child(div().text_color(muted).child(Icon::new(crate::search_menu::key_glyph(key)).size(ui::ICON_MD))).child(key.title()))
+                .child(div().flex().flex_wrap().gap_1p5().children(values))
         });
         ui::surface(cx)
             .id("search-filters-card")

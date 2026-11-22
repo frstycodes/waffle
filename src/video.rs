@@ -13,7 +13,7 @@ use std::{
 use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, Bounds, Context, Entity, FocusHandle, FontFeatures, Global, ImageSource, KeyDownEvent, MouseButton,
     ObjectFit, Pixels, Render, RenderImage, SharedString, WeakEntity, Window, canvas,
-    component::{Icon, tooltip::Tooltip},
+    component::Icon,
     div, img, linear_color_stop, linear_gradient, prelude::*, px, relative,
 };
 use gpui_motion_kit::{
@@ -21,7 +21,7 @@ use gpui_motion_kit::{
     core::{Bezier, Easing, Motion, Spring, Target, Transition},
 };
 
-use crate::{icons::Glyph, palette, playback::Playback};
+use crate::{icons::Glyph, palette, playback::Playback, ui};
 
 // The bar hides after the pointer rests this long while the video plays.
 const IDLE: Duration = Duration::from_secs(2);
@@ -573,7 +573,7 @@ impl VideoPlayer {
             .flex_none()
             .flex()
             .gap_1()
-            .text_size(px(12.))
+            .text_size(ui::TEXT_XS)
             .font_features(tabular)
             .text_color(gpui_kit::white())
             .child(crate::playback::time_label(position))
@@ -594,16 +594,16 @@ impl VideoPlayer {
             .child(
                 div()
                     .relative()
-                    .pt(px(28.))
-                    .pb(px(10.))
-                    .px(px(12.))
+                    .pt_7()
+                    .pb_2p5()
+                    .px_3()
                     .flex()
                     .items_center()
-                    .gap(px(16.))
+                    .gap_4()
                     .child(play)
                     // The time sits above the scrubber so even a narrow video shows it whole; volume
                     // and full screen live in the top corners (see `corners`).
-                    .child(div().flex_1().min_w_0().flex().flex_col().gap(px(2.)).child(time).child(scrubber)),
+                    .child(div().flex_1().min_w_0().flex().flex_col().gap_0p5().child(time).child(scrubber)),
             )
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_click(|_, _, cx| cx.stop_propagation())
@@ -642,7 +642,7 @@ impl VideoPlayer {
     fn control(&mut self, control: Control, label: &'static str, body: gpui_kit::Div, action: impl Fn(&mut Self, &mut Window, &mut Context<Self>) + 'static, cx: &mut Context<Self>) -> AnyElement {
         body.id(SharedString::from(format!("video-{control:?}")))
             .cursor_pointer()
-            .tooltip(move |window, cx| Tooltip::new(label).build(window, cx))
+            .tooltip(move |window, cx| ui::tip(label, window, cx))
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 match *hovered {
                     true => this.hot = Some(control),
@@ -685,8 +685,8 @@ impl VideoPlayer {
             .id("video-scrubber")
             .relative()
             .flex_1()
-            .min_w(px(40.))
-            .h(px(16.))
+            .min_w_10()
+            .h_4()
             .cursor_pointer()
             .child(canvas(move |bounds, _, _| record.set(bounds), |_, _, _, _| {}).absolute().size_full())
             .child(
@@ -694,11 +694,11 @@ impl VideoPlayer {
                     .absolute()
                     .left_0()
                     .right_0()
-                    .top(px(6.))
-                    .h(px(4.))
-                    .rounded(px(2.))
+                    .top_1p5()
+                    .h_1()
+                    .rounded_xs()
                     .bg(gpui_kit::white().opacity(0.24))
-                    .child(div().h_full().w(played).rounded(px(2.)).bg(palette::accent())),
+                    .child(div().h_full().w(played).rounded_xs().bg(palette::accent())),
             )
             .child(div().absolute().top(px(8. - knob_side / 2.)).left(played).ml(px(-knob_side / 2.)).size(px(knob_side)).rounded_full().bg(gpui_kit::white()))
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
@@ -742,13 +742,13 @@ impl VideoPlayer {
         let volume = self.volume(window, cx);
         // A click on a pill's edge stays off the video under it.
         let pill = || {
-            div().absolute().top(px(8.)).p(px(4.)).rounded(px(RADIUS)).bg(gpui_kit::black().opacity(0.56)).on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            div().absolute().top_2().p_1().rounded(px(RADIUS)).bg(gpui_kit::black().opacity(0.56)).on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         };
         div()
             .absolute()
             .inset_0()
-            .child(pill().left(px(8.)).child(full))
-            .child(pill().right(px(8.)).child(volume))
+            .child(pill().left_2().child(full))
+            .child(pill().right_2().child(volume))
             .into_any_element()
     }
 
@@ -763,9 +763,9 @@ impl VideoPlayer {
         let record = self.volume_bounds.clone();
         let slider = div()
             .id("video-volume-panel")
-            .w(px(32.))
-            .h(px(96.))
-            .py(px(12.))
+            .w_8()
+            .h_24()
+            .py_3()
             .rounded(px(RADIUS))
             .bg(gpui_kit::black().opacity(0.8))
             .flex()
@@ -774,13 +774,13 @@ impl VideoPlayer {
             .child(
                 div()
                     .relative()
-                    .w(px(4.))
+                    .w_1()
                     .h_full()
-                    .rounded(px(2.))
+                    .rounded_xs()
                     .bg(gpui_kit::white().opacity(0.24))
                     .child(canvas(move |bounds, _, _| record.set(bounds), |_, _, _, _| {}).absolute().size_full())
-                    .child(div().absolute().bottom_0().left_0().right_0().h(level).rounded(px(2.)).bg(palette::accent()))
-                    .child(div().absolute().bottom(level).left(px(-4.)).mb(px(-6.)).size(px(12.)).rounded_full().bg(gpui_kit::white())),
+                    .child(div().absolute().bottom_0().left_0().right_0().h(level).rounded_xs().bg(palette::accent()))
+                    .child(div().absolute().bottom(level).left_neg_1().mb_neg_1p5().size_3().rounded_full().bg(gpui_kit::white())),
             )
             .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &gpui_kit::MouseDownEvent, _, cx| {
                 cx.stop_propagation();
@@ -811,7 +811,7 @@ impl VideoPlayer {
             .absolute()
             .top(px(SLOT))
             .left(px((SLOT - 32.) / 2.))
-            .pt(px(8.))
+            .pt_2()
             .child(panel.render(|f| f.apply(slider)))
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
                 match *hovered {
@@ -830,7 +830,7 @@ fn loading_dots() -> AnyElement {
         .flex()
         .gap(px(3.))
         .children((0..3).map(|i| {
-            div().size(px(6.)).rounded_full().bg(gpui_kit::white()).with_animation(
+            div().size_1p5().rounded_full().bg(gpui_kit::white()).with_animation(
                 SharedString::from(format!("video-loading-{i}")),
                 Animation::new(Duration::from_millis(1200)).repeat(),
                 move |dot, t| dot.opacity(0.35 + 0.65 * ((t - i as f32 * 0.18) * TAU).sin().max(0.)),
@@ -843,13 +843,13 @@ fn loading_dots() -> AnyElement {
 fn failed_note(error: SharedString) -> AnyElement {
     div()
         .absolute()
-        .left(px(8.))
-        .bottom(px(8.))
-        .px(px(8.))
-        .py(px(4.))
-        .rounded(px(4.))
+        .left_2()
+        .bottom_2()
+        .px_2()
+        .py_1()
+        .rounded_sm()
         .bg(gpui_kit::black().opacity(0.7))
-        .text_size(px(14.))
+        .text_size(ui::TEXT_SM)
         .text_color(gpui_kit::white())
         .child(format!("Can't play this here ({error}). Click to open it."))
         .into_any_element()
