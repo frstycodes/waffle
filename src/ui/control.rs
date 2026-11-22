@@ -538,6 +538,7 @@ pub struct Tip {
     text: SharedString,
 }
 
+// A tooltip in the design's look, for `.tooltip(move |window, cx| ui::tip(text.clone(), window, cx))`.
 pub fn tip(text: impl Into<SharedString>, _: &mut Window, cx: &mut App) -> AnyView {
     let text = text.into();
     cx.new(|_| Tip { text }).into()

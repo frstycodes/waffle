@@ -591,7 +591,7 @@ impl Waffle {
             .child(body);
         // Under the header's pin button: its top-right corner just right of the click, kept in the window.
         let at = point(self.popover_at.x + px(16.), px(crate::layout::HEADER_HEIGHT - 2.));
-        Some(backdrop("pins-backdrop", cx).child(anchored_at(at, gpui_kit::Anchor::TopRight, ui::rise(card.transform_origin(ui::corner(true, false)), "pins", Duration::ZERO))).into_any_element())
+        Some(backdrop("pins-backdrop", cx).child(ui::floating_at("pins-float", at, gpui_kit::Anchor::TopRight, ui::rise(card.transform_origin(ui::corner(true, false)), "pins", Duration::ZERO))).into_any_element())
     }
 
 
@@ -604,7 +604,7 @@ impl Waffle {
             return None;
         }
         let picker = picker_frame("emoji-picker", PICKER_SIZE.1, cx).children(self.emoji_content(window, cx));
-        Some(backdrop("emoji-backdrop", cx).child(anchored_at(self.popover_at, gpui_kit::Anchor::BottomRight, ui::rise(picker.transform_origin(ui::corner(true, true)), "emoji-picker", Duration::ZERO))).into_any_element())
+        Some(backdrop("emoji-backdrop", cx).child(ui::floating_at("emoji-float", self.popover_at, gpui_kit::Anchor::BottomRight, ui::rise(picker.transform_origin(ui::corner(true, true)), "emoji-picker", Duration::ZERO))).into_any_element())
     }
 
     // Search, the category rail beside the grid, and the hovered emoji named at the foot.
@@ -935,10 +935,6 @@ fn mention_skeletons(cx: &App) -> AnyElement {
             .child(ui::skeleton(("mention-skel-text", i), RADIUS_XS, cx).h(px(12.)).w(gpui_kit::relative(widths.2)))
     };
     div().flex().flex_col().gap_2().child(card(0, (140., 90., 0.85))).child(card(1, (110., 70., 0.6))).child(card(2, (160., 100., 0.75))).into_any_element()
-}
-
-pub(crate) fn anchored_at(at: gpui_kit::Point<gpui_kit::Pixels>, corner: gpui_kit::Anchor, popover: impl IntoElement) -> AnyElement {
-    gpui_kit::anchored().position(at).anchor(corner).snap_to_window_with_margin(px(8.)).child(popover).into_any_element()
 }
 
 // A picker's floating card: the overlay surface, rounded and shadowed, its content laid out top to bottom.

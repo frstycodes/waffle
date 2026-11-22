@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::{
-    App, Context, Entity, Focusable, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window, WindowBounds, WindowOptions,
+    AnyElement, App, Context, Entity, Focusable, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, Pixels, Render, SharedString, StatefulInteractiveElement, Styled, Window, WindowBounds, WindowOptions,
     base::{Easing, Transition, transition},
     component::{
         ActiveTheme, Icon, Theme, ThemeMode,
@@ -723,70 +723,79 @@ fn ratio(fg: Hsla, bg: Hsla) -> String {
 }
 
 fn type_scale(cx: &App) -> impl IntoElement {
-    let spec = |meta: &'static str, first: bool, text: gpui_kit::Div| {
+    let spec = |meta: String, first: bool, text: gpui_kit::Div| {
         div()
             .flex()
             .items_baseline()
-            .gap(px(16.))
-            .py(px(12.))
+            .gap_4()
+            .py_3()
             .when(!first, |d| d.border_t_1().border_color(palette::line(cx)))
-            .child(div().w(px(140.)).flex_none().font_family(cx.theme().mono_font_family.clone()).child(note(meta, cx)))
+            .child(div().w(px(140.)).flex_none().font_family(cx.theme().mono_font_family.clone()).text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(meta))
             .child(text)
     };
     let (strong, text, faint) = (palette::strong(cx), palette::text(cx), palette::faint(cx));
-    section("Type", "One family for the interface, a mono for code. Gabarito is the proposal: geometric and friendly like the bars, and nobody else's.", cx).child(
-        board(cx)
-            .gap(px(0.))
-            .child(spec("28 · bold · 1.2", true, div().text_size(px(28.)).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Welcome to Night Shift")))
-            .child(spec("20 · bold · 1.2", false, div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Voice and video")))
-            .child(spec("16 · regular · 1.45", false, div().text_size(px(16.)).line_height(relative(1.45)).text_color(text).child("anyone up for a few rounds after dinner? bringing snacks this time, promise")))
-            .child(spec("14 · medium", false, div().font_weight(FontWeight::NORMAL).text_color(text).child("general · looking-for-group · Lounge")))
-            .child(spec("12 · semibold", false, div().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(faint).child("Today at 9:41 PM · Online · 3")))
-            .child(spec("mono 14", false, div().font_family(cx.theme().mono_font_family.clone()).text_color(text).child("cargo run --release"))),
+    let sample = |size: Pixels, leading: f32, weight: FontWeight, ink: Hsla, words: &'static str| div().text_size(size).line_height(relative(leading)).font_weight(weight).text_color(ink).child(words);
+    let rows = [
+        ("TEXT_XL", ui::TEXT_XL, ui::LEADING_TIGHT, FontWeight::SEMIBOLD, strong, "Welcome to Night Shift"),
+        ("TEXT_LG", ui::TEXT_LG, ui::LEADING_TIGHT, FontWeight::SEMIBOLD, strong, "Voice and video"),
+        ("TEXT_MD", ui::TEXT_MD, ui::LEADING_BODY, FontWeight::NORMAL, text, "anyone up for a few rounds after dinner? bringing snacks this time, promise"),
+        ("TEXT_SM", ui::TEXT_SM, ui::LEADING_BODY, FontWeight::NORMAL, text, "general · looking-for-group · Lounge"),
+        ("TEXT_XS", ui::TEXT_XS, ui::LEADING_BODY, FontWeight::MEDIUM, faint, "Today at 9:41 PM · Online · 3"),
+        ("TEXT_XXS", ui::TEXT_XXS, ui::LEADING_TIGHT, FontWeight::SEMIBOLD, faint, "NEW · HOST · APP"),
+    ];
+    section("Type", "One family for the interface, a mono for code. Sizes are `ui::TEXT_*`, line heights `ui::LEADING_*`.", cx).child(
+        board(cx).gap_0().children(rows.into_iter().enumerate().map(|(i, (name, size, leading, weight, ink, words))| {
+            spec(format!("{name} · {} · {leading}", f32::from(size)), i == 0, sample(size, leading, weight, ink, words))
+        })),
     )
 }
 
+// Drawn from the tokens themselves, so this page can't drift from what the app uses.
 fn space(cx: &App) -> impl IntoElement {
-    let bar = |n: f32| {
+    let bar = |(name, n): (&'static str, f32)| {
         div()
             .flex()
             .items_center()
-            .gap(px(12.))
-            .text_size(px(12.))
+            .gap_3()
+            .text_size(ui::TEXT_XS)
             .text_color(palette::faint(cx))
             .font_family(cx.theme().mono_font_family.clone())
-            .child(div().w(px(70.)).child(format!("{n}px")))
-            .child(div().w(px(n * 3.)).h(px(12.)).squircle(3.).bg(palette::accent().opacity(0.8)))
+            .child(div().w(px(70.)).child(format!("{name} · {n}")))
+            .child(div().w(px(n * 3.)).h_3().squircle(3.).bg(palette::accent().opacity(0.8)))
     };
     let tile = |name: &'static str, radius: f32, use_: &'static str| {
         div()
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(6.))
-            .text_size(px(12.))
+            .gap_1p5()
+            .text_size(ui::TEXT_XS)
             .child(div().size(px(76.)).squircle(radius).bg(palette::surface(Level::Raised, cx)).border(px(1.5)).border_color(palette::line_strong(cx)))
-            .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).font_family(cx.theme().mono_font_family.clone()).child(name))
+            .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).font_family(cx.theme().mono_font_family.clone()).child(format!("{name} · {radius}")))
             .child(div().text_color(palette::faint(cx)).child(use_))
     };
-    section("Space and shape", "A 4px scale. Controls 10, surfaces 14, dialogs 20; nested corners stay concentric.", cx).child(
+    let sizes = |label: &'static str, marks: Vec<AnyElement>| stack().child(note(label, cx)).child(row().gap_4().items_end().children(marks));
+    let icon_sizes = [ui::ICON_XS, ui::ICON_SM, ui::ICON_MD, ui::ICON_LG, ui::ICON_XL].map(|size| Icon::new(Glyph::Pin).size(size).into_any_element()).into();
+    let avatar_sizes = [ui::AVATAR_XS, ui::AVATAR_SM, ui::AVATAR_MD, ui::AVATAR_LG, ui::AVATAR_XL].map(|size| ui::monogram("Mira", size).into_any_element()).into();
+    section("Space and shape", "Spacing is gpui's own scale (`gap_1` 4px … `p_12` 48px; the rem is fixed at 16px). Corners are `ui::RADIUS_*` through `squircle`; nested corners stay concentric.", cx).child(
         div()
             .grid()
             .grid_cols(3)
-            .gap(px(16.))
-            .child(board(cx).gap(px(6.)).children([4., 8., 12., 16., 24., 32., 48.].map(bar)))
+            .gap_4()
+            .child(board(cx).gap_1p5().children([("0p5", 2.), ("1", 4.), ("1p5", 6.), ("2", 8.), ("2p5", 10.), ("3", 12.), ("3p5", 14.), ("4", 16.), ("6", 24.), ("8", 32.), ("12", 48.)].map(bar)))
             .child(
                 board(cx).child(
                     row()
-                        .gap(px(16.))
+                        .gap_4()
                         .items_start()
-                        .child(tile("xs · 6", 6., "Tags, tooltips"))
-                        .child(tile("sm · 8", 8., "Rows, menu items"))
-                        .child(tile("md · 10", 10., "Buttons, inputs"))
-                        .child(tile("lg · 14", 14., "Cards, tiles, servers"))
-                        .child(tile("xl · 20", 20., "Dialogs")),
+                        .child(tile("RADIUS_XS", ui::RADIUS_XS, "Tags, tooltips"))
+                        .child(tile("RADIUS_SM", ui::RADIUS_SM, "Rows, menu items"))
+                        .child(tile("RADIUS_MD", ui::RADIUS_MD, "Buttons, inputs"))
+                        .child(tile("RADIUS_LG", ui::RADIUS_LG, "Cards, tiles"))
+                        .child(tile("RADIUS_XL", ui::RADIUS_XL, "Dialogs")),
                 ),
-            ),
+            )
+            .child(board(cx).child(sizes("ICON_XS … ICON_XL", icon_sizes)).child(sizes("AVATAR_XS … AVATAR_XL", avatar_sizes))),
     )
 }
 
@@ -917,8 +926,24 @@ fn layout(cx: &App) -> impl IntoElement {
                     .child(ui::menu_row("m-copy", cx).child(div().text_color(palette::muted(cx)).child(glyph(Glyph::Copy))).child(div().flex_1().child("Copy text")))
                     .child(ui::menu_row("m-mark", cx).child(div().flex_1().child("Mark as unread")).child(ui::check(Check::On, cx).size(px(18.))))
                     .child(ui::menu_row("m-mode", cx).child(div().flex_1().child("Push to talk")).child(ui::radio_with(false, 18., palette::line_strong(cx))))
-                    .child(div().my(px(4.)).mx(px(8.)).h(px(1.)).bg(palette::line(cx)))
+                    .child(div().my_1().mx_2().h(ui::HAIRLINE).bg(palette::line(cx)))
                     .child(ui::menu_row("m-delete", cx).danger(cx).child(glyph(Glyph::Trash)).child("Delete message")),
-            ),
+            )
+            .child(overflow(cx)),
     )
+}
+
+// `ui::row`, `ui::col` and `ui::line` in a box too narrow for them: the name ends in an ellipsis, the
+// trailing count keeps its place, and nothing spills past the border.
+fn overflow(cx: &App) -> impl IntoElement {
+    let name = "an unreasonably long display name that never fits in a sidebar row";
+    ui::col()
+        .w(px(248.))
+        .gap_1()
+        .p_2()
+        .border_1()
+        .border_color(palette::line_strong(cx))
+        .squircle(ui::RADIUS_SM)
+        .child(note("ui::row · ui::line · flex_none", cx))
+        .child(ui::row().gap_2().child(ui::monogram("Mira", ui::AVATAR_MD)).child(ui::line(name).flex_1()).child(div().flex_none().child(ui::count_badge(12))))
 }

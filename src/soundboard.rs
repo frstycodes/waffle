@@ -19,7 +19,7 @@ use crate::{
     discord::{Emoji, SoundboardSound, VoiceEffect, perm},
     soundboard_fx::{self, Family},
     icons::Glyph,
-    overlays::{anchored_at, backdrop},
+    overlays::backdrop,
     palette,
     settings::Fill,
     ui::{self, RADIUS_LG, RADIUS_SM, Squircle},
@@ -491,7 +491,7 @@ impl Waffle {
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .children(self.picker_content(picker, cx));
         let card = ui::rise(card.transform_origin(gpui_kit::point(gpui_kit::relative(0.5), gpui_kit::relative(1.))), "soundboard", Duration::ZERO);
-        Some(backdrop("soundboard-backdrop", cx).child(anchored_at(at, Anchor::BottomCenter, card)).into_any_element())
+        Some(backdrop("soundboard-backdrop", cx).child(ui::floating_at("soundboard-float", at, Anchor::BottomCenter, card)).into_any_element())
     }
 
     fn picker_content(&self, picker: &Picker, cx: &mut Context<Self>) -> Vec<AnyElement> {

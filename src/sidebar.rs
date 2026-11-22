@@ -1145,7 +1145,7 @@ impl Waffle {
                         let user_id = state.user_id.clone();
                         cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.voice_user_menu(&user_id, e.position, cx))
                     })
-                    .when(state.streaming, |r| r.on_hover(stream_hover).on_mouse_move(cx.listener(|this, e: &gpui_kit::MouseMoveEvent, _, _| this.stream_tunnel.track(e.position))).children(stream_card.map(|card| div().absolute().top_0().right(px(4.)).child(gpui_kit::deferred(gpui_kit::anchored().snap_to_window_with_margin(px(8.)).child(card))))))
+                    .when(state.streaming, |r| r.on_hover(stream_hover).on_mouse_move(cx.listener(|this, e: &gpui_kit::MouseMoveEvent, _, _| this.stream_tunnel.track(e.position))).children(stream_card.map(|card| div().absolute().top_0().right_1().child(ui::floating("stream-card-float", card)))))
                     .when(is_watched, |r| r.bg(selected))
                     // A click opens their profile beside the channel list, as Discord's; a stream is watched from
                     // the preview its row shows on hover.
