@@ -417,23 +417,19 @@ impl Waffle {
         };
         let page = palette::surface(palette::Level::Page, cx);
         let close = if on_splash_cover { ui::round_button("onboarding-close", Glyph::X, "Close", 40.) } else { ui::icon_button("onboarding-close", Glyph::X, "Close", cx).large() };
-        // Over a splash the questions are a card as tall as they are (up to a cap), so the server's image
-        // shows all around; elsewhere the page fills the window.
+        // Over a splash the questions are a card, so the server's image shows all around. It keeps one size
+        // from step to step rather than resizing to each.
         let card = splash.is_some() && !on_splash_cover;
-        let body = match card {
-            true => hugging_scroll(div().id("onboarding-body").child(body), &view.body_scroll),
-            false => ui::scroll_area(div().id("onboarding-body").child(body), &view.body_scroll),
-        };
         let frame = div()
             .relative()
             .w_full()
+            .flex_1()
             .min_h_0()
             .flex()
             .flex_col()
             .when(!on_splash_cover, |d| d.bg(page))
             .when(card, |d| d.max_w(px(SHEET_WIDTH)).max_h(px(SHEET_HEIGHT)).squircle(ui::RADIUS_XL).overflow_hidden().shadow(ui::shadow_pop(cx)))
-            .when(!card, |d| d.flex_1())
-            .child(body)
+            .child(ui::scroll_area(div().id("onboarding-body").child(body), &view.body_scroll))
             .child(self.onboarding_footer(&prompts, &rules, on_splash_cover, cx))
             .child(div().absolute().top(px(16.)).right(px(16.)).child(close.on_click(cx.listener(|this, _, _, cx| this.close_onboarding(cx)))));
         let root = div()
@@ -594,12 +590,6 @@ fn rules_list(rules: &[String], scroll: &ScrollHandle, cx: &App) -> Div {
     });
     let list = div().id("onboarding-rules").max_h(px(RULES_HEIGHT)).overflow_y_scroll().track_scroll(scroll).flex().flex_col().children(rows);
     div().relative().squircle(ui::RADIUS_LG).bg(palette::surface(palette::Level::Group, cx)).p(px(4.)).child(list).vertical_scrollbar(scroll)
-}
-
-// A scroll area that is as tall as its content until its parent caps it (ui::scroll_area always fills).
-fn hugging_scroll(list: gpui_kit::Stateful<Div>, scroll: &ScrollHandle) -> Div {
-    use gpui_kit::base::InteractiveElementExt as _;
-    div().relative().flex().flex_col().flex_shrink(1.).min_h_0().child(list.flex_shrink(1.).min_h_0().overflow_y_scroll().lock_scroll_axis().track_scroll(scroll)).vertical_scrollbar(scroll)
 }
 
 fn column() -> Div {
