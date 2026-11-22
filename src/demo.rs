@@ -730,7 +730,7 @@ fn demo_active_now(waffle: &mut Waffle, empty: bool, cx: &mut Context<Waffle>) {
         ..Default::default()
     };
     for (id, name, rich) in [("25165824", "rosa", celeste), ("29360128", "mikey", track)] {
-        let activity = Activity { kind: rich.kind, text: rich.name.clone(), more: 0 };
+        let activity = Activity { kind: rich.kind, text: rich.name.clone(), rest: Vec::new() };
         waffle.presences.insert(id.into(), Presence { status: Presence_::Online, activity: Some(activity), rich: Some(rich), ..Default::default() });
         waffle.relationships.push(Relationship { user: user(id, name), kind: Relation::Friend });
     }

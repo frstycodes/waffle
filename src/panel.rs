@@ -112,7 +112,7 @@ impl Waffle {
         let Some(group) = self.open_group() else { return div().into_any_element() };
         let people = self.me.iter().chain(&group.recipients);
         let rows: Vec<AnyElement> = people
-            .map(|user| Member { user: user.clone(), roles: Vec::new(), presence: self.presences.get(&user.id).cloned().unwrap_or_default() })
+            .map(|user| Member { user: user.clone(), roles: Vec::new(), presence: self.presences.get(&user.id).cloned().unwrap_or_default(), boosting_since: None })
             .map(|member| self.member_row(&member, cx))
             .collect();
         div().flex().flex_col().gap(px(2.)).child(group_label(format!("Members · {}", rows.len()), cx)).children(rows).into_any_element()

@@ -139,7 +139,7 @@ impl Waffle {
                 };
                 let clear = ui::button("requests-clear", Tone::Link, cx).text_size(px(12.)).child("Clear All").on_click(cx.listener(move |this, _, _, cx| this.clear_requests(tab, cx)));
                 let label = div().pt_2().px_2().pb_1().flex().items_center().justify_between().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(heading).child(clear);
-                let rows: Vec<AnyElement> = dms.iter().map(|dm| self.request_row(dm, tab, cx)).collect();
+                let rows: Vec<AnyElement> = dms.iter().map(|dm| self.message_request_row(dm, tab, cx)).collect();
                 div().flex().flex_col().gap(px(2.)).child(label).children(rows).into_any_element()
             }
         };
@@ -160,7 +160,7 @@ impl Waffle {
 
     // GAP: Discord shows up to three mutual server icons and swaps the line for a message preview on hover
     // (`/users/@me/message-requests/supplemental-data`); the profile gives us only the count.
-    fn request_row(&self, dm: &Channel, tab: RequestsTab, cx: &mut Context<Self>) -> AnyElement {
+    fn message_request_row(&self, dm: &Channel, tab: RequestsTab, cx: &mut Context<Self>) -> AnyElement {
         let page = palette::surface(palette::Level::Page, cx);
         let name = dm.recipient.as_ref().map_or(dm.name.clone(), |u| u.name.clone());
         let profile = dm.recipient.as_ref().and_then(|u| self.profiles.peek(&profile_key(&u.id, None)));
