@@ -2,14 +2,22 @@
 // list with its cards (design/explore-forums-announcements-events.html `.ev2-*`), the event menu,
 // Interested, the details dialog, the create/edit wizard, Start, End and Cancel. Behaviour and copy are
 // Discord's; the look is Waffle's.
-use std::fmt::Display;
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    path::{Path, PathBuf},
+};
 
-use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, NaiveTime, TimeZone, Timelike, Utc};
 use gpui_kit::{
-    AnyElement, AppContext as _, Context, Entity, Focusable, FontWeight, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, SharedString, StatefulInteractiveElement, Styled, Window,
+    AnyElement, App, AppContext as _, Context, Entity, Focusable, FontWeight, Hsla, ImageSource, InteractiveElement, IntoElement, MouseButton, ParentElement, SharedString, StatefulInteractiveElement, Styled, Window,
     component::{
         Icon,
+        calendar::Matcher,
+        date_picker::{DatePicker, DatePickerEvent, DatePickerState},
         input::{Input, InputEvent, InputState, Textarea, TextareaState},
+        text::TextView,
+        time_field::{HourCycle, TimeField, TimeFieldEvent, TimeFieldState, TimePrecision},
     },
     div,
     prelude::FluentBuilder as _,
@@ -20,7 +28,7 @@ use serde_json::{Value, json};
 
 use crate::{
     Waffle,
-    discord::{self, Guild, ScheduledEvent, User, perm},
+    discord::{self, EventException, Guild, ScheduledEvent, User, perm},
     icons::Glyph,
     mascot::Mood,
     menu::{Entry, item, submenu},
@@ -40,6 +48,11 @@ const DETAILS_WIDTH: f32 = 600.;
 const WIZARD_WIDTH: f32 = 480.;
 const PRIVATE: u8 = 2;
 const STAGE_TYPE: u8 = 13;
+const DISCORD_EPOCH: i64 = 1_420_070_400_000;
+// Occurrences listed under a series' details.
+const OCCURRENCES_SHOWN: usize = 5;
+// rrule.js expansion stops at now+4 years (`er`).
+const SERIES_YEARS: i64 = 4;
 
 // The layers this feature stacks: the list, an event's details over it, the wizard, the Start dialog.
 #[derive(Default)]
@@ -48,7 +61,12 @@ pub(crate) struct Events {
     details: Option<Details>,
     wizard: Option<Wizard>,
     start: Option<Start>,
+    // Your Interested on single occurrences, by (event id, recurrence id); a series' own is `me_interested`.
+    rsvps: HashMap<OccurrenceKey, bool>,
 }
+
+// One occurrence: its event's id and its recurrence id.
+type OccurrenceKey = (String, String);
 
 struct Details {
     guild_id: String,
@@ -82,13 +100,36 @@ struct Wizard {
     frequency: Frequency,
     location: Entity<InputState>,
     topic: Entity<InputState>,
-    start_date: Entity<InputState>,
-    start_time: Entity<InputState>,
-    end_date: Entity<InputState>,
-    end_time: Entity<InputState>,
+    start_date: Entity<DatePickerState>,
+    start_time: Entity<TimeFieldState>,
+    end_date: Entity<DatePickerState>,
+    end_time: Entity<TimeFieldState>,
     description: Entity<TextareaState>,
+    cover: Cover,
+    // Editing one occurrence of a series: only its times change, saved as an exception.
+    occurrence: Option<Occurrence>,
     link: Option<String>,
     busy: bool,
+}
+
+// The wizard's cover: the event's own, a file picked to replace it, or taken off.
+#[derive(Clone, Debug, PartialEq)]
+enum Cover {
+    Kept,
+    Picked { path: PathBuf, data: String },
+    Removed,
+}
+
+// One occurrence of a series, with its exception applied.
+#[derive(Clone, Debug, PartialEq)]
+struct Occurrence {
+    recurrence_id: String,
+    original: DateTime<Utc>,
+    start: DateTime<Utc>,
+    end: Option<DateTime<Utc>>,
+    canceled: bool,
+    // An exception already exists for it, so changes PATCH it.
+    excepted: bool,
 }
 
 // What the card's status line says (`103355`): its state, the coloured lead and the rest.
@@ -270,6 +311,21 @@ fn listed<'a>(guild: &'a Guild, me: &str) -> Vec<&'a ScheduledEvent> {
         .collect();
     events.sort_by_key(|e| (e.status != ScheduledEvent::ACTIVE, parse_time(&e.start), e.id.clone()));
     events
+}
+
+// `/users/@me/scheduled-events`: the series you're Interested in, and your answers on single occurrences.
+fn rsvps_of(list: &Value) -> (Vec<String>, Vec<(OccurrenceKey, bool)>) {
+    let (mut series, mut single) = (Vec::new(), Vec::new());
+    for answer in list.as_array().into_iter().flatten() {
+        let Some(event) = answer["guild_scheduled_event_id"].as_str() else { continue };
+        let on = answer["response"].as_u64().unwrap_or(1) == 1;
+        match answer["guild_scheduled_event_exception_id"].as_str() {
+            Some(occurrence) => single.push(((event.to_owned(), occurrence.to_owned()), on)),
+            None if on => series.push(event.to_owned()),
+            None => {}
+        }
+    }
+    (series, single)
 }
 
 fn upcoming_count(guild: &Guild, me: &str) -> usize {
@@ -471,27 +527,171 @@ fn ics_file_name(name: &str) -> String {
     format!("{}.ics", if safe.is_empty() { "event" } else { safe })
 }
 
-// Wizard dates
+// Series
 
-// GAP: Waffle has no date or time picker; the wizard takes "2026-11-28" and "7:00 PM" (or "19:00") as text.
-const DATE_FORMAT: &str = "%Y-%m-%d";
-
-fn parse_clock(text: &str) -> Option<NaiveTime> {
-    let text = text.trim().to_uppercase().replace(' ', "");
-    let (body, meridiem) = match (text.strip_suffix("AM"), text.strip_suffix("PM")) {
-        (Some(body), _) => (body, "AM"),
-        (_, Some(body)) => (body, "PM"),
-        _ => return NaiveTime::parse_from_str(&text, "%H:%M").ok(),
-    };
-    // chrono won't read an hour without its minutes: "7 PM" is "7:00 PM".
-    let body = if body.contains(':') { body.to_owned() } else { format!("{body}:00") };
-    NaiveTime::parse_from_str(&format!("{body}{meridiem}"), "%I:%M%p").ok()
+// `G3`: an occurrence's recurrence id is a snowflake of its start, floored to the second.
+pub(crate) fn recurrence_id(start: DateTime<Utc>) -> String {
+    let ms = start.timestamp() * 1000;
+    (((ms - DISCORD_EPOCH).max(0) as u64) << 22).to_string()
 }
 
-fn parse_local(date: &str, time: &str) -> Option<DateTime<Utc>> {
-    let day = NaiveDate::parse_from_str(date.trim(), DATE_FORMAT).ok()?;
-    let at = NaiveDateTime::new(day, parse_clock(time)?);
-    Local.from_local_datetime(&at).earliest().map(|t| t.with_timezone(&Utc))
+// The series' starts from `first`, as rrule.js expands Discord's rule, up to `horizon`.
+fn series_starts(rule: &Value, first: DateTime<Utc>, horizon: DateTime<Utc>) -> Vec<DateTime<Utc>> {
+    let interval = rule["interval"].as_u64().unwrap_or(1).max(1) as i64;
+    let weekdays: Vec<u64> = rule["by_weekday"].as_array().into_iter().flatten().filter_map(Value::as_u64).collect();
+    let frequency = Frequency::of_rule(rule);
+    let step = |k: i64| -> Option<DateTime<Utc>> {
+        match frequency {
+            Frequency::Once => (k == 0).then_some(first),
+            Frequency::Weekly | Frequency::Biweekly => Some(first + Duration::weeks(k * interval)),
+            Frequency::Daily | Frequency::Weekdays => Some(first + Duration::days(k * interval)).filter(|t| weekdays.is_empty() || weekdays.contains(&u64::from(t.weekday().num_days_from_monday()))),
+            Frequency::Monthly => nth_weekday_in_month(rule, first, k),
+            Frequency::Yearly => first.with_year(first.year() + k as i32),
+        }
+    };
+    let most = 366 * SERIES_YEARS + 1;
+    (0..most).map(step).take_while(|t| t.is_none_or(|t| t <= horizon)).flatten().collect()
+}
+
+// Monthly on the nth weekday (`by_n_weekday`), `months` after the first, at the first's time; none when
+// that month has no such day (a fifth Friday).
+fn nth_weekday_in_month(rule: &Value, first: DateTime<Utc>, months: i64) -> Option<DateTime<Utc>> {
+    let nth = &rule["by_n_weekday"][0];
+    let (n, day) = (nth["n"].as_u64()? as u32, nth["day"].as_u64()? as u32);
+    let index = i64::from(first.year()) * 12 + i64::from(first.month0()) + months;
+    let month_start = NaiveDate::from_ymd_opt(index.div_euclid(12) as i32, index.rem_euclid(12) as u32 + 1, 1)?;
+    let offset = (day + 7 - month_start.weekday().num_days_from_monday()) % 7;
+    let date = month_start.with_day(1 + offset + n.checked_sub(1)? * 7)?;
+    Some(date.and_time(first.time()).and_utc())
+}
+
+// The occurrences starting from `from`, each with its exception applied.
+fn occurrences(event: &ScheduledEvent, from: DateTime<Utc>, limit: usize) -> Vec<Occurrence> {
+    let (Some(rule), Some((first, end))) = (event.recurrence.as_ref(), span(event)) else { return Vec::new() };
+    let length = event.end.as_ref().map(|_| end - first);
+    let horizon = Utc::now().max(from) + Duration::days(365 * SERIES_YEARS);
+    series_starts(rule, first, horizon)
+        .into_iter()
+        .map(|original| occurrence(&event.exceptions, original, length))
+        .filter(|o| o.start.max(o.original) >= from)
+        .take(limit)
+        .collect()
+}
+
+fn occurrence(exceptions: &[EventException], original: DateTime<Utc>, length: Option<Duration>) -> Occurrence {
+    let recurrence_id = recurrence_id(original);
+    let exception = exceptions.iter().find(|x| x.id == recurrence_id);
+    let start = exception.and_then(|x| x.start.as_deref()).and_then(parse_time).unwrap_or(original);
+    let end = exception.and_then(|x| x.end.as_deref()).and_then(parse_time).or(length.map(|l| start + l));
+    Occurrence { recurrence_id, original, start, end, canceled: exception.is_some_and(|x| x.canceled), excepted: exception.is_some() }
+}
+
+// "This event" on a series' card and menu: the next occurrence still on.
+fn next_occurrence(event: &ScheduledEvent, now: DateTime<Utc>) -> Option<Occurrence> {
+    occurrences(event, now, usize::MAX).into_iter().find(|o| !o.canceled)
+}
+
+fn occurrence_link(event: &ScheduledEvent, recurrence_id: &str) -> String {
+    format!("{}/{recurrence_id}", event_link(event))
+}
+
+// The request that writes an occurrence's exception (`496092`): a new one names the occurrence by its
+// original start; an existing one is patched by its id.
+// Not verified: that an exception's id is the occurrence's recurrence id; the doc addresses both the same way.
+fn exception_request(event: &ScheduledEvent, occurrence: &Occurrence, start: DateTime<Utc>, end: Option<DateTime<Utc>>, canceled: bool) -> (Method, String, Value) {
+    let base = format!("/guilds/{}/scheduled-events/{}/exceptions", event.guild_id, event.id);
+    let mut body = json!({ "scheduled_start_time": start.to_rfc3339(), "scheduled_end_time": end.map(|e| e.to_rfc3339()), "is_canceled": canceled });
+    if occurrence.excepted {
+        return (Method::PATCH, format!("{base}/{}", occurrence.recurrence_id), body);
+    }
+    body["original_scheduled_start_time"] = json!(occurrence.original.to_rfc3339());
+    (Method::POST, base, body)
+}
+
+// Restore Event: an exception that only canceled is deleted; one that also moved the occurrence keeps the
+// move and drops the cancel.
+fn restore_request(event: &ScheduledEvent, occurrence: &Occurrence) -> (Method, String, Option<Value>) {
+    if occurrence.start != occurrence.original {
+        let (method, path, body) = exception_request(event, occurrence, occurrence.start, occurrence.end, false);
+        return (method, path, Some(body));
+    }
+    (Method::DELETE, format!("/guilds/{}/scheduled-events/{}/exceptions/{}", event.guild_id, event.id, occurrence.recurrence_id), None)
+}
+
+// The exception as it stands once `body` lands; none once it's deleted.
+fn exception_from(recurrence_id: &str, body: Option<&Value>) -> Option<EventException> {
+    let body = body?;
+    Some(EventException {
+        id: recurrence_id.to_owned(),
+        start: body["scheduled_start_time"].as_str().map(str::to_owned),
+        end: body["scheduled_end_time"].as_str().map(str::to_owned),
+        canceled: body["is_canceled"].as_bool().unwrap_or(false),
+    })
+}
+
+// Covers
+
+// A hash is Discord's; the wizard's picked file comes as an absolute path, the demo's art as a bundled one.
+fn cover_source(event: &ScheduledEvent) -> Option<ImageSource> {
+    let image = event.image.as_deref()?;
+    if Path::new(image).is_absolute() {
+        return Some(PathBuf::from(image).into());
+    }
+    match image.contains('/') {
+        true => Some(image.to_owned().into()),
+        false => event.cover_url().map(Into::into),
+    }
+}
+
+// The create/PATCH body's `image`: the picked file's data URI, null to take the cover off, left out to keep it.
+fn cover_field(cover: &Cover) -> Option<Value> {
+    match cover {
+        Cover::Kept => None,
+        Cover::Picked { data, .. } => Some(json!(data)),
+        Cover::Removed => Some(Value::Null),
+    }
+}
+
+// What the wizard's preview shows: the picked file, nothing once removed, else the event's own.
+fn wizard_image(cover: &Cover, kept: Option<String>) -> Option<String> {
+    match cover {
+        Cover::Kept => kept,
+        Cover::Picked { path, .. } => Some(path.to_string_lossy().into_owned()),
+        Cover::Removed => None,
+    }
+}
+
+// Wizard dates
+
+fn local_instant(day: NaiveDate, at: NaiveTime) -> Option<DateTime<Utc>> {
+    Local.from_local_datetime(&day.and_time(at)).earliest().map(|t| t.with_timezone(&Utc))
+}
+
+fn picked_instant(date: &Entity<DatePickerState>, time: &Entity<TimeFieldState>, cx: &App) -> Option<DateTime<Utc>> {
+    let day = date.read(cx).date_time().start()?.date();
+    local_instant(day, time.read(cx).time())
+}
+
+// A date field's calendar, past days off; the date reads as the cards write it.
+fn date_state(at: DateTime<Local>, window: &mut Window, cx: &mut Context<Waffle>) -> Entity<DatePickerState> {
+    let today = Local::now().date_naive();
+    let state = cx.new(|cx| {
+        let mut state = DatePickerState::new(window, cx).date_format("%a, %b %-d, %Y").disabled_matcher(Matcher::custom(move |d| *d < today));
+        state.set_date(at.date_naive(), window, cx);
+        state
+    });
+    cx.subscribe(&state, |_, _, _: &DatePickerEvent, cx| cx.notify()).detach();
+    state
+}
+
+fn time_state(at: DateTime<Local>, window: &mut Window, cx: &mut Context<Waffle>) -> Entity<TimeFieldState> {
+    let state = cx.new(|cx| {
+        let mut state = TimeFieldState::new(window, cx).precision(TimePrecision::Minute).hour_cycle(HourCycle::H12);
+        state.set_time(at.time(), window, cx);
+        state
+    });
+    cx.subscribe(&state, |_, _, _: &TimeFieldEvent, cx| cx.notify()).detach();
+    state
 }
 
 // `jd`: the next whole hour at least an hour away.
@@ -533,9 +733,13 @@ impl Waffle {
 
     // A GET whose body the caller wants; a failure comes back as the error text.
     fn fetch_json(&mut self, path: String, then: impl FnOnce(&mut Waffle, Result<Value, String>, &mut Context<Waffle>) + 'static, cx: &mut Context<Self>) {
+        self.call_json(Method::GET, path, None, then, cx);
+    }
+
+    fn call_json(&mut self, method: Method, path: String, body: Option<Value>, then: impl FnOnce(&mut Waffle, Result<Value, String>, &mut Context<Waffle>) + 'static, cx: &mut Context<Self>) {
         let Some(client) = self.client.clone() else { return };
         cx.spawn(async move |this, cx| {
-            let result = client.call(Method::GET, path, None).await;
+            let result = client.call(method, path, body).await;
             this.update(cx, |this, cx| {
                 then(this, result, cx);
                 cx.notify();
@@ -569,22 +773,78 @@ impl Waffle {
             );
         }
         let g = guild_id.to_owned();
-        // Not verified: the response is a list of `{guild_scheduled_event_id, response, …}` for this server.
+        // Not verified: the response is a list of `{guild_scheduled_event_id, guild_scheduled_event_exception_id,
+        // response, …}` for this server, the exception id set on single-occurrence answers.
         self.fetch_json(
             format!("/users/@me/scheduled-events?guild_ids={guild_id}"),
             move |this, result, _| {
                 let Ok(list) = result else { return };
-                let mine: Vec<String> = list.as_array().into_iter().flatten().filter(|r| r["response"].as_u64().unwrap_or(1) == 1).filter_map(|r| r["guild_scheduled_event_id"].as_str().map(str::to_owned)).collect();
+                let (series, single) = rsvps_of(&list);
+                this.events.rsvps.extend(single);
                 let Some(guild) = this.guilds.iter_mut().find(|x| x.id == g) else { return };
                 for event in &mut guild.events {
-                    event.me_interested = mine.contains(&event.id);
+                    event.me_interested = series.contains(&event.id);
                 }
             },
             cx,
         );
     }
 
-    fn open_event_details(&mut self, guild_id: String, event_id: String, cx: &mut Context<Self>) {
+    // Whether you're Interested in one occurrence: its own answer, else the series'.
+    fn occurrence_interested(&self, event: &ScheduledEvent, recurrence_id: &str) -> bool {
+        self.events.rsvps.get(&(event.id.clone(), recurrence_id.to_owned())).copied().unwrap_or(event.me_interested)
+    }
+
+    // One occurrence's Interested (`929267.QC`): differing from the series is an answer on the occurrence
+    // (`UNINTERESTED` opts out of a series you follow); matching it again drops that answer.
+    fn set_occurrence_interested(&mut self, guild_id: String, event_id: String, recurrence_id: String, on: bool, cx: &mut Context<Self>) {
+        let Some(series) = self.scheduled_event(&guild_id, &event_id).map(|e| e.me_interested) else { return };
+        let path = format!("/guilds/{guild_id}/scheduled-events/{event_id}/{recurrence_id}/users/@me");
+        let (method, body) = if on == series { (Method::DELETE, None) } else { (Method::PUT, Some(json!({ "response": u8::from(on) }))) };
+        let key = (event_id, recurrence_id);
+        let before = self.events.rsvps.get(&key).copied();
+        let undo = key.clone();
+        self.rest_optimistic(
+            method,
+            path,
+            body,
+            move |this| {
+                match on == series {
+                    true => this.events.rsvps.remove(&key),
+                    false => this.events.rsvps.insert(key, on),
+                };
+            },
+            move |this| {
+                match before {
+                    Some(was) => this.events.rsvps.insert(undo, was),
+                    None => this.events.rsvps.remove(&undo),
+                };
+            },
+            cx,
+        );
+    }
+
+    // A series' Interested asks which: all of it or the next occurrence.
+    fn open_series_interested(&mut self, guild_id: String, event_id: String, window: &mut Window, cx: &mut Context<Self>) {
+        let at = window.mouse_position();
+        self.open_live_menu(at, move |this| this.interested_entries(&guild_id, &event_id, None), cx);
+    }
+
+    // "All events in this series" / "Only this event", ticked as they stand. `recurrence_id` picks the
+    // occurrence; none means the next one.
+    fn interested_entries(&self, guild_id: &str, event_id: &str, recurrence_id: Option<&str>) -> Vec<Entry> {
+        let Some(event) = self.scheduled_event(guild_id, event_id) else { return Vec::new() };
+        let Some(occurrence) = recurrence_id.map(str::to_owned).or_else(|| next_occurrence(event, Utc::now()).map(|o| o.recurrence_id)) else { return Vec::new() };
+        let (series, single) = (event.me_interested, self.occurrence_interested(event, &occurrence));
+        let (g, e) = (guild_id.to_owned(), event_id.to_owned());
+        let (g2, e2) = (g.clone(), e.clone());
+        vec![
+            item("All events in this series", move |this, _, cx| this.toggle_interested(g.clone(), e.clone(), cx)).checked(series).entry(),
+            item("Only this event", move |this, _, cx| this.set_occurrence_interested(g2.clone(), e2.clone(), occurrence.clone(), !single, cx)).checked(single).entry(),
+        ]
+    }
+
+    pub(crate) fn open_event_details(&mut self, guild_id: String, event_id: String, cx: &mut Context<Self>) {
         self.menu = None;
         self.events.details = Some(Details { guild_id, event_id, tab: 0, users: None });
         cx.notify();
@@ -642,18 +902,122 @@ impl Waffle {
             let (g, e) = ids();
             out.push(item("Start Event", move |this, _, cx| this.open_start_event(g.clone(), e.clone(), cx)).icon(Glyph::Play).entry());
         }
+        // A series' items split into this (the next occurrence) and all of it.
+        let next = event.recurrence.as_ref().and_then(|_| next_occurrence(event, Utc::now())).map(|o| o.recurrence_id);
         if manage && !canceled {
             let (g, e) = ids();
-            out.push(item("Edit Event", move |this, window, cx| this.open_event_wizard(g.clone(), Some(e.clone()), window, cx)).icon(Glyph::Pen).entry());
+            let all = item(if next.is_some() { "Edit all Events in this Series" } else { "Edit Event" }, move |this, window, cx| this.open_event_wizard(g.clone(), Some(e.clone()), window, cx));
+            out.push(match next.clone() {
+                Some(occurrence) => {
+                    let (g, e) = ids();
+                    let this_one = item("Edit this Event", move |this, window, cx| this.open_occurrence_editor(g.clone(), e.clone(), occurrence.clone(), window, cx)).entry();
+                    submenu("Edit Event", vec![this_one, all.entry()]).icon(Glyph::Pen).entry()
+                }
+                None => all.icon(Glyph::Pen).entry(),
+            });
         }
         let link = event_link(event);
-        out.push(item("Copy Event Link", move |this, _, cx| this.copy_event_link(link.clone(), cx)).icon(Glyph::Link).entry());
+        let copy_all = item(if next.is_some() { "Copy Link for all Events" } else { "Copy Event Link" }, move |this, _, cx| this.copy_event_link(link.clone(), cx));
+        out.push(match next.clone() {
+            Some(occurrence) => {
+                let link = occurrence_link(event, &occurrence);
+                let only = item("Copy Link for Only this Event", move |this, _, cx| this.copy_event_link(link.clone(), cx)).entry();
+                submenu("Copy Event Link", vec![only, copy_all.entry()]).icon(Glyph::Link).entry()
+            }
+            None => copy_all.icon(Glyph::Link).entry(),
+        });
         if manage && !active && !canceled {
             let (g, e) = ids();
             out.push(Entry::Separator);
-            out.push(item("Cancel Event", move |this, _, cx| this.confirm_cancel_event(g.clone(), e.clone(), cx)).danger().icon(Glyph::CalendarX).entry());
+            let all = item(if next.is_some() { "Cancel all Events in this Series" } else { "Cancel Event" }, move |this, _, cx| this.confirm_cancel_event(g.clone(), e.clone(), cx)).danger();
+            out.push(match next {
+                Some(occurrence) => {
+                    let (g, e) = ids();
+                    let this_one = item("Cancel this Event", move |this, _, cx| this.confirm_cancel_occurrence(g.clone(), e.clone(), occurrence.clone(), cx)).danger().entry();
+                    submenu("Cancel Event", vec![this_one, all.entry()]).danger().icon(Glyph::CalendarX).entry()
+                }
+                None => all.icon(Glyph::CalendarX).entry(),
+            });
         }
         out
+    }
+
+    // An occurrence row's menu (`924037` on a recurrence): edit or cancel this one, Restore a canceled one,
+    // its link, and its Interested.
+    fn occurrence_menu(&self, guild_id: &str, event_id: &str, recurrence_id: &str) -> Vec<Entry> {
+        let Some(event) = self.scheduled_event(guild_id, event_id) else { return Vec::new() };
+        let Some(occurrence) = occurrences(event, Utc::now(), usize::MAX).into_iter().find(|o| o.recurrence_id == recurrence_id) else { return Vec::new() };
+        let manage = self.may_manage(event) && event.status != ScheduledEvent::CANCELED;
+        let ids = || (guild_id.to_owned(), event_id.to_owned(), recurrence_id.to_owned());
+        let mut out = Vec::new();
+        if manage && !occurrence.canceled {
+            let (g, e, r) = ids();
+            out.push(item("Edit this Event", move |this, window, cx| this.open_occurrence_editor(g.clone(), e.clone(), r.clone(), window, cx)).icon(Glyph::Pen).entry());
+        }
+        if manage && occurrence.canceled {
+            let (g, e, r) = ids();
+            out.push(item("Restore Event", move |this, _, cx| this.restore_occurrence(&g, &e, &r, cx)).icon(Glyph::Calendar).entry());
+        }
+        let link = occurrence_link(event, recurrence_id);
+        out.push(item("Copy Event Link", move |this, _, cx| this.copy_event_link(link.clone(), cx)).icon(Glyph::Link).entry());
+        if !occurrence.canceled {
+            let label = if self.occurrence_interested(event, recurrence_id) { "Mark as Not Interested" } else { "Mark as Interested" };
+            out.push(submenu(label, self.interested_entries(guild_id, event_id, Some(recurrence_id))).icon(Glyph::Bell).entry());
+        }
+        if manage && !occurrence.canceled {
+            let (g, e, r) = ids();
+            out.push(Entry::Separator);
+            out.push(item("Cancel this Event", move |this, _, cx| this.confirm_cancel_occurrence(g.clone(), e.clone(), r.clone(), cx)).danger().icon(Glyph::CalendarX).entry());
+        }
+        out
+    }
+
+    fn open_occurrence_menu(&mut self, guild_id: String, event_id: String, recurrence_id: String, window: &mut Window, cx: &mut Context<Self>) {
+        let at = window.mouse_position();
+        self.open_live_menu(at, move |this| this.occurrence_menu(&guild_id, &event_id, &recurrence_id), cx);
+    }
+
+    fn find_occurrence(&self, guild_id: &str, event_id: &str, recurrence_id: &str) -> Option<(ScheduledEvent, Occurrence)> {
+        let event = self.scheduled_event(guild_id, event_id)?;
+        let occurrence = occurrences(event, Utc::now(), usize::MAX).into_iter().find(|o| o.recurrence_id == recurrence_id)?;
+        Some((event.clone(), occurrence))
+    }
+
+    // Writes an occurrence's exception at once, putting the old one back if Discord refuses.
+    // GAP: the GUILD_SCHEDULED_EVENT_EXCEPTION_* gateway events aren't handled, so others' changes to single
+    // occurrences arrive only with the event's next update.
+    fn send_exception(&mut self, event: &ScheduledEvent, recurrence_id: String, (method, path, body): (Method, String, Option<Value>), cx: &mut Context<Self>) {
+        let after = exception_from(&recurrence_id, body.as_ref());
+        let before = event.exceptions.iter().find(|x| x.id == recurrence_id).cloned();
+        let (g, e) = (event.guild_id.clone(), event.id.clone());
+        let (g2, e2, r2) = (g.clone(), e.clone(), recurrence_id.clone());
+        let swap = |this: &mut Waffle, g: &str, e: &str, id: &str, exception: Option<EventException>| {
+            let Some(event) = this.scheduled_event_mut(g, e) else { return };
+            event.exceptions.retain(|x| x.id != id);
+            event.exceptions.extend(exception);
+        };
+        self.rest_optimistic(method, path, body, move |this| swap(this, &g, &e, &recurrence_id, after), move |this| swap(this, &g2, &e2, &r2, before), cx);
+    }
+
+    fn confirm_cancel_occurrence(&mut self, guild_id: String, event_id: String, recurrence_id: String, cx: &mut Context<Self>) {
+        self.confirm_delete(
+            "Cancel Event?",
+            "Are you sure you want to cancel this event?",
+            "Cancel Event",
+            move |this, _, cx| {
+                let Some((event, occurrence)) = this.find_occurrence(&guild_id, &event_id, &recurrence_id) else { return };
+                let (method, path, body) = exception_request(&event, &occurrence, occurrence.start, occurrence.end, true);
+                this.send_exception(&event, recurrence_id.clone(), (method, path, Some(body)), cx);
+            },
+            cx,
+        );
+        self.set_dialog_cancel("Never Mind");
+    }
+
+    fn restore_occurrence(&mut self, guild_id: &str, event_id: &str, recurrence_id: &str, cx: &mut Context<Self>) {
+        let Some((event, occurrence)) = self.find_occurrence(guild_id, event_id, recurrence_id) else { return };
+        let request = restore_request(&event, &occurrence);
+        self.send_exception(&event, recurrence_id.to_owned(), request, cx);
     }
 
     // The server menu's "Create Event" (`499817`), after Create Channel and Create Category.
@@ -695,23 +1059,64 @@ impl Waffle {
         cx.notify();
     }
 
-    // Stage events open the stage; the rest switch to live (`163765`).
-    // GAP: Discord creates a missing stage channel first and then joins the event's channel; neither happens here.
+    // Starting (`163765`): a stage event opens its stage, made first when it's gone; the rest switch to live.
+    // Then you join the event's channel.
     fn start_event(&mut self, cx: &mut Context<Self>) {
         let Some(start) = self.events.start.take() else { return };
         let Some(event) = self.scheduled_event(&start.guild_id, &start.event_id).cloned() else { return };
-        let path = format!("/guilds/{}/scheduled-events/{}", event.guild_id, event.id);
         let (g, e) = (event.guild_id.clone(), event.id.clone());
-        let live = move |this: &mut Waffle, _: &mut Context<Waffle>| {
-            if let Some(event) = this.scheduled_event_mut(&g, &e) {
-                event.status = ScheduledEvent::ACTIVE;
-            }
-        };
-        if event.entity_type == ScheduledEvent::STAGE {
-            let body = json!({ "channel_id": event.channel_id, "topic": event.name, "privacy_level": PRIVATE, "guild_scheduled_event_id": event.id, "send_start_notification": start.notify });
-            return self.rest(Method::POST, "/stage-instances".into(), Some(body), live, cx);
+        if event.entity_type != ScheduledEvent::STAGE {
+            let path = format!("/guilds/{g}/scheduled-events/{e}");
+            return self.rest(Method::PATCH, path, Some(json!({ "status": ScheduledEvent::ACTIVE })), move |this, cx| this.event_started(&g, &e, cx), cx);
         }
-        self.rest(Method::PATCH, path, Some(json!({ "status": ScheduledEvent::ACTIVE })), live, cx);
+        let stage = event.channel_id.as_deref().and_then(|c| self.event_guild(&g)?.channel(c)).cloned();
+        match stage {
+            Some(stage) => self.open_stage(&event, &stage.id, start.notify, cx),
+            None => self.create_stage(event, start.notify, cx),
+        }
+    }
+
+    fn open_stage(&mut self, event: &ScheduledEvent, channel_id: &str, notify: bool, cx: &mut Context<Self>) {
+        let body = json!({ "channel_id": channel_id, "topic": event.name, "privacy_level": PRIVATE, "guild_scheduled_event_id": event.id, "send_start_notification": notify });
+        let (g, e) = (event.guild_id.clone(), event.id.clone());
+        self.rest(Method::POST, "/stage-instances".into(), Some(body), move |this, cx| this.event_started(&g, &e, cx), cx);
+    }
+
+    // The stage is named after the event (`name.substring(0,100)`).
+    // Not verified: whether Discord also points the event at the new stage; here only the stage instance names it.
+    fn create_stage(&mut self, event: ScheduledEvent, notify: bool, cx: &mut Context<Self>) {
+        let name: String = event.name.chars().take(100).collect();
+        let path = format!("/guilds/{}/channels", event.guild_id);
+        self.call_json(
+            Method::POST,
+            path,
+            Some(json!({ "name": name, "type": STAGE_TYPE })),
+            move |this, result, cx| {
+                let stage = match result.map(|v| discord::parse_channel(&v, &event.guild_id)) {
+                    Ok(Some(stage)) => stage,
+                    Ok(None) => return,
+                    Err(error) => return this.show_toast(error, cx),
+                };
+                if let Some(guild) = this.guilds.iter_mut().find(|g| g.id == event.guild_id) {
+                    if guild.channel(&stage.id).is_none() {
+                        guild.channels.push(stage.clone());
+                    }
+                    if let Some(listed) = guild.events.iter_mut().find(|e| e.id == event.id) {
+                        listed.channel_id = Some(stage.id.clone());
+                    }
+                }
+                this.open_stage(&event, &stage.id, notify, cx);
+            },
+            cx,
+        );
+    }
+
+    fn event_started(&mut self, guild_id: &str, event_id: &str, cx: &mut Context<Self>) {
+        let Some(event) = self.scheduled_event_mut(guild_id, event_id) else { return };
+        event.status = ScheduledEvent::ACTIVE;
+        let channel_id = event.channel_id.clone();
+        let Some(channel) = channel_id.and_then(|c| self.event_guild(guild_id)?.channel(&c).cloned()) else { return };
+        self.join_voice_in(Some(guild_id.to_owned()), channel, cx);
     }
 
     fn confirm_end_event(&mut self, guild_id: String, event_id: String, cx: &mut Context<Self>) {
@@ -734,7 +1139,12 @@ impl Waffle {
 
     // Discord's Cancel Event deletes the event rather than setting status 4.
     fn confirm_cancel_event(&mut self, guild_id: String, event_id: String, cx: &mut Context<Self>) {
-        self.confirm_delete("Cancel Event?", "Are you sure you want to cancel this event?", "Cancel Event", move |this, _, cx| this.cancel_event(&guild_id, &event_id, cx), cx);
+        let series = self.scheduled_event(&guild_id, &event_id).is_some_and(|e| e.recurrence.is_some());
+        let (body, button) = match series {
+            true => ("Are you sure you want to cancel this event? Canceling this event will also cancel all events in this series.", "Cancel all Events"),
+            false => ("Are you sure you want to cancel this event?", "Cancel Event"),
+        };
+        self.confirm_delete("Cancel Event?", body, button, move |this, _, cx| this.cancel_event(&guild_id, &event_id, cx), cx);
         self.set_dialog_cancel("Never Mind");
     }
 
@@ -773,6 +1183,19 @@ impl Waffle {
         self.close_events();
         cx.notify();
     }
+
+    // Every layer closes, for a jump elsewhere; your occurrence answers stay.
+    fn leave_events(&mut self) {
+        let rsvps = std::mem::take(&mut self.events.rsvps);
+        self.events = Events { rsvps, ..Events::default() };
+    }
+
+    // The empty list's "Server Settings > Roles".
+    fn open_roles_settings(&mut self, guild_id: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.leave_events();
+        self.open_server_settings(guild_id, window, cx);
+        self.open_server_page(crate::server_settings::access::Page::Roles, cx);
+    }
 }
 
 // The wizard
@@ -789,11 +1212,10 @@ impl Waffle {
             cx.subscribe(&state, |_, _, _: &InputEvent, cx| cx.notify()).detach();
             state
         };
-        let day = |t: DateTime<Local>| t.format(DATE_FORMAT).to_string();
         let location = input(event.as_ref().and_then(|e| e.location.clone()).unwrap_or_default(), "Add a location, link, or something.", window, cx);
         let topic = input(event.as_ref().map(|e| e.name.clone()).unwrap_or_default(), "What's your event?", window, cx);
-        let (start_date, start_time) = (input(day(start), "2026-11-28", window, cx), input(clock(&start), "7:00 PM", window, cx));
-        let (end_date, end_time) = (input(day(end), "2026-11-28", window, cx), input(clock(&end), "8:00 PM", window, cx));
+        let (start_date, start_time) = (date_state(start, window, cx), time_state(start, window, cx));
+        let (end_date, end_time) = (date_state(end, window, cx), time_state(end, window, cx));
         let description = cx.new(|cx| TextareaState::new(window, cx).placeholder("Tell people a little more about your event. Markdown, new lines, and links are supported."));
         description.update(cx, |s, cx| s.set_value(event.as_ref().and_then(|e| e.description.clone()).unwrap_or_default(), window, cx));
         cx.subscribe(&description, |_, _, _: &InputEvent, cx| cx.notify()).detach();
@@ -814,10 +1236,42 @@ impl Waffle {
             end_date,
             end_time,
             description,
+            cover: Cover::Kept,
+            occurrence: None,
             link: None,
             busy: false,
         });
         cx.notify();
+    }
+
+    // "Edit this Event": the wizard on one occurrence's times, saved as its exception.
+    // Not verified: Discord's single-occurrence modal (`462166`) wasn't fetched; the exception carries only times,
+    // so only times are offered here.
+    fn open_occurrence_editor(&mut self, guild_id: String, event_id: String, recurrence_id: String, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((_, occurrence)) = self.find_occurrence(&guild_id, &event_id, &recurrence_id) else { return };
+        self.open_event_wizard(guild_id, Some(event_id), window, cx);
+        let Some(w) = self.events.wizard.as_mut() else { return };
+        w.step = Step::Info;
+        let (start, end) = (occurrence.start.with_timezone(&Local), occurrence.end.unwrap_or(occurrence.start + Duration::hours(1)).with_timezone(&Local));
+        let pickers = (w.start_date.clone(), w.start_time.clone(), w.end_date.clone(), w.end_time.clone());
+        w.occurrence = Some(occurrence);
+        pickers.0.update(cx, |s, cx| s.set_date(start.date_naive(), window, cx));
+        pickers.1.update(cx, |s, cx| s.set_time(start.time(), window, cx));
+        pickers.2.update(cx, |s, cx| s.set_date(end.date_naive(), window, cx));
+        pickers.3.update(cx, |s, cx| s.set_time(end.time(), window, cx));
+    }
+
+    // Pick a cover, held as a data URI until the save goes out.
+    fn pick_cover(&mut self, cx: &mut Context<Self>) {
+        let paths = cx.prompt_for_paths(gpui_kit::PathPromptOptions { files: true, directories: false, multiple: false, prompt: None });
+        cx.spawn(async move |this, cx| {
+            let Ok(Ok(Some(paths))) = paths.await else { return };
+            let Some(path) = paths.into_iter().next() else { return };
+            let Ok(bytes) = std::fs::read(&path) else { return };
+            let data = crate::server_settings::api::image_data(crate::server_settings::view::mime_of(&path), &bytes);
+            this.update(cx, |this, cx| this.set_wizard(cx, |w| w.cover = Cover::Picked { path, data })).ok();
+        })
+        .detach();
     }
 
     // Demo scenes jump straight to a step with a topic typed.
@@ -834,8 +1288,7 @@ impl Waffle {
 
     fn wizard_times(&self, cx: &Context<Self>) -> (Option<DateTime<Utc>>, Option<DateTime<Utc>>) {
         let Some(w) = self.events.wizard.as_ref() else { return (None, None) };
-        let read = |s: &Entity<InputState>| s.read(cx).value().to_string();
-        (parse_local(&read(&w.start_date), &read(&w.start_time)), parse_local(&read(&w.end_date), &read(&w.end_time)))
+        (picked_instant(&w.start_date, &w.start_time, cx), picked_instant(&w.end_date, &w.end_time, cx))
     }
 
     // Discord's validation (`688218`), in its words.
@@ -893,6 +1346,9 @@ impl Waffle {
     }
 
     fn wizard_submit(&mut self, cx: &mut Context<Self>) {
+        if self.events.wizard.as_ref().is_some_and(|w| w.occurrence.is_some()) {
+            return self.send_occurrence(cx);
+        }
         let editing_series = self.events.wizard.as_ref().and_then(|w| w.editing.as_deref().map(|id| (w.guild_id.clone(), id.to_owned())));
         let series = editing_series.and_then(|(g, id)| self.scheduled_event(&g, &id).cloned()).filter(|e| e.recurrence.is_some());
         let schedule_changed = series.is_some_and(|e| {
@@ -915,7 +1371,7 @@ impl Waffle {
         let Some(start) = start else { return };
         let external = w.entity_type == ScheduledEvent::EXTERNAL;
         let description = w.description.read(cx).value().trim().to_owned();
-        let body = json!({
+        let mut body = json!({
             "name": w.topic.read(cx).value().trim(),
             "description": description,
             "privacy_level": PRIVATE,
@@ -926,6 +1382,9 @@ impl Waffle {
             "entity_metadata": if external { json!({ "location": w.location.read(cx).value().trim() }) } else { Value::Null },
             "recurrence_rule": w.frequency.rule(start, start.with_timezone(&Local).date_naive()),
         });
+        if let Some(image) = cover_field(&w.cover) {
+            body["image"] = image;
+        }
         let (method, path) = match &w.editing {
             Some(id) => (Method::PATCH, format!("/guilds/{}/scheduled-events/{id}", w.guild_id)),
             None => (Method::POST, format!("/guilds/{}/scheduled-events", w.guild_id)),
@@ -962,6 +1421,20 @@ impl Waffle {
             .ok();
         })
         .detach();
+    }
+
+    // One occurrence's new times, as its exception; the wizard closes once it's sent.
+    fn send_occurrence(&mut self, cx: &mut Context<Self>) {
+        if !self.wizard_problems(cx).step_ok(Step::Review) {
+            return;
+        }
+        let (start, end) = self.wizard_times(cx);
+        let Some(w) = self.events.wizard.take() else { return };
+        let (Some(start), Some(occurrence)) = (start, w.occurrence) else { return };
+        let Some(event) = w.editing.and_then(|id| self.scheduled_event(&w.guild_id, &id).cloned()) else { return };
+        let end = if event.entity_type == ScheduledEvent::EXTERNAL { end } else { occurrence.end.map(|e| start + (e - occurrence.start)) };
+        let (method, path, body) = exception_request(&event, &occurrence, start, end, false);
+        self.send_exception(&event, occurrence.recurrence_id.clone(), (method, path, Some(body)), cx);
     }
 
     fn set_wizard(&mut self, cx: &mut Context<Self>, change: impl FnOnce(&mut Wizard)) {
@@ -1140,8 +1613,18 @@ impl Waffle {
     }
 
     fn events_empty(&self, guild: &Guild, cx: &mut Context<Self>) -> AnyElement {
-        // GAP: Discord links "Server Settings > Roles"; it reads as plain text here.
-        let roles = guild.can(self.my_id(), perm::MANAGE_ROLES).then(|| div().max_w(px(320.)).text_center().text_size(px(12.)).text_color(palette::faint(cx)).child("You can give other people permission to create events in Server Settings > Roles."));
+        let gid = guild.id.clone();
+        let roles = guild.can(self.my_id(), perm::MANAGE_ROLES).then(|| {
+            let link = div()
+                .id("events-roles-link")
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(palette::accent_ink(cx))
+                .cursor_pointer()
+                .hover(|s| s.underline())
+                .child("Server Settings > Roles")
+                .on_click(cx.listener(move |this, _, window, cx| this.open_roles_settings(gid.clone(), window, cx)));
+            div().max_w(px(320.)).text_center().flex().flex_wrap().justify_center().gap_x(px(4.)).text_size(px(12.)).text_color(palette::faint(cx)).child("You can give other people permission to create events in").child(link).child(".")
+        });
         ui::empty_state("events-empty", Mood::Idle, "There are no upcoming events.", "Schedule an event for any planned activity in your server.", cx).children(roles).into_any_element()
     }
 
@@ -1152,7 +1635,7 @@ impl Waffle {
         let ink = phase_ink(when.phase, cx);
         let (strong, muted) = (palette::strong(cx), palette::muted(cx));
         let canceled = when.phase == Phase::Canceled;
-        let cover = event.cover_url().map(|url| ui::media(url, ui::all(ui::RADIUS_MD)).w_full().h(px(140.)).mb(px(6.)));
+        let cover = cover_source(event).map(|source| ui::media(source, ui::all(ui::RADIUS_MD)).w_full().h(px(140.)).mb(px(6.)));
         let head = div()
             .flex()
             .items_start()
@@ -1176,7 +1659,7 @@ impl Waffle {
             .children(cover)
             .child(head)
             .child(div().mt(px(2.)).text_size(px(18.)).line_height(px(22.)).font_weight(FontWeight::SEMIBOLD).text_color(if canceled { muted } else { strong }).child(event.name.clone()))
-            .children(event.description.clone().map(|d| div().text_size(px(14.)).line_height(px(20.)).line_clamp(2).text_color(palette::text(cx)).child(d)))
+            .children(event.description.as_deref().map(|d| description_view(&format!("event-card-md-{}", event.id), d, cx).max_h(px(40.)).overflow_hidden()))
             .child(self.card_foot(event, actions, cx));
         if !actions {
             return card.into_any_element();
@@ -1249,7 +1732,7 @@ impl Waffle {
                     cx.stop_propagation();
                     match channel.clone() {
                         Some(c) => {
-                            this.events = Events::default();
+                            this.leave_events();
                             this.open_channel(c, window, cx);
                         }
                         None => cx.open_url(&place),
@@ -1283,16 +1766,21 @@ impl Waffle {
         }
         if !active {
             let (g, e) = ids();
-            let on = event.me_interested;
+            let series = event.recurrence.is_some();
+            let next = series.then(|| next_occurrence(event, Utc::now())).flatten();
+            let on = next.as_ref().map_or(event.me_interested, |o| self.occurrence_interested(event, &o.recurrence_id));
             out.push(
                 ui::button(key("interested"), Tone::Secondary, cx)
                     .small()
                     .toggled(on, cx)
                     .child(Icon::new(if on { Glyph::BellRinging } else { Glyph::Bell }).size(px(16.)))
                     .child("Interested")
-                    .on_click(cx.listener(move |this, _, _, cx| {
+                    .on_click(cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();
-                        this.toggle_interested(g.clone(), e.clone(), cx);
+                        match series {
+                            true => this.open_series_interested(g.clone(), e.clone(), window, cx),
+                            false => this.toggle_interested(g.clone(), e.clone(), cx),
+                        }
                     }))
                     .into_any_element(),
             );
@@ -1324,7 +1812,7 @@ impl Waffle {
                     .child(label)
                     .on_click(cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();
-                        this.events = Events::default();
+                        this.leave_events();
                         match joined {
                             true => this.open_channel(channel.clone(), window, cx),
                             false => this.join_voice(channel.clone(), cx),
@@ -1352,7 +1840,7 @@ impl Waffle {
     fn event_details_dialog(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let details = self.events.details.as_ref()?;
         let event = self.scheduled_event(&details.guild_id, &details.event_id)?;
-        let cover = event.cover_url().map(|url| ui::media(url, ui::all(ui::RADIUS_LG)).w_full().h(px(160.)));
+        let cover = cover_source(event).map(|source| ui::media(source, ui::all(ui::RADIUS_LG)).w_full().h(px(160.)));
         let head = div()
             .flex()
             .items_start()
@@ -1388,7 +1876,7 @@ impl Waffle {
             .flex_col()
             .gap(px(12.))
             .child(div().flex().items_start().gap(px(8.)).child(div().mt(px(1.)).text_color(ink).child(Icon::new(Glyph::Calendar).size(px(18.)))).child(when_column(&when, repeat_label(event), ink, cx)))
-            .children(event.description.clone().map(|d| div().text_size(px(14.)).line_height(px(20.)).text_color(palette::text(cx)).child(d)))
+            .children(event.description.as_deref().map(|d| description_view(&format!("event-info-md-{}", event.id), d, cx)))
             .child(
                 div()
                     .flex()
@@ -1401,7 +1889,39 @@ impl Waffle {
                     .children(creator.map(|u| fact(ui::avatar(u.avatar.clone(), 20.).into_any_element(), format!("Created by {}", u.name))))
                     .child(fact(Icon::new(Glyph::Users).size(px(18.)).into_any_element(), format!("{} people are interested", event.interested))),
             )
+            .children(self.occurrence_rows(event, cx))
             .into_any_element()
+    }
+
+    // A series' next occurrences, each with its menu; canceled ones stay, marked, so they can be restored.
+    fn occurrence_rows(&self, event: &ScheduledEvent, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let list = occurrences(event, Utc::now(), OCCURRENCES_SHOWN);
+        if list.is_empty() {
+            return None;
+        }
+        let now = Local::now();
+        let rows = list.into_iter().map(|o| {
+            let (g, e, r) = (event.guild_id.clone(), event.id.clone(), o.recurrence_id.clone());
+            let start = o.start.with_timezone(&Local);
+            let interested = !o.canceled && self.occurrence_interested(event, &o.recurrence_id);
+            let more = ui::icon_button(SharedString::from(format!("event-occurrence-more-{}", o.recurrence_id)), Glyph::MoreVertical, "More event options", cx).on_click(cx.listener(move |this, _, window, cx| {
+                cx.stop_propagation();
+                this.open_occurrence_menu(g.clone(), e.clone(), r.clone(), window, cx);
+            }));
+            div()
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .min_w_0()
+                .py(px(4.))
+                .child(div().flex_none().text_color(if o.canceled { palette::danger_ink(cx) } else { palette::muted(cx) }).child(Icon::new(if o.canceled { Glyph::CalendarX } else { Glyph::Calendar }).size(px(16.))))
+                .child(div().flex_1().min_w_0().truncate().text_color(if o.canceled { palette::muted(cx) } else { palette::text(cx) }).when(o.canceled, |d| d.line_through()).child(date_line(&start, &now)))
+                .when(o.canceled, |d| d.child(div().flex_none().text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::danger_ink(cx)).child("Canceled")))
+                .when(interested, |d| d.child(div().flex_none().text_color(palette::accent_ink(cx)).child(Icon::new(Glyph::BellRinging).size(px(14.)))))
+                .child(more)
+        });
+        let head = div().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child("Events in this series");
+        Some(div().flex().flex_col().gap(px(2.)).pt(px(4.)).child(head).children(rows).into_any_element())
     }
 
     fn interested_list(&self, event: &ScheduledEvent, users: Option<&Result<Vec<User>, String>>, cx: &mut Context<Self>) -> AnyElement {
@@ -1465,11 +1985,12 @@ impl Waffle {
 
     fn event_wizard_dialog(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let w = self.events.wizard.as_ref()?;
-        let (title, subtitle) = match w.step {
-            Step::Location => ("Where is your event?", Some("So no one gets lost on where to go.")),
-            Step::Info => ("What's your event about?", Some("Fill out the details of your event.")),
-            Step::Review => ("Here's a preview of your event.", None),
-            Step::Success => ("All set. Now share your event!", None),
+        let (title, subtitle) = match (w.step, &w.occurrence) {
+            (_, Some(_)) => ("Edit this Event", Some("Only this event in the series changes.")),
+            (Step::Location, None) => ("Where is your event?", Some("So no one gets lost on where to go.")),
+            (Step::Info, None) => ("What's your event about?", Some("Fill out the details of your event.")),
+            (Step::Review, None) => ("Here's a preview of your event.", None),
+            (Step::Success, None) => ("All set. Now share your event!", None),
         };
         let head = div()
             .flex()
@@ -1487,17 +2008,19 @@ impl Waffle {
             )
             .child(ui::icon_button("event-wizard-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))));
         let problems = self.wizard_problems(cx);
-        let step = match w.step {
-            Step::Location => self.wizard_location(w, &problems, cx),
-            Step::Info => self.wizard_info(w, &problems, cx),
-            Step::Review => self.wizard_review(w, cx),
-            Step::Success => wizard_success(w, cx),
+        let step = match (w.step, w.occurrence.is_some()) {
+            (_, true) => self.wizard_times_fields(w, &problems, window, cx),
+            (Step::Location, false) => self.wizard_location(w, &problems, cx),
+            (Step::Info, false) => self.wizard_info(w, &problems, window, cx),
+            (Step::Review, false) => self.wizard_review(w, cx),
+            (Step::Success, false) => wizard_success(w, cx),
         };
+        let ok = problems.step_ok(if w.occurrence.is_some() { Step::Review } else { w.step });
         let body = ui::dialog_body()
             .child(head)
-            .when(w.step != Step::Success, |d| d.child(stepper(w.step, cx)))
+            .when(w.step != Step::Success && w.occurrence.is_none(), |d| d.child(stepper(w.step, cx)))
             .child(step)
-            .when(w.step != Step::Success, |d| d.child(wizard_foot(w, problems.step_ok(w.step), cx)));
+            .when(w.step != Step::Success, |d| d.child(wizard_foot(w, ok, cx)));
         let backdrop = div().id("event-wizard-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_event_layer(cx)));
         Some(ui::modal(backdrop, ui::dialog("event-wizard", WIZARD_WIDTH, body, window, cx), cx))
     }
@@ -1553,25 +2076,11 @@ impl Waffle {
             .into_any_element()
     }
 
-    fn wizard_info(&self, w: &Wizard, problems: &Problems, cx: &mut Context<Self>) -> AnyElement {
-        let text = |id: &'static str, state: &Entity<InputState>, error: bool, cx: &mut Context<Self>| {
-            let focus = state.read(cx).focus_handle(cx);
-            ui::text_field(id, Input::new(state).appearance(false), &focus).error(error)
-        };
+    fn wizard_info(&self, w: &Wizard, problems: &Problems, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let typed_topic = !w.topic.read(cx).value().trim().is_empty();
-        let topic = ui::field("Event Topic", cx).child(text("event-topic", &w.topic, problems.topic.is_some() && typed_topic, cx)).children(problems.topic.filter(|_| typed_topic).map(|p| ui::field_error(p, cx)));
-        let pair = |a: AnyElement, b: AnyElement| div().flex().gap(px(12.)).child(div().flex_1().min_w_0().child(a)).child(div().flex_1().min_w_0().child(b));
-        let start = pair(
-            ui::field("Start Date", cx).child(text("event-start-date", &w.start_date, problems.start.is_some(), cx).leading(Icon::new(Glyph::Calendar).size(px(16.)))).into_any_element(),
-            ui::field("Start Time", cx).child(text("event-start-time", &w.start_time, problems.start.is_some(), cx).leading(Icon::new(Glyph::Clock).size(px(16.)))).into_any_element(),
-        );
-        let external = w.entity_type == ScheduledEvent::EXTERNAL;
-        let end = external.then(|| {
-            pair(
-                ui::field("End Date", cx).child(text("event-end-date", &w.end_date, problems.end.is_some(), cx).leading(Icon::new(Glyph::Calendar).size(px(16.)))).into_any_element(),
-                ui::field("End Time", cx).child(text("event-end-time", &w.end_time, problems.end.is_some(), cx).leading(Icon::new(Glyph::Clock).size(px(16.)))).into_any_element(),
-            )
-        });
+        let focus = w.topic.read(cx).focus_handle(cx);
+        let topic_field = ui::text_field("event-topic", Input::new(&w.topic).appearance(false), &focus).error(problems.topic.is_some() && typed_topic);
+        let topic = ui::field("Event Topic", cx).child(topic_field).children(problems.topic.filter(|_| typed_topic).map(|p| ui::field_error(p, cx)));
         let (start_at, _) = self.wizard_times(cx);
         let day = start_at.map_or_else(|| Local::now().date_naive(), |s| s.with_timezone(&Local).date_naive());
         let frequency = ui::field("Event Frequency", cx).child(ui::select("event-frequency", Some(Glyph::Repeat), w.frequency.label(day), false, cx).on_click(cx.listener(|this, _, window, cx| this.open_frequency_menu(window, cx))));
@@ -1585,21 +2094,63 @@ impl Waffle {
             .flex_col()
             .gap(px(14.))
             .child(topic)
+            .child(self.wizard_times_fields(w, problems, window, cx))
+            .child(frequency)
+            .child(description)
+            .child(self.wizard_cover(w, cx))
+            .into_any_element()
+    }
+
+    // Start Date and Start Time, then End Date and End Time for somewhere else, each pair's error under it.
+    fn wizard_times_fields(&self, w: &Wizard, problems: &Problems, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let pair = |a: AnyElement, b: AnyElement| div().flex().gap(px(12.)).child(div().flex_1().min_w_0().child(a)).child(div().flex_1().min_w_0().child(b));
+        let start = pair(
+            ui::field("Start Date", cx).child(date_field(&w.start_date, problems.start.is_some(), window, cx)).into_any_element(),
+            ui::field("Start Time", cx).child(time_field(&w.start_time, problems.start.is_some(), window, cx)).into_any_element(),
+        );
+        let end = (w.entity_type == ScheduledEvent::EXTERNAL).then(|| {
+            pair(
+                ui::field("End Date", cx).child(date_field(&w.end_date, problems.end.is_some(), window, cx)).into_any_element(),
+                ui::field("End Time", cx).child(time_field(&w.end_time, problems.end.is_some(), window, cx)).into_any_element(),
+            )
+        });
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(14.))
             .child(start)
             .children(problems.start.map(|p| ui::field_error(p, cx)))
             .children(end)
             .children(problems.end.map(|p| ui::field_error(p, cx)))
-            .child(ui::field_hint("Dates as 2026-11-28, times as 7:00 PM or 19:00, in your time zone.", None, cx))
-            .child(frequency)
-            .child(description)
+            .into_any_element()
+    }
+
+    // "Cover Image": Upload Cover Image, or the picked or current cover with Change Image and Remove Image.
+    fn wizard_cover(&self, w: &Wizard, cx: &mut Context<Self>) -> AnyElement {
+        let kept = w.editing.as_deref().and_then(|id| self.scheduled_event(&w.guild_id, id)).and_then(|e| e.image.clone());
+        let preview = ScheduledEvent { id: w.editing.clone().unwrap_or_default(), image: wizard_image(&w.cover, kept), ..Default::default() };
+        let hint = ui::field_hint("We recommend an image that's at least 800px wide and 320px tall.", None, cx);
+        let field = ui::field("Cover Image", cx);
+        let Some(source) = cover_source(&preview) else {
+            let upload = ui::button("event-cover-upload", Tone::Secondary, cx).small().child(Icon::new(Glyph::Upload).size(px(16.))).child("Upload Cover Image").on_click(cx.listener(|this, _, _, cx| this.pick_cover(cx)));
+            return field.child(div().flex().child(upload)).child(hint).into_any_element();
+        };
+        let change = ui::button("event-cover-change", Tone::Secondary, cx).small().child("Change Image").on_click(cx.listener(|this, _, _, cx| this.pick_cover(cx)));
+        let remove = ui::button("event-cover-remove", Tone::Ghost, cx).small().child("Remove Image").on_click(cx.listener(|this, _, _, cx| this.set_wizard(cx, |w| w.cover = Cover::Removed)));
+        field
+            .child(ui::media(source, ui::all(ui::RADIUS_MD)).w_full().h(px(120.)))
+            .child(div().flex().gap(px(8.)).child(change).child(remove))
+            .child(hint)
             .into_any_element()
     }
 
     fn wizard_review(&self, w: &Wizard, cx: &mut Context<Self>) -> AnyElement {
         let (start, end) = self.wizard_times(cx);
         let external = w.entity_type == ScheduledEvent::EXTERNAL;
+        let kept = w.editing.as_deref().and_then(|id| self.scheduled_event(&w.guild_id, id)).and_then(|e| e.image.clone());
         let preview = ScheduledEvent {
-            id: "preview".into(),
+            id: w.editing.clone().unwrap_or_else(|| "preview".into()),
+            image: wizard_image(&w.cover, kept),
             guild_id: w.guild_id.clone(),
             channel_id: if external { None } else { w.channel_id.clone() },
             creator_id: self.me.as_ref().map(|m| m.id.clone()),
@@ -1621,6 +2172,34 @@ impl Waffle {
         };
         div().flex().flex_col().gap(px(12.)).child(self.event_card(&preview, &Local::now(), false, cx)).child(note.text_size(px(14.)).text_color(palette::muted(cx))).into_any_element()
     }
+}
+
+// A description as Discord renders it: markdown, line breaks kept, custom emoji as images (the profile bio's way).
+fn description_view(id: &str, text: &str, cx: &App) -> gpui_kit::Div {
+    let view = TextView::markdown(SharedString::from(id.to_owned()), crate::chat::inline_emoji(&crate::chat::discord_breaks(text)));
+    div().min_w_0().text_size(px(14.)).line_height(px(20.)).text_color(palette::text(cx)).child(view)
+}
+
+// gpui-kit's pickers in Waffle's field frame: the frame's edge takes the accent while the picker has focus
+// (or its calendar is open) and the danger ink on an error. The calendar is deferred, so the dialog can't clip it.
+fn picker_frame(focused: bool, error: bool, cx: &App) -> gpui_kit::Div {
+    let edge = match (error, focused) {
+        (true, _) => palette::danger_ink(cx),
+        (false, true) => palette::accent(),
+        (false, false) => palette::line_strong(cx),
+    };
+    ui::field_frame(cx).w_full().border_color(edge)
+}
+
+fn date_field(state: &Entity<DatePickerState>, error: bool, window: &mut Window, cx: &App) -> gpui_kit::Div {
+    let focused = state.read(cx).focus_handle(cx).contains_focused(window, cx);
+    picker_frame(focused, error, cx).px_0().child(DatePicker::new(state).appearance(false))
+}
+
+fn time_field(state: &Entity<TimeFieldState>, error: bool, window: &mut Window, cx: &App) -> gpui_kit::Div {
+    let focused = state.read(cx).focus_handle(cx).contains_focused(window, cx);
+    let field = TimeField::new(state).border_0().px_0().h_full().bg(gpui_kit::transparent_black());
+    picker_frame(focused, error, cx).child(div().flex_none().text_color(palette::faint(cx)).child(Icon::new(Glyph::Clock).size(px(16.)))).child(field)
 }
 
 // The status line's column: the coloured lead and the rest on one line, the repeat under it.
@@ -1685,17 +2264,19 @@ fn stepper(step: Step, cx: &gpui_kit::App) -> AnyElement {
 
 fn wizard_foot(w: &Wizard, ok: bool, cx: &mut Context<Waffle>) -> AnyElement {
     let primary = match (w.step, &w.editing) {
+        _ if w.occurrence.is_some() => "Save Event",
         (Step::Review, Some(_)) => "Save Event",
         (Step::Review, None) => "Create Event",
         _ => "Next",
     };
-    let review = w.step == Step::Review;
+    let occurrence = w.occurrence.is_some();
+    let review = w.step == Step::Review || occurrence;
     let busy = w.busy.then_some(if w.editing.is_some() { "Saving…" } else { "Creating…" });
     div()
         .flex()
         .items_center()
         .gap(px(8.))
-        .when(w.step != Step::Location, |d| d.child(ui::button("event-wizard-back", Tone::Secondary, cx).small().child("Back").on_click(cx.listener(|this, _, _, cx| this.wizard_step(false, cx)))))
+        .when(w.step != Step::Location && !occurrence, |d| d.child(ui::button("event-wizard-back", Tone::Secondary, cx).small().child("Back").on_click(cx.listener(|this, _, _, cx| this.wizard_step(false, cx)))))
         .child(div().flex_1())
         .child(ui::button("event-wizard-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))))
         .child(ui::button("event-wizard-next", Tone::Primary, cx).disabled(!ok || w.busy).loading(busy).child(primary).on_click(cx.listener(move |this, _, _, cx| match review {
@@ -1789,11 +2370,82 @@ mod tests {
         assert_eq!(Frequency::Yearly.label(day), "Annually on Nov 28");
     }
 
+    fn weekly(start: DateTime<Utc>) -> ScheduledEvent {
+        let mut e = event(&start.to_rfc3339(), None, 1, ScheduledEvent::VOICE);
+        e.recurrence = Frequency::Weekly.rule(start, start.date_naive());
+        e
+    }
+
     #[test]
-    fn clock_reads_both_styles() {
-        assert_eq!(parse_clock("7:00 pm"), NaiveTime::from_hms_opt(19, 0, 0));
-        assert_eq!(parse_clock("7 PM"), NaiveTime::from_hms_opt(19, 0, 0));
-        assert_eq!(parse_clock("19:30"), NaiveTime::from_hms_opt(19, 30, 0));
-        assert_eq!(parse_clock("noonish"), None);
+    fn recurrence_id_is_the_start_second_as_a_snowflake() {
+        let start = Utc.with_ymd_and_hms(2026, 11, 28, 19, 0, 0).unwrap();
+        let id = recurrence_id(start + Duration::milliseconds(750));
+        assert_eq!(id, recurrence_id(start));
+        let ms = (id.parse::<u64>().unwrap() >> 22) as i64 + DISCORD_EPOCH;
+        assert_eq!(ms, start.timestamp_millis());
+        assert_eq!(recurrence_id(Utc.with_ymd_and_hms(2015, 1, 1, 0, 0, 1).unwrap()), (1000u64 << 22).to_string());
+    }
+
+    #[test]
+    fn series_expands_and_applies_exceptions() {
+        let start = Utc.with_ymd_and_hms(2026, 11, 28, 19, 0, 0).unwrap();
+        let mut e = weekly(start);
+        let second = start + Duration::weeks(1);
+        e.exceptions = vec![EventException { id: recurrence_id(second), start: Some(second.to_rfc3339()), end: None, canceled: true }];
+        let list = occurrences(&e, start, 3);
+        assert_eq!(list.iter().map(|o| o.original).collect::<Vec<_>>(), [start, second, start + Duration::weeks(2)]);
+        assert_eq!(list.iter().map(|o| o.canceled).collect::<Vec<_>>(), [false, true, false]);
+        assert!(list[1].excepted && !list[0].excepted);
+        assert_eq!(next_occurrence(&e, start + Duration::hours(1)).map(|o| o.original), Some(start + Duration::weeks(2)));
+
+        let monthly = json!({ "frequency": 1, "interval": 1, "by_n_weekday": [{ "n": 4, "day": 5 }] });
+        let starts = series_starts(&monthly, start, start + Duration::days(70));
+        assert_eq!(starts.iter().map(|t| t.date_naive().to_string()).collect::<Vec<_>>(), ["2026-11-28", "2026-12-26", "2027-01-23"]);
+    }
+
+    #[test]
+    fn exceptions_post_new_patch_existing_and_restore() {
+        let start = Utc.with_ymd_and_hms(2026, 11, 28, 19, 0, 0).unwrap();
+        let e = weekly(start);
+        let fresh = occurrence(&[], start, None);
+        let (method, path, body) = exception_request(&e, &fresh, start, None, true);
+        assert_eq!((method, path.as_str()), (Method::POST, "/guilds/1/scheduled-events/42/exceptions"));
+        assert_eq!(body, json!({ "original_scheduled_start_time": start.to_rfc3339(), "scheduled_start_time": start.to_rfc3339(), "scheduled_end_time": null, "is_canceled": true }));
+
+        let canceled = occurrence(&[EventException { id: recurrence_id(start), start: None, end: None, canceled: true }], start, None);
+        let (method, path, body) = exception_request(&e, &canceled, start, None, true);
+        assert_eq!((method, path), (Method::PATCH, format!("/guilds/1/scheduled-events/42/exceptions/{}", recurrence_id(start))));
+        assert!(body.get("original_scheduled_start_time").is_none());
+        let (method, path, body) = restore_request(&e, &canceled);
+        assert_eq!((method, path, body), (Method::DELETE, format!("/guilds/1/scheduled-events/42/exceptions/{}", recurrence_id(start)), None));
+
+        let later = start + Duration::hours(2);
+        let moved = occurrence(&[EventException { id: recurrence_id(start), start: Some(later.to_rfc3339()), end: None, canceled: true }], start, None);
+        let (method, _, body) = restore_request(&e, &moved);
+        assert_eq!(method, Method::PATCH);
+        assert_eq!(body.as_ref().and_then(|b| b["is_canceled"].as_bool()), Some(false));
+        assert_eq!(exception_from("7", body.as_ref()).map(|x| (x.start, x.canceled)), Some((Some(later.to_rfc3339()), false)));
+    }
+
+    #[test]
+    fn cover_sends_data_null_or_nothing() {
+        let picked = Cover::Picked { path: PathBuf::from("/tmp/cover.png"), data: "data:image/png;base64,AQID".into() };
+        assert_eq!(cover_field(&picked), Some(json!("data:image/png;base64,AQID")));
+        assert_eq!(cover_field(&Cover::Removed), Some(Value::Null));
+        assert_eq!(cover_field(&Cover::Kept), None);
+        assert_eq!(wizard_image(&picked, Some("hash".into())).as_deref(), Some("/tmp/cover.png"));
+        assert_eq!(wizard_image(&Cover::Removed, Some("hash".into())), None);
+    }
+
+    #[test]
+    fn rsvps_split_series_from_single_occurrences() {
+        let list = json!([
+            { "guild_scheduled_event_id": "1", "response": 1 },
+            { "guild_scheduled_event_id": "2", "response": 0 },
+            { "guild_scheduled_event_id": "1", "guild_scheduled_event_exception_id": "9", "response": 0 },
+        ]);
+        let (series, single) = rsvps_of(&list);
+        assert_eq!(series, ["1"]);
+        assert_eq!(single, [(("1".to_owned(), "9".to_owned()), false)]);
     }
 }
