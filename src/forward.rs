@@ -238,7 +238,7 @@ impl Waffle {
     }
 
     // What goes out: the text, two lines at most, or what it carries, with the first picture at the right.
-    fn forward_preview(&self, message: &Message, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(crate) fn forward_preview(&self, message: &Message, cx: &mut Context<Self>) -> Option<AnyElement> {
         let shown = message.forward.as_deref().unwrap_or(message);
         let ctx = self.row_context_everywhere(std::slice::from_ref(shown), DIALOG_WIDTH, cx);
         let text = crate::chat::content(shown, &ctx, cx).map(|t| div().line_clamp(2).child(t).into_any_element());
