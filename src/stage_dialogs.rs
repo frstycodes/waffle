@@ -210,6 +210,7 @@ mod tests {
             my_roles: vec!["mods".into()],
             premium_tier: 0,
             afk_channel_id: None,
+            ..Default::default()
         }
     }
 

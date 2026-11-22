@@ -12,7 +12,7 @@ pub const NEW_TAG: &str = "shapes/new-tag.svg";
 // Reicon (MIT, github.com/dqev/reicon) in its filled weight, like Discord's chrome, plus Waffle's own glyphs
 // (muted, deafened, camera off, GIF...), all written to assets/icons/reicon/ by tools/reicon.py, which also
 // keeps these paths in step with its map (design/icons.html). Order matches `Glyph`.
-const GLYPHS: [(&str, &[u8]); 150] = [
+const GLYPHS: [(&str, &[u8]); 154] = [
     ("icons/hashtag.svg", include_bytes!("../assets/icons/reicon/hashtag2.svg")),
     ("icons/hashtag-lock.svg", include_bytes!("../assets/icons/reicon/lock2.svg")),
     ("icons/volume-high.svg", include_bytes!("../assets/icons/reicon/volume-high.svg")),
@@ -164,6 +164,10 @@ const GLYPHS: [(&str, &[u8]); 150] = [
     ("icons/sticker.svg", include_bytes!("../assets/icons/sticker.svg")),
     // Reicon has no forward; reply mirrored.
     ("icons/forward.svg", include_bytes!("../assets/icons/forward.svg")),
+    ("icons/gem.svg", include_bytes!("../assets/icons/gem.svg")),
+    ("icons/bookmark.svg", include_bytes!("../assets/icons/bookmark.svg")),
+    ("icons/book-open.svg", include_bytes!("../assets/icons/reicon/book-open.svg")),
+    ("icons/arrow-left.svg", include_bytes!("../assets/icons/reicon/arrow-left.svg")),
     // Raise hand on a stage: the same hand as HandWaving, named for its own concept.
     ("icons/hand.svg", include_bytes!("../assets/icons/reicon/hand.svg")),
     ("icons/stage.svg", include_bytes!("../assets/icons/reicon/podcast.svg")),
@@ -327,6 +331,10 @@ pub enum Glyph {
     Moon,
     Sticker,
     Forward,
+    Gem,
+    Bookmark,
+    BookOpen,
+    ArrowLeft,
     Hand,
     Stage,
 }
@@ -342,7 +350,7 @@ pub struct Assets;
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
-        match GLYPHS.iter().chain(BRAND.iter()).chain(crate::app_icon::BRAND_ICONS.iter()).find(|(p, _)| *p == path) {
+        match GLYPHS.iter().chain(BRAND.iter()).chain(crate::app_icon::BRAND_ICONS.iter()).chain(crate::illustration::ASSETS.iter()).find(|(p, _)| *p == path) {
             Some((_, bytes)) => Ok(Some(Cow::Borrowed(bytes))),
             None => gpui_kit::assets::Assets.load(path),
         }
@@ -350,7 +358,7 @@ impl AssetSource for Assets {
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
         let mut paths = gpui_kit::assets::Assets.list(path)?;
-        paths.extend(GLYPHS.iter().chain(BRAND.iter()).chain(crate::app_icon::BRAND_ICONS.iter()).map(|(p, _)| *p).filter(|p| p.starts_with(path)).map(SharedString::from));
+        paths.extend(GLYPHS.iter().chain(BRAND.iter()).chain(crate::app_icon::BRAND_ICONS.iter()).chain(crate::illustration::ASSETS.iter()).map(|(p, _)| *p).filter(|p| p.starts_with(path)).map(SharedString::from));
         Ok(paths)
     }
 }

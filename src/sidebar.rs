@@ -597,13 +597,16 @@ impl Waffle {
     pub fn render_channels(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let mut rows: Vec<AnyElement> = Vec::new();
         match (&self.status, self.guild().cloned()) {
-            (Status::Connecting, _) => rows.push(muted_line("Connecting to Discord…", cx)),
+            // Until the gateway's first READY: the list's shape, shimmering.
+            (Status::Connecting, guild) => rows.extend((0..8).map(|i| list_skeleton(i, guild.is_some(), cx))),
             (_, Some(guild)) => {
                 let me = self.my_id().to_owned();
                 // Beside the carried channel: "Move to Archive" while it's aimed into another category.
                 let tag = self.channel_board.dragged().zip(self.channel_board.hint()).and_then(|(moved, hint)| self.category_move(moved, hint.target.as_deref()?));
                 self.drag_motion.set_tag(tag);
-                for (i, (category, channels)) in channel_sections(&guild, &me).into_iter().enumerate() {
+                rows.extend(self.guild_entry_rows(&guild, window, cx));
+                let sections = channel_sections(&guild, &me).into_iter().map(|(category, channels)| (category, channels.into_iter().filter(|c| self.shows_in_list(&guild, c)).collect::<Vec<_>>())).filter(|(_, channels)| !channels.is_empty()).collect::<Vec<_>>();
+                for (i, (category, channels)) in sections.into_iter().enumerate() {
                     let order: Vec<String> = channels.iter().map(|c| c.id.clone()).collect();
                     let list = self.channel_board.list(channel_list(category.as_ref()), order, window, cx);
                     // A channel's first row is the item; its people and threads move with it.
@@ -994,7 +997,6 @@ impl Waffle {
             let name = state.user.as_ref().map(|u| u.name.clone()).unwrap_or_else(|| self.user_name(&state.user_id));
             let avatar = avatar_of(state);
             let talking = speaking.contains(&state.user_id);
-            let streamer = state.user_id.clone();
             let is_watched = watching.contains(&state.user_id);
             let hover_key = stream_hover_key(&state.user_id);
             // Open while the row or the card itself is hovered, so the card's button can be reached.
@@ -1048,11 +1050,13 @@ impl Waffle {
                         cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.voice_user_menu(&user_id, e.position, cx))
                     })
                     .when(state.streaming, |r| r.on_hover(stream_hover).on_mouse_move(cx.listener(|this, e: &gpui_kit::MouseMoveEvent, _, _| this.stream_tunnel.track(e.position))).children(stream_card.map(|card| div().absolute().top_0().right(px(4.)).child(gpui_kit::deferred(gpui_kit::anchored().snap_to_window_with_margin(px(8.)).child(card))))))
-                    .when(state.streaming && connected, |r| {
-                        r.cursor_pointer()
-                            .when(is_watched, |r| r.bg(selected))
-                            .tooltip(|window, cx| Tooltip::new("Watch stream").build(window, cx))
-                            .on_click(cx.listener(move |this, _, _, cx| this.watch_stream(streamer.clone(), cx)))
+                    .when(is_watched, |r| r.bg(selected))
+                    // A click opens their profile beside the channel list, as Discord's; a stream is watched from
+                    // the preview its row shows on hover.
+                    .cursor_pointer()
+                    .on_click({
+                        let (user_id, x) = (state.user_id.clone(), crate::layout::RAIL_WIDTH + self.channels_width + 8.);
+                        cx.listener(move |this, e: &gpui_kit::ClickEvent, _, cx| this.open_voice_profile(&user_id, point(px(x), e.position().y - px(40.)), cx))
                     })
                     .into_any_element(),
             );
@@ -1777,7 +1781,6 @@ pub(crate) enum Nav {
     MicOffFill,
     DeafenedFill,
     CameraFill,
-    LiveFill,
     GameFill,
     MusicFill,
     TvFill,
@@ -1810,7 +1813,6 @@ impl Nav {
             Nav::MicOffFill => include_bytes!("../assets/icons/reicon/muted.svg"),
             Nav::DeafenedFill => include_bytes!("../assets/icons/reicon/deafened.svg"),
             Nav::CameraFill => include_bytes!("../assets/icons/reicon/video.svg"),
-            Nav::LiveFill => include_bytes!("../assets/icons/reicon/signal-stream.svg"),
             Nav::GameFill => include_bytes!("../assets/icons/reicon/gamepad.svg"),
             Nav::MusicFill => include_bytes!("../assets/icons/reicon/music-notes.svg"),
             Nav::TvFill => include_bytes!("../assets/icons/reicon/tv.svg"),
@@ -1831,10 +1833,28 @@ pub(crate) fn activity_glyph(kind: ActivityKind) -> Option<Icon> {
     match kind {
         ActivityKind::Playing | ActivityKind::Competing => Some(Nav::GameFill.icon()),
         ActivityKind::Listening => Some(Nav::MusicFill.icon()),
-        ActivityKind::Streaming => Some(Nav::LiveFill.icon()),
-        ActivityKind::Watching => Some(Nav::TvFill.icon()),
+        // Discord draws a TV for both.
+        ActivityKind::Streaming | ActivityKind::Watching => Some(Nav::TvFill.icon()),
         ActivityKind::Custom => None,
     }
+}
+
+// A row still loading, names of varying length: a DM's avatar and name, or a channel's icon and name.
+fn list_skeleton(i: usize, channels: bool, cx: &App) -> AnyElement {
+    let width = [0.62, 0.45, 0.7, 0.52, 0.38, 0.58, 0.48, 0.66][i % 8];
+    let mark = match channels {
+        true => ui::skeleton(SharedString::from(format!("list-skel-mark-{i}")), 4., cx).size(px(18.)).flex_none(),
+        false => ui::skeleton_circle(SharedString::from(format!("list-skel-mark-{i}")), 32., cx),
+    };
+    div()
+        .h(px(if channels { ROW_HEIGHT } else { 42. }))
+        .px_2()
+        .flex()
+        .items_center()
+        .gap(px(if channels { 8. } else { 12. }))
+        .child(mark)
+        .child(ui::skeleton(SharedString::from(format!("list-skel-name-{i}")), 4., cx).h(px(12.)).w(relative(width)))
+        .into_any_element()
 }
 
 fn muted_line(text: &'static str, cx: &App) -> AnyElement {

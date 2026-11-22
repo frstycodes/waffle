@@ -1367,6 +1367,15 @@
         ],
         "createdAt": "2026-11-21T19:50:33.468Z",
         "reason": "Claude: compact badges (LIVE pill, request count, tile name chip) follow the shipped voice.css sizes"
+      },
+      {
+        "rule": "marquee",
+        "value": "*",
+        "files": [
+          "design/flows-discord-map.html"
+        ],
+        "createdAt": "2026-11-21T17:15:09.401Z",
+        "reason": "Claude: page has no marquee, animation or auto-scroll (grep for marquee/animation/scroll finds nothing); only static tables"
       }
     ]
   }

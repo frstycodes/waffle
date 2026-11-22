@@ -19,6 +19,7 @@ use crate::{
     Waffle, SearchState,
     discord::{Relation, Relationship, Status},
     icons::Glyph,
+    illustration::Illustration,
     layout::avatar_with_status,
     mascot::Mood,
     palette,
@@ -103,6 +104,88 @@ impl Waffle {
             self.fetch_mentions(cx);
         }
         cx.notify();
+    }
+
+    pub(crate) fn fetch_saved(&mut self, cx: &mut Context<Self>) {
+        let Some(client) = self.client.clone() else { return };
+        self.saved = Some(None);
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result = client.saved_messages().await;
+            this.update(cx, |this, cx| {
+                if let Ok(list) = &result {
+                    std::rc::Rc::make_mut(&mut this.saved_ids).extend(list.iter().map(|m| m.id.clone()));
+                }
+                this.saved = Some(Some(result.map_err(Into::into)));
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    // Your reaction frecency from Discord, merged into this device's.
+    pub(crate) fn load_reaction_frecency(&mut self, cx: &mut Context<Self>) {
+        let Some(client) = self.client.clone() else { return };
+        cx.spawn(async move |this, cx| {
+            let Ok(settings) = client.settings_proto(crate::frecency_sync::SETTINGS_TYPE).await else { return };
+            let Some(uses) = crate::frecency_sync::decode(&settings) else { return };
+            this.update(cx, |this, cx| {
+                let remote: Vec<_> = uses
+                    .into_iter()
+                    .filter_map(|u| {
+                        let emoji = crate::frecency_sync::emoji(&u.key, |id| this.guilds.iter().flat_map(|g| g.emojis.iter()).find(|e| e.id.as_deref() == Some(id)).cloned())?;
+                        Some((emoji, u.total, u.recent.iter().map(|ms| (*ms / 1000) as i64).collect::<Vec<_>>()))
+                    })
+                    .collect();
+                this.update_prefs(cx, |p| p.merge_emoji_uses(remote));
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    // Sends this device's reaction frecency to Discord a moment after the last reaction.
+    pub(crate) fn save_reaction_frecency(&mut self, cx: &mut Context<Self>) {
+        const DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+        if std::mem::replace(&mut self.frecency_save_pending, true) {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(DELAY).await;
+            let Ok(Some((client, settings))) = this.update(cx, |this, _| {
+                this.frecency_save_pending = false;
+                let uses: Vec<_> = this
+                    .prefs
+                    .emoji_uses
+                    .iter()
+                    .filter_map(|(emoji, total)| {
+                        let times = this.prefs.emoji_times.iter().find(|(e, _)| e == emoji).map(|(_, t)| t.iter().map(|s| *s as u64 * 1000).collect()).unwrap_or_default();
+                        Some(crate::frecency_sync::Use { key: crate::frecency_sync::key(emoji)?, total: *total, recent: times })
+                    })
+                    .collect();
+                Some((this.client.clone()?, crate::frecency_sync::encode(&uses)))
+            }) else {
+                return;
+            };
+            if let Err(e) = client.patch_settings_proto(crate::frecency_sync::SETTINGS_TYPE, settings).await {
+                eprintln!("frecency: save failed: {e}");
+            }
+        })
+        .detach();
+    }
+
+    pub(crate) fn fetch_saved_ids(&mut self, cx: &mut Context<Self>) {
+        let Some(client) = self.client.clone() else { return };
+        cx.spawn(async move |this, cx| {
+            let Ok(ids) = client.saved_message_ids().await else { return };
+            this.update(cx, |this, cx| {
+                this.saved_ids = std::rc::Rc::new(ids.into_iter().collect());
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     pub(crate) fn fetch_mentions(&mut self, cx: &mut Context<Self>) {
@@ -288,13 +371,20 @@ impl Waffle {
         };
         let body = match (people.is_empty(), tab) {
             (_, FriendsTab::AddFriend) => self.add_friend_page(cx),
-            (true, FriendsTab::Online) => ui::empty_state("friends-empty", Mood::Idle, "No one's around right now", "Your friends are offline. Say hi anyway, they'll see it when they're back.", cx)
+            (true, FriendsTab::Online) => ui::empty_state("friends-empty", Illustration::FriendsOnline, "No one's around to play with Waffle.", "Your friends are offline. Say hi anyway, they'll see it when they're back.", cx)
                 .child(ui::button("show-all-friends", Tone::Secondary, cx).mt_2().child("Show all friends").on_click(cx.listener(|this, _, _, cx| {
                     this.friends_tab = FriendsTab::All;
                     cx.notify();
                 })))
                 .into_any_element(),
-            (true, _) => ui::empty_state("friends-empty", Mood::Idle, format!("No one under {heading}"), "Friends, requests and blocks show up here as they happen.", cx).into_any_element(),
+            (true, FriendsTab::All) => ui::empty_state("friends-empty", Illustration::FriendsAll, "Waffle is waiting on friends. You don't have to though!", "Add someone by their username to start chatting.", cx)
+                .child(ui::button("empty-add-friend", Tone::Primary, cx).mt_2().child("Add friend").on_click(cx.listener(|this, _, _, cx| {
+                    this.friends_tab = FriendsTab::AddFriend;
+                    cx.notify();
+                })))
+                .into_any_element(),
+            (true, FriendsTab::Pending) => ui::empty_state("friends-empty", Illustration::FriendsPending, "There are no pending friend requests. Here's Waffle for now.", "Requests you send and receive show up here.", cx).into_any_element(),
+            (true, FriendsTab::Blocked) => ui::empty_state("friends-empty", Illustration::FriendsBlocked, "You can't unblock Waffle.", "People you block show up here.", cx).into_any_element(),
             (false, _) => {
                 let label = div().pt_2().px_2().pb_1().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(format!("{heading} · {}", people.len()));
                 let rows: Vec<AnyElement> = people.iter().map(|r| self.friend_row(r, cx)).collect();

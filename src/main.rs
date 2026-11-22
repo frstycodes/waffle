@@ -23,8 +23,10 @@ mod composer_emoji;
 mod demo;
 mod discord;
 mod drafts;
+mod frecency_sync;
 mod drag;
 mod icons;
+mod illustration;
 mod images;
 mod layout;
 mod link_preview;
@@ -45,6 +47,7 @@ mod overwrites;
 mod playback;
 mod poll;
 mod inbox;
+mod joining;
 mod status_menu;
 mod stickers;
 mod memory;
@@ -502,6 +505,9 @@ struct Call {
     joined: Instant,
     // Our own Go Live from its local frames, for the panel thumbnail and the self-view.
     self_view: Option<(Arc<RenderImage>, Instant)>,
+    // Discord's AV error conditions now holding, by user and code: the voice engine's, and the
+    // ready timeouts the app keeps (a camera's under "camera:{id}").
+    issues: HashSet<(String, u16)>,
     _events: Task<()>,
 }
 
@@ -517,6 +523,7 @@ impl Call {
 
     fn unwatch(&mut self, streamer_id: &str) -> Option<Watching> {
         let at = self.watching.iter().position(|w| w.streamer_id == streamer_id)?;
+        self.issues.remove(&(format!("stream:{streamer_id}"), voice::issues::RECEIVER_READY_TIMEOUT));
         if self.focus.as_deref() == Some(streamer_id) {
             self.focus = None;
         }
@@ -553,17 +560,44 @@ pub(crate) struct Watching {
     // None for our own Go Live, shown from its local frames: watching it through Discord would
     // end it on stop, since leaving a stream and ending one are the same gateway op.
     watch: Option<voice::StreamWatch>,
-    // Times in a row this stream was rewatched after ending without a frame in between, so one that
-    // keeps failing while its streamer reads as live ends instead of retrying forever.
+    pub(crate) state: WatchState,
+    // Reconnects in a row without a frame in between, so a stream that keeps dropping fails instead
+    // of retrying forever.
     rejoins: u8,
 }
 
-// How long a restarting streamer gets to start the new stream (Waffle waits up to 3 s for the
-// old one's delete), and how often an ended stream is followed before giving up.
+// Discord's active-stream states (its web client, 2026-11-21), less ENDED, which is `Call::ended`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum WatchState {
+    // Since when: Discord fails a watch that hasn't connected in 5 s (12 s on a Stage).
+    Connecting(Instant),
+    Active,
+    Reconnecting,
+    // With Discord's error code, shown on the tile.
+    Failed(u16),
+}
+
+// Discord's AV error codes for watching (its web client's error table, 2026-11-21).
+pub(crate) const STREAM_FAILED_TO_START: u16 = 2001;
+pub(crate) const STREAM_VIEW_LOW_FPS: u16 = 2002;
+pub(crate) const STREAM_RECONNECTING: u16 = 2007;
+
+const WATCH_TIMEOUT: Duration = Duration::from_secs(5);
+const STAGE_WATCH_TIMEOUT: Duration = Duration::from_secs(12);
+const STAGE_CHANNEL: u8 = 13;
+// A dropped connection is rejoined after this long, this many times in a row.
 const REJOIN_AFTER: Duration = Duration::from_secs(2);
 const MAX_REJOINS: u8 = 3;
+// The streamer's voice state stops saying they're live while we still watch: Discord closes the
+// stream this long after, unless they're live again.
+const LIVE_LAPSE: Duration = Duration::from_secs(180);
 
 impl Watching {
+    pub(crate) fn new(streamer_id: String, frame: Option<Arc<RenderImage>>, watch: Option<voice::StreamWatch>) -> Self {
+        let state = if watch.is_some() { WatchState::Connecting(Instant::now()) } else { WatchState::Active };
+        Self { streamer_id, frame, arrivals: Default::default(), watch, state, rejoins: 0 }
+    }
+
     fn ended(&self) -> bool {
         self.watch.as_ref().is_some_and(voice::StreamWatch::ended)
     }
@@ -575,6 +609,8 @@ struct ProfileCard {
     guild_id: Option<String>,
     at: gpui_kit::Point<gpui_kit::Pixels>,
     profile: Option<Profile>,
+    // Every activity card, after "Show more".
+    all_activity: bool,
 }
 
 // Where a picked emoji goes.
@@ -654,6 +690,9 @@ pub struct Waffle {
     last_channel: HashMap<Option<String>, String>,
     feeds: HashMap<String, Feed>,
     list: ListState,
+    // Where each channel left scrolled up was read from (a message id and how far into it), so coming
+    // back opens there; a channel left at the bottom has none and opens on the newest message.
+    scroll_anchors: HashMap<String, (String, gpui_kit::Pixels)>,
     read_states: HashMap<String, ReadState>,
     last_message: HashMap<String, u64>,
     presences: HashMap<String, Presence>,
@@ -775,6 +814,8 @@ pub struct Waffle {
     // When the pointer last moved over the call view; the bar and header fade out after a while.
     call_pointer_at: Instant,
     call_pointer_inside: bool,
+    // On the stage's own chrome (controls, header buttons): it stays up while the pointer rests there.
+    call_pointer_on_chrome: bool,
     call_strip_hidden: bool,
     // Our stream's self-view: shown, and which corner of the stage it sits in.
     // Our local volume for each streamer's Go Live (0..=2), kept across watches.
@@ -805,6 +846,12 @@ pub struct Waffle {
     friends_tab: home::FriendsTab,
     // Your recent mentions once fetched (None while loading); kept after the popover closes for the page.
     inbox: Option<Option<Result<Vec<Message>, SharedString>>>,
+    // Your saved-for-later messages once fetched for the Inbox's Saved tab, and the ids of every saved
+    // one (loaded on connect) for Save's label. Rc so each render's row context shares it.
+    saved: Option<Option<Result<Vec<Message>, SharedString>>>,
+    saved_ids: std::rc::Rc<HashSet<String>>,
+    // A reaction frecency save is waiting out FRECENCY_SAVE_DELAY, so a burst of reactions sends once.
+    frecency_save_pending: bool,
     // The inbox popover, rising from the rail's Inbox tile.
     inbox_open: bool,
     inbox_tab: inbox::InboxTab,
@@ -814,6 +861,10 @@ pub struct Waffle {
     popover_at: gpui_kit::Point<gpui_kit::Pixels>,
     // The full Inbox page in the content column ("See all").
     inbox_page: bool,
+    // Joining a server: invite screen, onboarding, rules, Channels & Roles and the Server Guide.
+    join: joining::Join,
+    // A server page open in the content column instead of a channel (Server Guide, Channels & Roles).
+    guild_page: Option<joining::GuildPage>,
     // The GIF picker: None closed, Some(None) loading, Some(Some(..)) results.
     gif_picker: Option<Option<Result<Vec<Gif>, SharedString>>>,
     // Which tab the GIF picker shows; stickers share its frame.
@@ -893,6 +944,8 @@ pub struct Waffle {
     forward: Vec<(Option<String>, Channel)>,
     folded: HashSet<String>,
     hovered: Option<String>,
+    // The member row under the pointer: its avatar and decoration animate, as Discord's do.
+    member_hover: Option<String>,
     motions: Motions<Part>,
     // The DM tiles on the rail with their counts, leaving ones included until their exit settles; None until
     // DMs first load, so the ones there at launch never animate in.
@@ -1036,6 +1089,7 @@ impl Waffle {
             last_channel: HashMap::new(),
             feeds: HashMap::new(),
             list: ListState::new(0, ListAlignment::Bottom, px(600.)),
+            scroll_anchors: HashMap::new(),
             read_states: HashMap::new(),
             last_message: HashMap::new(),
             presences: HashMap::new(),
@@ -1117,6 +1171,7 @@ impl Waffle {
             stream_live_since: HashMap::new(),
             call_pointer_at: Instant::now(),
             call_pointer_inside: false,
+            call_pointer_on_chrome: false,
             // Discord's focused view hides everyone else behind the pill on the stream's bottom edge.
             call_strip_hidden: true,
             preview_generation: 0,
@@ -1135,11 +1190,16 @@ impl Waffle {
             relationships: Vec::new(),
             friends_tab: home::FriendsTab::Online,
             inbox: None,
+            saved: None,
+            saved_ids: Default::default(),
+            frecency_save_pending: false,
             inbox_open: false,
             inbox_tab: inbox::InboxTab::default(),
             pending_jump: None,
             popover_at: gpui_kit::Point::default(),
             inbox_page: false,
+            join: joining::Join::default(),
+            guild_page: None,
             gif_picker: None,
             picker_tab: stickers::PickerTab::default(),
             sticker_packs: None,
@@ -1198,6 +1258,7 @@ impl Waffle {
             forward: Vec::new(),
             folded: HashSet::new(),
             hovered: None,
+            member_hover: None,
             motions: Motions::new(),
             rail_dms_shown: None,
             arrivals: Rc::default(),
@@ -1356,6 +1417,8 @@ impl Waffle {
                 self.my_status = ready.status;
                 self.remember_account(&ready.me);
                 self.gateway_session = ready.session_id.clone();
+                self.fetch_saved_ids(cx);
+                self.load_reaction_frecency(cx);
                 self.me = Some(ready.me);
                 self.custom_status = ready.custom_status;
                 self.expire_custom_status_later(cx);
@@ -1431,12 +1494,13 @@ impl Waffle {
                     self.channel = None;
                 }
             }
-            Event::MemberUpdate { guild_id, user, roles } => {
+            Event::MemberUpdate { guild_id, user, roles, membership } => {
                 self.profile_changed(&user.id);
                 if self.me.as_ref().is_some_and(|me| me.id == user.id)
                     && let Some(guild) = self.guilds.iter_mut().find(|g| g.id == guild_id)
                 {
                     guild.my_roles = roles.clone();
+                    guild.me = membership;
                 }
                 self.member_roles.entry(guild_id.clone()).or_default().insert(user.id.clone(), roles);
                 self.members.entry(guild_id.clone()).or_default().insert(user.id.clone(), user);
@@ -1476,6 +1540,8 @@ impl Waffle {
                         if guild.my_roles.is_empty() {
                             guild.my_roles = std::mem::take(&mut existing.my_roles);
                         }
+                        // Same for our membership state: GUILD_CREATE doesn't carry it.
+                        guild.me = std::mem::take(&mut existing.me);
                         for thread in existing.threads.drain(..) {
                             if !guild.threads.iter().any(|t| t.id == thread.id) {
                                 guild.threads.push(thread);
@@ -1680,6 +1746,7 @@ impl Waffle {
     }
 
     fn on_message(&mut self, message: Message, cx: &mut Context<Self>) {
+        self.note_message_sent(&message, cx);
         let channel_id = message.channel_id.clone();
         let mine = self.me.as_ref().is_some_and(|me| me.id == message.author.id);
         let is_open = self.channel.as_ref().is_some_and(|c| c.id == channel_id);
@@ -1752,6 +1819,7 @@ impl Waffle {
 
     fn open_guild(&mut self, guild_id: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         self.guild_id = guild_id.clone();
+        self.guild_page = None;
         self.refresh_stream_previews(cx);
         self.request_channel_info();
         let remembered = self.last_channel.get(&guild_id).cloned();
@@ -1774,6 +1842,8 @@ impl Waffle {
 
     pub(crate) fn open_channel(&mut self, channel: Channel, window: &mut Window, cx: &mut Context<Self>) {
         self.inbox_page = false;
+        self.guild_page = None;
+        self.note_channel_viewed(&channel, cx);
         // Results belong to the server or DM they searched: another place closes them.
         let scope = match &self.guild_id {
             Some(guild) => format!("guilds/{guild}"),
@@ -1823,9 +1893,20 @@ impl Waffle {
         }
         self.load_dm_profile(&channel, cx);
         self.stash_draft(cx);
+        if let Some(previous) = self.channel.as_ref().map(|c| c.id.clone()).filter(|p| *p != id) {
+            match self.scroll_anchor() {
+                Some(anchor) => self.scroll_anchors.insert(previous, anchor),
+                None => self.scroll_anchors.remove(&previous),
+            };
+        }
+        let is_forum = channel.kind == ChannelKind::Forum;
         self.channel = Some(channel);
         self.editing = None;
         self.restore_draft(window, cx);
+        // Opening a channel or DM puts the cursor in its composer, as Discord's.
+        if !is_forum {
+            self.composer.update(cx, |state, cx| state.focus(window, cx));
+        }
         self.send_error = None;
         self.autocomplete = None;
         self.scrolled_up = false;
@@ -1842,13 +1923,37 @@ impl Waffle {
         self.list.reset(count);
         // With news, the channel opens on its first unread, under the NEW line, and stays unread until you
         // scroll down to the newest message (Discord's auto-read needs the bottom); otherwise it's read now.
+        // Without, it opens where it was left.
         self.unread_scroll_pending = self.unread_marker.is_some();
         self.scroll_to_first_unread();
+        if self.unread_marker.is_none()
+            && let Some(anchor) = self.scroll_anchors.get(&id).cloned()
+        {
+            self.scroll_to_anchor(anchor);
+        }
         self.fetch_latest(&id, cx);
         if self.unread_marker.is_none() {
             self.ack_open(cx);
         }
         cx.notify();
+    }
+
+    // The message at the top of the open feed and how far into it, while scrolled up from the newest.
+    fn scroll_anchor(&self) -> Option<(String, gpui_kit::Pixels)> {
+        if !self.scrolled_up {
+            return None;
+        }
+        let top = self.list.logical_scroll_top();
+        let feed = self.feeds.get(&self.channel.as_ref()?.id)?;
+        Some((feed.messages.get(top.item_ix)?.id.clone(), top.offset_in_item))
+    }
+
+    // Back to an anchor, if its message is still in the feed.
+    fn scroll_to_anchor(&mut self, (message_id, offset): (String, gpui_kit::Pixels)) {
+        let Some(feed) = self.channel.as_ref().and_then(|c| self.feeds.get(&c.id)) else { return };
+        let Some(item_ix) = feed.messages.iter().position(|m| m.id == message_id) else { return };
+        self.list.scroll_to(ListOffset { item_ix, offset_in_item: offset });
+        self.scrolled_up = true;
     }
 
     // Puts the first unread message near the top, once it's loaded.
@@ -1889,6 +1994,8 @@ impl Waffle {
 
     fn merge_latest(&mut self, channel_id: &str, result: Result<Vec<Message>, String>, cx: &mut Context<Self>) {
         let is_open = self.channel.as_ref().is_some_and(|c| c.id == channel_id);
+        // Read before the feed changes: the reset below would otherwise drop a reader scrolled up back to the bottom.
+        let anchor = is_open.then(|| self.scroll_anchor()).flatten();
         let feed = self.feeds.entry(channel_id.to_owned()).or_default();
         feed.fetching = false;
         let fetched = match result {
@@ -1911,6 +2018,9 @@ impl Waffle {
         let authors: Vec<String> = feed.messages.iter().map(|m| m.author.id.clone()).collect();
         if is_open && !unchanged {
             self.list.reset(count);
+            if let Some(anchor) = anchor {
+                self.scroll_to_anchor(anchor);
+            }
             self.scroll_to_first_unread();
             // Tried once the messages are in: a first unread that never loads mustn't hold off reading.
             self.unread_scroll_pending = false;
@@ -1954,6 +2064,9 @@ impl Waffle {
                     let top = this.list.logical_scroll_top();
                     this.list.splice(0..0, added);
                     this.list.scroll_to(ListOffset { item_ix: top.item_ix + added, offset_in_item: top.offset_in_item });
+                }
+                if added > 0 {
+                    this.refresh_viewer(cx);
                 }
                 this.request_missing_roles(authors);
                 cx.notify();
@@ -2116,6 +2229,19 @@ impl Waffle {
         }
         self.drafts.clear(&channel.id);
         self.save_drafts_soon(cx);
+        // Over Discord's limit, the text goes as a message.txt instead of being refused.
+        if content.chars().count() > discord::message_limit(self.my_account.premium_type) {
+            match attachments::save_message_text(&content).ok().and_then(attachments::PendingFile::new) {
+                Some(file) => {
+                    self.pending_files.push(file);
+                    return self.send_files(String::new(), cx);
+                }
+                None => {
+                    self.send_error = Some("Couldn't turn the long message into a file".into());
+                    return cx.notify();
+                }
+            }
+        }
         if !self.pending_files.is_empty() {
             return self.send_files(content, cx);
         }
@@ -2257,6 +2383,7 @@ impl Waffle {
         let add = !message.reactions.iter().any(|r| r.emoji == emoji && r.me);
         if add {
             self.update_prefs(cx, |p| p.record_emoji(&emoji));
+            self.save_reaction_frecency(cx);
         }
         let (channel_id, message_id) = (message.channel_id.clone(), message.id.clone());
         let me = self.my_id().to_owned();
@@ -2329,13 +2456,22 @@ impl Waffle {
         }
     }
 
-    /// Cmd/Ctrl+V: files copied in Finder or Explorer, or a picture (a screenshot), attach; text is left
-    /// to the composer's own paste. True when it attached something.
+    /// Cmd/Ctrl+V: files copied in Finder or Explorer, a picture (a screenshot) or text over 4000
+    /// characters (as message.txt) attach; other text is left to the composer's own paste. True when it
+    /// attached something.
     fn paste_files(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let Some(item) = cx.read_from_clipboard() else { return false };
         let paths = match attachments::classify(&item) {
             attachments::Pasted::Text => return false,
             attachments::Pasted::Files(paths) => paths,
+            attachments::Pasted::LongText(text) => match attachments::save_message_text(&text) {
+                Ok(path) => vec![path],
+                Err(error) => {
+                    self.send_error = Some(format!("Couldn't attach that text: {error}").into());
+                    cx.notify();
+                    return true;
+                }
+            },
             attachments::Pasted::Image(image) => match attachments::save_pasted_image(&image) {
                 Ok(path) => vec![path],
                 Err(error) => {
@@ -2846,7 +2982,7 @@ impl Waffle {
             }
         })
         .detach();
-        self.call = Some(Call { session, guild_id, channel, connected: false, stage: voice::Stage::AwaitingEndpoint, stats: None, level: (SILENCE_DB, false), speaking: HashSet::new(), last_spoke: HashMap::new(), cameras: HashMap::new(), camera_on: false, watching: Vec::new(), focus: None, ended: Vec::new(), sharing: None, share_label: None, share_source: None, live_since: None, self_view: None, joined: Instant::now(), _events: task });
+        self.call = Some(Call { session, guild_id, channel, connected: false, stage: voice::Stage::AwaitingEndpoint, stats: None, level: (SILENCE_DB, false), speaking: HashSet::new(), last_spoke: HashMap::new(), cameras: HashMap::new(), camera_on: false, watching: Vec::new(), focus: None, ended: Vec::new(), sharing: None, share_label: None, share_source: None, live_since: None, self_view: None, issues: HashSet::new(), joined: Instant::now(), _events: task });
         cx.notify();
     }
 
@@ -2913,6 +3049,8 @@ impl Waffle {
     fn on_voice(&mut self, event: voice::VoiceEvent, cx: &mut Context<Self>) {
         // A stream picked from the hover card before we'd joined: watch it once connected.
         let mut start_watch: Option<String> = None;
+        let mut lapsed: Option<String> = None;
+        let mut ready_checks: Vec<String> = Vec::new();
         let Some(call) = &mut self.call else { return };
         match event {
             voice::VoiceEvent::Connected => {
@@ -2958,7 +3096,16 @@ impl Waffle {
                 if streaming && call.ended.contains(&user_id) {
                     start_watch = Some(user_id.clone());
                 }
+                if !streaming && call.watched(&user_id).is_some_and(|w| !w.ended()) {
+                    lapsed = Some(user_id.clone());
+                }
                 // A camera tile is drawn while it has a frame: without this, a camera turned off froze on its last one.
+                if camera && !call.cameras.contains_key(&user_id) {
+                    ready_checks.push(format!("camera:{user_id}"));
+                }
+                if !camera {
+                    call.issues.remove(&(format!("camera:{user_id}"), voice::issues::RECEIVER_READY_TIMEOUT));
+                }
                 if !camera && let Some(frame) = call.cameras.remove(&user_id) {
                     cx.drop_image(frame, None);
                 }
@@ -2968,6 +3115,12 @@ impl Waffle {
                 let Some(frame) = call.session.take_frame(&user_id, voice::VideoSource::GoLive) else { return };
                 let mine = self.me.as_ref().is_some_and(|m| m.id == user_id);
                 let watching_self = call.watched(&user_id).is_some();
+                if mine && self.prefs.hidden_self_streams.contains(&call.channel.id) {
+                    if let Some((old, _)) = call.self_view.take() {
+                        cx.drop_image(old, None);
+                    }
+                    return;
+                }
                 // The self-view runs at 15 fps: a full-rate copy of every frame isn't worth it for a thumbnail.
                 if mine && !watching_self {
                     if call.self_view.as_ref().is_some_and(|(_, at)| at.elapsed() < SELF_VIEW_INTERVAL) {
@@ -2979,9 +3132,11 @@ impl Waffle {
                     }
                     return cx.notify();
                 }
+                call.issues.remove(&(format!("stream:{user_id}"), voice::issues::RECEIVER_READY_TIMEOUT));
                 let Some(watching) = call.watching.iter_mut().find(|w| w.streamer_id == user_id) else { return };
                 let Some(image) = render_image(frame) else { return };
                 watching.rejoins = 0;
+                watching.state = WatchState::Active;
                 watching.arrivals.push_back(Instant::now());
                 while watching.arrivals.len() > 120 {
                     watching.arrivals.pop_front();
@@ -2993,27 +3148,46 @@ impl Waffle {
             }
             voice::VoiceEvent::StreamFrame { user_id, source: voice::VideoSource::Camera } => {
                 let Some(frame) = call.session.take_frame(&user_id, voice::VideoSource::Camera) else { return };
+                call.issues.remove(&(format!("camera:{user_id}"), voice::issues::RECEIVER_READY_TIMEOUT));
                 let Some(image) = render_image(frame) else { return };
                 if let Some(old) = call.cameras.insert(user_id, image) {
                     cx.drop_image(old, None);
                 }
             }
+            voice::VoiceEvent::Issue { user_id, code, active } => {
+                match active {
+                    true => call.issues.insert((user_id, code)),
+                    false => call.issues.remove(&(user_id, code)),
+                };
+            }
+            voice::VoiceEvent::StreamConnected { user_id } => {
+                if let Some(watching) = call.watching.iter_mut().find(|w| w.streamer_id == user_id)
+                    && matches!(watching.state, WatchState::Connecting(_) | WatchState::Reconnecting)
+                {
+                    watching.state = WatchState::Active;
+                }
+                ready_checks.push(format!("stream:{user_id}"));
+            }
             voice::VoiceEvent::StreamEnded { user_id, reason } => {
-                if reason != "Stopped" && reason != "Stream ended" && reason != "user_requested" {
+                if reason != "Stopped" && !is_delete_reason(&reason) {
                     eprintln!("voice: stream ended: {reason}");
                 }
                 // A stream that was replaced or watched again ends after its successor started; only the
                 // one whose own handle has ended is over.
                 if self.me.as_ref().is_some_and(|m| m.id == user_id) {
+                    let capture_failed = call.issues.contains(&(user_id.clone(), voice::issues::SCREENSHARE_OS_ERROR));
                     if call.sharing.as_ref().is_some_and(voice::GoLive::ended) {
                         self.end_share(cx);
+                        if capture_failed {
+                            self.voice_error = Some(format!("Your system stopped the screen capture. Error code: {}", voice::issues::SCREENSHARE_OS_ERROR).into());
+                        }
                     }
                     return;
                 }
                 if !call.watched(&user_id).is_some_and(Watching::ended) {
                     return;
                 }
-                return self.on_watch_ended(user_id, cx);
+                return self.on_watch_ended(user_id, reason, cx);
             }
             voice::VoiceEvent::Moved(channel_id) => return self.follow_voice_move(&channel_id, cx),
             voice::VoiceEvent::Disconnected(reason) => {
@@ -3036,6 +3210,12 @@ impl Waffle {
         }
         if let Some(streamer) = start_watch {
             self.watch_stream(streamer, cx);
+        }
+        if let Some(streamer) = lapsed {
+            self.on_live_lapse(streamer, cx);
+        }
+        for key in ready_checks {
+            self.check_ready(key, cx);
         }
         cx.notify();
     }
@@ -3060,20 +3240,52 @@ impl Waffle {
                 }
             },
         };
-        call.watching.push(Watching { streamer_id, frame: None, arrivals: Default::default(), watch, rejoins: 0 });
+        let timeout = if call.channel.raw_type == STAGE_CHANNEL { STAGE_WATCH_TIMEOUT } else { WATCH_TIMEOUT };
+        call.watching.push(Watching::new(streamer_id.clone(), None, watch));
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(timeout).await;
+            this.update(cx, |this, cx| this.watch_timed_out(&streamer_id, timeout, cx)).ok();
+        })
+        .detach();
         cx.notify();
     }
 
-    // A watched stream ended. Streamers end and restart a stream to change its quality, and Discord's
-    // client follows them into the new one; so does this one while their voice state says they're
-    // still live, after giving the new stream time to start. Otherwise it's over.
-    fn on_watch_ended(&mut self, streamer_id: String, cx: &mut Context<Self>) {
-        let live = self.participants().iter().any(|s| s.user_id == streamer_id && s.streaming);
+    fn watch_timed_out(&mut self, streamer_id: &str, timeout: Duration, cx: &mut Context<Self>) {
         let Some(watching) = self.call.as_mut().and_then(|c| c.watching.iter_mut().find(|w| w.streamer_id == streamer_id)) else { return };
-        if !live || watching.rejoins >= MAX_REJOINS {
-            return self.end_watch(streamer_id, cx);
+        if matches!(watching.state, WatchState::Connecting(since) if since.elapsed() >= timeout) {
+            watching.state = WatchState::Failed(STREAM_FAILED_TO_START);
+            cx.notify();
         }
-        // The stage shows the loader until the restarted stream's first frame.
+    }
+
+    // A watched stream's connection ended, handled as Discord handles STREAM_DELETE: unavailable or a
+    // dropped connection reconnects, unauthorized fails, full closes with a notice, anything else ends.
+    fn on_watch_ended(&mut self, streamer_id: String, reason: String, cx: &mut Context<Self>) {
+        let name = self.user_name(&streamer_id);
+        let Some(watching) = self.call.as_mut().and_then(|c| c.watching.iter_mut().find(|w| w.streamer_id == streamer_id)) else { return };
+        match reason.as_str() {
+            voice::STREAM_DELETE_FULL => {
+                self.unwatch_stream(&streamer_id, cx);
+                self.voice_error = Some(format!("{name}'s stream is full").into());
+            }
+            voice::STREAM_DELETE_UNAUTHORIZED => fail_watch(watching, cx),
+            // Already failed: the delete that follows a failure keeps it failed, as Discord's.
+            _ if matches!(watching.state, WatchState::Failed(_)) => {}
+            voice::STREAM_DELETE_UNAVAILABLE => self.reconnect_watch(streamer_id, cx),
+            _ if is_delete_reason(&reason) => self.end_watch(streamer_id, cx),
+            // Never connected: the stream server didn't answer or refused us.
+            _ if matches!(watching.state, WatchState::Connecting(_)) => fail_watch(watching, cx),
+            _ => self.reconnect_watch(streamer_id, cx),
+        }
+    }
+
+    fn reconnect_watch(&mut self, streamer_id: String, cx: &mut Context<Self>) {
+        let Some(watching) = self.call.as_mut().and_then(|c| c.watching.iter_mut().find(|w| w.streamer_id == streamer_id)) else { return };
+        if watching.rejoins >= MAX_REJOINS {
+            return fail_watch(watching, cx);
+        }
+        watching.state = WatchState::Reconnecting;
+        // The tile shows the reconnecting state rather than a frozen picture.
         if let Some(frame) = watching.frame.take() {
             cx.drop_image(frame, None);
         }
@@ -3089,7 +3301,7 @@ impl Waffle {
         let live = self.participants().iter().any(|s| s.user_id == streamer_id && s.streaming);
         let Some(call) = &mut self.call else { return };
         // Stopped or watched again by hand meanwhile.
-        let Some(watching) = call.watching.iter_mut().find(|w| w.streamer_id == streamer_id && w.ended()) else { return };
+        let Some(watching) = call.watching.iter_mut().find(|w| w.streamer_id == streamer_id && w.state == WatchState::Reconnecting) else { return };
         if !live {
             return self.end_watch(streamer_id, cx);
         }
@@ -3097,20 +3309,60 @@ impl Waffle {
             Ok(watch) => {
                 watching.watch = Some(watch);
                 watching.rejoins += 1;
-                cx.notify();
             }
-            Err(_) => self.end_watch(streamer_id, cx),
+            Err(_) => fail_watch(watching, cx),
         }
+        cx.notify();
+    }
+
+    // A stream connected, or a camera turned on, with no picture READY_TIMEOUT later: Discord's 2012
+    // (`key` is "stream:{id}" or "camera:{id}"). The first frame clears it.
+    fn check_ready(&mut self, key: String, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(voice::issues::READY_TIMEOUT).await;
+            this.update(cx, |this, cx| {
+                let Some(call) = &mut this.call else { return };
+                let pictured = match key.split_once(':') {
+                    Some(("stream", id)) => call.watched(id).is_none_or(|w| !w.arrivals.is_empty() || w.state != WatchState::Active),
+                    Some((_, id)) => call.cameras.contains_key(id),
+                    None => true,
+                };
+                if !pictured {
+                    call.issues.insert((key, voice::issues::RECEIVER_READY_TIMEOUT));
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    // The streamer's voice state says they stopped while we still watch: closed after LIVE_LAPSE
+    // unless they're live again, as Discord does.
+    fn on_live_lapse(&mut self, streamer_id: String, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(LIVE_LAPSE).await;
+            this.update(cx, |this, cx| {
+                let live = this.participants().iter().any(|s| s.user_id == streamer_id && s.streaming);
+                let ended = this.call.as_ref().is_some_and(|c| c.ended.contains(&streamer_id));
+                if !live && !ended && this.call.as_ref().is_some_and(|c| c.watched(&streamer_id).is_some()) {
+                    this.unwatch_stream(&streamer_id, cx);
+                }
+            })
+            .ok();
+        })
+        .detach();
     }
 
     fn end_watch(&mut self, streamer_id: String, cx: &mut Context<Self>) {
+        let focused = self.call_focus.as_deref() == Some(format!("stream:{streamer_id}").as_str());
         let Some(call) = &mut self.call else { return };
         if let Some(frame) = call.unwatch(&streamer_id).and_then(|w| w.frame) {
             cx.drop_image(frame, None);
         }
         sounds::play(sounds::Cue::StreamEnded);
-        // Its card stays, saying who stopped.
-        if !call.ended.contains(&streamer_id) {
+        // In focus, its card stays, saying who stopped, until closed; elsewhere it just goes, as Discord's.
+        if focused && !call.ended.contains(&streamer_id) {
             call.ended.push(streamer_id);
         }
         cx.notify();
@@ -3135,6 +3387,9 @@ impl Waffle {
     fn stop_watching(&mut self, cx: &mut Context<Self>) {
         let Some(call) = &mut self.call else { return };
         call.focus = None;
+        if self.call_focus.as_deref().is_some_and(|key| key.starts_with("stream:")) {
+            self.call_focus = None;
+        }
         for frame in call.watching.drain(..).filter_map(|w| w.frame) {
             cx.drop_image(frame, None);
         }
@@ -3455,7 +3710,7 @@ mod tests {
     }
 
     fn member(id: &str) -> ListItem {
-        ListItem::Member(discord::Member { user: User { id: id.into(), ..Default::default() }, roles: vec![], presence: Presence::default() })
+        ListItem::Member(discord::Member { user: User { id: id.into(), ..Default::default() }, roles: vec![], presence: Presence::default(), boosting_since: None })
     }
 
     fn ids(list: &[ListItem]) -> Vec<String> {
@@ -3563,4 +3818,17 @@ fn release_frames(mut call: Call, cx: &mut gpui_kit::App) {
     for frame in frames {
         cx.drop_image(frame, None);
     }
+}
+
+fn fail_watch(watching: &mut Watching, cx: &mut Context<Waffle>) {
+    watching.state = WatchState::Failed(STREAM_FAILED_TO_START);
+    if let Some(frame) = watching.frame.take() {
+        cx.drop_image(frame, None);
+    }
+    cx.notify();
+}
+
+// STREAM_DELETE's own reasons, as opposed to a transport error that dropped the connection.
+fn is_delete_reason(reason: &str) -> bool {
+    [voice::STREAM_DELETE_ENDED, voice::STREAM_DELETE_RATE_LIMITED, "user_requested"].contains(&reason)
 }

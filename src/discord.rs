@@ -7,7 +7,7 @@ use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 const GATEWAY: &str = "wss://gateway.discord.gg/?v=10&encoding=json";
 pub const API: &str = "https://discord.com/api/v10";
-const CDN: &str = "https://cdn.discordapp.com";
+pub(crate) const CDN: &str = "https://cdn.discordapp.com";
 pub(crate) const VIEW_CHANNEL: u64 = 1 << 10;
 
 // The user-account gateway and several fields below (nameplates, guild tags, member list ops,
@@ -20,7 +20,7 @@ pub struct User {
     pub avatar: String,
     pub bot: bool,
     pub tag: Option<GuildTag>,
-    pub nameplate: Option<Nameplate>,
+    pub nameplate: Option<Box<Nameplate>>,
     // Avatar decoration frame drawn around the avatar.
     pub decoration: Option<String>,
     pub name_style: Option<NameStyle>,
@@ -67,6 +67,10 @@ fn parse_name_style(styles: &Value) -> Option<NameStyle> {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Nameplate {
     pub art: String,
+    // The moving version, as an animated image: what Discord plays where it can't play the WebM
+    // (Safari, Linux, reduced motion). From the nameplate's `sku_id`.
+    #[serde(default)]
+    pub animated: Option<String>,
     // The tint Discord paints under the art: (dark theme, light theme), from the nameplate's palette.
     pub tint: (u32, u32),
 }
@@ -200,7 +204,8 @@ pub struct FeedEntry {
 pub struct Activity {
     pub kind: ActivityKind,
     pub text: String,
-    pub more: usize,
+    // The other activities after the first, in Discord's order, for "+N" and its hover list.
+    pub rest: Vec<(ActivityKind, String)>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -225,7 +230,7 @@ pub struct Role {
     pub managed: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Guild {
     pub id: String,
     pub name: String,
@@ -248,6 +253,33 @@ pub struct Guild {
     pub premium_tier: u8,
     // People idling here don't count as voice activity (Discord's server icon badge skips it).
     pub afk_channel_id: Option<String>,
+    // Discord's feature flags (COMMUNITY, GUILD_ONBOARDING, MEMBER_VERIFICATION_GATE_ENABLED, ...).
+    pub features: Vec<String>,
+    // The invite splash: the image a server shows behind its invites and onboarding.
+    pub splash: Option<String>,
+    pub rules_channel_id: Option<String>,
+    // Our own membership here: pending rules, onboarding and to-do flags, join date.
+    pub me: Membership,
+}
+
+// Our member entry's join state. `flags` are Discord's guild member flags (see `joining::flags`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Membership {
+    pub pending: bool,
+    pub flags: u64,
+    pub joined_at: Option<String>,
+}
+
+impl Membership {
+    pub fn parse(m: &Value) -> Self {
+        Membership { pending: m["pending"].as_bool().unwrap_or(false), flags: m["flags"].as_u64().unwrap_or(0), joined_at: m["joined_at"].as_str().map(str::to_owned) }
+    }
+}
+
+impl Guild {
+    pub fn has_feature(&self, feature: &str) -> bool {
+        self.features.iter().any(|f| f == feature)
+    }
 }
 
 // Your notification settings for one server, or for DMs under the key "@me" (Discord's
@@ -261,6 +293,8 @@ pub struct GuildSettings {
     pub suppress_everyone: bool,
     pub suppress_roles: bool,
     pub hide_muted: bool,
+    // user_guild_settings flags; bit 14 (16384) is "pick your channels" (opt-in channels on).
+    pub flags: u64,
     pub channels: HashMap<String, ChannelSettings>,
 }
 
@@ -269,6 +303,8 @@ pub struct ChannelSettings {
     pub muted: bool,
     pub mute_end: Option<String>,
     pub notifications: u8,
+    // channel_overrides flags; bit 12 (4096) follows the channel (or category) when opt-in is on.
+    pub flags: u64,
 }
 
 impl GuildSettings {
@@ -299,6 +335,7 @@ pub fn parse_guild_settings(g: &Value) -> (String, GuildSettings) {
                     muted: c["muted"].as_bool().unwrap_or(false),
                     mute_end: c["mute_config"]["end_time"].as_str().map(str::to_owned),
                     notifications: c["message_notifications"].as_u64().unwrap_or(3) as u8,
+                    flags: c["flags"].as_u64().unwrap_or(0),
                 },
             ))
         })
@@ -310,6 +347,7 @@ pub fn parse_guild_settings(g: &Value) -> (String, GuildSettings) {
         suppress_everyone: g["suppress_everyone"].as_bool().unwrap_or(false),
         suppress_roles: g["suppress_roles"].as_bool().unwrap_or(false),
         hide_muted: g["hide_muted_channels"].as_bool().unwrap_or(false),
+        flags: g["flags"].as_u64().unwrap_or(0),
         channels,
     };
     (key, settings)
@@ -930,6 +968,8 @@ pub struct Member {
     pub user: User,
     pub roles: Vec<String>,
     pub presence: Presence,
+    // `premium_since`: when they started boosting this server (ISO 8601), if they do.
+    pub boosting_since: Option<String>,
 }
 
 // Lists are almost all members; boxing them would allocate per row to shrink the rare group headers.
@@ -1038,6 +1078,9 @@ pub struct AccountSettings {
     pub friends_all: bool,
     pub friends_mutual_friends: bool,
     pub friends_mutual_guilds: bool,
+    // Servers whose members can't DM you, and servers that don't see your activity.
+    pub restricted_guilds: Vec<String>,
+    pub activity_restricted_guilds: Vec<String>,
 }
 
 impl Default for AccountSettings {
@@ -1052,6 +1095,8 @@ impl Default for AccountSettings {
             friends_all: true,
             friends_mutual_friends: true,
             friends_mutual_guilds: true,
+            restricted_guilds: Vec::new(),
+            activity_restricted_guilds: Vec::new(),
         }
     }
 }
@@ -1069,6 +1114,12 @@ impl AccountSettings {
         flag("render_reactions", &mut self.render_reactions);
         flag("show_current_game", &mut self.show_current_game);
         flag("default_guilds_restricted", &mut self.default_guilds_restricted);
+        if v["restricted_guilds"].is_array() {
+            self.restricted_guilds = strings(&v["restricted_guilds"]);
+        }
+        if v["activity_restricted_guild_ids"].is_array() {
+            self.activity_restricted_guilds = strings(&v["activity_restricted_guild_ids"]);
+        }
         if let Some(level) = v["explicit_content_filter"].as_u64() {
             self.explicit_content_filter = level.min(2) as u8;
         }
@@ -1098,7 +1149,7 @@ pub enum Event {
     ChannelUpsert { guild_id: String, channel: Channel },
     ChannelDelete { guild_id: String, id: String },
     // A member's roles, nickname or server avatar changed.
-    MemberUpdate { guild_id: String, user: User, roles: Vec<String> },
+    MemberUpdate { guild_id: String, user: User, roles: Vec<String>, membership: Membership },
     // A friend, block or request was added, changed or removed (`None` kind = removed).
     RelationshipChange { user_id: String, relationship: Option<Relationship> },
     // Our membership of a thread changed (joined or left).
@@ -1282,6 +1333,30 @@ impl Client {
         }
         let body = self.run(self.request(reqwest::Method::GET, &path)).await?;
         Ok(body.as_array().into_iter().flatten().filter_map(parse_message).collect())
+    }
+
+    /// One of your settings-proto blobs (base64), by Discord's settings type.
+    pub async fn settings_proto(&self, kind: u8) -> Result<String, String> {
+        let body = self.run(self.request(reqwest::Method::GET, &format!("/users/@me/settings-proto/{kind}"))).await?;
+        body["settings"].as_str().map(str::to_owned).ok_or_else(|| "Unexpected response".into())
+    }
+
+    /// Merges `settings` (base64, only the fields to change) into a settings-proto blob.
+    pub async fn patch_settings_proto(&self, kind: u8, settings: String) -> Result<(), String> {
+        let req = self.request(reqwest::Method::PATCH, &format!("/users/@me/settings-proto/{kind}")).json(&serde_json::json!({ "settings": settings }));
+        self.run(req).await.map(drop)
+    }
+
+    /// Your saved-for-later messages, newest saved first (Discord's bookmarks, 25 a page).
+    pub async fn saved_messages(&self) -> Result<Vec<Message>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, "/users/@me/saved-messages/bookmarks?limit=25")).await?;
+        Ok(body["results"].as_array().into_iter().flatten().filter_map(|r| parse_message(&r["message"])).collect())
+    }
+
+    /// The ids of the messages you saved, as the client loads them on connect.
+    pub async fn saved_message_ids(&self) -> Result<Vec<String>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, "/users/@me/saved-messages?bookmark_ids=true")).await?;
+        Ok(bookmark_ids(&body["bookmark_ids"]))
     }
 
     /// Discord's GIF search; an empty query returns what's trending. Shapes from memory: Not verified.
@@ -1706,6 +1781,12 @@ pub fn upload_limit(premium_type: u8, guild_tier: u8) -> u64 {
     user.max(guild) << 20
 }
 
+/// The longest message text Discord takes: 4000 characters with Nitro, 2000 otherwise.
+// Not verified: whether Discord counts code points or UTF-16 units; code points are counted here.
+pub fn message_limit(premium_type: u8) -> usize {
+    if premium_type == 2 { 4000 } else { 2000 }
+}
+
 // Discord caps a message at 10 attachments.
 pub const MAX_FILES: usize = 10;
 
@@ -1814,12 +1895,23 @@ async fn send_or_gone(req: reqwest::RequestBuilder) -> Result<Option<Value>, Str
 
 // A server invite's card: `GET /invites/{code}?with_counts=true`.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+// Cached previews predate some fields.
+#[serde(default)]
 pub struct Invite {
     pub guild_id: String,
     pub name: String,
     pub icon: Option<String>,
     pub online: Option<u64>,
     pub members: Option<u64>,
+    pub features: Vec<String>,
+    pub splash: Option<String>,
+    // The invite lets you pick a server nickname before joining (Discord's `is_nickname_changeable`).
+    pub nickname_changeable: bool,
+}
+
+// A server's invite splash on the CDN, wide enough for a full-window background.
+pub fn splash_url(guild_id: &str, hash: &str) -> String {
+    format!("{CDN}/splashes/{guild_id}/{hash}.jpg?size=2048")
 }
 
 // The server a joined invite was to; a group DM invite has none.
@@ -1837,6 +1929,9 @@ pub fn parse_invite(v: &Value) -> Option<Invite> {
         icon: guild["icon"].as_str().map(|hash| format!("{CDN}/icons/{id}/{hash}.png?size=96")),
         online: v["approximate_presence_count"].as_u64(),
         members: v["approximate_member_count"].as_u64(),
+        features: strings(&guild["features"]),
+        splash: guild["splash"].as_str().map(|hash| splash_url(id, hash)),
+        nickname_changeable: v["is_nickname_changeable"].as_bool().unwrap_or(false),
     })
 }
 
@@ -2093,6 +2188,7 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
             guild_id: d["guild_id"].as_str()?.to_owned(),
             user: parse_member_user(d, &d["user"], d["guild_id"].as_str()),
             roles: strings(&d["roles"]),
+            membership: Membership::parse(d),
         }),
         "RELATIONSHIP_ADD" | "RELATIONSHIP_UPDATE" => {
             let kind = match d["type"].as_u64()? {
@@ -2179,7 +2275,9 @@ fn parse_ready(d: &Value) -> Ready {
             .enumerate()
             .filter_map(|(i, g)| {
                 let mut guild = parse_guild(g)?;
-                guild.my_roles = my_roles(g, &d["merged_members"][i], d["user"]["id"].as_str().unwrap_or_default());
+                let member = my_member(g, &d["merged_members"][i], d["user"]["id"].as_str().unwrap_or_default());
+                guild.my_roles = strings(&member["roles"]);
+                guild.me = Membership::parse(&member);
                 Some(guild)
             })
             .collect(),
@@ -2275,13 +2373,17 @@ fn parse_guild(g: &Value) -> Option<Guild> {
         my_roles: Vec::new(),
         premium_tier: props["premium_tier"].as_u64().or(g["premium_tier"].as_u64()).unwrap_or(0) as u8,
         afk_channel_id: props["afk_channel_id"].as_str().or(g["afk_channel_id"].as_str()).map(str::to_owned),
+        features: strings(if props["features"].is_array() { &props["features"] } else { &g["features"] }),
+        splash: props["splash"].as_str().or(g["splash"].as_str()).map(|hash| splash_url(id, hash)),
+        rules_channel_id: props["rules_channel_id"].as_str().or(g["rules_channel_id"].as_str()).map(str::to_owned),
+        me: Membership::default(),
     })
 }
 
 // READY lists our own member entry per server, either inside each guild or in `merged_members`.
-fn my_roles(guild: &Value, merged: &Value, me: &str) -> Vec<String> {
-    let mine = |list: &Value| list.as_array().into_iter().flatten().find(|m| m["user_id"].as_str().or(m["user"]["id"].as_str()) == Some(me)).map(|m| strings(&m["roles"]));
-    mine(&guild["members"]).or_else(|| mine(merged)).unwrap_or_default()
+fn my_member(guild: &Value, merged: &Value, me: &str) -> Value {
+    let mine = |list: &Value| list.as_array().into_iter().flatten().find(|m| m["user_id"].as_str().or(m["user"]["id"].as_str()) == Some(me)).cloned();
+    mine(&guild["members"]).or_else(|| mine(merged)).unwrap_or(Value::Null)
 }
 
 pub fn parse_thread(c: &Value, guild_id: &str) -> Option<Channel> {
@@ -2520,8 +2622,9 @@ pub fn parse_user(user: &Value) -> User {
     let plate = &user["collectibles"]["nameplate"];
     let nameplate = plate["asset"].as_str().map(|asset| Nameplate {
         art: format!("{CDN}/assets/collectibles/{asset}static.png"),
+        animated: plate["sku_id"].as_str().map(|sku| format!("{CDN}/media/v1/collectibles-shop/{sku}/animated")),
         tint: palette_tint(plate["palette"].as_str().unwrap_or_default()),
-    });
+    }).map(Box::new);
     let decoration = user["avatar_decoration_data"]["asset"].as_str().map(|asset| format!("{CDN}/avatar-decoration-presets/{asset}.png?size=96&passthrough=false"));
     let name_style = parse_name_style(&user["display_name_styles"]);
     User { id, name, avatar, bot: user["bot"].as_bool().unwrap_or(false), tag, nameplate, decoration, name_style }
@@ -2579,6 +2682,16 @@ fn scaled(original: (f32, f32), scale: f32) -> String {
 fn with_query(url: String, query: &str) -> String {
     let joiner = if url.contains('?') { "&" } else { "?" };
     format!("{url}{joiner}{query}")
+}
+
+/// The moving version of an avatar or decoration URL, for while Discord would animate it: an animated
+/// (`a_`) avatar as its GIF, a decoration with `passthrough=true` (its APNG, as Discord's client asks for).
+/// Anything else comes back as it is.
+pub fn animated(url: &str) -> String {
+    if url.contains("/avatars/") && url.contains("/a_") {
+        return url.replacen(".png?", ".gif?", 1);
+    }
+    url.replacen("passthrough=false", "passthrough=true", 1)
 }
 
 pub fn avatar_url(user_id: &str, hash: Option<&str>) -> String {
@@ -2710,7 +2823,7 @@ fn parse_presence(p: &Value) -> Presence {
         Some(format!("{emoji}{text}"))
     });
     let others: Vec<&Value> = activities.iter().filter(|a| a["type"] != 4).collect();
-    let first = others.first().and_then(|a| {
+    let line = |a: &Value| {
         let name = a["name"].as_str()?;
         let (kind, text) = match a["type"].as_u64() {
             Some(1) => (ActivityKind::Streaming, a["details"].as_str().unwrap_or(name)),
@@ -2719,8 +2832,10 @@ fn parse_presence(p: &Value) -> Presence {
             Some(5) => (ActivityKind::Competing, name),
             _ => (ActivityKind::Playing, name),
         };
-        Some(Activity { kind, text: text.to_owned(), more: others.len() - 1 })
-    });
+        Some((kind, text.to_owned()))
+    };
+    let mut lines = others.iter().filter_map(|a| line(a));
+    let first = lines.next().map(|(kind, text)| Activity { kind, text, rest: lines.collect() });
     let rich = others.first().and_then(|a| parse_rich(a));
     let clients = &p["client_status"];
     let mobile_only = !clients["mobile"].is_null() && clients["desktop"].is_null() && clients["web"].is_null();
@@ -2823,7 +2938,7 @@ fn parse_list_item(item: &Value, guild_id: Option<&str>) -> Option<ListItem> {
         return Some(ListItem::Group { id: group.get("id")?.as_str()?.to_owned(), count: group.get("count").and_then(Value::as_u64).unwrap_or(0) as u32 });
     }
     let m = &item["member"];
-    m.is_object().then(|| ListItem::Member(Member { user: parse_member_user(m, &m["user"], guild_id), roles: strings(&m["roles"]), presence: parse_presence(&m["presence"]) }))
+    m.is_object().then(|| ListItem::Member(Member { user: parse_member_user(m, &m["user"], guild_id), roles: strings(&m["roles"]), presence: parse_presence(&m["presence"]), boosting_since: m["premium_since"].as_str().map(str::to_owned) }))
 }
 
 fn parse_voice_state(v: &Value) -> VoiceState {
@@ -3141,6 +3256,7 @@ mod tests {
             threads: Vec::new(),
             my_roles: Vec::new(),
             default_notifications: Default::default(),
+            ..Default::default()
         };
         fn visible(g: &Guild) -> Vec<&str> {
             g.channels.iter().filter(|c| g.can_view("me", c)).map(|c| c.id.as_str()).collect()
@@ -3179,6 +3295,7 @@ mod tests {
             threads: vec![thread],
             my_roles: Vec::new(),
             default_notifications: Default::default(),
+            ..Default::default()
         };
         let can = |g: &Guild, me: &str, id: &str| g.channel_permissions(me, g.channel(id).unwrap()) & perm::MANAGE_MESSAGES != 0;
         let all = ["open", "locked", "mine", "everyone", "t"];
@@ -3220,7 +3337,7 @@ mod tests {
             threads: Vec::new(),
             my_roles: vec!["mods".into()],
             default_notifications: Default::default(),
-            stage_instances: Vec::new(),
+            ..Default::default()
         };
         let to = |g: &Guild, me: &str, who: &str| ["b", "full", "locked", "closed"].into_iter().filter(|id| g.can_move(me, who, g.channel(id).unwrap())).collect::<Vec<_>>();
 
@@ -3370,13 +3487,20 @@ mod tests {
     }
 
     #[test]
+    fn animated_swaps_only_moving_art() {
+        assert_eq!(animated(&avatar_url("1", Some("a_abc"))), format!("{CDN}/avatars/1/a_abc.gif?size=128"));
+        assert_eq!(animated(&avatar_url("1", Some("abc"))), avatar_url("1", Some("abc")), "a still avatar stays a PNG");
+        assert_eq!(animated(&format!("{CDN}/avatar-decoration-presets/x.png?size=96&passthrough=false")), format!("{CDN}/avatar-decoration-presets/x.png?size=96&passthrough=true"));
+    }
+
+    #[test]
     fn presence_keeps_custom_status_apart() {
         let p = parse_presence(&json!({ "status": "dnd", "activities": [{ "type": 0, "name": "Apex" }, { "type": 4, "state": "m!help" }] }));
         assert_eq!(p.status, Status::Dnd);
         assert_eq!(p.custom.as_deref(), Some("m!help"));
         assert_eq!(p.activity.unwrap().text, "Apex");
         let p = parse_presence(&json!({ "status": "idle", "activities": [{ "type": 2, "name": "Spotify", "state": "Hozier" }, { "type": 0, "name": "Apex" }] }));
-        assert_eq!(p.activity, Some(Activity { kind: ActivityKind::Listening, text: "Hozier".into(), more: 1 }));
+        assert_eq!(p.activity, Some(Activity { kind: ActivityKind::Listening, text: "Hozier".into(), rest: vec![(ActivityKind::Playing, "Apex".into())] }));
     }
 
     #[test]
@@ -3449,7 +3573,22 @@ mod tests {
     fn invites_read_their_server_and_counts() {
         let body = json!({ "code": "waffle", "guild": { "id": "9", "name": "Dumpling Hall", "icon": "ff" }, "approximate_member_count": 8311, "approximate_presence_count": 1204 });
         let invite = parse_invite(&body).unwrap();
-        assert_eq!(invite, Invite { guild_id: "9".into(), name: "Dumpling Hall".into(), icon: Some("https://cdn.discordapp.com/icons/9/ff.png?size=96".into()), online: Some(1204), members: Some(8311) });
+        assert_eq!(invite, Invite { guild_id: "9".into(), name: "Dumpling Hall".into(), icon: Some("https://cdn.discordapp.com/icons/9/ff.png?size=96".into()), online: Some(1204), members: Some(8311), ..Default::default() });
         assert_eq!(parse_invite(&json!({ "code": "gdm", "channel": { "id": "5", "type": 3 } })), None, "a group DM invite has no server card");
+    }
+}
+
+// `bookmark_ids` from GET /users/@me/saved-messages. Not verified: each entry's shape; read as either a
+// message id or a save with `message_id`.
+fn bookmark_ids(list: &Value) -> Vec<String> {
+    list.as_array().into_iter().flatten().filter_map(|v| v.as_str().or_else(|| v["message_id"].as_str())).map(str::to_owned).collect()
+}
+
+#[cfg(test)]
+mod saved_tests {
+    #[test]
+    fn bookmark_ids_read_ids_or_saves() {
+        let list = serde_json::json!(["1", { "channel_id": "9", "message_id": "2" }, 3]);
+        assert_eq!(super::bookmark_ids(&list), ["1", "2"]);
     }
 }
