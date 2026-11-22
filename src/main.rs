@@ -84,6 +84,7 @@ mod viewer;
 mod hotkeys;
 mod key_hook;
 mod sounds;
+mod system_message;
 #[cfg(target_os = "windows")]
 mod tray;
 mod text_file;
@@ -674,6 +675,8 @@ pub struct Waffle {
     // Answers picked on a poll before Vote, and polls showing their results before you vote, by message.
     poll_picks: HashMap<String, Vec<u32>>,
     poll_peek: HashSet<String>,
+    // Folded runs of joins opened to their lines, by the run's first message.
+    open_join_runs: HashSet<String>,
     forward_dialog: Option<forward::ForwardDialog>,
     report_dialog: Option<report::ReportDialog>,
     group_dialog: Option<group_dm::GroupDialog>,
@@ -1109,6 +1112,7 @@ impl Waffle {
             poll_creator: None,
             poll_picks: HashMap::new(),
             poll_peek: HashSet::new(),
+            open_join_runs: HashSet::new(),
             forward_dialog: None,
             report_dialog: None,
             group_dialog: None,
