@@ -3192,13 +3192,16 @@ fn poll_share(answer: &PollAnswer, share: u32, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-// Text files read in place (the fetch starts here, when the row first renders); any other file, or one
-// that turned out not to be text, is a card with its icon, name, size and one action.
+// Audio plays in place; text files read in place (the fetch starts here, when the row first renders);
+// any other file, or one that turned out not to be text, is a card with its icon, name, size and one action.
 fn files(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Vec<AnyElement> {
     message
         .files
         .iter()
         .map(|file| {
+            if message.state == SendState::Sent && file.is_audio() {
+                return crate::audio_player::tile(message, file, ctx.this.clone(), cx);
+            }
             let readable = message.state == SendState::Sent && crate::text_file::is_text_name(&file.name);
             let text_files = ctx.text_files.borrow();
             let state = text_files.files.get(&file.url);
