@@ -488,6 +488,26 @@ fn halo(surface: Hsla, color: Hsla) -> Vec<BoxShadow> {
     vec![ring(4., color), ring(2., surface)]
 }
 
+/// Whether `key`'s element is under the pointer, held beside it so a change redraws only the view that
+/// draws it; pass the listener to that element's `on_hover`.
+pub fn hover_state(key: impl Into<ElementId>, window: &mut Window, cx: &mut App) -> (bool, impl Fn(&bool, &mut Window, &mut App) + 'static) {
+    let state = window.use_keyed_state(key, cx, |_, _| false);
+    let hovered = *state.read(cx);
+    let state = state.downgrade();
+    let listener = move |over: &bool, _: &mut Window, cx: &mut App| {
+        let over = *over;
+        state
+            .update(cx, |hovered, cx| {
+                if *hovered != over {
+                    *hovered = over;
+                    cx.notify();
+                }
+            })
+            .ok();
+    };
+    (hovered, listener)
+}
+
 // How far `id`'s hover has faded in, 0 to 1, on the design's hover timing (150ms ease-out).
 pub fn hover_fade(id: impl Into<gpui_kit::base::TransitionId>, hovered: bool, window: &mut Window, cx: &mut App) -> f32 {
     transition(id, if hovered { 1. } else { 0. }, Transition::new(DUR_HOVER).easing(motion::ease_out()), window, cx)

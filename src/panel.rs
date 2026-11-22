@@ -13,7 +13,7 @@ use crate::{
     Part, Waffle, Edge, RightPanel,
     discord::{ActivityKind, FeedEntry, ListItem, Member, Status},
     icons::Glyph,
-    layout::{decorated_avatar, nameplate_art, nameplate_tint},
+    layout::{decorated_avatar, nameplate_art, nameplate_tint, playing_avatar},
     motion, palette,
     sidebar::{Nav, activity_glyph, category_action, category_head, channel_glyph, hover_ease},
     ui::{self, Squircle},
@@ -28,12 +28,12 @@ impl Waffle {
         match self.right_panel {
             RightPanel::Search(_) | RightPanel::ModView(_) => true,
             RightPanel::Hidden => false,
-            RightPanel::Members => self.guild_id.is_some() || self.open_group().is_some(),
+            RightPanel::Members => self.guild_id.is_some() || self.open_group().is_some() || self.dm_recipient().is_some(),
             RightPanel::Activity => self.guild_id.is_some(),
         }
     }
 
-    // The side panel's width while it shows. A 1:1 DM has no member list; its side panel is only ever search results.
+    // The side panel's width while it shows. A 1:1 DM's "members" are its person's profile.
     pub fn panel_column_width(&self) -> Option<f32> {
         match &self.right_panel {
             _ if !self.panel_shown() => None,
@@ -47,6 +47,9 @@ impl Waffle {
     pub fn render_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         self.close_mod_view_if_barred();
         let width = self.panel_column_width()?;
+        if matches!(self.right_panel, RightPanel::Members) && self.dm_recipient().is_some() {
+            return self.dm_profile(window, cx);
+        }
         // Its header sits on the window's top line beside the channel header's: "Members", or the search's
         // query with a way back to the members.
         let (head, body, foot): (Div, AnyElement, Option<AnyElement>) = match &self.right_panel {
@@ -351,7 +354,8 @@ impl Waffle {
         };
         // Discord animates the avatar, decoration and nameplate while the row is hovered or its profile is open.
         let animate = (selected || self.member_hover.as_deref() == Some(member.user.id.as_str())) && crate::presence::may_animate();
-        let plate = member.user.nameplate.as_ref().map(|plate| member_nameplate(plate, names(format!("member-name-mask-{}", member.user.id)), fills, spot.width, selected, animate, dark));
+        let row = PlateRow { group: MEMBER_ROW_GROUP.into(), height: member_row_height(), width: spot.width, fills, selected, animate, dark };
+        let plate = member.user.nameplate.as_ref().map(|plate| row_nameplate(plate, names(format!("member-name-mask-{}", member.user.id)), row));
         let plated = plate.is_some();
         let hover_id = member.user.id.clone();
         div()
@@ -549,13 +553,26 @@ const NAMEPLATE_END: f32 = 32.;
 // The member list's padding on both sides: a row is the panel's width less this.
 const MEMBER_LIST_INSET: f32 = 16.;
 
-// A nameplate behind a member row, as Discord draws it there: the palette colour fading in from nothing
+// The row a nameplate is drawn behind: its hover group, size, fills at rest and hovered (laid solid, for
+// the mask to wash in), and whether it's selected and playing.
+pub(crate) struct PlateRow {
+    pub group: SharedString,
+    pub height: f32,
+    pub width: f32,
+    pub fills: (gpui_kit::Hsla, Option<gpui_kit::Hsla>),
+    pub selected: bool,
+    pub animate: bool,
+    pub dark: bool,
+}
+
+// A nameplate behind a member or DM row, as Discord draws it there: the palette colour fading in from nothing
 // (8% from a fifth of the way to halfway, 20% at the end), and over it the art pinned right at 60% (90%
 // while selected), masked to 30% up to 2px past the names (name line and activity, whichever is wider)
 // and rising to full over the next 50px. gpui has no masks, so the mask is laid over the art instead: the
 // row as it looks without art (its fill, `fills`: at rest and on hover, under the tint) at 70% to the
 // names' end, fading out over 50px. Every layer rounds itself, so nothing has to paint the corners off.
-fn member_nameplate(plate: &crate::discord::Nameplate, names: Div, fills: (gpui_kit::Hsla, Option<gpui_kit::Hsla>), row_width: f32, selected: bool, animate: bool, dark: bool) -> AnyElement {
+pub(crate) fn row_nameplate(plate: &crate::discord::Nameplate, names: Div, row: PlateRow) -> AnyElement {
+    let PlateRow { group, height, width: row_width, fills, selected, animate, dark } = row;
     let tint = nameplate_tint(plate, dark);
     let r = px(ui::RADIUS_SM);
     let left = gpui_kit::Corners { top_left: r, bottom_left: r, ..Default::default() };
@@ -583,11 +600,11 @@ fn member_nameplate(plate: &crate::discord::Nameplate, names: Div, fills: (gpui_
         .left(relative(1.))
         .w(px(50.))
         .bg(fade(rest))
-        .when_some(hovered, |d, h| d.group_hover(MEMBER_ROW_GROUP, move |s| s.bg(fade(h))));
+        .when_some(hovered, |d, h| d.group_hover(group.clone(), move |s| s.bg(fade(h))));
     // The mask ends where the names do: an invisible copy of them, laid out as the row lays out the real
     // ones (and stopping as short of the end), sizes the held part, which shows the row's own fill and
     // tint at the row's width, clipped to that part.
-    let backdrop = ui::edge(tint_layer().w(px(row_width)).bg(rest), left).when_some(hovered, |d, h| d.group_hover(MEMBER_ROW_GROUP, move |s| s.bg(h)));
+    let backdrop = ui::edge(tint_layer().w(px(row_width)).bg(rest), left).when_some(hovered, |d, h| d.group_hover(group, move |s| s.bg(h)));
     let held = div()
         .relative()
         .flex()
@@ -605,7 +622,7 @@ fn member_nameplate(plate: &crate::discord::Nameplate, names: Div, fills: (gpui_
         .absolute()
         .inset_0()
         .child(tint_layer().right_0())
-        .child(nameplate_art(plate, member_row_height(), r, r, animate).opacity(if selected { 0.9 } else { 0.6 }))
+        .child(nameplate_art(plate, height, r, r, animate).opacity(if selected { 0.9 } else { 0.6 }))
         // Clipped to the row: on a long name the fade runs past its end.
         .child(div().absolute().inset_0().overflow_hidden().flex().pr(px(NAMEPLATE_END - 2.)).child(div().relative().flex().min_w_0().child(held).child(ramp)))
         .into_any_element()
@@ -662,11 +679,11 @@ fn boost_date(iso: &str) -> Option<String> {
 }
 
 fn member_avatar(member: &Member, animate: bool, surface: gpui_kit::Hsla) -> AnyElement {
-    let (avatar, decoration) = match animate {
-        true => (crate::discord::animated(&member.user.avatar), member.user.decoration.as_deref().map(crate::discord::animated)),
-        false => (member.user.avatar.clone(), member.user.decoration.clone()),
-    };
-    decorated_avatar(&avatar, decoration.as_deref(), 32., Some(member.presence.mark()), surface)
+    let (avatar, decoration, mark) = (&member.user.avatar, member.user.decoration.as_deref(), Some(member.presence.mark()));
+    match animate {
+        true => playing_avatar(&format!("member-{}", member.user.id), avatar, decoration, 32., mark, surface),
+        false => decorated_avatar(avatar, decoration, 32., mark, surface),
+    }
 }
 
 #[cfg(test)]

@@ -97,6 +97,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::menu_row` — A row inside a floating surface (menu, popover, picker): no fill until hovered, then the hover fill and the strong ink fade in.
 - `ui::pressable` — Any element with an id that shrinks to `to` while held, eased like a Control's press (gpui's `.active` style swaps in one frame).
 - `ui::Pressable`
+- `ui::hover_state` — Whether `key`'s element is under the pointer, held beside it so a change redraws only the view that draws it; pass the listener to that elem
 - `ui::hover_fade` — How far `id`'s hover has faded in, 0 to 1, on the design's hover timing (150ms ease-out).
 - `ui::tip` — A tooltip in the design's look, for `.tooltip(move |window, cx| ui::tip(text.clone(), window, cx))`.
 

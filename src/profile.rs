@@ -9,19 +9,21 @@ use gpui_kit::{
 
 use crate::{
     ProfileCard, Waffle,
-    discord::{ActivityKind, Badge, Connection, EffectLayer, Profile, Relation, RichPresence, User, perm},
+    discord::{ActivityKind, Badge, Connection, Profile, Relation, RichPresence, User, perm},
     icons::Glyph,
-    layout::{TITLE_HEIGHT, decorated_avatar},
+    layout::{TITLE_HEIGHT, decorated_avatar, playing_avatar},
     palette,
     ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, RADIUS_XS, Squircle},
     user_menu::Surface,
 };
 
+mod dm_panel;
+mod media;
+pub(crate) use media::banner;
+use media::{effect_overlay, full_avatar};
+
 pub(crate) const WIDTH: f32 = 320.;
 const BORDER: f32 = 2.;
-// Discord banners are 5:2; at that height a cover fit crops nothing.
-const BANNER: f32 = WIDTH * 0.4;
-const BANNER_PLAIN: f32 = 64.;
 pub(crate) const AVATAR: f32 = 80.;
 pub(crate) const AVATAR_RING: f32 = 6.;
 // Only picks which corner the card rises from; `anchored` places it by its measured size.
@@ -116,8 +118,9 @@ impl Waffle {
     }
 
     pub(crate) fn profile_overlay(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
-        self.profile_card.as_ref()?;
         let card = self.profile_card.as_ref()?;
+        // Animated pictures move only under the pointer, as Discord's.
+        let (hovered, on_hover) = ui::hover_state(SharedString::from(format!("profile-hover-{}", card.user.id)), window, cx);
         let viewport = window.viewport_size();
         let profile = card.profile.clone().unwrap_or_default();
         let ink = Ink::new(profile.theme, cx);
@@ -126,31 +129,10 @@ impl Waffle {
         let y = f32::from(card.at.y).clamp(top, (f32::from(viewport.height) - ESTIMATED_HEIGHT - 8.).max(top));
         let max_height = f32::from(viewport.height) - top - 8.;
         let is_me = self.me.as_ref().is_some_and(|me| me.id == card.user.id);
-        let inner_radius = inner_radius(ink);
-        let body = div()
-            .id("profile-body")
-            .min_h_0()
-            .overflow_y_scroll()
-            .px_4()
-            .pb_3()
-            .flex()
-            .flex_col()
-            .gap_3()
-            .child(name_block(&card.user, &profile, ink))
-            // Not fetched yet: where the badges, mutuals and bio will be.
-            .when(card.profile.is_none(), |b| b.child(profile_skeleton(cx)))
-            .children(badges(&profile.badges, ink))
-            .children(mutuals(&profile, ink))
-            .children(profile.bio.as_ref().map(|bio| bio_view(&card.user.id, bio, ink)))
-            .children(self.member_since(card, &profile, ink, cx))
-            .children(self.friends_since(card, ink))
-            .children(connections(&profile.connections, ink, cx))
-            .children(game_collection(&profile.games, ink))
-            .children(self.profile_activity(card, ink, cx))
-            .children(self.roles_row(card, &profile, ink, cx));
+        let body = self.profile_sections(card, &profile, ink, cx).id("profile-body").min_h_0().overflow_y_scroll();
         let (outer, inner) = themed_card(ink, max_height, cx);
         let inner = inner
-            .child(self.profile_header(card, &profile, is_me, inner_radius, ink, cx))
+            .child(self.profile_header(card, &profile, inner_radius(ink), hovered, ink, cx))
             .child(body)
             .when(!is_me, |c| c.child(message_field(&card.user, ink, cx)));
         let effect = profile.effect_sku.as_ref().and_then(|sku| self.profile_effects.get(sku)).and_then(|layers| layers.as_deref()).and_then(effect_overlay);
@@ -160,6 +142,7 @@ impl Waffle {
             .relative()
             .w(px(WIDTH))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_hover(on_hover)
             .child(inner)
             .children(effect);
         // It rises from the corner nearest where it was asked for: pushed in from an edge, from that side.
@@ -170,6 +153,28 @@ impl Waffle {
         let placed = gpui_kit::anchored().position(card.at).snap_to_window_with_margin(gpui_kit::Edges { top: px(top), right: px(8.), bottom: px(8.), left: px(8.) }).child(rise);
         let avatar = card.avatar_full.then(|| avatar_viewer(&card.user, window, cx));
         Some(crate::overlays::backdrop("profile-backdrop", cx).child(placed).children(avatar).into_any_element())
+    }
+
+    // The card's sections under its header: name, then whatever the profile has.
+    fn profile_sections(&self, card: &ProfileCard, profile: &Profile, ink: Ink, cx: &mut Context<Self>) -> Div {
+        div()
+            .px_4()
+            .pb_3()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(name_block(&card.user, profile, ink))
+            // Not fetched yet: where the badges, mutuals and bio will be.
+            .when(card.profile.is_none(), |b| b.child(profile_skeleton(cx)))
+            .children(badges(&profile.badges, ink))
+            .children(mutuals(profile, ink))
+            .children(profile.bio.as_ref().map(|bio| bio_view(&card.user.id, bio, ink)))
+            .children(self.member_since(card, profile, ink, cx))
+            .children(self.friends_since(card, ink))
+            .children(connections(&profile.connections, ink, cx))
+            .children(game_collection(&profile.games, ink))
+            .children(self.profile_activity(card, ink, cx))
+            .children(self.roles_row(card, profile, ink, cx))
     }
 
     // Discord's date from the account's id, then, opened in a server, the server's from when they joined.
@@ -207,20 +212,25 @@ impl Waffle {
     }
 
     // Banner with its round actions, then the avatar overlapping its foot.
-    fn profile_header(&self, card: &ProfileCard, profile: &Profile, is_me: bool, radius: f32, ink: Ink, cx: &mut Context<Self>) -> Div {
+    // `radius` rounds the banner's top corners to what holds it: the card's inner radius, 0 flush in a panel.
+    fn profile_header(&self, card: &ProfileCard, profile: &Profile, radius: f32, hovered: bool, ink: Ink, cx: &mut Context<Self>) -> Div {
         let user = &card.user;
+        let is_me = self.me.as_ref().is_some_and(|me| me.id == user.id);
         let status = self.presences.get(&user.id).map(|p| p.mark()).or(is_me.then_some(self.my_status.into()));
-        let (banner, _) = banner(profile, ink, radius, cx);
+        let (banner, _) = banner(profile, ink, radius, hovered, cx);
         let decoration = user.decoration.clone().or(profile.decoration.clone());
-        // An open profile's avatar and decoration move, as Discord's.
-        let decoration = decoration.as_deref().map(crate::discord::animated);
+        // Still until the card is hovered, as Discord's.
+        let face = match hovered {
+            true => playing_avatar(&format!("profile-{}", user.id), &user.avatar, decoration.as_deref(), AVATAR, status, ink.top),
+            false => decorated_avatar(&user.avatar, decoration.as_deref(), AVATAR, status, ink.top),
+        };
         let avatar = div()
             .id("profile-avatar")
             .p(px(AVATAR_RING))
             .rounded_full()
             .bg(ink.top)
             .cursor_pointer()
-            .child(decorated_avatar(&crate::discord::animated(&user.avatar), decoration.as_deref(), AVATAR, status, ink.top))
+            .child(face)
             .on_click(cx.listener(|this, _, _, cx| {
                 if let Some(card) = &mut this.profile_card {
                     card.avatar_full = true;
@@ -568,16 +578,6 @@ fn luminance(color: Hsla) -> f32 {
     0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
 }
 
-// The banner with its height: the picture at 5:2, else a strip of the theme or accent colour.
-pub(crate) fn banner(profile: &Profile, ink: Ink, radius: f32, cx: &App) -> (AnyElement, f32) {
-    match (&profile.banner, ink.border, profile.accent) {
-        (Some(url), _, _) => (ui::media(url.clone(), ui::top(radius)).w_full().h(px(BANNER)).object_fit(gpui_kit::ObjectFit::Cover).into_any_element(), BANNER),
-        (None, Some((color, _)), _) => (banner_fill(color, radius).into_any_element(), BANNER_PLAIN),
-        (None, None, Some(accent)) => (banner_fill(palette::data_color(accent), radius).into_any_element(), BANNER_PLAIN),
-        (None, None, None) => (banner_fill(palette::selected(cx), radius).into_any_element(), BANNER_PLAIN),
-    }
-}
-
 // The card in the profile's colours: its gradient body inside the gradient border when the profile has a
 // theme. Returns (outer, inner); content goes in the inner.
 pub(crate) fn themed_card(ink: Ink, max_height: f32, cx: &App) -> (Div, Div) {
@@ -596,10 +596,6 @@ pub(crate) fn themed_card(ink: Ink, max_height: f32, cx: &App) -> (Div, Div) {
 
 pub(crate) fn inner_radius(ink: Ink) -> f32 {
     if ink.border.is_some() { RADIUS_LG - BORDER } else { RADIUS_LG }
-}
-
-fn banner_fill(color: Hsla, radius: f32) -> Div {
-    ui::edge(div().w_full().h(px(BANNER_PLAIN)).bg(color), ui::top(radius))
 }
 
 fn banner_button(id: &'static str, glyph: Glyph, label: &'static str) -> Stateful<Div> {
@@ -815,21 +811,6 @@ fn avatar_viewer(user: &User, window: &Window, cx: &mut Context<Waffle>) -> AnyE
         .into_any_element()
 }
 
-fn full_avatar(url: &str) -> String {
-    crate::discord::animated(url).replacen("size=128", "size=1024", 1)
-}
-
-// The effect's layers over the whole card, scaled so its widest reaches the card's edges. Drawn without a
-// hitbox, so the card under it keeps the pointer.
-fn effect_overlay(layers: &[EffectLayer]) -> Option<Div> {
-    let span = layers.iter().map(|l| l.x + l.width).fold(0., f32::max);
-    if span <= 0. {
-        return None;
-    }
-    let k = WIDTH / span;
-    let images = layers.iter().enumerate().map(|(i, l)| img(l.src.clone()).id(("profile-effect", i)).absolute().left(px(l.x * k)).top(px(l.y * k)).w(px(l.width * k)).h(px(l.height * k)));
-    Some(div().absolute().inset_0().overflow_hidden().children(images))
-}
 
 fn section(title: &'static str, content: impl IntoElement, ink: Ink) -> Div {
     div().flex().flex_col().gap_1p5().child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(ink.strong).child(title)).child(content)
@@ -1010,13 +991,5 @@ mod tests {
         assert_eq!(connection_url(&c("mastodon", "javascript:alert(1)", "w")), None);
         assert_eq!(connection_url(&c("xbox", "1", "wren")), None);
         assert_eq!(encode_component("a/b?c=d&e"), "a%2Fb%3Fc%3Dd%26e");
-    }
-
-    #[test]
-    fn effect_fills_the_card_width() {
-        let layer = |x: f32, width: f32| EffectLayer { src: "a".into(), x, y: 0., width, height: 10., z: 0 };
-        assert!(effect_overlay(&[]).is_none());
-        assert!(effect_overlay(&[layer(0., 0.)]).is_none());
-        assert!(effect_overlay(&[layer(0., 450.), layer(100., 50.)]).is_some());
     }
 }
