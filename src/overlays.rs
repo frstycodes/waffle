@@ -298,6 +298,7 @@ impl Waffle {
             | self.poll_creator.take().is_some()
             | self.take_app_modal()
             | self.forward_dialog.take().is_some()
+            | self.group_dialog.take().is_some()
             | self.reactions_dialog.take().is_some()
             | self.emoji_picker.take().is_some()
             | self.switcher.take().is_some()
@@ -323,6 +324,7 @@ impl Waffle {
         out.extend(self.poll_creator_overlay(window, cx));
         out.extend(self.app_modal_overlay(window, cx));
         out.extend(self.forward_overlay(window, cx));
+        out.extend(self.group_overlay(window, cx));
         out.extend(self.reactions_overlay(window, cx));
         out.extend(self.emoji_overlay(window, cx));
         out.extend(self.switcher_overlay(window, cx));

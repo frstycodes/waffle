@@ -630,6 +630,7 @@ impl Waffle {
             (_, None) => {
                 rows.push(dm_find(cx).mb(px(8.)).on_click(cx.listener(|this, _, window, cx| this.open_switcher(window, cx))).into_any_element());
                 rows.push(self.friends_row(cx));
+                rows.extend(self.requests_row(cx));
                 let start = cat_add("dm-start", None, "Start a conversation", cx).on_click(cx.listener(|this, _, window, cx| this.open_switcher(window, cx)));
                 rows.push(div().mt(px(16.)).child(category_head("dm-head".into(), div().id("dm-head").child("Direct messages"), true, cx).child(start)).into_any_element());
                 match self.dms.is_empty() {

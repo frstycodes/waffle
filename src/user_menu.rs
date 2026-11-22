@@ -22,6 +22,8 @@ pub enum Surface {
     ServerVoice,
     // A 1:1 DM: the DM list row or a DM author.
     Dm,
+    // The open group DM: its member list or an author in it.
+    Group,
     // No channel: the Friends list.
     Generic,
 }
@@ -50,7 +52,14 @@ impl Waffle {
             entries.extend(self.user_menu(&user, None, Surface::Dm, at).into_iter().filter(|e| !e.is_copy_id()));
         }
         let id = channel.id.clone();
-        entries.push(item("Close DM", move |this, _, cx| this.close_dm(&id, cx)).icon(Glyph::X).entry());
+        if channel.raw_type == 3 {
+            let edit = id.clone();
+            entries.push(item("Edit Group", move |this, window, cx| this.open_edit_group(edit.clone(), window, cx)).icon(Glyph::Pen).entry());
+            entries.push(Entry::Separator);
+            entries.push(item("Leave Group", move |this, _, cx| this.ask_leave_group(id.clone(), cx)).danger().icon(Glyph::DoorExit).entry());
+        } else {
+            entries.push(item("Close DM", move |this, _, cx| this.close_dm(&id, cx)).icon(Glyph::X).entry());
+        }
         entries.push(Entry::Separator);
         if self.developer_mode {
             if let Some(user) = &channel.recipient {
@@ -75,7 +84,13 @@ impl Waffle {
 
     // An author's name or avatar in chat: the server menu in a server, the DM menu in a DM.
     pub(crate) fn open_author_menu(&mut self, user: User, at: Point<Pixels>, cx: &mut Context<Self>) {
-        let surface = if self.guild_id.is_some() { Surface::ServerChat } else { Surface::Dm };
+        let surface = if self.guild_id.is_some() {
+            Surface::ServerChat
+        } else if self.open_group().is_some() {
+            Surface::Group
+        } else {
+            Surface::Dm
+        };
         let guild_id = self.guild_id.clone();
         self.open_user_menu(user, guild_id, surface, at, cx);
     }
@@ -150,6 +165,15 @@ impl Waffle {
             out.push(item("Add friend nickname", move |this, window, cx| this.edit_friend_nickname(id.clone(), who.clone(), window, cx)).icon(Glyph::Tag).entry());
         }
         out.push(Entry::Separator);
+
+        // A group's owner over its other members.
+        if let Some(group) = self.open_group().filter(|g| surface == Surface::Group && !is_me && self.group_owner_is_me(g) && g.recipients.iter().any(|r| r.id == target)) {
+            let (gid, uid) = (group.id.clone(), target.clone());
+            out.push(item("Remove From Group", move |this, _, cx| this.remove_from_group(gid.clone(), uid.clone(), cx)).danger().icon(Glyph::UserMinus).entry());
+            let (gid, heir) = (group.id.clone(), user.clone());
+            out.push(item("Make Group Owner", move |this, _, cx| this.ask_make_group_owner(gid.clone(), heir.clone(), cx)).danger().icon(Glyph::Crown).entry());
+            out.push(Entry::Separator);
+        }
 
         // G3: volume.
         if media && !is_me {

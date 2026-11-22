@@ -1349,7 +1349,7 @@ impl Waffle {
             None | Some(IndexState::Loading) => loading_rows(3, cx).into_any_element(),
             Some(IndexState::Failed(error)) => self.index_error(error, cx).into_any_element(),
             Some(IndexState::Ready(index)) if index.commands.is_empty() => picker_note("No apps here have commands", "Apps added to this server show their commands here.", cx).into_any_element(),
-            Some(IndexState::Ready(index)) => self.picker_body(index, cx),
+            Some(IndexState::Ready(index)) => self.command_picker_body(index, cx),
         };
         let foot = popup_foot(cx)
             .child(ui::key_hint(div().flex().gap(px(4.)).child(ui::kbd_glyph(Glyph::ArrowUp, cx)).child(ui::kbd_glyph(Glyph::ArrowDown, cx)), "Move", cx))
@@ -1358,7 +1358,7 @@ impl Waffle {
         popup("command-picker", [body, foot.into_any_element()], cx)
     }
 
-    fn picker_body(&self, index: &CommandIndex, cx: &mut Context<Self>) -> AnyElement {
+    fn command_picker_body(&self, index: &CommandIndex, cx: &mut Context<Self>) -> AnyElement {
         let query = self.command_picker.query.clone();
         let ranks = self.command_ranks(index);
         let rows = listing(index, &query, &ranks, self.command_picker.filter);
