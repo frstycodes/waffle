@@ -67,6 +67,8 @@ pub struct Join {
     pub done_actions: HashMap<String, HashSet<String>>,
     pub invite: Option<InviteView>,
     pub onboard: Option<OnboardingView>,
+    // Onboarding closed halfway, by server: its picks and step, for Finish joining.
+    pub paused_onboarding: HashMap<String, OnboardingView>,
     pub rules: Option<RulesView>,
     pub browse: BrowseView,
     pub guide: GuideView,
