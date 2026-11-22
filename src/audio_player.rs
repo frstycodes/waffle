@@ -419,15 +419,15 @@ impl AudioPlayer {
         let needs_length = duration.is_none() && matches!(self.stage, Stage::Idle);
         div()
             .id(SharedString::from(format!("voice-{}", self.key)))
-            .mt(px(6.))
+            .mt_1p5()
             .self_start()
             .max_w_full()
             .flex()
             .items_center()
-            .gap(px(12.))
-            .py(px(8.))
-            .pl(px(8.))
-            .pr(px(12.))
+            .gap_3()
+            .py_2()
+            .pl_2()
+            .pr_3()
             .squircle(RADIUS_XL)
             .border_1()
             .when(playing, |d| d.bg(palette::accent_soft(cx)).border_color(gpui_kit::transparent_black()))
@@ -436,14 +436,14 @@ impl AudioPlayer {
             .when(needs_length, |d| d.on_hover(cx.listener(|this, hovered: &bool, _, cx| if *hovered && matches!(this.stage, Stage::Idle) { this.load(false, cx) })))
             .child(self.play_button(36., if playing { "Pause voice message" } else { "Play voice message" }, cx))
             .child(self.waveform(duration, cx))
-            .child(div().flex_none().min_w(px(32.)).text_right().text_size(px(14.)).font_features(tabular()).text_color(palette::muted(cx)).child(time))
+            .child(div().flex_none().min_w_8().text_right().text_size(ui::TEXT_SM).font_features(tabular()).text_color(palette::muted(cx)).child(time))
             .child(
                 ui::pressable(
                     div()
                         .id(SharedString::from(format!("voice-rate-{}", self.key)))
-                        .h(px(24.))
-                        .min_w(px(36.))
-                        .px(px(6.))
+                        .h_6()
+                        .min_w_9()
+                        .px_1p5()
                         .flex_none()
                         .flex()
                         .items_center()
@@ -452,7 +452,7 @@ impl AudioPlayer {
                         .cursor_pointer()
                         .bg(palette::hover(cx))
                         .hover(|s| s.bg(palette::press(cx)).text_color(palette::strong(cx)))
-                        .text_size(px(12.))
+                        .text_size(ui::TEXT_XS)
                         .font_weight(FontWeight::SEMIBOLD)
                         .font_features(tabular())
                         .text_color(palette::muted(cx))
@@ -480,13 +480,13 @@ impl AudioPlayer {
             .id(SharedString::from(format!("audio-{}", self.key)))
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| this.key_down(e, cx)))
-            .mt(px(8.))
+            .mt_2()
             .w_full()
             .max_w(px(440.))
-            .p(px(12.))
+            .p_3()
             .flex()
             .flex_col()
-            .gap(px(10.))
+            .gap_2p5()
             .squircle(RADIUS_LG)
             .bg(palette::surface(Level::Sidebar, cx))
             .border_1()
@@ -495,9 +495,9 @@ impl AudioPlayer {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(12.))
+                    .gap_3()
                     .min_w_0()
-                    .child(div().size(px(40.)).flex_none().squircle(RADIUS_XS).bg(palette::surface(Level::Raised, cx)).text_color(palette::muted(cx)).flex().items_center().justify_center().child(Icon::new(Glyph::File).size(px(20.))))
+                    .child(div().size_10().flex_none().squircle(RADIUS_XS).bg(palette::surface(Level::Raised, cx)).text_color(palette::muted(cx)).flex().items_center().justify_center().child(Icon::new(Glyph::File).size(ui::ICON_XL)))
                     .child(
                         div()
                             .flex_1()
@@ -509,7 +509,7 @@ impl AudioPlayer {
                                     .id(SharedString::from(format!("audio-name-{}", self.key)))
                                     .truncate()
                                     .cursor_pointer()
-                                    .text_size(px(14.))
+                                    .text_size(ui::TEXT_SM)
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(palette::strong(cx))
                                     .hover(|s| s.underline())
@@ -519,16 +519,16 @@ impl AudioPlayer {
                                         cx.open_url(&open)
                                     }),
                             )
-                            .child(div().text_size(px(12.)).text_color(palette::faint(cx)).child(crate::chat::format_size(self.file.size))),
+                            .child(div().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(crate::chat::format_size(self.file.size))),
                     ),
             )
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
+                    .gap_2()
                     .child(self.play_button(32., label, cx))
-                    .child(div().flex_none().text_size(px(12.)).font_features(tabular()).text_color(palette::muted(cx)).child(format!("{now:0>width$} / {total}", width = total.len())))
+                    .child(div().flex_none().text_size(ui::TEXT_XS).font_features(tabular()).text_color(palette::muted(cx)).child(format!("{now:0>width$} / {total}", width = total.len())))
                     .child(div().flex_1().min_w_0().child(ui::slider_live(SharedString::from(format!("audio-seek-{}", self.key)), fraction, {
                         let this = cx.entity().downgrade();
                         move |f, _, cx| {
@@ -620,8 +620,8 @@ impl AudioPlayer {
             .id(SharedString::from(format!("audio-volume-card-{}", self.key)))
             .occlude()
             .w(px(136.))
-            .px(px(12.))
-            .py(px(4.))
+            .px_3()
+            .py_1()
             .squircle(RADIUS_SM)
             .bg(palette::surface(Level::Overlay, cx))
             .shadow(ui::shadow_pop(cx))
@@ -638,7 +638,7 @@ impl AudioPlayer {
                 ui::pressable(
                     div()
                         .id(SharedString::from(format!("audio-mute-{}", self.key)))
-                        .size(px(28.))
+                        .size_7()
                         .squircle(RADIUS_XS)
                         .flex()
                         .items_center()
@@ -646,7 +646,7 @@ impl AudioPlayer {
                         .cursor_pointer()
                         .text_color(palette::muted(cx))
                         .hover(|s| s.bg(palette::hover(cx)).text_color(palette::strong(cx)))
-                        .child(Icon::new(if silent { Glyph::VolumeOff } else { Glyph::VolumeHigh }).size(px(20.)))
+                        .child(Icon::new(if silent { Glyph::VolumeOff } else { Glyph::VolumeHigh }).size(ui::ICON_XL))
                         .on_hover(cx.listener(|this, hovered: &bool, _, cx| this.hold_volume(0, *hovered, cx)))
                         .on_click(cx.listener(|this, _, _, cx| {
                             cx.stop_propagation();
@@ -656,7 +656,7 @@ impl AudioPlayer {
                 ),
             )
             .when(self.volume_open, |d| {
-                d.child(div().absolute().top(px(-8.)).left(px(14. - 68.)).child(gpui_kit::deferred(gpui_kit::anchored().anchor(Anchor::BottomLeft).snap_to_window_with_margin(px(8.)).child(card)).with_priority(1)))
+                d.child(div().absolute().top_neg_2().left(px(14. - 68.)).child(gpui_kit::deferred(gpui_kit::anchored().anchor(Anchor::BottomLeft).snap_to_window_with_margin(px(8.)).child(card)).with_priority(1)))
             })
     }
 }

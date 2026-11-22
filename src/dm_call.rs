@@ -294,8 +294,8 @@ impl Waffle {
             .window_frame("call-ringing", RING, cx)
             .flex_row()
             .items_center()
-            .gap(px(12.))
-            .p(px(14.))
+            .gap_3()
+            .p_3p5()
             .child(
                 div()
                     .size(px(52.))
@@ -310,9 +310,9 @@ impl Waffle {
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .gap(px(2.))
+                    .gap_0p5()
                     .child(div().truncate().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(self.dm_caller(channel_id)))
-                    .child(div().truncate().text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::accent()).child(line)),
+                    .child(div().truncate().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::accent()).child(line)),
             )
             .child(
                 div()
@@ -320,12 +320,12 @@ impl Waffle {
                     .flex_none()
                     .flex()
                     .flex_col()
-                    .gap(px(6.))
+                    .gap_1p5()
                     .child(
                         ui::button("ringing-join", Tone::Primary, cx)
                             .small()
                             .w_full()
-                            .child(Icon::new(Glyph::Phone).size(px(16.)))
+                            .child(Icon::new(Glyph::Phone).size(ui::ICON_MD))
                             .child("Join")
                             .on_click(cx.listener(move |this, _, _, cx| this.answer_dm_call(&join_id, cx))),
                     )
@@ -333,7 +333,7 @@ impl Waffle {
                         ui::button("ringing-decline", Tone::Danger, cx)
                             .small()
                             .w_full()
-                            .child(Icon::new(Glyph::CallEnd).size(px(16.)))
+                            .child(Icon::new(Glyph::CallEnd).size(ui::ICON_MD))
                             .child("Decline")
                             .on_click(cx.listener(move |this, _, _, cx| this.decline_dm_call(decline_id.clone(), cx))),
                     ),
@@ -386,7 +386,7 @@ impl Waffle {
                     .bg(gpui_kit::black())
                     .child(match frame {
                         Some(frame) => ui::media(ImageSource::Render(frame), ui::all(RADIUS_MD)).absolute().inset_0().size_full().object_fit(gpui_kit::ObjectFit::Contain).into_any_element(),
-                        None => crate::call::stream_fill(RADIUS_MD).absolute().inset_0().flex().items_center().justify_center().text_size(px(12.)).text_color(gpui_kit::white().opacity(0.7)).child(format!("Joining {name}'s stream…")).into_any_element(),
+                        None => crate::call::stream_fill(RADIUS_MD).absolute().inset_0().flex().items_center().justify_center().text_size(ui::TEXT_XS).text_color(gpui_kit::white().opacity(0.7)).child(format!("Joining {name}'s stream…")).into_any_element(),
                     })
                     .children(camera.map(|f| inset(video(f, 9.), 0.28, 9. / 16.))),
             )
@@ -473,8 +473,8 @@ impl Waffle {
         let share = window_control("call-window-share", Glyph::ShareScreenFill, if sharing { "Stop sharing" } else { "Share your screen" }, if sharing { Look::Active } else { Look::Rest }, call.connected)
             .when(call.connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_screen_share(cx))));
         let leave = ui::pressable(div().id("call-window-leave"), 0.92)
-            .w(px(44.))
-            .h(px(36.))
+            .w_11()
+            .h_9()
             .flex_none()
             .squircle(12.)
             .flex()
@@ -487,8 +487,8 @@ impl Waffle {
             .child(Icon::new(Glyph::CallEnd).size(px(19.)))
             .tooltip(|window, cx| Tooltip::new("Leave call").build(window, cx))
             .on_click(cx.listener(|this, _, _, cx| this.leave_voice(cx)));
-        let group = div().p(px(2.)).flex().gap(px(2.)).squircle(12.).bg(stage::wash(0.06)).child(mic).child(camera).child(share);
-        div().h(px(BAR)).flex_none().pb(px(4.)).flex().items_center().justify_center().gap(px(6.)).child(group).child(leave)
+        let group = div().p_0p5().flex().gap_0p5().squircle(12.).bg(stage::wash(0.06)).child(mic).child(camera).child(share);
+        div().h(px(BAR)).flex_none().pb_1().flex().items_center().justify_center().gap_1p5().child(group).child(leave)
     }
 
     // A call going on in this DM that isn't ringing us: who's in, a camera mark if anyone's on video, and Join.
@@ -505,14 +505,14 @@ impl Waffle {
             div()
                 .id("dm-join-pill")
                 .occlude()
-                .h(px(32.))
-                .pl(px(6.))
+                .h_8()
+                .pl_1p5()
                 .pr(px(3.))
-                .mr(px(4.))
+                .mr_1()
                 .flex_none()
                 .flex()
                 .items_center()
-                .gap(px(8.))
+                .gap_2()
                 .squircle(RADIUS_MD)
                 .bg(palette::hover(cx))
                 .text_size(px(13.))
@@ -520,11 +520,11 @@ impl Waffle {
                 .text_color(palette::strong(cx))
                 .child(ui::avatar_stack(faces, 22., palette::surface(Level::Page, cx)))
                 .child("In a call")
-                .when(video, |d| d.child(Icon::new(Glyph::Video).size(px(14.)).text_color(palette::muted(cx))))
+                .when(video, |d| d.child(Icon::new(Glyph::Video).size(ui::ICON_SM).text_color(palette::muted(cx))))
                 .child(
                     ui::button("dm-join", Tone::Primary, cx)
                         .small()
-                        .child(Icon::new(Glyph::Phone).size(px(14.)))
+                        .child(Icon::new(Glyph::Phone).size(ui::ICON_SM))
                         .child("Join")
                         .on_click(cx.listener(move |this, _, _, cx| this.answer_dm_call(&id, cx))),
                 )
@@ -550,26 +550,26 @@ fn window_head(title: String, sub: String) -> Div {
     div()
         .h(px(HEAD))
         .flex_none()
-        .pl(px(12.))
-        .pr(px(6.))
+        .pl_3()
+        .pr_1p5()
         .flex()
         .items_center()
-        .gap(px(6.))
+        .gap_1p5()
         .child(
             div()
                 .flex_1()
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .child(div().truncate().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).child(title))
-                .child(div().truncate().text_size(px(12.)).text_color(stage::muted()).font_features(crate::call::tabular()).child(sub)),
+                .child(div().truncate().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).child(title))
+                .child(div().truncate().text_size(ui::TEXT_XS).text_color(stage::muted()).font_features(crate::call::tabular()).child(sub)),
         )
 }
 
 fn window_icon_button(id: &'static str, glyph: Glyph, tip: &'static str) -> Stateful<Div> {
     div()
         .id(id)
-        .size(px(32.))
+        .size_8()
         .flex_none()
         .squircle(11.)
         .flex()
@@ -578,7 +578,7 @@ fn window_icon_button(id: &'static str, glyph: Glyph, tip: &'static str) -> Stat
         .cursor_pointer()
         .text_color(stage::muted())
         .hover(|s| s.bg(stage::wash(0.08)).text_color(stage::strong()))
-        .child(Icon::new(glyph).size(px(18.)))
+        .child(Icon::new(glyph).size(ui::ICON_LG))
         .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
 }
 
@@ -586,17 +586,17 @@ fn stage_wash_button(id: &'static str, glyph: Glyph, label: SharedString) -> Sta
     div()
         .id(id)
         .h(px(30.))
-        .px(px(12.))
+        .px_3()
         .flex()
         .items_center()
-        .gap(px(6.))
+        .gap_1p5()
         .squircle(11.)
         .cursor_pointer()
         .bg(stage::wash(0.1))
         .hover(|s| s.bg(stage::wash(0.16)))
         .text_size(px(13.))
         .font_weight(FontWeight::SEMIBOLD)
-        .child(Icon::new(glyph).size(px(14.)))
+        .child(Icon::new(glyph).size(ui::ICON_SM))
         .child(label)
 }
 
@@ -618,8 +618,8 @@ fn window_control(id: &'static str, glyph: Glyph, tip: &'static str, look: Look,
         Look::Active => (palette::accent(), palette::accent_hover(), palette::on_accent()),
     };
     ui::pressable(div().id(id), if enabled { 0.92 } else { 1. })
-        .w(px(36.))
-        .h(px(32.))
+        .w_9()
+        .h_8()
         .flex_none()
         .squircle(10.)
         .flex()
@@ -638,7 +638,7 @@ fn faces_grid(faces: Vec<Face>, duo: bool) -> AnyElement {
     let size = if duo { DUO_FACE } else { GROUP_FACE };
     let cells = faces.into_iter().enumerate().map(|(i, f)| {
         // Speaking keeps presence green, as the stage's tiles do: a 2px ring 2px off the face.
-        let ring = f.speaking.then(|| div().absolute().top(px(-4.)).left(px(-4.)).size(px(size + 8.)).rounded_full().border_2().border_color(stage::online()));
+        let ring = f.speaking.then(|| div().absolute().top_neg_1().left_neg_1().size(px(size + 8.)).rounded_full().border_2().border_color(stage::online()));
         let avatar = div().relative().size(px(size)).flex_none().rounded_full().child(ui::avatar(f.avatar, size)).children(ring);
         let avatar = match (f.pending, f.gone) {
             (true, _) => avatar
@@ -652,16 +652,16 @@ fn faces_grid(faces: Vec<Face>, duo: bool) -> AnyElement {
             .max_w_full()
             .flex()
             .items_center()
-            .gap(px(4.))
+            .gap_1()
             .text_size(px(if duo { 13. } else { 11. }))
             .text_color(stage::muted())
-            .when(f.muted, |d| d.child(Icon::new(Glyph::MicOff).size(px(12.)).text_color(stage::off_ink())))
+            .when(f.muted, |d| d.child(Icon::new(Glyph::MicOff).size(ui::ICON_XS).text_color(stage::off_ink())))
             .child(div().min_w_0().truncate().child(f.name));
         div().min_w_0().flex().flex_col().items_center().gap(px(if duo { 6. } else { 4. })).child(avatar).child(name)
     });
     match duo {
-        true => div().size_full().pt(px(14.)).pb(px(10.)).px(px(12.)).flex().flex_col().items_center().gap(px(16.)).children(cells).into_any_element(),
-        false => div().size_full().pt(px(12.)).pb(px(8.)).px(px(12.)).grid().grid_cols(2).gap_x(px(8.)).gap_y(px(14.)).children(cells).into_any_element(),
+        true => div().size_full().pt_3p5().pb_2p5().px_3().flex().flex_col().items_center().gap_4().children(cells).into_any_element(),
+        false => div().size_full().pt_3().pb_2().px_3().grid().grid_cols(2).gap_x_2().gap_y_3p5().children(cells).into_any_element(),
     }
 }
 
@@ -679,8 +679,8 @@ fn video(frame: Arc<RenderImage>, radius: f32) -> AnyElement {
 fn inset(picture: AnyElement, width: f32, aspect: f32) -> Div {
     div()
         .absolute()
-        .right(px(8.))
-        .bottom(px(8.))
+        .right_2()
+        .bottom_2()
         .w(gpui_kit::relative(width))
         .h(gpui_kit::relative(width * aspect))
         .squircle(9.)

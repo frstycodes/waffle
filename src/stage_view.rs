@@ -142,21 +142,21 @@ impl Waffle {
             })))
             .when(room.hands > 0, |d| d.child(ui::count_badge(room.hands as u32).absolute().top(px(-3.)).right(px(-5.))));
         div()
-            .h(px(40.))
+            .h_10()
             .flex()
             .items_center()
-            .gap(px(10.))
-            .child(Icon::new(Glyph::Stage).size(px(20.)).text_color(stage::muted()))
+            .gap_2p5()
+            .child(Icon::new(Glyph::Stage).size(ui::ICON_XL).text_color(stage::muted()))
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
                     .child(div().truncate().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(title))
-                    .child(div().truncate().text_size(px(12.)).text_color(stage::muted()).font_features(tabular()).child(line)),
+                    .child(div().truncate().text_size(ui::TEXT_XS).text_color(stage::muted()).font_features(tabular()).child(line)),
             )
             .when(live, |d| d.child(ui::live_badge()))
             .when(manage, |d| d.child(edit).child(requests))
-            .child(div().w(px(1.)).h(px(20.)).mx(px(2.)).flex_none().bg(stage::wash(0.14)))
+            .child(div().w(ui::HAIRLINE).h_5().mx_0p5().flex_none().bg(stage::wash(0.14)))
             .child(self.chat_toggle(cx))
     }
 
@@ -173,13 +173,13 @@ impl Waffle {
             .min_h_0()
             .overflow_y_scroll()
             .px(px(STAGE_PAD))
-            .pt(px(16.))
+            .pt_4()
             .pb(px(STAGE_PAD))
             .flex()
             .flex_col()
-            .gap(px(40.))
+            .gap_10()
             .when(room.speakers > 0, |d| d.child(section(Glyph::Mic, format!("Speakers · {}", room.speakers)).child(self.speaker_grid(width, cx))))
-            .when(!faces.is_empty(), |d| d.child(section(Glyph::Headphones, format!("Audience · {}{hands}", room.audience.len())).child(div().flex().flex_wrap().gap_x(px(8.)).gap_y(px(20.)).children(faces))))
+            .when(!faces.is_empty(), |d| d.child(section(Glyph::Headphones, format!("Audience · {}{hands}", room.audience.len())).child(div().flex().flex_wrap().gap_x_2().gap_y_5().children(faces))))
             .into_any_element()
     }
 
@@ -198,17 +198,17 @@ impl Waffle {
         div()
             .id(SharedString::from(format!("stage-face-{id}")))
             .w(px(FACE_CELL))
-            .px(px(4.))
-            .py(px(8.))
+            .px_1()
+            .py_2()
             .squircle(RADIUS_MD)
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(4.))
+            .gap_1()
             .hover(|s| s.bg(stage::wash(0.05)))
             .child(div().relative().size(px(FACE)).child(ui::avatar(avatar, FACE)).children(place.map(hand_badge)))
-            .child(div().max_w(relative(1.)).truncate().text_size(px(12.)).text_color(stage::text()).child(name))
-            .children(why.map(|why| div().text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::accent()).font_features(tabular()).child(why)))
+            .child(div().max_w(relative(1.)).truncate().text_size(ui::TEXT_XS).text_color(stage::text()).child(name))
+            .children(why.map(|why| div().text_size(ui::TEXT_XXS).font_weight(FontWeight::SEMIBOLD).text_color(palette::accent()).font_features(tabular()).child(why)))
             .on_mouse_down(MouseButton::Right, cx.listener(move |this, e: &MouseDownEvent, _, cx| this.voice_user_menu(&id, e.position, cx)))
     }
 
@@ -225,12 +225,12 @@ impl Waffle {
             .flex_col()
             .items_center()
             .justify_center()
-            .gap(px(8.))
-            .child(ui::icon_tile(Glyph::Stage, stage::wash(0.08), stage::strong()).size(px(56.)).mb(px(4.)))
-            .child(div().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(title))
+            .gap_2()
+            .child(ui::icon_tile(Glyph::Stage, stage::wash(0.08), stage::strong()).size(px(56.)).mb_1())
+            .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(title))
             .child(div().text_size(px(13.)).text_color(stage::muted()).child(body))
             .when(room.moderator, |d| {
-                d.child(ui::button("stage-start", ui::Tone::Primary, cx).mt(px(8.)).child("Start Stage").on_click(cx.listener(move |this, _, window, cx| this.open_stage_topic(guild_id.clone(), channel_id.clone(), window, cx))))
+                d.child(ui::button("stage-start", ui::Tone::Primary, cx).mt_2().child("Start Stage").on_click(cx.listener(move |this, _, window, cx| this.open_stage_topic(guild_id.clone(), channel_id.clone(), window, cx))))
             })
     }
 
@@ -244,10 +244,10 @@ impl Waffle {
             .flex_none()
             .flex()
             .items_center()
-            .gap(px(12.))
+            .gap_3()
             .px(px(STAGE_PAD))
-            .pt(px(12.))
-            .pb(px(16.))
+            .pt_3()
+            .pb_4()
             .child(div().flex_1().min_w_0().children(say))
             .child(control_group().child(self.mic_control(cx)).when(speaker, |g| g.child(self.camera_control(cx)).child(self.share_control(cx))))
             .when(live, |d| d.child(control_group().children(self.stage_actions(room, cx))))
@@ -282,8 +282,8 @@ impl Waffle {
         let can_end = room.moderator && room.topic.is_some();
         let leave = ui::button("stage-disconnect", Tone::Danger, cx)
             .h(px(CONTROLS_HEIGHT))
-            .px(px(14.))
-            .child(Icon::new(Glyph::CallEnd).size(px(20.)))
+            .px_3p5()
+            .child(Icon::new(Glyph::CallEnd).size(ui::ICON_XL))
             .tooltip(|window, cx| ui::tip("Disconnect Quietly", window, cx))
             .on_click(cx.listener(move |this, _, _, cx| this.disconnect_from_stage(guild_id.clone(), channel_id.clone(), cx)));
         if !can_end {
@@ -292,7 +292,7 @@ impl Waffle {
         let channel_id = room.channel.id.clone();
         let more = ui::button("stage-disconnect-more", Tone::Danger, cx)
             .h(px(CONTROLS_HEIGHT))
-            .child(Icon::new(Glyph::ChevronUpBold).size(px(12.)))
+            .child(Icon::new(Glyph::ChevronUpBold).size(ui::ICON_XS))
             .tooltip(|window, cx| ui::tip("More ways to leave", window, cx))
             .on_mouse_down(
                 MouseButton::Left,
@@ -314,20 +314,20 @@ impl Waffle {
         let allow = div()
             .id("stage-allow-requests")
             .min_h(px(34.))
-            .px(px(10.))
-            .py(px(8.))
+            .px_2p5()
+            .py_2()
             .squircle(RADIUS_SM)
             .flex()
             .items_center()
-            .gap(px(12.))
+            .gap_3()
             .cursor_pointer()
             .hover(|s| s.bg(stage::wash(0.05)))
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
-                    .child(div().text_size(px(14.)).font_weight(FontWeight::MEDIUM).text_color(stage::strong()).child("Allow requests from @everyone"))
-                    .child(div().text_size(px(12.)).text_color(stage::muted()).child("Turn off to stop new hands going up.")),
+                    .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(stage::strong()).child("Allow requests from @everyone"))
+                    .child(div().text_size(ui::TEXT_XS).text_color(stage::muted()).child("Turn off to stop new hands going up.")),
             )
             .child(ui::switch_live("stage-allow-switch", allowed, window, cx))
             .on_click(cx.listener(move |this, _, _, cx| this.allow_requests(&guild_id, &channel_id, !allowed, cx)));
@@ -336,7 +336,7 @@ impl Waffle {
             true => requests_empty().into_any_element(),
             false => {
                 let rows: Vec<AnyElement> = asks.into_iter().map(|(state, place)| self.request_row(room, state, place, cx).into_any_element()).collect();
-                div().id("stage-requests-list").flex_1().min_h_0().overflow_y_scroll().flex().flex_col().gap(px(2.)).children(rows).into_any_element()
+                div().id("stage-requests-list").flex_1().min_h_0().overflow_y_scroll().flex().flex_col().gap_0p5().children(rows).into_any_element()
             }
         };
         let card = div()
@@ -344,33 +344,33 @@ impl Waffle {
             .occlude()
             .absolute()
             .top(px(FOCUS_HEAD + 4.))
-            .right(px(12.))
+            .right_3()
             .w(px(REQUESTS_WIDTH))
             .max_h(px((stage_height - FOCUS_HEAD - FOOT_HEIGHT - 8.).max(160.)))
-            .p(px(6.))
+            .p_1p5()
             .squircle(RADIUS_LG)
             .bg(stage::overlay())
             .shadow(ui::shadow_pop_on(stage::wash(0.14), cx))
             .flex()
             .flex_col()
-            .gap(px(2.))
+            .gap_0p5()
             .text_color(stage::text())
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
-                    .pt(px(8.))
-                    .px(px(10.))
-                    .pb(px(4.))
-                    .text_size(px(14.))
+                    .gap_2()
+                    .pt_2()
+                    .px_2p5()
+                    .pb_1()
+                    .text_size(ui::TEXT_SM)
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(stage::strong())
                     .child(div().flex_1().child("Requests to Speak"))
                     .when(room.hands > 0, |d| d.child(ui::count_badge(room.hands as u32))),
             )
             .child(allow)
-            .child(div().h(px(1.)).mx(px(10.)).my(px(4.)).flex_none().bg(stage::wash(0.08)))
+            .child(div().h(ui::HAIRLINE).mx_2p5().my_1().flex_none().bg(stage::wash(0.08)))
             .child(list);
         // It hangs from the header's hand button, so it grows from its top right.
         ui::rise(card.transform_origin(gpui_kit::point(relative(1.), relative(0.))), "stage-requests", Duration::ZERO).into_any_element()
@@ -397,23 +397,23 @@ impl Waffle {
             .when(!invited, |b| b.on_click(cx.listener(move |this, _, _, cx| this.answer_request(&guild_id, &channel_id, &user, true, cx))));
         div()
             .id(SharedString::from(format!("stage-request-{id}")))
-            .min_h(px(48.))
-            .pl(px(10.))
-            .pr(px(6.))
-            .py(px(4.))
+            .min_h_12()
+            .pl_2p5()
+            .pr_1p5()
+            .py_1()
             .squircle(RADIUS_SM)
             .flex()
             .items_center()
-            .gap(px(10.))
+            .gap_2p5()
             .hover(|s| s.bg(stage::wash(0.05)))
-            .child(div().w(px(16.)).flex_none().flex().justify_center().text_size(px(13.)).font_weight(FontWeight::BOLD).text_color(palette::accent()).font_features(tabular()).children(place.map(|n| n.to_string())))
+            .child(div().w_4().flex_none().flex().justify_center().text_size(px(13.)).font_weight(FontWeight::BOLD).text_color(palette::accent()).font_features(tabular()).children(place.map(|n| n.to_string())))
             .child(ui::avatar(avatar, 32.))
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
-                    .child(div().truncate().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(name))
-                    .child(div().truncate().text_size(px(12.)).text_color(stage::muted()).font_features(tabular()).child(detail)),
+                    .child(div().truncate().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(name))
+                    .child(div().truncate().text_size(ui::TEXT_XS).text_color(stage::muted()).font_features(tabular()).child(detail)),
             )
             .child(invite)
             .child(
@@ -435,30 +435,30 @@ impl Waffle {
             .left(px((stage_width - width) / 2.))
             .bottom(px(FOOT_HEIGHT + 8.))
             .w(px(width))
-            .py(px(12.))
-            .pl(px(14.))
-            .pr(px(12.))
+            .py_3()
+            .pl_3p5()
+            .pr_3()
             .squircle(RADIUS_LG)
             .bg(stage::overlay())
             .shadow(ui::shadow_pop_on(stage::wash(0.14), cx))
             .flex()
             .items_center()
-            .gap(px(12.))
+            .gap_3()
             .child(ui::icon_tile(Glyph::Stage, stage::wash(0.08), stage::strong()))
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
-                    .child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child("You have been invited to speak."))
+                    .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child("You have been invited to speak."))
                     .child(
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(4.))
-                            .text_size(px(12.))
+                            .gap_1()
+                            .text_size(ui::TEXT_XS)
                             .text_color(stage::muted())
                             .child(div().flex_none().child("Join the speakers in"))
-                            .child(Icon::new(Glyph::Stage).size(px(12.)))
+                            .child(Icon::new(Glyph::Stage).size(ui::ICON_XS))
                             .child(div().min_w_0().truncate().child(place)),
                     ),
             )
@@ -473,14 +473,14 @@ pub(crate) fn moderator_mark(user_id: &str) -> Stateful<Div> {
     div()
         .id(SharedString::from(format!("stage-moderator-{user_id}")))
         .flex_none()
-        .child(Icon::new(Glyph::Shield).size(px(14.)).text_color(gpui_kit::white()))
+        .child(Icon::new(Glyph::Shield).size(ui::ICON_SM).text_color(gpui_kit::white()))
         .tooltip(|window, cx| Tooltip::new("Stage Moderator").build(window, cx))
 }
 
 // A section's label over its people, sentence case, counts in tabular figures.
 fn section(glyph: Glyph, label: String) -> Div {
-    div().flex().flex_col().gap(px(14.)).child(
-        div().flex().items_center().gap(px(6.)).text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(stage::muted()).font_features(tabular()).child(Icon::new(glyph).size(px(14.))).child(label),
+    div().flex().flex_col().gap_3p5().child(
+        div().flex().items_center().gap_1p5().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(stage::muted()).font_features(tabular()).child(Icon::new(glyph).size(ui::ICON_SM)).child(label),
     )
 }
 
@@ -488,24 +488,24 @@ fn section(glyph: Glyph, label: String) -> Div {
 fn hand_badge(place: usize) -> Div {
     div()
         .absolute()
-        .top(px(-4.))
+        .top_neg_1()
         .right(px(-9.))
         .h(px(22.))
         .min_w(px(22.))
         .pl(px(5.))
-        .pr(px(6.))
+        .pr_1p5()
         .rounded_full()
         .flex()
         .items_center()
-        .gap(px(2.))
+        .gap_0p5()
         .bg(palette::accent())
         .border_2()
         .border_color(stage::bg())
         .text_color(palette::on_accent())
-        .text_size(px(12.))
+        .text_size(ui::TEXT_XS)
         .font_weight(FontWeight::BOLD)
         .font_features(tabular())
-        .child(Icon::new(Glyph::Hand).size(px(12.)))
+        .child(Icon::new(Glyph::Hand).size(ui::ICON_XS))
         .child(place.to_string())
 }
 
@@ -520,10 +520,10 @@ fn say(room: &Room, place: Option<usize>, muted: bool) -> Div {
     };
     let asks = matches!(room.me, OnStage::Invited | OnStage::HandRaised);
     div()
-        .text_size(px(12.))
+        .text_size(ui::TEXT_XS)
         .text_color(stage::muted())
         .font_features(tabular())
-        .child(div().truncate().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(if asks { palette::accent() } else { stage::strong() }).child(title))
+        .child(div().truncate().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(if asks { palette::accent() } else { stage::strong() }).child(title))
         .child(div().truncate().child(detail))
 }
 
@@ -531,33 +531,33 @@ fn say(room: &Room, place: Option<usize>, muted: bool) -> Div {
 fn speak_on_stage() -> ui::Pressable {
     ui::pressable(div().id("stage-speak"), 0.92)
         .h(px(CONTROLS_HEIGHT - DOCK_PAD * 2.))
-        .px(px(14.))
+        .px_3p5()
         .flex_none()
         .squircle(10.)
         .flex()
         .items_center()
-        .gap(px(8.))
+        .gap_2()
         .text_color(gpui_kit::white())
-        .text_size(px(14.))
+        .text_size(ui::TEXT_SM)
         .font_weight(FontWeight::SEMIBOLD)
         .cursor_pointer()
         .hover(|s| s.bg(stage::wash(0.08)))
-        .child(Icon::new(Glyph::MicFill).size(px(20.)))
+        .child(Icon::new(Glyph::MicFill).size(ui::ICON_XL))
         .child("Speak on Stage")
 }
 
 fn requests_empty() -> Div {
     div()
-        .pt(px(20.))
-        .px(px(12.))
-        .pb(px(24.))
+        .pt_5()
+        .px_3()
+        .pb_6()
         .flex()
         .flex_col()
         .items_center()
-        .gap(px(2.))
+        .gap_0p5()
         .text_size(px(13.))
         .text_color(stage::muted())
-        .child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child("No Requests"))
+        .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child("No Requests"))
         .child("Requests to speak will show up here.")
 }
 
