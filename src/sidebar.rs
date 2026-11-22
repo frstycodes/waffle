@@ -1267,7 +1267,8 @@ pub(crate) fn channel_row(id: SharedString, group: SharedString, state: RowState
         .text_color(ink)
         .when(selected, |r| r.bg(palette::selected(cx)))
         .when(!selected, |r| r.hover(move |s| s.bg(hover).text_color(text)))
-        .when(unread && !selected, |r| r.child(div().absolute().left(px(-8.)).w(px(4.)).h(px(8.)).rounded_r(px(4.)).bg(palette::strong(cx))))
+        // Pinned to the name line's centre: a two-line row (a voice status under the name) would drop it to the top.
+        .when(unread && !selected, |r| r.child(div().absolute().left(px(-8.)).top(px((ROW_HEIGHT - 8.) / 2.)).w(px(4.)).h(px(8.)).rounded_r(px(4.)).bg(palette::strong(cx))))
 }
 
 // A category's header row (.cathead): the label, a button that folds the category unless `static_`,
