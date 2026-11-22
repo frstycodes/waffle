@@ -429,6 +429,7 @@ impl Waffle {
             previews: self.file_previews.clone(),
             embeds: self.account_settings.render_embeds,
             reactions: self.account_settings.render_reactions,
+            media: self.media_prefs(),
             // Later entries win: the server's member cache last, so nicknames beat the account names
             // that history loaded over REST carries (it has no member objects).
             names: messages
@@ -860,6 +861,7 @@ pub(crate) struct RowContext {
     // Settings › Chat: Discord's render_embeds and render_reactions.
     embeds: bool,
     reactions: bool,
+    media: MediaPrefs,
     names: HashMap<String, String>,
     // The chat's surface, for drawing authors' display-name styles on; None in a server.
     style_ground: Option<Hsla>,
@@ -944,7 +946,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .children(content(message, ctx, cx))
         .children(message.forward.as_ref().map(|original| forward_card(original, ctx, cx)))
         .children(media.map(|m| div().when(pending, |d| d.opacity(0.6)).child(m)))
-        .children(message.stickers.iter().map(|s| div().when(pending, |d| d.opacity(0.6)).child(crate::stickers::in_chat(s, cx))))
+        .children(message.stickers.iter().map(|s| div().when(pending, |d| d.opacity(0.6)).child(crate::stickers::in_chat(s, ctx.media.stickers.plays(ctx.hovers(message)), cx))))
         .children(message.poll.as_ref().map(|p| poll_card(message, p, ctx, cx)))
         .children(message.embeds.iter().filter(|_| ctx.embeds).enumerate().map(|(i, e)| embed_card(e, message.reply_to.as_deref(), format!("embed-{}-{i}", message.id), ctx, cx)))
         .children(link_cards(message, ctx, cx))
@@ -1263,7 +1265,7 @@ fn forward_card(original: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyEl
         .child(label)
         .children(content(original, ctx, cx))
         .children(media_grid(original, ctx, cx))
-        .children(original.stickers.iter().map(|s| crate::stickers::in_chat(s, cx)))
+        .children(original.stickers.iter().map(|s| crate::stickers::in_chat(s, ctx.media.stickers.plays(false), cx)))
         .children(original.embeds.iter().filter(|_| ctx.embeds).enumerate().map(|(i, e)| embed_card(e, None, format!("forward-embed-{}-{i}", original.id), ctx, cx)))
         .children(files(original, ctx, cx))
         .child(source)
@@ -1385,16 +1387,18 @@ fn pin_line(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement
 }
 
 pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyElement> {
-    if message.content.is_empty() || only_media_link(message) {
+    // A lone link whose media the setting keeps out of line stays as its text.
+    if message.content.is_empty() || (ctx.media.links && only_media_link(message)) {
         return None;
     }
     // A message of only custom emoji renders them big, as Discord's "jumbo" emoji.
     let emoji = custom_emoji(&message.content);
     if !emoji.is_empty() && strip_emoji(&message.content).trim().is_empty() && emoji.len() <= 27 {
-        return Some(div().flex().flex_wrap().gap_1().children(emoji.into_iter().filter_map(|e| e.url()).enumerate().map(|(i, url)| img(url).id(("jumbo", i)).size(px(48.)))).into_any_element());
+        return Some(div().flex().flex_wrap().gap_1().children(emoji.iter().filter_map(|e| shown_emoji(e, ctx.media.emoji).url()).enumerate().map(|(i, url)| img(url).id(("jumbo", i)).size(px(48.)))).into_any_element());
     }
-    // Spoilers stay covered until the message is clicked; "-# " lines are Discord's small grey subtext.
-    let revealed = ctx.revealed.borrow().contains(&message.id);
+    // Spoilers stay covered until the message is clicked, unless the setting shows them; "-# " lines are
+    // Discord's small grey subtext.
+    let revealed = ctx.spoilers_revealed(&message.id);
     let has_spoiler = message.content.contains("||");
     let (body, subtext) = split_subtext(&message.content);
     let text = hide_spoilers(&readable(&body, ctx), revealed);
@@ -1718,21 +1722,91 @@ pub(crate) fn animated_image(source: impl Into<gpui_kit::ImageSource>) -> Statef
     img(source).id("animated")
 }
 
+// An image that animates only while `animate`: without an id gpui holds its first frame (see `animated_image`).
+pub(crate) fn moving(image: gpui_kit::Img, animate: bool) -> AnyElement {
+    if animate { image.id("animated").into_any_element() } else { image.into_any_element() }
+}
+
+// The media rows of Appearance and Accessibility (docs/discord-settings-re.md). Reduced motion overrides
+// GIFs and emoji to off and stickers to on interaction, as Discord's settings override does.
+#[derive(Clone, Copy)]
+pub(crate) struct MediaPrefs {
+    // "Show images, videos, and lolcats": uploaded to Discord, and posted as links.
+    attachments: bool,
+    links: bool,
+    gifs: bool,
+    emoji: bool,
+    pub(crate) stickers: crate::stickers::StickerMotion,
+    spoilers: crate::settings::Spoilers,
+}
+
+impl Waffle {
+    pub(crate) fn media_prefs(&self) -> MediaPrefs {
+        let (account, still) = (&self.account_settings, self.prefs.reduces_motion());
+        MediaPrefs {
+            attachments: account.inline_attachment_media,
+            links: account.inline_embed_media,
+            gifs: account.gif_auto_play && !still,
+            emoji: account.animate_emoji && !still,
+            stickers: crate::stickers::StickerMotion::of(account.animate_stickers, still),
+            spoilers: self.prefs.spoilers,
+        }
+    }
+}
+
+impl RowContext {
+    // Whether the spoiler under `key` (a message id for its text, a media key for an upload) shows: the
+    // setting reveals them all, or only where you moderate, else a click on it does.
+    fn spoilers_revealed(&self, key: &str) -> bool {
+        let shown = match self.media.spoilers {
+            crate::settings::Spoilers::Always => true,
+            crate::settings::Spoilers::IfModerator => self.manage_messages,
+            crate::settings::Spoilers::OnClick => false,
+        };
+        shown || self.revealed.borrow().contains(key)
+    }
+
+    // Hover on the message row stands in for hover on its media: what plays a still GIF or sticker.
+    fn hovers(&self, message: &Message) -> bool {
+        self.hovered.as_deref() == Some(message.id.as_str())
+    }
+}
+
+// The emoji as the setting draws it: an animated one's still picture while animation is off.
+fn shown_emoji(emoji: &Emoji, animate: bool) -> Emoji {
+    Emoji { animated: emoji.animated && animate, ..emoji.clone() }
+}
+
+// The message's media, then its uploads as file rows where the setting keeps them out of line.
+fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<AnyElement> {
+    let gallery = gallery(message, &inline_media(message, &ctx.media), ctx, cx);
+    if ctx.media.attachments || message.media_files.is_empty() {
+        return gallery;
+    }
+    Some(div().flex().flex_col().children(gallery).children(message.media_files.iter().map(|f| file_card(message, f, cx))).into_any_element())
+}
+
+// Indexes into `message.media` drawn inline: uploads lead it (see `Message::media_files`), link media follows.
+fn inline_media(message: &Message, prefs: &MediaPrefs) -> Vec<usize> {
+    let uploads = message.media_files.len();
+    (0..message.media.len()).filter(|&i| if i < uploads { prefs.attachments } else { prefs.links }).collect()
+}
+
 // Media at its own shape: one alone fits 400×320; several tile the 432px column (2 side by side,
 // 3 one tall and two stacked, 4 two by two, 5 or more two over three with the last counting the rest).
-fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<AnyElement> {
-    let first = message.media.first()?;
-    if message.media.len() == 1 {
+fn gallery(message: &Message, shown: &[usize], ctx: &Rc<RowContext>, cx: &mut App) -> Option<AnyElement> {
+    let first = &message.media[*shown.first()?];
+    if shown.len() == 1 {
         let scale = (MAX_IMAGE.0.min(ctx.column) / first.width).min(MAX_IMAGE.1 / first.height).min(1.);
         let (w, h) = (first.width * scale, first.height * scale);
-        return Some(div().mt(px(8.)).flex_none().w(px(w)).h(px(h)).child(media_tile(message, 0, (w, h), ui::all(RADIUS_LG), ctx, cx)).into_any_element());
+        return Some(div().mt(px(8.)).flex_none().w(px(w)).h(px(h)).child(media_tile(message, shown[0], (w, h), ui::all(RADIUS_LG), ctx, cx)).into_any_element());
     }
     // Laid out for the feed's column, then scaled down to fit a narrower one.
     let k = (ctx.column / COLUMN).min(1.);
-    let (height, tiles) = gallery_layout(message.media.len());
+    let (height, tiles) = gallery_layout(shown.len());
     let (height, width) = (height * k, COLUMN * k);
     let tiles: Vec<Tile> = tiles.into_iter().map(|t| Tile { x: t.x * k, y: t.y * k, w: t.w * k, h: t.h * k }).collect();
-    let rest = message.media.len() - tiles.len();
+    let rest = shown.len() - tiles.len();
     let mut grid = div().mt(px(8.)).relative().flex_none().w(px(width)).h(px(height));
     for (i, tile) in tiles.iter().enumerate() {
         let corners = gallery_corners(*tile, width, height, RADIUS_LG);
@@ -1744,7 +1818,7 @@ fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<A
                 .top(px(tile.y))
                 .w(px(tile.w))
                 .h(px(tile.h))
-                .child(media_tile(message, i, (tile.w, tile.h), corners, ctx, cx))
+                .child(media_tile(message, shown[i], (tile.w, tile.h), corners, ctx, cx))
                 .when(counts_rest, |t| {
                     t.child(
                         ui::edge(div(), corners)
@@ -1765,23 +1839,43 @@ fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<A
     Some(grid.into_any_element())
 }
 
-// One picture, video or GIF, rounded to `corners`; a click opens the viewer at it.
-fn media_tile(message: &Message, i: usize, (w, h): (f32, f32), corners: Corners<Pixels>, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+// One picture, video or GIF, rounded to `corners`. An upload named as a spoiler is veiled until clicked,
+// or until the setting shows it.
+fn media_tile(message: &Message, i: usize, size: (f32, f32), corners: Corners<Pixels>, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+    let key = format!("{}-spoiler-{i}", message.id);
+    let spoiler = message.media_files.get(i).is_some_and(|f| f.name.starts_with("SPOILER_"));
+    let tile = media_picture(message, i, size, corners, ctx, cx);
+    if !spoiler || ctx.spoilers_revealed(&key) {
+        return tile;
+    }
+    div().relative().size_full().child(tile).child(media_veil(key, "Spoiler", corners, ctx)).into_any_element()
+}
+
+// The tile's picture, video or GIF; a click opens the viewer at it.
+fn media_picture(message: &Message, i: usize, (w, h): (f32, f32), corners: Corners<Pixels>, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     let item = &message.media[i];
     // A video plays where it is; clicks on it belong to its player.
     if let MediaKind::Video { poster } = &item.kind {
         return div().size_full().child(crate::video::tile(format!("{}-{i}", message.id), &item.url, poster, cx)).into_any_element();
     }
+    // Not verified: with autoplay off Discord plays a GIF while it's hovered. GAP: Waffle plays it while
+    // its message is hovered, the only hover state rows keep.
+    let plays = ctx.media.gifs || ctx.hovers(message);
     // Fetched at the size it's drawn rather than full resolution; the viewer still opens the original.
     let sized = |url: &str| crate::discord::sized_image(url, w, h, (item.width, item.height));
     let picture = match &item.kind {
         MediaKind::Gif { poster } => div()
             .relative()
             .size_full()
-            .child(crate::gif::rounded_tile(format!("{}-{i}-{}", message.id, item.url), &item.url, &sized(poster), gpui_kit::size(px(w), px(h)), corners, cx))
+            .child(crate::gif::rounded_tile(format!("{}-{i}-{}", message.id, item.url), &item.url, &sized(poster), gpui_kit::size(px(w), px(h)), corners, plays, cx))
             .child(media_tag("GIF").top(px(8.)).left(px(8.)))
             .into_any_element(),
-        _ => ui::edge(animated_image(sized(&item.url)), corners).size_full().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
+        _ => div()
+            .relative()
+            .size_full()
+            .child(moving(ui::edge(img(sized(&item.url)), corners).size_full().object_fit(gpui_kit::ObjectFit::Cover), plays))
+            .when(!plays && is_gif(&item.url), |d| d.child(media_tag("GIF").top(px(8.)).left(px(8.))))
+            .into_any_element(),
     };
     let (this, url) = (ctx.this.clone(), item.url.clone());
     ui::edge(div(), corners)
@@ -1796,6 +1890,48 @@ fn media_tile(message: &Message, i: usize, (w, h): (f32, f32), corners: Corners<
         .on_click(move |_, window, cx| { cx.stop_propagation();
             this.update(cx, |this, cx| this.open_viewer(&url, window, cx)).ok();
         })
+        .into_any_element()
+}
+
+fn is_gif(url: &str) -> bool {
+    url.split(['?', '#']).next().is_some_and(|path| path.to_ascii_lowercase().ends_with(".gif"))
+}
+
+// A blur over media until it's clicked (a spoiler, sensitive content); the click adds `key` to the
+// revealed set.
+fn media_veil(key: String, label: &'static str, corners: Corners<Pixels>, ctx: &RowContext) -> AnyElement {
+    let (reveal, refresh) = (ctx.revealed.clone(), ctx.this.clone());
+    ui::edge(div(), corners)
+        .id(SharedString::from(format!("veil-{key}")))
+        .occlude()
+        .absolute()
+        .inset_0()
+        .bg(on_media(0.35))
+        .backdrop_blur(px(28.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            reveal.borrow_mut().insert(key.clone());
+            refresh.update(cx, |_, cx| cx.notify()).ok();
+        })
+        .child(
+            div()
+                .h(px(32.))
+                .px(px(12.))
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .squircle(RADIUS_MD)
+                .bg(on_media(0.72))
+                .text_color(gpui_kit::white())
+                .text_size(px(14.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .child(Icon::new(Glyph::EyeSlash).size(px(16.)))
+                .child(label),
+        )
         .into_any_element()
 }
 
@@ -2006,7 +2142,8 @@ fn embed_card(embed: &Embed, poll_message: Option<&str>, key: String, ctx: &RowC
         .children(fields);
     let has_text = embed.provider.is_some() || embed.author.is_some() || embed.title.is_some() || embed.description.is_some() || !embed.fields.is_empty();
     let top = (has_text || thumbnail.is_some()).then(|| div().flex().items_start().gap(px(16.)).child(text).children(thumbnail));
-    let media = embed_media(embed, &key, inner, ctx, cx);
+    // Without inline link media the card keeps its text and thumbnail but not its big pictures.
+    let media = ctx.media.links.then(|| embed_media(embed, &key, inner, ctx, cx)).flatten();
     let stamp = embed.timestamp.as_deref().map(|t| (format_stamp(t), day(t).map(|d| format!("{}, {}", d.format("%A, %B %-d, %Y"), clock(t))).unwrap_or_default()));
     let footer = (embed.footer.is_some() || stamp.is_some()).then(|| {
         let line = embed.footer.clone().into_iter().chain(stamp.as_ref().map(|(short, _)| short.clone())).collect::<Vec<_>>().join(" · ");
@@ -2138,51 +2275,7 @@ fn embed_media(embed: &Embed, key: &str, inner: f32, ctx: &RowContext, cx: &App)
     };
     let veil = format!("{key}-veil");
     let veiled = embed.sensitive && !ctx.revealed.borrow().contains(&veil);
-    let (reveal, refresh) = (ctx.revealed.clone(), ctx.this.clone());
-    Some(
-        div()
-            .relative()
-            .w(px(inner))
-            .h(px(height))
-            .flex_none()
-            .child(body)
-            .when(veiled, |d| {
-                d.child(
-                    div()
-                        .id(SharedString::from(veil.clone()))
-                        .absolute()
-                        .inset_0()
-                        .squircle(RADIUS_SM)
-                        .bg(on_media(0.35))
-                        .backdrop_blur(px(28.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .cursor_pointer()
-                        .on_click(move |_, _, cx| {
-                            cx.stop_propagation();
-                            reveal.borrow_mut().insert(veil.clone());
-                            refresh.update(cx, |_, cx| cx.notify()).ok();
-                        })
-                        .child(
-                            div()
-                                .h(px(32.))
-                                .px(px(12.))
-                                .flex()
-                                .items_center()
-                                .gap(px(6.))
-                                .squircle(RADIUS_MD)
-                                .bg(on_media(0.72))
-                                .text_color(gpui_kit::white())
-                                .text_size(px(14.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(Icon::new(Glyph::EyeSlash).size(px(16.)))
-                                .child("Sensitive content · Show"),
-                        ),
-                )
-            })
-            .into_any_element(),
-    )
+    Some(div().relative().w(px(inner)).h(px(height)).flex_none().child(body).when(veiled, |d| d.child(media_veil(veil, "Sensitive content · Show", ui::all(RADIUS_SM), ctx))).into_any_element())
 }
 
 // A closed poll's result: the winner, its share, and the way back to the poll.
@@ -2380,7 +2473,7 @@ fn upload_cards(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Vec<AnyEle
             let sent = file.sent.load(std::sync::atomic::Ordering::Relaxed).min(file.size);
             let fraction = if file.size == 0 { 1. } else { sent as f32 / file.size as f32 };
             let kind = crate::attachments::FileKind::of(&file.path);
-            let picture = file_picture(ctx.previews.get(&file.path).cloned().flatten(), kind, 40., false, cx);
+            let picture = file_picture(ctx.previews.get(&file.path).cloned().flatten(), kind, 40., file.name.starts_with("SPOILER_"), cx);
             let status = match job.error.is_some() {
                 true => format_size(file.size),
                 false => format!("{} of {}", format_size(sent), format_size(file.size)),
@@ -2516,7 +2609,7 @@ fn reactions(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyEle
         let card = crate::reactions::ReactorsCard::new(ctx.this.clone(), message, r);
         reaction_pill(SharedString::from(format!("react-{}-{}", message.id, r.emoji.name)), r.me, cx)
             .px(px(9.))
-            .child(emoji_face(&r.emoji, 18., 16.))
+            .child(emoji_face(&shown_emoji(&r.emoji, ctx.media.emoji), 18., 16.))
             .child(r.count.to_string())
             .on_hover(move |hovered, _, cx| {
                 if *hovered {
@@ -2687,7 +2780,7 @@ fn readable_with(content: &str, ctx: &RowContext, inline_emoji: bool) -> String 
         } else if let Some(stamp) = token.strip_prefix("t:") {
             discord_timestamp(stamp)
         } else if let Some(name) = token.strip_prefix("a:").or_else(|| token.strip_prefix(':')) {
-            match (inline_emoji, emoji_image(token)) {
+            match (inline_emoji, emoji_image(token, ctx.media.emoji)) {
                 (true, Some(html)) => Some(html),
                 _ => name.split(':').next().map(|n| format!(":{n}:")),
             }
@@ -2761,7 +2854,7 @@ pub(crate) fn inline_emoji(text: &str) -> String {
         let tail = &rest[start..];
         let Some(end) = tail.find('>') else { break };
         out.push_str(&rest[..start]);
-        match emoji_image(&tail[1..end]) {
+        match emoji_image(&tail[1..end], true) {
             Some(html) => out.push_str(&html),
             None => out.push_str(&tail[..=end]),
         }
@@ -2772,9 +2865,9 @@ pub(crate) fn inline_emoji(text: &str) -> String {
 }
 
 // `a:name:id` or `:name:id` as an inline image the markdown view lays out in the text flow. Its
-// images carry element ids, so animated emoji play. 22px is Discord's 1.375em at 16px text.
-fn emoji_image(token: &str) -> Option<String> {
-    let animated = token.starts_with("a:");
+// images carry element ids, so animated emoji play unless `animate` is off. 22px is Discord's 1.375em at 16px text.
+fn emoji_image(token: &str, animate: bool) -> Option<String> {
+    let animated = animate && token.starts_with("a:");
     let mut parts = token.trim_start_matches("a:").trim_start_matches(':').split(':');
     let (name, id) = (parts.next()?, parts.next()?);
     if parts.next().is_some() || name.is_empty() || !id.bytes().all(|b| b.is_ascii_digit()) {
@@ -3014,6 +3107,20 @@ fn crumb(id: &'static str, cx: &App) -> Stateful<Div> {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn media_settings_split_uploads_from_link_media() {
+        use crate::discord::{File, Media, MediaKind, Message};
+        let media = |url: &str| Media { url: url.into(), width: 1., height: 1., kind: MediaKind::Image };
+        let message = Message { media: vec![media("a.png"), media("b.png"), media("link.png")], media_files: vec![File { name: "a.png".into(), url: "a.png".into(), size: 1 }, File { name: "b.png".into(), url: "b.png".into(), size: 1 }], ..Default::default() };
+        let mut prefs = super::MediaPrefs { attachments: true, links: true, gifs: true, emoji: true, stickers: crate::stickers::StickerMotion::Always, spoilers: crate::settings::Spoilers::OnClick };
+        assert_eq!(super::inline_media(&message, &prefs), [0, 1, 2]);
+        prefs.attachments = false;
+        assert_eq!(super::inline_media(&message, &prefs), [2]);
+        prefs = super::MediaPrefs { attachments: true, links: false, ..prefs };
+        assert_eq!(super::inline_media(&message, &prefs), [0, 1]);
+        assert!(super::is_gif("https://cdn.discordapp.com/attachments/1/2/Dance.GIF?ex=a") && !super::is_gif("https://x/gif.png?f=.gif"));
+    }
+
+    #[test]
     fn unread_bar_says_how_many_since_when() {
         let now = chrono::Utc::now().to_rfc3339();
         assert!(super::unread_label(1, false, &now).starts_with("1 new message since "));
@@ -3072,10 +3179,11 @@ mod tests {
     #[test]
     fn jumbo_emoji_detection() {
         assert_eq!(custom_emoji("<:blob:1> <a:dance:2>").len(), 2);
-        let dance = emoji_image("a:dance:2").unwrap();
+        let dance = emoji_image("a:dance:2", true).unwrap();
         assert!(dance.contains("/emojis/2.gif") && dance.contains(r#"alt=":dance:""#) && dance.contains(r#"width="22""#));
-        assert!(emoji_image(":blob:1").unwrap().contains("/emojis/1.webp"));
-        assert_eq!(emoji_image(":bad:x1"), None);
+        assert!(emoji_image(":blob:1", true).unwrap().contains("/emojis/1.webp"));
+        assert!(emoji_image("a:dance:2", false).unwrap().contains("/emojis/2.webp"));
+        assert_eq!(emoji_image(":bad:x1", true), None);
         assert!(strip_emoji("<:blob:1> <a:dance:2>").trim().is_empty());
         assert_eq!(strip_emoji("hi <:blob:1> <@5>"), "hi  <@5>");
     }

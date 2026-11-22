@@ -56,6 +56,8 @@ struct Slot {
     // Drawn above the overlays (the media viewer), so it plays while one is open; clipped to its own
     // frame rather than the chat.
     top: bool,
+    // Off holds the still: GIF autoplay is off and the GIF isn't hovered.
+    moving: bool,
 }
 
 #[derive(Default)]
@@ -144,20 +146,20 @@ pub fn set_covered(covered: bool) {
 }
 
 // The GIF for `url` where the app shows it: the still (`poster`), and a slot the layer plays the clip
-// over. `key` must be unique to where it's shown. gpui can't clip pictures to a rounded parent, so
-// the still and the layer's frames are both rounded to `corners`.
-pub fn rounded_tile(key: String, url: &str, poster: &str, cell: gpui_kit::Size<Pixels>, corners: Corners<Pixels>, _cx: &mut App) -> AnyElement {
-    placeholder(key, url, poster, cell, corners, false)
+// over while `moving`. `key` must be unique to where it's shown. gpui can't clip pictures to a rounded
+// parent, so the still and the layer's frames are both rounded to `corners`.
+pub fn rounded_tile(key: String, url: &str, poster: &str, cell: gpui_kit::Size<Pixels>, corners: Corners<Pixels>, moving: bool, _cx: &mut App) -> AnyElement {
+    placeholder(key, url, poster, cell, corners, false, moving)
 }
 
 // A tile drawn above every overlay (the media viewer): it keeps playing while one is open, and is
 // clipped to its own frame rather than the chat.
 pub fn top_tile(key: String, url: &str, poster: &str, cell: gpui_kit::Size<Pixels>, corners: Corners<Pixels>, _cx: &mut App) -> AnyElement {
-    placeholder(key, url, poster, cell, corners, true)
+    placeholder(key, url, poster, cell, corners, true, true)
 }
 
 // `cell` is the size the caller laid the tile out at; a slot never paints past it.
-fn placeholder(key: String, url: &str, poster: &str, cell: gpui_kit::Size<Pixels>, corners: Corners<Pixels>, top: bool) -> AnyElement {
+fn placeholder(key: String, url: &str, poster: &str, cell: gpui_kit::Size<Pixels>, corners: Corners<Pixels>, top: bool, moving: bool) -> AnyElement {
     let url = url.to_owned();
     div()
         .relative()
@@ -172,7 +174,7 @@ fn placeholder(key: String, url: &str, poster: &str, cell: gpui_kit::Size<Pixels
                     // GAP: in a gallery the measured bounds have come out taller than the cell (the layer
                     // then painted over the next message), cause not found; the cell's size bounds it.
                     let bounds = Bounds { origin: bounds.origin, size: bounds.size.min(&cell) };
-                    let slot = Slot { url: url.clone(), bounds, mask: window.content_mask().bounds.intersect(&bounds), corners, top };
+                    let slot = Slot { url: url.clone(), bounds, mask: window.content_mask().bounds.intersect(&bounds), corners, top, moving };
                     LAYOUT.with(|l| l.borrow_mut().slots.insert(key.clone(), slot));
                     wake(cx);
                 },
@@ -307,9 +309,12 @@ impl GifLayer {
     }
 }
 
-// Whether a slot's GIF should be moving: its window focused, the slot on screen, uncovered by other
-// windows and, unless it sits above them, by the app's overlays.
+// Whether a slot's GIF should be moving: allowed to, its window focused, the slot on screen, uncovered
+// by other windows and, unless it sits above them, by the app's overlays.
 fn plays(slot: &Slot, layout: &Layout) -> bool {
+    if !slot.moving {
+        return false;
+    }
     let visible = slot.bounds.intersect(&layout.clip(slot));
     if forced() {
         return visible.size.width > px(0.) && visible.size.height > px(0.);

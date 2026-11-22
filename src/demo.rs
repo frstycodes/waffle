@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | chat-media-settings | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -375,6 +375,9 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // and an expired code, a message you can't see (no card), and two still loading.
         "link-previews" => demo_link_previews(waffle),
         "forwarded" => demo_forwarded(waffle),
+        // An upload, a link image, a GIF, an animated emoji, a sticker and spoilers, with uploads kept out of
+        // line, GIFs still until hovered, stickers moving on hover and spoilers always shown.
+        "chat-media-settings" => demo_media_settings(waffle),
         // The dialog with #📷-media picked and a note; gpui's channel reads only, so it shows locked.
         "forward-dialog" => {
             if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "2") {
@@ -1532,6 +1535,30 @@ fn demo_forwarded(waffle: &mut Waffle) {
     let mut messages = feed.messages.as_ref().clone();
     messages.push(post("901", "", Some(Box::new(original))));
     messages.push(post("902", "you two need to see this", None));
+    feed.messages = std::sync::Arc::new(messages);
+    waffle.list.reset(waffle.feeds.get("general").map_or(0, |f| f.messages.len()));
+}
+
+fn demo_media_settings(waffle: &mut Waffle) {
+    use crate::discord::{File, Sticker, StickerFormat};
+    waffle.account_settings.inline_attachment_media = false;
+    waffle.account_settings.gif_auto_play = false;
+    waffle.account_settings.animate_stickers = 1;
+    waffle.prefs.spoilers = crate::settings::Spoilers::Always;
+    let Some(feed) = waffle.feeds.get_mut("general") else { return };
+    let wren = user("8388608", "Wren");
+    let post = |id: &str, content: &str| Message { id: id.into(), channel_id: "general".into(), guild_id: Some("1".into()), author: wren.clone(), content: content.into(), timestamp: chrono::Utc::now().to_rfc3339(), ..Default::default() };
+    let upload = |name: &str, size: u64| File { name: name.into(), url: format!("https://cdn.discordapp.com/attachments/demo/{name}"), size };
+    let mut messages = feed.messages.as_ref().clone();
+    messages.push(Message {
+        media: vec![Media { url: avatar_url("3", None), width: 640., height: 400., kind: MediaKind::Image }, Media { url: avatar_url("5", None), width: 640., height: 400., kind: MediaKind::Image }],
+        media_files: vec![upload("sunset.png", 482_113), upload("SPOILER_ending.png", 210_554)],
+        ..post("951", "two from last night, second one spoils the ending")
+    });
+    messages.push(Message { media: vec![Media { url: avatar_url("4", None), width: 320., height: 320., kind: MediaKind::Image }], ..post("952", "https://example.com/cat.png") });
+    messages.push(Message { media: vec![Media { url: "https://example.com/dance.mp4".into(), width: 320., height: 240., kind: MediaKind::Gif { poster: avatar_url("2", None) } }], ..post("953", "https://tenor.com/view/dance-gif-1") });
+    messages.push(post("954", "<a:dance:1328465377218269257> the boss dies in phase ||two, not three||"));
+    messages.push(Message { stickers: vec![Sticker { id: "781291131828699156".into(), name: "Wave".into(), format: StickerFormat::Apng, tags: String::new() }], ..post("955", "") });
     feed.messages = std::sync::Arc::new(messages);
     waffle.list.reset(waffle.feeds.get("general").map_or(0, |f| f.messages.len()));
 }
