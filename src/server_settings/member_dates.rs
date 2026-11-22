@@ -10,7 +10,6 @@ use gpui_kit::{
     },
     div,
     prelude::FluentBuilder,
-    px,
 };
 
 use super::{api::DateRange, members::Pop};
@@ -232,13 +231,13 @@ impl Waffle {
             .min_w_0()
             .flex()
             .items_center()
-            .gap(px(4.))
+            .gap_1()
             .cursor_pointer()
             .text_color(ink)
             .hover(|s| s.text_color(palette::strong(cx)))
             .child(div().flex_none().child(column.label()))
             .when(active, |d| d.child(div().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).child(menu.filter.label())))
-            .child(Icon::new(if active { Glyph::Filter } else { Glyph::ChevronDown }).size(px(12.)).flex_none())
+            .child(Icon::new(if active { Glyph::Filter } else { Glyph::ChevronDown }).size(ui::ICON_XS).flex_none())
             .on_click(cx.listener(move |this, _, _, cx| this.member_pop(Some(Pop::Date(column)), cx)));
         let list = open.then(|| ui::menu_dropdown(SharedString::from(format!("ss-date-menu-{}", column.key())), 20., Align::Start, self.date_menu_rows(column, menu, cx), self.member_dismiss(cx), cx));
         div().relative().min_w_0().child(trigger).children(list).into_any_element()
@@ -250,15 +249,15 @@ impl Waffle {
         if menu.custom_open {
             let field = |id: &str, label: &'static str, state: &Entity<InputState>, cx: &mut Context<Self>| {
                 let focus = state.read(cx).focus_handle(cx);
-                ui::field(label, cx).px(px(10.)).child(ui::text_field(SharedString::from(format!("ss-date-{key}-{id}")), Input::new(state).appearance(false), &focus)).into_any_element()
+                ui::field(label, cx).px_2p5().child(ui::text_field(SharedString::from(format!("ss-date-{key}-{id}")), Input::new(state).appearance(false), &focus)).into_any_element()
             };
-            let back = ui::menu_row(SharedString::from(format!("ss-date-{key}-back")), cx).child(Icon::new(Glyph::ChevronLeft).size(px(16.))).child("Custom range").on_click(cx.listener(move |this, _, _, cx| this.toggle_custom_range(column, false, cx)));
+            let back = ui::menu_row(SharedString::from(format!("ss-date-{key}-back")), cx).child(Icon::new(Glyph::ChevronLeft).size(ui::ICON_MD)).child("Custom range").on_click(cx.listener(move |this, _, _, cx| this.toggle_custom_range(column, false, cx)));
             let apply = ui::button(SharedString::from(format!("ss-date-{key}-apply")), ui::Tone::Primary, cx).small().child("Apply").on_click(cx.listener(move |this, _, _, cx| this.apply_custom_range(column, cx)));
-            let error = menu.error.clone().map(|e| ui::field_error(e, cx).px(px(10.)).into_any_element());
+            let error = menu.error.clone().map(|e| ui::field_error(e, cx).px_2p5().into_any_element());
             return [back.into_any_element(), field("after", "After date", &menu.after, cx), field("before", "Before date", &menu.before, cx)]
                 .into_iter()
                 .chain(error)
-                .chain([div().px(px(10.)).py(px(6.)).flex().justify_end().child(apply).into_any_element()])
+                .chain([div().px_2p5().py_1p5().flex().justify_end().child(apply).into_any_element()])
                 .collect();
         }
         let chosen = |p: Preset| menu.filter == DateFilter::Preset(p);
@@ -267,17 +266,17 @@ impl Waffle {
             .map(|preset| {
                 ui::menu_row(SharedString::from(format!("ss-date-{key}-{preset:?}")), cx)
                     .child(div().flex_1().min_w_0().truncate().child(preset.label()))
-                    .child(div().text_color(accent).when(!chosen(preset), |d| d.invisible()).child(Icon::new(Glyph::Checkmark).size(px(16.))))
+                    .child(div().text_color(accent).when(!chosen(preset), |d| d.invisible()).child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD)))
                     .on_click(cx.listener(move |this, _, _, cx| this.pick_date_preset(column, preset, cx)))
                     .into_any_element()
             })
             .collect();
         let custom = matches!(menu.filter, DateFilter::Custom { .. });
-        rows.push(div().py(px(4.)).child(ui::divider(None, cx)).into_any_element());
+        rows.push(div().py_1().child(ui::divider(None, cx)).into_any_element());
         rows.push(
             ui::menu_row(SharedString::from(format!("ss-date-{key}-custom")), cx)
                 .child(div().flex_1().min_w_0().truncate().child(if custom { menu.filter.label() } else { "Custom range".into() }))
-                .child(div().text_color(if custom { accent } else { palette::muted(cx) }).child(Icon::new(if custom { Glyph::Checkmark } else { Glyph::ChevronRight }).size(px(16.))))
+                .child(div().text_color(if custom { accent } else { palette::muted(cx) }).child(Icon::new(if custom { Glyph::Checkmark } else { Glyph::ChevronRight }).size(ui::ICON_MD)))
                 .on_click(cx.listener(move |this, _, _, cx| this.toggle_custom_range(column, true, cx)))
                 .into_any_element(),
         );

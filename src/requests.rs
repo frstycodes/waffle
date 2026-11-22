@@ -56,9 +56,9 @@ impl Waffle {
         let state = RowState { selected, unread: false, muted: false, strong: false };
         Some(
             channel_row("requests-row".into(), "requests-row".into(), state, cx)
-                .h(px(40.))
+                .h_10()
                 .gap_3()
-                .child(Icon::new(Glyph::Envelope).size(px(20.)).flex_none())
+                .child(Icon::new(Glyph::Envelope).size(ui::ICON_XL).flex_none())
                 .child(div().flex_1().min_w_0().truncate().child("Message Requests"))
                 .when(pending > 0, |r| r.child(ui::count_badge(pending)))
                 .on_click(cx.listener(|this, _, _, cx| this.open_requests(RequestsTab::Requests, cx)))
@@ -120,10 +120,10 @@ impl Waffle {
                     .border_r_1()
                     .border_color(palette::line_strong(cx))
                     .whitespace_nowrap()
-                    .text_size(px(16.))
+                    .text_size(ui::TEXT_MD)
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(palette::strong(cx))
-                    .child(Icon::new(Glyph::Envelope).size(px(20.)).text_color(palette::faint(cx)))
+                    .child(Icon::new(Glyph::Envelope).size(ui::ICON_XL).text_color(palette::faint(cx)))
                     .child("Message Requests"),
             )
             .child(div().min_w_0().overflow_hidden().occlude().child(tabs))
@@ -137,10 +137,10 @@ impl Waffle {
                     RequestsTab::Requests => format!("Pending Requests · {}", dms.len()),
                     RequestsTab::Spam => format!("Spam · {}", dms.len()),
                 };
-                let clear = ui::button("requests-clear", Tone::Link, cx).text_size(px(12.)).child("Clear All").on_click(cx.listener(move |this, _, _, cx| this.clear_requests(tab, cx)));
-                let label = div().pt_2().px_2().pb_1().flex().items_center().justify_between().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(heading).child(clear);
+                let clear = ui::button("requests-clear", Tone::Link, cx).text_size(ui::TEXT_XS).child("Clear All").on_click(cx.listener(move |this, _, _, cx| this.clear_requests(tab, cx)));
+                let label = div().pt_2().px_2().pb_1().flex().items_center().justify_between().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(heading).child(clear);
                 let rows: Vec<AnyElement> = dms.iter().map(|dm| self.message_request_row(dm, tab, cx)).collect();
-                div().flex().flex_col().gap(px(2.)).child(label).children(rows).into_any_element()
+                div().flex().flex_col().gap_0p5().child(label).children(rows).into_any_element()
             }
         };
         div()
@@ -152,9 +152,9 @@ impl Waffle {
             .flex_col()
             .bg(palette::surface(palette::Level::Page, cx))
             .text_color(palette::text(cx))
-            .text_size(px(14.))
+            .text_size(ui::TEXT_SM)
             .child(ui::hard_edge(|| false, cx).child(header))
-            .child(div().id("requests-list").flex_1().min_h_0().overflow_y_scrollbar().pt(px(16.)).px_4().pb_6().child(body))
+            .child(div().id("requests-list").flex_1().min_h_0().overflow_y_scrollbar().pt_4().px_4().pb_6().child(body))
             .into_any_element()
     }
 
@@ -171,7 +171,7 @@ impl Waffle {
         let id = dm.id.clone();
         div()
             .id(SharedString::from(format!("request-{}", dm.id)))
-            .min_h(px(64.))
+            .min_h_16()
             .px_2()
             .py_2()
             .flex()
@@ -194,9 +194,9 @@ impl Waffle {
                             .gap_2()
                             .min_w_0()
                             .child(div().min_w_0().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(name))
-                            .children(when.map(|w| div().flex_none().text_size(px(12.)).text_color(palette::faint(cx)).child(w))),
+                            .children(when.map(|w| div().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(w))),
                     )
-                    .child(div().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child(line.join(" · "))),
+                    .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(line.join(" · "))),
             )
             .child(div().flex_none().flex().gap_2().on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| cx.stop_propagation()).children(self.request_actions(&dm.id, tab, cx)))
             .on_click(cx.listener(move |this, _, window, cx| this.open_request(&id, window, cx)))
@@ -234,18 +234,18 @@ impl Waffle {
         };
         Some(
             div()
-                .min_h(px(44.))
-                .py(px(6.))
-                .pl(px(14.))
-                .pr(px(8.))
+                .min_h_11()
+                .py_1p5()
+                .pl_3p5()
+                .pr_2()
                 .flex()
                 .items_center()
-                .gap(px(8.))
+                .gap_2()
                 .border_b_1()
                 .border_color(palette::line(cx))
-                .text_size(px(14.))
+                .text_size(ui::TEXT_SM)
                 .text_color(palette::muted(cx))
-                .child(Icon::new(if dm.props.spam { Glyph::Shield } else { Glyph::Envelope }).size(px(16.)).text_color(palette::faint(cx)))
+                .child(Icon::new(if dm.props.spam { Glyph::Shield } else { Glyph::Envelope }).size(ui::ICON_MD).text_color(palette::faint(cx)))
                 .child(div().flex_1().min_w_0().truncate().child(label))
                 .children(self.request_actions(&dm.id, tab, cx)),
         )

@@ -251,7 +251,7 @@ impl Waffle {
         let close = ui::icon_button("report-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_report(cx)));
         let body = match &dialog.menu {
             Load::Loading => ui::dialog_body().child(head(SharedString::from("Report"), None, close, cx)).child(
-                div().flex().flex_col().gap(px(8.)).children((0..4usize).map(|i| ui::skeleton(("report-loading", i), RADIUS_MD, cx).h(px(44.)).w_full())),
+                div().flex().flex_col().gap_2().children((0..4usize).map(|i| ui::skeleton(("report-loading", i), RADIUS_MD, cx).h_11().w_full())),
             ),
             Load::Failed => ui::dialog_body().child(head(SharedString::from("Report"), None, close, cx)).child(
                 ui::empty_state("report-failed", Illustration::LoadFailed, "Couldn't load the report menu", "Discord didn't send it. Close this and try again in a moment.", cx),
@@ -270,7 +270,7 @@ impl Waffle {
         let subheader = node.subheader.as_deref().and_then(|s| markdown(s, cx));
         let mut body = ui::dialog_body();
         if success {
-            body = body.child(div().flex().justify_center().pt(px(8.)).child(img(Illustration::ReportSent.path()).w(px(200.)).h(px(150.))));
+            body = body.child(div().flex().justify_center().pt_2().child(img(Illustration::ReportSent.path()).w(px(200.)).h(px(150.))));
         }
         body = body.child(head(node.header.clone().into(), subheader, close, cx).when(success, |h| h.text_center()));
         if let Some(info) = node.info.as_deref().and_then(|s| markdown(s, cx)) {
@@ -296,20 +296,20 @@ impl Waffle {
             }
         }
         if !more.is_empty() {
-            body = body.child(labelled("More you can do", div().flex().flex_col().gap(px(2.)).mx(px(-8.)).children(more), cx));
+            body = body.child(labelled("More you can do", div().flex().flex_col().gap_0p5().mx_neg_2().children(more), cx));
         }
         if !node.children.is_empty() {
             let rows = node.children.iter().enumerate().map(|(i, (label, to))| {
                 let (to, label_owned) = (to.clone(), label.clone());
                 ui::menu_row(SharedString::from(format!("report-child-{}-{i}", dialog.node)), cx)
-                    .min_h(px(44.))
-                    .text_size(px(15.))
+                    .min_h_11()
+                    .text_size(ui::TEXT_LEAD)
                     .text_color(palette::strong(cx))
                     .child(div().flex_1().min_w_0().child(label.clone()))
-                    .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(px(18.))))
+                    .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_LG)))
                     .on_click(cx.listener(move |this, _, _, cx| this.report_step(to.clone(), Some(label_owned.clone()), cx)))
             });
-            body = body.child(div().flex().flex_col().gap(px(2.)).mx(px(-8.)).children(rows));
+            body = body.child(div().flex().flex_col().gap_0p5().mx_neg_2().children(rows));
         }
         let submit = node.button.as_ref().is_some_and(|(kind, _)| kind == "submit");
         if submit && !success {
@@ -343,7 +343,7 @@ impl Waffle {
             return None;
         }
         let also_block = (kind == Some("submit") && self.can_also_block(dialog)).then(|| self.also_block_toggle(dialog.also_block, window, cx));
-        Some(div().flex().items_center().gap_2().pt(px(4.)).children(back).child(div().flex_1()).children(also_block).children(primary).into_any_element())
+        Some(div().flex().items_center().gap_2().pt_1().children(back).child(div().flex_1()).children(also_block).children(primary).into_any_element())
     }
 
     // Waffle's own (better.html): block on the way out instead of a second step on the thank-you node.
@@ -357,8 +357,8 @@ impl Waffle {
             .id("report-also-block")
             .flex()
             .items_center()
-            .gap(px(8.))
-            .mr(px(8.))
+            .gap_2()
+            .mr_2()
             .cursor_pointer()
             .child(ui::check_live("report-also-block-check", if on { Check::On } else { Check::Off }, window, cx))
             .child("Also block")
@@ -377,10 +377,10 @@ impl Waffle {
         let who = div()
             .flex()
             .items_center()
-            .gap(px(8.))
+            .gap_2()
             .child(ui::avatar(m.author.avatar.clone(), PREVIEW_AVATAR / 1.5))
             .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(m.author.name.clone()));
-        Some(labelled("Selected message", well(cx).flex_col().items_start().gap(px(6.)).child(who).child(div().w_full().child(preview)), cx).into_any_element())
+        Some(labelled("Selected message", well(cx).flex_col().items_start().gap_1p5().child(who).child(div().w_full().child(preview)), cx).into_any_element())
     }
 
     fn report_choices(&self, dialog: &ReportDialog, element: &Element, many: bool, id: &str, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -406,7 +406,7 @@ impl Waffle {
             ui::pick_row(row_id, mark, label, detail.map(Into::into), cx).on_click(cx.listener(move |this, _, _, cx| this.report_pick(name.clone(), value.clone(), many, cx)))
         }).collect::<Vec<_>>();
         let title = element.data["title"].as_str().map(|t| div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(t.to_owned()));
-        div().flex().flex_col().gap(px(2.)).children(title).child(div().flex().flex_col().gap(px(2.)).mx(px(-8.)).children(rows)).into_any_element()
+        div().flex().flex_col().gap_0p5().children(title).child(div().flex().flex_col().gap_0p5().mx_neg_2().children(rows)).into_any_element()
     }
 
     fn report_action(&self, dialog: &ReportDialog, kind: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -442,9 +442,9 @@ impl Waffle {
                 .flex()
                 .items_center()
                 .gap_3()
-                .p(px(8.))
+                .p_2()
                 .child(ui::icon_tile(glyph, palette::selected(cx), palette::strong(cx)))
-                .child(div().flex_1().min_w_0().flex().flex_col().child(div().text_color(palette::strong(cx)).truncate().child(title)).child(div().text_size(px(12.)).text_color(palette::muted(cx)).child(detail)))
+                .child(div().flex_1().min_w_0().flex().flex_col().child(div().text_color(palette::strong(cx)).truncate().child(title)).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail)))
                 .child(button)
                 .into_any_element(),
         )
@@ -539,22 +539,22 @@ fn head(title: SharedString, subheader: Option<AnyElement>, close: ui::Control, 
         .min_w_0()
         .flex()
         .flex_col()
-        .gap(px(4.))
-        .child(div().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
+        .gap_1()
+        .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
         .children(subheader.map(|s| div().text_color(palette::muted(cx)).child(s)));
     div().flex().items_start().gap_3().child(text).child(close)
 }
 
 fn labelled(label: &'static str, content: impl IntoElement, cx: &mut Context<Waffle>) -> gpui_kit::Div {
-    div().flex().flex_col().gap(px(6.)).child(div().text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(label)).child(content)
+    div().flex().flex_col().gap_1p5().child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(label)).child(content)
 }
 
 fn well(cx: &mut Context<Waffle>) -> gpui_kit::Div {
-    div().flex().p(px(12.)).squircle(RADIUS_MD).bg(palette::surface(palette::Level::Page, cx))
+    div().flex().p_3().squircle(RADIUS_MD).bg(palette::surface(palette::Level::Page, cx))
 }
 
 fn notice(body: AnyElement, cx: &mut Context<Waffle>) -> gpui_kit::Div {
-    well(cx).items_start().gap(px(10.)).child(div().text_color(palette::muted(cx)).child(Icon::new(Glyph::Info).size(px(18.)))).child(div().flex_1().min_w_0().child(body))
+    well(cx).items_start().gap_2p5().child(div().text_color(palette::muted(cx)).child(Icon::new(Glyph::Info).size(ui::ICON_LG))).child(div().flex_1().min_w_0().child(body))
 }
 
 fn user_preview(user: &User, cx: &mut Context<Waffle>) -> gpui_kit::Div {
@@ -568,22 +568,22 @@ fn crumbs(history: &[(String, Option<String>)], cx: &mut Context<Waffle>) -> Opt
         return None;
     }
     let faint = palette::faint(cx);
-    let rows = picked.into_iter().map(move |label| div().flex().items_center().gap(px(8.)).child(div().text_color(faint).child(Icon::new(Glyph::Checkmark).size(px(16.)))).child(label));
-    Some(labelled("Report category", well(cx).flex_col().gap(px(6.)).text_color(palette::strong(cx)).children(rows), cx))
+    let rows = picked.into_iter().map(move |label| div().flex().items_center().gap_2().child(div().text_color(faint).child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD))).child(label));
+    Some(labelled("Report category", well(cx).flex_col().gap_1p5().text_color(palette::strong(cx)).children(rows), cx))
 }
 
 fn text_block(data: &Value, cx: &mut Context<Waffle>) -> Option<gpui_kit::Div> {
     let header = data["header"].as_str().filter(|s| !s.is_empty()).map(|h| div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(h.to_owned()));
     let body = data["body"].as_str().filter(|s| !s.is_empty()).map(|b| div().text_color(palette::text(cx)).child(b.to_owned()));
-    (header.is_some() || body.is_some()).then(|| div().flex().flex_col().gap(px(4.)).children(header).children(body))
+    (header.is_some() || body.is_some()).then(|| div().flex().flex_col().gap_1().children(header).children(body))
 }
 
 fn link_row(data: &Value, id: &str, cx: &mut Context<Waffle>) -> Option<AnyElement> {
     let url = data["url"].as_str()?.to_owned();
     let text = data["link_text"].as_str().unwrap_or(&url).to_owned();
     let detail = data["link_description"].as_str().filter(|s| !s.is_empty()).map(|d| SharedString::from(d.to_owned()));
-    let row = ui::pick_row(SharedString::from(id.to_owned()), div().text_color(palette::muted(cx)).child(Icon::new(Glyph::Open).size(px(18.))), text, detail, cx).on_click(move |_, _, cx| cx.open_url(&url));
-    Some(labelled("Learn more", div().mx(px(-8.)).child(row), cx).into_any_element())
+    let row = ui::pick_row(SharedString::from(id.to_owned()), div().text_color(palette::muted(cx)).child(Icon::new(Glyph::Open).size(ui::ICON_LG)), text, detail, cx).on_click(move |_, _, cx| cx.open_url(&url));
+    Some(labelled("Learn more", div().mx_neg_2().child(row), cx).into_any_element())
 }
 
 fn legal(cx: &mut Context<Waffle>) -> AnyElement {
@@ -591,8 +591,8 @@ fn legal(cx: &mut Context<Waffle>) -> AnyElement {
     div()
         .flex()
         .flex_wrap()
-        .gap_x(px(4.))
-        .text_size(px(12.))
+        .gap_x_1()
+        .text_size(ui::TEXT_XS)
         .text_color(palette::muted(cx))
         .child("By submitting this report you confirm that it is truthful and made in good faith. Read the")
         .child(link)

@@ -6,13 +6,11 @@
 // ones. Nothing is drawn on other platforms.
 use gpui_kit::{AnyElement, App, Hsla, Window, WindowControlArea, component::Icon, div, prelude::*, px};
 
-use crate::{icons::Glyph, layout::HEADER_HEIGHT, palette, sidebar::Nav};
+use crate::{icons::Glyph, layout::HEADER_HEIGHT, palette, sidebar::Nav, ui};
 
 const BUTTON_WIDTH: f32 = 46.;
 /// Room the controls take at the right of the header line.
 pub const WIDTH: f32 = width(cfg!(target_os = "windows"));
-// Windows 11's caption red, not the app's danger tone: Close should look like every other window's.
-const CLOSE_HOVER: u32 = 0xC42B1C;
 
 const fn width(windows: bool) -> f32 {
     if windows { BUTTON_WIDTH * 3. } else { 0. }
@@ -39,7 +37,7 @@ pub fn render(window: &Window, cx: &App) -> Option<AnyElement> {
             // registered first. Blocking the mouse hides those from the hit test under the button.
             .occlude()
             .window_control_area(area)
-            .child(icon.size(px(16.)))
+            .child(icon.size(ui::ICON_MD))
     };
     let maximize = if window.is_maximized() { Nav::Restore } else { Nav::Maximize };
     Some(
@@ -51,7 +49,7 @@ pub fn render(window: &Window, cx: &App) -> Option<AnyElement> {
             .flex()
             .child(button("window-minimize", Nav::Minimize.icon(), WindowControlArea::Min, hover, strong))
             .child(button("window-maximize", maximize.icon(), WindowControlArea::Max, hover, strong))
-            .child(button("window-close", Icon::new(Glyph::X), WindowControlArea::Close, gpui_kit::rgb(CLOSE_HOVER).into(), gpui_kit::white()))
+            .child(button("window-close", Icon::new(Glyph::X), WindowControlArea::Close, palette::window_close_hover(), gpui_kit::white()))
             .into_any_element(),
     )
 }

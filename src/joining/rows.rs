@@ -1,6 +1,6 @@
 // The rows atop a server's channel list: Get Started, Finish joining, Server Guide, Channels & Roles
 // (design/explore-joining.html §3).
-use gpui_kit::{AnyElement, Context, FontWeight, SharedString, Stateful, Div, Window, component::Icon, div, prelude::*, px, relative};
+use gpui_kit::{AnyElement, Context, FontWeight, SharedString, Stateful, Div, Window, component::Icon, div, prelude::*, relative};
 
 use super::{GuildPage, browse::page_title, features, settings_flags::OPT_IN_CHANNELS_ON};
 use crate::{
@@ -38,7 +38,7 @@ impl Waffle {
             rows.push(self.page_row("channels-roles", Glyph::Search, page_title(has_prompts), GuildPage::ChannelsRoles, cx));
         }
         if !rows.is_empty() {
-            rows.push(div().h(px(1.)).mx(px(10.)).my(px(6.)).bg(palette::line(cx)).into_any_element());
+            rows.push(div().h(ui::HAIRLINE).mx_2p5().my_1p5().bg(palette::line(cx)).into_any_element());
         }
         rows
     }
@@ -52,7 +52,7 @@ impl Waffle {
         let selected = page.is_some_and(|p| self.guild_page == Some(p));
         let state = RowState { selected, unread: false, muted: false, strong: false };
         channel_row(id.into(), format!("entry-{id}").into(), state, cx)
-            .child(Icon::new(glyph).size(px(18.)).flex_none().text_color(if selected { palette::muted(cx) } else { palette::faint(cx) }))
+            .child(Icon::new(glyph).size(ui::ICON_LG).flex_none().text_color(if selected { palette::muted(cx) } else { palette::faint(cx) }))
             .child(ui::truncating(format!("entry-name-{id}"), label).flex_1())
     }
 }
@@ -64,13 +64,13 @@ fn get_started(done: usize, total: usize, cx: &mut Context<Waffle>) -> AnyElemen
     div()
         .id("get-started")
         .flex_none()
-        .mt(px(2.))
-        .mb(px(6.))
-        .px(px(12.))
-        .py(px(10.))
+        .mt_0p5()
+        .mb_1p5()
+        .px_3()
+        .py_2p5()
         .flex()
         .flex_col()
-        .gap(px(8.))
+        .gap_2()
         .squircle(ui::RADIUS_MD)
         .bg(palette::surface(palette::Level::Raised, cx))
         .border_1()
@@ -83,14 +83,14 @@ fn get_started(done: usize, total: usize, cx: &mut Context<Waffle>) -> AnyElemen
                 .items_center()
                 .justify_between()
                 .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Get Started"))
-                .child(div().text_size(px(12.)).text_color(palette::muted(cx)).child(format!("{done} of {total}"))),
+                .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(format!("{done} of {total}"))),
         )
-        .child(div().h(px(6.)).w_full().rounded_full().bg(palette::line_strong(cx)).child(div().h_full().w(relative(fraction)).rounded_full().bg(palette::positive_ink(cx))))
+        .child(div().h_1p5().w_full().rounded_full().bg(palette::line_strong(cx)).child(div().h_full().w(relative(fraction)).rounded_full().bg(palette::positive_ink(cx))))
         .on_click(cx.listener(|this, _, _, cx| this.open_guild_page(GuildPage::Guide, cx)))
         .into_any_element()
 }
 
 fn progress_dots(answered: usize, total: usize, cx: &mut Context<Waffle>) -> Div {
     let (accent, rest) = (palette::accent(), palette::line_strong(cx));
-    div().flex_none().flex().gap(px(4.)).children((0..total).map(|i| div().size(px(6.)).rounded_full().bg(if i < answered { accent } else { rest })))
+    div().flex_none().flex().gap_1().children((0..total).map(|i| div().size_1p5().rounded_full().bg(if i < answered { accent } else { rest })))
 }

@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use gpui_kit::{
     AnimationExt, AnyElement, App, Context, Div, FontWeight, Hsla, MouseButton, Pixels, Point, SharedString, Stateful, StyledText, Window,
-    component::{ActiveTheme, Icon, text::TextView, tooltip::Tooltip},
-    div, img, linear_color_stop, linear_gradient, prelude::*, px, relative, rgb, svg,
+    component::{ActiveTheme, Icon, text::TextView},
+    div, img, linear_color_stop, linear_gradient, prelude::*, px, relative, svg,
 };
 
 use crate::{
@@ -166,6 +166,7 @@ impl Waffle {
         let origin = ui::corner(x < f32::from(card.at.x), y < f32::from(card.at.y));
         let rise = ui::rise(card_el.transform_origin(origin), SharedString::from(format!("profile-{}", card.user.id)), Duration::ZERO);
         // Measured, not estimated: a short card opened low sits just above the window's foot, not 560px up.
+        // lint-allow(raw-floating): placed inside the overlay backdrop, with a measured top margin floating_at can't take.
         let placed = gpui_kit::anchored().position(card.at).snap_to_window_with_margin(gpui_kit::Edges { top: px(top), right: px(8.), bottom: px(8.), left: px(8.) }).child(rise);
         let avatar = card.avatar_full.then(|| avatar_viewer(&card.user, window, cx));
         Some(crate::overlays::backdrop("profile-backdrop", cx).child(placed).children(avatar).into_any_element())
@@ -178,23 +179,23 @@ impl Waffle {
         let guild = card.guild_id.as_ref().and_then(|id| self.guilds.iter().find(|g| &g.id == id));
         let joined = guild.zip(profile.joined.as_deref().and_then(parse_time));
         let discord_mark = div()
-            .size(px(20.))
+            .size_5()
             .flex_none()
             .squircle(RADIUS_XS)
             .bg(palette::accent())
             .flex()
             .items_center()
             .justify_center()
-            .children(crate::icons::brand_mark("discord").map(|path| svg().path(path).size(px(14.)).text_color(palette::on_accent())));
+            .children(crate::icons::brand_mark("discord").map(|path| svg().path(path).size_3p5().text_color(palette::on_accent())));
         let row = div()
             .flex()
             .flex_wrap()
             .items_center()
-            .gap(px(10.))
+            .gap_2p5()
             .child(since_date("profile-since-discord", discord_mark, "Discord".into(), &created, ink))
             .when_some(joined, |row, (guild, joined)| {
                 let icon = ui::server_tile(guild.icon.as_deref(), &guild.name, 20., cx);
-                row.child(div().size(px(4.)).rounded_full().bg(ink.muted)).child(since_date("profile-since-server", icon, guild.name.clone().into(), &joined, ink))
+                row.child(div().size_1().rounded_full().bg(ink.muted)).child(since_date("profile-since-server", icon, guild.name.clone().into(), &joined, ink))
             });
         Some(section(if card.user.bot { "Created On" } else { "Member Since" }, row, ink))
     }
@@ -202,7 +203,7 @@ impl Waffle {
     fn friends_since(&self, card: &ProfileCard, ink: Ink) -> Option<Div> {
         let friend = self.relationships.iter().find(|r| r.user.id == card.user.id && r.kind == Relation::Friend)?;
         let since = parse_time(friend.since.as_deref()?)?;
-        Some(section("Friends Since", div().text_size(px(14.)).text_color(ink.text).child(short_date(&since)), ink))
+        Some(section("Friends Since", div().text_size(ui::TEXT_SM).text_color(ink.text).child(short_date(&since)), ink))
     }
 
     // Banner with its round actions, then the avatar overlapping its foot.
@@ -227,7 +228,7 @@ impl Waffle {
                 cx.notify();
             }));
         let edit = is_me.then(|| {
-            ui::button("profile-edit", ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::Pen).size(px(16.))).child("Edit profile").on_click(cx.listener(|this, _, window, cx| {
+            ui::button("profile-edit", ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::Pen).size(ui::ICON_MD)).child("Edit profile").on_click(cx.listener(|this, _, window, cx| {
                 this.profile_card = None;
                 this.open_settings(crate::settings::Page::Profiles, window, cx);
             }))
@@ -268,7 +269,7 @@ impl Waffle {
         let more = banner_button("profile-more", Glyph::More, "More")
             .cursor_pointer()
             .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_user_menu(user.clone(), guild_id.clone(), menu_surface(guild_id.is_some()), event.position(), cx)));
-        div().absolute().top(px(12.)).right(px(12.)).flex().gap_2().children(mod_view).children(friend).child(more)
+        div().absolute().top_3().right_3().flex().gap_2().children(mod_view).children(friend).child(more)
     }
 
     // Discord's popout shows one activity card: their stream, else their first activity, else the voice
@@ -296,14 +297,14 @@ impl Waffle {
         if card.all_activity {
             let less = div()
                 .id("profile-activity-less")
-                .text_size(px(14.))
+                .text_size(ui::TEXT_SM)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(ink.muted)
                 .cursor_pointer()
                 .hover(move |s| s.text_color(ink.strong))
                 .child("Show less")
                 .on_click(cx.listener(|this, _, _, cx| this.show_all_activity(false, cx)));
-            return Some(div().flex().flex_col().items_start().gap(px(8.)).children(cards.into_iter().map(|c| div().w_full().child(c))).child(less).into_any_element());
+            return Some(div().flex().flex_col().items_start().gap_2().children(cards.into_iter().map(|c| div().w_full().child(c))).child(less).into_any_element());
         }
         let more = cards.len() - 1;
         let first = cards.into_iter().next()?;
@@ -315,20 +316,20 @@ impl Waffle {
         let label = if more == 1 { "Show 1 more activity".to_owned() } else { format!("Show {more} more activities") };
         let button = div()
             .id("profile-activity-view-more")
-            .h(px(28.))
+            .h_7()
             .flex()
             .items_center()
             .justify_center()
             .squircle(RADIUS_SM)
             .bg(ink.tile)
-            .text_size(px(14.))
+            .text_size(ui::TEXT_SM)
             .font_weight(FontWeight::MEDIUM)
             .text_color(ink.muted)
             .cursor_pointer()
             .hover(move |s| s.text_color(ink.strong))
             .child(label)
             .on_click(cx.listener(|this, _, _, cx| this.show_all_activity(true, cx)));
-        div().flex().flex_col().gap(px(6.)).child(first).child(button)
+        div().flex().flex_col().gap_1p5().child(first).child(button)
     }
 
     fn show_all_activity(&mut self, all: bool, cx: &mut Context<Self>) {
@@ -370,15 +371,15 @@ impl Waffle {
         let head = div()
             .flex()
             .items_center()
-            .gap(px(8.))
+            .gap_2()
             .min_w_0()
-            .child(div().truncate().text_size(px(14.)).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(heading))
+            .child(div().truncate().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(heading))
             .child(ui::live_badge());
         div()
             .p_3()
             .flex()
             .flex_col()
-            .gap(px(10.))
+            .gap_2p5()
             .squircle(RADIUS_MD)
             .bg(ink.tile)
             .child(head)
@@ -396,10 +397,10 @@ impl Waffle {
             .p_3()
             .flex()
             .flex_col()
-            .gap(px(10.))
+            .gap_2p5()
             .squircle(RADIUS_MD)
             .bg(ink.tile)
-            .child(div().text_size(px(14.)).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child("In voice"))
+            .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child("In voice"))
             .child(self.voice_place_row(guild, channel, ink))
             .children((!is_me && !connected).then(|| self.join_voice_button(guild, channel, cx)))
             .into_any_element()
@@ -417,19 +418,19 @@ impl Waffle {
             })
             .collect();
         let server = match &guild.icon {
-            Some(icon) => ui::media(icon.clone(), ui::all(RADIUS_XS)).size(px(20.)).flex_none().into_any_element(),
-            None => div().size(px(20.)).flex_none().squircle(RADIUS_XS).bg(ink.top).into_any_element(),
+            Some(icon) => ui::media(icon.clone(), ui::all(RADIUS_XS)).size_5().flex_none().into_any_element(),
+            None => div().size_5().flex_none().squircle(RADIUS_XS).bg(ink.top).into_any_element(),
         };
         div()
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap_1p5()
             .min_w_0()
-            .text_size(px(14.))
+            .text_size(ui::TEXT_SM)
             .text_color(ink.text)
             .child(server)
-            .child(Icon::new(Glyph::ChevronRight).size(px(14.)).flex_none().text_color(ink.muted))
-            .child(crate::sidebar::channel_glyph(channel).size(px(16.)).flex_none().text_color(ink.muted))
+            .child(Icon::new(Glyph::ChevronRight).size(ui::ICON_SM).flex_none().text_color(ink.muted))
+            .child(crate::sidebar::channel_glyph(channel).size_4().flex_none().text_color(ink.muted))
             .child(div().flex_1().min_w_0().truncate().child(channel.name.clone()))
             .child(ui::listed_stack(SharedString::from(format!("profile-voice-{}", channel.id)), "In voice", people, 3, 20., ink.tile, ink.top, ink.strong))
     }
@@ -452,7 +453,7 @@ impl Waffle {
         let (user, guild_id) = (card.user.clone(), card.guild_id.clone());
         let more = div()
             .id("profile-activity-more")
-            .size(px(24.))
+            .size_6()
             .squircle(RADIUS_XS)
             .flex()
             .items_center()
@@ -460,11 +461,11 @@ impl Waffle {
             .cursor_pointer()
             .text_color(ink.muted)
             .hover(move |s| s.bg(ink.tile).text_color(ink.strong))
-            .child(Icon::new(Glyph::More).size(px(16.)))
+            .child(Icon::new(Glyph::More).size(ui::ICON_MD))
             .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_user_menu(user.clone(), guild_id.clone(), menu_surface(guild_id.is_some()), event.position(), cx)));
         let art = match &rich.image {
             Some(url) => ui::media(url.clone(), ui::all(RADIUS_SM)).size(px(72.)).flex_none().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
-            None => div().size(px(72.)).flex_none().squircle(RADIUS_SM).bg(ink.tile).flex().items_center().justify_center().text_color(ink.muted).child(Icon::new(Glyph::Game).size(px(32.))).into_any_element(),
+            None => div().size(px(72.)).flex_none().squircle(RADIUS_SM).bg(ink.tile).flex().items_center().justify_center().text_color(ink.muted).child(Icon::new(Glyph::Game).size_8()).into_any_element(),
         };
         let line = |text: String| div().truncate().text_color(ink.text).child(text);
         let state = rich.state.clone().map(|state| match rich.party {
@@ -477,24 +478,24 @@ impl Waffle {
             .min_w_0()
             .flex()
             .flex_col()
-            .gap(px(2.))
-            .text_size(px(14.))
-            .child(div().truncate().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(ink.strong).child(rich.name.clone()))
+            .gap_0p5()
+            .text_size(ui::TEXT_SM)
+            .child(div().truncate().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(ink.strong).child(rich.name.clone()))
             .children(rich.details.clone().map(line))
-            .children(state.map(|s| div().flex().items_center().gap_1().min_w_0().text_color(ink.text).when(rich.party.is_some(), |d| d.child(Icon::new(Glyph::Users).size(px(14.)).flex_none())).child(div().truncate().child(s))))
+            .children(state.map(|s| div().flex().items_center().gap_1().min_w_0().text_color(ink.text).when(rich.party.is_some(), |d| d.child(Icon::new(Glyph::Users).size(ui::ICON_SM).flex_none())).child(div().truncate().child(s))))
             .children(elapsed.map(|time| {
                 // Status green is ~2:1 on a light card; a deeper green keeps it readable there.
-                let green = if luminance(ink.strong) < 0.5 { rgb(0x1E7A46).into() } else { palette::status(crate::discord::Status::Online) };
-                div().flex().items_center().gap_1().text_color(green).child(Icon::new(Glyph::Game).size(px(14.))).child(div().font_family(mono).child(time))
+                let green = if luminance(ink.strong) < 0.5 { palette::online_on_light() } else { palette::status(crate::discord::Status::Online) };
+                div().flex().items_center().gap_1().text_color(green).child(Icon::new(Glyph::Game).size(ui::ICON_SM)).child(div().font_family(mono).child(time))
             }));
         div()
             .p_3()
             .flex()
             .flex_col()
-            .gap(px(10.))
+            .gap_2p5()
             .squircle(RADIUS_MD)
             .bg(ink.tile)
-            .child(div().flex().items_center().justify_between().child(div().text_size(px(14.)).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(activity_heading(rich.kind))).child(more))
+            .child(div().flex().items_center().justify_between().child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(activity_heading(rich.kind))).child(more))
             .child(div().flex().items_center().gap_3().min_w_0().child(art).child(facts))
             .when(rich.joinable, |c| c.child(ask_to_join(ink)))
     }
@@ -509,24 +510,24 @@ impl Waffle {
             return None;
         }
         let chips = roles.into_iter().map(|r| {
-            let color = if r.color == 0 { palette::status_in(crate::discord::Status::Offline, cx) } else { rgb(r.color).into() };
+            let color = if r.color == 0 { palette::status_in(crate::discord::Status::Offline, cx) } else { palette::data_color(r.color) };
             ui::role_chip(r.name.clone(), color, cx).bg(ink.tile).text_color(ink.text)
         });
         let (user, guild_id) = (card.user.clone(), guild.id.clone());
         let add = can_manage.then(|| {
             div()
                 .id("profile-add-role")
-                .h(px(24.))
-                .px(px(6.))
+                .h_6()
+                .px_1p5()
                 .flex()
                 .items_center()
                 .gap_1()
                 .squircle(RADIUS_XS)
                 .cursor_pointer()
-                .text_size(px(14.))
+                .text_size(ui::TEXT_SM)
                 .text_color(ink.muted)
                 .hover(move |s| s.bg(ink.tile).text_color(ink.strong))
-                .child(Icon::new(Glyph::Plus).size(px(14.)))
+                .child(Icon::new(Glyph::Plus).size(ui::ICON_SM))
                 .child("Add role")
                 .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_user_menu(user.clone(), Some(guild_id.clone()), Surface::ServerChat, event.position(), cx)))
         });
@@ -553,11 +554,11 @@ impl Ink {
             let surface = palette::surface(palette::Level::Overlay, cx);
             return Ink { top: surface, bottom: surface, border: None, strong: palette::strong(cx), text: palette::text(cx), muted: palette::muted(cx), tile: palette::selected(cx) };
         };
-        let (from, to): (Hsla, Hsla) = (rgb(from).into(), rgb(to).into());
+        let (from, to): (Hsla, Hsla) = (palette::data_color(from), palette::data_color(to));
         let dark = cx.theme().is_dark();
         let ground: Hsla = if dark { gpui_kit::black() } else { gpui_kit::white() };
         let (top, bottom) = (ui::mix(from, ground, 0.55), ui::mix(to, ground, 0.55));
-        let strong: Hsla = if luminance(ui::mix(top, bottom, 0.5)) > 0.4 { gpui_kit::rgb(0x1A1A1E).into() } else { gpui_kit::white() };
+        let strong: Hsla = if luminance(ui::mix(top, bottom, 0.5)) > 0.4 { palette::ink_on_light() } else { gpui_kit::white() };
         Ink { top, bottom, border: Some((from, to)), strong, text: strong.opacity(0.92), muted: strong.opacity(0.72), tile: strong.opacity(0.1) }
     }
 }
@@ -572,7 +573,7 @@ pub(crate) fn banner(profile: &Profile, ink: Ink, radius: f32, cx: &App) -> (Any
     match (&profile.banner, ink.border, profile.accent) {
         (Some(url), _, _) => (ui::media(url.clone(), ui::top(radius)).w_full().h(px(BANNER)).object_fit(gpui_kit::ObjectFit::Cover).into_any_element(), BANNER),
         (None, Some((color, _)), _) => (banner_fill(color, radius).into_any_element(), BANNER_PLAIN),
-        (None, None, Some(accent)) => (banner_fill(rgb(accent).into(), radius).into_any_element(), BANNER_PLAIN),
+        (None, None, Some(accent)) => (banner_fill(palette::data_color(accent), radius).into_any_element(), BANNER_PLAIN),
         (None, None, None) => (banner_fill(palette::selected(cx), radius).into_any_element(), BANNER_PLAIN),
     }
 }
@@ -605,7 +606,7 @@ fn banner_button(id: &'static str, glyph: Glyph, label: &'static str) -> Statefu
     let fill = gpui_kit::black().opacity(0.55);
     div()
         .id(id)
-        .size(px(32.))
+        .size_8()
         .rounded_full()
         .bg(fill)
         .hover(|s| s.bg(gpui_kit::black().opacity(0.75)))
@@ -613,8 +614,8 @@ fn banner_button(id: &'static str, glyph: Glyph, label: &'static str) -> Statefu
         .items_center()
         .justify_center()
         .text_color(gpui_kit::white())
-        .child(Icon::new(glyph).size(px(16.)))
-        .tooltip(move |window, cx| Tooltip::new(label).build(window, cx))
+        .child(Icon::new(glyph).size(ui::ICON_MD))
+        .tooltip(move |window, cx| ui::tip(label, window, cx))
 }
 
 fn menu_surface(in_guild: bool) -> Surface {
@@ -628,26 +629,26 @@ pub(crate) fn name_block(user: &User, profile: &Profile, ink: Ink) -> Div {
     let tag = user.tag.as_ref().map(|tag| {
         div()
             .h(px(22.))
-            .px(px(6.))
+            .px_1p5()
             .flex()
             .flex_none()
             .items_center()
-            .gap(px(4.))
+            .gap_1()
             .squircle(RADIUS_XS)
             .bg(ink.tile)
             .text_color(ink.strong)
-            .text_size(px(14.))
+            .text_size(ui::TEXT_SM)
             .font_weight(FontWeight::MEDIUM)
-            .children(tag.badge.clone().map(|badge| img(badge).size(px(14.))))
+            .children(tag.badge.clone().map(|badge| img(badge).size_3p5()))
             .child(tag.text.clone())
     });
     div()
         .flex()
         .flex_col()
-        .gap(px(2.))
-        .child(crate::name_fonts::styled(div().truncate().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD), user.name_style.as_ref()).text_color(ink.strong).child(StyledText::new(user.name.clone()).with_highlights(name)))
+        .gap_0p5()
+        .child(crate::name_fonts::styled(div().truncate().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD), user.name_style.as_ref()).text_color(ink.strong).child(StyledText::new(user.name.clone()).with_highlights(name)))
         .when(!handle.is_empty() || tag.is_some(), |b| {
-            b.child(div().flex().flex_wrap().items_center().gap_x(px(6.)).gap_y(px(4.)).text_size(px(14.)).text_color(ink.text).when(!handle.is_empty(), |l| l.child(div().min_w_0().truncate().child(handle))).children(tag))
+            b.child(div().flex().flex_wrap().items_center().gap_x_1p5().gap_y_1().text_size(ui::TEXT_SM).text_color(ink.text).when(!handle.is_empty(), |l| l.child(div().min_w_0().truncate().child(handle))).children(tag))
         })
 }
 
@@ -657,20 +658,20 @@ pub(crate) fn badges(badges: &[Badge], ink: Ink) -> Option<Div> {
     }
     let shown = badges.iter().take(MAX_BADGES).enumerate().map(|(i, badge)| {
         let label = SharedString::from(badge.description.clone());
-        div().id(("profile-badge", i)).size(px(22.)).child(img(badge.icon.clone()).size_full()).tooltip(move |window, cx| Tooltip::new(label.clone()).build(window, cx))
+        div().id(("profile-badge", i)).size(px(22.)).child(img(badge.icon.clone()).size_full()).tooltip(move |window, cx| ui::tip(label.clone(), window, cx))
     });
     let more = badges.len().saturating_sub(MAX_BADGES);
     let pill = div()
         .id("profile-badges")
         .h(px(30.))
-        .px(px(6.))
+        .px_1p5()
         .flex()
         .items_center()
-        .gap(px(4.))
+        .gap_1()
         .squircle(RADIUS_SM)
         .bg(ink.tile)
         .children(shown)
-        .when(more > 0, |p| p.child(div().pl(px(2.)).text_size(px(14.)).text_color(ink.text).child(format!("+{more}"))));
+        .when(more > 0, |p| p.child(div().pl_0p5().text_size(ui::TEXT_SM).text_color(ink.text).child(format!("+{more}"))));
     let pill = match more > 0 {
         true => ui::overflow_list(pill, "Badges", badges.iter().map(|b| ui::Entry::item(b.icon.clone(), b.description.clone())).collect()),
         false => pill,
@@ -688,13 +689,13 @@ fn mutuals(profile: &Profile, ink: Ink) -> Option<Div> {
         return None;
     }
     let faces = profile.mutual_friends.iter().take(3).map(|u| u.avatar.clone());
-    Some(div().flex().items_center().gap_2().text_size(px(14.)).text_color(ink.muted).child(ui::avatar_stack(faces, 20., ink.top)).child(div().truncate().child(parts.join(" • "))))
+    Some(div().flex().items_center().gap_2().text_size(ui::TEXT_SM).text_color(ink.muted).child(ui::avatar_stack(faces, 20., ink.top)).child(div().truncate().child(parts.join(" • "))))
 }
 
 // Discord markdown with custom emoji as images, as a message renders it; Discord gives the bio no heading.
 pub(crate) fn bio_view(user_id: &str, bio: &str, ink: Ink) -> Div {
     let view = TextView::markdown(SharedString::from(format!("bio-{user_id}")), crate::chat::inline_emoji(&crate::chat::discord_breaks(bio))).selectable(true);
-    div().text_size(px(14.)).text_color(ink.text).max_h(px(160.)).child(view)
+    div().text_size(ui::TEXT_SM).text_color(ink.text).max_h_40().child(view)
 }
 
 fn game_collection(games: &[String], ink: Ink) -> Option<Div> {
@@ -702,22 +703,22 @@ fn game_collection(games: &[String], ink: Ink) -> Option<Div> {
         return None;
     }
     let more = games.len().saturating_sub(MAX_GAMES);
-    let tile = |el: Div| el.size(px(32.)).flex_none().squircle(RADIUS_XS);
-    let icons = games.iter().take(MAX_GAMES).map(|url| ui::media(url.clone(), ui::all(RADIUS_XS)).size(px(32.)).flex_none().object_fit(gpui_kit::ObjectFit::Cover));
+    let tile = |el: Div| el.size_8().flex_none().squircle(RADIUS_XS);
+    let icons = games.iter().take(MAX_GAMES).map(|url| ui::media(url.clone(), ui::all(RADIUS_XS)).size_8().flex_none().object_fit(gpui_kit::ObjectFit::Cover));
     let overflow = (more > 0).then(|| {
-        tile(div()).bg(gpui_kit::black().opacity(0.6)).flex().items_center().justify_center().text_size(px(14.)).text_color(gpui_kit::white()).child(format!("+{more}"))
+        tile(div()).bg(gpui_kit::black().opacity(0.6)).flex().items_center().justify_center().text_size(ui::TEXT_SM).text_color(gpui_kit::white()).child(format!("+{more}"))
     });
     Some(
         div()
             .px_3()
-            .py(px(10.))
+            .py_2p5()
             .flex()
             .items_center()
             .justify_between()
             .gap_2()
             .squircle(RADIUS_MD)
             .bg(ink.tile)
-            .child(div().text_size(px(14.)).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child("Game Collection"))
+            .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child("Game Collection"))
             .child(div().flex().gap_1().children(icons).children(overflow)),
     )
 }
@@ -736,7 +737,7 @@ fn activity_heading(kind: ActivityKind) -> &'static str {
 fn ask_to_join(ink: Ink) -> Stateful<Div> {
     div()
         .id("profile-ask-to-join")
-        .h(px(36.))
+        .h_9()
         .flex()
         .items_center()
         .justify_center()
@@ -744,19 +745,19 @@ fn ask_to_join(ink: Ink) -> Stateful<Div> {
         .squircle(RADIUS_SM)
         .bg(ink.tile)
         .text_color(ink.muted)
-        .text_size(px(14.))
+        .text_size(ui::TEXT_SM)
         .opacity(0.7)
-        .child(Icon::new(Glyph::Game).size(px(16.)))
+        .child(Icon::new(Glyph::Game).size(ui::ICON_MD))
         .child("Ask to Join")
-        .tooltip(|window, cx| Tooltip::new("Joining from Waffle isn't supported yet").build(window, cx))
+        .tooltip(|window, cx| ui::tip("Joining from Waffle isn't supported yet", window, cx))
 }
 
 fn message_field(user: &User, ink: Ink, cx: &mut Context<Waffle>) -> Div {
     let dm_user = user.id.clone();
     let field = div()
         .id("profile-message")
-        .h(px(44.))
-        .px(px(14.))
+        .h_11()
+        .px_3p5()
         .flex()
         .items_center()
         .justify_between()
@@ -764,8 +765,8 @@ fn message_field(user: &User, ink: Ink, cx: &mut Context<Waffle>) -> Div {
         .squircle(RADIUS_MD)
         .bg(ink.tile)
         .cursor_text()
-        .child(div().truncate().text_size(px(14.)).text_color(ink.muted).child(format!("Message @{}", user.name)))
-        .child(Icon::new(Glyph::Emoji).size(px(16.)).flex_none().text_color(ink.muted))
+        .child(div().truncate().text_size(ui::TEXT_SM).text_color(ink.muted).child(format!("Message @{}", user.name)))
+        .child(Icon::new(Glyph::Emoji).size(ui::ICON_MD).flex_none().text_color(ink.muted))
         .on_click(cx.listener(move |this, _, window, cx| this.message_user(dm_user.clone(), window, cx)));
     div().flex_none().px_4().pt_1().pb_4().child(field)
 }
@@ -776,12 +777,12 @@ pub(crate) fn profile_key(user_id: &str, guild_id: Option<&str>) -> String {
 }
 
 fn profile_skeleton(cx: &App) -> Div {
-    let line = |id: &'static str, width: f32| ui::skeleton(id, 4., cx).h(px(12.)).w(relative(width));
+    let line = |id: &'static str, width: f32| ui::skeleton(id, 4., cx).h_3().w(relative(width));
     div()
         .flex()
         .flex_col()
-        .gap(px(10.))
-        .child(ui::skeleton("profile-skel-badges", 8., cx).h(px(28.)).w(px(120.)))
+        .gap_2p5()
+        .child(ui::skeleton("profile-skel-badges", 8., cx).h_7().w(px(120.)))
         .child(line("profile-skel-mutuals", 0.7))
         .child(line("profile-skel-bio-1", 0.9))
         .child(line("profile-skel-bio-2", 0.55))
@@ -831,7 +832,7 @@ fn effect_overlay(layers: &[EffectLayer]) -> Option<Div> {
 }
 
 fn section(title: &'static str, content: impl IntoElement, ink: Ink) -> Div {
-    div().flex().flex_col().gap(px(6.)).child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(ink.strong).child(title)).child(content)
+    div().flex().flex_col().gap_1p5().child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(ink.strong).child(title)).child(content)
 }
 
 fn since_date(id: &'static str, mark: impl IntoElement, tip: SharedString, at: &chrono::DateTime<chrono::Utc>, ink: Ink) -> Stateful<Div> {
@@ -839,12 +840,12 @@ fn since_date(id: &'static str, mark: impl IntoElement, tip: SharedString, at: &
         .id(id)
         .flex()
         .items_center()
-        .gap(px(6.))
-        .text_size(px(14.))
+        .gap_1p5()
+        .text_size(ui::TEXT_SM)
         .text_color(ink.text)
         .child(mark)
         .child(short_date(at))
-        .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
 }
 
 // When a snowflake was minted: its top 42 bits are milliseconds since Discord's epoch (2015).
@@ -868,7 +869,7 @@ fn connections(list: &[Connection], ink: Ink, cx: &App) -> Option<Div> {
         return None;
     }
     let chips = list.iter().enumerate().map(|(i, c)| connection_chip(i, c, ink, cx));
-    Some(section("Connections", div().flex().flex_wrap().gap(px(6.)).children(chips), ink))
+    Some(section("Connections", div().flex().flex_wrap().gap_1p5().children(chips), ink))
 }
 
 // The service's mark on its colour, the account name, Discord's verified seal, and a click to the account.
@@ -885,33 +886,33 @@ fn connection_chip(i: usize, c: &Connection, ink: Ink, cx: &App) -> Stateful<Div
     let hover = ink.strong.opacity(0.16);
     div()
         .id(("profile-connection", i))
-        .h(px(28.))
+        .h_7()
         .max_w_full()
-        .pl(px(4.))
-        .pr(px(8.))
+        .pl_1()
+        .pr_2()
         .flex()
         .items_center()
-        .gap(px(6.))
+        .gap_1p5()
         .squircle(RADIUS_SM)
         .bg(ink.tile)
-        .text_size(px(14.))
+        .text_size(ui::TEXT_SM)
         .font_weight(FontWeight::MEDIUM)
         .text_color(ink.strong)
         .child(brand_tile(&c.kind, platform, color))
         .child(div().min_w_0().truncate().child(name))
-        .when(c.verified, |d| d.child(Icon::new(Glyph::CheckCircle).size(px(14.)).flex_none().text_color(seal)))
-        .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+        .when(c.verified, |d| d.child(Icon::new(Glyph::CheckCircle).size(ui::ICON_SM).flex_none().text_color(seal)))
+        .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
         .when_some(url, |d, url| d.cursor_pointer().hover(move |s| s.bg(hover)).on_click(move |_, _, cx| cx.open_url(&url)))
 }
 
 // The mark tinted dark or light by its colour; a service without a mark gets its initial.
 fn brand_tile(kind: &str, platform: &str, color: Option<u32>) -> Div {
-    let fill: Hsla = color.map_or_else(|| palette::oklch(0.5, 0.1, ui::name_hue(kind)), |c| rgb(c).into());
-    let ink: Hsla = if luminance(fill) > 0.5 { rgb(0x1A1A1E).into() } else { gpui_kit::white() };
-    let tile = div().size(px(20.)).flex_none().squircle(RADIUS_XS).bg(fill).flex().items_center().justify_center().text_color(ink);
+    let fill: Hsla = color.map_or_else(|| palette::oklch(0.5, 0.1, ui::name_hue(kind)), palette::data_color);
+    let ink: Hsla = if luminance(fill) > 0.5 { palette::ink_on_light() } else { gpui_kit::white() };
+    let tile = div().size_5().flex_none().squircle(RADIUS_XS).bg(fill).flex().items_center().justify_center().text_color(ink);
     match crate::icons::brand_mark(kind) {
         Some(path) => tile.child(svg().path(path).size(px(13.)).text_color(ink)),
-        None => tile.text_size(px(12.)).font_weight(FontWeight::BOLD).child(platform.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default()),
+        None => tile.text_size(ui::TEXT_XS).font_weight(FontWeight::BOLD).child(platform.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default()),
     }
 }
 

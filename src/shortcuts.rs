@@ -187,19 +187,19 @@ pub(crate) fn rows(group: Group) -> Vec<Row> {
 // Combos read "or", each in this platform's order and caps.
 pub(crate) fn caps(keys: &[&str], cx: &App) -> Div {
     let muted = palette::muted(cx);
-    div().flex().items_center().gap(px(4.)).flex_none().children(keys.iter().enumerate().flat_map(|(i, combo)| {
-        let or = (i > 0).then(|| div().px(px(2.)).text_size(px(12.)).text_color(muted).child("or").into_any_element());
+    div().flex().items_center().gap_1().flex_none().children(keys.iter().enumerate().flat_map(|(i, combo)| {
+        let or = (i > 0).then(|| div().px_0p5().text_size(ui::TEXT_XS).text_color(muted).child("or").into_any_element());
         or.into_iter().chain([key_caps(&platform_combo(combo), cx).into_any_element()])
     }))
 }
 
 pub(crate) fn row(id: impl Into<SharedString>, row: &Row, line: bool, cx: &App) -> Stateful<Div> {
-    ui::settings_row(id, line, cx).min_h(px(40.)).py(px(6.)).child(div().flex_1().min_w_0().text_color(palette::strong(cx)).child(row.label)).child(caps(&row.keys, cx))
+    ui::settings_row(id, line, cx).min_h_10().py_1p5().child(div().flex_1().min_w_0().text_color(palette::strong(cx)).child(row.label)).child(caps(&row.keys, cx))
 }
 
 // A group's heading inside a card (the settings list, where every group shares one card).
 pub(crate) fn group_heading(group: Group, cx: &App) -> Div {
-    div().px(px(12.)).pt(px(14.)).pb(px(4.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(group.title())
+    div().px_3().pt_3p5().pb_1().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(group.title())
 }
 
 impl Waffle {
@@ -412,16 +412,16 @@ impl Waffle {
         let head = div()
             .flex()
             .items_center()
-            .gap(px(12.))
-            .child(div().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Keyboard combos"))
+            .gap_3()
+            .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Keyboard combos"))
             .child(key_caps(&platform_combo(COMBOS_KEY), cx))
             .child(div().flex_1())
             .child(ui::icon_button("combos-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.set_keyboard_combos(false, cx))));
         let blurb = div().text_color(palette::muted(cx)).child("Master these to be the greatest Waffle Waffle Revolution player");
         let app: &App = cx;
-        let column = |groups: &[Group]| div().flex_1().min_w_0().flex().flex_col().gap(px(20.)).children(groups.iter().map(|&g| dialog_group(g, app)));
+        let column = |groups: &[Group]| div().flex_1().min_w_0().flex().flex_col().gap_5().children(groups.iter().map(|&g| dialog_group(g, app)));
         let columns = match wide {
-            true => div().flex().items_start().gap(px(24.)).child(column(&Group::ALL[..2])).child(column(&Group::ALL[2..])),
+            true => div().flex().items_start().gap_6().child(column(&Group::ALL[..2])).child(column(&Group::ALL[2..])),
             false => column(&Group::ALL),
         };
         // Room under the cap for the head and blurb; the groups scroll in the rest.
@@ -441,7 +441,7 @@ impl Waffle {
         }
         let open = ui::button("open-combos", Tone::Secondary, cx)
             .small()
-            .child(Icon::new(Glyph::Keyboard).size(px(16.)))
+            .child(Icon::new(Glyph::Keyboard).size(ui::ICON_MD))
             .child("Keyboard combos")
             .child(key_caps(&platform_combo(COMBOS_KEY), cx))
             .on_click(cx.listener(|this, _, _, cx| this.set_keyboard_combos(true, cx)));
@@ -451,12 +451,12 @@ impl Waffle {
 
 fn dialog_group(group: Group, cx: &App) -> Div {
     let rows = rows(group);
-    let note = group.note().map(|n| div().px(px(4.)).text_size(px(12.)).text_color(palette::muted(cx)).child(n));
+    let note = group.note().map(|n| div().px_1().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(n));
     div()
         .flex()
         .flex_col()
-        .gap(px(6.))
-        .child(div().px(px(4.)).text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(group.title()))
+        .gap_1p5()
+        .child(div().px_1().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(group.title()))
         .children(note)
         .child(ui::settings_card(cx).children(rows.iter().enumerate().map(|(i, r)| row(format!("combo-{}-{i}", group.title()), r, i > 0, cx))))
 }
