@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | notification-settings | notification-settings-muted | inbox-mark-read | mark-unread | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | app-replies | components | components-users | components-v2 | command-picker | command-picker-search | command-options | command-options-loading | command-options-failed | command-options-empty | command-options-tab | command-options-errors | app-modal | app-modal-error | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | call-streams-failed | call-streams-reconnecting | call-streams-issues | call-streams-hidden | inbox-saved | games | stage | stage-audience | stage-requests | stage-invited | stage-waiting | stage-start | stage-start-dialog | stage-edit | stage-end | stage-full | requests | requests-spam | requests-empty | request-open | active-now | active-now-empty | group-dm | group-picker | group-edit | group-leave | updating (the launch splash alone). | send-options | tts
+// WAFFLE_DEMO=chat | chat-compact | chat-large-text | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | keyboard-combos | appearance | appearance-scrolled | settings-accessibility | notifications | content-social | chat-settings | settings-contrast | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | notification-settings | notification-settings-muted | inbox-mark-read | mark-unread | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | app-replies | components | components-users | components-v2 | command-picker | command-picker-search | command-options | command-options-loading | command-options-failed | command-options-empty | command-options-tab | command-options-errors | app-modal | app-modal-error | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | call-streams-failed | call-streams-reconnecting | call-streams-issues | call-streams-hidden | inbox-saved | games | stage | stage-audience | stage-requests | stage-invited | stage-waiting | stage-start | stage-start-dialog | stage-edit | stage-end | stage-full | requests | requests-spam | requests-empty | request-open | active-now | active-now-empty | group-dm | group-picker | group-edit | group-leave | embed-suppress | system-messages | system-messages-open | chat-media-settings | updating (the launch splash alone). | send-options | tts
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -45,6 +45,9 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
     let messages = match scene {
         _ if load => load_messages(),
         "embeds" => embed_messages(),
+        "chat-compact" | "chat-large-text" => display_messages(),
+        "system-messages" | "system-messages-open" => system_messages(),
+        "embed-suppress" => embed_suppress_messages(),
         _ => messages(),
     };
     waffle.feeds.insert("general".into(), Feed { messages: std::sync::Arc::new(messages), loaded: true, ..Default::default() });
@@ -54,6 +57,11 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
     }
     waffle.on_event(Event::Typing { channel_id: "general".into(), user_id: "8388608".into(), name: Some("Wren".into()) }, cx);
     match scene {
+        // The run of four joins opened to each join's own line.
+        "system-messages-open" => {
+            let first = waffle.feeds.get("general").and_then(|f| f.messages.iter().find(|m| m.kind == 7).map(|m| m.id.clone()));
+            waffle.open_join_runs.extend(first);
+        }
         // An account big enough that the rail, the channel list and the member list all scroll.
         "busy" => {
             let servers: Vec<Guild> = (1..=24u8).map(|n| {
@@ -72,6 +80,20 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                 ListItem::Member(Member { user, roles: Vec::new(), presence: Presence { status: Presence_::Offline, custom: None, activity: None, rich: None, ..Default::default() }, boosting_since: None })
             }));
             waffle.on_event(Event::MemberList { guild_id: "1".into(), groups: vec![("r1".into(), 2), ("online".into(), 3), ("offline".into(), 81)], ops: vec![ListOp::Sync { start: 0, items }] }, cx);
+        }
+        // Compact display with its small avatars, and the send button.
+        "chat-compact" => {
+            waffle.account_settings.message_display_compact = true;
+            waffle.prefs.compact_avatars = true;
+            waffle.prefs.send_button = true;
+        }
+        // The largest text, no space between groups, role dots, underlined links and image descriptions.
+        "chat-large-text" => {
+            waffle.prefs.chat_font_size = 24;
+            waffle.prefs.group_spacing = Some(0);
+            waffle.prefs.role_style = crate::settings::RoleStyle::NextToNames;
+            waffle.prefs.underline_links = true;
+            waffle.prefs.show_image_descriptions = true;
         }
         // One draft waiting in #staff-notes (its pencil in the sidebar), another with a chip in the open composer.
         "drafts" => {
@@ -160,6 +182,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         }
         "emoji" => waffle.open_emoji_picker(crate::EmojiTarget::Composer, window, cx),
         "switcher" => waffle.open_switcher(window, cx),
+        "keyboard-combos" => waffle.set_keyboard_combos(true, cx),
         "status" => waffle.status_menu = true,
         "status-custom" => {
             waffle.custom_status = Some(demo_custom_status());
@@ -230,6 +253,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             }
         }
         "appearance" => waffle.open_settings(crate::settings::Page::Appearance, window, cx),
+        "settings-accessibility" => waffle.open_settings(crate::settings::Page::Accessibility, window, cx),
         // The nav scrolled up under its header strip, where the traffic lights sit.
         "appearance-scrolled" => {
             waffle.open_settings(crate::settings::Page::Appearance, window, cx);
@@ -242,6 +266,15 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         "notifications" => waffle.open_settings(crate::settings::Page::Notifications, window, cx),
         "content-social" => waffle.open_settings(crate::settings::Page::ContentSocial, window, cx),
         "chat-settings" => waffle.open_settings(crate::settings::Page::Chat, window, cx),
+        // The whole look turned: muted colour, high contrast, compact lists and switch indicators. In memory
+        // only; changing any setting in the scene saves them to the real prefs file.
+        "settings-contrast" => {
+            let prefs = &mut waffle.prefs;
+            (prefs.saturation, prefs.high_contrast, prefs.ui_density, prefs.switch_icons) = (0.3, true, crate::settings::Density::Compact, true);
+            waffle.apply_prefs();
+            crate::palette::apply(cx);
+            waffle.open_settings(crate::settings::Page::Accessibility, window, cx);
+        }
         // Typed once the window is up, as `mention` does.
         "settings-search" => {
             waffle.open_settings(crate::settings::Page::Account, window, cx);
@@ -491,8 +524,12 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // shape, separator and buttons; a gallery container at its items' own sizes with a spoilered item, a
         // file with its size and a spoilered one; a section with a spoilered thumbnail; a lone gallery item
         // spanning its container; a spoiler container.
-
         "components-v2" => demo_components_v2(waffle),
+        // An upload, a link image, a GIF, an animated emoji, a sticker and spoilers, with uploads kept out of
+        // line, GIFs still until hovered, stickers moving on hover and spoilers always shown.
+        "chat-media-settings" => demo_media_settings(waffle),
+        // Your message held hovered, so its article card shows the ✕ without the pointer on it.
+        "embed-suppress" => waffle.hovered_message = Some("301".into()),
         // Report Message on someone else's message, through a sample menu (Discord's real one is server-sent).
         // `-submit` stops at Submit with Also block ticked; `-sent` is the thank-you node; `-user` reports a person.
         // Signed out, nothing is sent.
@@ -1590,6 +1627,142 @@ fn embed_messages() -> Vec<Message> {
     ]
 }
 
+// design/explore-system-messages.html's notices: a folded run of four joins, a lone join with its wave
+// button, bot joins, boosts, threads, a follow, stage lines, group adds and leaves, a rename, discovery, a
+// poll result, AutoMod, thread starters (whole, deleted, not loaded) and a type Discord draws nothing for.
+fn system_messages() -> Vec<Message> {
+    let at = |minute: u32| format!("2026-11-21T12:{minute:02}:00Z");
+    // Real snowflakes from the times, so each join picks its line the way Discord does.
+    let id = |minute: u32| {
+        let ms = chrono::DateTime::parse_from_rfc3339(&at(minute)).map_or(0, |t| t.timestamp_millis() as u64);
+        (((ms - 1_420_070_400_000) << 22) | u64::from(minute)).to_string()
+    };
+    let notice = |minute: u32, kind: u8, author: &User, content: &str| Message {
+        id: id(minute),
+        channel_id: "general".into(),
+        guild_id: Some("1".into()),
+        author: author.clone(),
+        content: content.into(),
+        timestamp: at(minute),
+        kind,
+        ..Default::default()
+    };
+    let bot = |id: &str, name: &str| User { bot: true, ..user(id, name) };
+    let field = |name: &str, value: &str| (name.to_owned(), value.to_owned(), false);
+    let (ana, jun, rosa, kai, mira, theo) = (user("20971520", "Ana"), user("25165824", "Jun"), user("29360128", "Rosa"), user("33554432", "Kai"), user("37748736", "Mira"), user("41943040", "Theo"));
+    let me = me_user();
+    let parent = Message { content: "ok who's doing the patch 7 tier list, I'll start: honey is S tier".into(), ..notice(0, 0, &jun, "") };
+
+    let mut carl = notice(7, 7, &bot("46137344", "Carl-bot"), "");
+    carl.actor = Some(theo.clone());
+    let mut thread = notice(12, 18, &jun, "gpui list virtualisation");
+    thread.reference_channel = Some("t1".into());
+    let mut added = notice(20, 1, &ana, "");
+    added.mentions = vec![rosa.clone()];
+    let mut poll = notice(24, 46, &ana, "");
+    poll.reply_to = Some(id(0));
+    poll.embeds = vec![Embed {
+        poll: Some(crate::discord::PollResult { question: "Best waffle topping for the Friday stream, honey or the questionable syrup?".into(), winner: Some(("Honey".into(), Some(Emoji::unicode("🍯")))), winner_votes: 7, total_votes: 12 }),
+        ..Default::default()
+    }];
+    let mut automod = notice(26, 24, &rosa, "");
+    automod.embeds = vec![Embed {
+        description: Some("free nitro at discord-gift.ru hurry".into()),
+        fields: vec![
+            field("rule_name", "Block scam links"),
+            field("channel_id", "general"),
+            field("keyword", "discord-gift"),
+            field("keyword_matched_content", "discord-gift"),
+            field("flagged_message_id", &id(25)),
+            field("timeout_duration", "600"),
+        ],
+        ..Default::default()
+    }];
+    let mut starter = notice(28, 21, &jun, "");
+    starter.reply = Some(Box::new(parent.clone()));
+    starter.reply_to = Some(parent.id.clone());
+    let mut deleted = notice(29, 21, &jun, "");
+    deleted.reference_deleted = true;
+    vec![
+        parent,
+        notice(1, 7, &ana, ""),
+        notice(2, 7, &jun, ""),
+        notice(3, 7, &rosa, ""),
+        notice(4, 7, &kai, ""),
+        Message { content: "welcome all four of you!".into(), ..notice(5, 0, &me, "") },
+        notice(6, 7, &mira, ""),
+        carl,
+        notice(8, 7, &bot("50331648", "Statsy"), ""),
+        notice(9, 8, &rosa, ""),
+        notice(10, 10, &kai, "2"),
+        notice(11, 22, &theo, ""),
+        thread,
+        notice(13, 12, &theo, "Rust News #announcements"),
+        notice(14, 27, &theo, "Friday Q&A"),
+        notice(15, 29, &mira, ""),
+        notice(16, 30, &kai, ""),
+        notice(17, 31, &theo, "Friday Q&A: patch 7"),
+        notice(18, 28, &theo, "Friday Q&A: patch 7"),
+        notice(19, 4, &theo, "late-night-games"),
+        added,
+        notice(21, 2, &jun, ""),
+        notice(22, 14, &theo, ""),
+        notice(23, 15, &theo, ""),
+        poll,
+        automod,
+        notice(27, 36, &theo, "2026-11-22T09:44:00Z"),
+        starter,
+        deleted,
+        notice(30, 21, &jun, ""),
+    ]
+}
+
+// Remove embeds and YouTube (design/explore-system-messages.html): your link with an article card (✕ on
+// hover), a bot's embed-only post (no ✕), a message whose embeds were removed (flag 4, so none show),
+// then a YouTube video and a Short, each with Play and Open Link.
+fn embed_suppress_messages() -> Vec<Message> {
+    let post = |id: &str, author: User, ts: &str, content: &str, embeds: Vec<Embed>| Message {
+        id: id.into(),
+        channel_id: "general".into(),
+        guild_id: Some("1".into()),
+        author,
+        timestamp: ts.into(),
+        content: content.into(),
+        embeds,
+        ..Default::default()
+    };
+    let pic = |seed: &str, width: f32, height: f32| Media { url: avatar_url(seed, None), width, height, kind: MediaKind::Image, ..Default::default() };
+    let article = Embed {
+        url: Some("https://blog.rust-lang.org/2026/11/20/Rust-1.95.0.html".into()),
+        provider: Some("Rust Blog".into()),
+        title: Some("Announcing Rust 1.95.0".into()),
+        description: Some("The Rust team is happy to announce a new version of Rust, 1.95.0. Rust is a programming language empowering everyone to build reliable and efficient software.".into()),
+        ..Default::default()
+    };
+    let mut bot = user("33554432", "Raidbot");
+    bot.bot = true;
+    let raid = Embed { rich: true, color: Some(0xE67E22), title: Some("Raid tonight: Ashen Peaks".into()), description: Some("Sign-ups are open.".into()), ..Default::default() };
+    let youtube = |id: &str, title: &str, still: Media| Embed {
+        video: true,
+        color: Some(0xFF0000),
+        url: Some(format!("https://www.youtube.com/watch?v={id}")),
+        provider: Some("YouTube".into()),
+        provider_url: Some("https://www.youtube.com".into()),
+        title: Some(title.into()),
+        images: vec![still],
+        ..Default::default()
+    };
+    let wren = user("8388608", "Wren");
+    let suppressed = Message { flags: crate::discord::message_flag::SUPPRESS_EMBEDS, ..post("303", wren.clone(), "2026-11-20T22:05:00Z", "no preview on this one https://blog.rust-lang.org/", vec![article.clone()]) };
+    vec![
+        post("301", me_user(), "2026-11-20T22:02:00Z", "this is the one I meant https://blog.rust-lang.org/2026/11/20/Rust-1.95.0.html", vec![article]),
+        post("302", bot, "2026-11-20T22:03:00Z", "", vec![raid]),
+        suppressed,
+        post("304", wren.clone(), "2026-11-20T22:10:00Z", "https://youtu.be/dQw4w9WgXcQ", vec![youtube("dQw4w9WgXcQ", "How waffle irons are made", pic("5", 1280., 720.))]),
+        post("305", wren, "2026-11-20T22:11:00Z", "https://youtube.com/shorts/abc123", vec![youtube("abc123", "honey pour asmr #shorts", pic("6", 720., 1280.))]),
+    ]
+}
+
 fn messages() -> Vec<Message> {
     let message = |id: &str, author: User, roles: &[&str], ts: &str, content: &str| Message {
         id: id.into(),
@@ -1650,6 +1823,39 @@ fn messages() -> Vec<Message> {
         Message { pinned: true, ..message("106", abyss, &["r2"], "2026-11-14T08:20:00Z", "the build so far:\n    Brightline 8-core CPU\n    Coldfront 240 mm cooler\n    32 GB memory\n<@4194304>") },
         pin_notice,
     ]
+}
+
+// The usual feed, then a busy run: several authors, continuations, links and a described picture.
+fn display_messages() -> Vec<Message> {
+    let message = |id: &str, author: User, role: &str, ts: &str, content: &str| Message {
+        id: id.into(),
+        channel_id: "general".into(),
+        guild_id: Some("1".into()),
+        author,
+        roles: Some(vec![role.into()]),
+        content: content.into(),
+        timestamp: ts.into(),
+        ..Default::default()
+    };
+    let (kiwi, wren, moss) = (user("4194304", "kiwi"), user("8388608", "Wren"), user("12582912", "moss lantern"));
+    let mut photo = message("208", wren.clone(), "r2", "2026-11-14T08:31:00Z", "the view from the pass");
+    photo.media = vec![Media { url: avatar_url("3", None), width: 320., height: 200., kind: MediaKind::Image, description: Some("A snowy ridge at sunrise, two tents in the foreground".into()), ..Default::default() }];
+    let mut reply = message("209", kiwi.clone(), "r1", "2026-11-14T08:33:00Z", "worth the climb");
+    reply.reply_to = Some("208".into());
+    reply.reply = Some(Box::new(photo.clone()));
+    let mut feed = messages();
+    feed.extend([
+        message("201", kiwi.clone(), "r1", "2026-11-14T08:24:00Z", "release notes are up: https://example.com/notes/0.14"),
+        message("202", kiwi.clone(), "r1", "2026-11-14T08:24:30Z", "and the [migration guide](https://example.com/migrate) too"),
+        message("203", kiwi, "r1", "2026-11-14T08:25:00Z", "ping me if anything breaks"),
+        message("204", moss.clone(), "r2", "2026-11-14T08:27:00Z", "on it"),
+        message("205", moss, "r2", "2026-11-14T08:27:20Z", "the `cargo update` step needed `--precise`, otherwise smooth"),
+        message("206", wren.clone(), "r2", "2026-11-14T08:29:00Z", "a long one, so the line has to wrap: the new list virtualises rows, keeps their heights cached between frames, and only measures what scrolls into view, which is why the big channels feel light now"),
+        message("207", wren, "r2", "2026-11-14T08:30:00Z", "also hiked this weekend"),
+        photo,
+        reply,
+    ]);
+    feed
 }
 
 // The header search focused: its filters and made-up history, or a filter's values being picked. The field
@@ -1979,6 +2185,30 @@ fn demo_forwarded(waffle: &mut Waffle) {
     let mut messages = feed.messages.as_ref().clone();
     messages.push(post("901", "", Some(Box::new(original))));
     messages.push(post("902", "you two need to see this", None));
+    feed.messages = std::sync::Arc::new(messages);
+    waffle.list.reset(waffle.feeds.get("general").map_or(0, |f| f.messages.len()));
+}
+
+fn demo_media_settings(waffle: &mut Waffle) {
+    use crate::discord::{File, Sticker, StickerFormat};
+    waffle.account_settings.inline_attachment_media = false;
+    waffle.account_settings.gif_auto_play = false;
+    waffle.account_settings.animate_stickers = 1;
+    waffle.prefs.spoilers = crate::settings::Spoilers::Always;
+    let Some(feed) = waffle.feeds.get_mut("general") else { return };
+    let wren = user("8388608", "Wren");
+    let post = |id: &str, content: &str| Message { id: id.into(), channel_id: "general".into(), guild_id: Some("1".into()), author: wren.clone(), content: content.into(), timestamp: chrono::Utc::now().to_rfc3339(), ..Default::default() };
+    let upload = |name: &str, size: u64| File { name: name.into(), url: format!("https://cdn.discordapp.com/attachments/demo/{name}"), size, ..Default::default() };
+    let mut messages = feed.messages.as_ref().clone();
+    messages.push(Message {
+        media: vec![Media { url: avatar_url("3", None), width: 640., height: 400., kind: MediaKind::Image, ..Default::default() }, Media { url: avatar_url("5", None), width: 640., height: 400., kind: MediaKind::Image, ..Default::default() }],
+        media_files: vec![upload("sunset.png", 482_113), upload("SPOILER_ending.png", 210_554)],
+        ..post("951", "two from last night, second one spoils the ending")
+    });
+    messages.push(Message { media: vec![Media { url: avatar_url("4", None), width: 320., height: 320., kind: MediaKind::Image, ..Default::default() }], ..post("952", "https://example.com/cat.png") });
+    messages.push(Message { media: vec![Media { url: "https://example.com/dance.mp4".into(), width: 320., height: 240., kind: MediaKind::Gif { poster: avatar_url("2", None) }, ..Default::default() }], ..post("953", "https://tenor.com/view/dance-gif-1") });
+    messages.push(post("954", "<a:dance:1328465377218269257> the boss dies in phase ||two, not three||"));
+    messages.push(Message { stickers: vec![Sticker { id: "781291131828699156".into(), name: "Wave".into(), format: StickerFormat::Apng, tags: String::new() }], ..post("955", "") });
     feed.messages = std::sync::Arc::new(messages);
     waffle.list.reset(waffle.feeds.get("general").map_or(0, |f| f.messages.len()));
 }

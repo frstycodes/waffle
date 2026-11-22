@@ -27,6 +27,8 @@ use crate::{
     motion,
     overlays::ComposerPicker,
     palette::{self, Level},
+    settings::RoleStyle,
+    system_message::{Sentence, notice_line},
     ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, RADIUS_XS, Squircle},
 };
 
@@ -46,7 +48,7 @@ const GALLERY_GAP: f32 = 4.;
 // A Components V2 gallery's lone item spans its container, up to this tall.
 const GALLERY_MAX_H: f32 = 360.;
 
-const AVATAR: f32 = 40.;
+pub(crate) const AVATAR: f32 = 40.;
 // The avatar column plus the gap to the content column: where replies and continuations line up.
 pub(crate) const CONTENT_INSET: f32 = AVATAR + 16.;
 // The unread bar's room at the feed's top: 8 above it, its 36, 8 below.
@@ -358,8 +360,11 @@ impl Waffle {
             let message = &messages[ix];
             let previous = ix.checked_sub(1).map(|i| &messages[i]);
             let new_day = day(&message.timestamp) != previous.and_then(|p| day(&p.timestamp));
-            let starts_group = new_day || message.reply.is_some() || previous.is_none_or(|p| p.call.is_some() || p.pin_notice || !continues(p, message));
-            let row = message_row(message, starts_group, &ctx, cx);
+            let starts_group = new_day || message.reply.is_some() || previous.is_none_or(|p| crate::system_message::is_notice(p) || !continues(p, message));
+            let row = match crate::system_message::is_notice(message) {
+                true => crate::system_message::row(&messages, ix, &ctx, cx),
+                false => message_row(message, starts_group, &ctx, cx),
+            };
             // One accent line above the first message after your read position.
             let first_unread = ctx.unread_marker.is_some_and(|read| crate::order(&message.id) > read && previous.is_none_or(|p| crate::order(&p.id) <= read));
             let start = ctx.dm_start.as_ref().filter(|_| ix == 0).map(|s| crate::dm_start::dm_start_header(s, ctx.this.clone(), cx));
@@ -449,6 +454,14 @@ impl Waffle {
             previews: self.file_previews.clone(),
             embeds: self.account_settings.render_embeds,
             reactions: self.account_settings.render_reactions,
+            compact: self.account_settings.message_display_compact,
+            compact_avatars: self.prefs.compact_avatars,
+            font_size: f32::from(self.prefs.chat_font_size),
+            group_spacing: f32::from(self.prefs.group_spacing(self.account_settings.message_display_compact)),
+            role_style: self.prefs.role_style,
+            underline_links: self.prefs.underline_links,
+            name_styles: self.prefs.display_name_styles,
+            media: self.media_prefs(),
             // Later entries win: the server's member cache last, so nicknames beat the account names
             // that history loaded over REST carries (it has no member objects).
             names: messages
@@ -486,6 +499,7 @@ impl Waffle {
             column,
             quick_reactions: self.prefs.frequent_emojis(3, &["💯", "👍", "👎"]),
             shift: self.shift_held,
+            manage_messages: channel.is_some_and(|c| self.can_in(&c.id, crate::discord::perm::MANAGE_MESSAGES)),
             facts: crate::message_menu::Facts {
                 mine: false,
                 manage: channel.is_some_and(|c| self.can_in(&c.id, crate::discord::perm::MANAGE_MESSAGES)),
@@ -499,6 +513,7 @@ impl Waffle {
             poll_picks: self.poll_picks.clone(),
             poll_peek: self.poll_peek.clone(),
             components: self.component_view(messages),
+            notices: self.notice_facts(messages, channel),
         })
     }
 
@@ -529,7 +544,9 @@ impl Waffle {
             .child(self.composer_field(strong, cx))
             .children([(ComposerPicker::Gifs, "composer-gif", Glyph::Gif, "Open GIF picker"), (ComposerPicker::Stickers, "composer-sticker", Glyph::Sticker, "Open sticker picker"), (ComposerPicker::Emoji, "composer-emoji", Glyph::Emoji, "Select Emoji")].map(|(picker, id, glyph, label)| {
                 ui::icon_button(id, glyph, label, cx).toggled(open_picker == Some(picker), cx).on_click(cx.listener(move |this, _, window, cx| this.show_composer_picker(picker, window, cx)))
-            }));
+            }))
+            // Not verified: the tooltip; Discord's chat box shows its button only when this setting is on.
+            .when(self.prefs.send_button, |r| r.child(ui::icon_button("composer-send", Glyph::PaperPlane, "Send Message", cx).disabled(!self.has_draft).on_click(cx.listener(|this, _, window, cx| this.submit(false, window, cx)))));
         let card = div()
             .relative()
             .mx(px(16.))
@@ -1020,6 +1037,34 @@ impl RowContext {
     pub(crate) fn this(&self) -> WeakEntity<Waffle> {
         self.this.clone()
     }
+
+    // A name's line box at the chat's text size: 22px at 16, Discord's 1.375.
+    fn name_line(&self) -> f32 {
+        (self.font_size * 1.375).round()
+    }
+
+    // The body's first line box (the row's 1.45 line height), which the time beside it centres in.
+    fn body_line(&self) -> f32 {
+        (self.font_size * 1.45).round()
+    }
+
+    fn role_marks(&self, user_id: &str) -> (Option<Hsla>, Option<Hsla>) {
+        role_marks(self.role_style, self.colors.get(user_id).copied())
+    }
+}
+
+// Role colors: the name's ink and the dot after it, as each style shows someone's role colour.
+pub(crate) fn role_marks(style: RoleStyle, color: Option<Hsla>) -> (Option<Hsla>, Option<Hsla>) {
+    match style {
+        RoleStyle::InNames => (color, None),
+        RoleStyle::NextToNames => (None, color),
+        RoleStyle::Hidden => (None, None),
+    }
+}
+
+// Not verified: Discord's dot size; 10px as in design/explore-settings.html.
+pub(crate) fn role_dot(color: Hsla) -> Div {
+    div().size(px(10.)).flex_none().rounded_full().bg(color)
 }
 
 pub(crate) struct RowContext {
@@ -1030,12 +1075,22 @@ pub(crate) struct RowContext {
     // Settings › Chat: Discord's render_embeds and render_reactions.
     embeds: bool,
     reactions: bool,
+    // Accessibility and Chat settings: Discord's message display, text size, group spacing, role colours,
+    // link underlines, display-name styles and image descriptions.
+    compact: bool,
+    compact_avatars: bool,
+    font_size: f32,
+    group_spacing: f32,
+    role_style: RoleStyle,
+    underline_links: bool,
+    name_styles: bool,
+    media: MediaPrefs,
     names: HashMap<String, String>,
     // The chat's surface, for drawing authors' display-name styles on; None in a server.
     style_ground: Option<Hsla>,
     colors: HashMap<String, Hsla>,
     mentions_me: std::collections::HashSet<String>,
-    channel_names: HashMap<String, String>,
+    pub(crate) channel_names: HashMap<String, String>,
     role_names: HashMap<String, String>,
     mention_fill: Hsla,
     mention_hover: Hsla,
@@ -1062,6 +1117,7 @@ pub(crate) struct RowContext {
     // The toolbar's three quick reactions: most used, padded with 💯 😆 💖.
     quick_reactions: Vec<Emoji>,
     shift: bool,
+    manage_messages: bool,
     // What the channel lets you do to a message, for the Shift toolbar (`mine` set per message).
     facts: crate::message_menu::Facts,
     saved_ids: std::rc::Rc<std::collections::HashSet<String>>,
@@ -1070,6 +1126,7 @@ pub(crate) struct RowContext {
     poll_picks: HashMap<String, Vec<u32>>,
     poll_peek: std::collections::HashSet<String>,
     pub(crate) components: crate::components::ComponentView,
+    pub(crate) notices: crate::system_message::Facts,
 }
 
 // More than a few rows below the viewport: the feed is scrolled away from its newest message.
@@ -1078,14 +1135,8 @@ pub(crate) fn away_from_present(visible_end: usize, count: usize) -> bool {
 }
 
 // An avatar column and a content column; a continuation shows its time in the gutter on hover, and the
-// toolbar floats at the row's top right.
+// toolbar floats at the row's top right. Compact display puts each message on one line after its time.
 fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
-    if let Some(call) = &message.call {
-        return call_line(message, call, ctx, cx);
-    }
-    if message.pin_notice {
-        return pin_line(message, ctx, cx);
-    }
     // A Components V2 message lays out its own media and files.
     let v2 = message.flags & crate::app_commands::COMPONENTS_V2 != 0;
     let ephemeral = components::is_ephemeral(message);
@@ -1112,21 +1163,27 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
     };
     let pending = message.state != SendState::Sent;
     let landed = ctx.flash.as_ref() == Some(&message.id);
+    let text = content(message, ctx, cx);
+    let lead = match ctx.compact {
+        true => compact_line(message, starts_group, text, ctx, cx),
+        false => text,
+    };
     let body = div()
         .relative()
         .flex_1()
         .min_w_0()
         .flex()
         .flex_col()
-        .text_size(px(16.))
+        .text_size(px(ctx.font_size))
         .text_color(ink)
-        .children(content(message, ctx, cx))
+        .children(message.reply.as_ref().filter(|_| ctx.compact).map(|reply| reply_preview(reply, message.reply_to.clone(), ctx, cx)))
+        .children(lead)
         .children(components::interaction_status(message, ctx, cx))
         .children(message.forward.as_ref().map(|original| forward_card(original, ctx, cx)))
         .children(media.map(|m| div().when(pending, |d| d.opacity(0.6)).child(m)))
-        .children(message.stickers.iter().map(|s| div().when(pending, |d| d.opacity(0.6)).child(crate::stickers::in_chat(s, cx))))
+        .children(message.stickers.iter().map(|s| div().when(pending, |d| d.opacity(0.6)).child(crate::stickers::in_chat(s, ctx.media.stickers.plays(ctx.hovers(message)), cx))))
         .children(message.poll.as_ref().map(|p| poll_card(message, p, ctx, cx)))
-        .children(message.embeds.iter().filter(|_| ctx.embeds).enumerate().map(|(i, e)| embed_card(e, message.reply_to.as_deref(), format!("embed-{}-{i}", message.id), ctx, cx)))
+        .children(shown_embeds(message, ctx).iter().enumerate().map(|(i, e)| embed_card(e, Some(message), message.reply_to.as_deref(), format!("embed-{}-{i}", message.id), ctx, cx)))
         .children(link_cards(message, ctx, cx))
         .children(message.thread.as_ref().map(|t| thread_card(t, ctx, cx)))
         .when(!v2, |b| b.children(files(message, ctx, cx)))
@@ -1158,13 +1215,17 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .on_hover(track_message_hover(message, ctx));
     // Last, so it paints over the message's own content where it overlaps it.
     let toolbar = hovered.then(|| actions(message, mine, ctx, cx));
+    if ctx.compact {
+        let line = div().flex().gap(px(8.)).child(compact_time(message, ctx, cx)).child(body);
+        return inset(with_message_menu(row.when(starts_group, |r| r.mt(px(ctx.group_spacing))).child(line).children(toolbar), message, ctx), mention);
+    }
     if !starts_group {
         let gutter = div()
             .w(px(AVATAR))
             .flex_none()
             .flex()
             .justify_end()
-            .line_height(px(23.))
+            .line_height(px(ctx.body_line()))
             .text_size(px(12.))
             .text_color(palette::faint(cx))
             .whitespace_nowrap()
@@ -1175,7 +1236,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         return inset(with_message_menu(row.child(div().flex().gap(px(16.)).child(gutter).child(body)).children(toolbar), message, ctx), mention);
     }
     let row = row
-        .mt(px(12.))
+        .mt(px(ctx.group_spacing))
         .pt(px(4.))
         .children(message.reply.as_ref().map(|reply| reply_preview(reply, message.reply_to.clone(), ctx, cx)))
         .children(components::used_command(message, ctx, cx))
@@ -1212,7 +1273,7 @@ pub(crate) fn search_hit(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) 
         .children(content(message, ctx, cx))
         .children(message.forward.as_ref().map(|original| forward_card(original, ctx, cx)))
         .children(media.map(|m| div().flex_none().child(m)))
-        .children(message.embeds.iter().enumerate().map(|(i, e)| embed_card(e, message.reply_to.as_deref(), format!("hit-embed-{}-{i}", message.id), ctx, cx)))
+        .children(message.embeds.iter().enumerate().map(|(i, e)| embed_card(e, None, message.reply_to.as_deref(), format!("hit-embed-{}-{i}", message.id), ctx, cx)))
         .children(files(message, ctx, cx));
     div()
         .flex()
@@ -1255,34 +1316,90 @@ fn fit_frame((width, height): (f32, f32), (max_w, max_h): (f32, f32)) -> (f32, f
 }
 
 // Rows sit 8px in from the feed's edges, so their hover fill reads as a rounded card; a mention is flush.
-fn inset(row: AnyElement, flush: bool) -> AnyElement {
+pub(crate) fn inset(row: AnyElement, flush: bool) -> AnyElement {
     div().w_full().when(!flush, |d| d.px(px(8.))).child(row).into_any_element()
 }
 
-// Name in its top role's colour, tags, the time, and a pin when pinned.
-fn message_head(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> impl IntoElement + use<> {
-    let name_color = ctx.colors.get(&message.author.id).copied().unwrap_or(palette::strong(cx));
-    let name = ctx.name_of(&message.author);
-    let runs = ctx.style_ground.zip(message.author.name_style.as_ref()).map(|(ground, style)| name_runs(&name, style, ground)).unwrap_or_default();
+// The author, the time, and a pin when pinned.
+pub(crate) fn message_head(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> impl IntoElement + use<> {
     // GAP: gpui text reports no baseline to taffy, so `items_baseline` would line up box bottoms and
-    // lift the name. One 22px line box, centred, with the smaller time nudged 1px, shares a baseline.
+    // lift the name. One line box, centred, with the smaller time nudged 1px, shares a baseline.
     div()
         .flex()
         .items_center()
         .gap(px(8.))
         .min_w_0()
-        .line_height(px(22.))
-        .child(
-            crate::name_fonts::styled(profile_trigger(format!("name-{}", message.id), &message.author, ctx).min_w_0().truncate().text_size(px(16.)).font_weight(FontWeight::MEDIUM), message.author.name_style.as_ref())
-                .text_color(name_color)
-                .hover(|s| s.underline())
-                .child(StyledText::new(name).with_highlights(runs)),
-        )
-        .children(message.author.tag.as_ref().map(|tag| guild_tag(tag, cx)))
-        .when(message.author.bot, |h| h.child(ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px(px(6.)).gap(px(3.)).child(Icon::new(Glyph::Checkmark).size(px(11.))).child("APP")))
+        .line_height(px(ctx.name_line()))
+        .child(author(message, ctx, cx))
         .when(message.silent(), |h| h.child(silent_mark(&message.id, cx)))
         .child(div().flex_none().relative().top(px(1.)).whitespace_nowrap().text_size(px(12.)).text_color(palette::faint(cx)).child(format_stamp(&message.timestamp)))
         .when(message.pinned, |h| h.child(div().flex_none().self_center().text_color(palette::muted(cx)).child(Icon::new(Glyph::Pin).size(px(14.)))))
+}
+
+// The name in its display-name style (unless those are off) and its role colour or dot, per Role colors,
+// then the server tag and APP for a bot.
+fn author(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Div {
+    let (ink, dot) = ctx.role_marks(&message.author.id);
+    let name = ctx.name_of(&message.author);
+    let style = message.author.name_style.as_ref().filter(|_| ctx.name_styles);
+    let runs = ctx.style_ground.zip(style).map(|(ground, style)| name_runs(&name, style, ground)).unwrap_or_default();
+    div()
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .min_w_0()
+        .child(
+            crate::name_fonts::styled(profile_trigger(format!("name-{}", message.id), &message.author, ctx).min_w_0().truncate().text_size(px(ctx.font_size)).font_weight(FontWeight::MEDIUM), style)
+                .text_color(ink.unwrap_or(palette::strong(cx)))
+                .hover(|s| s.underline())
+                .child(StyledText::new(name).with_highlights(runs)),
+        )
+        .children(dot.map(role_dot))
+        .children(message.author.tag.as_ref().map(|tag| guild_tag(tag, cx)))
+        .when(message.author.bot, |h| h.child(ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px(px(6.)).gap(px(3.)).child(Icon::new(Glyph::Checkmark).size(px(11.))).child("APP")))
+}
+
+// Not verified: Discord's compact time column and avatar; 52px and 18px in design/explore-settings.html,
+// the column widened to fit "12:59 PM".
+const COMPACT_TIME: f32 = 56.;
+const COMPACT_AVATAR: f32 = 18.;
+
+// Compact's time column: every message shows its own time, so names and text line up down the feed.
+fn compact_time(message: &Message, ctx: &RowContext, cx: &App) -> Div {
+    div()
+        .w(px(COMPACT_TIME))
+        .flex_none()
+        .flex()
+        .items_center()
+        .h(px(ctx.body_line()))
+        .whitespace_nowrap()
+        .text_size(px(12.))
+        .text_color(palette::faint(cx))
+        .map(|t| match message.state {
+            SendState::Sending => t.child(Icon::new(Glyph::Clock).size(px(14.))),
+            _ => t.child(clock(&message.timestamp)),
+        })
+}
+
+// Compact's first line: a group's first message leads with its author (a small avatar when Show user
+// avatars is on) and the text follows on the same line; a continuation is its text alone.
+fn compact_line(message: &Message, starts_group: bool, text: Option<AnyElement>, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyElement> {
+    if !starts_group {
+        return text;
+    }
+    let line = ctx.body_line();
+    let avatar = ctx.compact_avatars.then(|| profile_trigger(format!("avatar-{}", message.id), &message.author, ctx).flex_none().h(px(line)).flex().items_center().child(ui::avatar(message.author.avatar.clone(), COMPACT_AVATAR)));
+    Some(
+        div()
+            .flex()
+            .items_start()
+            .gap(px(6.))
+            .min_w_0()
+            .children(avatar)
+            .child(author(message, ctx, cx).flex_none().max_w(gpui_kit::relative(0.4)).h(px(line)))
+            .children(text.map(|text| div().flex_1().min_w_0().child(text)))
+            .into_any_element(),
+    )
 }
 
 // @silent's sleeping bell beside the name.
@@ -1297,7 +1414,7 @@ fn silent_mark(id: &str, cx: &App) -> impl IntoElement + use<> {
 }
 
 // Clicking an avatar or name opens their profile popout at the pointer, as in Discord.
-fn profile_trigger(id: String, user: &User, ctx: &Rc<RowContext>) -> Stateful<Div> {
+pub(crate) fn profile_trigger(id: String, user: &User, ctx: &Rc<RowContext>) -> Stateful<Div> {
     let (this, user) = (ctx.this.clone(), user.clone());
     let (menu_this, menu_user) = (this.clone(), user.clone());
     div()
@@ -1315,7 +1432,7 @@ fn profile_trigger(id: String, user: &User, ctx: &Rc<RowContext>) -> Stateful<Di
         })
 }
 
-fn track_message_hover(message: &Message, ctx: &Rc<RowContext>) -> impl Fn(&bool, &mut Window, &mut App) + 'static {
+fn track_message_hover(message: &Message, ctx: &RowContext) -> impl Fn(&bool, &mut Window, &mut App) + 'static {
     let (this, id) = (ctx.this.clone(), message.id.clone());
     move |hovered, window, cx| {
         // The row and its toolbar both report, and moving between them fires a leave and an enter in either
@@ -1404,7 +1521,8 @@ fn reply_preview(reply: &Message, target: Option<String>, ctx: &Rc<RowContext>, 
         .id(SharedString::from(format!("reply-{}", reply.id)))
         .relative()
         .h(px(REPLY_HEIGHT))
-        .pl(px(CONTENT_INSET))
+        // Compact draws it in the text column, with no avatar for the spine to reach.
+        .when(!ctx.compact, |r| r.pl(px(CONTENT_INSET)).child(reply_spine(cx)))
         .mb(px(2.))
         .min_w_0()
         .flex()
@@ -1414,7 +1532,6 @@ fn reply_preview(reply: &Message, target: Option<String>, ctx: &Rc<RowContext>, 
         .text_size(px(14.))
         .text_color(faint)
         .hover(move |s| s.text_color(text))
-        .child(reply_spine(cx))
         .child(ui::avatar(reply.author.avatar.clone(), 16.))
         .child(div().flex_none().font_weight(FontWeight::MEDIUM).text_color(muted).child(ctx.name_of(&reply.author)))
         .child(snippet)
@@ -1473,8 +1590,8 @@ fn forward_card(original: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyEl
         .child(label)
         .children(content(original, ctx, cx))
         .children(media_grid(original, ctx, cx))
-        .children(original.stickers.iter().map(|s| crate::stickers::in_chat(s, cx)))
-        .children(original.embeds.iter().filter(|_| ctx.embeds).enumerate().map(|(i, e)| embed_card(e, None, format!("forward-embed-{}-{i}", original.id), ctx, cx)))
+        .children(original.stickers.iter().map(|s| crate::stickers::in_chat(s, ctx.media.stickers.plays(false), cx)))
+        .children(shown_embeds(original, ctx).iter().enumerate().map(|(i, e)| embed_card(e, None, None, format!("forward-embed-{}-{i}", original.id), ctx, cx)))
         .children(files(original, ctx, cx))
         .child(source)
         .into_any_element()
@@ -1510,104 +1627,104 @@ fn only_media_link(message: &Message) -> bool {
 }
 
 // A DM call's record: one line in the history. A call you missed is the only red one, and it offers Call back.
-fn call_line(message: &Message, call: &crate::discord::CallRecord, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+pub(crate) fn call_line(message: &Message, call: &crate::discord::CallRecord, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     let me = ctx.me.as_ref().map(|m| m.id.as_str()).unwrap_or_default();
-    let author = ctx.name_of(&message.author);
     let missed = call.ended.is_some() && message.author.id != me && !call.participants.iter().any(|p| p == me);
     let lasted = call.ended.as_deref().and_then(|end| Some((local(end)? - local(&message.timestamp)?).num_seconds())).map(crate::dm_call::lasted);
-    let (text, action) = match (missed, lasted) {
-        (true, Some(lasted)) => (format!("You missed a call from {author} that lasted {lasted}."), Some("Call back")),
-        (true, None) => (format!("You missed a call from {author}."), Some("Call back")),
-        (false, Some(lasted)) => (format!("{author} started a call that lasted {lasted}."), None),
-        (false, None) => (format!("{author} started a call."), Some("Join")),
+    let s = Sentence::new(&message.id, cx);
+    let (sentence, action) = match (missed, lasted) {
+        (true, Some(lasted)) => (s.text("You missed a call from ").name(&message.author, ctx).text(&format!(" that lasted {lasted}.")), Some("Call back")),
+        (true, None) => (s.text("You missed a call from ").name(&message.author, ctx).text("."), Some("Call back")),
+        (false, Some(lasted)) => (s.name(&message.author, ctx).text(&format!(" started a call that lasted {lasted}.")), None),
+        (false, None) => (s.name(&message.author, ctx).text(" started a call."), Some("Join")),
     };
     let ink = if missed { palette::danger_ink(cx) } else { palette::positive_ink(cx) };
-    let (this, channel_id) = (ctx.this.clone(), message.channel_id.clone());
-    let action = action.map(|label| {
-        ui::button(SharedString::from(format!("call-line-{}", message.id)), ui::Tone::Link, cx).child(label).on_click(move |_, _, cx| { cx.stop_propagation();
-            this.update(cx, |this, cx| this.answer_dm_call(&channel_id, cx)).ok();
-        })
-    });
-    div()
-        .id(SharedString::from(format!("msg-{}", message.id)))
-        .w_full()
-        .px(px(16.))
-        .py(px(4.))
-        .flex()
-        .items_center()
-        .gap(px(16.))
-        .text_size(px(14.))
-        .child(div().w(px(AVATAR)).flex_none().flex().justify_center().child(Icon::new(Glyph::Phone).size(px(18.)).text_color(ink)))
-        .child(div().min_w_0().text_color(palette::muted(cx)).child(text))
-        .child(div().flex_none().text_size(px(12.)).text_color(palette::faint(cx)).child(clock(&message.timestamp)))
-        .children(action)
-        .into_any_element()
+    let sentence = match action {
+        Some(label) => {
+            let (this, channel_id) = (ctx.this.clone(), message.channel_id.clone());
+            let link = sentence.link(label).text_color(palette::accent_ink(cx)).on_click(move |_, _, cx| { cx.stop_propagation();
+                this.update(cx, |this, cx| this.answer_dm_call(&channel_id, cx)).ok();
+            });
+            sentence.text(" \u{2014} ").part(link)
+        }
+        None => sentence,
+    };
+    notice_line(&message.id, Glyph::Phone, ink, sentence, Some(format_stamp(&message.timestamp)), Vec::new(), cx)
 }
 
-// Discord's pin notice, one line like a call record: who pinned, a link to the message, a link to the pins.
-fn pin_line(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
-    let strong = palette::strong(cx);
-    let link = |id: String, label: &'static str| div().id(SharedString::from(id)).cursor_pointer().font_weight(FontWeight::MEDIUM).text_color(strong).hover(|s| s.underline()).child(label);
+// Discord's pin notice: who pinned, a link to the message, a link to the pins.
+pub(crate) fn pin_line(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+    let s = Sentence::new(&message.id, cx).name(&message.author, ctx).text(" pinned ");
     let (this, target) = (ctx.this.clone(), message.reply_to.clone());
-    let jump = link(format!("pin-jump-{}", message.id), "a message").on_click(move |_, _, cx| { cx.stop_propagation();
+    let jump = s.link("a message").on_click(move |_, _, cx| { cx.stop_propagation();
         let Some(id) = target.clone() else { return };
         this.update(cx, |this, cx| this.jump_to(id, cx)).ok();
     });
+    let s = s.part(jump).text(" to this channel. See all ");
     let this = ctx.this.clone();
-    let pins = link(format!("pin-list-{}", message.id), "pinned messages").on_mouse_down(gpui_kit::MouseButton::Left, move |_, _, cx| { cx.stop_propagation();
+    let pins = s.link("pinned messages").on_mouse_down(gpui_kit::MouseButton::Left, move |_, _, cx| { cx.stop_propagation();
         this.update(cx, |this, cx| {
             this.popover_at = gpui_kit::point(px(this.pins_button_x.get()), px(0.));
             this.open_pins(cx);
         })
         .ok();
     });
-    let name = profile_trigger(format!("pin-name-{}", message.id), &message.author, ctx).font_weight(FontWeight::MEDIUM).text_color(strong).hover(|s| s.underline()).child(ctx.name_of(&message.author));
-    // A group's spacing, as any message that starts one, so it sits as far from its neighbours.
-    let line = div()
-        .id(SharedString::from(format!("msg-{}", message.id)))
-        .w_full()
-        .px(px(16.))
-        .mt(px(12.))
-        .pt(px(4.))
-        .pb(px(2.))
+    let sentence = s.part(pins).text(".");
+    notice_line(&message.id, Glyph::Pin, palette::muted(cx), sentence, Some(format_stamp(&message.timestamp)), Vec::new(), cx)
+}
+
+// A poll-result notice's cards, under its line.
+pub(crate) fn poll_results(message: &Message, ctx: &RowContext, cx: &App) -> Vec<AnyElement> {
+    message.embeds.iter().enumerate().filter_map(|(i, e)| Some(poll_result(e.poll.as_ref()?, message.reply_to.as_deref(), &format!("poll-result-{}-{i}", message.id), ctx, cx))).collect()
+}
+
+// A thread starter's parent message, whole but inert: no toolbar, reactions or thread chip, as Discord draws it.
+pub(crate) fn starter_message(parent: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Div {
+    let body = div()
+        .flex_1()
+        .min_w_0()
         .flex()
-        .items_center()
-        .gap(px(16.))
-        .text_size(px(14.))
-        .child(div().w(px(AVATAR)).flex_none().flex().justify_center().child(Icon::new(Glyph::Pin).size(px(18.)).text_color(palette::muted(cx))))
+        .flex_col()
+        .text_size(px(16.))
+        .text_color(palette::text(cx))
+        .child(message_head(parent, ctx, cx))
+        .children(content(parent, ctx, cx))
+        .children(parent.forward.as_ref().map(|original| forward_card(original, ctx, cx)))
+        .children(media_grid(parent, ctx, cx))
+        .children(parent.stickers.iter().map(|s| crate::stickers::in_chat(s, ctx.media.stickers.plays(false), cx)))
+        .children(parent.poll.as_ref().map(|p| poll_card(parent, p, ctx, cx)))
+        .children(shown_embeds(parent, ctx).iter().enumerate().map(|(i, e)| embed_card(e, None, parent.reply_to.as_deref(), format!("starter-embed-{}-{i}", parent.id), ctx, cx)))
+        .children(files(parent, ctx, cx));
+    div()
+        .flex()
+        .flex_col()
+        .line_height(gpui_kit::relative(1.45))
+        .children(parent.reply.as_ref().map(|reply| reply_preview(reply, parent.reply_to.clone(), ctx, cx)))
         .child(
             div()
-                .min_w_0()
                 .flex()
-                .flex_wrap()
-                .items_baseline()
-                .gap_x(px(4.))
-                .text_color(palette::muted(cx))
-                .child(name)
-                .child("pinned")
-                .child(jump)
-                .child("to this channel. See all")
-                .child(pins)
-                .child(div().ml(px(-4.)).child("."))
-                .child(div().ml(px(4.)).text_size(px(12.)).text_color(palette::faint(cx)).child(clock(&message.timestamp))),
-        );
-    inset(line.into_any_element(), false)
+                .gap(px(16.))
+                .child(profile_trigger(format!("starter-avatar-{}", parent.id), &parent.author, ctx).flex_none().mt(px(2.)).child(ui::avatar(parent.author.avatar.clone(), AVATAR)))
+                .child(body),
+        )
 }
 
 pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyElement> {
-    if message.content.is_empty() || only_media_link(message) {
+    // A lone link whose media the setting keeps out of line stays as its text.
+    if message.content.is_empty() || (ctx.media.links && only_media_link(message)) {
         return None;
     }
     // A message of only custom emoji renders them big, as Discord's "jumbo" emoji.
     let emoji = custom_emoji(&message.content);
     if !emoji.is_empty() && strip_emoji(&message.content).trim().is_empty() && emoji.len() <= 27 {
-        return Some(div().flex().flex_wrap().gap_1().children(emoji.into_iter().filter_map(|e| e.url()).enumerate().map(|(i, url)| img(url).id(("jumbo", i)).size(px(48.)))).into_any_element());
+        return Some(div().flex().flex_wrap().gap_1().children(emoji.iter().filter_map(|e| shown_emoji(e, ctx.media.emoji).url()).enumerate().map(|(i, url)| img(url).id(("jumbo", i)).size(px(48.)))).into_any_element());
     }
-    // Spoilers stay covered until the message is clicked.
-    let revealed = ctx.revealed.borrow().contains(&message.id);
+    // Spoilers stay covered until the message is clicked, unless the setting shows them; "-# " lines are
+    // Discord's small grey subtext.
+    let revealed = ctx.spoilers_revealed(&message.id);
     let has_spoiler = message.content.contains("||");
     let text = hide_spoilers(&readable(&message.content, ctx), revealed);
-    let mut blocks = text_blocks(&format!("md-{}", message.id), &text, BODY_TEXT, ctx, cx);
+    let mut blocks = text_blocks(&format!("md-{}", message.id), &text, ctx.font_size, ctx, cx);
     let last = blocks.pop();
     let (reveal, id) = (ctx.revealed.clone(), message.id.clone());
     let refresh = ctx.this.clone();
@@ -1739,6 +1856,7 @@ fn markdown(id: SharedString, text: String, body: f32, ctx: &RowContext) -> Text
     let this = ctx.this.clone();
     let (copy_target, copied) = (ctx.this.clone(), ctx.copied.clone());
     let badges = MentionBadges { this: ctx.this.clone(), fill: ctx.mention_fill, hover: ctx.mention_hover, ink: ctx.mention_ink };
+    let text = if ctx.underline_links { underline_links(&text) } else { text };
     TextView::markdown(id, discord_breaks(&text))
         // Constant: the plugin only changes how mentions draw, never what parses.
         .markdown_extensions(MarkdownExtensions::default().parser_revision(1).plugin(badges))
@@ -1820,6 +1938,96 @@ fn split_subtext(text: &str) -> Vec<(bool, String)> {
     }
     runs.retain(|(_, run)| !run.trim().is_empty());
     runs
+}
+
+// Always underline links: each web link wrapped in `<u>`, since the markdown view never underlines a link
+// itself. A bare address becomes `<url>`, which autolinks after the tag where a bare one might not.
+// Mentions and emoji, links too, are left alone.
+fn underline_links(markdown: &str) -> String {
+    outside_code(markdown, |text| {
+        let mut out = String::with_capacity(text.len() + 16);
+        let mut rest = text;
+        while let Some((start, end, bare)) = next_link(rest) {
+            out.push_str(&rest[..start]);
+            let link = &rest[start..end];
+            match bare {
+                true => out.push_str(&format!("<u><{link}></u>")),
+                false => out.push_str(&format!("<u>{link}</u>")),
+            }
+            rest = &rest[end..];
+        }
+        out.push_str(rest);
+        out
+    })
+}
+
+// The next web link in `text`: its byte range and whether it's a bare address. A masked `[label](url)`
+// and an `<url>` keep their own syntax; a bare one ends at whitespace, less trailing punctuation.
+fn next_link(text: &str) -> Option<(usize, usize, bool)> {
+    let mut from = 0;
+    loop {
+        let at = from + text[from..].find("http")?;
+        let after = &text[at..];
+        from = at + 4;
+        if !(after.starts_with("https://") || after.starts_with("http://")) {
+            continue;
+        }
+        let before = &text[..at];
+        if let Some(label) = before.strip_suffix("](").or_else(|| before.strip_suffix("](<")) {
+            let (Some(open), Some(close)) = (label.rfind('['), after.find(')')) else { continue };
+            let close = at + close + 1;
+            if label[..open].ends_with('!') {
+                from = close;
+                continue;
+            }
+            return Some((open, close, false));
+        }
+        if let Some(end) = after.find('>').filter(|_| before.ends_with('<')) {
+            return Some((at - 1, at + end + 1, false));
+        }
+        if !before.chars().next_back().is_none_or(|c| c.is_whitespace() || "*_~(".contains(c)) {
+            continue;
+        }
+        let word = &after[..after.find(|c: char| c.is_whitespace() || c == '<').unwrap_or(after.len())];
+        let url = word.trim_end_matches(['.', ',', '!', '?', ')', ';', ':', '*', '_', '~', '|', '\'', '"']);
+        return Some((at, at + url.len(), true));
+    }
+}
+
+// `f` applied to the text outside code: a run of backticks opens a span or block that the next run of the
+// same length closes, as in markdown; a run never closed is plain text.
+pub(crate) fn outside_code(text: &str, mut f: impl FnMut(&str) -> String) -> String {
+    let mut out = String::with_capacity(text.len());
+    let (mut plain, mut at) = (0, 0);
+    while let Some(open) = text[at..].find('`').map(|i| at + i) {
+        let len = backtick_run(&text[open..]);
+        match closing_run(text, open + len, len) {
+            Some(end) => {
+                out.push_str(&f(&text[plain..open]));
+                out.push_str(&text[open..end]);
+                (plain, at) = (end, end);
+            }
+            None => at = open + len,
+        }
+    }
+    out.push_str(&f(&text[plain..]));
+    out
+}
+
+fn backtick_run(text: &str) -> usize {
+    text.bytes().take_while(|&b| b == b'`').count()
+}
+
+// Where the next run of exactly `len` backticks at or after `from` ends.
+fn closing_run(text: &str, mut from: usize, len: usize) -> Option<usize> {
+    while let Some(open) = text[from..].find('`').map(|i| from + i) {
+        let run = backtick_run(&text[open..]);
+        if run == len {
+            return Some(open + run);
+        }
+        from = open + run;
+    }
+    None
 }
 
 // `||secret||` → a solid bar of the same length until revealed (gpui's markdown can't paint a cover).
@@ -1995,6 +2203,61 @@ pub(crate) fn animated_image(source: impl Into<gpui_kit::ImageSource>) -> Statef
     img(source).id("animated")
 }
 
+// An image that animates only while `animate`: without an id gpui holds its first frame (see `animated_image`).
+pub(crate) fn moving(image: gpui_kit::Img, animate: bool) -> AnyElement {
+    if animate { image.id("animated").into_any_element() } else { image.into_any_element() }
+}
+
+// The media rows of Appearance and Accessibility (docs/discord-settings-re.md). Reduced motion overrides
+// GIFs and emoji to off and stickers to on interaction, as Discord's settings override does.
+#[derive(Clone, Copy)]
+pub(crate) struct MediaPrefs {
+    // "Show images, videos, and lolcats": uploaded to Discord, and posted as links.
+    attachments: bool,
+    links: bool,
+    gifs: bool,
+    emoji: bool,
+    pub(crate) stickers: crate::stickers::StickerMotion,
+    spoilers: crate::settings::Spoilers,
+}
+
+impl Waffle {
+    pub(crate) fn media_prefs(&self) -> MediaPrefs {
+        let (account, still) = (&self.account_settings, self.prefs.reduces_motion());
+        MediaPrefs {
+            attachments: account.inline_attachment_media,
+            links: account.inline_embed_media,
+            gifs: account.gif_auto_play && !still,
+            emoji: account.animate_emoji && !still,
+            stickers: crate::stickers::StickerMotion::of(account.animate_stickers, still),
+            spoilers: self.prefs.spoilers,
+        }
+    }
+}
+
+impl RowContext {
+    // Whether the spoiler under `key` (a message id for its text, a media key for an upload) shows: the
+    // setting reveals them all, or only where you moderate, else a click on it does.
+    fn spoilers_revealed(&self, key: &str) -> bool {
+        let shown = match self.media.spoilers {
+            crate::settings::Spoilers::Always => true,
+            crate::settings::Spoilers::IfModerator => self.manage_messages,
+            crate::settings::Spoilers::OnClick => false,
+        };
+        shown || self.revealed.borrow().contains(key)
+    }
+
+    // Hover on the message row stands in for hover on its media: what plays a still GIF or sticker.
+    fn hovers(&self, message: &Message) -> bool {
+        self.hovered.as_deref() == Some(message.id.as_str())
+    }
+}
+
+// The emoji as the setting draws it: an animated one's still picture while animation is off.
+fn shown_emoji(emoji: &Emoji, animate: bool) -> Emoji {
+    Emoji { animated: emoji.animated && animate, ..emoji.clone() }
+}
+
 // What a tile's click pages through in the viewer: the feed's media, or a Components V2 gallery's own
 // items.
 #[derive(Clone, Copy)]
@@ -2003,47 +2266,58 @@ pub(crate) enum Paging {
     Gallery,
 }
 
-// The message's media under its text, in the feed's 432px column (narrower when the feed is).
-pub(crate) fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<AnyElement> {
-    media_layout(message, ctx.column.min(COLUMN), Paging::Feed, ctx, cx).map(|grid| grid.mt(px(8.)).into_any_element())
+// The message's media, then its uploads as file rows where the setting keeps them out of line.
+fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<AnyElement> {
+    let gallery = media_layout(message, &inline_media(message, &ctx.media), ctx.column.min(COLUMN), Paging::Feed, ctx, cx).map(|g| g.mt(px(8.)).into_any_element());
+    if ctx.media.attachments || message.media_files.is_empty() {
+        return gallery;
+    }
+    Some(div().flex().flex_col().children(gallery).children(message.media_files.iter().map(|f| file_card(message, f, cx))).into_any_element())
 }
 
-// Media at its own shape: one alone fits 400×320 in the feed and spans a gallery's `width` up to
-// 360 tall; several tile `width` (2 side by side, 3 one tall and two stacked, 4 two by two, 5 or more
-// two over three with the last counting the rest).
+// Indexes into `message.media` drawn inline: uploads lead it (see `Message::media_files`), link media follows.
+fn inline_media(message: &Message, prefs: &MediaPrefs) -> Vec<usize> {
+    let uploads = message.media_files.len();
+    (0..message.media.len()).filter(|&i| if i < uploads { prefs.attachments } else { prefs.links }).collect()
+}
+
+// Media at its own shape, the items `shown` (indexes into `message.media`): one alone fits 400×320 in
+// the feed and spans a gallery's `width` up to 360 tall; several tile `width` (2 side by side, 3 one tall
+// and two stacked, 4 two by two, 5 or more two over three with the last counting the rest).
 // With Show image descriptions on, a lone picture's alt text runs under it as a caption; in a gallery
 // each described picture gets an ALT button that opens it.
-pub(crate) fn media_layout(message: &Message, width: f32, paging: Paging, ctx: &Rc<RowContext>, cx: &mut App) -> Option<Div> {
-    let first = message.media.first()?;
-    if message.media.len() == 1 {
+pub(crate) fn media_layout(message: &Message, shown: &[usize], width: f32, paging: Paging, ctx: &Rc<RowContext>, cx: &mut App) -> Option<Div> {
+    let first = &message.media[*shown.first()?];
+    if shown.len() == 1 {
         let scale = match paging {
             Paging::Feed => (MAX_IMAGE.0.min(width) / first.width).min(MAX_IMAGE.1 / first.height).min(1.),
             Paging::Gallery => (width / first.width).min(GALLERY_MAX_H / first.height),
         };
         let (w, h) = (first.width * scale, first.height * scale);
-        let caption = shown_alt(message, 0, ctx).map(|alt| div().mt(px(4.)).max_w(px(w)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(alt));
-        let frame = media_frame(message, 0, (w, h), ui::all(RADIUS_LG), paging, ctx, cx).flex_none().w(px(w)).h(px(h));
+        let caption = shown_alt(message, shown[0], ctx).map(|alt| div().mt(px(4.)).max_w(px(w)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(alt));
+        let frame = media_frame(message, shown[0], (w, h), ui::all(RADIUS_LG), paging, ctx, cx).flex_none().w(px(w)).h(px(h));
         return Some(div().flex().flex_col().child(frame).children(caption));
     }
     // Laid out for the feed's column, then scaled to `width`.
     let k = width / COLUMN;
-    let (height, tiles) = gallery_layout(message.media.len());
+    let (height, tiles) = gallery_layout(shown.len());
     let height = height * k;
     let tiles: Vec<Tile> = tiles.into_iter().map(|t| Tile { x: t.x * k, y: t.y * k, w: t.w * k, h: t.h * k }).collect();
-    let rest = message.media.len() - tiles.len();
+    let rest = shown.len() - tiles.len();
     let mut grid = div().relative().flex_none().w(px(width)).h(px(height));
     let mut popout = None;
     for (i, tile) in tiles.iter().enumerate() {
         let corners = gallery_corners(*tile, width, height, RADIUS_LG);
         let counts_rest = rest > 0 && i + 1 == tiles.len();
-        let alt = shown_alt(message, i, ctx).filter(|_| !counts_rest && !matches!(message.media[i].kind, MediaKind::Video { .. }));
-        let key = format!("{}#{i}", message.id);
+        let item = shown[i];
+        let alt = shown_alt(message, item, ctx).filter(|_| !counts_rest && !matches!(message.media[item].kind, MediaKind::Video { .. }));
+        let key = format!("{}#{item}", message.id);
         if let Some(text) = alt.clone().filter(|_| ctx.alt_popout.as_deref() == Some(key.as_str())) {
             // Over the gallery, rising from the tile's ALT button; drawn last so later tiles don't cover it.
             popout = Some(alt_popout(&key, text, ctx, cx).left(px(tile.x + 6.)).bottom(px(height - tile.y - tile.h + 34.)));
         }
         grid = grid.child(
-            media_frame(message, i, (tile.w, tile.h), corners, paging, ctx, cx)
+            media_frame(message, item, (tile.w, tile.h), corners, paging, ctx, cx)
                 .absolute()
                 .left(px(tile.x))
                 .top(px(tile.y))
@@ -2100,7 +2374,7 @@ fn media_frame(message: &Message, i: usize, size: (f32, f32), corners: Corners<P
 // The alt text to show for item `i`: the setting is on, there is some, and it isn't a hidden spoiler.
 fn shown_alt(message: &Message, i: usize, ctx: &RowContext) -> Option<String> {
     let item = message.media.get(i)?;
-    let hidden = item.spoiler && !ctx.revealed.borrow().contains(&spoiler_key(message, i));
+    let hidden = item.spoiler && !ctx.spoilers_revealed(&spoiler_key(message, i));
     item.description.clone().filter(|alt| ctx.image_descriptions && !alt.is_empty() && !hidden)
 }
 
@@ -2165,21 +2439,29 @@ fn alt_popout(key: &str, text: String, ctx: &RowContext, cx: &App) -> Stateful<D
 // veiled until clicked.
 fn media_tile(message: &Message, i: usize, (w, h): (f32, f32), corners: Corners<Pixels>, paging: Paging, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     let item = &message.media[i];
-    let cover = (item.spoiler && !ctx.revealed.borrow().contains(&spoiler_key(message, i))).then(|| reveal_veil(message, i, corners, ctx));
+    let cover = (item.spoiler && !ctx.spoilers_revealed(&spoiler_key(message, i))).then(|| reveal_veil(message, i, corners, ctx));
     // A video plays where it is; clicks on it belong to its player.
     if let MediaKind::Video { poster } = &item.kind {
         return div().relative().size_full().child(crate::video::tile(format!("{}-{i}", message.id), &item.url, poster, cx)).children(cover).into_any_element();
     }
+    // Not verified: with autoplay off Discord plays a GIF while it's hovered. GAP: Waffle plays it while
+    // its message is hovered, the only hover state rows keep.
+    let plays = ctx.media.gifs || ctx.hovers(message);
     // Fetched at the size it's drawn rather than full resolution; the viewer still opens the original.
     let sized = |url: &str| crate::discord::sized_image(url, w, h, (item.width, item.height));
     let picture = match &item.kind {
         MediaKind::Gif { poster } => div()
             .relative()
             .size_full()
-            .child(crate::gif::rounded_tile(format!("{}-{i}-{}", message.id, item.url), &item.url, &sized(poster), gpui_kit::size(px(w), px(h)), corners, cx))
+            .child(crate::gif::rounded_tile(format!("{}-{i}-{}", message.id, item.url), &item.url, &sized(poster), gpui_kit::size(px(w), px(h)), corners, plays, cx))
             .child(media_tag("GIF").top(px(8.)).left(px(8.)))
             .into_any_element(),
-        _ => ui::edge(animated_image(sized(&item.url)), corners).size_full().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
+        _ => div()
+            .relative()
+            .size_full()
+            .child(moving(ui::edge(img(sized(&item.url)), corners).size_full().object_fit(gpui_kit::ObjectFit::Cover), plays))
+            .when(!plays && is_gif(&item.url), |d| d.child(media_tag("GIF").top(px(8.)).left(px(8.))))
+            .into_any_element(),
     };
     let (this, url) = (ctx.this.clone(), item.url.clone());
     let own = matches!(paging, Paging::Gallery).then(|| message.media.clone());
@@ -2205,46 +2487,51 @@ fn media_tile(message: &Message, i: usize, (w, h): (f32, f32), corners: Corners<
         .into_any_element()
 }
 
-// Covers media (a spoiler, sensitive content) until clicked; `key` records the reveal in `revealed`.
-// It occludes, so nothing under it answers the pointer while covered.
+// `media_veil` until `key` is revealed; it occludes, so nothing under it answers the pointer while covered.
 pub(crate) fn veil(key: String, label: &'static str, corners: Corners<Pixels>, ctx: &RowContext) -> Option<Stateful<Div>> {
-    if ctx.revealed.borrow().contains(&key) {
-        return None;
-    }
+    let covered = !ctx.revealed.borrow().contains(&key);
+    covered.then(|| media_veil(key, label, corners, ctx))
+}
+
+fn is_gif(url: &str) -> bool {
+    url.split(['?', '#']).next().is_some_and(|path| path.to_ascii_lowercase().ends_with(".gif"))
+}
+
+// A blur over media until it's clicked (a spoiler, sensitive content); the click adds `key` to the
+// revealed set.
+fn media_veil(key: String, label: &'static str, corners: Corners<Pixels>, ctx: &RowContext) -> Stateful<Div> {
     let (reveal, refresh) = (ctx.revealed.clone(), ctx.this.clone());
-    Some(
-        ui::edge(div(), corners)
-            .id(SharedString::from(key.clone()))
-            .absolute()
-            .inset_0()
-            .occlude()
-            .bg(on_media(0.35))
-            .backdrop_blur(px(28.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .cursor_pointer()
-            .on_click(move |_, _, cx| {
-                cx.stop_propagation();
-                reveal.borrow_mut().insert(key.clone());
-                refresh.update(cx, |_, cx| cx.notify()).ok();
-            })
-            .child(
-                div()
-                    .h(px(32.))
-                    .px(px(12.))
-                    .flex()
-                    .items_center()
-                    .gap(px(6.))
-                    .squircle(RADIUS_MD)
-                    .bg(on_media(0.72))
-                    .text_color(gpui_kit::white())
-                    .text_size(px(14.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(Icon::new(Glyph::EyeSlash).size(px(16.)))
-                    .child(label),
-            ),
-    )
+    ui::edge(div(), corners)
+        .id(SharedString::from(format!("veil-{key}")))
+        .occlude()
+        .absolute()
+        .inset_0()
+        .bg(on_media(0.35))
+        .backdrop_blur(px(28.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            reveal.borrow_mut().insert(key.clone());
+            refresh.update(cx, |_, cx| cx.notify()).ok();
+        })
+        .child(
+            div()
+                .h(px(32.))
+                .px(px(12.))
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .squircle(RADIUS_MD)
+                .bg(on_media(0.72))
+                .text_color(gpui_kit::white())
+                .text_size(px(14.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .child(Icon::new(Glyph::EyeSlash).size(px(16.)))
+                .child(label),
+        )
 }
 
 // A spoiler's cover: blurred and dimmed, labelled, and a click lifts it (and nothing else).
@@ -2382,10 +2669,29 @@ fn link_cards(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Vec<AnyE
     crate::link_preview::cards(&message.id, &message.content, &cards, cx)
 }
 
+// Settings › Chat can turn embeds off, and Discord's SUPPRESS_EMBEDS flag removes a message's for everyone.
+fn shown_embeds<'a>(message: &'a Message, ctx: &RowContext) -> &'a [Embed] {
+    if !ctx.embeds || message.embeds_suppressed() {
+        return &[];
+    }
+    &message.embeds
+}
+
+// Discord's ✕ on embed cards: the author or a moderator, on a message that has something besides its
+// embeds (text, stickers, a poll, a forward), so a bot's embed-only post keeps them. Not on Discord's
+// own messages, ephemeral ones or a thread's starter copy (type 21).
+// Not verified: Discord also counts components and activities, which Waffle doesn't parse.
+pub(crate) fn can_remove_embeds(message: &Message, me: Option<&str>, manage_messages: bool) -> bool {
+    let allowed = me == Some(message.author.id.as_str()) || manage_messages;
+    let other_content = !message.content.is_empty() || !message.stickers.is_empty() || message.poll.is_some() || message.forward.is_some();
+    allowed && message.author.id != "1" && message.flags & crate::discord::message_flag::EPHEMERAL == 0 && message.kind != 21 && other_content
+}
+
 // A rich embed (design/embeds.html), Discord's embed object field for field. Its colour is Discord's bar
 // down the left edge, so a bot's colours read the way its users know them. Text sits beside an 80px
-// thumbnail; pictures, the footer and the time run the card's width under it.
-fn embed_card(embed: &Embed, poll_message: Option<&str>, key: String, ctx: &RowContext, cx: &App) -> AnyElement {
+// thumbnail; pictures, the footer and the time run the card's width under it. `row` is the feed message
+// that carries it; forwards and search hits pass None and get no ✕.
+fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Option<&str>, key: String, ctx: &RowContext, cx: &App) -> AnyElement {
     if let Some(poll) = &embed.poll {
         return poll_result(poll, poll_message, &key, ctx, cx);
     }
@@ -2517,7 +2823,8 @@ fn embed_card(embed: &Embed, poll_message: Option<&str>, key: String, ctx: &RowC
         .children(fields);
     let has_text = embed.provider.is_some() || embed.author.is_some() || embed.title.is_some() || embed.description.is_some() || !embed.fields.is_empty();
     let top = (has_text || thumbnail.is_some()).then(|| div().flex().items_start().gap(px(16.)).child(text).children(thumbnail));
-    let media = embed_media(embed, &key, inner, ctx, cx);
+    // Without inline link media the card keeps its text and thumbnail but not its big pictures.
+    let media = ctx.media.links.then(|| embed_media(embed, row, &key, inner, ctx, cx)).flatten();
     let stamp = embed.timestamp.as_deref().map(|t| (format_stamp(t), day(t).map(|d| format!("{}, {}", d.format("%A, %B %-d, %Y"), clock(t))).unwrap_or_default()));
     let footer = (embed.footer.is_some() || stamp.is_some()).then(|| {
         let line = embed.footer.clone().into_iter().chain(stamp.as_ref().map(|(short, _)| short.clone())).collect::<Vec<_>>().join(" · ");
@@ -2565,6 +2872,31 @@ fn embed_card(embed: &Embed, poll_message: Option<&str>, key: String, ctx: &RowC
         .line_height(gpui_kit::relative(1.45))
         .child(strip)
         .children(sections.into_iter().flatten())
+        .children(row.filter(|m| !embed.inline() && remove_embeds_shown(m, ctx)).map(|m| remove_embeds_button(m, &key, ctx, cx)))
+        .into_any_element()
+}
+
+// While the row is hovered or keyboard-focused.
+fn remove_embeds_shown(message: &Message, ctx: &RowContext) -> bool {
+    let active = ctx.hovered.as_deref() == Some(message.id.as_str()) || ctx.focused.as_deref() == Some(message.id.as_str());
+    active && message.state == SendState::Sent && can_remove_embeds(message, ctx.me.as_ref().map(|me| me.id.as_str()), ctx.manage_messages)
+}
+
+// Occludes so the title or thumbnail under it stays still, and reports hover so the row keeps it.
+fn remove_embeds_button(message: &Message, key: &str, ctx: &RowContext, cx: &App) -> AnyElement {
+    let (this, m) = (ctx.this.clone(), message.clone());
+    ui::icon_button(SharedString::from(format!("{key}-remove")), Glyph::X, "Remove all embeds", cx)
+        .small()
+        .absolute()
+        .top(px(8.))
+        .right(px(8.))
+        .occlude()
+        .on_hover(track_message_hover(message, ctx))
+        .on_click(move |_, window, cx| {
+            cx.stop_propagation();
+            let quick = window.modifiers().shift;
+            this.update(cx, |this, cx| this.remove_embeds(&m, quick, cx)).ok();
+        })
         .into_any_element()
 }
 
@@ -2577,6 +2909,8 @@ const EMBED_BAR: f32 = 4.;
 const EMBED_BAR_STRIP: f32 = 2. * RADIUS_LG;
 const EMBED_THUMB: f32 = 80.;
 const EMBED_MEDIA_MAX_H: f32 = 360.;
+// Discord's box for a portrait video still (YouTube Shorts, TikTok): width, height.
+const EMBED_PORTRAIT: (f32, f32) = (400., 450.);
 // About twelve lines of 14px text: a longer description folds under a fade.
 const EMBED_CLIP: f32 = 252.;
 
@@ -2607,8 +2941,11 @@ fn field_rows(fields: &[(String, String, bool)], thumbnail: bool) -> Vec<Vec<usi
 }
 
 // The embed's pictures at the card's inner width: one at its own shape up to 360 tall, or a gallery of
-// up to four. A video's still carries the play button and opens the video; a sensitive one stays blurred.
-fn embed_media(embed: &Embed, key: &str, inner: f32, ctx: &RowContext, cx: &App) -> Option<AnyElement> {
+// up to four. A video's still carries the play button and Open Link; a portrait one (Shorts) takes
+// Discord's taller box. A sensitive one stays blurred.
+// GAP: Discord swaps the still for the provider's player (a YouTube iframe); gpui has no web view, so
+// Play opens the video in the browser too.
+fn embed_media(embed: &Embed, row: Option<&Message>, key: &str, inner: f32, ctx: &RowContext, cx: &App) -> Option<AnyElement> {
     let first = embed.images.first()?;
     let tile = |i: usize, (w, h): (f32, f32), corners: Corners<Pixels>| {
         let m = &embed.images[i];
@@ -2627,15 +2964,20 @@ fn embed_media(embed: &Embed, key: &str, inner: f32, ctx: &RowContext, cx: &App)
                 d.child(div().absolute().inset_0().flex().items_center().justify_center().child(
                     div().size(px(56.)).rounded_full().flex().items_center().justify_center().bg(on_media(0.62)).text_color(gpui_kit::white()).child(Icon::new(Glyph::Play).size(px(26.))),
                 ))
+                .children(embed.url.clone().map(|url| open_link_button(url, row, &format!("{key}-open-{i}"), ctx)))
             })
             .on_click(move |_, window, cx| {
                 cx.stop_propagation();
                 this.update(cx, |this, cx| if video { this.open_link(&url, window, cx) } else { this.open_viewer(&url, window, cx) }).ok();
             })
     };
-    let (height, body) = if embed.images.len() == 1 {
+    let portrait = embed.video && embed.images.len() == 1 && first.height > first.width;
+    let (width, height, body) = if portrait {
+        let (w, h) = fit_frame((first.width, first.height), (EMBED_PORTRAIT.0.min(inner), EMBED_PORTRAIT.1));
+        (w, h, div().size_full().child(tile(0, (w, h), ui::all(RADIUS_SM))))
+    } else if embed.images.len() == 1 {
         let h = (inner * first.height / first.width.max(1.)).min(EMBED_MEDIA_MAX_H);
-        (h, div().size_full().child(tile(0, (inner, h), ui::all(RADIUS_SM))))
+        (inner, h, div().size_full().child(tile(0, (inner, h), ui::all(RADIUS_SM))))
     } else {
         let k = inner / COLUMN;
         let (height, tiles) = gallery_layout(embed.images.len().min(4));
@@ -2645,19 +2987,39 @@ fn embed_media(embed: &Embed, key: &str, inner: f32, ctx: &RowContext, cx: &App)
             let t = Tile { x: t.x * k, y: t.y * k, w: t.w * k, h: t.h * k };
             grid = grid.child(div().absolute().left(px(t.x)).top(px(t.y)).w(px(t.w)).h(px(t.h)).child(tile(i, (t.w, t.h), gallery_corners(t, inner, height, RADIUS_SM))));
         }
-        (height, grid)
+        (inner, height, grid)
     };
-    Some(
-        div()
-            .relative()
-            .w(px(inner))
-            .h(px(height))
-            .flex_none()
-            .child(body)
-            .when(embed.sensitive, |d| d.children(veil(format!("{key}-veil"), "Sensitive content · Show", ui::all(RADIUS_SM), ctx)))
-            .into_any_element(),
-    )
+    let veil = format!("{key}-veil");
+    let veiled = embed.sensitive && !ctx.revealed.borrow().contains(&veil);
+    Some(div().relative().w(px(width)).h(px(height)).flex_none().child(body).when(veiled, |d| d.child(media_veil(veil, "Sensitive content · Show", ui::all(RADIUS_SM), ctx))).into_any_element())
+}
 
+// Discord's Open Link corner on a video still. In a feed row it reports hover, since occluding takes it from the row.
+fn open_link_button(url: String, row: Option<&Message>, id: &str, ctx: &RowContext) -> AnyElement {
+    let this = ctx.this.clone();
+    div()
+        .id(SharedString::from(id.to_owned()))
+        .absolute()
+        .top(px(8.))
+        .right(px(8.))
+        .size(px(32.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .squircle(RADIUS_SM)
+        .bg(on_media(0.55))
+        .hover(|s| s.bg(on_media(0.75)))
+        .text_color(gpui_kit::white())
+        .cursor_pointer()
+        .occlude()
+        .when_some(row, |d, m| d.on_hover(track_message_hover(m, ctx)))
+        .tooltip(|window, cx| Tooltip::new("Open Link").build(window, cx))
+        .child(Icon::new(Glyph::Open).size(px(18.)))
+        .on_click(move |_, window, cx| {
+            cx.stop_propagation();
+            this.update(cx, |this, cx| this.open_link(&url, window, cx)).ok();
+        })
+        .into_any_element()
 }
 
 // A closed poll's result: the winner, its share, and the way back to the poll.
@@ -2988,7 +3350,7 @@ fn reactions(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyEle
         let card = crate::reactions::ReactorsCard::new(ctx.this.clone(), message, r);
         reaction_pill(SharedString::from(format!("react-{}-{}", message.id, r.emoji.name)), r.me, cx)
             .px(px(9.))
-            .child(emoji_face(&r.emoji, 18., 16.))
+            .child(emoji_face(&shown_emoji(&r.emoji, ctx.media.emoji), 18., 16.))
             .child(r.count.to_string())
             .on_hover(move |hovered, _, cx| {
                 if *hovered {
@@ -3169,7 +3531,7 @@ fn readable_with(content: &str, ctx: &RowContext, inline_emoji: bool) -> String 
         } else if let Some(stamp) = token.strip_prefix("t:") {
             discord_timestamp(stamp)
         } else if let Some(name) = token.strip_prefix("a:").or_else(|| token.strip_prefix(':')) {
-            match (inline_emoji, emoji_image(token)) {
+            match (inline_emoji, emoji_image(token, ctx.media.emoji)) {
                 (true, Some(html)) => Some(html),
                 _ => name.split(':').next().map(|n| format!(":{n}:")),
             }
@@ -3243,7 +3605,7 @@ pub(crate) fn inline_emoji(text: &str) -> String {
         let tail = &rest[start..];
         let Some(end) = tail.find('>') else { break };
         out.push_str(&rest[..start]);
-        match emoji_image(&tail[1..end]) {
+        match emoji_image(&tail[1..end], true) {
             Some(html) => out.push_str(&html),
             None => out.push_str(&tail[..=end]),
         }
@@ -3254,9 +3616,9 @@ pub(crate) fn inline_emoji(text: &str) -> String {
 }
 
 // `a:name:id` or `:name:id` as an inline image the markdown view lays out in the text flow. Its
-// images carry element ids, so animated emoji play. 22px is Discord's 1.375em at 16px text.
-fn emoji_image(token: &str) -> Option<String> {
-    let animated = token.starts_with("a:");
+// images carry element ids, so animated emoji play unless `animate` is off. 22px is Discord's 1.375em at 16px text.
+fn emoji_image(token: &str, animate: bool) -> Option<String> {
+    let animated = animate && token.starts_with("a:");
     let mut parts = token.trim_start_matches("a:").trim_start_matches(':').split(':');
     let (name, id) = (parts.next()?, parts.next()?);
     if parts.next().is_some() || name.is_empty() || !id.bytes().all(|b| b.is_ascii_digit()) {
@@ -3412,11 +3774,11 @@ fn continues(previous: &Message, message: &Message) -> bool {
     previous.author.id == message.author.id && !answers_command && (b - a).num_seconds() < GROUP_GAP_SECS
 }
 
-fn local(timestamp: &str) -> Option<DateTime<Local>> {
+pub(crate) fn local(timestamp: &str) -> Option<DateTime<Local>> {
     Some(DateTime::parse_from_rfc3339(timestamp).ok()?.with_timezone(&Local))
 }
 
-fn day(timestamp: &str) -> Option<NaiveDate> {
+pub(crate) fn day(timestamp: &str) -> Option<NaiveDate> {
     Some(local(timestamp)?.date_naive())
 }
 
@@ -3464,7 +3826,7 @@ fn unread_label(count: usize, estimated: bool, since: &str) -> String {
     }
 }
 
-fn clock(timestamp: &str) -> String {
+pub(crate) fn clock(timestamp: &str) -> String {
     local(timestamp).map(|t| t.format(time_format(false)).to_string()).unwrap_or_default()
 }
 
@@ -3503,6 +3865,20 @@ fn crumb(id: &'static str, cx: &App) -> Stateful<Div> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn media_settings_split_uploads_from_link_media() {
+        use crate::discord::{File, Media, MediaKind, Message};
+        let media = |url: &str| Media { url: url.into(), width: 1., height: 1., kind: MediaKind::Image, ..Default::default() };
+        let message = Message { media: vec![media("a.png"), media("b.png"), media("link.png")], media_files: vec![File { name: "a.png".into(), url: "a.png".into(), size: 1, ..Default::default() }, File { name: "b.png".into(), url: "b.png".into(), size: 1, ..Default::default() }], ..Default::default() };
+        let mut prefs = super::MediaPrefs { attachments: true, links: true, gifs: true, emoji: true, stickers: crate::stickers::StickerMotion::Always, spoilers: crate::settings::Spoilers::OnClick };
+        assert_eq!(super::inline_media(&message, &prefs), [0, 1, 2]);
+        prefs.attachments = false;
+        assert_eq!(super::inline_media(&message, &prefs), [2]);
+        prefs = super::MediaPrefs { attachments: true, links: false, ..prefs };
+        assert_eq!(super::inline_media(&message, &prefs), [0, 1]);
+        assert!(super::is_gif("https://cdn.discordapp.com/attachments/1/2/Dance.GIF?ex=a") && !super::is_gif("https://x/gif.png?f=.gif"));
+    }
+
     #[test]
     fn unread_bar_says_how_many_since_when() {
         let now = chrono::Utc::now().to_rfc3339();
@@ -3562,10 +3938,11 @@ mod tests {
     #[test]
     fn jumbo_emoji_detection() {
         assert_eq!(custom_emoji("<:blob:1> <a:dance:2>").len(), 2);
-        let dance = emoji_image("a:dance:2").unwrap();
+        let dance = emoji_image("a:dance:2", true).unwrap();
         assert!(dance.contains("/emojis/2.gif") && dance.contains(r#"alt=":dance:""#) && dance.contains(r#"width="22""#));
-        assert!(emoji_image(":blob:1").unwrap().contains("/emojis/1.webp"));
-        assert_eq!(emoji_image(":bad:x1"), None);
+        assert!(emoji_image(":blob:1", true).unwrap().contains("/emojis/1.webp"));
+        assert!(emoji_image("a:dance:2", false).unwrap().contains("/emojis/2.webp"));
+        assert_eq!(emoji_image(":bad:x1", true), None);
         assert!(strip_emoji("<:blob:1> <a:dance:2>").trim().is_empty());
         assert_eq!(strip_emoji("hi <:blob:1> <@5>"), "hi  <@5>");
     }
@@ -3679,5 +4056,37 @@ mod tests {
         // A long screenshot is held at 1:2.5 and cropped; an unknown size is a square.
         assert_eq!(fit_frame((400., 4000.), max), (88., 220.));
         assert_eq!(fit_frame((0., 0.), max), (220., 220.));
+    }
+    #[test]
+    fn links_are_underlined_outside_code() {
+        assert_eq!(underline_links("see https://a.io/x. ok"), "see <u><https://a.io/x></u>. ok");
+        assert_eq!(underline_links("[docs](https://a.io) and <https://b.io>"), "<u>[docs](https://a.io)</u> and <u><https://b.io></u>");
+        assert_eq!(underline_links("[docs](<https://a.io>)"), "<u>[docs](<https://a.io>)</u>");
+        assert_eq!(underline_links("`https://a.io` ```\nhttps://b.io\n```"), "`https://a.io` ```\nhttps://b.io\n```");
+        assert_eq!(underline_links("[@wren](waffle://user/1) <img src=\"https://cdn/e.png\" />"), "[@wren](waffle://user/1) <img src=\"https://cdn/e.png\" />");
+        assert_eq!(underline_links("an `unclosed https://a.io"), "an `unclosed <u><https://a.io></u>");
+    }
+
+    #[test]
+    fn code_runs_close_only_on_their_own_length() {
+        let upper = |text: &str| outside_code(text, str::to_uppercase);
+        assert_eq!(upper("a ``b ` c`` d"), "A ``b ` c`` D");
+        assert_eq!(upper("a ```\nb\n``` c `d` e"), "A ```\nb\n``` C `d` E");
+    }
+
+    #[test]
+    fn remove_embeds_needs_author_or_manage_messages_and_other_content() {
+        use crate::discord::{Message, Poll, User, message_flag};
+        let mine = Message { author: User { id: "me".into(), ..Default::default() }, content: "look".into(), ..Default::default() };
+        let theirs = Message { author: User { id: "them".into(), ..Default::default() }, ..mine.clone() };
+        assert!(can_remove_embeds(&mine, Some("me"), false));
+        assert!(!can_remove_embeds(&theirs, Some("me"), false));
+        assert!(can_remove_embeds(&theirs, Some("me"), true), "Manage Messages");
+        let embed_only = Message { content: String::new(), ..mine.clone() };
+        assert!(!can_remove_embeds(&embed_only, Some("me"), true), "a bot's embed-only post");
+        assert!(can_remove_embeds(&Message { poll: Some(Poll::default()), ..embed_only }, Some("me"), false), "a poll counts");
+        assert!(!can_remove_embeds(&Message { flags: message_flag::EPHEMERAL, ..mine.clone() }, Some("me"), true));
+        assert!(!can_remove_embeds(&Message { author: User { id: "1".into(), ..Default::default() }, ..mine.clone() }, Some("1"), true), "Discord's own");
+        assert!(!can_remove_embeds(&Message { kind: 21, ..mine }, Some("me"), true), "thread starter copy");
     }
 }

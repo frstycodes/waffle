@@ -821,7 +821,7 @@ impl Waffle {
         let body = open.then(|| {
             div().pl(px(30.)).pt(px(8.)).flex().flex_col().gap(px(4.)).children(details.into_iter().map(|d| {
                 let change = match (&d.old, &d.new) {
-                    (Some(old), Some(new)) => div().flex().items_center().gap(px(6.)).child(div().text_color(palette::muted(cx)).line_through().child(old.clone())).child(Icon::new(Glyph::ArrowRightBold).size(px(12.))).child(div().text_color(palette::strong(cx)).child(new.clone())),
+                    (Some(old), Some(new)) => div().flex().items_center().gap(px(6.)).child(div().text_color(palette::muted(cx)).line_through().child(old.clone())).child(Icon::new(Glyph::ArrowRight).size(px(12.))).child(div().text_color(palette::strong(cx)).child(new.clone())),
                     (None, Some(new)) => div().text_color(palette::strong(cx)).child(new.clone()),
                     (Some(old), None) => div().text_color(palette::muted(cx)).line_through().child(old.clone()),
                     (None, None) => div().text_color(palette::muted(cx)).child("Cleared"),

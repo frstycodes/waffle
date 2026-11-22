@@ -57,12 +57,29 @@ pub enum Toggle {
     FriendsAll,
     FriendsMutualFriends,
     FriendsMutualGuilds,
+    InlineEmbedMedia,
+    InlineAttachmentMedia,
+    CompactAvatars,
+    ConvertEmoticons,
+    SendButton,
+    UnderlineLinks,
+    DisplayNameStyles,
+    DesaturateUserColors,
+    HighContrast,
+    SwitchIcons,
+    ReduceMotion,
+    ReduceMotionSync,
+    GifAutoPlay,
+    AnimateEmoji,
 }
 
 // One of several, drawn as radio rows filling its group.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Choice {
     DmFilter,
+    Spoilers,
+    RoleStyle,
+    StickerAnimation,
     SpamFilter,
 }
 
@@ -74,6 +91,13 @@ impl Choice {
                 (2, "Filter all direct messages", Some("Every DM is scanned for explicit images")),
                 (1, "Filter DMs from non-friends", Some("Messages from friends aren't scanned")),
                 (0, "Don't filter direct messages", None),
+            ],
+            Choice::Spoilers => &[(0, "On click", None), (1, "On servers I moderate", None), (2, "Always", None)],
+            Choice::RoleStyle => &[(0, "In names", None), (1, "Next to names", None), (2, "Don't show role colors", None)],
+            Choice::StickerAnimation => &[
+                (0, "Always animate", None),
+                (1, "Animate on interaction", Some("Stickers animate when you hover over them")),
+                (2, "Never animate", None),
             ],
             // DmSpamFilterV2's values (settings::proto).
             Choice::SpamFilter => &[(3, "Filter all spam", None), (2, "Filter messages from non-friends (Recommended)", None), (1, "Don't filter spam", None)],
@@ -126,7 +150,6 @@ pub static SETTINGS: &[Setting] = &[
     s("native-sidebar", Appearance, "Sidebar", "Sidebar material", Some("Liquid Glass behind the sidebar"), &["liquid glass", "glass", "translucent", "transparent", "vibrancy", "blur", "wallpaper"], Custom),
     s("ui-font", Appearance, "Text", "Interface font", Some("Menus, messages and everything else"), &["font", "typeface", "text", "figtree", "type"], Custom),
     s("mono-font", Appearance, "Text", "Code font", Some("Code blocks and inline code"), &["font", "monospace", "mono", "code", "roboto mono", "typeface"], Custom),
-    s("reduce-motion", Appearance, "Motion", "Reduce motion", Some("Fades instead of springs and slides"), &["animation", "motion", "accessibility", "springs"], Custom),
     s("app-icon", Appearance, "App icon", "App icon", Some("How Waffle looks in your Dock"), &["dock icon", "logo", "icon"], Custom),
     // Voice and video
     s("input-device", VoiceVideo, "Voice", "Input device", None, &["mic", "microphone", "input"], Custom),
@@ -142,12 +165,38 @@ pub static SETTINGS: &[Setting] = &[
     s("camera", VoiceVideo, "Camera", "Camera", None, &["webcam", "video", "preview"], Custom),
     s("voice-sounds", VoiceVideo, "Sounds", "Voice sounds", Some("Join, leave, mute and deafen cues"), &["join sound", "leave sound", "cues", "sound effects"], Custom),
     on_row(s("reset-voice", VoiceVideo, "Advanced", "Reset voice and video settings", None, &["defaults", "reset"], Custom), "reset"),
-    // Chat
+    // Accessibility: Discord's sections and rows, in its order (docs/discord-settings-re.md §2).
+    s("chat-font-size", Accessibility, "Text readability", "Text size in chat", Some("Adjust the size of the chat font."), &["font size", "font scaling", "text size", "bigger text", "smaller text"], Custom),
+    s("underline-links", Accessibility, "Text readability", "Always underline links", Some("Make links stand out more."), &["links", "underline"], Switch(Toggle::UnderlineLinks)),
+    s("display-name-styles", Accessibility, "Text readability", "Display name styles", Some("Show the fonts, colours and effects people give their names."), &["name font", "name style", "nameplate", "gradient"], Switch(Toggle::DisplayNameStyles)),
+    s("ui-density", Accessibility, "Visual density", "UI density", Some("Adjust the space between server, channel, and member lists."), &["list spacing", "density", "compact", "spacious"], Custom),
+    s("message-display", Accessibility, "Visual density", "Chat message display", Some("Change the appearance of chat messages."), &["compact", "cozy", "message display", "irc"], Custom),
+    s("group-spacing", Accessibility, "Visual density", "Space between message groups", Some("Adjust the spacing between message groups."), &["spacing", "gap", "padding"], Custom),
+    s("zoom", Accessibility, "Visual density", "Zoom level", Some("Adjust the size of the interface."), &["zoom", "scale", "size", "bigger", "smaller"], Custom),
+    s("saturation", Accessibility, "Colour and contrast", "Saturation", Some("Reduce the saturation of colors within the app"), &["color", "colour", "saturation", "grayscale", "greyscale"], Custom),
+    s("desaturate-user-colors", Accessibility, "Colour and contrast", "Apply saturation setting to custom colors", Some("Apply the above setting to custom color choices, like role colors."), &["role colors", "saturation"], Switch(Toggle::DesaturateUserColors)),
+    s("high-contrast", Accessibility, "Colour and contrast", "Enable high contrast mode", Some("Enhance visibility with bold colors and sharp contrast."), &["contrast", "high contrast"], Switch(Toggle::HighContrast)),
+    s("switch-icons", Accessibility, "Colour and contrast", "Show on/off indicators", Some("On forms, menus and settings, on/off toggles will have icons."), &["toggle", "switch", "indicator", "icons"], Switch(Toggle::SwitchIcons)),
+    s("role-style", Accessibility, "Role colors", "Role colors", Some("Choose how you would like role colors to be displayed."), &["role color", "role colour", "name color", "dot"], Control::Choice(Choice::RoleStyle)),
+    s("reduce-motion", Accessibility, "Reduced motion", "Enable reduced motion", Some("Reduce the amount and intensity of animations, hover effects, and other moving effects."), &["animation", "motion", "springs", "reduce motion"], Custom),
+    s("reduce-motion-sync", Accessibility, "Reduced motion", "Sync with computer setting", None, &["animation", "motion", "system"], Custom),
+    s("min-toast", Accessibility, "Reduced motion", "Minimum notification duration", Some("Keep pop-up notifications on screen for at least this long."), &["toast", "notification", "duration", "popup"], Custom),
+    s("gif-autoplay", Accessibility, "Reduced motion", "Play GIFs when Waffle is focused", None, &["gif", "autoplay", "animation"], Custom),
+    s("animate-emoji", Accessibility, "Reduced motion", "Play animated emoji", None, &["emoji", "animated", "animation"], Custom),
+    s("sticker-animation", Accessibility, "Play sticker animations", "Play sticker animations", None, &["sticker", "animation", "animate"], Control::Choice(Choice::StickerAnimation)),
+    s("tts-rate", Accessibility, "Audio and screen reader", "Text-to-speech rate", Some("Control the speed at which text is read aloud"), &["tts", "speech", "speak", "voice", "rate", "read aloud"], Custom),
+    s("image-descriptions", Accessibility, "Audio and screen reader", "Show image descriptions", Some("Image descriptions are used to describe images for screen readers."), &["alt text", "description", "screen reader"], Custom),
+    // Chat: Discord's Messages and Chat Box rows (Appearance there).
+    s("inline-embed-media", Chat, "Show images, videos, and lolcats", "When posted as links to chat", None, &["images", "videos", "media", "links", "inline"], Switch(Toggle::InlineEmbedMedia)),
+    s("inline-attachment-media", Chat, "Show images, videos, and lolcats", "When uploaded directly to Discord", None, &["images", "videos", "media", "uploads", "attachments", "inline"], Switch(Toggle::InlineAttachmentMedia)),
     s("render-embeds", Chat, "Display", "Show embeds and link previews", None, &["links", "preview", "unfurl", "embeds"], Switch(Toggle::RenderEmbeds)),
     s("render-reactions", Chat, "Display", "Show emoji reactions", None, &["reactions", "emoji"], Switch(Toggle::RenderReactions)),
-    s("image-descriptions", Chat, "Display", "Show image descriptions", Some("Image descriptions are used to describe images for screen readers."), &["alt text", "alt", "description", "accessibility", "screen reader"], Switch(Toggle::ImageDescriptions)),
     s("tts-command", Chat, "Display", "Allow playback and usage of /tts command", Some("Using the /tts command speaks your message out loud. Turn this off if you prefer to see /tts messages as text only."), &["tts", "text to speech", "speak", "read aloud", "voice"], Switch(Toggle::TtsCommand)),
     s("clock-24", Chat, "Display", "Use a 24-hour clock", Some("For message times"), &["time", "timestamp", "am pm", "clock", "24h"], Switch(Toggle::Clock24)),
+    s("compact-avatars", Chat, "Display", "Show user avatars", None, &["avatars", "compact", "pictures"], Switch(Toggle::CompactAvatars)),
+    s("spoilers", Chat, "Show spoiler content", "Show spoiler content", None, &["spoiler", "hidden", "blur", "reveal"], Control::Choice(Choice::Spoilers)),
+    s("convert-emoticons", Chat, "Chat box", "Automatically convert emoticons in your messages to emoji", Some("For example, when you type :) Waffle will convert it to \u{1f642}"), &["emoticon", "smiley", ":)", "emoji"], Switch(Toggle::ConvertEmoticons)),
+    s("send-button", Chat, "Chat box", "Show send message button", None, &["send", "button", "enter"], Switch(Toggle::SendButton)),
     // Notifications
     s("desktop-notifications", Notifications, "Desktop", "Desktop notifications", Some("For DMs, mentions and what your server settings ask for"), &["alerts", "banner", "popup", "toast", "notify"], Switch(Toggle::DesktopNotifications)),
     s("dock-badge", Notifications, "Desktop", "Unread badge on the Dock icon", Some("Counts unread mentions and DMs"), &["badge", "count", "dock", "mentions", "unread"], Switch(Toggle::DockBadge)),
@@ -235,7 +284,7 @@ fn word_score<P: Scope>(setting: &Setting<P>, word: &str) -> Option<u32> {
 mod tests {
     use super::*;
 
-    const ALL: [Page; 10] = [Account, ContentSocial, Appearance, VoiceVideo, Chat, Notifications, Keybinds, Advanced, Updates, ActivityPrivacy];
+    const ALL: [Page; 11] = [Account, ContentSocial, Appearance, Accessibility, VoiceVideo, Chat, Notifications, Keybinds, Advanced, Updates, ActivityPrivacy];
 
     #[test]
     fn ids_and_rows_are_unique() {

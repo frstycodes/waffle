@@ -924,7 +924,8 @@ fn gallery(message: &Message, items: &[GalleryItem], path: &str, width: f32, ctx
         })
         .collect();
     let grid = Message { id: format!("{}-gallery-{path}", message.id), channel_id: message.channel_id.clone(), media, ..Default::default() };
-    chat::media_layout(&grid, width, Paging::Gallery, ctx, cx).map_or_else(|| div().into_any_element(), IntoElement::into_any_element)
+    let shown: Vec<usize> = (0..grid.media.len()).collect();
+    chat::media_layout(&grid, &shown, width, Paging::Gallery, ctx, cx).map_or_else(|| div().into_any_element(), IntoElement::into_any_element)
 }
 
 // The file card, sized from the attachment it points at, else from the component's own `size`; a
