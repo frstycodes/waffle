@@ -2,7 +2,7 @@
 // band, full-width dividers, 48px rows. Every row lays its cells out on the same `Col`s, so columns line
 // up without a grid. Narrower than its columns' minimums, the content scrolls sideways inside the box while
 // the border and corners stay put.
-use gpui_kit::{AnyElement, App, Div, ElementId, FontWeight, InteractiveElement, ParentElement, SharedString, Stateful, StatefulInteractiveElement, Styled, div, px};
+use gpui_kit::{AnyElement, App, Div, ElementId, FontWeight, InteractiveElement, ParentElement, SharedString, Stateful, StatefulInteractiveElement, Styled, base::InteractiveElementExt as _, div, px};
 
 use super::{RADIUS_MD, Squircle, edge, top};
 use crate::palette;
@@ -42,7 +42,8 @@ pub fn table(id: impl Into<SharedString>, min_width: f32, head: Div, rows: impl 
         .border_color(palette::line_strong(cx))
         .overflow_hidden()
         .child(band)
-        .child(div().id(ElementId::Name(format!("{id}-scroll").into())).overflow_x_scroll().child(content))
+        // Locked to the gesture's axis, as the page around it is, so a sideways swipe doesn't also scroll the page.
+        .child(div().id(ElementId::Name(format!("{id}-scroll").into())).overflow_x_scroll().lock_scroll_axis().child(content))
 }
 
 // The header row on the band: 12px muted labels, a fixed height so the band under it lines up.

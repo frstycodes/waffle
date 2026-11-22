@@ -1,7 +1,7 @@
 // Grouped settings (design/css/settings.css `.set-group`, `.set-card`, `.set-row`), iOS inset-grouped style: a
 // heading over a borderless card of rows, each a title and description with its control at the end, inset
 // hairlines between them.
-use gpui_kit::{App, ClickEvent, Div, ElementId, ScrollHandle, FontWeight, InteractiveElement, IntoElement, ParentElement, SharedString, Stateful, StatefulInteractiveElement, Styled, Window, component::Icon, div, prelude::FluentBuilder, px};
+use gpui_kit::{base::InteractiveElementExt as _, App, ClickEvent, Div, ElementId, ScrollHandle, FontWeight, InteractiveElement, IntoElement, ParentElement, SharedString, Stateful, StatefulInteractiveElement, Styled, Window, component::Icon, div, prelude::FluentBuilder, px};
 
 use super::{Control, RADIUS_XL, Squircle, menu_row, pressable};
 use crate::{icons::Glyph, palette};
@@ -170,7 +170,7 @@ const SETTINGS_NAV_TAIL: f32 = 12.;
 // The scrolling column of a settings page: title, then its groups.
 // Children go in `settings_column`s, so the content centres beside the nav.
 pub fn settings_page(id: impl Into<ElementId>, scroll: &ScrollHandle) -> Stateful<Div> {
-    div().id(id.into()).size_full().overflow_y_scroll().track_scroll(scroll).pt(px(32.)).px(px(40.)).pb(px(96.)).flex().flex_col().items_center().gap(px(32.))
+    div().id(id.into()).size_full().overflow_y_scroll().lock_scroll_axis().track_scroll(scroll).pt(px(32.)).px(px(40.)).pb(px(96.)).flex().flex_col().items_center().gap(px(32.))
 }
 
 pub const SETTINGS_WIDTH: f32 = 680.;
