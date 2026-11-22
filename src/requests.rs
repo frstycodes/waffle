@@ -72,6 +72,7 @@ impl Waffle {
         self.channel = None;
         self.call_view = false;
         self.requests_page = Some(tab);
+        self.guild_page = None;
         // Usernames and mutual servers come from each person's profile.
         let people: Vec<_> = self.dm_requests.iter().filter_map(|d| d.recipient.clone()).collect();
         for person in people {

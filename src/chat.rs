@@ -85,7 +85,10 @@ impl Waffle {
             // The feed stops under the header, a hard edge.
             .child(header)
             // The composer floats over the feed, which scrolls on under its glass.
-            .child(div().relative().flex_1().min_h_0().child(body).children(unread_bar).child(self.render_composer(window, cx)));
+            .child(div().relative().flex_1().min_h_0().child(body).children(unread_bar).child(match self.composer_gate(&channel, window, cx) {
+                Some(gate) => gate,
+                None => self.render_composer(window, cx).into_any_element(),
+            }));
         // The members column beside the feed runs to the window's top with a header of its own on the same line.
         let panel = self.panel_column_width().map(|w| self.part(crate::part::Column::Panel, gpui_kit::StyleRefinement::default().w(px(w)).h_full().flex_none(), cx));
         let drop_zone = self.drop_zone(&channel, cx);
@@ -466,10 +469,18 @@ impl Waffle {
             has_more,
             dm_start: channel.and_then(|c| self.dm_start(c, has_more)),
             column,
-            quick_reactions: self.prefs.frequent_emojis(3, &["💯", "😆", "💖"]),
+            quick_reactions: self.prefs.frequent_emojis(3, &["💯", "👍", "👎"]),
             shift: self.shift_held,
-            manage_messages: channel.is_some_and(|c| self.can_in(&c.id, crate::discord::perm::MANAGE_MESSAGES)),
-            threads: channel.is_some_and(|c| c.kind == ChannelKind::Text && self.can_in(&c.id, crate::discord::perm::CREATE_PUBLIC_THREADS)),
+            facts: crate::message_menu::Facts {
+                mine: false,
+                manage: channel.is_some_and(|c| self.can_in(&c.id, crate::discord::perm::MANAGE_MESSAGES)),
+                pin: channel.is_some_and(|c| self.can_in(&c.id, crate::discord::perm::PIN_MESSAGES)),
+                in_dm: channel.is_some_and(|c| self.dms.iter().any(|d| d.id == c.id)),
+                threads: channel.is_some_and(|c| c.kind == ChannelKind::Text && self.can_in(&c.id, crate::discord::perm::CREATE_PUBLIC_THREADS)),
+                developer: self.developer_mode,
+                saved: false,
+            },
+            saved_ids: self.saved_ids.clone(),
             poll_picks: self.poll_picks.clone(),
             poll_peek: self.poll_peek.clone(),
         })
@@ -523,6 +534,7 @@ impl Waffle {
             .children(self.composer_bar(cx))
             .children(self.attachment_tray(cx))
             .child(row);
+        let guide_bar = self.channel.clone().and_then(|channel| self.guide_action_bar(&channel, cx));
         let typers = self.typers();
         let names: Vec<&str> = typers.iter().map(|t| t.name.as_str()).collect();
         // A glass pill just above the composer, out of the flow, so the box never moves when someone types.
@@ -574,7 +586,8 @@ impl Waffle {
             .child(measure)
             .children(self.jump_to_present(cx))
             // Occludes: the composer floats over the feed, which must not take the hover or the click under it.
-            .child(div().relative().occlude().child(card).children(typing))
+            // A Server Guide to-do bar rides on top, inside the measured stack so the feed leaves room for it.
+            .child(div().relative().occlude().flex().flex_col().gap(px(8.)).children(guide_bar).child(card).children(typing))
             .children(note)
             // 8px off the window's foot, level with the user card in the left column.
             .child(div().h(px(8.)))
@@ -893,9 +906,9 @@ pub(crate) struct RowContext {
     // The toolbar's three quick reactions: most used, padded with 💯 😆 💖.
     quick_reactions: Vec<Emoji>,
     shift: bool,
-    manage_messages: bool,
-    // Messages here can start threads.
-    threads: bool,
+    // What the channel lets you do to a message, for the Shift toolbar (`mine` set per message).
+    facts: crate::message_menu::Facts,
+    saved_ids: std::rc::Rc<std::collections::HashSet<String>>,
     // The widest media may run.
     column: f32,
     poll_picks: HashMap<String, Vec<u32>>,
@@ -2573,10 +2586,11 @@ fn reaction_pill(id: SharedString, mine: bool, cx: &App) -> ui::Pressable {
 // The hover toolbar: three quick reactions, then react, reply, thread and more. With Shift held, edit
 // and delete take the quick reactions' place behind a Shift keycap; the rest stay put.
 fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
+    use crate::message_menu::MessageAction as A;
     let (hover, line) = (palette::hover(cx), palette::line(cx));
     let sep = || div().w(px(1.)).h(px(20.)).mx(px(2.)).bg(line);
     let sent = message.state == SendState::Sent;
-    let shifted = ctx.shift && (mine || ctx.manage_messages);
+    let facts = crate::message_menu::Facts { mine, saved: ctx.saved_ids.contains(&message.id), ..ctx.facts };
     let mut bar = div()
         .id(SharedString::from(format!("actions-{}", message.id)))
         // Rides 18px into the row above: block the pointer there and keep this row hovered, or the pointer hands
@@ -2595,30 +2609,53 @@ fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> Any
         .bg(palette::surface(Level::Overlay, cx))
         .shadow(ui::shadow_pop(cx))
         .child(crate::gif::above_gifs());
-    if shifted || message.state == SendState::Failed {
-        if shifted {
-            bar = bar.child(ui::kbd("Shift", cx).ml(px(6.)).mr(px(4.)));
-        }
-        if mine && sent {
-            let (this, msg) = (ctx.this.clone(), message.clone());
-            bar = bar.child(ui::icon_button(SharedString::from(format!("edit-{}", message.id)), Glyph::Pen, "Edit", cx).on_click(move |_, window, cx| { cx.stop_propagation();
-                this.update(cx, |this, cx| this.start_edit(msg.clone(), window, cx)).ok();
-            }));
-        }
+    // One button per action, doing what its menu row does; held Shift skips the confirms, as Discord's.
+    let action = |action: A, cx: &App| {
+        let (glyph, tip) = match action {
+            A::Edit => (Glyph::Pen, "Edit"),
+            A::Reply => (Glyph::Reply, "Reply"),
+            A::Forward => (Glyph::Forward, "Forward"),
+            A::Thread => (Glyph::ThreadNew, "Create Thread"),
+            A::React => (Glyph::Emoji, "Add Reaction"),
+            A::CopyText => (Glyph::Copy, "Copy Text"),
+            A::Pin if message.pinned => (Glyph::PinSlash, "Unpin Message"),
+            A::Pin => (Glyph::Pin, "Pin Message"),
+            A::MarkUnread => (Glyph::Envelope, "Mark Unread"),
+            A::Save if facts.saved => (Glyph::Bookmark, "Remove from Saved"),
+            A::Save => (Glyph::Bookmark, "Save Message"),
+            A::Delete => (Glyph::Trash, "Delete"),
+            A::CopyId => (Glyph::Id, "Copy Message ID"),
+        };
         let (this, msg) = (ctx.this.clone(), message.clone());
-        let (danger, danger_ink) = (palette::danger(), palette::danger_ink(cx));
-        bar = bar.child(
-            ui::icon_button(SharedString::from(format!("delete-{}", message.id)), Glyph::Trash, "Delete", cx)
-                .text_color(danger_ink)
-                .hover(move |s| s.bg(danger).text_color(gpui_kit::white()))
-                .on_click(move |_, _, cx| { cx.stop_propagation();
-                    this.update(cx, |this, cx| this.delete(msg.clone(), cx)).ok();
-                }),
-        );
-        if sent {
-            bar = bar.child(sep());
+        let button = ui::icon_button(SharedString::from(format!("{action:?}-{}", message.id)), glyph, tip, cx).on_click(move |_, window, cx| {
+            cx.stop_propagation();
+            let quick = window.modifiers().shift;
+            this.update(cx, |this, cx| this.run_message_action(action, &msg, quick, window, cx)).ok();
+        });
+        match action {
+            A::Delete => {
+                let (danger, danger_ink) = (palette::danger(), palette::danger_ink(cx));
+                button.text_color(danger_ink).hover(move |s| s.bg(danger).text_color(gpui_kit::white()))
+            }
+            _ => button,
         }
-    } else if sent {
+    };
+    let offer = |a: A| a.allowed(message, &facts).then_some(a);
+    if !sent {
+        // A failed send: Delete (and the menu's Resend).
+        bar = bar.children(offer(A::Delete).map(|a| action(a, cx)));
+    } else if ctx.shift {
+        // Shift: the menu's direct actions laid out on the bar, in Discord's order.
+        let (this, msg) = (ctx.this.clone(), message.clone());
+        let link = ui::icon_button(SharedString::from(format!("link-{}", message.id)), Glyph::Link, "Copy Message Link", cx).on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            this.update(cx, |this, cx| this.copy_text(this.message_link(&msg), cx)).ok();
+        });
+        bar = bar
+            .children(offer(A::CopyId).map(|a| action(a, cx)))
+            .child(link)
+            .children([A::MarkUnread, A::Save, A::Pin, A::Thread, A::Reply, A::React, A::Edit, A::Forward, A::Delete].into_iter().filter_map(offer).map(|a| action(a, cx)));
+    } else {
         for quick in ctx.quick_reactions.iter().cloned() {
             let (this, msg, emoji) = (ctx.this.clone(), message.clone(), quick.clone());
             let face = emoji_face(&quick, 20., 18.);
@@ -2638,29 +2675,15 @@ fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> Any
                     }),
             );
         }
-        bar = bar.child(sep());
+        bar = bar.child(sep()).children([A::React, A::Edit, A::Reply, A::Forward, A::Thread].into_iter().filter_map(offer).map(|a| action(a, cx)));
     }
-    if sent {
+    if !ctx.shift || !sent {
         let (this, msg) = (ctx.this.clone(), message.clone());
-        bar = bar.child(ui::icon_button(SharedString::from(format!("react-{}", message.id)), Glyph::Emoji, "Add Reaction", cx).on_click(move |_, window, cx| { cx.stop_propagation();
-            this.update(cx, |this, cx| this.open_emoji_picker(EmojiTarget::Reaction(Box::new(msg.clone())), window, cx)).ok();
+        bar = bar.child(ui::icon_button(SharedString::from(format!("more-{}", message.id)), Glyph::MoreVertical, "More", cx).on_click(move |event, _, cx| { cx.stop_propagation();
+            let at = event.position();
+            this.update(cx, |this, cx| this.open_message_menu(msg.clone(), at, cx)).ok();
         }));
-        let (this, msg) = (ctx.this.clone(), message.clone());
-        bar = bar.child(ui::icon_button(SharedString::from(format!("reply-{}", message.id)), Glyph::Reply, "Reply", cx).on_click(move |_, window, cx| { cx.stop_propagation();
-            this.update(cx, |this, cx| this.start_reply(msg.clone(), window, cx)).ok();
-        }));
-        if ctx.threads && message.thread.is_none() {
-            let (this, msg) = (ctx.this.clone(), message.clone());
-            bar = bar.child(ui::icon_button(SharedString::from(format!("thread-{}", message.id)), Glyph::ThreadNew, "Create Thread", cx).on_click(move |_, window, cx| { cx.stop_propagation();
-                this.update(cx, |this, cx| this.create_thread(msg.clone(), window, cx)).ok();
-            }));
-        }
     }
-    let (this, msg) = (ctx.this.clone(), message.clone());
-    bar = bar.child(ui::icon_button(SharedString::from(format!("more-{}", message.id)), Glyph::MoreVertical, "More", cx).on_click(move |event, _, cx| { cx.stop_propagation();
-        let at = event.position();
-        this.update(cx, |this, cx| this.open_message_menu(msg.clone(), at, cx)).ok();
-    }));
     // GAP: not `deferred`: inside the chat list a deferred bar never painted. It overlaps only the message
     // above, which the list paints first, so it draws on top without it.
     bar.into_any_element()

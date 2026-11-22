@@ -129,6 +129,22 @@ pub fn scroll_area(list: Stateful<Div>, scroll: &gpui_kit::ScrollHandle) -> Div 
         .vertical_scrollbar(scroll)
 }
 
+/// A list that scrolls inside a fixed box, its top and bottom edges fading into `surface` wherever there is
+/// more to scroll to: a short box of rows doesn't look scrollable on its own, and the fade says it is.
+pub fn scroll_fade(list: Stateful<Div>, scroll: &gpui_kit::ScrollHandle, surface: Hsla) -> Div {
+    // gpui's offset runs negative as you scroll down; max_offset is positive.
+    let (scrolled, max) = (-f32::from(scroll.offset().y), f32::from(scroll.max_offset().y));
+    let edge = |top: bool| {
+        let fade = div().absolute().left_0().right_0().h(px(32.)).bg(linear_gradient(if top { 180. } else { 0. }, linear_color_stop(surface, 0.), linear_color_stop(surface.opacity(0.), 1.)));
+        if top { fade.top_0() } else { fade.bottom_0() }
+    };
+    div()
+        .relative()
+        .child(list.overflow_y_scroll().track_scroll(scroll))
+        .children((scrolled > 1.).then(|| edge(true)))
+        .children((scrolled < max - 1.).then(|| edge(false)))
+        .vertical_scrollbar(scroll)
+}
 
 thread_local! {
     // Labels whose text overflowed their box when last painted, by key; they show the full text on hover.
