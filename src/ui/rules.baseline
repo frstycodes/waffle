@@ -3,7 +3,6 @@ src/accounts.rs	global-notify	3
 src/active_now.rs	global-notify	1
 src/active_now.rs	raw-px	1
 src/announcements.rs	global-notify	18
-src/announcements.rs	raw-floating	1
 src/announcements.rs	raw-px	6
 src/app_modal.rs	global-notify	6
 src/audio_player.rs	raw-floating	2
@@ -40,7 +39,6 @@ src/dm_call.rs	global-notify	5
 src/dm_call.rs	kit-tooltip	4
 src/dm_call.rs	raw-px	56
 src/drag.rs	global-notify	1
-src/drag.rs	raw-floating	1
 src/drag.rs	raw-px	24
 src/events.rs	global-notify	14
 src/events.rs	raw-px	9
@@ -104,7 +102,6 @@ src/poll.rs	raw-px	12
 src/presence.rs	raw-px	6
 src/profile.rs	global-notify	7
 src/profile.rs	raw-color	8
-src/profile.rs	raw-floating	1
 src/profile.rs	raw-px	12
 src/rail_drag.rs	global-notify	2
 src/reactions.rs	global-notify	5
@@ -114,7 +111,6 @@ src/report.rs	raw-px	2
 src/requests.rs	global-notify	3
 src/restart.rs	global-notify	1
 src/role_popout.rs	global-notify	2
-src/role_popout.rs	raw-floating	1
 src/role_popout.rs	raw-px	4
 src/search_menu.rs	global-notify	7
 src/search_menu.rs	raw-px	23

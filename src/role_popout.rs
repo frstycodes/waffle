@@ -175,6 +175,7 @@ impl Waffle {
             .child(div().id("role-popout-rows").flex_shrink(1.).min_h_0().overflow_y_scroll().flex().flex_col().gap_0p5().children(rows))
             .children(more.map(|n| div().px_2().py_1p5().text_size(ui::TEXT_SM).text_color(palette::faint(cx)).child(format!("+{} more", crate::link_preview::grouped(n.into())))));
         let key = SharedString::from(format!("role-popout-{}", open.role_id.as_deref().unwrap_or("everyone")));
+        // lint-allow(raw-floating): placed inside the overlay backdrop, with a measured top margin floating_at can't take.
         let placed = gpui_kit::anchored()
             .position(open.at)
             .snap_to_window_with_margin(gpui_kit::Edges { top: px(top), right: px(8.), bottom: px(8.), left: px(8.) })

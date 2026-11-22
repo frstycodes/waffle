@@ -433,6 +433,7 @@ impl Waffle {
             let ease_in = t * t * t;
             ghost = ghost.opacity(1. - ease_in).scale(1. - 0.6 * ease_in);
         }
+        // lint-allow(raw-floating): a drag ghost must not occlude the drop targets under it.
         Some(deferred(anchored().position(Point::default()).child(ghost)).with_priority(2).into_any_element())
     }
 }

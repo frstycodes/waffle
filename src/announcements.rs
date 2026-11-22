@@ -603,6 +603,7 @@ impl Waffle {
         let viewport = window.viewport_size();
         let right = f32::from(card.at.x) + SOURCE_CARD_WIDTH + 8. > f32::from(viewport.width);
         let rise = ui::rise(surface.transform_origin(ui::corner(right, false)), "source-card-rise", std::time::Duration::ZERO);
+        // lint-allow(raw-floating): placed inside the overlay backdrop, which already occludes; the card occludes itself.
         let placed = gpui_kit::anchored().position(card.at).snap_to_window_with_margin(px(8.)).child(rise);
         Some(crate::overlays::backdrop("source-card-backdrop", cx).child(placed).into_any_element())
     }
