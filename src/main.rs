@@ -980,7 +980,7 @@ impl Waffle {
                 return;
             }
             if this.create_channel.is_some() {
-                return this.submit_create_channel(cx);
+                return this.advance_create_channel(window, cx);
             }
             if this.dialog.as_ref().is_some_and(|d| d.input) {
                 this.confirm_dialog(window, cx);

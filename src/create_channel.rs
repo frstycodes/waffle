@@ -1,7 +1,6 @@
 // Create Channel, Discord's dialog: the type, the name with the type's glyph in front, and Private channel,
-// which hides it from @everyone. Where Discord asks for members and roles in a second step, Waffle opens the
-// picker in place under the switch (and, for Stage, its moderators). Opened from a category's + (in that
-// category) or the server menu (uncategorised). Copy, gating, normalization and overwrites follow
+// which hides it from @everyone. A private channel, or a Stage, then asks for its members and roles (its
+// moderators) in a second step, as Discord does. Opened from a category's + (in that category) or the server menu (uncategorised). Copy, gating, normalization and overwrites follow
 // docs/discord-create-channel-re.md.
 use std::{cmp::Reverse, collections::HashSet};
 
@@ -50,7 +49,7 @@ const NAME_MAX: usize = 100;
 const STAGE_MODERATOR: u64 = perm::MANAGE_CHANNELS | perm::MUTE_MEMBERS | perm::MOVE_MEMBERS;
 // GAP: rows past this many members aren't listed; searching narrows to the rest.
 const MEMBER_CAP: usize = 100;
-const ACCESS_LIST_HEIGHT: f32 = 216.;
+const ACCESS_LIST_HEIGHT: f32 = 320.;
 
 pub(crate) struct CreateChannel {
     guild_id: String,
@@ -59,6 +58,8 @@ pub(crate) struct CreateChannel {
     kind: u64,
     private: bool,
     picked: Vec<Pick>,
+    // On the second step: who may see it, or Stage's moderators.
+    choosing_access: bool,
     search: Entity<SearchState>,
     _subscriptions: [Subscription; 2],
 }
@@ -117,7 +118,7 @@ impl Waffle {
             }),
             cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify()),
         ];
-        self.create_channel = Some(CreateChannel { guild_id, parent, category, kind, private: false, picked: Vec::new(), search, _subscriptions: subscriptions });
+        self.create_channel = Some(CreateChannel { guild_id, parent, category, kind, private: false, picked: Vec::new(), choosing_access: false, search, _subscriptions: subscriptions });
         cx.notify();
     }
 
@@ -165,6 +166,26 @@ impl Waffle {
         cx.notify();
     }
 
+    // The first step's primary action: Next into the access step for a private channel or a Stage,
+    // otherwise create.
+    pub(crate) fn advance_create_channel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let named = !self.dialog_input.read(cx).value().trim().is_empty();
+        let Some(form) = self.create_channel.as_mut().filter(|_| named) else { return };
+        if form.choosing_access || !needs_access_step(form) {
+            return self.submit_create_channel(cx);
+        }
+        form.choosing_access = true;
+        form.search.update(cx, |state, cx| state.focus(window, cx));
+        cx.notify();
+    }
+
+    fn back_to_channel_info(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(form) = self.create_channel.as_mut() else { return };
+        form.choosing_access = false;
+        self.dialog_input.update(cx, |state, cx| state.focus(window, cx));
+        cx.notify();
+    }
+
     pub(crate) fn submit_create_channel(&mut self, cx: &mut Context<Self>) {
         let name = self.dialog_input.read(cx).value().trim().to_owned();
         let Some(form) = self.create_channel.as_ref().filter(|_| !name.is_empty()) else { return };
@@ -203,31 +224,64 @@ impl Waffle {
     pub(crate) fn render_create_channel(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let form = self.create_channel.as_ref()?;
         let guild = self.guilds.iter().find(|g| g.id == form.guild_id)?;
+        let step = match form.choosing_access {
+            true => self.access_step(form, guild, window, cx),
+            false => self.info_step(form, guild, window, cx),
+        };
+        let body = ui::dialog_body()
+            .gap(px(20.))
+            .on_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| match e.keystroke.key.as_str() {
+                "enter" => this.advance_create_channel(window, cx),
+                "escape" => this.close_create_channel(cx),
+                _ => {}
+            }))
+            .children(step);
+        let backdrop = div().id("create-channel-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_create_channel(cx)));
+        Some(ui::modal(backdrop, ui::dialog("create-channel", 460., body, window, cx), cx))
+    }
+
+    // Step one: the type, the name, and Private channel.
+    fn info_step(&self, form: &CreateChannel, guild: &Guild, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let rows: Vec<AnyElement> = offered_types(guild, self.my_id()).into_iter().map(|kind| type_row(kind, form.private, kind == form.kind, window, cx).into_any_element()).collect();
         let empty = self.dialog_input.read(cx).value().trim().is_empty();
         let focus = gpui_kit::Focusable::focus_handle(self.dialog_input.read(cx), cx);
         let name = ui::text_field("create-channel-name", Input::new(&self.dialog_input).appearance(false), &focus).leading(type_icon(form.kind, form.private).size(px(16.)));
-        let shows_picker = form.private || form.kind == STAGE;
+        let primary = if needs_access_step(form) { "Next" } else { "Create channel" };
         let actions = div()
             .flex()
             .gap(px(8.))
             .child(ui::button("create-channel-cancel", Tone::Secondary, cx).flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_create_channel(cx))))
-            .child(ui::button("create-channel-submit", Tone::Primary, cx).flex_1().disabled(empty).child("Create channel").on_click(cx.listener(|this, _, _, cx| this.submit_create_channel(cx))));
-        let body = ui::dialog_body()
-            .gap(px(20.))
-            .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| match e.keystroke.key.as_str() {
-                "enter" => this.submit_create_channel(cx),
-                "escape" => this.close_create_channel(cx),
-                _ => {}
-            }))
-            .child(dialog_head(form.category.clone(), cx))
-            .child(group(section_label("Channel type", cx)).child(div().flex().flex_col().gap(px(2.)).children(rows)))
-            .child(group(section_label("Channel name", cx)).child(name).when(form.kind == ANNOUNCEMENT, |g| g.child(announcement_note(cx))))
-            .when(allows_private(form.kind), |b| b.child(private_row(form.private, window, cx)))
-            .when(shows_picker, |b| b.child(self.access_picker(form, guild, window, cx)))
-            .child(actions);
-        let backdrop = div().id("create-channel-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_create_channel(cx)));
-        Some(ui::modal(backdrop, ui::dialog("create-channel", 460., body, window, cx), cx))
+            .child(ui::button("create-channel-submit", Tone::Primary, cx).flex_1().disabled(empty).child(primary).on_click(cx.listener(|this, _, window, cx| this.advance_create_channel(window, cx))));
+        let category = form.category.clone().map(|c| SharedString::from(format!("in {c}")));
+        let mut step = vec![
+            dialog_head("Create channel", None, category, cx).into_any_element(),
+            group(section_label("Channel type", cx)).child(div().flex().flex_col().gap(px(2.)).children(rows)).into_any_element(),
+            group(section_label("Channel name", cx)).child(name).when(form.kind == ANNOUNCEMENT, |g| g.child(announcement_note(cx))).into_any_element(),
+        ];
+        if allows_private(form.kind) {
+            step.push(private_row(form.private, window, cx).into_any_element());
+        }
+        step.push(actions.into_any_element());
+        step
+    }
+
+    // Step two: who may see the private channel, or the Stage's moderators. Nothing picked is allowed
+    // (Discord's Skip): the channel is then yours alone, or a Stage with no extra moderators.
+    fn access_step(&self, form: &CreateChannel, guild: &Guild, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let stage = form.kind == STAGE;
+        let title = if stage { "Add Stage moderators" } else { "Add members or roles" };
+        let name: SharedString = self.dialog_input.read(cx).value().trim().to_owned().into();
+        let primary = if form.picked.is_empty() { "Skip" } else { "Create channel" };
+        let actions = div()
+            .flex()
+            .gap(px(8.))
+            .child(ui::button("create-channel-back", Tone::Secondary, cx).flex_1().child("Back").on_click(cx.listener(|this, _, window, cx| this.back_to_channel_info(window, cx))))
+            .child(ui::button("create-channel-create", Tone::Primary, cx).flex_1().child(primary).on_click(cx.listener(|this, _, _, cx| this.submit_create_channel(cx))));
+        vec![
+            dialog_head(title, Some(type_icon(form.kind, form.private)), Some(name), cx).into_any_element(),
+            self.access_picker(form, guild, window, cx),
+            actions.into_any_element(),
+        ]
     }
 
     // Who may see a private channel, or Stage's moderators: the count, a search, the picks as pills, and
@@ -237,7 +291,7 @@ impl Waffle {
         let query = form.search.read(cx).value().to_string();
         let candidates = self.access_candidates(guild, &query);
         let muted = palette::muted(cx);
-        let head = section_label(if stage { "Stage moderators" } else { "Who can access this channel" }, cx)
+        let head = section_label(if stage { "Moderators" } else { "Members and roles" }, cx)
             .flex()
             .items_baseline()
             .child(div().ml_auto().text_size(px(12.)).font_weight(FontWeight::NORMAL).text_color(muted).child(access_count(form.picked.len(), stage)));
@@ -280,6 +334,10 @@ fn offered_types(guild: &Guild, me: &str) -> Vec<u64> {
             _ => true,
         })
         .collect()
+}
+
+fn needs_access_step(form: &CreateChannel) -> bool {
+    form.private || form.kind == STAGE
 }
 
 fn allows_private(kind: u64) -> bool {
@@ -401,20 +459,14 @@ fn access_count(picked: usize, stage: bool) -> String {
     }
 }
 
-fn dialog_head(category: Option<String>, cx: &mut Context<Waffle>) -> impl IntoElement {
+// The title, and under it where the channel goes ("in General") or, on the access step, the channel itself.
+fn dialog_head(title: &'static str, icon: Option<Icon>, sub: Option<SharedString>, cx: &mut Context<Waffle>) -> impl IntoElement {
     let (strong, muted) = (palette::strong(cx), palette::muted(cx));
+    let sub = sub.map(|text| div().flex().items_center().gap(px(4.)).text_size(px(14.)).text_color(muted).children(icon.map(|i| i.size(px(14.)))).child(text));
     div()
         .flex()
         .items_start()
-        .child(
-            div()
-                .flex_1()
-                .flex()
-                .flex_col()
-                .gap(px(2.))
-                .child(div().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Create channel"))
-                .children(category.map(|c| div().text_size(px(14.)).text_color(muted).child(format!("in {c}")))),
-        )
+        .child(div().flex_1().min_w_0().flex().flex_col().gap(px(2.)).child(div().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(title)).children(sub))
         .child(ui::icon_button("create-channel-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_create_channel(cx))))
 }
 
@@ -550,8 +602,12 @@ pub(crate) fn demo(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &m
         "create-channel-private" => {
             form.private = true;
             form.picked = role.into_iter().chain(member).collect();
+            form.choosing_access = true;
         }
-        "create-channel-stage" => form.picked = member.into_iter().collect(),
+        "create-channel-stage" => {
+            form.picked = member.into_iter().collect();
+            form.choosing_access = true;
+        }
         _ => {}
     }
 }
