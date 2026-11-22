@@ -4,7 +4,7 @@ use std::time::Duration;
 use gpui_kit::{
     AnyElement, App, Context, Div, FontWeight, Hsla, MouseButton, Pixels, Point, SharedString, Stateful, StyledText, Window,
     component::{ActiveTheme, Icon, text::TextView, tooltip::Tooltip},
-    div, img, linear_color_stop, linear_gradient, prelude::*, px, rgb,
+    div, img, linear_color_stop, linear_gradient, prelude::*, px, relative, rgb,
 };
 
 use crate::{
@@ -35,7 +35,7 @@ impl Waffle {
         // The last profile we fetched shows at once; a stale one refreshes underneath it.
         let key = profile_key(&user.id, guild_id.as_deref());
         let cached = self.profiles.cached(&key);
-        self.profile_card = Some(ProfileCard { user: user.clone(), guild_id: guild_id.clone(), at, profile: cached });
+        self.profile_card = Some(ProfileCard { user: user.clone(), guild_id: guild_id.clone(), at, profile: cached, all_activity: false });
         cx.notify();
         if self.presences.get(&user.id).and_then(|p| p.rich.as_ref()).is_some_and(|r| r.started.is_some()) {
             self.tick_profile_timer(user.id.clone(), cx);
@@ -114,11 +114,13 @@ impl Waffle {
             .flex_col()
             .gap_3()
             .child(name_block(&card.user, &profile, ink))
+            // Not fetched yet: where the badges, mutuals and bio will be.
+            .when(card.profile.is_none(), |b| b.child(profile_skeleton(cx)))
             .children(badges(&profile.badges, ink))
             .children(mutuals(&profile, ink))
             .children(profile.bio.as_ref().map(|bio| bio_view(&card.user.id, bio, ink)))
             .children(game_collection(&profile.games, ink))
-            .children(self.presences.get(&card.user.id).and_then(|p| p.rich.as_ref()).map(|rich| self.activity_card(card, rich, ink, cx)))
+            .children(self.profile_activity(card, ink, cx))
             .children(self.roles_row(card, &profile, ink, cx));
         let (outer, inner) = themed_card(ink, max_height, cx);
         let inner = inner
@@ -145,7 +147,9 @@ impl Waffle {
         let status = self.presences.get(&user.id).map(|p| p.mark()).or(is_me.then_some(self.my_status.into()));
         let (banner, _) = banner(profile, ink, radius, cx);
         let decoration = user.decoration.clone().or(profile.decoration.clone());
-        let avatar = div().p(px(AVATAR_RING)).rounded_full().bg(ink.top).child(decorated_avatar(&user.avatar, decoration.as_deref(), AVATAR, status, ink.top));
+        // An open profile's avatar and decoration move, as Discord's.
+        let decoration = decoration.as_deref().map(crate::discord::animated);
+        let avatar = div().p(px(AVATAR_RING)).rounded_full().bg(ink.top).child(decorated_avatar(&crate::discord::animated(&user.avatar), decoration.as_deref(), AVATAR, status, ink.top));
         let edit = is_me.then(|| {
             ui::button("profile-edit", ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::Pen).size(px(16.))).child("Edit profile").on_click(cx.listener(|this, _, window, cx| {
                 this.profile_card = None;
@@ -189,6 +193,143 @@ impl Waffle {
 
     // Discord's rich presence card: heading and menu, the large image, then name, details, state with
     // the party size, the elapsed time, and Ask to Join when the party is open.
+    // Discord's popout shows one activity card: their stream, else their first activity, else the voice
+    // channel they're in.
+    fn profile_activity(&self, card: &ProfileCard, ink: Ink, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let place = self.guilds.iter().find_map(|g| {
+            let state = g.voice_states.iter().find(|v| v.user_id == card.user.id)?;
+            let channel = g.channels.iter().find(|c| Some(&c.id) == state.channel_id.as_ref())?;
+            Some((g, channel, state.streaming))
+        });
+        // Discord's order: the stream, each activity, then voice when not streaming. The popout shows
+        // the first; the rest wait behind Show more.
+        let mut cards: Vec<AnyElement> = Vec::new();
+        if let Some((guild, channel, true)) = place {
+            cards.push(self.stream_activity(card, guild, channel, ink, cx));
+        }
+        if let Some(rich) = self.presences.get(&card.user.id).and_then(|p| p.rich.as_ref()) {
+            cards.push(self.activity_card(card, rich, ink, cx).into_any_element());
+        }
+        if let Some((guild, channel, false)) = place {
+            cards.push(self.voice_activity(card, guild, channel, ink, cx));
+        }
+        if cards.is_empty() {
+            return None;
+        }
+        let more = cards.len() - 1;
+        let shown = if card.all_activity { cards.len() } else { 1 };
+        let column = div().flex().flex_col().gap(px(8.)).children(cards.into_iter().take(shown));
+        if more == 0 || card.all_activity {
+            return Some(column.into_any_element());
+        }
+        let show_more = ui::button("profile-activity-more", ui::Tone::Secondary, cx).small().w_full().child("Show more").on_click(cx.listener(|this, _, _, cx| {
+            if let Some(card) = &mut this.profile_card {
+                card.all_activity = true;
+            }
+            cx.notify();
+        }));
+        Some(column.child(show_more).into_any_element())
+    }
+
+    // .profile-stream: "Streaming {game}" with LIVE, the stream's preview (a click watches it, joining the
+    // call first if need be), where it is, and Join Voice.
+    fn stream_activity(&self, card: &ProfileCard, guild: &crate::discord::Guild, channel: &crate::discord::Channel, ink: Ink, cx: &mut Context<Self>) -> AnyElement {
+        let user_id = card.user.id.clone();
+        let is_me = self.me.as_ref().is_some_and(|me| me.id == user_id);
+        let game = self.presences.get(&user_id).and_then(|p| p.activity.as_ref()).filter(|a| a.kind == ActivityKind::Playing).map(|a| a.text.clone());
+        let heading = game.map_or_else(|| "Streaming".to_owned(), |game| format!("Streaming {game}"));
+        let connected = self.call.as_ref().is_some_and(|c| c.channel.id == channel.id && c.connected);
+        let watch_channel = channel.clone();
+        let preview = div()
+            .id("profile-stream-preview")
+            .relative()
+            .w_full()
+            .aspect_ratio(16. / 9.)
+            .child(crate::call::stream_fill(RADIUS_SM).absolute().inset_0())
+            .children(self.stream_preview(&user_id).map(|url| ui::media(url, ui::all(RADIUS_SM)).absolute().size_full().object_fit(gpui_kit::ObjectFit::Cover)))
+            .when(!is_me, |d| {
+                d.cursor_pointer().on_click(cx.listener(move |this, _, window, cx| {
+                    this.profile_card = None;
+                    match connected {
+                        true => this.watch_stream(user_id.clone(), cx),
+                        false => this.watch_on_connect = Some(user_id.clone()),
+                    }
+                    this.show_call(watch_channel.clone(), window, cx);
+                }))
+            });
+        let head = div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .min_w_0()
+            .child(div().truncate().text_size(px(14.)).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(heading))
+            .child(ui::live_badge());
+        div()
+            .p_3()
+            .flex()
+            .flex_col()
+            .gap(px(10.))
+            .squircle(RADIUS_MD)
+            .bg(ink.tile)
+            .child(head)
+            .child(preview)
+            .child(self.voice_place_row(guild, channel, ink))
+            .children((!is_me && !connected).then(|| self.join_voice_button(guild, channel, cx)))
+            .into_any_element()
+    }
+
+    // .profile-voice: "In voice", who's there, where, and Join Voice.
+    fn voice_activity(&self, card: &ProfileCard, guild: &crate::discord::Guild, channel: &crate::discord::Channel, ink: Ink, cx: &mut Context<Self>) -> AnyElement {
+        let is_me = self.me.as_ref().is_some_and(|me| me.id == card.user.id);
+        let connected = self.call.as_ref().is_some_and(|c| c.channel.id == channel.id && c.connected);
+        div()
+            .p_3()
+            .flex()
+            .flex_col()
+            .gap(px(10.))
+            .squircle(RADIUS_MD)
+            .bg(ink.tile)
+            .child(div().text_size(px(14.)).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child("In voice"))
+            .child(self.voice_place_row(guild, channel, ink))
+            .children((!is_me && !connected).then(|| self.join_voice_button(guild, channel, cx)))
+            .into_any_element()
+    }
+
+    // The server › channel breadcrumb, and who's in it.
+    fn voice_place_row(&self, guild: &crate::discord::Guild, channel: &crate::discord::Channel, ink: Ink) -> Div {
+        let faces: Vec<String> = guild.voice_states.iter().filter(|v| v.channel_id.as_ref() == Some(&channel.id)).map(|v| v.user.as_ref().map_or_else(|| crate::discord::avatar_url(&v.user_id, None), |u| u.avatar.clone())).collect();
+        let server = match &guild.icon {
+            Some(icon) => ui::media(icon.clone(), ui::all(RADIUS_XS)).size(px(20.)).flex_none().into_any_element(),
+            None => div().size(px(20.)).flex_none().squircle(RADIUS_XS).bg(ink.top).into_any_element(),
+        };
+        div()
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .min_w_0()
+            .text_size(px(14.))
+            .text_color(ink.text)
+            .child(server)
+            .child(Icon::new(Glyph::ChevronRight).size(px(14.)).flex_none().text_color(ink.muted))
+            .child(crate::sidebar::channel_glyph(channel).size(px(16.)).flex_none().text_color(ink.muted))
+            .child(div().flex_1().min_w_0().truncate().child(channel.name.clone()))
+            .child(ui::capped_stack(&faces, 3, 20., ink.tile, ink.top, ink.strong))
+    }
+
+    fn join_voice_button(&self, guild: &crate::discord::Guild, channel: &crate::discord::Channel, cx: &mut Context<Self>) -> AnyElement {
+        let (guild_id, channel) = (guild.id.clone(), channel.clone());
+        ui::button("profile-join-voice", ui::Tone::Secondary, cx)
+            .w_full()
+            .justify_center()
+            .child("Join Voice")
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.profile_card = None;
+                this.join_voice_in(Some(guild_id.clone()), channel.clone(), cx);
+                cx.notify();
+            }))
+            .into_any_element()
+    }
+
     fn activity_card(&self, card: &ProfileCard, rich: &RichPresence, ink: Ink, cx: &mut Context<Self>) -> Div {
         let (user, guild_id) = (card.user.clone(), card.guild_id.clone());
         let more = div()
@@ -509,4 +650,16 @@ fn message_field(user: &User, ink: Ink, cx: &mut Context<Waffle>) -> Div {
 // A profile differs per server (nickname, roles, server avatar), so the server is part of its key.
 pub(crate) fn profile_key(user_id: &str, guild_id: Option<&str>) -> String {
     format!("{user_id}-{}", guild_id.unwrap_or("dm"))
+}
+
+fn profile_skeleton(cx: &App) -> Div {
+    let line = |id: &'static str, width: f32| ui::skeleton(id, 4., cx).h(px(12.)).w(relative(width));
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(10.))
+        .child(ui::skeleton("profile-skel-badges", 8., cx).h(px(28.)).w(px(120.)))
+        .child(line("profile-skel-mutuals", 0.7))
+        .child(line("profile-skel-bio-1", 0.9))
+        .child(line("profile-skel-bio-2", 0.55))
 }
