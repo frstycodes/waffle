@@ -286,18 +286,44 @@ impl Guild {
 
 // Your notification settings for one server, or for DMs under the key "@me" (Discord's
 // user_guild_settings). Message notification levels: 0 all, 1 mentions, 2 nothing, 3 inherit.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GuildSettings {
     pub muted: bool,
     // RFC 3339 end of a timed mute; None for "until I turn it back on".
     pub mute_end: Option<String>,
+    // The length the mute was picked for, in seconds (-1 forever); None when Discord sent none.
+    pub mute_window: Option<i64>,
     pub notifications: u8,
     pub suppress_everyone: bool,
     pub suppress_roles: bool,
+    // Discord's highlights setting: 0 unset, 1 disabled (Suppress Highlights on), 2 enabled.
+    pub notify_highlights: u8,
+    pub mute_scheduled_events: bool,
+    pub mobile_push: bool,
     pub hide_muted: bool,
     // user_guild_settings flags; bit 14 (16384) is "pick your channels" (opt-in channels on).
     pub flags: u64,
     pub channels: HashMap<String, ChannelSettings>,
+}
+
+// Mobile push is on until turned off, as in Discord.
+impl Default for GuildSettings {
+    fn default() -> Self {
+        Self {
+            muted: false,
+            mute_end: None,
+            mute_window: None,
+            notifications: 0,
+            suppress_everyone: false,
+            suppress_roles: false,
+            notify_highlights: 0,
+            mute_scheduled_events: false,
+            mobile_push: true,
+            hide_muted: false,
+            flags: 0,
+            channels: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -345,9 +371,13 @@ pub fn parse_guild_settings(g: &Value) -> (String, GuildSettings) {
     let settings = GuildSettings {
         muted: g["muted"].as_bool().unwrap_or(false),
         mute_end: g["mute_config"]["end_time"].as_str().map(str::to_owned),
+        mute_window: g["mute_config"]["selected_time_window"].as_i64(),
         notifications: g["message_notifications"].as_u64().unwrap_or(0) as u8,
         suppress_everyone: g["suppress_everyone"].as_bool().unwrap_or(false),
         suppress_roles: g["suppress_roles"].as_bool().unwrap_or(false),
+        notify_highlights: g["notify_highlights"].as_u64().unwrap_or(0) as u8,
+        mute_scheduled_events: g["mute_scheduled_events"].as_bool().unwrap_or(false),
+        mobile_push: g["mobile_push"].as_bool().unwrap_or(true),
         hide_muted: g["hide_muted_channels"].as_bool().unwrap_or(false),
         flags: g["flags"].as_u64().unwrap_or(0),
         channels,
@@ -1213,7 +1243,8 @@ pub enum Event {
     Presence { user_id: String, presence: Presence },
     MemberList { guild_id: String, groups: Vec<(String, u32)>, ops: Vec<ListOp> },
     MembersChunk { guild_id: String, members: Vec<(User, Vec<String>)> },
-    Ack { channel_id: String, message_id: u64 },
+    // `manual`: Mark Unread from any of our devices, carrying the mention count after `message_id`.
+    Ack { channel_id: String, message_id: u64, manual: Option<u32> },
     // With the session it belongs to: ours, or another client of ours.
     VoiceState(VoiceState, Option<String>),
     // A stage went live or changed topic (`Some`), or ended (`None`).
@@ -1483,6 +1514,18 @@ impl Client {
     pub async fn ack(&self, channel_id: &str, message_id: &str) {
         let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages/{message_id}/ack")).json(&json!({ "token": null }));
         let _ = self.run(req).await;
+    }
+
+    /// Discord's Mark Unread: acks `ack_id`, just before the message marked, with the mentions after it.
+    /// The gateway echoes it to every device as a manual MESSAGE_ACK.
+    pub async fn ack_manual(&self, channel_id: &str, ack_id: u64, mention_count: u32) {
+        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages/{ack_id}/ack")).json(&json!({ "manual": true, "mention_count": mention_count }));
+        let _ = self.run(req).await;
+    }
+
+    /// Clears one mention from Recent Mentions on every device; the channel's read state stays.
+    pub async fn delete_mention(&self, message_id: &str) -> Result<(), String> {
+        self.run(self.request(reqwest::Method::DELETE, &format!("/users/@me/mentions/{message_id}"))).await.map(|_| ())
     }
 
     pub async fn profile(&self, user_id: &str, guild_id: Option<&str>) -> Result<Profile, String> {
@@ -2296,7 +2339,11 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
             guild_id: s(&d["guild_id"]),
             members: d["members"].as_array().into_iter().flatten().map(|m| (parse_member_user(m, &m["user"], d["guild_id"].as_str()), strings(&m["roles"]))).collect(),
         }),
-        "MESSAGE_ACK" => Some(Event::Ack { channel_id: s(&d["channel_id"]), message_id: snowflake(&d["message_id"]) }),
+        "MESSAGE_ACK" => Some(Event::Ack {
+            channel_id: s(&d["channel_id"]),
+            message_id: snowflake(&d["message_id"]),
+            manual: d["manual"].as_bool().unwrap_or(false).then(|| d["mention_count"].as_u64().unwrap_or(0) as u32),
+        }),
         "VOICE_STATE_UPDATE" => Some(Event::VoiceState(parse_voice_state(d), d["session_id"].as_str().map(str::to_owned))),
         "STAGE_INSTANCE_CREATE" | "STAGE_INSTANCE_UPDATE" => Some(Event::StageInstance { guild_id: s(&d["guild_id"]), channel_id: s(&d["channel_id"]), instance: parse_stage_instance(d) }),
         "STAGE_INSTANCE_DELETE" => Some(Event::StageInstance { guild_id: s(&d["guild_id"]), channel_id: s(&d["channel_id"]), instance: None }),
@@ -3709,6 +3756,14 @@ mod tests {
         let invite = parse_invite(&body).unwrap();
         assert_eq!(invite, Invite { guild_id: "9".into(), name: "Dumpling Hall".into(), icon: Some("https://cdn.discordapp.com/icons/9/ff.png?size=96".into()), online: Some(1204), members: Some(8311), ..Default::default() });
         assert_eq!(parse_invite(&json!({ "code": "gdm", "channel": { "id": "5", "type": 3 } })), None, "a group DM invite has no server card");
+    }
+
+    #[test]
+    fn a_manual_ack_carries_its_mention_count() {
+        let manual = dispatch("MESSAGE_ACK", &json!({ "channel_id": "7", "message_id": "42", "manual": true, "mention_count": 3, "version": 9 }));
+        assert!(matches!(manual, Some(Event::Ack { message_id: 42, manual: Some(3), .. })));
+        let read = dispatch("MESSAGE_ACK", &json!({ "channel_id": "7", "message_id": "42", "version": 9 }));
+        assert!(matches!(read, Some(Event::Ack { manual: None, .. })));
     }
 }
 

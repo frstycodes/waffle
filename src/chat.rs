@@ -140,14 +140,19 @@ impl Waffle {
                 .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_threads_popout(id.clone(), e.position, cx)))
         });
         // Mute and notification level for this channel, the same entries as its right-click menu; the bell
-        // shows a slash while it's muted.
+        // shows a slash while it's muted. Shift+click mutes or unmutes without the menu, as Discord's does.
         let bell = self.guild_id.clone().filter(|_| matches!(channel.kind, ChannelKind::Text | ChannelKind::Voice)).map(|guild_id| {
             let muted = self.guild_settings.get(&guild_id).is_some_and(|s| s.channel_muted(&channel.id));
             let (label, glyph) = if muted { ("Unmute or change notifications", Glyph::BellSlash) } else { ("Notification Settings", Glyph::Bell) };
             let open = channel.clone();
             ui::icon_button("notify-button", glyph, label, cx)
                 .occlude()
-                .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_notify_menu(open.clone(), guild_id.clone(), e.position, cx)))
+                .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| {
+                    if e.modifiers.shift {
+                        return this.patch_channel_override(guild_id.clone(), &open.id, serde_json::json!({ "muted": !muted }), cx);
+                    }
+                    this.open_notify_menu(open.clone(), guild_id.clone(), e.position, cx)
+                }))
         });
         let pins_x = self.pins_button_x.clone();
         let pins = ui::icon_button("pins-button", Glyph::Pin, "Pinned Messages", cx)
@@ -1159,11 +1164,24 @@ fn set_hovered_message(this: &WeakEntity<Waffle>, id: Option<String>, cx: &mut A
 }
 
 // Right-click opens the message menu; a plain click on the row's own space focuses it. Controls inside
-// stop their clicks, and a drag (selecting text) or a double click isn't a plain click.
+// stop their clicks, and a drag (selecting text) or a double click isn't a plain click. Alt+click anywhere
+// on the row marks it unread, as in Discord: taken in the capture phase, so no link, avatar or image under
+// the pointer also opens.
 fn with_message_menu(row: Stateful<Div>, message: &Message, ctx: &Rc<RowContext>) -> AnyElement {
     let (this, message) = (ctx.this.clone(), message.clone());
     let (focus_this, id) = (this.clone(), message.id.clone());
-    row.on_mouse_down(gpui_kit::MouseButton::Right, move |event, _, cx| {
+    let (unread_this, unread) = (this.clone(), message.clone());
+    row.capture_any_mouse_down(move |event, _, cx| {
+        if event.button != gpui_kit::MouseButton::Left || !event.modifiers.alt {
+            return;
+        }
+        if !crate::message_menu::MessageAction::MarkUnread.allowed(&unread, &Default::default()) {
+            return;
+        }
+        cx.stop_propagation();
+        unread_this.update(cx, |this, cx| this.mark_unread(&unread, cx)).ok();
+    })
+    .on_mouse_down(gpui_kit::MouseButton::Right, move |event, _, cx| {
         let at = event.position;
         this.update(cx, |this, cx| this.open_message_menu(message.clone(), at, cx)).ok();
     })
