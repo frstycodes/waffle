@@ -6,10 +6,9 @@ use gpui_kit::{
     component::{ActiveTheme, Icon, text::TextView, tooltip::Tooltip},
     div, img, linear_color_stop, linear_gradient, prelude::*, px, relative, rgb, svg,
 };
-use gpui_motion_kit::core::{Bezier, Easing, Motion, Target, Transition};
 
 use crate::{
-    Part, ProfileCard, Waffle,
+    ProfileCard, Waffle,
     discord::{ActivityKind, Badge, Connection, EffectLayer, Profile, Relation, RichPresence, User, perm},
     icons::Glyph,
     layout::{TITLE_HEIGHT, decorated_avatar},
@@ -29,12 +28,6 @@ pub(crate) const AVATAR_RING: f32 = 6.;
 const ESTIMATED_HEIGHT: f32 = 560.;
 const MAX_BADGES: usize = 6;
 const MAX_GAMES: usize = 3;
-// Discord's activity peek: a sliver PEEK tall hangs below the first card, inset PEEK_INSET each side; on
-// hover it grows by twice PEEK_LIFT.
-const PEEK: f32 = 8.;
-const PEEK_INSET: f32 = 8.;
-const PEEK_LIFT: f32 = 2.;
-const PEEK_HOVER: &str = "profile-activity-peek";
 
 impl Waffle {
     pub(crate) fn open_profile(&mut self, user: User, at: Point<Pixels>, cx: &mut Context<Self>) {
@@ -124,8 +117,6 @@ impl Waffle {
 
     pub(crate) fn profile_overlay(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         self.profile_card.as_ref()?;
-        let peek_hovered = self.hovered.as_deref() == Some(PEEK_HOVER);
-        let lift = self.motions.frame_one(Part::ActivityPeek, Motion::new(Target::default().y(if peek_hovered { -PEEK_LIFT } else { 0. })).transition(peek_ease()), window, cx).target().y_px();
         let card = self.profile_card.as_ref()?;
         let viewport = window.viewport_size();
         let profile = card.profile.clone().unwrap_or_default();
@@ -155,7 +146,7 @@ impl Waffle {
             .children(self.friends_since(card, ink))
             .children(connections(&profile.connections, ink, cx))
             .children(game_collection(&profile.games, ink))
-            .children(self.profile_activity(card, lift, ink, cx))
+            .children(self.profile_activity(card, ink, cx))
             .children(self.roles_row(card, &profile, ink, cx));
         let (outer, inner) = themed_card(ink, max_height, cx);
         let inner = inner
@@ -278,7 +269,7 @@ impl Waffle {
 
     // Discord's popout shows one activity card: their stream, else their first activity, else the voice
     // channel they're in. More than one peeks from under it; clicking the peek lists them all in place.
-    fn profile_activity(&self, card: &ProfileCard, lift: f32, ink: Ink, cx: &mut Context<Self>) -> Option<AnyElement> {
+    fn profile_activity(&self, card: &ProfileCard, ink: Ink, cx: &mut Context<Self>) -> Option<AnyElement> {
         let place = self.guilds.iter().find_map(|g| {
             let state = g.voice_states.iter().find(|v| v.user_id == card.user.id)?;
             let channel = g.channels.iter().find(|c| Some(&c.id) == state.channel_id.as_ref())?;
@@ -310,28 +301,30 @@ impl Waffle {
                 .on_click(cx.listener(|this, _, _, cx| this.show_all_activity(false, cx)));
             return Some(div().flex().flex_col().items_start().gap(px(8.)).children(cards.into_iter().map(|c| div().w_full().child(c))).child(less).into_any_element());
         }
+        let more = cards.len() - 1;
         let first = cards.into_iter().next()?;
-        Some(self.activity_peek(first, lift, ink, cx).into_any_element())
+        Some(self.activity_more(first, more, ink, cx).into_any_element())
     }
 
-    // The first card raised over a sliver of the next, which unfolds the rest ("View More").
-    fn activity_peek(&self, first: AnyElement, lift: f32, ink: Ink, cx: &mut Context<Self>) -> Stateful<Div> {
-        // The card's own tile is translucent: an opaque body under it keeps its shadow from showing through.
-        let body = ui::mix(ink.top, ink.bottom, 0.5);
-        let first = div().squircle(RADIUS_MD).bg(body).shadow(vec![ui::shadow(gpui_kit::black().opacity(0.25), 0., 1., 3., 0., false)]).child(first);
-        // Hangs from the card's foot, flush and never under it; hovering pulls it out by twice the lift.
-        let sliver = ui::edge(div().mx(px(PEEK_INSET)).h(px(PEEK - 2. * lift)).bg(ink.tile), ui::bottom(RADIUS_SM))
+    // The first card, then a button under it that unfolds the rest in place.
+    fn activity_more(&self, first: AnyElement, more: usize, ink: Ink, cx: &mut Context<Self>) -> Div {
+        let label = if more == 1 { "Show 1 more activity".to_owned() } else { format!("Show {more} more activities") };
+        let button = div()
             .id("profile-activity-view-more")
-            .cursor_pointer()
-            .tooltip(|window, cx| Tooltip::new("View More").build(window, cx))
-            .on_click(cx.listener(|this, _, _, cx| this.show_all_activity(true, cx)));
-        div()
-            .id("profile-activity-stack")
+            .h(px(28.))
             .flex()
-            .flex_col()
-            .on_hover(cx.listener(|this, hovered: &bool, _, cx| this.set_hovered(PEEK_HOVER, *hovered, cx)))
-            .child(first)
-            .child(sliver)
+            .items_center()
+            .justify_center()
+            .squircle(RADIUS_SM)
+            .bg(ink.tile)
+            .text_size(px(14.))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(ink.muted)
+            .cursor_pointer()
+            .hover(move |s| s.text_color(ink.strong))
+            .child(label)
+            .on_click(cx.listener(|this, _, _, cx| this.show_all_activity(true, cx)));
+        div().flex().flex_col().gap(px(6.)).child(first).child(button)
     }
 
     fn show_all_activity(&mut self, all: bool, cx: &mut Context<Self>) {
@@ -818,11 +811,6 @@ fn effect_overlay(layers: &[EffectLayer]) -> Option<Div> {
     let k = WIDTH / span;
     let images = layers.iter().enumerate().map(|(i, l)| img(l.src.clone()).id(("profile-effect", i)).absolute().left(px(l.x * k)).top(px(l.y * k)).w(px(l.width * k)).h(px(l.height * k)));
     Some(div().absolute().inset_0().overflow_hidden().children(images))
-}
-
-// Discord's 200ms ease-in-out for the peek's lift.
-fn peek_ease() -> Transition {
-    Transition::Tween(Duration::from_millis(200), Easing::Bezier(Bezier::new(0.42, 0., 0.58, 1.).expect("monotonic bezier")))
 }
 
 fn section(title: &'static str, content: impl IntoElement, ink: Ink) -> Div {

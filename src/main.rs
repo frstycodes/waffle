@@ -651,7 +651,6 @@ enum Part {
     Fold(String),
     Chevron(String),
     Banner,
-    ActivityPeek,
 }
 
 type ComposerState = TextareaState;
