@@ -426,7 +426,7 @@ mod tests {
     fn dates_bound_message_ids() {
         // 2015-01-02 is one day after Discord's epoch.
         let day = (86_400_000u64 << 22).to_string();
-        let two = (2 * 86_400_000u64 << 22).to_string();
+        let two = ((2 * 86_400_000u64) << 22).to_string();
         assert_eq!(parse("before:2015-01-02", user, channel).params, [("max_id".into(), day.clone())]);
         // After a day means from the start of the next one.
         assert_eq!(parse("after:2015-01-02", user, channel).params, [("min_id".into(), two.clone())]);

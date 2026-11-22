@@ -14,6 +14,7 @@ mod capture;
 #[path = "capture_windows.rs"]
 mod capture;
 mod dave;
+pub mod issues;
 mod dsp;
 mod feedback;
 mod taps;
@@ -85,6 +86,13 @@ pub enum VoiceEvent {
     // A new frame of a remote camera or Go Live, or our own camera or Go Live (our user id) for the
     // self-preview: take it with `VoiceSession::take_frame`. Frames not taken yet are replaced.
     StreamFrame { user_id: String, source: VideoSource },
+    // One of Discord's AV error conditions (`issues`) started or cleared for `user_id` (ours for what
+    // we send).
+    Issue { user_id: String, code: u16, active: bool },
+    // A watched Go Live's media connection is up (Discord's RTC_CONNECTED for the stream).
+    StreamConnected { user_id: String },
+    // `reason` is STREAM_DELETE's (`STREAM_DELETE_*` below), "Stopped" when we ended it, or the
+    // transport error that dropped the connection.
     StreamEnded { user_id: String, reason: String },
     // Discord moved our session to this channel (someone with Move Members dragged us): the
     // session has ended without leaving, for the app to join it there.
@@ -290,14 +298,6 @@ pub fn thumbnail(source: ShareSource, max_width: u32) -> Result<VideoFrame, Stri
     }
 }
 
-// The process of the app in front, whichever app that is (Waffle included).
-pub fn frontmost_pid() -> Option<i32> {
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    return capture::frontmost_pid();
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    None
-}
-
 // The icon of the app with process id `pid`, as a `size` x `size` BGRA square (premultiplied alpha).
 pub fn app_icon(pid: i32, size: u32) -> Option<VideoFrame> {
     #[cfg(target_os = "macos")]
@@ -387,6 +387,8 @@ struct Shared {
     guild_id: Option<String>,
     channel_id: String,
     events: mpsc::UnboundedSender<VoiceEvent>,
+    // Issues raised and not yet cleared, so each change is told once.
+    issues: Mutex<std::collections::HashSet<(String, u16)>>,
     session_id: Mutex<Option<String>>,
     // A VOICE_SERVER_UPDATE mid-call: Discord moved the call to this server; the session reconnects there.
     moved_server: Mutex<Option<Server>>,
@@ -503,6 +505,15 @@ impl Shared {
         let _ = self.events.unbounded_send(event);
     }
 
+    fn issue(&self, user_id: &str, code: u16, active: bool) {
+        let Ok(mut held) = self.issues.lock() else { return };
+        let key = (user_id.to_owned(), code);
+        let changed = if active { held.insert(key) } else { held.remove(&key) };
+        if changed {
+            self.emit(VoiceEvent::Issue { user_id: user_id.to_owned(), code, active });
+        }
+    }
+
     fn publish_frame(&self, user_id: &str, source: VideoSource, frame: Arc<VideoFrame>) {
         let Ok(mut frames) = self.frames.lock() else { return };
         if frames.insert((user_id.to_owned(), source), frame).is_none() {
@@ -527,6 +538,7 @@ pub fn join(
         guild_id,
         channel_id,
         events,
+        issues: Mutex::default(),
         session_id: Mutex::new(None),
         moved_server: Mutex::new(None),
         muted: AtomicBool::new(false),
@@ -821,6 +833,7 @@ async fn join_voice(shared: &Arc<Shared>, dispatches: &mut broadcast::Receiver<(
         session_id,
         server,
         role: Role::Voice,
+        streamer: String::new(),
     };
     // Discord reallocates a call's voice server with a fresh VOICE_SERVER_UPDATE (docs: Voice, "Voice
     // Server Update"): the old connection is dropped and the same session identifies on the new endpoint.
@@ -932,7 +945,16 @@ struct Target {
     session_id: String,
     server: Server,
     role: Role,
+    // Whose Go Live a Watch connection carries; empty otherwise.
+    streamer: String,
 }
+
+// STREAM_DELETE's reasons (Discord's client, 2026-11-21), plus `unavailable: true` as its own.
+pub const STREAM_DELETE_UNAVAILABLE: &str = "unavailable";
+pub const STREAM_DELETE_FULL: &str = "stream_full";
+pub const STREAM_DELETE_UNAUTHORIZED: &str = "unauthorized";
+pub const STREAM_DELETE_RATE_LIMITED: &str = "safety_guild_rate_limited";
+pub const STREAM_DELETE_ENDED: &str = "stream_ended";
 
 async fn await_voice_server(shared: &Shared, dispatches: &mut broadcast::Receiver<(String, Value)>) -> Result<(String, Server), String> {
     let (mut session_id, mut server) = (None, None);
@@ -982,7 +1004,7 @@ async fn stream(shared: Arc<Shared>, role: Role, streamer: String, key: String, 
         shared.gateway.send(20, json!({ "stream_key": key }));
     }
     let (reason, stopped) = tokio::select! {
-        result = connect_stream(&shared, role, &key, session_id, &mut dispatches) => (result.err().unwrap_or_else(|| "Stream connection closed".to_owned()), false),
+        result = connect_stream(&shared, role, &streamer, &key, session_id, &mut dispatches) => (result.err().unwrap_or_else(|| "Stream connection closed".to_owned()), false),
         _ = stop => ("Stopped".to_owned(), true),
     };
     shared.gateway.send(19, json!({ "stream_key": key }));
@@ -991,7 +1013,12 @@ async fn stream(shared: Arc<Shared>, role: Role, streamer: String, key: String, 
         let _ = tokio::time::timeout(DELETE_TIMEOUT, deleted(&key, &mut dispatches)).await;
     }
     let _ = gone.send(());
-    shared.emit(VoiceEvent::StreamEnded { user_id: streamer, reason });
+    shared.emit(VoiceEvent::StreamEnded { user_id: streamer.clone(), reason });
+    // After the end, so the app still sees what ended it.
+    let ended: &[u16] = if role.broadcasts() { &issues::BROADCAST_ISSUES } else { &issues::WATCH_ISSUES };
+    for code in ended {
+        shared.issue(&streamer, *code, false);
+    }
 }
 
 // The next VOICE_* / STREAM_* dispatch; None once the gateway handle is gone. A receiver that fell
@@ -1017,6 +1044,7 @@ async fn deleted(key: &str, dispatches: &mut broadcast::Receiver<(String, Value)
 async fn connect_stream(
     shared: &Arc<Shared>,
     role: Role,
+    streamer: &str,
     key: &str,
     session_id: String,
     dispatches: &mut broadcast::Receiver<(String, Value)>,
@@ -1027,12 +1055,16 @@ async fn connect_stream(
     if role.broadcasts() {
         shared.gateway.send(22, json!({ "stream_key": key, "paused": false }));
     }
-    let target = Target { server_id: rtc.server_id, dave_channel: rtc.channel_id, session_id, server, role };
-    serve(shared, target, dispatches, |kind, d| {
-        let ended = kind == "STREAM_DELETE" && d["stream_key"].as_str() == Some(key);
-        ended.then(|| d["reason"].as_str().unwrap_or("Stream ended").to_owned())
-    })
+    let target = Target { server_id: rtc.server_id, dave_channel: rtc.channel_id, session_id, server, role, streamer: streamer.to_owned() };
+    serve(shared, target, dispatches, |kind, d| (kind == "STREAM_DELETE" && d["stream_key"].as_str() == Some(key)).then(|| delete_reason(d)))
     .await
+}
+
+fn delete_reason(d: &Value) -> String {
+    match d["unavailable"].as_bool() {
+        Some(true) => STREAM_DELETE_UNAVAILABLE.to_owned(),
+        _ => d["reason"].as_str().unwrap_or(STREAM_DELETE_ENDED).to_owned(),
+    }
 }
 
 #[derive(Clone)]
@@ -1251,6 +1283,12 @@ async fn serve(
             Some(6) => {
                 if let Some(sent) = d["t"].as_i64() {
                     pings.record(sent);
+                    // Discord rates a connection bad past 500 ms or 10% loss of what it sends (2006).
+                    if matches!(target.role, Role::Broadcast(..)) {
+                        let ping = pings.0.back().copied().unwrap_or(0);
+                        let bad = ping > 500 || counters.outbound_loss().is_some_and(|loss| loss > issues::LOSS_LINE);
+                        shared.issue(&shared.user_id, issues::STREAM_SEND_NETWORK_QUALITY, bad);
+                    }
                     if debug() {
                         eprintln!("[{:?}] heartbeat ack after {} ms", target.role, pings.0.back().copied().unwrap_or(0));
                     }
@@ -1313,6 +1351,8 @@ async fn serve(
                 if is_voice {
                     stage(Stage::Connected);
                     shared.emit(VoiceEvent::Connected);
+                } else if target.role == Role::Watch {
+                    shared.emit(VoiceEvent::StreamConnected { user_id: target.streamer.clone() });
                 }
             }
             Some(5) => {
@@ -1501,6 +1541,22 @@ mod tests {
         assert_eq!(window.push(Some(0.0)), Some(0.0), "old reports fall out after the window");
     }
 
+    #[test]
+    fn an_issue_is_told_once_when_it_starts_and_once_when_it_clears() {
+        let (shared, mut rx) = shared();
+        shared.issue("me", issues::STREAM_SEND_LOW_FPS, true);
+        shared.issue("me", issues::STREAM_SEND_LOW_FPS, true);
+        shared.issue("me", issues::STREAM_SEND_LOW_FPS, false);
+        shared.issue("me", issues::STREAM_SEND_LOW_FPS, false);
+        let told: Vec<bool> = std::iter::from_fn(|| rx.try_recv().ok())
+            .filter_map(|e| match e {
+                VoiceEvent::Issue { active, .. } => Some(active),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(told, [true, false]);
+    }
+
     fn shared() -> (Shared, mpsc::UnboundedReceiver<VoiceEvent>) {
         let (gateway, _out) = GatewayHandle::new();
         let (events, rx) = mpsc::unbounded();
@@ -1510,6 +1566,7 @@ mod tests {
             guild_id: Some("g".into()),
             channel_id: "c".into(),
             events,
+            issues: Mutex::default(),
             session_id: Mutex::new(None),
             moved_server: Mutex::new(None),
             muted: AtomicBool::new(false),

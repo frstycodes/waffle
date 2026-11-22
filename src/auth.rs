@@ -26,7 +26,7 @@ const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 
 pub enum AuthEvent {
     Qr(String),
-    Scanned(User),
+    Scanned(Box<User>),
     /// Discord wants a captcha; the URL is a local page that shows it in the browser.
     Captcha(String),
     SignedIn(String),
@@ -189,7 +189,7 @@ async fn qr_session(tx: &mpsc::UnboundedSender<AuthEvent>) -> Result<String, Out
                     "pending_ticket" | "pending_finish" => {
                         let payload = String::from_utf8(decrypt(&key, &msg["encrypted_user_payload"])?).map_err(|e| failed(&e))?;
                         if let Some(user) = parse_user_payload(&payload) {
-                            let _ = tx.unbounded_send(AuthEvent::Scanned(user));
+                            let _ = tx.unbounded_send(AuthEvent::Scanned(Box::new(user)));
                         }
                     }
                     "pending_login" => return exchange_ticket(tx, &key, msg["ticket"].as_str().unwrap_or_default()).await,

@@ -137,7 +137,7 @@ impl Waffle {
             let (this, main) = (cx.weak_entity(), self.main_window);
             // The main window's root is this view, so it can only be borrowed once this update ends.
             cx.defer(move |cx| {
-                main.update(cx, |_, window, cx| this.update(cx, |this, cx| this.submit(window, cx))).ok();
+                main.update(cx, |_, window, cx| this.update(cx, |this, cx| this.submit(false, window, cx))).ok();
             });
         }
         cx.notify();
@@ -390,19 +390,11 @@ mod tests {
         Guild {
             id: "g".into(),
             name: "g".into(),
-            icon: None,
             channels: vec![channel],
             roles: all,
-            voice_states: Vec::new(),
-            emojis: Vec::new(),
-            stickers: Vec::new(),
             owner_id: Some("owner".into()),
-            default_notifications: 0,
-            threads: Vec::new(),
             my_roles: mine.iter().map(|r| r.to_string()).collect(),
-            premium_tier: 0,
-            afk_channel_id: None,
-            timed_out_until: None,
+            ..Default::default()
         }
     }
 
@@ -416,7 +408,7 @@ mod tests {
         let mira = User { id: "mira".into(), name: "Mira".into(), ..Default::default() };
         let mut dm = text_channel(0, Vec::new());
         dm.recipient = Some(mira.clone());
-        let blocked = [Relationship { user: mira, kind: Relation::Blocked }];
+        let blocked = [Relationship { user: mira, kind: Relation::Blocked, since: None }];
         assert_eq!(guard(&dm, None, "me", &blocked, now), Some(Guard::Blocked { user_id: "mira".into(), name: "Mira".into() }));
         assert_eq!(guard(&dm, None, "me", &[], now), None);
 

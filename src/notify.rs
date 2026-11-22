@@ -4,7 +4,7 @@
 // @everyone / role mentions don't count.
 use crate::{
     Waffle,
-    discord::{Message, Status},
+    discord::{Message, Relation, Status},
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -12,6 +12,14 @@ pub enum Notify {
     None,
     Message,
     Mention,
+}
+
+// How a message's place treats it, with mutes and levels resolved thread → channel → category → server.
+struct Rules {
+    dm: bool,
+    muted: bool,
+    mentioned: bool,
+    level: u8,
 }
 
 // `level`: 0 all messages, 1 only mentions, 2 nothing (already resolved from channel/category/server).
@@ -30,11 +38,29 @@ fn decide(dm: bool, level: u8, mentioned: bool, muted: bool) -> Notify {
 impl Waffle {
     pub(crate) fn notify_kind(&self, message: &Message, focused_here: bool) -> Notify {
         let Some(me) = &self.me else { return Notify::None };
-        if message.author.id == me.id || focused_here || self.my_status == Status::Dnd || self.hidden_author(&message.author.id).is_some() {
+        // @silent: no sound and no desktop notification; it still counts as a mention.
+        if message.author.id == me.id || focused_here || self.my_status == Status::Dnd || message.silent() || self.hidden_author(&message.author.id).is_some() {
             return Notify::None;
         }
-        let key = message.guild_id.clone().unwrap_or_else(|| "@me".into());
-        let settings = self.settings_for(&key);
+        let rules = self.rules_for(message);
+        decide(rules.dm, rules.level, rules.mentioned, rules.muted)
+    }
+
+    /// Whether a message adds to its channel's mention count, as Discord's read state counts it: it mentions
+    /// you past the server's suppress rules, or it's in an unmuted DM. Yours and blocked users' never do.
+    pub(crate) fn counts_as_mention(&self, message: &Message) -> bool {
+        let blocked = self.relationships.iter().any(|r| r.kind == Relation::Blocked && r.user.id == message.author.id);
+        if message.author.id == self.my_id() || blocked {
+            return false;
+        }
+        let rules = self.rules_for(message);
+        if rules.dm { !rules.muted } else { rules.mentioned }
+    }
+
+    fn rules_for(&self, message: &Message) -> Rules {
+        let me = self.my_id();
+        let guild_id = self.guild_id_of(message);
+        let settings = self.settings_for(guild_id.as_deref().unwrap_or("@me"));
         // A thread takes its channel's mute and level; the channel its category's.
         let all = || self.guilds.iter().flat_map(|g| g.channels.iter().chain(g.threads.iter()));
         let mut channel_id = message.channel_id.clone();
@@ -46,15 +72,19 @@ impl Waffle {
             || settings.channel_muted(&message.channel_id)
             || settings.channel_muted(&channel_id)
             || parent.as_ref().is_some_and(|p| settings.channel_muted(p));
-        let direct = message.mentions.iter().any(|u| u.id == me.id);
+        let direct = message.mentions.iter().any(|u| u.id == me);
         let everyone = message.mention_everyone && !settings.suppress_everyone;
         let role = !settings.suppress_roles && self.mentions_role(message);
-        let mentioned = direct || everyone || role;
         // 3 means "inherit": channel → category → server.
         let channel_level = settings.channels.get(&channel_id).map(|c| c.notifications).filter(|l| *l != 3);
         let category_level = parent.as_ref().and_then(|p| settings.channels.get(p)).map(|c| c.notifications).filter(|l| *l != 3);
-        let level = channel_level.or(category_level).unwrap_or(settings.notifications);
-        decide(message.guild_id.is_none(), level, mentioned, muted)
+        Rules { dm: guild_id.is_none(), muted, mentioned: direct || everyone || role, level: channel_level.or(category_level).unwrap_or(settings.notifications) }
+    }
+
+    /// The message's server, or None in a DM. History from REST comes without `guild_id`, so a missing one
+    /// is looked up by channel.
+    pub(crate) fn guild_id_of(&self, message: &Message) -> Option<String> {
+        message.guild_id.clone().or_else(|| self.place_of(None, &message.channel_id).and_then(|(guild, _)| guild))
     }
 
     pub(crate) fn notify(&self, message: &Message) {

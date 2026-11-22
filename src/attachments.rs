@@ -12,9 +12,12 @@ use crate::discord::{MAX_FILES, Upload};
 #[derive(Clone, Debug, PartialEq)]
 pub struct PendingFile {
     pub path: PathBuf,
+    // What the message names it; Modify Attachment can change it before sending.
     pub name: String,
     pub size: u64,
     pub spoiler: bool,
+    // Alt text, for pictures and videos.
+    pub description: Option<String>,
 }
 
 impl PendingFile {
@@ -22,17 +25,16 @@ impl PendingFile {
     pub fn new(path: PathBuf) -> Option<Self> {
         let meta = std::fs::metadata(&path).ok().filter(|m| m.is_file())?;
         let name = path.file_name()?.to_string_lossy().into_owned();
-        Some(Self { path, name, size: meta.len(), spoiler: false })
+        Some(Self { path, name, size: meta.len(), spoiler: false, description: None })
     }
 
     pub fn kind(&self) -> FileKind {
         FileKind::of(&self.path)
     }
 
-    // Discord marks a spoiler by the file's name.
+    // The name goes as typed: a spoiler travels as the message's `is_spoiler`, not a `SPOILER_` prefix.
     pub fn upload(&self) -> Upload {
-        let name = if self.spoiler { format!("SPOILER_{}", self.name) } else { self.name.clone() };
-        Upload { path: self.path.clone(), name, size: self.size, sent: Arc::new(AtomicU64::new(0)) }
+        Upload { path: self.path.clone(), name: self.name.clone(), size: self.size, description: self.description.clone(), spoiler: self.spoiler, sent: Arc::new(AtomicU64::new(0)) }
     }
 }
 
@@ -89,11 +91,16 @@ pub fn admit(pending: &mut Vec<PendingFile>, new: Vec<PendingFile>, limit: u64) 
 pub enum Pasted {
     Files(Vec<PathBuf>),
     Image(gpui_kit::Image),
+    // Over LONG_PASTE: becomes message.txt, as Discord's composer does.
+    LongText(String),
     Text,
 }
 
+// Discord turns a paste longer than this (UTF-16 units, whatever your Nitro) into message.txt.
+const LONG_PASTE: usize = 4000;
+
 /// What a Cmd/Ctrl+V brings. Files copied in Finder or Explorer come with their names as text too; the
-/// files win. Text stays the text field's own paste.
+/// files win. Text stays the text field's own paste, unless it's long.
 pub fn classify(item: &ClipboardItem) -> Pasted {
     let entries = item.entries();
     if let Some(paths) = entries.iter().find_map(|e| match e {
@@ -107,12 +114,24 @@ pub fn classify(item: &ClipboardItem) -> Pasted {
         _ => None,
     }) {
         Some(image) => Pasted::Image(image),
-        None => Pasted::Text,
+        None => match item.text() {
+            Some(text) if text.encode_utf16().count() > LONG_PASTE => Pasted::LongText(text),
+            _ => Pasted::Text,
+        },
     }
 }
 
 /// A pasted picture as a file to upload, named `image.png` like Discord's own paste. Formats Discord
 /// doesn't show inline (TIFF, BMP, SVG) are re-encoded as PNG.
+/// Text too long for a message, as the `message.txt` Discord's client sends it as.
+pub fn save_message_text(text: &str) -> Result<PathBuf, String> {
+    let dir = std::env::temp_dir().join(format!("waffle-paste-{}", crate::nonce()));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("message.txt");
+    std::fs::write(&path, text).map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
 pub fn save_pasted_image(image: &gpui_kit::Image) -> Result<PathBuf, String> {
     let dir = std::env::temp_dir().join(format!("waffle-paste-{}", crate::nonce()));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -142,7 +161,7 @@ mod tests {
     use super::*;
 
     fn file(name: &str, size: u64) -> PendingFile {
-        PendingFile { path: PathBuf::from(format!("/tmp/{name}")), name: name.into(), size, spoiler: false }
+        PendingFile { path: PathBuf::from(format!("/tmp/{name}")), name: name.into(), size, spoiler: false, description: None }
     }
 
     #[test]
@@ -194,14 +213,18 @@ mod tests {
     #[test]
     fn text_stays_text() {
         assert_eq!(classify(&ClipboardItem::new_string("hello".into())), Pasted::Text);
+        assert_eq!(classify(&ClipboardItem::new_string("x".repeat(LONG_PASTE))), Pasted::Text);
+        let long = "x".repeat(LONG_PASTE + 1);
+        assert_eq!(classify(&ClipboardItem::new_string(long.clone())), Pasted::LongText(long));
     }
 
     #[test]
-    fn spoilers_are_marked_by_name() {
+    fn spoilers_keep_their_name() {
         let mut f = file("cat.png", 1);
-        assert_eq!(f.upload().name, "cat.png");
         f.spoiler = true;
-        assert_eq!(f.upload().name, "SPOILER_cat.png");
+        let upload = f.upload();
+        assert_eq!(upload.name, "cat.png");
+        assert!(upload.spoiler);
     }
 
     #[test]

@@ -30,7 +30,7 @@ const FINDER: usize = 7;
 pub enum Login {
     Preparing,
     Qr(Rc<Modules>),
-    Scanned(User),
+    Scanned(Box<User>),
     /// Waiting for the captcha the browser is showing; holds that page's URL.
     Captcha(SharedString),
     Failed(SharedString),

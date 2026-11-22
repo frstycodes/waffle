@@ -6,7 +6,7 @@ use gpui_kit::{AnyElement, App, Context, InteractiveElement, IntoElement, KeyDow
 use serde_json::json;
 
 use super::{
-    Section,
+    RoleStyle, Section, Spoilers,
     registry::{self, Choice, Control, Setting, Toggle},
 };
 use crate::{Waffle, icons::Glyph, palette, ui};
@@ -40,19 +40,30 @@ impl Waffle {
         out
     }
 
-    fn registry_row(&self, setting: &'static Setting, line: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn registry_row(&self, setting: &'static Setting, line: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        if let Control::Switch(toggle) = setting.control {
+            return self.toggle_row(setting, toggle, line, window, cx);
+        }
         let row = ui::settings_row(setting.id, line, cx).child(ui::settings_text(setting.title, setting.caption, cx));
         match setting.control {
-            Control::Switch(toggle) => {
-                let switch = ui::switch_live(SharedString::from(format!("{}-switch", setting.id)), self.toggle_value(toggle), window, cx);
-                ui::settings_choice(row, cx).child(switch).on_click(cx.listener(move |this, _, _, cx| this.flip(toggle, cx))).into_any_element()
-            }
             Control::Link(url) => ui::settings_choice(row, cx)
                 .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(px(16.))))
                 .on_click(move |_, _, cx: &mut App| cx.open_url(url))
                 .into_any_element(),
-            Control::Choice(_) | Control::Custom => row.into_any_element(),
+            Control::Switch(_) | Control::Choice(_) | Control::Custom => row.into_any_element(),
         }
+    }
+
+    // A switch row bound to `toggle`, for registry switches and the custom rows that hold one. A blocked
+    // one dims its switch and says why under its title.
+    pub(super) fn toggle_row(&self, setting: &'static Setting, toggle: Toggle, line: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let blocked = self.toggle_blocked(toggle);
+        let row = ui::settings_row(setting.id, line, cx).child(ui::settings_text(setting.title, blocked.or(setting.caption), cx));
+        let switch = ui::switch_live(SharedString::from(format!("{}-switch", setting.id)), self.toggle_value(toggle), window, cx);
+        if blocked.is_some() {
+            return row.child(switch.opacity(0.45)).into_any_element();
+        }
+        ui::settings_choice(row, cx).child(switch).on_click(cx.listener(move |this, _, _, cx| this.flip(toggle, cx))).into_any_element()
     }
 
     // A choice fills its card with one radio row per option.
@@ -70,20 +81,50 @@ impl Waffle {
             Toggle::DesktopNotifications => self.prefs.desktop_notifications,
             Toggle::DockBadge => self.prefs.dock_badge,
             Toggle::Clock24 => self.prefs.clock_24h,
+            Toggle::ImageDescriptions => self.prefs.show_image_descriptions,
             Toggle::AutoDownloadUpdates => self.prefs.auto_download_updates,
             Toggle::RenderEmbeds => account.render_embeds,
             Toggle::RenderReactions => account.render_reactions,
+            Toggle::TtsCommand => self.prefs.tts_command,
             Toggle::DeveloperMode => account.developer_mode,
             Toggle::ShareActivity => account.show_current_game,
             Toggle::DmsFromServerMembers => !account.default_guilds_restricted,
+            Toggle::MessageRequests => account.message_requests,
             Toggle::FriendsAll => account.friends_all,
             Toggle::FriendsMutualFriends => account.friends_mutual_friends,
             Toggle::FriendsMutualGuilds => account.friends_mutual_guilds,
+            Toggle::InlineEmbedMedia => account.inline_embed_media,
+            Toggle::InlineAttachmentMedia => account.inline_attachment_media,
+            // Compact shows it on whatever's stored; cozy always has avatars, as in Discord.
+            Toggle::CompactAvatars => !account.message_display_compact || self.prefs.compact_avatars,
+            Toggle::ConvertEmoticons => account.convert_emoticons,
+            Toggle::SendButton => self.prefs.send_button,
+            Toggle::UnderlineLinks => self.prefs.underline_links,
+            Toggle::DisplayNameStyles => self.prefs.display_name_styles,
+            Toggle::DesaturateUserColors => self.prefs.desaturate_user_colors,
+            Toggle::HighContrast => self.prefs.high_contrast,
+            Toggle::SwitchIcons => self.prefs.switch_icons,
+            Toggle::ReduceMotion => self.prefs.reduces_motion(),
+            Toggle::ReduceMotionSync => self.prefs.reduce_motion_sync,
+            // Reduced motion turns these off without touching what's stored, as Discord does.
+            Toggle::GifAutoPlay => account.gif_auto_play && !self.prefs.reduces_motion(),
+            Toggle::AnimateEmoji => account.animate_emoji && !self.prefs.reduces_motion(),
+        }
+    }
+
+    // Why a switch can't be flipped right now, shown under its title; None when it can.
+    pub(super) fn toggle_blocked(&self, toggle: Toggle) -> Option<&'static str> {
+        match toggle {
+            Toggle::CompactAvatars if !self.account_settings.message_display_compact => Some("To hide avatars, go to Accessibility and select Compact under Chat message display."),
+            Toggle::ReduceMotion if self.prefs.reduce_motion_sync => Some("Following your computer's setting"),
+            Toggle::GifAutoPlay | Toggle::AnimateEmoji if self.prefs.reduces_motion() => Some("This setting has been automatically disabled because of your reduced motion setting."),
+            _ => None,
         }
     }
 
     fn flip(&mut self, toggle: Toggle, cx: &mut Context<Self>) {
         let on = !self.toggle_value(toggle);
+        let before = self.account_settings.clone();
         let account = &mut self.account_settings;
         let patch = match toggle {
             Toggle::DesktopNotifications => return self.update_prefs(cx, |p| p.desktop_notifications = on),
@@ -92,7 +133,50 @@ impl Waffle {
                 return self.update_badge();
             }
             Toggle::Clock24 => return self.update_prefs(cx, |p| p.clock_24h = on),
+            Toggle::ImageDescriptions => {
+                // Captions under single pictures change row heights.
+                self.list.remeasure();
+                return self.update_prefs(cx, |p| p.show_image_descriptions = on);
+            }
+            Toggle::TtsCommand => return self.update_prefs(cx, |p| p.tts_command = on),
             Toggle::AutoDownloadUpdates => return self.set_auto_download(on, cx),
+            Toggle::CompactAvatars => return self.update_prefs(cx, |p| p.compact_avatars = on),
+            Toggle::SendButton => return self.update_prefs(cx, |p| p.send_button = on),
+            Toggle::UnderlineLinks => return self.update_prefs(cx, |p| p.underline_links = on),
+            Toggle::DisplayNameStyles => return self.update_prefs(cx, |p| p.display_name_styles = on),
+            Toggle::DesaturateUserColors => return self.update_prefs(cx, |p| p.desaturate_user_colors = on),
+            Toggle::HighContrast => return self.update_prefs(cx, |p| p.high_contrast = on),
+            Toggle::SwitchIcons => return self.update_prefs(cx, |p| p.switch_icons = on),
+            Toggle::ReduceMotion => return self.update_prefs(cx, |p| p.reduce_motion = on),
+            // Turning sync off keeps what the computer had, as Discord copies the OS value.
+            Toggle::ReduceMotionSync => {
+                return self.update_prefs(cx, |p| {
+                    if !on {
+                        p.reduce_motion = p.reduces_motion();
+                    }
+                    p.reduce_motion_sync = on;
+                });
+            }
+            Toggle::InlineEmbedMedia => {
+                account.inline_embed_media = on;
+                json!({ "inline_embed_media": on })
+            }
+            Toggle::InlineAttachmentMedia => {
+                account.inline_attachment_media = on;
+                json!({ "inline_attachment_media": on })
+            }
+            Toggle::ConvertEmoticons => {
+                account.convert_emoticons = on;
+                json!({ "convert_emoticons": on })
+            }
+            Toggle::GifAutoPlay => {
+                account.gif_auto_play = on;
+                json!({ "gif_auto_play": on })
+            }
+            Toggle::AnimateEmoji => {
+                account.animate_emoji = on;
+                json!({ "animate_emoji": on })
+            }
             Toggle::RenderEmbeds => {
                 account.render_embeds = on;
                 json!({ "render_embeds": on })
@@ -115,6 +199,10 @@ impl Waffle {
                 account.default_guilds_restricted = !on;
                 json!({ "default_guilds_restricted": !on })
             }
+            Toggle::MessageRequests => {
+                account.message_requests = on;
+                return self.save_settings_proto(before, super::proto::message_requests(on), cx);
+            }
             // Everyone covers the other two, as in Discord: turning it on turns them on.
             Toggle::FriendsAll => {
                 account.friends_all = on;
@@ -133,35 +221,76 @@ impl Waffle {
                 json!({ "friend_source_flags": account.friend_sources() })
             }
         };
-        self.save_account_settings(patch, cx);
+        self.save_account_settings(before, patch, cx);
     }
 
     fn choice_value(&self, choice: Choice) -> u8 {
         match choice {
             Choice::DmFilter => self.account_settings.explicit_content_filter,
+            Choice::Spoilers => self.prefs.spoilers as u8,
+            Choice::RoleStyle => self.prefs.role_style as u8,
+            Choice::StickerAnimation => self.account_settings.animate_stickers,
+            // GAP: unset, Discord derives the filter from age and the explicit-content setting; we show its usual result.
+            Choice::SpamFilter => match self.account_settings.dm_spam_filter {
+                0 => super::proto::SPAM_FILTER_NON_FRIENDS,
+                set => set,
+            },
         }
     }
 
     fn choose_setting(&mut self, choice: Choice, value: u8, cx: &mut Context<Self>) {
+        let before = self.account_settings.clone();
         let patch = match choice {
             Choice::DmFilter => {
                 self.account_settings.explicit_content_filter = value;
                 json!({ "explicit_content_filter": value })
             }
+            Choice::Spoilers => {
+                let spoilers = [Spoilers::OnClick, Spoilers::IfModerator, Spoilers::Always][value.min(2) as usize];
+                return self.update_prefs(cx, |p| p.spoilers = spoilers);
+            }
+            Choice::RoleStyle => {
+                let style = [RoleStyle::InNames, RoleStyle::NextToNames, RoleStyle::Hidden][value.min(2) as usize];
+                return self.update_prefs(cx, |p| p.role_style = style);
+            }
+            Choice::StickerAnimation => {
+                self.account_settings.animate_stickers = value;
+                json!({ "animate_stickers": value })
+            }
+            Choice::SpamFilter => {
+                self.account_settings.dm_spam_filter = value;
+                return self.save_settings_proto(before, super::proto::spam_filter(value), cx);
+            }
         };
-        self.save_account_settings(patch, cx);
+        self.save_account_settings(before, patch, cx);
     }
 
-    // Shown at once, saved to Discord after; if Discord refuses, the earlier value comes back with a toast.
-    fn save_account_settings(&mut self, patch: serde_json::Value, cx: &mut Context<Self>) {
+    // Shown at once, saved to Discord after; if Discord refuses, `before` (the settings ahead of the change)
+    // comes back with a toast.
+    pub(super) fn save_account_settings(&mut self, before: crate::discord::AccountSettings, patch: serde_json::Value, cx: &mut Context<Self>) {
         cx.notify();
         let Some(client) = self.client.clone() else { return };
-        let before = self.account_settings.clone();
         cx.spawn(async move |this, cx| {
             if client.set_account_settings(patch).await.is_err() {
                 let _ = this.update(cx, |this, cx| {
                     this.account_settings = before;
                     this.developer_mode = this.account_settings.developer_mode;
+                    this.publish_presence();
+                    this.show_toast("Couldn't save that setting", cx);
+                });
+            }
+        })
+        .detach();
+    }
+
+    // The same for a setting that lives only in the settings proto: `settings` is the base64 of the change.
+    pub(super) fn save_settings_proto(&mut self, before: crate::discord::AccountSettings, settings: String, cx: &mut Context<Self>) {
+        cx.notify();
+        let Some(client) = self.client.clone() else { return };
+        cx.spawn(async move |this, cx| {
+            if client.call(reqwest::Method::PATCH, "/users/@me/settings-proto/1".into(), Some(json!({ "settings": settings }))).await.is_err() {
+                let _ = this.update(cx, |this, cx| {
+                    this.account_settings = before;
                     this.show_toast("Couldn't save that setting", cx);
                 });
             }
