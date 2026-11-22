@@ -791,7 +791,7 @@ fn demo_active_now(waffle: &mut Waffle, empty: bool, cx: &mut Context<Waffle>) {
     for (id, name, rich) in [("25165824", "rosa", celeste), ("29360128", "mikey", track)] {
         let activity = Activity { kind: rich.kind, text: rich.name.clone(), rest: Vec::new() };
         waffle.presences.insert(id.into(), Presence { status: Presence_::Online, activity: Some(activity), rich: Some(rich), ..Default::default() });
-        waffle.relationships.push(Relationship { user: user(id, name), kind: Relation::Friend });
+        waffle.relationships.push(Relationship { user: user(id, name), kind: Relation::Friend, since: None });
     }
 }
 
@@ -814,7 +814,7 @@ fn demo_profile(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
     let playing = Activity { kind: ActivityKind::Playing, text: rich.name.clone(), rest: Vec::new() };
     waffle.presences.insert("8388608".into(), Presence { status: Presence_::Dnd, custom: None, activity: Some(playing), rich: Some(rich), ..Default::default() });
     if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
-        guild.voice_states.push(VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "8388608".into(), user: Some(user("8388608", "Wren")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false });
+        guild.voice_states.push(VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "8388608".into(), user: Some(user("8388608", "Wren")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false, suppress: false, requested_at: None });
     }
     let mut zoe = user("8388608", "Wren");
     zoe.tag = Some(GuildTag { text: "wony".into(), badge: Some("brand/icons/sticker.png".into()) });
@@ -939,7 +939,7 @@ fn demo_group(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Co
     let members = [user("8388608", "Wren"), rosa.clone(), user("20971520", "ferris"), user("29360128", "Bartholomew Featherstonehaugh-Wright")];
     let friends = members.iter().cloned().chain([user("33554432", "saik"), user("37748736", "Laryke"), user("41943040", "h y p r"), user("46137344", "pouyas"), user("50331648", "valse")]);
     waffle.relationships.retain(|r| r.kind != Relation::Friend);
-    waffle.relationships.extend(friends.map(|user| Relationship { user, kind: Relation::Friend }));
+    waffle.relationships.extend(friends.map(|user| Relationship { user, kind: Relation::Friend, since: None }));
     let mut group = channel("road-trip", "road trip", ChannelKind::Dm, None);
     group.raw_type = 3;
     group.recipients = members.to_vec();
