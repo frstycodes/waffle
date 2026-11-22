@@ -101,7 +101,7 @@ const GLYPHS: [(&str, &[u8]); 152] = [
     ("icons/copy-simple.svg", include_bytes!("../assets/icons/reicon/copy3.svg")),
     ("icons/minus.svg", include_bytes!("../assets/icons/reicon/minus.svg")),
     ("icons/arrow-line-up.svg", include_bytes!("../assets/icons/reicon/arrow-up5.svg")),
-    ("icons/arrow-line-down.svg", include_bytes!("../assets/icons/reicon/arrow-down5.svg")),
+    ("icons/arrow-line-down.svg", include_bytes!("../assets/icons/reicon/arrow-down-line.svg")),
     ("icons/info.svg", include_bytes!("../assets/icons/reicon/info-circle.svg")),
     ("icons/device-mobile-bold.svg", include_bytes!("../assets/icons/reicon/mobile.svg")),
     ("icons/clock-counter-clockwise.svg", include_bytes!("../assets/icons/reicon/history.svg")),
@@ -137,8 +137,8 @@ const GLYPHS: [(&str, &[u8]); 152] = [
     ("icons/app-window.svg", include_bytes!("../assets/icons/reicon/window.svg")),
     ("icons/usb.svg", include_bytes!("../assets/icons/reicon/usb.svg")),
     ("icons/plus-circle.svg", include_bytes!("../assets/icons/reicon/add-circle.svg")),
-    ("icons/arrow-up.svg", include_bytes!("../assets/icons/reicon/arrow-up.svg")),
-    ("icons/arrow-down.svg", include_bytes!("../assets/icons/reicon/arrow-down.svg")),
+    ("icons/arrow-up.svg", include_bytes!("../assets/icons/reicon/arrow-up5.svg")),
+    ("icons/arrow-down.svg", include_bytes!("../assets/icons/reicon/arrow-down-line.svg")),
     ("icons/at-bold.svg", include_bytes!("../assets/icons/reicon/at-sign.svg")),
     ("icons/eye-bold.svg", include_bytes!("../assets/icons/reicon/eye.svg")),
     ("icons/chevron-up-bold.svg", include_bytes!("../assets/icons/reicon/chevron-up.svg")),
@@ -149,7 +149,7 @@ const GLYPHS: [(&str, &[u8]); 152] = [
     ("icons/video-off-fill.svg", include_bytes!("../assets/icons/reicon/camera-off.svg")),
     ("icons/share-screen-fill.svg", include_bytes!("../assets/icons/reicon/screencast.svg")),
     ("icons/activities-fill.svg", include_bytes!("../assets/icons/reicon/rocket.svg")),
-    ("icons/arrow-right-bold.svg", include_bytes!("../assets/icons/reicon/arrow-right.svg")),
+    ("icons/arrow-right.svg", include_bytes!("../assets/icons/reicon/arrow-right5.svg")),
     ("icons/text-locked.svg", include_bytes!("../assets/icons/reicon/text-locked.svg")),
     ("icons/voice-locked.svg", include_bytes!("../assets/icons/reicon/voice-locked.svg")),
     ("icons/announcement-locked.svg", include_bytes!("../assets/icons/reicon/announcement-locked.svg")),
@@ -164,7 +164,7 @@ const GLYPHS: [(&str, &[u8]); 152] = [
     ("icons/sticker.svg", include_bytes!("../assets/icons/sticker.svg")),
     // Reicon has no forward; reply mirrored.
     ("icons/forward.svg", include_bytes!("../assets/icons/forward.svg")),
-    // Reicon's arrow-right mirrored: a leave notice's arrow.
+    // Reicon's line arrow (arrow-up5) turned left: a leave notice's arrow.
     ("icons/arrow-left.svg", include_bytes!("../assets/icons/arrow-left.svg")),
     // Reicon's chart-square and presentation-play, from design/explore-system-messages.html.
     ("icons/poll.svg", include_bytes!("../assets/icons/poll.svg")),
@@ -319,7 +319,7 @@ pub enum Glyph {
     VideoOffFill,
     ShareScreenFill,
     ActivitiesFill,
-    ArrowRightBold,
+    ArrowRight,
     TextLocked,
     VoiceLocked,
     AnnouncementLocked,

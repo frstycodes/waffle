@@ -358,7 +358,7 @@ fn tag_chip(tag: SharedString, cx: &App) -> AnyElement {
         .font_weight(FontWeight::MEDIUM)
         .bg(palette::strong(cx))
         .text_color(palette::surface(palette::Level::Page, cx))
-        .child(Icon::new(Glyph::ArrowRightBold).size(px(14.)))
+        .child(Icon::new(Glyph::ArrowRight).size(px(14.)))
         .child(tag.clone())
         .with_animation(tag, Animation::new(ui::DUR_POP).with_easing(gpui_kit::ease_out_quint()), |chip, t| chip.opacity(t).translate_x(px(-4. * (1. - t))).scale(0.95 + 0.05 * t))
         .into_any_element()

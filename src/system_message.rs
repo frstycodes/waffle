@@ -340,7 +340,7 @@ fn line(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     let (glyph, ink, sentence) = match message.kind {
         1 => {
             let target = message.mentions.first().unwrap_or(author);
-            (Glyph::ArrowRightBold, positive, s.text(" added ").name(target, ctx).text(if facts.thread { " to the thread." } else { " to the group." }))
+            (Glyph::ArrowRight, positive, s.text(" added ").name(target, ctx).text(if facts.thread { " to the thread." } else { " to the group." }))
         }
         2 => {
             let target = message.mentions.first().filter(|t| t.id != author.id);
@@ -359,7 +359,7 @@ fn line(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
         5 => (Glyph::Pen, muted, s.text(" changed the group icon.")),
         7 => return join_line(message, ctx, cx),
         8..=11 => (Glyph::Gem, palette::boost_ink(cx), boost_sentence(message, s, facts)),
-        12 => (Glyph::ArrowRightBold, positive, s.text(" has added ").strong(&message.content).text(" to this channel. Its most important updates will show up here.")),
+        12 => (Glyph::ArrowRight, positive, s.text(" has added ").strong(&message.content).text(" to this channel. Its most important updates will show up here.")),
         14..=17 => return discovery_line(message, ctx, cx),
         18 => (Glyph::Thread, muted, thread_sentence(message, s, ctx)),
         27 => (Glyph::Stage, positive, s.text(" started ").strong(&message.content)),
@@ -473,10 +473,10 @@ fn join_line(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElemen
     let positive = palette::positive_ink(cx);
     let stamp = Some(chat::format_stamp(&message.timestamp));
     if message.author.bot {
-        return notice_line(&message.id, Glyph::ArrowRightBold, positive, bot_join_sentence(message, ctx, cx), stamp, Vec::new(), cx);
+        return notice_line(&message.id, Glyph::ArrowRight, positive, bot_join_sentence(message, ctx, cx), stamp, Vec::new(), cx);
     }
     let under = wave_button(message, ctx, cx).map(under_row).into_iter().collect();
-    notice_line(&message.id, Glyph::ArrowRightBold, positive, join_sentence(message, ctx, cx), stamp, under, cx)
+    notice_line(&message.id, Glyph::ArrowRight, positive, join_sentence(message, ctx, cx), stamp, under, cx)
 }
 
 fn join_sentence(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Sentence {
@@ -530,7 +530,7 @@ fn fold_line(run: &[Message], ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement 
         false => Vec::new(),
         true => vec![div().mt(px(4.)).flex().flex_col().gap(px(2.)).children(run[2..].iter().map(|m| folded_join(m, ctx, cx))).into_any_element()],
     };
-    notice_line(&first.id, Glyph::ArrowRightBold, palette::positive_ink(cx), sentence, Some(chat::format_stamp(&first.timestamp)), under, cx)
+    notice_line(&first.id, Glyph::ArrowRight, palette::positive_ink(cx), sentence, Some(chat::format_stamp(&first.timestamp)), under, cx)
 }
 
 fn folded_join(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
