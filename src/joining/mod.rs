@@ -66,6 +66,8 @@ pub struct Join {
     // Server → the to-do channels done (GET new-member-actions, then each completion).
     pub done_actions: HashMap<String, HashSet<String>>,
     pub invite: Option<InviteView>,
+    // Server → the nickname picked on its invite screen, set once the join goes through.
+    pub invite_nicknames: HashMap<String, String>,
     pub onboard: Option<OnboardingView>,
     pub rules: Option<RulesView>,
     pub browse: BrowseView,
