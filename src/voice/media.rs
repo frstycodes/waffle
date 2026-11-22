@@ -40,6 +40,7 @@ use super::{
     audio::{AudioSettings, FRAME_LEN, FRAME_SAMPLES, Mixer, SAMPLE_RATE},
     camera::{self, CameraCapture},
     feedback::{self, Feedback, RemoteVideo},
+    issues,
     rtp::{self, Cipher},
     vad::{Gate, InputWatch, PreRoll},
     video::{self, FrameAssembler, VideoDecoder, VideoEncoder, VideoFrame},
@@ -74,7 +75,6 @@ pub const CAMERA_FPS: u32 = 30;
 const SOURCE_SIZE_CAP: (u32, u32) = (3840, 2160);
 const VIDEO_MTU: usize = 1200;
 const VIDEO_CLOCK_HZ: u128 = 90_000;
-const IDLE_REPEAT: Duration = Duration::from_millis(500);
 const STREAM_AUDIO_BITRATE: i32 = 128_000;
 
 // 16:9 bounds for a Go Live height.
@@ -212,7 +212,7 @@ impl Media {
 
         let devices: Devices = match link.role {
             Role::Broadcast(source, options) => {
-                let ScreenFeed { capture, frames, sound } = start_capture(source, options)?;
+                let ScreenFeed { capture, frames, sound } = start_capture(source, options).inspect_err(|_| link.shared.issue(&link.my_id, issues::SCREENSHARE_OS_ERROR, true))?;
                 let (width, height) = go_live_size(options.resolution);
                 let bitrate = video_bitrate(width, height, options.fps);
                 let (l, f, s, fps) = (link.clone(), feedback.clone(), stop.clone(), options.fps);
@@ -572,6 +572,12 @@ fn handle_rtcp(link: &Link, feedback: &Feedback, packet: &[u8]) {
             (_, Some(sender)) => &sender.reports,
             _ => continue,
         };
+        // What the server says we lose of our stream's video (2004 past 10%).
+        if matches!(link.role, Role::Broadcast(..))
+            && let Some(loss) = reported_loss(reports, link.video_ssrc)
+        {
+            link.shared.issue(&link.my_id, issues::STREAM_SEND_HIGH_PACKET_LOSS, loss > issues::LOSS_LINE);
+        }
         if let Some(loss) = reported_loss(reports, link.ssrc) {
             if super::debug() {
                 eprintln!("[{:?}] server reports {loss:.1}% loss of our audio", link.role);
@@ -596,6 +602,8 @@ struct VideoIn {
     units: SyncSender<Vec<u8>>,
     // A frame was lost before reaching the decoder, which then waits for a keyframe.
     lost: Arc<AtomicBool>,
+    // A watched stream's loss after retransmissions, for 2003; None for cameras, which Discord doesn't check.
+    loss: Option<(issues::LossMeter, Arc<Shared>)>,
 }
 
 impl VideoIn {
@@ -605,12 +613,18 @@ impl VideoIn {
         let lost = Arc::new(AtomicBool::new(false));
         let (l, u, flag) = (link.clone(), user.clone(), lost.clone());
         spawn("waffle-video-decode", move || decode_loop(&l, &u, ssrc, decoder, &queued, &flag))?;
-        Ok(Self { user, ssrc, nacks: feedback.receive_video(ssrc), frames: FrameAssembler::default(), units, lost })
+        let loss = (link.role == Role::Watch).then(|| (issues::LossMeter::default(), link.shared.clone()));
+        Ok(Self { user, ssrc, nacks: feedback.receive_video(ssrc), frames: FrameAssembler::default(), units, lost, loss })
     }
 
     fn receive(&mut self, packet: Packet) {
         let Some(packet) = self.nacks.arrived(packet) else { return };
         let now = Instant::now();
+        if let Some((meter, shared)) = &mut self.loss
+            && let Some(loss) = meter.packet(packet.header.sequence_number, now)
+        {
+            shared.issue(&self.user, issues::STREAM_VIEW_HIGH_PACKET_LOSS, loss > issues::LOSS_LINE);
+        }
         self.frames.push(packet, now);
         while let Some(frame) = self.frames.pop(now) {
             // A full queue means the decoder is behind: dropping a frame and catching up on the next
@@ -682,7 +696,10 @@ fn start_capture(_source: ShareSource, _options: GoLiveOptions) -> Result<Screen
 fn stream_audio_loop(link: &Link, sound: Receiver<Vec<f32>>, stop: &AtomicBool) {
     let mut encoder = match Encoder::new(SAMPLE_RATE, Channels::Stereo, Application::Audio) {
         Ok(encoder) => encoder,
-        Err(e) => return eprintln!("voice: opus encoder: {e}"),
+        Err(e) => {
+            link.shared.issue(&link.my_id, issues::SOUNDSHARE_FAILED, true);
+            return eprintln!("voice: opus encoder: {e}");
+        }
     };
     let _ = encoder.set_bitrate(opus::Bitrate::Bits(STREAM_AUDIO_BITRATE));
     // Not verified: speaking flag 2 (soundshare) marks this SSRC as stream audio.
@@ -695,7 +712,13 @@ fn stream_audio_loop(link: &Link, sound: Receiver<Vec<f32>>, stop: &AtomicBool) 
         match sound.recv_timeout(POLL) {
             Ok(chunk) => pending.extend(chunk),
             Err(RecvTimeoutError::Timeout) => continue,
-            Err(RecvTimeoutError::Disconnected) => return,
+            // The capture's sound ended while the stream goes on (Discord's 1001).
+            Err(RecvTimeoutError::Disconnected) => {
+                if !stop.load(Ordering::Relaxed) {
+                    link.shared.issue(&link.my_id, issues::SOUNDSHARE_FAILED, true);
+                }
+                return;
+            }
         }
         while pending.len() >= FRAME_LEN {
             let frame: Vec<f32> = pending.drain(..FRAME_LEN).collect();
@@ -718,7 +741,20 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, frames: Receiver<Arc<V
     let mut payloader = H264Payloader::default();
     let started = Instant::now();
     let mut sequence: u16 = rand::random();
-    let mut last: Option<(Arc<VideoFrame>, Instant)> = None;
+    // Discord's viewers flag a stream under half its frame rate (error 2002, "stream-view-low-fps"),
+    // so a still screen repeats its last frame at the full rate, as Discord's own capturer does; an
+    // unchanged frame encodes to a few bytes.
+    let interval = Duration::from_secs_f64(1.0 / f64::from(fps.max(1)));
+    let mut last: Option<Arc<VideoFrame>> = None;
+    let mut due = Instant::now() + interval;
+    // Discord's checks on what we send: frames encoded per second against its line (2005 for a stream,
+    // 2013 under 10 for a camera), and a source that never delivers a first frame (2011).
+    let streaming = matches!(link.role, Role::Broadcast(..));
+    let (low_code, low_line) = if streaming { (issues::STREAM_SEND_LOW_FPS, issues::low_fps_line(fps)) } else { (issues::CAMERA_SEND_LOW_FPS, 10.) };
+    let mut rate = issues::RateMeter::new(Instant::now());
+    // A camera's issues are told under "camera:{id}", apart from the stream's.
+    let who = if streaming { link.my_id.clone() } else { format!("camera:{}", link.my_id) };
+    let raise = |code, on| link.shared.issue(&who, code, on);
     let mut last_keyframe: Option<Instant> = None;
     let mut pacer = Pacer::new(bitrate);
     while !stop.load(Ordering::Relaxed) {
@@ -727,30 +763,46 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, frames: Receiver<Arc<V
         let keyframe_due = link.keyframe.load(Ordering::Relaxed) && last_keyframe.is_none_or(|at| at.elapsed() >= KEYFRAME_MIN_GAP);
         // ScreenCaptureKit only delivers frames when the screen changes; repeating the last one
         // keeps the stream alive and lets keyframe requests be answered on a still screen.
-        let frame = match frames.recv_timeout(POLL) {
+        let frame = match frames.recv_timeout(due.saturating_duration_since(Instant::now())) {
             // Our own Go Live comes back to the UI as its self-view, as the camera's does.
             Ok(frame) if matches!(link.role, Role::Broadcast(..)) => {
                 link.shared.publish_frame(&link.my_id, VideoSource::GoLive, frame.clone());
                 frame
             }
             Ok(frame) => frame,
-            Err(RecvTimeoutError::Timeout) => match last.take() {
-                Some((frame, at)) if at.elapsed() >= IDLE_REPEAT || keyframe_due => frame,
-                kept => {
-                    last = kept;
+            Err(RecvTimeoutError::Timeout) => match &last {
+                Some(frame) => frame.clone(),
+                None => {
+                    raise(issues::SENDER_READY_TIMEOUT, started.elapsed() >= issues::READY_TIMEOUT);
+                    due = Instant::now() + interval;
                     continue;
                 }
             },
-            Err(RecvTimeoutError::Disconnected) => return,
+            // The capture ended under a stream that goes on: the OS stopped it (Discord's 3004).
+            Err(RecvTimeoutError::Disconnected) => {
+                if streaming && !stop.load(Ordering::Relaxed) {
+                    raise(issues::SCREENSHARE_OS_ERROR, true);
+                }
+                return clear_send_issues(link, &who, low_code);
+            }
         };
+        if last.is_none() {
+            raise(issues::SENDER_READY_TIMEOUT, false);
+        }
         if keyframe_due {
             link.keyframe.store(false, Ordering::Relaxed);
             last_keyframe = Some(Instant::now());
             encoder.force_keyframe();
         }
+        // Behind (a slow encode): the next frame is due now rather than in a burst catching up.
+        due = (due + interval).max(Instant::now());
         let unit = encoder.encode(&frame);
-        last = Some((frame, Instant::now()));
+        last = Some(frame);
         let Some(unit) = unit else { continue };
+        rate.frame();
+        if let Some(sent) = rate.rate(Instant::now()) {
+            raise(low_code, sent < low_line);
+        }
         let Some(sealed) = dave_seal_video(link, &video::without_nal_types(&unit, &UNSENT_NAL_TYPES)) else { continue };
         let timestamp = (started.elapsed().as_micros() * VIDEO_CLOCK_HZ / 1_000_000) as u32;
         let Ok(payloads) = payloader.payload(VIDEO_MTU, &Bytes::from(sealed)) else { continue };
@@ -761,6 +813,14 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, frames: Receiver<Arc<V
             pacer.wait(rtp::HEADER_LEN + payload.len());
             feedback::run(writer.write(&Packet { header, payload }, &Attributes::new())).ok();
         }
+    }
+    clear_send_issues(link, &who, low_code);
+}
+
+// What a send loop raised goes with it.
+fn clear_send_issues(link: &Link, who: &str, low_code: u16) {
+    for code in [low_code, issues::SENDER_READY_TIMEOUT] {
+        link.shared.issue(who, code, false);
     }
 }
 

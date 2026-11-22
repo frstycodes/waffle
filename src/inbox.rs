@@ -18,6 +18,8 @@ pub(crate) enum InboxTab {
     Unreads,
     #[default]
     Mentions,
+    // Discord's saved-for-later messages.
+    Saved,
 }
 
 /// What the Mentions tab includes, kept across restarts.
@@ -100,6 +102,9 @@ impl Waffle {
         if tab == InboxTab::Mentions && self.inbox.is_none() {
             self.fetch_mentions(cx);
         }
+        if tab == InboxTab::Saved && self.saved.is_none() {
+            self.fetch_saved(cx);
+        }
         cx.notify();
     }
 
@@ -133,8 +138,8 @@ impl Waffle {
             .when(titled, |t| t.child(Icon::new(Glyph::Inbox).size(px(20.)).text_color(palette::faint(cx))).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Inbox")))
             .child(div().flex_1())
             .children(mark_all);
-        const TABS: [InboxTab; 2] = [InboxTab::Unreads, InboxTab::Mentions];
-        let items = [ui::Tab::new("Unreads").count((unread > 0).then_some(unread as u32)), ui::Tab::new("Mentions")];
+        const TABS: [InboxTab; 3] = [InboxTab::Unreads, InboxTab::Mentions, InboxTab::Saved];
+        let items = [ui::Tab::new("Unreads").count((unread > 0).then_some(unread as u32)), ui::Tab::new("Mentions"), ui::Tab::new("Saved")];
         let selected = TABS.iter().position(|t| *t == self.inbox_tab).unwrap_or(1);
         let this = cx.entity().downgrade();
         let tabs = ui::tabs("inbox-tabs", &items, selected, move |i, _, cx| {
@@ -146,7 +151,8 @@ impl Waffle {
     /// The open tab's list: Mentions under its filter chips (at most `limit`), or the unread channels.
     pub(crate) fn inbox_body(&self, limit: Option<usize>, cx: &mut Context<Self>) -> AnyElement {
         match self.inbox_tab {
-            InboxTab::Mentions => div().flex().flex_col().gap_2().child(self.mention_filters(cx)).child(self.mention_list(limit, cx)).into_any_element(),
+            InboxTab::Mentions => div().flex().flex_col().gap_2().child(self.mention_filters(cx)).child(self.message_cards(&self.inbox, limit, "You're all caught up!", cx)).into_any_element(),
+            InboxTab::Saved => self.message_cards(&self.saved, limit, "Save a message from its menu to find it here later.", cx),
             InboxTab::Unreads => self.unread_list(cx),
         }
     }

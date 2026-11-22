@@ -157,6 +157,7 @@ pub static SETTINGS: &[Setting] = &[
     s("auto-download-updates", Updates, "Automatic updates", "Download updates automatically", Some("Off, Waffle still checks and tells you, then downloads when you ask"), &["update", "upgrade", "auto update", "background", "download", "release"], Switch(Toggle::AutoDownloadUpdates)),
     // Activity privacy
     s("share-activity", ActivityPrivacy, "Activity status", "Share your activity status", Some("What you're playing or listening to, as Discord's apps detect it"), &["game", "playing", "spotify", "rich presence", "status", "activity"], Switch(Toggle::ShareActivity)),
+    s("registered-games", ActivityPrivacy, "Registered games", "Registered games", Some("Games detected here, each with its own switch, and Add it! for one that isn't"), &["game", "detect", "detection", "add it", "registered", "playing"], Custom),
 ];
 
 impl<P: Scope> Setting<P> {
