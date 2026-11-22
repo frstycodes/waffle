@@ -235,6 +235,7 @@ fn parse_webhook(v: &Value) -> Option<Webhook> {
     Some(Webhook { name: v["name"].as_str().unwrap_or("Webhook").to_owned(), by: user["global_name"].as_str().or(user["username"].as_str()).map(str::to_owned), url, id })
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum Load<T> {
     Loading,
     Ready(T),

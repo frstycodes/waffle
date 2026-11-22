@@ -85,7 +85,10 @@ impl Waffle {
             // The feed stops under the header, a hard edge.
             .child(header)
             // The composer floats over the feed, which scrolls on under its glass.
-            .child(div().relative().flex_1().min_h_0().child(body).children(unread_bar).child(self.render_composer(window, cx)));
+            .child(div().relative().flex_1().min_h_0().child(body).children(unread_bar).child(match self.composer_gate(&channel, window, cx) {
+                Some(gate) => gate,
+                None => self.render_composer(window, cx).into_any_element(),
+            }));
         // The members column beside the feed runs to the window's top with a header of its own on the same line.
         let panel = self.panel_column_width().map(|w| self.part(crate::part::Column::Panel, gpui_kit::StyleRefinement::default().w(px(w)).h_full().flex_none(), cx));
         let drop_zone = self.drop_zone(&channel, cx);
@@ -525,6 +528,7 @@ impl Waffle {
             .children(self.composer_bar(cx))
             .children(self.attachment_tray(cx))
             .child(row);
+        let guide_bar = self.channel.clone().and_then(|channel| self.guide_action_bar(&channel, cx));
         let typers = self.typers();
         let names: Vec<&str> = typers.iter().map(|t| t.name.as_str()).collect();
         // A glass pill just above the composer, out of the flow, so the box never moves when someone types.
@@ -576,7 +580,8 @@ impl Waffle {
             .child(measure)
             .children(self.jump_to_present(cx))
             // Occludes: the composer floats over the feed, which must not take the hover or the click under it.
-            .child(div().relative().occlude().child(card).children(typing))
+            // A Server Guide to-do bar rides on top, inside the measured stack so the feed leaves room for it.
+            .child(div().relative().occlude().flex().flex_col().gap(px(8.)).children(guide_bar).child(card).children(typing))
             .children(note)
             // 8px off the window's foot, level with the user card in the left column.
             .child(div().h(px(8.)))
