@@ -32,6 +32,7 @@ mod discord;
 mod drafts;
 mod drag;
 mod icons;
+mod illustration;
 mod images;
 mod layout;
 mod link_preview;

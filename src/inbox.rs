@@ -6,6 +6,7 @@ use crate::{
     Waffle,
     discord::{Channel, ChannelKind, Message},
     icons::Glyph,
+    illustration::Illustration,
     palette,
     ui::{self, RADIUS_SM, Squircle},
 };
@@ -166,16 +167,7 @@ impl Waffle {
     fn unread_list(&self, cx: &mut Context<Self>) -> AnyElement {
         let unreads = self.unreads();
         if unreads.is_empty() {
-            return div()
-                .p_6()
-                .flex()
-                .flex_col()
-                .items_center()
-                .gap_1()
-                .text_center()
-                .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("You're all caught up"))
-                .child(div().text_color(palette::muted(cx)).child("New messages in channels you follow will gather here."))
-                .into_any_element();
+            return ui::empty_state("unreads-empty", Illustration::InboxEmpty, "You're all caught up", "New messages in channels you follow will gather here.", cx).into_any_element();
         }
         let messages: Vec<Message> = unreads.iter().flat_map(|u| u.messages.iter().cloned()).collect();
         let ctx = self.row_context_everywhere(&messages, 380., cx);
