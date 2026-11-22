@@ -75,7 +75,8 @@ pub struct AudioPlayer {
     resume: Duration,
     // Dragging across the waveform, and whether to play again on release.
     scrubbing: Option<bool>,
-    volume_hovers: u8,
+    // The speaker and the slider card under the pointer, and the slider held: any keeps the card open.
+    volume_hold: [bool; 3],
     volume_open: bool,
     focus: FocusHandle,
     unpainted_since: Rc<Cell<Option<Instant>>>,
@@ -110,7 +111,7 @@ impl AudioPlayer {
             played: !resume.is_zero(),
             resume,
             scrubbing: None,
-            volume_hovers: 0,
+            volume_hold: [false; 3],
             volume_open: false,
             focus: cx.focus_handle(),
             unpainted_since: Rc::default(),
@@ -332,8 +333,8 @@ impl AudioPlayer {
         cx.notify();
     }
 
-    fn hover_volume(&mut self, hovered: bool, cx: &mut Context<Self>) {
-        self.volume_hovers = if hovered { self.volume_hovers + 1 } else { self.volume_hovers.saturating_sub(1) };
+    fn hold_volume(&mut self, part: usize, hovered: bool, cx: &mut Context<Self>) {
+        self.volume_hold[part] = hovered;
         if hovered {
             self.volume_open = true;
             return cx.notify();
@@ -341,7 +342,7 @@ impl AudioPlayer {
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(LINGER).await;
             this.update(cx, |this, cx| {
-                if this.volume_hovers == 0 {
+                if !this.volume_hold.contains(&true) {
                     this.volume_open = false;
                     cx.notify();
                 }
@@ -604,7 +605,11 @@ impl AudioPlayer {
             .squircle(RADIUS_SM)
             .bg(palette::surface(Level::Overlay, cx))
             .shadow(ui::shadow_pop(cx))
-            .on_hover(cx.listener(|this, hovered: &bool, _, cx| this.hover_volume(*hovered, cx)))
+            .on_hover(cx.listener(|this, hovered: &bool, _, cx| this.hold_volume(1, *hovered, cx)))
+            // A drag takes hover from the card, so holding the slider keeps it open on its own.
+            .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.hold_volume(2, true, cx)))
+            .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| this.hold_volume(2, false, cx)))
+            .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, _, cx| this.hold_volume(2, false, cx)))
             .child(slider);
         div()
             .relative()
@@ -622,7 +627,7 @@ impl AudioPlayer {
                         .text_color(palette::muted(cx))
                         .hover(|s| s.bg(palette::hover(cx)).text_color(palette::strong(cx)))
                         .child(Icon::new(if silent { Glyph::VolumeOff } else { Glyph::VolumeHigh }).size(px(20.)))
-                        .on_hover(cx.listener(|this, hovered: &bool, _, cx| this.hover_volume(*hovered, cx)))
+                        .on_hover(cx.listener(|this, hovered: &bool, _, cx| this.hold_volume(0, *hovered, cx)))
                         .on_click(cx.listener(|this, _, _, cx| {
                             cx.stop_propagation();
                             this.toggle_mute(cx);
