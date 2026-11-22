@@ -419,6 +419,7 @@ impl AudioPlayer {
         div()
             .id(SharedString::from(format!("voice-{}", self.key)))
             .mt(px(6.))
+            .self_start()
             .max_w_full()
             .flex()
             .items_center()
