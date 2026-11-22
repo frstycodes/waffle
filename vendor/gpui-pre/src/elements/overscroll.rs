@@ -51,11 +51,17 @@ pub fn rebound_offset(initial: f32, velocity: f32, t: f32) -> f32 {
     (initial + velocity * t * REBOUND_AMPLITUDE) * (-t * REBOUND_STIFFNESS / REBOUND_PERIOD).exp()
 }
 
-/// Whether this scroll event may stretch past an edge. Wheel notches clamp, and the gesture
-/// phases this relies on are only told apart on macOS: Windows' Direct Manipulation keeps
-/// inertia inside the touch and ends it only once inertia stops.
+/// Whether this scroll event may stretch past an edge. Wheel notches clamp. Trackpads stretch on
+/// macOS and Windows alike: Windows' Direct Manipulation ends the touch when its inertia starts
+/// (direct_manipulation.rs), giving the same phases as macOS.
 pub(crate) fn rubber_bands(event: &ScrollWheelEvent, cx: &App) -> bool {
-    cfg!(target_os = "macos") && event.delta.precise() && !cx.reduce_motion()
+    event.delta.precise() && !cx.reduce_motion()
+}
+
+/// Whether momentum may stretch past an edge and rebound: the same settings as [`rubber_bands`],
+/// for motion stepped per frame rather than fed by an event.
+pub(crate) fn coasts_into_edges(cx: &App) -> bool {
+    !cx.reduce_motion()
 }
 
 #[derive(Clone, Copy, Debug)]

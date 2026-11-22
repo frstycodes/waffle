@@ -154,21 +154,46 @@ impl Waffle {
         let Some(list) = self.member_lists.get(&guild.id).filter(|l| !l.is_empty()) else { return members_loading(cx).into_any_element() };
         let mut first = activity.is_none();
         let spot = self.side_spot(cx);
-        let rows = list.iter().filter_map(|item| match item {
-            ListItem::Group { id, count } => {
-                let count = self.member_groups.get(&guild.id).and_then(|g| g.get(id)).copied().unwrap_or(*count);
-                let name = match id.as_str() {
-                    "online" => "Online".to_string(),
-                    "offline" => "Offline".to_string(),
-                    "" => return None,
-                    role => guild.roles.iter().find(|r| r.id == role).map(|r| r.name.clone()).unwrap_or_else(|| "Members".into()),
-                };
-                let spaced = !std::mem::take(&mut first);
-                Some(group_label(format!("{name} · {count}"), cx).when(spaced, |l| l.mt_3()).into_any_element())
-            }
-            ListItem::Member(member) => Some(self.member_row(member, spot, cx)),
+        // Each entry with its height: a group's label (12px more after the first), or a member's row.
+        let entries: Vec<(f32, Entry)> = list
+            .iter()
+            .filter_map(|item| match item {
+                ListItem::Group { id, count } => {
+                    let count = self.member_groups.get(&guild.id).and_then(|g| g.get(id)).copied().unwrap_or(*count);
+                    let name = match id.as_str() {
+                        "online" => "Online".to_string(),
+                        "offline" => "Offline".to_string(),
+                        "" => return None,
+                        role => guild.roles.iter().find(|r| r.id == role).map(|r| r.name.clone()).unwrap_or_else(|| "Members".into()),
+                    };
+                    let spaced = !std::mem::take(&mut first);
+                    Some((GROUP_LABEL + if spaced { GROUP_SPACE } else { 0. }, Entry::Group(format!("{name} · {count}"), spaced)))
+                }
+                ListItem::Member(member) => Some((member_row_height(), Entry::Member(member))),
+            })
+            .collect();
+        // A server's list runs to thousands: only the entries in view are built (see `ui::visible_rows`). Where
+        // the block starts under the activity cards is read as it paints, so the next frame knows.
+        let gap = ui::density_pad(2.);
+        let top = window.use_keyed_state("member-rows-top", cx, |_, _| None::<f32>);
+        let scroll = self.panel_scroll.clone();
+        let heights: Vec<f32> = entries.iter().map(|(height, _)| *height).collect();
+        let (range, before, after) = match *top.read(cx) {
+            Some(at) => ui::visible_rows(&heights, gap, at, -f32::from(scroll.offset().y), f32::from(scroll.bounds().size.height), ROWS_OVERSCAN),
+            None => ui::visible_rows(&heights, gap, 0., 0., ROWS_FIRST_PAINT, 0.),
+        };
+        let measure = gpui_kit::canvas(|_, _, _| {}, move |bounds, _, _, cx| {
+            // Painted where it scrolled to; the content's own position takes the offset back out.
+            let at = f32::from(bounds.top() - scroll.bounds().top() - scroll.offset().y);
+            top.update(cx, |top, _| *top = Some(at));
         });
-        div().flex().flex_col().gap(px(ui::density_pad(2.))).children(activity).children(rows.collect::<Vec<_>>()).into_any_element()
+        let spacer = |height: f32| (height > 0.).then(|| div().flex_none().h(px(height)));
+        let rows = entries[range].iter().map(|(_, entry)| match entry {
+            Entry::Group(label, spaced) => group_label(label.clone(), cx).when(*spaced, |l| l.mt_3()).into_any_element(),
+            Entry::Member(member) => self.member_row(member, spot, cx),
+        });
+        let block = div().relative().flex().flex_col().gap(px(gap)).child(measure.absolute().size_0()).children(spacer(before)).children(rows.collect::<Vec<_>>()).children(spacer(after));
+        div().flex().flex_col().gap(px(gap)).children(activity).child(block).into_any_element()
     }
 
     pub(crate) fn load_activity_feed(&mut self, cx: &mut Context<Self>) {
@@ -364,7 +389,7 @@ impl Waffle {
                 let next = hovered.then(|| hover_id.clone());
                 if this.member_hover != next && (*hovered || this.member_hover.as_deref() == Some(hover_id.as_str())) {
                     this.member_hover = next;
-                    cx.notify();
+                    this.redraw(crate::part::Column::Panel, cx);
                 }
             }))
             .relative()
@@ -544,6 +569,19 @@ impl Render for ActivityTip {
 }
 
 // A 32px avatar plus padding that follows UI density: 44px at Default.
+// A group's label, and the space above every label after the first (`mt_3`).
+const GROUP_LABEL: f32 = 28.;
+const GROUP_SPACE: f32 = 12.;
+// How far past the view's edges member rows are built, and how much is built before the list's place is known.
+const ROWS_OVERSCAN: f32 = 400.;
+const ROWS_FIRST_PAINT: f32 = 1200.;
+
+// An entry of the member list, built only while near the view.
+enum Entry<'a> {
+    Group(String, bool),
+    Member(&'a Member),
+}
+
 fn member_row_height() -> f32 {
     32. + ui::density_pad(12.)
 }

@@ -15,10 +15,10 @@ use crate::{
 
 // Two lines beside a 32px avatar.
 const DM_ROW_HEIGHT: f32 = 44.;
-// Rows built past each edge of the view, so a fast scroll doesn't outrun them before the next frame.
-const OVERSCAN: usize = 8;
-// Rows built before the list has been laid out once and its position is known.
-const FIRST_PAINT: usize = 30;
+// How far past each edge of the view rows are built, so a fast scroll doesn't outrun them before the next frame.
+const OVERSCAN: f32 = 400.;
+// How much of the list is built before it has been laid out once and its position is known.
+const FIRST_PAINT: f32 = 1200.;
 
 impl Waffle {
     // The DM list's rows from child `first` of the channel list on: only those in view (and `OVERSCAN` either
@@ -27,15 +27,15 @@ impl Waffle {
     // so the range follows from the scroll offset and where the block sat in the last layout.
     pub(super) fn dm_rows(&self, first: usize, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let dms = self.dm_order();
-        let pitch = DM_ROW_HEIGHT + row_gap();
+        let heights = vec![DM_ROW_HEIGHT; dms.len()];
         let scroll = &self.channels_scroll;
-        let (start, end) = match scroll.bounds_for_item(first) {
+        let (range, before, after) = match scroll.bounds_for_item(first) {
             // Child bounds are laid out unscrolled; the offset runs negative as the list scrolls down.
-            Some(block) => in_view(dms.len(), f32::from(block.top() - scroll.bounds().top()), -f32::from(scroll.offset().y), f32::from(scroll.bounds().size.height), pitch),
-            None => (0, dms.len().min(FIRST_PAINT)),
+            Some(block) => ui::visible_rows(&heights, row_gap(), f32::from(block.top() - scroll.bounds().top()), -f32::from(scroll.offset().y), f32::from(scroll.bounds().size.height), OVERSCAN),
+            None => ui::visible_rows(&heights, row_gap(), 0., 0., FIRST_PAINT, 0.),
         };
-        let spacer = |rows: usize| (rows > 0).then(|| div().flex_none().h(px(rows as f32 * pitch - row_gap())).into_any_element());
-        spacer(start).into_iter().chain(dms[start..end].iter().map(|c| self.dm_row(c, cx))).chain(spacer(dms.len() - end)).collect()
+        let spacer = |height: f32| (height > 0.).then(|| div().flex_none().h(px(height)).into_any_element());
+        spacer(before).into_iter().chain(dms[range].iter().map(|c| self.dm_row(c, cx))).chain(spacer(after)).collect()
     }
 
     // A conversation: the person, then one line on what they're doing.
@@ -120,29 +120,5 @@ impl Waffle {
                 cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_dm_menu(channel.clone(), e.position, cx))
             })
             .into_any_element()
-    }
-
-}
-
-// The rows of `count`, `pitch` apart from `top`, that a view from `view_top` and `view_height` tall shows,
-// widened by `OVERSCAN` either side: (first, past the last).
-fn in_view(count: usize, top: f32, view_top: f32, view_height: f32, pitch: f32) -> (usize, usize) {
-    let start = ((view_top - top) / pitch).floor().max(0.) as usize;
-    let end = (((view_top + view_height - top) / pitch).ceil().max(0.) as usize + OVERSCAN).min(count);
-    (start.saturating_sub(OVERSCAN).min(end), end)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn builds_the_rows_in_view_and_a_margin() {
-        // 200 rows 46px apart starting 120px down; a 600px view.
-        assert_eq!(in_view(200, 120., 0., 600., 46.), (0, 19));
-        assert_eq!(in_view(200, 120., 2000., 600., 46.), (32, 62));
-        // Scrolled past the end, or a list shorter than the view.
-        assert_eq!(in_view(200, 120., 99_999., 600., 46.), (200, 200));
-        assert_eq!(in_view(5, 120., 0., 600., 46.), (0, 5));
     }
 }

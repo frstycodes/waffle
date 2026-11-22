@@ -179,6 +179,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::floating` — A surface floating over everything after it, placed by its parent's position and kept inside the window.
 - `ui::floating_at` — `floating` with its `corner` pinned to the window point `at` (a click, a button's edge).
 - `ui::sized` — Content built for the size its slot has this frame, for layouts that pick their shape from the space (a grid choosing its columns), without 
+- `ui::visible_rows` — The rows of a scrolled column worth building: those a view from `view_top`, `view_height` tall, shows, widened by `margin` either side.
 
 ## src/ui/overflow.rs
 

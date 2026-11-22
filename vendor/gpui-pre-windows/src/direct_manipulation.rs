@@ -214,6 +214,23 @@ impl IDirectManipulationViewportEventHandler_Impl for DirectManipulationEventHan
             return Ok(());
         }
 
+        // Waffle: the finger lifted and Direct Manipulation's inertia takes over. End the touch here, as
+        // macOS does before its momentum, so gpui's scroll motion coasts on its own curve and treats the
+        // inertia updates that follow as the system's momentum.
+        if current == DIRECTMANIPULATION_INERTIA
+            && previous == DIRECTMANIPULATION_RUNNING
+            && self.gesture_kind.get() == GestureKind::Scroll
+        {
+            self.pending_events
+                .borrow_mut()
+                .push(PlatformInput::ScrollWheel(ScrollWheelEvent {
+                    position: self.mouse_position(),
+                    delta: ScrollDelta::Pixels(point(px(0.0), px(0.0))),
+                    modifiers: current_modifiers(),
+                    touch_phase: TouchPhase::Ended,
+                }));
+        }
+
         // A new gesture interrupted inertia, so end the old sequence.
         if current == DIRECTMANIPULATION_RUNNING && previous == DIRECTMANIPULATION_INERTIA {
             self.end_gesture();

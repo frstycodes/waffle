@@ -43,7 +43,8 @@ use std::{
 };
 
 use super::ImageCacheProvider;
-use super::overscroll::{Overscroll, rubber_bands};
+use super::overscroll::{Overscroll, coasts_into_edges, rubber_bands};
+use super::scroll_motion::{ScrollInput, ScrollMotion};
 
 #[cfg(feature = "stacker")]
 type StackSafe<T> = stacksafe::StackSafe<T>;
@@ -2179,6 +2180,8 @@ pub struct Interactivity {
     /// (`uniform_list`), which would read the stretch as a real offset.
     pub(crate) rubber_band: bool,
     pub(crate) overscroll: Option<Rc<RefCell<Overscroll>>>,
+    /// Waffle: momentum and wheel easing, stepped once per frame.
+    pub(crate) scroll_motion: Option<Rc<RefCell<ScrollMotion>>>,
     pub(crate) group: Option<SharedString>,
     /// The base style of the element, before any modifications are applied
     /// by focus, active, etc.
@@ -2306,6 +2309,7 @@ impl Interactivity {
                     let scroll_handle_state = scroll_handle.0.borrow();
                     self.scroll_offset = Some(scroll_handle_state.offset.clone());
                     self.ongoing_scroll = Some(scroll_handle_state.ongoing_scroll.clone());
+                    self.scroll_motion = Some(scroll_handle_state.scroll_motion.clone());
                     if self.rubber_band {
                         self.overscroll = Some(scroll_handle_state.overscroll.clone());
                     }
@@ -2323,6 +2327,12 @@ impl Interactivity {
                         element_state
                             .ongoing_scroll
                             .get_or_insert_with(|| Rc::new(RefCell::new(OngoingScroll::default())))
+                            .clone(),
+                    );
+                    self.scroll_motion = Some(
+                        element_state
+                            .scroll_motion
+                            .get_or_insert_with(Rc::default)
                             .clone(),
                     );
                     if self.rubber_band {
@@ -2492,7 +2502,7 @@ impl Interactivity {
         bounds: Bounds<Pixels>,
         style: &Style,
         window: &mut Window,
-        _cx: &mut App,
+        cx: &mut App,
     ) -> Point<Pixels> {
         fn round_to_two_decimals(pixels: Pixels) -> Pixels {
             const ROUNDING_FACTOR: f32 = 100.0;
@@ -2533,6 +2543,38 @@ impl Interactivity {
             // Clamp scroll offset in case scroll max is smaller now (e.g., if children
             // were removed or the bounds became larger).
             let mut scroll_offset = scroll_offset.borrow_mut();
+
+            // Waffle: this frame's share of momentum or a notch's ease, sampled at draw time.
+            if let Some(motion) = self.scroll_motion.as_ref() {
+                let mut motion = motion.borrow_mut();
+                if motion.is_moving() {
+                    let now = Instant::now();
+                    let coasting = motion.is_coasting();
+                    let (mut delta, more) = motion.step(now);
+                    if coasting
+                        && coasts_into_edges(cx)
+                        && let Some(overscroll) = self.overscroll.as_ref()
+                    {
+                        let mut overscroll = overscroll.borrow_mut();
+                        overscroll.set_extent(scroll_max, bounds.size);
+                        delta = overscroll.scroll(*scroll_offset, delta, TouchPhase::Moved, now);
+                    }
+                    let before = *scroll_offset;
+                    let moved = point(
+                        (scroll_offset.x + delta.x).clamp(-scroll_max.x, px(0.)),
+                        (scroll_offset.y + delta.y).clamp(-scroll_max.y, px(0.)),
+                    );
+                    *scroll_offset = *scroll_offset + delta;
+                    // Momentum that has reached an edge is spent (the rubber band takes it from there).
+                    if coasting && moved == before {
+                        motion.stop();
+                    }
+                    if more || self.overscroll.as_ref().is_some_and(|o| o.borrow().is_rebounding()) {
+                        window.request_animation_frame();
+                        window.note_scroll_motion();
+                    }
+                }
+            }
 
             scroll_offset.x = scroll_offset.x.clamp(-scroll_max.x, px(0.));
             if scroll_to_bottom {
@@ -3397,6 +3439,7 @@ impl Interactivity {
         if let Some(scroll_offset) = self.scroll_offset.clone() {
             let ongoing_scroll = self.ongoing_scroll.clone();
             let overscroll = self.overscroll.clone();
+            let scroll_motion = self.scroll_motion.clone();
             let overflow = style.overflow;
             let allow_concurrent_scroll = style.allow_concurrent_scroll;
             let restrict_scroll_to_axis = style.restrict_scroll_to_axis;
@@ -3444,6 +3487,15 @@ impl Interactivity {
                         }
                     }
                     let mut delta = point(delta_x, delta_y);
+                    // Waffle: the finger's own movement applies now; momentum and notches are
+                    // stepped once per frame at prepaint.
+                    let mut motion_started = false;
+                    if let Some(motion) = scroll_motion.as_ref() {
+                        let mut motion = motion.borrow_mut();
+                        let input = if event.delta.precise() { ScrollInput::Precise } else { ScrollInput::Notched };
+                        delta = motion.input(delta, input, event.touch_phase, !cx.reduce_motion(), Instant::now());
+                        motion_started = motion.is_moving();
+                    }
                     let mut overscroll_changed = false;
                     if let Some(overscroll) = overscroll.as_ref()
                         && rubber_bands(event, cx)
@@ -3460,7 +3512,7 @@ impl Interactivity {
                             overscroll.offset() != old_overscroll || overscroll.is_rebounding();
                     }
                     *scroll_offset = *scroll_offset + delta;
-                    if overscroll_changed || *scroll_offset != old_scroll_offset {
+                    if overscroll_changed || motion_started || *scroll_offset != old_scroll_offset {
                         cx.notify(current_view);
                     }
                 }
@@ -3705,6 +3757,7 @@ pub struct InteractiveElementState {
     pub(crate) scroll_offset: Option<Rc<RefCell<Point<Pixels>>>>,
     ongoing_scroll: Option<Rc<RefCell<OngoingScroll>>>,
     overscroll: Option<Rc<RefCell<Overscroll>>>,
+    scroll_motion: Option<Rc<RefCell<ScrollMotion>>>,
     pub(crate) active_tooltip: Option<Rc<RefCell<Option<ActiveTooltip>>>>,
     long_press_tooltip_active: Option<Rc<Cell<bool>>>,
 }
@@ -4378,6 +4431,7 @@ struct ScrollHandleState {
     offset: Rc<RefCell<Point<Pixels>>>,
     ongoing_scroll: Rc<RefCell<OngoingScroll>>,
     overscroll: Rc<RefCell<Overscroll>>,
+    scroll_motion: Rc<RefCell<ScrollMotion>>,
     bounds: Bounds<Pixels>,
     max_offset: Point<Pixels>,
     child_bounds: Vec<Bounds<Pixels>>,

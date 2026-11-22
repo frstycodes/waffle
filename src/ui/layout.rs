@@ -9,6 +9,8 @@
 // occluding"). `floating` and `floating_at` occlude for you.
 use gpui_kit::{Anchor, AnyElement, App, AvailableSpace, Canvas, Deferred, Div, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, Point, SharedString, Size, Styled, Window, anchored, canvas, deferred, div};
 
+use std::ops::Range;
+
 use super::WINDOW_MARGIN;
 
 /// A horizontal flex row, children centred on the cross axis, able to shrink below its content.
@@ -51,4 +53,44 @@ pub fn sized(build: impl FnOnce(Size<Pixels>, &mut Window, &mut App) -> AnyEleme
         |_, mut el, window, cx| el.paint(window, cx),
     )
     .size_full()
+}
+
+/// The rows of a scrolled column worth building: those a view from `view_top`, `view_height` tall, shows,
+/// widened by `margin` either side. `heights` are every row's, laid `gap` apart from `top` down the scrolled
+/// content. Returns that range and the heights of the spacers standing in for the rows before and after it,
+/// so the content keeps its full height and a long list costs only what shows.
+pub fn visible_rows(heights: &[f32], gap: f32, top: f32, view_top: f32, view_height: f32, margin: f32) -> (Range<usize>, f32, f32) {
+    let (low, high) = (view_top - margin, view_top + view_height + margin);
+    let (mut y, mut range) = (top, None::<Range<usize>>);
+    for (i, height) in heights.iter().enumerate() {
+        if y + height >= low && y <= high {
+            range = Some(range.map_or(i..i + 1, |r| r.start..i + 1));
+        }
+        y += height + gap;
+    }
+    // Nothing in view: the view is above the rows, or past them.
+    let range = range.unwrap_or(if top > high { 0..0 } else { heights.len()..heights.len() });
+    let span = |rows: &[f32]| if rows.is_empty() { 0. } else { rows.iter().sum::<f32>() + gap * (rows.len() - 1) as f32 };
+    (range.clone(), span(&heights[..range.start]), span(&heights[range.end..]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::visible_rows;
+
+    #[test]
+    fn builds_what_shows_and_keeps_the_rest_s_height() {
+        // 100 rows 40 tall, 4 apart, from 100 down; a 400 tall view with 50 either side.
+        let rows = [40.; 100];
+        let (range, before, after) = visible_rows(&rows, 4., 100., 1000., 400., 50.);
+        assert_eq!(range, 19..31);
+        // Every row and gap is accounted for: spacers, built rows and the gaps between all of them.
+        let built = range.len() as f32 * 40. + (range.len() - 1) as f32 * 4.;
+        assert_eq!(before + 4. + built + 4. + after, 100. * 40. + 99. * 4.);
+        assert_eq!(visible_rows(&rows, 4., 100., 0., 400., 50.).0, 0..8);
+        assert_eq!(visible_rows(&rows, 4., 100., 99_999., 400., 50.), (100..100, 100. * 40. + 99. * 4., 0.));
+        assert_eq!(visible_rows(&[], 4., 0., 0., 400., 50.), (0..0, 0., 0.));
+        // Mixed heights (a label between rows).
+        assert_eq!(visible_rows(&[28., 44., 44., 40., 44.], 2., 0., 80., 20., 0.).0, 2..3);
+    }
 }
