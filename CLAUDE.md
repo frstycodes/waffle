@@ -1,10 +1,31 @@
 # Waffle (dango)
 
+These rules bind every session. Hand-written UI values and app-wide redraws are counted by `tools/ui_lint.py`: before you edit a file it tells you what that file still carries, after the edit it blocks anything new, and `cargo test` fails on it (`tests/ui_rules.rs`). `python3 tools/ui_lint.py` lists what's left across the app.
+
+## Design system first
+
+`crate::ui` is the design system: tokens, layout primitives and every component, ported from `design/` (the HTML source of truth). Colours are `palette`, curves and springs `motion`, glyphs `icons::Glyph`. Start UI files with `use crate::ui::prelude::*;`. The catalog at the end of this file lists everything it has.
+
+1. **Look it up before you build it.** Find the component in the catalog (or `src/ui/`) and use it. Composing a lookalike from `div()` (a button, chip, badge, row, field, tooltip, surface, divider, empty state) is a bug, even when the existing one needs a small option added.
+2. **Missing? Add it to the design system, then use it.** It goes in `src/ui/` and is re-exported from `src/ui.rs`. It's domain-agnostic (no Discord types; a domain wrapper such as a server tile lives in the app file and wraps the primitive), takes `cx` for colours, and uses tokens only. It gets a section on the design-system page (`src/design_system.rs`, run with `WAVE_DESIGN=1 cargo run`), checked in both themes. It gets a one-sentence comment above it, which becomes its catalog line; regenerate the catalog with `python3 tools/ui_lint.py --update`.
+3. **Everything is a token.** Spacing is gpui's own scale (`gap_2` 8px, `p_1p5` 6px, …; the rem is fixed at 16px). Type is `ui::TEXT_*` with `ui::LEADING_*`, weights are named `FontWeight`s, corners are `.squircle(ui::RADIUS_*)` (`rounded_full` for people and pills), and icons and avatars use `ui::ICON_*` and `ui::AVATAR_*`. Hairlines are `ui::HAIRLINE`, colours are `palette::` roles (light and dark come with them), and durations are `ui::DUR_*` with `motion::` curves. No number goes inside `px()` in app code. A value the scale lacks becomes a named token in `src/ui/tokens.rs`, mirrored in `design/tokens.css`. A one-off layout size (a popover's width) is a named `const` in its file.
+4. **The ratchet.** `src/ui/rules.tsv` lists what app code may not write: numbers in `px()`, raw colours, numeric weights, raw floating surfaces, the kit's tooltip, and `cx.notify()` inside `impl Waffle` (an app-wide redraw). `src/ui/rules.baseline` counts what was left from before, per file and rule. Counts only fall: never add to the baseline, migrate the lines you touch, and lock in what fell with `python3 tools/ui_lint.py --update`. A line that genuinely can't comply carries `// lint-allow(<rule>): <reason>` on it or on the line above (`lint-allow(raw-px, raw-color): …` for several). Valid reasons: a size computed from data, a drag ghost that must not occlude, a notify that really changes every column. "It was easier" is not one. An allow without a reason is reported.
+
+## Overflow: nothing spills
+
+A flex child's minimum size is its content's, so long text pushes its row past its parent instead of shrinking. Build every layout as if the data were worst-case.
+
+- Rows and columns are `ui::row()` / `ui::col()`, which shrink (`min_w_0`, `min_h_0`). A raw flex container that holds text or anything data-sized needs `min_w_0` (`min_h_0` for columns).
+- In a row, the piece that stretches is `flex_1()` + `min_w_0()`; fixed pieces (icons, avatars, badges, buttons, counts) are `flex_none()`.
+- Text that must stay on one line is `ui::line(text)`, or `ui::truncating(key, text)` when the cut text should show in a tooltip. Running text wraps inside a width-bounded parent. Never let a name, title, channel or server label size its container.
+- Anything with a variable number of children scrolls: a bounded height (`flex_1` + `min_h_0`, or `max_h`), then `ui::scroll_area` or `list`/`uniform_list`. Popovers cap their height and scroll inside; `ui::floating` keeps them in the window.
+- Check before calling it done: the longest real name you can find, a 99+ count, an empty list, a missing avatar, and the window at its minimum width. Nothing may clip mid-glyph, overlap, or push past its parent.
+
 ## Pointer: nothing floats without occluding
 
 gpui hit-tests every hitbox under the pointer, front to back, until one occludes. An element drawn over others (popover, hover card, menu card, floating bar, toast, PiP, overlay button row, anything `absolute()`/`anchored()`/`deferred()` over content) passes hover and clicks through to whatever is behind it unless it blocks them.
 
-- Every floating surface gets `.id(...)` and `.occlude()` on its outermost element, in the same edit that creates it. Use `.block_mouse_except_scroll()` instead only when the content under it must keep scrolling (a header over a list).
+- Floating surfaces are `ui::floating(id, content)` or `ui::floating_at(id, at, corner, content)`: deferred, kept in the window, and occluding. Anything else floating gets `.id(...)` and `.occlude()` on its outermost element, in the same edit that creates it. Use `.block_mouse_except_scroll()` instead only when the content under it must keep scrolling (a header over a list).
 - A backdrop that occludes covers the surface only if the surface sits inside it; a card beside its backdrop still needs its own.
 - Decoration inside an element that already handles the pointer (a badge, a scrim, a label on a tile) needs nothing. A transparent full-window layer (the GIF layer, drag ghosts) must not occlude.
 - Hover-to-open surfaces keep themselves open with their own `on_hover`, since occluding takes the hover from the row under them.
@@ -18,3 +39,31 @@ Where Discord leads a dialog, empty state or first-run screen with a spot illust
 - One look across the set: polished stylised 3D-ish objects, soft light, three-quarter view, breakfast and café things from Waffle's world. Honey `#EFA831` and amber `#BF7D06` lead, cream and graphite `#1d1f24` support; no purple or blue, no text, no logos, no background tile. Reuse an existing illustration as the reference image so new ones match.
 - Every piece reads on both the dark and the light surface; check both before shipping.
 - Layout follows Discord's: art centred above the title, title a playful question or line, one muted subtitle. Copy stays Discord's.
+
+## Rendering: redraw only what changed
+
+`Waffle` is one big entity, like a React context that every column reads. The window is split into cached views, one per column (`part.rs`): a cached view replays its last drawing until it's notified. Every column observes `Waffle`, so **`cx.notify()` on `Waffle` re-renders all three columns** and everything else `render_root` builds. A notify on a smaller view re-renders that view and its parents, and the cached columns beside it replay.
+
+gpui notifies `window.current_view()`, the view whose render built the element, when a list or `overflow_*_scroll` div scrolls (`list.rs`) and when a `.hover()` style changes (`div.rs`). An element built in `Waffle`'s own render notifies `Waffle`.
+
+- State that one column alone draws (a hover, an open/closed flag) → `self.redraw(Column::X, cx)`, not `cx.notify()`.
+- Notify only when what's drawn changed. Check the old value first. High-rate sources (audio levels, video frames, timers, gateway events) never notify unconditionally.
+- State with its own update rate (a meter, a playing video, a ticking clock, a text field) gets its own entity, as `VideoPlayer` does; its tick notifies that entity, not `Waffle`. This is the gpui version of splitting a context into store slices.
+- Anything that scrolls or animates and is drawn outside a column gets its own view, like `Overlays` in `part.rs`, so its notifies stay local.
+- A cached view (`.cached(style)`) is sized by its style only; its content can't size it. Cache fixed regions; give content-sized popovers an uncached view.
+- Long lists use `list`/`uniform_list` with a `ListState`, never a div of every row.
+- Render runs again on every redraw: derive expensive values when their inputs change and keep them in state, not in render.
+
+## Idiomatic Rust and gpui
+
+- A stateless piece of UI is a function returning an element the caller keeps composing (`-> Div`, `-> Stateful<Div>`), like `ui::badge`. When it has several options, it's a `#[derive(IntoElement)]` struct with builder methods and `RenderOnce`, like `ui::TextField`. An `Entity` exists only to hold state.
+- Views talk through gpui: `cx.emit` + `cx.subscribe` for events, `cx.observe` for "it changed". Not `Rc<RefCell<…>>` shared between views.
+- Handlers on a view's state use `cx.listener(...)`. Spawned tasks hold a `WeakEntity` and end when `update` fails; `.detach()` a task only when it ends itself, otherwise keep the `Task` in the view so dropping the view cancels it.
+- Element ids are stable and unique: keyed by the data's id (`("message", id)`), never by index in a list that reorders.
+- No `unwrap`/`expect` on runtime data in render or event paths: guard and return. `expect` is for invariants, with the invariant as its message.
+- Enums over boolean pairs and stringly states; `match` exhaustively, no `_ =>` over an enum you own.
+- Done means `cargo clippy --all-targets` adds no warnings in `src/` and `cargo test` passes, `ui_rules` included (it runs `tools/ui_lint.py --check` and `tools/test_ui_lint.py`).
+
+## Design system catalog
+
+@src/ui/CATALOG.md
