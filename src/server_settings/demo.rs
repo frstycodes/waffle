@@ -8,6 +8,7 @@ use super::{
     api::{AuditQuery, Overview},
     audit,
     lists::{self, AuditView},
+    members,
     roles::{self, RoleEdit, RoleTab},
     view::Info,
 };
@@ -22,6 +23,7 @@ pub fn open(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         "server-settings-engagement" => Page::Engagement,
         "server-settings-automod" => Page::AutoMod,
         "server-settings-invites" => Page::Invites,
+        "server-settings-members" => Page::Members,
         _ => Page::Profile,
     };
     let Some(view) = waffle.server_settings.as_mut() else { return };
@@ -32,7 +34,7 @@ pub fn open(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
     view.roles.list = Load::Ready(roles::sorted(role_values().iter().filter_map(roles::parse_role).collect()));
     view.roles.counts = [("r1", 4u64), ("r2", 61), ("r3", 12), ("r4", 1), ("bot", 1)].iter().map(|(k, v)| (k.to_string(), *v)).collect();
     fill_lists(&mut view.lists);
-    view.loaded.extend([Page::Profile, Page::Engagement, Page::Roles, Page::AuditLog, Page::Bans, Page::AutoMod, Page::Invites, Page::Emoji, Page::Stickers, Page::Soundboard, Page::Integrations, Page::Template, Page::Onboarding]);
+    view.loaded.extend([Page::Profile, Page::Engagement, Page::Roles, Page::AuditLog, Page::Bans, Page::AutoMod, Page::Invites, Page::Emoji, Page::Stickers, Page::Soundboard, Page::Integrations, Page::Template, Page::Onboarding, Page::Members]);
     view.page = page;
     let (name, description) = (view.name.clone(), view.description.clone());
     name.update(cx, |s, cx| s.set_value(saved.name.clone(), window, cx));
@@ -83,6 +85,8 @@ fn fill_lists(l: &mut lists::Lists) {
         lists::Rule { id: "a1".into(), name: "Block mention spam".into(), enabled: true, trigger_type: 5, words: Vec::new() },
         lists::Rule { id: "a2".into(), name: "Block custom words".into(), enabled: false, trigger_type: 1, words: vec!["free nitro".into(), "airdrop*".into()] },
     ]);
+    let rows: Vec<members::Member> = member_results().iter().filter_map(members::parse_result).collect();
+    (l.members.total, l.members.rows) = (rows.len() as u64, Load::Ready(rows));
     l.emojis = Load::Ready(Vec::new());
     l.stickers = Load::Ready(Vec::new());
     l.sounds = Load::Ready(Vec::new());
@@ -95,6 +99,42 @@ fn fill_lists(l: &mut lists::Lists) {
     names.channels.extend([("general", "👋-general"), ("hub", "study-hall"), ("lounge", "hangout")].map(|(a, b)| (a.to_owned(), b.to_owned())));
     names.roles.extend([("r1", "Council"), ("r3", "Moderators")].map(|(a, b)| (a.to_owned(), b.to_owned())));
     l.audit = AuditView { entries: page.entries, names, query: AuditQuery::default(), next: Some("1".into()), loading: false, error: None, open: [(1_572_600_000_000_000_000u64 - 5 * 40_000_000_000_000).to_string()].into_iter().collect() };
+}
+
+// Six members-search entries, newest member first, covering every signal and join method shape: an invite,
+// the vanity URL, a bot invite, Server discovery and a Twitch integration. Times count back from now so the
+// signals stay live.
+fn member_results() -> Vec<Value> {
+    let now = chrono::Utc::now();
+    let ago = |minutes: i64| (now - chrono::Duration::minutes(minutes)).to_rfc3339();
+    let made = |minutes: i64| ((((now - chrono::Duration::minutes(minutes)).timestamp_millis() - 1_420_070_400_000) as u64) << 22).to_string();
+    const DAY: i64 = 24 * 60;
+    let entry = |id: String, username: &str, global: Option<&str>, joined: i64, extra: Value, join: Value| {
+        let mut member = json!({ "user": { "id": id, "username": username, "global_name": global }, "joined_at": ago(joined), "roles": [], "flags": 0 });
+        merge(&mut member, extra);
+        let mut out = json!({ "member": member });
+        merge(&mut out, join);
+        out
+    };
+    vec![
+        entry(made(60), "free_nitro_drop", None, 6, json!({ "flags": 128, "user": { "public_flags": 1 << 20 } }), json!({ "join_source_type": 5, "source_invite_code": "x7Kq2" })),
+        entry(made(2 * DAY), "bartholomew.featherstonehaugh.wright", Some("Bartholomew Featherstonehaugh-Wright"), 120, json!({ "unusual_dm_activity_until": ago(-DAY), "roles": ["r2"] }), json!({ "join_source_type": 3 })),
+        entry(made(400 * DAY), "clipbot", Some("Clip bot"), 20 * DAY, json!({ "user": { "bot": true }, "roles": ["r2"] }), json!({ "join_source_type": 1 })),
+        entry(made(7 * 365 * DAY), "moss", Some("moss lantern"), 95 * DAY, json!({ "communication_disabled_until": ago(-42), "roles": ["r2"] }), json!({ "join_source_type": 6, "source_invite_code": "nightowls" })),
+        entry(made(5 * 365 * DAY), "kiwi", Some("kiwi"), 300 * DAY, json!({}), json!({ "join_source_type": 2, "integration_type": "twitch" })),
+        entry(made(7 * 365 * DAY + 40 * DAY), "wren", Some("Wren"), 2 * 365 * DAY, json!({ "nick": "Wren (mod)", "roles": ["r1", "r2"] }), json!({ "join_source_type": 5, "source_invite_code": "7Kq2xQ" })),
+    ]
+}
+
+// Copies `extra`'s keys onto `into`, object by object.
+fn merge(into: &mut Value, extra: Value) {
+    let (Some(into), Value::Object(extra)) = (into.as_object_mut(), extra) else { return };
+    for (key, value) in extra {
+        match into.get_mut(&key) {
+            Some(slot) if slot.is_object() && value.is_object() => merge(slot, value),
+            _ => _ = into.insert(key, value),
+        }
+    }
 }
 
 // Made-up entries, newest first; ids are snowflakes from November 2026.
