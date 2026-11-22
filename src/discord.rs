@@ -260,6 +260,8 @@ pub struct Guild {
     pub premium_tier: u8,
     // People idling here don't count as voice activity (Discord's server icon badge skips it).
     pub afk_channel_id: Option<String>,
+    // Our own timeout here (communication_disabled_until); it may already have passed.
+    pub timed_out_until: Option<chrono::DateTime<chrono::Utc>>,
     // Scheduled events, from READY / GUILD_CREATE and the GUILD_SCHEDULED_EVENT_* events.
     pub events: Vec<ScheduledEvent>,
     // A Community server's community-updates channel, which can't be an announcement channel.
@@ -496,6 +498,8 @@ pub mod perm {
     // Discord's client calls you a stage moderator only with all three.
     pub const STAGE_MODERATOR: u64 = MANAGE_CHANNELS | MUTE_MEMBERS | MOVE_MEMBERS;
     pub const SEND_MESSAGES: u64 = 1 << 11;
+    pub const SEND_MESSAGES_IN_THREADS: u64 = 1 << 38;
+    pub const BYPASS_SLOWMODE: u64 = 1 << 52;
     pub const MANAGE_MESSAGES: u64 = 1 << 13;
     pub const CHANGE_NICKNAME: u64 = 1 << 26;
     pub const MANAGE_NICKNAMES: u64 = 1 << 27;
@@ -554,10 +558,7 @@ impl Guild {
         if base == u64::MAX {
             return base;
         }
-        let channel = match (&channel.thread, &channel.parent_id) {
-            (Some(_), Some(parent)) => self.channels.iter().find(|c| &c.id == parent).unwrap_or(channel),
-            _ => channel,
-        };
+        let channel = self.overwrite_source(channel);
         let apply = |bits: u64, allow: u64, deny: u64| (bits & !deny) | allow;
         let mut bits = base;
         if let Some(o) = channel.overwrites.iter().find(|o| o.id == self.id) {
@@ -569,6 +570,35 @@ impl Guild {
             bits = apply(bits, o.allow, o.deny);
         }
         bits
+    }
+
+    // Threads follow their parent channel's overwrites.
+    fn overwrite_source<'a>(&'a self, channel: &'a Channel) -> &'a Channel {
+        match (&channel.thread, &channel.parent_id) {
+            (Some(_), Some(parent)) => self.channels.iter().find(|c| &c.id == parent).unwrap_or(channel),
+            _ => channel,
+        }
+    }
+
+    // The roles whose members may post in `channel`, highest first: Administrator, or the send bit after
+    // the @everyone overwrite and the role's own. A member's personal overwrites aren't counted. Leaves out
+    // @everyone and integration roles.
+    pub fn posting_roles(&self, channel: &Channel) -> Vec<&Role> {
+        let bit = send_permission(channel);
+        let source = self.overwrite_source(channel);
+        let everyone = self.roles.iter().find(|r| r.id == self.id).map_or(0, |r| r.permissions);
+        let overwrite = |bits: u64, id: &str| source.overwrites.iter().find(|o| o.id == id && !o.member).map_or(bits, |o| (bits & !o.deny) | o.allow);
+        let mut roles: Vec<&Role> = self
+            .roles
+            .iter()
+            .filter(|r| r.id != self.id && !r.managed)
+            .filter(|r| {
+                let base = everyone | r.permissions;
+                base & perm::ADMINISTRATOR != 0 || overwrite(overwrite(base, &self.id), &r.id) & bit != 0
+            })
+            .collect();
+        roles.sort_by_key(|r| std::cmp::Reverse(r.position));
+        roles
     }
 
     // A channel or one of the threads we know of.
@@ -621,6 +651,14 @@ impl Guild {
             return i64::MAX;
         }
         self.roles.iter().filter(|r| self.my_roles.contains(&r.id)).map(|r| r.position).max().unwrap_or(0)
+    }
+}
+
+// Posting in a thread takes its own bit, not Send Messages.
+pub fn send_permission(channel: &Channel) -> u64 {
+    match channel.thread {
+        Some(_) => perm::SEND_MESSAGES_IN_THREADS,
+        None => perm::SEND_MESSAGES,
     }
 }
 
@@ -1549,7 +1587,7 @@ pub enum Event {
     // A post someone just started in a forum (THREAD_CREATE with `newly_created`).
     ForumPostCreated { forum_id: String, post_id: String, owner_id: String },
     // A member's roles, nickname or server avatar changed.
-    MemberUpdate { guild_id: String, user: User, roles: Vec<String>, membership: Membership },
+    MemberUpdate { guild_id: String, user: User, roles: Vec<String>, timed_out_until: Option<chrono::DateTime<chrono::Utc>>, membership: Membership },
     // A friend, block or request was added, changed or removed (`None` kind = removed).
     RelationshipChange { user_id: String, relationship: Option<Relationship> },
     // A DM or group DM was opened, changed (name, icon, owner, request state) or closed.
@@ -2962,6 +3000,7 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
             guild_id: d["guild_id"].as_str()?.to_owned(),
             user: parse_member_user(d, &d["user"], d["guild_id"].as_str()),
             roles: strings(&d["roles"]),
+            timed_out_until: timeout_end(d),
             membership: Membership::parse(d),
         }),
         "RELATIONSHIP_ADD" | "RELATIONSHIP_UPDATE" => {
@@ -3060,6 +3099,7 @@ fn parse_ready(d: &Value) -> Ready {
                 let mut guild = parse_guild(g)?;
                 let member = my_member(g, &d["merged_members"][i], d["user"]["id"].as_str().unwrap_or_default());
                 guild.my_roles = strings(&member["roles"]);
+                guild.timed_out_until = timeout_end(&member);
                 guild.me = Membership::parse(&member);
                 Some(guild)
             })
@@ -3158,6 +3198,7 @@ fn parse_guild(g: &Value) -> Option<Guild> {
         my_roles: Vec::new(),
         premium_tier: props["premium_tier"].as_u64().or(g["premium_tier"].as_u64()).unwrap_or(0) as u8,
         afk_channel_id: props["afk_channel_id"].as_str().or(g["afk_channel_id"].as_str()).map(str::to_owned),
+        timed_out_until: None,
         system_channel_flags: props["system_channel_flags"].as_u64().or(g["system_channel_flags"].as_u64()).unwrap_or(0),
         features: strings(if props["features"].is_array() { &props["features"] } else { &g["features"] }),
         splash: props["splash"].as_str().or(g["splash"].as_str()).map(|hash| splash_url(id, hash)),
@@ -3172,6 +3213,11 @@ fn parse_guild(g: &Value) -> Option<Guild> {
 fn my_member(guild: &Value, merged: &Value, me: &str) -> Value {
     let mine = |list: &Value| list.as_array().into_iter().flatten().find(|m| m["user_id"].as_str().or(m["user"]["id"].as_str()) == Some(me)).cloned();
     mine(&guild["members"]).or_else(|| mine(merged)).unwrap_or(Value::Null)
+}
+
+fn timeout_end(member: &Value) -> Option<chrono::DateTime<chrono::Utc>> {
+    let end = member["communication_disabled_until"].as_str()?;
+    Some(chrono::DateTime::parse_from_rfc3339(end).ok()?.with_timezone(&chrono::Utc))
 }
 
 pub fn parse_thread(c: &Value, guild_id: &str) -> Option<Channel> {
@@ -4260,6 +4306,7 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            timed_out_until: None,
             system_channel_flags: 0,
             events: Vec::new(),
             public_updates_channel_id: None,
@@ -4302,6 +4349,7 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            timed_out_until: None,
             system_channel_flags: 0,
             events: Vec::new(),
             public_updates_channel_id: None,
@@ -4347,6 +4395,7 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            timed_out_until: None,
             system_channel_flags: 0,
             events: Vec::new(),
             public_updates_channel_id: None,

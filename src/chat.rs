@@ -21,6 +21,7 @@ use gpui_motion_kit::core::{Motion, Target};
 use crate::{
     EmojiTarget, Feed, RightPanel, Waffle, components,
     discord::{Channel, ChannelKind, Embed, Emoji, MediaKind, Message, NameEffect, NameStyle, Poll, PollAnswer, SendState, User},
+    hidden::{Hidden, Run},
     icons::Glyph,
     layout::HEADER_HEIGHT,
     mascot::Mood,
@@ -352,6 +353,8 @@ impl Waffle {
         // A pointer copy: the feed is copy-on-write, so this frame shares it rather than cloning every message.
         let messages = feed.messages.clone();
         let ctx = self.row_context(&messages, Some(channel), feed.has_more, COLUMN, cx);
+        let folds = self.folds(&messages);
+        self.refold(&channel.id, &messages, &folds);
         let arrivals = self.arrivals.clone();
         let messages = list(self.list.clone(), move |ix, window, cx| {
             if ix == 0 && ctx.has_more {
@@ -364,9 +367,9 @@ impl Waffle {
             let previous = ix.checked_sub(1).map(|i| &messages[i]);
             let new_day = day(&message.timestamp) != previous.and_then(|p| day(&p.timestamp));
             let starts_group = new_day || message.reply.is_some() || previous.is_none_or(|p| crate::system_message::is_notice(p) || !continues(p, message));
-            let row = match crate::system_message::is_notice(message) {
-                true => crate::system_message::row(&messages, ix, &ctx, cx),
-                false => message_row(message, starts_group, &ctx, cx),
+            let row = match crate::hidden::run_at(&folds, ix) {
+                None => feed_row(&messages, ix, starts_group, &ctx, cx),
+                Some(run) => folded_row(&messages, ix, run, starts_group, &ctx, cx),
             };
             // One accent line above the first message after your read position.
             let first_unread = ctx.unread_marker.is_some_and(|read| crate::order(&message.id) > read && previous.is_none_or(|p| crate::order(&p.id) <= read));
@@ -478,6 +481,7 @@ impl Waffle {
             style_ground: self.guild_id.is_none().then(|| palette::surface(palette::Level::Page, cx)),
             colors: messages.iter().filter_map(|m| Some((m.author.id.clone(), self.role_color(m.guild_id.as_ref().or(self.guild_id.as_ref()), &m.author.id, m.roles.as_ref(), cx.theme().is_dark())?))).collect(),
             mentions_me: messages.iter().filter(|m| self.mentions_me(m)).map(|m| m.id.clone()).collect(),
+            hidden_replies: messages.iter().filter_map(|m| m.reply.as_deref()).filter_map(|r| Some((r.id.clone(), self.hidden_author(&r.author.id)?))).collect(),
             channel_names: self.guild().into_iter().flat_map(|g| &g.channels).map(|c| (c.id.clone(), c.name.clone())).chain(self.forward_sources(messages)).collect(),
             role_names: self.guild().map(|g| g.roles.iter().map(|r| (r.id.clone(), r.name.clone())).collect()).unwrap_or_default(),
             mention_fill: palette::accent_soft(cx),
@@ -536,6 +540,8 @@ impl Waffle {
         let focused = self.composer.read(cx).focus_handle(cx).is_focused(window);
         let (strong, muted) = (palette::strong(cx), palette::muted(cx));
         let open_picker = self.composer_picker();
+        // The draft stays in `composer` underneath; the input row comes back when the guard lifts.
+        let locked = self.locked_row(cx);
         let row = div()
             .min_h(px(48.))
             .py(px(7.))
@@ -546,6 +552,7 @@ impl Waffle {
             .child(ui::icon_button("attach", Glyph::PlusCircle, "Upload a file or create a poll", cx).on_click(cx.listener(|this, _, window, cx| this.open_menu(window.mouse_position(), this.attach_entries(), cx))))
             // XSmall gives the editor 0/4px padding of its own; with these, the design's 4/6.
             .child(self.composer_field(strong, cx))
+            .children(self.slowmode_chip(cx))
             .children([(ComposerPicker::Gifs, "composer-gif", Glyph::Gif, "Open GIF picker"), (ComposerPicker::Stickers, "composer-sticker", Glyph::Sticker, "Open sticker picker"), (ComposerPicker::Emoji, "composer-emoji", Glyph::Emoji, "Select Emoji")].map(|(picker, id, glyph, label)| {
                 ui::icon_button(id, glyph, label, cx).toggled(open_picker == Some(picker), cx).on_click(cx.listener(move |this, _, window, cx| this.show_composer_picker(picker, window, cx)))
             }))
@@ -567,13 +574,16 @@ impl Waffle {
             // A hairline: one device pixel on Retina; a full point read heavy around the glass.
             .border(px(0.5))
             .border_color(if focused { palette::line_strong(cx) } else { palette::line(cx) })
-            .children(self.autocomplete_popup(cx))
-            .children(self.command_popup(cx))
-            .children(self.hold_up_popout(cx))
-            .children(self.request_bar(cx))
-            .children(self.composer_bar(cx))
-            .children(self.attachment_tray(cx))
-            .child(row);
+            .when(locked.is_none(), |card| {
+                card.children(self.autocomplete_popup(cx))
+                    .children(self.command_popup(cx))
+                    .children(self.hold_up_popout(cx))
+                    .children(self.request_bar(cx))
+                    .children(self.queued_bar(cx))
+                    .children(self.composer_bar(cx))
+                    .children(self.attachment_tray(cx))
+            })
+            .child(locked.unwrap_or_else(|| row.into_any_element()));
         // Enter on a command that can't run yet.
         let shake = self.command_picker.shake;
         let card = match shake {
@@ -728,20 +738,7 @@ impl Waffle {
             (_, Some(_)) => emphasised(&[("Editing message".into(), true)], strong),
             _ => return None,
         };
-        let bar = div()
-            .min_h(px(40.))
-            .py(px(4.))
-            .pl(px(14.))
-            .pr(px(6.))
-            .flex()
-            .items_center()
-            .gap(px(6.))
-            .min_w_0()
-            .border_b_1()
-            .border_color(palette::line(cx))
-            .text_size(px(14.))
-            .text_color(palette::muted(cx))
-            .child(div().flex_1().min_w_0().truncate().child(label));
+        let bar = bar_row(cx).child(div().flex_1().min_w_0().truncate().child(label));
         let bar = match self.replying.is_some() {
             true => bar.child(self.ping_toggle(cx)),
             false => bar.child(ui::key_hint(ui::kbd("Esc", cx), "Cancel", cx)).child(ui::key_hint(ui::kbd("Enter", cx), "Save", cx)),
@@ -1094,6 +1091,8 @@ pub(crate) struct RowContext {
     style_ground: Option<Hsla>,
     colors: HashMap<String, Hsla>,
     mentions_me: std::collections::HashSet<String>,
+    // Replied-to messages by someone blocked or ignored, by id: the reply bar doesn't quote them.
+    hidden_replies: HashMap<String, Hidden>,
     pub(crate) channel_names: HashMap<String, String>,
     role_names: HashMap<String, String>,
     mention_fill: Hsla,
@@ -1261,6 +1260,60 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         )
         .children(toolbar);
     inset(with_message_menu(row, message, ctx), mention)
+}
+
+// A message in a run from someone blocked or ignored: the run's first draws the fold, the rest nothing until
+// Show opens it; shown, each is its usual row, faded.
+fn feed_row(messages: &[Message], ix: usize, starts_group: bool, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+    match crate::system_message::is_notice(&messages[ix]) {
+        true => crate::system_message::row(messages, ix, ctx, cx),
+        false => message_row(&messages[ix], starts_group, ctx, cx),
+    }
+}
+
+fn folded_row(messages: &[Message], ix: usize, run: &Run, starts_group: bool, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+    let row = run.shown.then(|| div().opacity(0.72).child(feed_row(messages, ix, starts_group, ctx, cx)));
+    div().w_full().when(ix == run.start, |d| d.child(fold_line(&messages[run.start].id, run, ctx, cx))).children(row).into_any_element()
+}
+
+// design/explore-chat-guard.html `.fold`: one quiet line in the content column, and Show / Hide.
+fn fold_line(first_id: &str, run: &Run, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
+    let (glyph, word) = match run.hidden {
+        Hidden::Blocked => (Glyph::Prohibit, "blocked"),
+        Hidden::Ignored => (Glyph::EyeSlash, "ignored"),
+    };
+    let label = match run.len {
+        1 => format!("1 {word} message"),
+        n => format!("{n} {word} messages"),
+    };
+    let (this, key) = (ctx.this.clone(), first_id.to_owned());
+    let toggle = ui::button(SharedString::from(format!("fold-{first_id}")), ui::Tone::Ghost, cx)
+        .small()
+        .h(px(28.))
+        .px(px(8.))
+        .ml(px(2.))
+        .text_size(px(14.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(palette::info_ink(cx))
+        .child(if run.shown { "Hide" } else { "Show" })
+        .on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            this.update(cx, |this, cx| this.toggle_fold(key.clone(), cx)).ok();
+        });
+    let line = div()
+        .mt(px(6.))
+        .min_h(px(32.))
+        .pl(px(16. + CONTENT_INSET))
+        .pr(px(16.))
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .text_size(px(14.))
+        .text_color(palette::faint(cx))
+        .child(Icon::new(glyph).size(px(16.)))
+        .child(label)
+        .child(toggle);
+    inset(line.into_any_element(), false)
 }
 
 // A search result: the message as the feed draws it (head, text, media, embeds, files), without the
@@ -1524,9 +1577,13 @@ fn reply_spine(cx: &App) -> Div {
 
 fn reply_preview(reply: &Message, target: Option<String>, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
     let (faint, muted, text) = (palette::faint(cx), palette::muted(cx), palette::text(cx));
-    let snippet = match reply.content.is_empty() {
-        true => div().flex_none().flex().items_center().gap(px(4.)).text_color(muted).child(Icon::new(attachment_glyph(reply)).size(px(14.))).child(attachment_kind(reply)),
-        false => div().min_w_0().truncate().child(plain(&readable_with(&reply.content, ctx, false))),
+    let hidden = ctx.hidden_replies.get(&reply.id).map(|hidden| match hidden {
+        Hidden::Blocked => "a blocked message",
+        Hidden::Ignored => "an ignored message",
+    });
+    let quote: Vec<AnyElement> = match hidden {
+        Some(label) => vec![div().min_w_0().truncate().child(label).into_any_element()],
+        None => vec![ui::avatar(reply.author.avatar.clone(), 16.).into_any_element(), div().flex_none().font_weight(FontWeight::MEDIUM).text_color(muted).child(ctx.name_of(&reply.author)).into_any_element(), reply_snippet(reply, ctx, cx)],
     };
     let this = ctx.this.clone();
     div()
@@ -1544,14 +1601,19 @@ fn reply_preview(reply: &Message, target: Option<String>, ctx: &Rc<RowContext>, 
         .text_size(px(14.))
         .text_color(faint)
         .hover(move |s| s.text_color(text))
-        .child(ui::avatar(reply.author.avatar.clone(), 16.))
-        .child(div().flex_none().font_weight(FontWeight::MEDIUM).text_color(muted).child(ctx.name_of(&reply.author)))
-        .child(snippet)
+        .children(quote)
         .on_click(move |_, _, cx| { cx.stop_propagation();
             let Some(id) = target.clone() else { return };
             this.update(cx, |this, cx| this.jump_to(id, cx)).ok();
         })
         .into_any_element()
+}
+
+fn reply_snippet(reply: &Message, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
+    match reply.content.is_empty() {
+        true => div().flex_none().flex().items_center().gap(px(4.)).text_color(palette::muted(cx)).child(Icon::new(attachment_glyph(reply)).size(px(14.))).child(attachment_kind(reply)).into_any_element(),
+        false => div().min_w_0().truncate().child(plain(&readable_with(&reply.content, ctx, false))).into_any_element(),
+    }
 }
 
 // A forwarded copy (design/messages.html `.fwd`): the label, the original's text, media and files, then
@@ -3706,6 +3768,23 @@ pub(crate) fn emphasised(parts: &[(String, bool)], strong: Hsla) -> StyledText {
         }
     }
     StyledText::new(text).with_highlights(runs)
+}
+
+// A strip at the top of the composer: replying, editing, or a send waiting out slowmode.
+pub(crate) fn bar_row(cx: &App) -> Div {
+    div()
+        .min_h(px(40.))
+        .py(px(4.))
+        .pl(px(14.))
+        .pr(px(6.))
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .min_w_0()
+        .border_b_1()
+        .border_color(palette::line(cx))
+        .text_size(px(14.))
+        .text_color(palette::muted(cx))
 }
 
 // A keycap and what it does, for the edit bar.

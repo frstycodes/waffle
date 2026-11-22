@@ -39,7 +39,7 @@ impl Waffle {
     pub(crate) fn notify_kind(&self, message: &Message, focused_here: bool) -> Notify {
         let Some(me) = &self.me else { return Notify::None };
         // @silent: no sound and no desktop notification; it still counts as a mention.
-        if message.author.id == me.id || focused_here || self.my_status == Status::Dnd || message.silent() {
+        if message.author.id == me.id || focused_here || self.my_status == Status::Dnd || message.silent() || self.hidden_author(&message.author.id).is_some() {
             return Notify::None;
         }
         let rules = self.rules_for(message);

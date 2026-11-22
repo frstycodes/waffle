@@ -29,6 +29,7 @@ mod dm_call;
 mod dm_start;
 mod announcements;
 mod chat;
+mod chat_guard;
 mod composer_emoji;
 #[cfg(debug_assertions)]
 mod demo;
@@ -56,6 +57,7 @@ mod gif;
 mod games;
 mod go_live;
 mod h264;
+mod hidden;
 mod home;
 mod os_image;
 mod notification_settings;
@@ -793,6 +795,10 @@ pub struct Waffle {
     // Notification settings per server, "@me" for DMs.
     guild_settings: HashMap<String, discord::GuildSettings>,
     ignored: HashSet<String>,
+    // Folds of hidden messages opened with Show, by the run's first message id.
+    shown_folds: HashSet<String>,
+    // The open feed's folds as last drawn; when they change, the list re-measures their rows.
+    fold_layout: std::cell::RefCell<hidden::FoldLayout>,
     // A DM call we started: ring them once the call connects.
     ring_on_connect: Option<String>,
     // The DM call we're ringing out on; its ringtone plays until someone joins, we leave, or a minute passes.
@@ -988,6 +994,7 @@ pub struct Waffle {
     scrolled_up: bool,
     // The floating composer's height, measured as it paints; the feed keeps that much room at its foot.
     composer_height: Rc<std::cell::Cell<f32>>,
+    guard: chat_guard::GuardClock,
     // The header pin button's centre, where Pinned Messages opens from wherever it's asked for.
     pins_button_x: Rc<std::cell::Cell<f32>>,
     pins_list: ListState,
@@ -1217,6 +1224,8 @@ impl Waffle {
             my_account: Default::default(),
             guild_settings: HashMap::new(),
             ignored: HashSet::new(),
+            shown_folds: HashSet::new(),
+            fold_layout: Default::default(),
             ring_on_connect: None,
             ringing_out: None,
             dm_calls: HashMap::new(),
@@ -1329,6 +1338,7 @@ impl Waffle {
             reactions_dialog: None,
             games: Default::default(),
             composer_height: Rc::new(std::cell::Cell::new(86.)),
+            guard: Default::default(),
             pins_button_x: Rc::default(),
             pins_list: ListState::new(0, ListAlignment::Top, px(500.)),
             pip: Default::default(),
@@ -1620,12 +1630,13 @@ impl Waffle {
                     self.channel = None;
                 }
             }
-            Event::MemberUpdate { guild_id, user, roles, membership } => {
+            Event::MemberUpdate { guild_id, user, roles, timed_out_until, membership } => {
                 self.profile_changed(&user.id);
                 if self.me.as_ref().is_some_and(|me| me.id == user.id)
                     && let Some(guild) = self.guilds.iter_mut().find(|g| g.id == guild_id)
                 {
                     guild.my_roles = roles.clone();
+                    guild.timed_out_until = timed_out_until;
                     guild.me = membership;
                 }
                 self.member_roles.entry(guild_id.clone()).or_default().insert(user.id.clone(), roles);
@@ -1686,6 +1697,7 @@ impl Waffle {
                         if guild.my_roles.is_empty() {
                             guild.my_roles = std::mem::take(&mut existing.my_roles);
                         }
+                        guild.timed_out_until = guild.timed_out_until.or(existing.timed_out_until);
                         // Same for our membership state: GUILD_CREATE doesn't carry it.
                         guild.me = std::mem::take(&mut existing.me);
                         for thread in existing.threads.drain(..) {
@@ -1939,7 +1951,8 @@ impl Waffle {
             typers.retain(|t| t.user_id != message.author.id);
         }
         let is_dm = self.dms.iter().any(|d| d.id == channel_id);
-        if !mine && !is_open && (self.mentions_me(&message) || is_dm) {
+        let hidden = self.hidden_author(&message.author.id).is_some();
+        if !mine && !is_open && !hidden && (self.mentions_me(&message) || is_dm) {
             self.read_states.entry(channel_id.clone()).or_default().mentions += 1;
         }
         self.speak_tts(&message, is_open, mine);
@@ -2415,6 +2428,9 @@ impl Waffle {
         if typed.is_empty() && self.pending_files.is_empty() {
             return;
         }
+        if self.composer_guard().is_some() || (self.editing.is_none() && self.hold_for_slowmode(&channel.id, cx)) {
+            return;
+        }
         // An edit keeps its text as typed: Discord reads @silent and /tts only on a new message.
         let (content, options) = match self.editing {
             Some(_) => (typed.to_owned(), discord::SendOptions::default()),
@@ -2503,6 +2519,7 @@ impl Waffle {
         // and the job (with its upload cards) would stay forever.
         if result.is_ok() {
             self.forget_upload(nonce);
+            self.slowmode_sent(channel_id, cx);
         }
         let pending = self.feeds.get_mut(channel_id).and_then(|f| Arc::make_mut(&mut f.messages).iter_mut().find(|m| m.nonce.as_deref() == Some(nonce) && m.state != SendState::Sent));
         let Some(pending) = pending else { return };

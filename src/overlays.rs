@@ -386,9 +386,11 @@ impl Waffle {
         match list {
             None | Some(None) => mention_skeletons(cx),
             Some(Some(Err(error))) => div().p_4().text_color(theme.danger).child(error.clone()).into_any_element(),
-            Some(Some(Ok(list))) if list.is_empty() => crate::ui::empty_state("messages-empty", Illustration::InboxEmpty, empty.0, empty.1, cx).into_any_element(),
             Some(Some(Ok(list))) => {
-                let shown: Vec<Message> = list.iter().take(limit.unwrap_or(usize::MAX)).cloned().collect();
+                let shown: Vec<Message> = list.iter().filter(|m| self.hidden_author(&m.author.id).is_none()).take(limit.unwrap_or(usize::MAX)).cloned().collect();
+                if shown.is_empty() {
+                    return crate::ui::empty_state("messages-empty", Illustration::InboxEmpty, empty.0, empty.1, cx).into_any_element();
+                }
                 let ctx = self.row_context_everywhere(&shown, 380., cx);
                 // The demo shows the first card as hovered, its actions up.
                 let demo = cfg!(debug_assertions) && std::env::var("WAFFLE_DEMO").as_deref() == Ok("inbox-mark-read");
