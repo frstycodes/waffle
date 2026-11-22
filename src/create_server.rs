@@ -346,8 +346,7 @@ fn templates_step(form: &CreateServer, limit: ServerLimit, window: &mut Window, 
         .child(head("Create your server", "Your server is where you and your friends hang out. Make yours and start talking.", cx))
         .children(limit_notice(limit, cx))
         .child(list)
-        .child(ui::divider(None, cx))
-        .child(foot)
+        .child(foot.pt(px(8.)))
 }
 
 fn intent_step(cx: &mut Context<Waffle>) -> Div {
@@ -503,6 +502,7 @@ fn template_row(i: usize, template: &Template, expanded: bool, off: bool, cx: &m
     let (hover, strong, faint) = (palette::hover(cx), palette::strong(cx), palette::faint(cx));
     let chans = channel_chips(template);
     let long = chans.len() > CHIPS_SHOWN;
+    let group: SharedString = format!("create-server-template-{i}").into();
     let clamped = long && !expanded;
     let chips = div()
         .relative()
@@ -514,7 +514,7 @@ fn template_row(i: usize, template: &Template, expanded: bool, off: bool, cx: &m
         .line_height(px(16.))
         .text_color(palette::muted(cx))
         .children(chans.into_iter().map(|(glyph, name)| channel_chip(glyph, name, faint)))
-        .when(clamped, |d| d.max_h(px(34.)).overflow_hidden().child(fade(palette::surface(palette::Level::Raised, cx))));
+        .when(clamped, |d| d.max_h(px(34.)).overflow_hidden().child(fade(group.clone(), palette::surface(palette::Level::Raised, cx), hover)));
     let count = template.channels.iter().filter(|c| !matches!(c, Chan::Category(_))).count();
     let more = long.then(|| {
         let label: SharedString = if expanded { "Show fewer".into() } else { format!("Show all {count} channels").into() };
@@ -525,6 +525,7 @@ fn template_row(i: usize, template: &Template, expanded: bool, off: bool, cx: &m
     });
     div()
         .id(("create-server-template", i))
+        .group(group)
         .flex()
         .items_start()
         .gap(px(12.))
@@ -554,9 +555,12 @@ fn channel_chip(glyph: Glyph, name: &'static str, faint: Hsla) -> impl IntoEleme
     div().flex().items_center().gap(px(3.)).whitespace_nowrap().child(div().text_color(faint).child(Icon::new(glyph).size(px(12.)))).child(name)
 }
 
-// The clamped list's last line dissolving into the dialog.
-fn fade(surface: Hsla) -> impl IntoElement {
-    div().absolute().left_0().right_0().bottom_0().h(px(20.)).bg(linear_gradient(180., linear_color_stop(surface.opacity(0.), 0.), linear_color_stop(surface, 1.)))
+// The clamped list's last line dissolving into its row: the dialog's surface, or the surface under the row's
+// hover wash while the row is hovered, so the fade never shows as a box.
+fn fade(group: SharedString, surface: Hsla, hover: Hsla) -> impl IntoElement {
+    let into = |fill: Hsla| linear_gradient(180., linear_color_stop(fill.opacity(0.), 0.), linear_color_stop(fill, 1.));
+    let hovered = ui::mix(surface, hover.opacity(1.), hover.a);
+    div().absolute().left_0().right_0().bottom_0().h(px(20.)).bg(into(surface)).group_hover(group, move |s| s.bg(into(hovered)))
 }
 
 // The dashed squircle that opens the file picker, or the picked image, with the + badge either way.
