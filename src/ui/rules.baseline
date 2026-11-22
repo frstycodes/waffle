@@ -13,15 +13,12 @@ src/channel_menu.rs	global-notify	7
 src/channel_settings.rs	global-notify	22
 src/channel_settings.rs	raw-px	10
 src/chat.rs	global-notify	7
-src/chat.rs	raw-color	5
 src/chat.rs	raw-px	40
 src/chat_guard.rs	global-notify	4
 src/chat_guard.rs	raw-px	2
 src/command_picker.rs	global-notify	24
-src/command_picker.rs	raw-color	1
 src/command_picker.rs	raw-px	11
 src/components.rs	global-notify	4
-src/components.rs	raw-color	1
 src/components.rs	raw-px	5
 src/create_channel.rs	global-notify	9
 src/create_channel.rs	raw-px	4

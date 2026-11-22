@@ -957,7 +957,7 @@ fn container(message: &Message, accent: Option<u32>, children: &[Component], pat
     let raised = palette::surface(Level::Raised, cx);
     let (fill, edge) = match accent {
         Some(color) => {
-            let tint = Hsla::from(gpui_kit::rgb(color));
+            let tint = palette::data_color(color);
             (ui::mix(raised, tint, 0.07), tint.opacity(0.35))
         }
         None => (raised, palette::line(cx)),

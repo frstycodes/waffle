@@ -1784,7 +1784,7 @@ fn app_tile(app: &app_commands::App, size: f32, cx: &App) -> AnyElement {
 fn role_dot(color: u32, cx: &App) -> gpui_kit::Hsla {
     match color {
         0 => palette::muted(cx),
-        color => gpui_kit::rgb(color).into(),
+        color => palette::data_color(color),
     }
 }
 

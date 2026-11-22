@@ -2158,7 +2158,7 @@ pub(crate) fn name_runs(name: &str, style: &NameStyle, ground: Hsla) -> Vec<(std
         false => style.colors.as_slice(),
     };
     let ratio = if matches!(style.effect, NameEffect::Gradient | NameEffect::Glow | NameEffect::Prism) { 2.5 } else { 3. };
-    let inks: Vec<Hsla> = colors.iter().map(|c| readable_on(gpui_kit::rgb(*c).into(), ground, ratio)).collect();
+    let inks: Vec<Hsla> = colors.iter().map(|c| readable_on(palette::data_color(*c), ground, ratio)).collect();
     if inks.is_empty() {
         return Vec::new();
     }
@@ -2693,7 +2693,7 @@ fn set_hovered_tile(this: &WeakEntity<Waffle>, key: Option<String>, cx: &mut App
 
 // The design's media scrim, oklch(0.14 0.004 260), at `alpha`.
 fn on_media(alpha: f32) -> Hsla {
-    Hsla::from(gpui_kit::rgb(0x08090B)).opacity(alpha)
+    palette::media_scrim().opacity(alpha)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -2786,7 +2786,7 @@ fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Option<&str>, 
     }
     let (strong, faint) = (palette::strong(cx), palette::faint(cx));
     let fill = palette::surface(Level::Sidebar, cx);
-    let bar = embed.color.map_or(palette::line_strong(cx), |c| gpui_kit::rgb(c).into());
+    let bar = embed.color.map_or(palette::line_strong(cx), palette::data_color);
     let width = EMBED_WIDTH.min(ctx.column);
     let inner = width - 2. * EMBED_PAD.1 - EMBED_BAR - 2.;
     let md = |part: &str, text: &str| markdown(SharedString::from(format!("{key}-{part}")), readable(text, ctx), EMBED_TEXT, ctx);
@@ -4008,7 +4008,7 @@ mod tests {
     #[test]
     fn name_styles_colour_per_letter_and_stay_readable() {
         use crate::discord::{NameEffect, NameStyle};
-        let (dark, light): (gpui_kit::Hsla, gpui_kit::Hsla) = (gpui_kit::rgb(0x1E1F22).into(), gpui_kit::rgb(0xFFFFFF).into());
+        let (dark, light): (gpui_kit::Hsla, gpui_kit::Hsla) = (crate::palette::data_color(0x1E1F22), crate::palette::data_color(0xFFFFFF));
         let inks = |name: &str, effect, colors: Vec<u32>, ground| super::name_runs(name, &NameStyle { font: 11, effect, colors }, ground).into_iter().map(|(r, h)| (r, h.color.unwrap())).collect::<Vec<_>>();
         let gummy = inks("a bé", NameEffect::Gummy, vec![0xFF0000, 0x0000FF], dark);
         assert_eq!(gummy.iter().map(|(r, _)| r.clone()).collect::<Vec<_>>(), [0..1, 1..2, 2..3, 3..5], "one run per character, by byte");
