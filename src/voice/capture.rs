@@ -10,7 +10,7 @@ use std::sync::{
 use screencapturekit::{cv::CVPixelBufferLockFlags, prelude::*, screenshot_manager::SCScreenshotManager};
 
 use objc2::AllocAnyThread;
-use objc2_app_kit::{NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSRunningApplication, NSWorkspace};
+use objc2_app_kit::{NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSRunningApplication};
 use objc2_foundation::{NSPoint, NSRect, NSSize};
 
 use super::{ShareSource, ShareableScreen, ShareableWindow, video::VideoFrame};
@@ -118,10 +118,6 @@ pub fn thumbnail(source: ShareSource, max_width: u32) -> Result<VideoFrame, Stri
     let config = SCStreamConfiguration::new().with_width(width).with_height(height).with_pixel_format(PixelFormat::BGRA).with_shows_cursor(false);
     let sample = SCScreenshotManager::capture_sample_buffer(&filter, &config).map_err(|e| e.to_string())?;
     sample.pixel_buffer().and_then(|buffer| copy_bgra(&buffer)).ok_or_else(|| "Screenshot had no image".into())
-}
-
-pub fn frontmost_pid() -> Option<i32> {
-    Some(NSWorkspace::sharedWorkspace().frontmostApplication()?.processIdentifier())
 }
 
 // Draws NSRunningApplication's icon into a BGRA bitmap we own.

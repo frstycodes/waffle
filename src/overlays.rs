@@ -334,12 +334,13 @@ impl Waffle {
     }
 
     /// Your recent mentions as cards (at most `limit`), each jumping to its message on click.
-    pub(crate) fn mention_list(&self, limit: Option<usize>, cx: &mut Context<Self>) -> AnyElement {
+    // A fetched list of messages as cards (mentions, saved), each opening its message.
+    pub(crate) fn message_cards(&self, list: &Option<Option<Result<Vec<Message>, SharedString>>>, limit: Option<usize>, empty: (&'static str, &'static str), cx: &mut Context<Self>) -> AnyElement {
         let theme = cx.theme().clone();
-        match &self.inbox {
+        match list {
             None | Some(None) => mention_skeletons(cx),
             Some(Some(Err(error))) => div().p_4().text_color(theme.danger).child(error.clone()).into_any_element(),
-            Some(Some(Ok(list))) if list.is_empty() => crate::ui::empty_state("mentions-empty", Illustration::InboxEmpty, "You're all caught up!", "Mentions of you and your roles land here.", cx).into_any_element(),
+            Some(Some(Ok(list))) if list.is_empty() => crate::ui::empty_state("messages-empty", Illustration::InboxEmpty, empty.0, empty.1, cx).into_any_element(),
             Some(Some(Ok(list))) => {
                 let shown: Vec<Message> = list.iter().take(limit.unwrap_or(usize::MAX)).cloned().collect();
                 let ctx = self.row_context_everywhere(&shown, 380., cx);

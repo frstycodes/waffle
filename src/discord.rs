@@ -20,7 +20,7 @@ pub struct User {
     pub avatar: String,
     pub bot: bool,
     pub tag: Option<GuildTag>,
-    pub nameplate: Option<Nameplate>,
+    pub nameplate: Option<Box<Nameplate>>,
     // Avatar decoration frame drawn around the avatar.
     pub decoration: Option<String>,
     pub name_style: Option<NameStyle>,
@@ -67,6 +67,10 @@ fn parse_name_style(styles: &Value) -> Option<NameStyle> {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Nameplate {
     pub art: String,
+    // The moving version, as an animated image: what Discord plays where it can't play the WebM
+    // (Safari, Linux, reduced motion). From the nameplate's `sku_id`.
+    #[serde(default)]
+    pub animated: Option<String>,
     // The tint Discord paints under the art: (dark theme, light theme), from the nameplate's palette.
     pub tint: (u32, u32),
 }
@@ -200,7 +204,8 @@ pub struct FeedEntry {
 pub struct Activity {
     pub kind: ActivityKind,
     pub text: String,
-    pub more: usize,
+    // The other activities after the first, in Discord's order, for "+N" and its hover list.
+    pub rest: Vec<(ActivityKind, String)>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -900,6 +905,8 @@ pub struct Member {
     pub user: User,
     pub roles: Vec<String>,
     pub presence: Presence,
+    // `premium_since`: when they started boosting this server (ISO 8601), if they do.
+    pub boosting_since: Option<String>,
 }
 
 // Lists are almost all members; boxing them would allocate per row to shrink the rare group headers.
@@ -1261,6 +1268,30 @@ impl Client {
         }
         let body = self.run(self.request(reqwest::Method::GET, &path)).await?;
         Ok(body.as_array().into_iter().flatten().filter_map(parse_message).collect())
+    }
+
+    /// One of your settings-proto blobs (base64), by Discord's settings type.
+    pub async fn settings_proto(&self, kind: u8) -> Result<String, String> {
+        let body = self.run(self.request(reqwest::Method::GET, &format!("/users/@me/settings-proto/{kind}"))).await?;
+        body["settings"].as_str().map(str::to_owned).ok_or_else(|| "Unexpected response".into())
+    }
+
+    /// Merges `settings` (base64, only the fields to change) into a settings-proto blob.
+    pub async fn patch_settings_proto(&self, kind: u8, settings: String) -> Result<(), String> {
+        let req = self.request(reqwest::Method::PATCH, &format!("/users/@me/settings-proto/{kind}")).json(&serde_json::json!({ "settings": settings }));
+        self.run(req).await.map(drop)
+    }
+
+    /// Your saved-for-later messages, newest saved first (Discord's bookmarks, 25 a page).
+    pub async fn saved_messages(&self) -> Result<Vec<Message>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, "/users/@me/saved-messages/bookmarks?limit=25")).await?;
+        Ok(body["results"].as_array().into_iter().flatten().filter_map(|r| parse_message(&r["message"])).collect())
+    }
+
+    /// The ids of the messages you saved, as the client loads them on connect.
+    pub async fn saved_message_ids(&self) -> Result<Vec<String>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, "/users/@me/saved-messages?bookmark_ids=true")).await?;
+        Ok(bookmark_ids(&body["bookmark_ids"]))
     }
 
     /// Discord's GIF search; an empty query returns what's trending. Shapes from memory: Not verified.
@@ -1683,6 +1714,12 @@ pub fn upload_limit(premium_type: u8, guild_tier: u8) -> u64 {
         _ => 10,
     };
     user.max(guild) << 20
+}
+
+/// The longest message text Discord takes: 4000 characters with Nitro, 2000 otherwise.
+// Not verified: whether Discord counts code points or UTF-16 units; code points are counted here.
+pub fn message_limit(premium_type: u8) -> usize {
+    if premium_type == 2 { 4000 } else { 2000 }
 }
 
 // Discord caps a message at 10 attachments.
@@ -2517,8 +2554,9 @@ pub fn parse_user(user: &Value) -> User {
     let plate = &user["collectibles"]["nameplate"];
     let nameplate = plate["asset"].as_str().map(|asset| Nameplate {
         art: format!("{CDN}/assets/collectibles/{asset}static.png"),
+        animated: plate["sku_id"].as_str().map(|sku| format!("{CDN}/media/v1/collectibles-shop/{sku}/animated")),
         tint: palette_tint(plate["palette"].as_str().unwrap_or_default()),
-    });
+    }).map(Box::new);
     let decoration = user["avatar_decoration_data"]["asset"].as_str().map(|asset| format!("{CDN}/avatar-decoration-presets/{asset}.png?size=96&passthrough=false"));
     let name_style = parse_name_style(&user["display_name_styles"]);
     User { id, name, avatar, bot: user["bot"].as_bool().unwrap_or(false), tag, nameplate, decoration, name_style }
@@ -2576,6 +2614,16 @@ fn scaled(original: (f32, f32), scale: f32) -> String {
 fn with_query(url: String, query: &str) -> String {
     let joiner = if url.contains('?') { "&" } else { "?" };
     format!("{url}{joiner}{query}")
+}
+
+/// The moving version of an avatar or decoration URL, for while Discord would animate it: an animated
+/// (`a_`) avatar as its GIF, a decoration with `passthrough=true` (its APNG, as Discord's client asks for).
+/// Anything else comes back as it is.
+pub fn animated(url: &str) -> String {
+    if url.contains("/avatars/") && url.contains("/a_") {
+        return url.replacen(".png?", ".gif?", 1);
+    }
+    url.replacen("passthrough=false", "passthrough=true", 1)
 }
 
 pub fn avatar_url(user_id: &str, hash: Option<&str>) -> String {
@@ -2707,7 +2755,7 @@ fn parse_presence(p: &Value) -> Presence {
         Some(format!("{emoji}{text}"))
     });
     let others: Vec<&Value> = activities.iter().filter(|a| a["type"] != 4).collect();
-    let first = others.first().and_then(|a| {
+    let line = |a: &Value| {
         let name = a["name"].as_str()?;
         let (kind, text) = match a["type"].as_u64() {
             Some(1) => (ActivityKind::Streaming, a["details"].as_str().unwrap_or(name)),
@@ -2716,8 +2764,10 @@ fn parse_presence(p: &Value) -> Presence {
             Some(5) => (ActivityKind::Competing, name),
             _ => (ActivityKind::Playing, name),
         };
-        Some(Activity { kind, text: text.to_owned(), more: others.len() - 1 })
-    });
+        Some((kind, text.to_owned()))
+    };
+    let mut lines = others.iter().filter_map(|a| line(a));
+    let first = lines.next().map(|(kind, text)| Activity { kind, text, rest: lines.collect() });
     let rich = others.first().and_then(|a| parse_rich(a));
     let clients = &p["client_status"];
     let mobile_only = !clients["mobile"].is_null() && clients["desktop"].is_null() && clients["web"].is_null();
@@ -2820,7 +2870,7 @@ fn parse_list_item(item: &Value, guild_id: Option<&str>) -> Option<ListItem> {
         return Some(ListItem::Group { id: group.get("id")?.as_str()?.to_owned(), count: group.get("count").and_then(Value::as_u64).unwrap_or(0) as u32 });
     }
     let m = &item["member"];
-    m.is_object().then(|| ListItem::Member(Member { user: parse_member_user(m, &m["user"], guild_id), roles: strings(&m["roles"]), presence: parse_presence(&m["presence"]) }))
+    m.is_object().then(|| ListItem::Member(Member { user: parse_member_user(m, &m["user"], guild_id), roles: strings(&m["roles"]), presence: parse_presence(&m["presence"]), boosting_since: m["premium_since"].as_str().map(str::to_owned) }))
 }
 
 fn parse_voice_state(v: &Value) -> VoiceState {
@@ -3365,13 +3415,20 @@ mod tests {
     }
 
     #[test]
+    fn animated_swaps_only_moving_art() {
+        assert_eq!(animated(&avatar_url("1", Some("a_abc"))), format!("{CDN}/avatars/1/a_abc.gif?size=128"));
+        assert_eq!(animated(&avatar_url("1", Some("abc"))), avatar_url("1", Some("abc")), "a still avatar stays a PNG");
+        assert_eq!(animated(&format!("{CDN}/avatar-decoration-presets/x.png?size=96&passthrough=false")), format!("{CDN}/avatar-decoration-presets/x.png?size=96&passthrough=true"));
+    }
+
+    #[test]
     fn presence_keeps_custom_status_apart() {
         let p = parse_presence(&json!({ "status": "dnd", "activities": [{ "type": 0, "name": "Apex" }, { "type": 4, "state": "m!help" }] }));
         assert_eq!(p.status, Status::Dnd);
         assert_eq!(p.custom.as_deref(), Some("m!help"));
         assert_eq!(p.activity.unwrap().text, "Apex");
         let p = parse_presence(&json!({ "status": "idle", "activities": [{ "type": 2, "name": "Spotify", "state": "Hozier" }, { "type": 0, "name": "Apex" }] }));
-        assert_eq!(p.activity, Some(Activity { kind: ActivityKind::Listening, text: "Hozier".into(), more: 1 }));
+        assert_eq!(p.activity, Some(Activity { kind: ActivityKind::Listening, text: "Hozier".into(), rest: vec![(ActivityKind::Playing, "Apex".into())] }));
     }
 
     #[test]
@@ -3446,5 +3503,20 @@ mod tests {
         let invite = parse_invite(&body).unwrap();
         assert_eq!(invite, Invite { guild_id: "9".into(), name: "Dumpling Hall".into(), icon: Some("https://cdn.discordapp.com/icons/9/ff.png?size=96".into()), online: Some(1204), members: Some(8311), ..Default::default() });
         assert_eq!(parse_invite(&json!({ "code": "gdm", "channel": { "id": "5", "type": 3 } })), None, "a group DM invite has no server card");
+    }
+}
+
+// `bookmark_ids` from GET /users/@me/saved-messages. Not verified: each entry's shape; read as either a
+// message id or a save with `message_id`.
+fn bookmark_ids(list: &Value) -> Vec<String> {
+    list.as_array().into_iter().flatten().filter_map(|v| v.as_str().or_else(|| v["message_id"].as_str())).map(str::to_owned).collect()
+}
+
+#[cfg(test)]
+mod saved_tests {
+    #[test]
+    fn bookmark_ids_read_ids_or_saves() {
+        let list = serde_json::json!(["1", { "channel_id": "9", "message_id": "2" }, 3]);
+        assert_eq!(super::bookmark_ids(&list), ["1", "2"]);
     }
 }
