@@ -201,7 +201,8 @@ impl Waffle {
     fn feed_card(&self, i: usize, entry: &FeedEntry, member: &Member, now: i64, cx: &mut Context<Self>) -> AnyElement {
         let dark = cx.theme().is_dark();
         let (strong, muted, hover) = (palette::strong(cx), palette::muted(cx), palette::hover(cx));
-        let name_ink = self.role_color(self.guild_id.as_ref(), &member.user.id, Some(&member.roles), dark).unwrap_or(strong);
+        let (role_ink, _) = crate::chat::role_marks(self.prefs.role_style, self.role_color(self.guild_id.as_ref(), &member.user.id, Some(&member.roles), dark));
+        let name_ink = role_ink.unwrap_or(strong);
         let when = if entry.live { "Now".to_owned() } else { ago(now - entry.at) };
         let meta = div()
             .flex()
@@ -267,10 +268,10 @@ impl Waffle {
         let dark = cx.theme().is_dark();
         let offline = member.presence.status == Status::Offline;
         let (strong, faint, hover) = (palette::strong(cx), palette::faint(cx), palette::hover(cx));
-        let name_ink = match offline {
-            true => faint,
-            false => self.role_color(self.guild_id.as_ref(), &member.user.id, Some(&member.roles), dark).unwrap_or(strong),
-        };
+        let (role_ink, dot) = crate::chat::role_marks(self.prefs.role_style, self.role_color(self.guild_id.as_ref(), &member.user.id, Some(&member.roles), dark));
+        let name_ink = if offline { faint } else { role_ink.unwrap_or(strong) };
+        let dot = dot.filter(|_| !offline);
+        let name_style = member.user.name_style.as_ref().filter(|_| self.prefs.display_name_styles);
         let surface = palette::surface(palette::Level::Sidebar, cx);
         let owner = self.guild().is_some_and(|g| g.owner_id.as_ref() == Some(&member.user.id));
         let selected = self.profile_card.as_ref().is_some_and(|p| p.user.id == member.user.id);
@@ -281,7 +282,8 @@ impl Waffle {
                 .items_center()
                 .gap(px(6.))
                 .min_w_0()
-                .child(crate::name_fonts::styled(ui::truncating(key, member.user.name.clone()).font_weight(FontWeight::NORMAL).text_color(name_ink), member.user.name_style.as_ref()))
+                .child(crate::name_fonts::styled(ui::truncating(key, member.user.name.clone()).font_weight(FontWeight::NORMAL).text_color(name_ink), name_style))
+                .children(dot.map(crate::chat::role_dot))
                 .children(member.user.tag.as_ref().map(|tag| crate::chat::guild_tag(tag, cx)))
                 .when(owner, |r| r.child(Icon::new(Glyph::Crown).size(px(14.)).flex_none().text_color(crown)))
                 .when(member.user.bot, |r| r.child(ui::tag("App", cx)))
