@@ -78,10 +78,23 @@ pub(crate) fn chat_width(wanted: f32, window: f32) -> f32 {
     wanted.min(window - CHAT_STAGE_ROOM).max(CHAT_MIN_WIDTH)
 }
 
-// The stage's tile area (left, top, width, height), between its header and controls.
-fn tile_area(stage: (f32, f32)) -> (f32, f32, f32, f32) {
-    let top = FOCUS_HEAD + STAGE_GAP;
-    (STAGE_PAD, top, stage.0 - STAGE_PAD * 2., (stage.1 - top - CONTROLS_HEIGHT - STAGE_GAP - STAGE_PAD).max(0.))
+fn grid_gap(cols: usize) -> f32 {
+    if cols >= 3 { TILE_GAP_DENSE } else { TILE_GAP }
+}
+
+// The column count and tile width that make the biggest 16:9 tiles fit `width` x `height`. No floor
+// on the width: a crowded stage shrinks its cards rather than spill past its foot.
+fn grid_fit(n: usize, width: f32, height: f32) -> (usize, f32) {
+    let n = n.max(1);
+    let size = |cols: usize| {
+        let rows = n.div_ceil(cols) as f32;
+        let gap = grid_gap(cols);
+        let w = (width - gap * (cols as f32 - 1.)) / cols as f32;
+        w.min((height - gap * (rows - 1.)) / rows * 16. / 9.)
+    };
+    let cols = (1..=n).max_by(|a, b| size(*a).total_cmp(&size(*b))).unwrap_or(1);
+    // Floored so float error can't wrap a full row onto one more line.
+    (cols, size(cols).floor().max(0.))
 }
 
 #[derive(Clone)]
@@ -732,8 +745,7 @@ impl Waffle {
         if let Some(big) = focused {
             return Some(self.focus_stage(big, &tiles, shown, cx));
         }
-        let (_, _, width, height) = tile_area(self.stage_size(window, cx));
-        let body = self.card_stage(&tiles, (width, height), cx);
+        let body = self.card_stage(tiles, cx);
         let stage = div().flex_1().min_h_0().flex().flex_col().gap(px(STAGE_GAP)).pt(px(STAGE_GAP)).px(px(STAGE_PAD)).pb(px(STAGE_PAD));
         Some(
             self.stage_root(cx)
@@ -832,25 +844,14 @@ impl Waffle {
             .into_any_element()
     }
 
-    // The grid, fitted to the space it actually has.
-    fn card_stage(&self, tiles: &[Tile], fallback: (f32, f32), cx: &mut Context<Self>) -> AnyElement {
-        let measured = self.call_area.get();
-        let (width, height) = if measured.0 > 0. { measured } else { fallback };
-        let body = self.tile_grid(tiles, width, height, cx);
-        let (area, this) = (self.call_area.clone(), cx.weak_entity());
-        let measure = gpui_kit::canvas(
-            move |bounds, _, cx| {
-                let size = (f32::from(bounds.size.width), f32::from(bounds.size.height));
-                if (size.0 - area.get().0).abs() > 0.5 || (size.1 - area.get().1).abs() > 0.5 {
-                    area.set(size);
-                    this.update(cx, |_, cx| cx.notify()).ok();
-                }
-            },
-            |_, _, _, _| {},
-        )
-        .absolute()
-        .inset_0();
-        div().relative().size_full().child(measure).child(body).into_any_element()
+    // The grid, fitted to the space it has this frame: sizing it from the last frame's measurement drew
+    // one stale frame on every resize and Space change.
+    fn card_stage(&self, tiles: Vec<Tile>, cx: &mut Context<Self>) -> AnyElement {
+        let this = cx.weak_entity();
+        ui::sized(move |size, _, cx| {
+            this.update(cx, |waffle, cx| waffle.tile_grid(&tiles, f32::from(size.width), f32::from(size.height), cx)).unwrap_or_else(|_| div().into_any_element())
+        })
+        .into_any_element()
     }
 
     // Clicking a card makes it the big one; clicking it again goes back to the grid. A stream you
@@ -893,17 +894,9 @@ impl Waffle {
 
     // .tiles: the size that makes the biggest 16:9 tiles fit, 10px apart (8px three across and up).
     fn tile_grid(&self, tiles: &[Tile], width: f32, height: f32, cx: &mut Context<Self>) -> AnyElement {
-        let n = tiles.len().max(1);
-        let gap = |cols: usize| if cols >= 3 { TILE_GAP_DENSE } else { TILE_GAP };
-        let size = |cols: usize| {
-            let rows = n.div_ceil(cols) as f32;
-            let w = (width - gap(cols) * (cols as f32 - 1.)) / cols as f32;
-            w.min((height - gap(cols) * (rows - 1.)) / rows * 16. / 9.)
-        };
-        let cols = (1..=n).max_by(|a, b| size(*a).total_cmp(&size(*b))).unwrap_or(1);
-        let tile_w = size(cols).max(124.);
+        let (cols, tile_w) = grid_fit(tiles.len(), width, height);
         let rendered: Vec<AnyElement> = tiles.iter().map(|t| self.tile(t, TileSize::Card(tile_w), cx)).collect();
-        div().size_full().flex().flex_wrap().items_center().justify_center().content_center().gap(px(gap(cols))).children(rendered).into_any_element()
+        div().size_full().flex().flex_wrap().items_center().justify_center().content_center().gap(px(grid_gap(cols))).children(rendered).into_any_element()
     }
 
     // A stage's speakers as the call's cards, in Discord's columns for the width (1 under 424px, 2 under
@@ -2433,6 +2426,24 @@ fn average_color(rgba: &[u8]) -> Option<(u8, u8, u8)> {
         weight += a;
     }
     (weight > 0).then(|| ((sum[0] / weight) as u8, (sum[1] / weight) as u8, (sum[2] / weight) as u8))
+}
+
+#[cfg(test)]
+mod grid_tests {
+    use super::*;
+
+    #[test]
+    fn the_grid_always_fits_its_stage() {
+        for n in 1..=25 {
+            for (width, height) in [(1600., 700.), (500., 1300.), (300., 200.), (900., 520.)] {
+                let (cols, w) = grid_fit(n, width, height);
+                let rows = n.div_ceil(cols) as f32;
+                let gap = grid_gap(cols);
+                assert!(w * cols as f32 + gap * (cols as f32 - 1.) <= width, "{n} tiles overflow {width} wide");
+                assert!(w * 9. / 16. * rows + gap * (rows - 1.) <= height + 0.01, "{n} tiles overflow {height} tall");
+            }
+        }
+    }
 }
 
 #[cfg(test)]

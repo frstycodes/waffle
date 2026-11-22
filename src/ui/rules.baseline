@@ -6,8 +6,8 @@ src/announcements.rs	global-notify	18
 src/announcements.rs	raw-px	3
 src/app_modal.rs	global-notify	6
 src/audio_player.rs	raw-px	7
-src/call.rs	file-lines	2173
-src/call.rs	global-notify	21
+src/call.rs	file-lines	2162
+src/call.rs	global-notify	20
 src/call.rs	raw-px	16
 src/call_previews.rs	global-notify	4
 src/call_previews.rs	raw-px	1
@@ -78,7 +78,7 @@ src/layout.rs	raw-px	9
 src/link_preview.rs	global-notify	1
 src/link_preview.rs	raw-px	1
 src/login.rs	raw-px	13
-src/main.rs	file-lines	3453
+src/main.rs	file-lines	3451
 src/main.rs	global-notify	71
 src/main.rs	raw-px	9
 src/menu.rs	file-lines	895
