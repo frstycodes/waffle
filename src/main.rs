@@ -1433,6 +1433,13 @@ impl Waffle {
                     guild.events.retain(|e| e.id != id);
                 }
             }
+            Event::ScheduledEventException { guild_id, event_id, id, exception } => {
+                let event = self.guilds.iter_mut().filter(|g| g.id == guild_id).flat_map(|g| g.events.iter_mut()).find(|e| e.id == event_id);
+                if let Some(event) = event {
+                    event.exceptions.retain(|x| x.id != id);
+                    event.exceptions.extend(exception);
+                }
+            }
             Event::ScheduledEventUser { guild_id, event_id, user_id, added } => {
                 let mine = self.me.as_ref().is_some_and(|me| me.id == user_id);
                 // Our own Interested echoes back after the optimistic toggle already counted it.

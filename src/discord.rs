@@ -1178,6 +1178,8 @@ pub enum Event {
     // A scheduled event created or changed, deleted, or someone marked / unmarked Interested.
     ScheduledEvent(ScheduledEvent),
     ScheduledEventDelete { guild_id: String, id: String },
+    // One occurrence's exception written (Some) or removed (None, by id).
+    ScheduledEventException { guild_id: String, event_id: String, id: String, exception: Option<EventException> },
     ScheduledEventUser { guild_id: String, event_id: String, user_id: String, added: bool },
     // FORUM_UNREADS: unread message counts for a forum's posts, (post id, count).
     ForumUnreads { forum_id: String, counts: Vec<(String, u32)> },
@@ -2221,6 +2223,16 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
         }
         "CHANNEL_DELETE" | "THREAD_DELETE" => Some(Event::ChannelDelete { guild_id: d["guild_id"].as_str()?.to_owned(), id: d["id"].as_str()?.to_owned() }),
         "GUILD_SCHEDULED_EVENT_CREATE" | "GUILD_SCHEDULED_EVENT_UPDATE" => parse_scheduled_event(d).map(Event::ScheduledEvent),
+        // Not verified: the exception payload carries `guild_id` and `event_id` beside the exception's own fields.
+        "GUILD_SCHEDULED_EVENT_EXCEPTION_CREATE" | "GUILD_SCHEDULED_EVENT_EXCEPTION_UPDATE" | "GUILD_SCHEDULED_EVENT_EXCEPTION_DELETE" => {
+            let exception = parse_event_exception(d)?;
+            Some(Event::ScheduledEventException {
+                guild_id: d["guild_id"].as_str()?.to_owned(),
+                event_id: d["event_id"].as_str()?.to_owned(),
+                id: exception.id.clone(),
+                exception: (kind != "GUILD_SCHEDULED_EVENT_EXCEPTION_DELETE").then_some(exception),
+            })
+        }
         "GUILD_SCHEDULED_EVENT_DELETE" => Some(Event::ScheduledEventDelete { guild_id: d["guild_id"].as_str()?.to_owned(), id: d["id"].as_str()?.to_owned() }),
         "GUILD_SCHEDULED_EVENT_USER_ADD" | "GUILD_SCHEDULED_EVENT_USER_REMOVE" => Some(Event::ScheduledEventUser {
             guild_id: s(&d["guild_id"]),

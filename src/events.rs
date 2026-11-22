@@ -984,8 +984,6 @@ impl Waffle {
     }
 
     // Writes an occurrence's exception at once, putting the old one back if Discord refuses.
-    // GAP: the GUILD_SCHEDULED_EVENT_EXCEPTION_* gateway events aren't handled, so others' changes to single
-    // occurrences arrive only with the event's next update.
     fn send_exception(&mut self, event: &ScheduledEvent, recurrence_id: String, (method, path, body): (Method, String, Option<Value>), cx: &mut Context<Self>) {
         let after = exception_from(&recurrence_id, body.as_ref());
         let before = event.exceptions.iter().find(|x| x.id == recurrence_id).cloned();
