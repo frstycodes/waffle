@@ -238,7 +238,7 @@ impl Waffle {
         let edit = is_me.then(|| {
             ui::button("profile-edit", ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::Pen).size(px(16.))).child("Edit profile").on_click(cx.listener(|this, _, window, cx| {
                 this.profile_card = None;
-                this.open_settings(crate::settings::Page::Account, window, cx);
+                this.open_settings(crate::settings::Page::Profiles, window, cx);
             }))
         });
         div()
