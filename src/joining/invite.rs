@@ -206,7 +206,8 @@ fn shell(splash: Option<(&str, &str)>, wide: bool, left: Div, window: &mut Windo
     div()
         .id("invite-card")
         .w(px(width))
-        .min_h(px(420.))
+        // Only beside a splash: the image wants the height. Alone, a card is as tall as what it says.
+        .when(two_columns, |card| card.min_h(px(420.)))
         .flex()
         .squircle(RADIUS_XL)
         .overflow_hidden()
