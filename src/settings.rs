@@ -1355,7 +1355,7 @@ impl Waffle {
         let (inputs, outputs, cameras) = (view.devices.inputs.clone(), view.devices.outputs.clone(), view.devices.cameras.clone());
         let advanced = view.advanced;
         let (custom, studio) = (prefs.input_profile == InputProfile::Custom, prefs.input_profile == InputProfile::Studio);
-        let mut out = vec![Section::anchored("Voice", self.devices_group(&inputs, &outputs, cx))];
+        let mut out = vec![Section::with_anchor("Voice", self.devices_group(&inputs, &outputs, cx))];
 
         let mut lines = Hairlines::default();
         let profiles = [
@@ -1401,9 +1401,9 @@ impl Waffle {
             .child(self.device_select(Select::Camera, Glyph::Video, &cameras, prefs.camera.as_deref(), 40., cx));
         // GAP: the design's camera preview tile (Test video, mirrored self view) needs a local camera
         // preview the settings page doesn't have yet.
-        out.push(Section::anchored("Camera", ui::settings_group("Camera", cx).child(card_pad(cx).child(camera))));
-        out.push(Section::anchored("Sounds", self.sounds_group(window, cx)));
-        out.push(Section::anchored("Advanced", ui::settings_group("Advanced", cx).child(ui::settings_card(cx).child(self.reset_row(cx)))));
+        out.push(Section::with_anchor("Camera", ui::settings_group("Camera", cx).child(card_pad(cx).child(camera))));
+        out.push(Section::with_anchor("Sounds", self.sounds_group(window, cx)));
+        out.push(Section::with_anchor("Advanced", ui::settings_group("Advanced", cx).child(ui::settings_card(cx).child(self.reset_row(cx)))));
         out
     }
 
@@ -2092,7 +2092,7 @@ impl Section {
         Self { anchor: None, key: Some(key), body: body.into_any_element() }
     }
 
-    fn anchored(anchor: &'static str, body: impl IntoElement) -> Self {
+    fn with_anchor(anchor: &'static str, body: impl IntoElement) -> Self {
         Self { anchor: Some(anchor), key: Some(anchor), body: body.into_any_element() }
     }
 }

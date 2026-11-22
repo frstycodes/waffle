@@ -126,7 +126,6 @@ src/server_settings/view.rs	global-notify	17
 src/server_settings/view.rs	raw-px	8
 src/settings.rs	global-notify	24
 src/settings.rs	raw-color	8
-src/settings.rs	raw-floating	5
 src/settings.rs	raw-px	35
 src/settings/accessibility.rs	raw-color	1
 src/settings/accessibility.rs	raw-px	8
