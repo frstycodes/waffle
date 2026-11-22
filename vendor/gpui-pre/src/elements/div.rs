@@ -4052,8 +4052,24 @@ fn show_tooltip(
     });
     let did_show = new_tooltip.is_some();
     *active_tooltip.borrow_mut() = new_tooltip;
+    if did_show {
+        dismiss_other_tooltip(active_tooltip, owner, window, cx);
+    }
     window.refresh_view(owner, cx);
     did_show
+}
+
+// Waffle patch: one tooltip up at a time. A hoverable tooltip waits before hiding so the pointer can reach
+// it; another showing meanwhile dismisses it. Otherwise the window, which draws the last tooltip request in
+// paint order, kept drawing a tile left below the pointer until its delay ran out.
+fn dismiss_other_tooltip(shown: &Rc<RefCell<Option<ActiveTooltip>>>, owner: EntityId, window: &mut Window, cx: &mut App) {
+    let Some((previous, previous_owner)) = window.shown_tooltip.replace((Rc::downgrade(shown), owner)) else {
+        return;
+    };
+    let Some(previous) = previous.upgrade() else { return };
+    if !Rc::ptr_eq(&previous, shown) {
+        clear_active_tooltip(&previous, previous_owner, window, cx);
+    }
 }
 
 /// Returns a callback which will be called by window prepaint to update tooltip visibility. The

@@ -1379,6 +1379,8 @@ pub struct Window {
     pub(crate) next_tooltip_id: TooltipId,
     pub(crate) tooltip_bounds: Option<TooltipBounds>,
     tooltip_entrance: Option<TooltipEntrance>,
+    // Waffle patch: the tooltip showing now and the view that owns it, so the next one to show can dismiss it.
+    pub(crate) shown_tooltip: Option<(std::rc::Weak<RefCell<Option<crate::ActiveTooltip>>>, EntityId)>,
     pub(crate) next_frame_callbacks: Rc<RefCell<Vec<FrameCallback>>>,
     pub(crate) dirty_views: FxHashSet<EntityId>,
     focus_listeners: SubscriberSet<(), AnyWindowFocusListener>,
@@ -2301,6 +2303,7 @@ impl Window {
             next_tooltip_id: TooltipId::default(),
             tooltip_bounds: None,
             tooltip_entrance: None,
+            shown_tooltip: None,
             dirty_views: FxHashSet::default(),
             focus_listeners: SubscriberSet::new(),
             focus_lost_listeners: SubscriberSet::new(),
