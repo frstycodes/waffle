@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
 use gpui_kit::{
     App, Hsla, Window,
     component::{ActiveTheme, Theme, ThemeMode, scroll::ScrollbarMode},
@@ -131,17 +133,71 @@ const LIGHT: Tokens = Tokens {
     seg_thumb: (0xFFFFFF, 1.),
 };
 
-fn tokens(cx: &App) -> &'static Tokens {
-    if cx.theme().is_dark() { &DARK } else { &LIGHT }
+// High contrast (Discord's "bold colors and sharp contrast"): secondary text steps up a rung (muted takes
+// the text colour, faint takes muted), hairlines take the strong line, and fills and strong lines deepen.
+const HIGH_CONTRAST_FILL: f32 = 1.75;
+const DARK_HC: Tokens = high_contrast(DARK);
+const LIGHT_HC: Tokens = high_contrast(LIGHT);
+
+const fn high_contrast(t: Tokens) -> Tokens {
+    Tokens {
+        muted: t.text,
+        faint: t.muted,
+        hover: t.hover * HIGH_CONTRAST_FILL,
+        press: t.press * HIGH_CONTRAST_FILL,
+        selected: t.selected * HIGH_CONTRAST_FILL,
+        line: t.line_strong,
+        line_strong: t.line_strong * 1.5,
+        ..t
+    }
 }
 
+fn tokens(cx: &App) -> &'static Tokens {
+    match (cx.theme().is_dark(), HIGH_CONTRAST.load(Ordering::Relaxed)) {
+        (true, false) => &DARK,
+        (false, false) => &LIGHT,
+        (true, true) => &DARK_HC,
+        (false, true) => &LIGHT_HC,
+    }
+}
+
+// Settings › Accessibility's look, read by every colour built here (atomics: `hex` runs without an App).
+static SATURATION: AtomicU32 = AtomicU32::new(1f32.to_bits());
+static DESATURATE_USER_COLORS: AtomicBool = AtomicBool::new(false);
+static HIGH_CONTRAST: AtomicBool = AtomicBool::new(false);
+
+// Stores the prefs' look; true when it changed, so the caller re-applies the theme (`apply`).
+pub fn set_look(prefs: &crate::settings::Prefs) -> bool {
+    let saturation = prefs.saturation.clamp(0., 1.).to_bits();
+    let changed = [
+        SATURATION.swap(saturation, Ordering::Relaxed) != saturation,
+        DESATURATE_USER_COLORS.swap(prefs.desaturate_user_colors, Ordering::Relaxed) != prefs.desaturate_user_colors,
+        HIGH_CONTRAST.swap(prefs.high_contrast, Ordering::Relaxed) != prefs.high_contrast,
+    ];
+    changed.contains(&true)
+}
+
+fn saturation() -> f32 {
+    f32::from_bits(SATURATION.load(Ordering::Relaxed))
+}
+
+// Scales saturation alone, so hue and lightness hold.
+fn desaturate(mut colour: Hsla, saturation: f32) -> Hsla {
+    colour.s *= saturation;
+    colour
+}
+
+// Every UI colour passes through here, so the saturation setting reaches all of them. Pictures (images,
+// video, avatars, emoji) never do.
 fn hex(value: u32) -> Hsla {
-    rgb(value).into()
+    desaturate(rgb(value).into(), saturation())
 }
 
 pub fn sync(window: &mut Window, cx: &mut App) {
     Theme::sync_system_appearance(Some(window), cx);
-    match crate::settings::Prefs::load().theme {
+    let prefs = crate::settings::Prefs::load();
+    set_look(&prefs);
+    match prefs.theme {
         crate::settings::ThemePref::Dark => Theme::change(ThemeMode::Dark, Some(window), cx),
         crate::settings::ThemePref::Light => Theme::change(ThemeMode::Light, Some(window), cx),
         crate::settings::ThemePref::System => {}
@@ -424,6 +480,11 @@ pub fn oklch(l: f32, c: f32, hue: f32) -> Hsla {
     hex(from_oklch(l, c, hue.to_radians()))
 }
 
+// An OKLCH colour standing in for a picture (an avatar's monogram), which keeps its colour at any saturation.
+pub fn picture_oklch(l: f32, c: f32, hue: f32) -> Hsla {
+    rgb(from_oklch(l, c, hue.to_radians())).into()
+}
+
 pub fn danger() -> Hsla {
     hex(DANGER)
 }
@@ -587,13 +648,15 @@ pub fn status(status: crate::discord::Status) -> Hsla {
 // A role's colour as a name colour: the role's own hex, as Discord shows it. Only a role too dark for the
 // dark theme (or too light for the light one) moves, in lightness alone, to the floor that still reads.
 // Deviates from design/css/navigation.css's .role-ink, whose clamp turned every role pastel.
+// Saturation reaches it only with "Apply saturation setting to custom colors" on.
 pub fn role_ink(color: u32, dark: bool) -> Hsla {
     let (l, c, h) = to_oklch(color);
     let readable = if dark { l.max(0.62) } else { l.min(0.55) };
-    if readable == l {
-        return hex(color);
+    let ink = rgb(if readable == l { color } else { from_oklch(readable, c, h) }).into();
+    if !DESATURATE_USER_COLORS.load(Ordering::Relaxed) {
+        return ink;
     }
-    hex(from_oklch(readable, c, h))
+    desaturate(ink, saturation())
 }
 
 fn to_oklch(color: u32) -> (f32, f32, f32) {
@@ -652,7 +715,7 @@ mod tests {
 
     #[test]
     fn text_meets_aa_on_every_surface() {
-        for t in [&DARK, &LIGHT] {
+        for t in [&DARK, &LIGHT, &DARK_HC, &LIGHT_HC] {
             let selected_row = over(t.ink_wash, t.selected, t.sidebar);
             let surfaces = [t.rail, t.sidebar, t.page, t.raised, t.overlay, selected_row];
             for ink in [t.text, t.strong, t.muted, t.faint] {
@@ -716,6 +779,25 @@ mod tests {
             for name in ["keyword", "comment", "comment.doc", "string.special", "punctuation.bracket"] {
                 assert!(theme.style.syntax.style(name).and_then(|s| s.color).is_some(), "{name} has a colour");
             }
+        }
+    }
+
+    #[test]
+    fn desaturating_keeps_hue_and_lightness() {
+        let honey: Hsla = rgb(ACCENT).into();
+        let grey = desaturate(honey, 0.);
+        assert_eq!((grey.h, grey.l, grey.s), (honey.h, honey.l, 0.));
+        let soft = desaturate(honey, 0.3);
+        assert!((soft.s - honey.s * 0.3).abs() < 1e-6 && soft.h == honey.h && soft.l == honey.l);
+        assert_eq!(desaturate(honey, 1.), honey);
+    }
+
+    #[test]
+    fn high_contrast_steps_secondary_text_up() {
+        for (t, hc) in [(&DARK, &DARK_HC), (&LIGHT, &LIGHT_HC)] {
+            assert!(contrast(hc.muted, t.sidebar) > contrast(t.muted, t.sidebar));
+            assert!(contrast(hc.faint, t.sidebar) > contrast(t.faint, t.sidebar));
+            assert!(hc.line == t.line_strong && hc.selected > t.selected);
         }
     }
 

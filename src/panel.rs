@@ -124,7 +124,7 @@ impl Waffle {
             }
             ListItem::Member(member) => Some(self.member_row(member, cx)),
         });
-        div().flex().flex_col().gap(px(2.)).children(activity).children(rows.collect::<Vec<_>>()).into_any_element()
+        div().flex().flex_col().gap(px(ui::density_pad(2.))).children(activity).children(rows.collect::<Vec<_>>()).into_any_element()
     }
 
     pub(crate) fn load_activity_feed(&mut self, cx: &mut Context<Self>) {
@@ -299,7 +299,7 @@ impl Waffle {
         div()
             .id(SharedString::from(format!("member-{}", member.user.id)))
             .relative()
-            .h(px(MEMBER_ROW))
+            .h(px(member_row_height()))
             .flex_none()
             .px_2()
             // Discord's room for the art: names stop 32px short of a nameplated row's end.
@@ -389,7 +389,11 @@ impl MemberStatus {
     }
 }
 
-const MEMBER_ROW: f32 = 44.;
+// A 32px avatar plus padding that follows UI density: 44px at Default.
+fn member_row_height() -> f32 {
+    32. + ui::density_pad(12.)
+}
+
 const MEMBER_ROW_GROUP: &str = "member-row";
 const NAMEPLATE_END: f32 = 32.;
 // The member list's padding on both sides: a row is the panel's width less this.
@@ -451,7 +455,7 @@ fn member_nameplate(plate: &crate::discord::Nameplate, names: Div, fills: (gpui_
         .absolute()
         .inset_0()
         .child(tint_layer().right_0())
-        .child(nameplate_art(plate, MEMBER_ROW, r, r).opacity(if selected { 0.9 } else { 0.6 }))
+        .child(nameplate_art(plate, member_row_height(), r, r).opacity(if selected { 0.9 } else { 0.6 }))
         // Clipped to the row: on a long name the fade runs past its end.
         .child(div().absolute().inset_0().overflow_hidden().flex().pr(px(NAMEPLATE_END - 2.)).child(div().relative().flex().min_w_0().child(held).child(ramp)))
         .into_any_element()

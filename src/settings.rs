@@ -674,11 +674,15 @@ impl Waffle {
         cx.notify();
     }
 
-    // Saves, then pushes every setting that has a live effect: sounds, hotkeys, the voice engine.
+    // Saves, then pushes every setting that has a live effect: sounds, hotkeys, the voice engine, the look.
     pub(crate) fn update_prefs(&mut self, cx: &mut Context<Self>, change: impl FnOnce(&mut Prefs)) {
         change(&mut self.prefs);
         self.prefs.save();
+        let restyled = palette::set_look(&self.prefs);
         self.apply_prefs();
+        if restyled {
+            palette::apply(cx);
+        }
         cx.set_reduce_motion(self.prefs.reduces_motion());
         cx.notify();
     }
@@ -686,6 +690,9 @@ impl Waffle {
     pub(crate) fn apply_prefs(&mut self) {
         sounds::silence(&self.prefs.silenced_cues);
         crate::chat::set_clock_24(self.prefs.clock_24h);
+        palette::set_look(&self.prefs);
+        crate::ui::set_density(self.prefs.ui_density);
+        crate::ui::set_switch_icons(self.prefs.switch_icons);
         if let Some(hotkeys) = &mut self.hotkeys {
             let active: Vec<Keybind> = self.prefs.keybinds.iter().filter(|k| self.prefs.push_to_talk || k.action != Action::PushToTalk).cloned().collect();
             self.keybind_errors = hotkeys.bind(&active);
