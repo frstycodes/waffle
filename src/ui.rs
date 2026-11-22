@@ -219,9 +219,11 @@ pub fn unread_dot() -> Div {
     div().size(px(8.)).flex_none().rounded_full().bg(palette::alert())
 }
 
-// A role: its colour as a dot, never as the text's colour.
+// A role: its colour as a dot and a light tint of the capsule. The text keeps the normal ink, since role
+// colours are often too pale to read on their own tint.
 pub fn role_chip(name: impl Into<SharedString>, color: Hsla, cx: &App) -> Div {
-    pill(cx).child(div().size(px(10.)).rounded_full().bg(color)).child(name.into())
+    let tint = if dark(cx) { 0.2 } else { 0.14 };
+    pill(cx).bg(color.opacity(tint)).child(div().size(px(10.)).rounded_full().bg(color)).child(name.into())
 }
 
 // The role chip's capsule, for a lead mark other than a colour dot (a permission's shield).

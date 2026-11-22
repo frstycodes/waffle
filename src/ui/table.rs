@@ -1,5 +1,5 @@
 // A ruled data table (design/explore-navigation.html #member-signals): one bordered box, a shaded header
-// band, full-width dividers, ~40px rows. Every row lays its cells out on the same `Col`s, so columns line
+// band, full-width dividers, 48px rows. Every row lays its cells out on the same `Col`s, so columns line
 // up without a grid.
 use gpui_kit::{AnyElement, App, Div, ElementId, FontWeight, InteractiveElement, ParentElement, Stateful, Styled, div, px};
 
@@ -19,16 +19,16 @@ pub fn table(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
 
 // The header band: 12px muted labels on the group tone, its top corners following the box's.
 pub fn table_head(cols: &[Col], cells: impl IntoIterator<Item = AnyElement>, cx: &App) -> Div {
-    edge(cells_row(cols, cells), top(RADIUS_MD - 1.)).min_h(px(32.)).bg(palette::surface(palette::Level::Group, cx)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx))
+    edge(cells_row(cols, cells), top(RADIUS_MD - 1.)).min_h(px(36.)).bg(palette::surface(palette::Level::Group, cx)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx))
 }
 
 // A body row under a full-width divider.
 pub fn table_row(id: impl Into<ElementId>, cols: &[Col], cells: impl IntoIterator<Item = AnyElement>, cx: &App) -> Stateful<Div> {
-    cells_row(cols, cells).id(id.into()).min_h(px(40.)).border_t_1().border_color(palette::line(cx)).text_color(palette::text(cx))
+    cells_row(cols, cells).id(id.into()).min_h(px(48.)).border_t_1().border_color(palette::line(cx)).text_color(palette::text(cx))
 }
 
 fn cells_row(cols: &[Col], cells: impl IntoIterator<Item = AnyElement>) -> Div {
-    div().flex().items_center().gap(px(12.)).px(px(14.)).py(px(4.)).children(cols.iter().zip(cells).map(|(col, cell)| cell_box(*col).child(cell)))
+    div().flex().items_center().gap(px(16.)).px(px(16.)).py(px(6.)).children(cols.iter().zip(cells).map(|(col, cell)| cell_box(*col).child(cell)))
 }
 
 fn cell_box(col: Col) -> Div {

@@ -733,7 +733,7 @@ fn name_cell(member: &Member, cx: &App) -> AnyElement {
         .items_center()
         .gap(px(8.))
         .min_w_0()
-        .child(ui::avatar(member.avatar.clone(), 24.))
+        .child(ui::avatar(member.avatar.clone(), 28.))
         .child(ui::truncating(format!("ss-mn-{}", member.id), member.name.clone()).text_color(palette::strong(cx)))
         .when(member.bot, |d| d.child(ui::tag("App", cx).flex_none()))
         .child(div().flex_1().flex_basis(px(0.)).min_w_0().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child(member.username.clone()))
