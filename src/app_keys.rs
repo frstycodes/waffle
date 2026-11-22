@@ -6,7 +6,7 @@ use gpui_kit::{App, KeyBinding, actions};
 actions!(waffle, [Quit, Restart, FocusSearch, ZoomIn, ZoomOut, ResetZoom]);
 
 // Discord's zoom levels.
-const ZOOM_STEPS: [f32; 11] = [0.5, 0.67, 0.75, 0.8, 0.9, 1., 1.1, 1.25, 1.5, 1.75, 2.];
+pub(crate) const ZOOM_STEPS: [f32; 11] = [0.5, 0.67, 0.75, 0.8, 0.9, 1., 1.1, 1.25, 1.5, 1.75, 2.];
 
 pub fn init(cx: &mut App) {
     // `secondary` is ⌘ on macOS and Ctrl elsewhere.
@@ -25,6 +25,11 @@ pub fn init(cx: &mut App) {
     cx.on_action(|_: &ZoomIn, cx| set_zoom(cx, |z| ZOOM_STEPS.into_iter().find(|s| *s > z + 0.001)));
     cx.on_action(|_: &ZoomOut, cx| set_zoom(cx, |z| ZOOM_STEPS.into_iter().rev().find(|s| *s < z - 0.001)));
     cx.on_action(|_: &ResetZoom, cx| set_zoom(cx, |_| Some(1.)));
+}
+
+// Settings › Accessibility's Zoom level slider, through the same path as the shortcuts.
+pub(crate) fn set_zoom_to(cx: &mut App, zoom: f32) {
+    set_zoom(cx, |_| Some(zoom));
 }
 
 // Every window follows the saved zoom; `next` None means already at the end of the range.

@@ -67,7 +67,7 @@ impl Waffle {
         }).icon(Glyph::Link).entry());
         if cfg!(target_os = "macos") && !message.content.is_empty() {
             let text = message.content.clone();
-            out.push(item("Speak message", move |_, _, _| speak(&text)).icon(Glyph::Soundboard).entry());
+            out.push(item("Speak message", move |this, _, _| speak(&text, this.prefs.tts_rate)).icon(Glyph::Soundboard).entry());
         }
         out.push(Entry::Separator);
 
@@ -303,13 +303,16 @@ pub(crate) fn shortcode(emoji: &Emoji) -> String {
     format!(":{name}:")
 }
 
-// Discord's "Speak message", through the system voice.
-fn speak(text: &str) {
+// Discord's "Speak message", through the system voice. `rate` is Discord's text-to-speech rate, 1 normal.
+pub(crate) fn speak(text: &str, rate: f32) {
     let text = text.to_owned();
+    // `say` reads 175 words a minute as normal. It takes 0 as its default speed, so the slowest end of
+    // Discord's range speaks at 1, its slowest.
+    let wpm = ((175. * rate).round() as u32).max(1);
     // Through stdin, so text starting with "-" can't be read as `say` options.
     std::thread::spawn(move || {
         use std::io::Write;
-        let Ok(mut child) = std::process::Command::new("say").stdin(std::process::Stdio::piped()).spawn() else { return };
+        let Ok(mut child) = std::process::Command::new("say").arg("-r").arg(wpm.to_string()).stdin(std::process::Stdio::piped()).spawn() else { return };
         if let Some(mut stdin) = child.stdin.take() {
             let _ = stdin.write_all(text.as_bytes());
         }
