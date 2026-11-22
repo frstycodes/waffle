@@ -975,6 +975,16 @@ pub struct AccountSettings {
     pub friends_all: bool,
     pub friends_mutual_friends: bool,
     pub friends_mutual_guilds: bool,
+    // Chat and accessibility rows Discord syncs (docs/discord-settings-re.md). Believed, not checked against a
+    // live READY: the legacy object carries these keys under the same names as the protobuf fields.
+    pub message_display_compact: bool,
+    pub inline_attachment_media: bool,
+    pub inline_embed_media: bool,
+    pub gif_auto_play: bool,
+    pub animate_emoji: bool,
+    // 0 always, 1 on interaction, 2 never.
+    pub animate_stickers: u8,
+    pub convert_emoticons: bool,
 }
 
 impl Default for AccountSettings {
@@ -989,6 +999,13 @@ impl Default for AccountSettings {
             friends_all: true,
             friends_mutual_friends: true,
             friends_mutual_guilds: true,
+            message_display_compact: false,
+            inline_attachment_media: true,
+            inline_embed_media: true,
+            gif_auto_play: true,
+            animate_emoji: true,
+            animate_stickers: 0,
+            convert_emoticons: true,
         }
     }
 }
@@ -1006,6 +1023,15 @@ impl AccountSettings {
         flag("render_reactions", &mut self.render_reactions);
         flag("show_current_game", &mut self.show_current_game);
         flag("default_guilds_restricted", &mut self.default_guilds_restricted);
+        flag("message_display_compact", &mut self.message_display_compact);
+        flag("inline_attachment_media", &mut self.inline_attachment_media);
+        flag("inline_embed_media", &mut self.inline_embed_media);
+        flag("gif_auto_play", &mut self.gif_auto_play);
+        flag("animate_emoji", &mut self.animate_emoji);
+        flag("convert_emoticons", &mut self.convert_emoticons);
+        if let Some(when) = v["animate_stickers"].as_u64() {
+            self.animate_stickers = when.min(2) as u8;
+        }
         if let Some(level) = v["explicit_content_filter"].as_u64() {
             self.explicit_content_filter = level.min(2) as u8;
         }

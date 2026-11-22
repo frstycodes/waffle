@@ -6,7 +6,7 @@ use gpui_kit::{AnyElement, App, Context, InteractiveElement, IntoElement, KeyDow
 use serde_json::json;
 
 use super::{
-    Section,
+    RoleStyle, Section, Spoilers,
     registry::{self, Choice, Control, Setting, Toggle},
 };
 use crate::{Waffle, icons::Glyph, palette, ui};
@@ -40,9 +40,17 @@ impl Waffle {
         out
     }
 
-    fn registry_row(&self, setting: &'static Setting, line: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let row = ui::settings_row(setting.id, line, cx).child(ui::settings_text(setting.title, setting.caption, cx));
+    pub(super) fn registry_row(&self, setting: &'static Setting, line: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let blocked = match setting.control {
+            Control::Switch(toggle) => self.toggle_blocked(toggle),
+            _ => None,
+        };
+        let row = ui::settings_row(setting.id, line, cx).child(ui::settings_text(setting.title, blocked.or(setting.caption), cx));
         match setting.control {
+            Control::Switch(toggle) if blocked.is_some() => {
+                let switch = ui::switch_live(SharedString::from(format!("{}-switch", setting.id)), self.toggle_value(toggle), window, cx);
+                row.child(switch.opacity(0.45)).into_any_element()
+            }
             Control::Switch(toggle) => {
                 let switch = ui::switch_live(SharedString::from(format!("{}-switch", setting.id)), self.toggle_value(toggle), window, cx);
                 ui::settings_choice(row, cx).child(switch).on_click(cx.listener(move |this, _, _, cx| this.flip(toggle, cx))).into_any_element()
@@ -79,6 +87,33 @@ impl Waffle {
             Toggle::FriendsAll => account.friends_all,
             Toggle::FriendsMutualFriends => account.friends_mutual_friends,
             Toggle::FriendsMutualGuilds => account.friends_mutual_guilds,
+            Toggle::InlineEmbedMedia => account.inline_embed_media,
+            Toggle::InlineAttachmentMedia => account.inline_attachment_media,
+            // Compact shows it on whatever's stored; cozy always has avatars, as in Discord.
+            Toggle::CompactAvatars => !account.message_display_compact || self.prefs.compact_avatars,
+            Toggle::ConvertEmoticons => account.convert_emoticons,
+            Toggle::SendButton => self.prefs.send_button,
+            Toggle::UnderlineLinks => self.prefs.underline_links,
+            Toggle::DisplayNameStyles => self.prefs.display_name_styles,
+            Toggle::DesaturateUserColors => self.prefs.desaturate_user_colors,
+            Toggle::HighContrast => self.prefs.high_contrast,
+            Toggle::SwitchIcons => self.prefs.switch_icons,
+            Toggle::ReduceMotion => self.prefs.reduces_motion(),
+            Toggle::ReduceMotionSync => self.prefs.reduce_motion_sync,
+            // Reduced motion turns these off without touching what's stored, as Discord does.
+            Toggle::GifAutoPlay => account.gif_auto_play && !self.prefs.reduces_motion(),
+            Toggle::AnimateEmoji => account.animate_emoji && !self.prefs.reduces_motion(),
+            Toggle::ImageDescriptions => self.prefs.view_image_descriptions,
+        }
+    }
+
+    // Why a switch can't be flipped right now, shown under its title; None when it can.
+    pub(super) fn toggle_blocked(&self, toggle: Toggle) -> Option<&'static str> {
+        match toggle {
+            Toggle::CompactAvatars if !self.account_settings.message_display_compact => Some("To hide avatars, go to Accessibility and select Compact under Chat message display."),
+            Toggle::ReduceMotion if self.prefs.reduce_motion_sync => Some("Following your computer's setting"),
+            Toggle::GifAutoPlay | Toggle::AnimateEmoji if self.prefs.reduces_motion() => Some("This setting has been automatically disabled because of your reduced motion setting."),
+            _ => None,
         }
     }
 
@@ -93,6 +128,44 @@ impl Waffle {
             }
             Toggle::Clock24 => return self.update_prefs(cx, |p| p.clock_24h = on),
             Toggle::AutoDownloadUpdates => return self.set_auto_download(on, cx),
+            Toggle::CompactAvatars => return self.update_prefs(cx, |p| p.compact_avatars = on),
+            Toggle::SendButton => return self.update_prefs(cx, |p| p.send_button = on),
+            Toggle::UnderlineLinks => return self.update_prefs(cx, |p| p.underline_links = on),
+            Toggle::DisplayNameStyles => return self.update_prefs(cx, |p| p.display_name_styles = on),
+            Toggle::DesaturateUserColors => return self.update_prefs(cx, |p| p.desaturate_user_colors = on),
+            Toggle::HighContrast => return self.update_prefs(cx, |p| p.high_contrast = on),
+            Toggle::SwitchIcons => return self.update_prefs(cx, |p| p.switch_icons = on),
+            Toggle::ReduceMotion => return self.update_prefs(cx, |p| p.reduce_motion = on),
+            // Turning sync off keeps what the computer had, as Discord copies the OS value.
+            Toggle::ReduceMotionSync => {
+                return self.update_prefs(cx, |p| {
+                    if !on {
+                        p.reduce_motion = p.reduces_motion();
+                    }
+                    p.reduce_motion_sync = on;
+                });
+            }
+            Toggle::ImageDescriptions => return self.update_prefs(cx, |p| p.view_image_descriptions = on),
+            Toggle::InlineEmbedMedia => {
+                account.inline_embed_media = on;
+                json!({ "inline_embed_media": on })
+            }
+            Toggle::InlineAttachmentMedia => {
+                account.inline_attachment_media = on;
+                json!({ "inline_attachment_media": on })
+            }
+            Toggle::ConvertEmoticons => {
+                account.convert_emoticons = on;
+                json!({ "convert_emoticons": on })
+            }
+            Toggle::GifAutoPlay => {
+                account.gif_auto_play = on;
+                json!({ "gif_auto_play": on })
+            }
+            Toggle::AnimateEmoji => {
+                account.animate_emoji = on;
+                json!({ "animate_emoji": on })
+            }
             Toggle::RenderEmbeds => {
                 account.render_embeds = on;
                 json!({ "render_embeds": on })
@@ -139,6 +212,9 @@ impl Waffle {
     fn choice_value(&self, choice: Choice) -> u8 {
         match choice {
             Choice::DmFilter => self.account_settings.explicit_content_filter,
+            Choice::Spoilers => self.prefs.spoilers as u8,
+            Choice::RoleStyle => self.prefs.role_style as u8,
+            Choice::StickerAnimation => self.account_settings.animate_stickers,
         }
     }
 
@@ -147,6 +223,18 @@ impl Waffle {
             Choice::DmFilter => {
                 self.account_settings.explicit_content_filter = value;
                 json!({ "explicit_content_filter": value })
+            }
+            Choice::Spoilers => {
+                let spoilers = [Spoilers::OnClick, Spoilers::IfModerator, Spoilers::Always][value.min(2) as usize];
+                return self.update_prefs(cx, |p| p.spoilers = spoilers);
+            }
+            Choice::RoleStyle => {
+                let style = [RoleStyle::InNames, RoleStyle::NextToNames, RoleStyle::Hidden][value.min(2) as usize];
+                return self.update_prefs(cx, |p| p.role_style = style);
+            }
+            Choice::StickerAnimation => {
+                self.account_settings.animate_stickers = value;
+                json!({ "animate_stickers": value })
             }
         };
         self.save_account_settings(patch, cx);

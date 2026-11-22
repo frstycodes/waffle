@@ -9,6 +9,7 @@ use gpui_kit::{
 };
 use serde::{Deserialize, Serialize};
 
+mod accessibility;
 mod advanced;
 mod profile;
 pub(crate) mod registry;
@@ -31,6 +32,7 @@ pub enum Page {
     Account,
     ContentSocial,
     Appearance,
+    Accessibility,
     VoiceVideo,
     Chat,
     Notifications,
@@ -46,6 +48,7 @@ impl Page {
             Page::Account => "My account",
             Page::ContentSocial => "Content and social",
             Page::Appearance => "Appearance",
+            Page::Accessibility => "Accessibility",
             Page::VoiceVideo => "Voice and video",
             Page::Chat => "Chat",
             Page::Notifications => "Notifications",
@@ -61,6 +64,7 @@ impl Page {
             Page::Account => Glyph::UserCircle,
             Page::ContentSocial => Glyph::Shield,
             Page::Appearance => Glyph::Palette,
+            Page::Accessibility => Glyph::Eye,
             Page::VoiceVideo => Glyph::Mic,
             Page::Chat => Glyph::ChatRound,
             Page::Notifications => Glyph::Bell,
@@ -83,7 +87,7 @@ impl Page {
 // Discord's three headings. My account sits on its own as the identity row at the top of the nav.
 const NAV: [(&str, &[Page]); 3] = [
     ("User settings", &[Page::ContentSocial]),
-    ("App settings", &[Page::Appearance, Page::VoiceVideo, Page::Chat, Page::Notifications, Page::Keybinds, Page::Advanced, Page::Updates]),
+    ("App settings", &[Page::Appearance, Page::Accessibility, Page::VoiceVideo, Page::Chat, Page::Notifications, Page::Keybinds, Page::Advanced, Page::Updates]),
     ("Activity settings", &[Page::ActivityPrivacy]),
 ];
 
@@ -93,6 +97,34 @@ pub enum ThemePref {
     System,
     Dark,
     Light,
+}
+
+// Discord's choices and ranges (docs/discord-settings-re.md).
+pub const CHAT_FONT_SIZES: [u8; 7] = [12, 14, 15, 16, 18, 20, 24];
+pub const GROUP_SPACINGS: [u8; 5] = [0, 4, 8, 16, 24];
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum Density {
+    Compact,
+    #[default]
+    Default,
+    Spacious,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum RoleStyle {
+    #[default]
+    InNames,
+    NextToNames,
+    Hidden,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum Spoilers {
+    #[default]
+    OnClick,
+    IfModerator,
+    Always,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
@@ -125,8 +157,34 @@ pub struct Prefs {
     // The interface's font family: Figtree (bundled) unless picked in Appearance.
     pub ui_font: String,
     pub mono_font: String,
-    // On top of the system's own reduce-motion setting.
+    // Discord's "Enable Reduced Motion": used while `reduce_motion_sync` is off, which follows the OS instead.
     pub reduce_motion: bool,
+    pub reduce_motion_sync: bool,
+    // Accessibility, kept on this computer as Discord does (docs/discord-settings-re.md §2).
+    // Text size in chat, one of `CHAT_FONT_SIZES`.
+    pub chat_font_size: u8,
+    // Space between message groups, one of `GROUP_SPACINGS`; None follows the display (16 cozy, 0 compact).
+    pub group_spacing: Option<u8>,
+    pub ui_density: Density,
+    // 0..=1, in 0.05 steps. Leaves images, video and user colours alone unless `desaturate_user_colors`.
+    pub saturation: f32,
+    pub desaturate_user_colors: bool,
+    pub high_contrast: bool,
+    // Discord's "Show on/off indicators": a tick or cross inside each switch's thumb.
+    pub switch_icons: bool,
+    pub role_style: RoleStyle,
+    pub underline_links: bool,
+    pub display_name_styles: bool,
+    // Toasts stay at least this long, 3..=20 s.
+    pub min_toast_secs: u8,
+    // Text-to-speech rate, 0..=10 in 0.25 steps, 1 is normal.
+    pub tts_rate: f32,
+    pub view_image_descriptions: bool,
+    // Chat. Not verified: Discord syncs these three, but only in the protobuf settings Waffle doesn't use
+    // (`display_compact_avatars`, `render_spoilers`); the send button is local in Discord too.
+    pub compact_avatars: bool,
+    pub spoilers: Spoilers,
+    pub send_button: bool,
     pub app_icon: crate::app_icon::AppIcon,
     pub input_device: Option<String>,
     pub output_device: Option<String>,
@@ -203,6 +261,23 @@ impl Default for Prefs {
             ui_font: UI_FONT.into(),
             mono_font: MONO_FONT.into(),
             reduce_motion: false,
+            reduce_motion_sync: true,
+            chat_font_size: 16,
+            group_spacing: None,
+            ui_density: Density::Default,
+            saturation: 1.,
+            desaturate_user_colors: false,
+            high_contrast: false,
+            switch_icons: false,
+            role_style: RoleStyle::InNames,
+            underline_links: false,
+            display_name_styles: true,
+            min_toast_secs: 3,
+            tts_rate: 1.,
+            view_image_descriptions: false,
+            compact_avatars: false,
+            spoilers: Spoilers::OnClick,
+            send_button: false,
             app_icon: crate::app_icon::AppIcon::default(),
             input_device: None,
             output_device: None,
@@ -257,7 +332,12 @@ fn share_keybind() -> Keybind {
 
 impl Prefs {
     pub fn load() -> Self {
-        let mut prefs: Self = prefs_file().and_then(|path| std::fs::read_to_string(path).ok()).and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default();
+        let text = prefs_file().and_then(|path| std::fs::read_to_string(path).ok()).unwrap_or_default();
+        let mut prefs: Self = serde_json::from_str(&text).unwrap_or_default();
+        // Before the sync switch, Reduce motion added to the OS setting; a file that had it on keeps it on.
+        if prefs.reduce_motion && !text.contains("\"reduce_motion_sync\"") {
+            prefs.reduce_motion_sync = false;
+        }
         prefs.add_new_keybinds();
         // 480p left the picker; the nearest offered quality takes its place.
         if prefs.stream_resolution == 480 {
@@ -274,6 +354,15 @@ impl Prefs {
             self.keybinds.push(share_keybind());
         }
         self.keybinds_version = KEYBINDS_VERSION;
+    }
+
+    pub fn reduces_motion(&self) -> bool {
+        if self.reduce_motion_sync { crate::material::system_reduce_motion() } else { self.reduce_motion }
+    }
+
+    // Discord's default spacing is 16 in cozy and 0 in compact until it's moved.
+    pub fn group_spacing(&self, compact: bool) -> u8 {
+        self.group_spacing.unwrap_or(if compact { 0 } else { 16 })
     }
 
     pub(crate) fn save(&self) {
@@ -590,7 +679,7 @@ impl Waffle {
         change(&mut self.prefs);
         self.prefs.save();
         self.apply_prefs();
-        cx.set_reduce_motion(crate::material::system_reduce_motion() || self.prefs.reduce_motion);
+        cx.set_reduce_motion(self.prefs.reduces_motion());
         cx.notify();
     }
 
@@ -779,6 +868,7 @@ impl Waffle {
             Page::Appearance => self.appearance_page(window, cx),
             Page::Updates => self.updates_page(window, cx),
             Page::Advanced => self.advanced_page(cx),
+            Page::Accessibility => self.accessibility_page(window, cx),
             Page::ContentSocial | Page::Chat | Page::ActivityPrivacy => Vec::new(),
         };
         sections.extend(self.registry_sections(page, window, cx));
@@ -1055,12 +1145,6 @@ impl Waffle {
         let text = ui::settings_card(cx)
             .child(self.font_row(Select::UiFont, "Interface font", Some("Menus, messages and everything else"), &self.prefs.ui_font, UI_FONT, false, cx))
             .child(self.font_row(Select::MonoFont, "Code font", Some("Code blocks and inline code"), &self.prefs.mono_font, MONO_FONT, true, cx));
-        let motion = ui::settings_card(cx).child(self.switch_row(
-            SwitchRow { id: "set-reduce-motion", title: "Reduce motion", detail: Some("Fades instead of springs and slides"), on: self.prefs.reduce_motion, enabled: true, field: |p| &mut p.reduce_motion },
-            false,
-            window,
-            cx,
-        ));
         let material = crate::material::setting_name().map(|name| {
             let row = self.switch_row(SwitchRow { id: "set-native-sidebar", title: name, detail: None, on: self.prefs.native_sidebar, enabled: true, field: |p| &mut p.native_sidebar }, false, window, cx);
             Section::keyed(
@@ -1071,7 +1155,6 @@ impl Waffle {
         let mut sections = vec![
             Section::keyed("Theme", ui::settings_group("Theme", cx).child(picks).child(ui::settings_caption("Midnight is the darkest theme, the one Waffle is built on.", cx))),
             Section::keyed("Text", ui::settings_group("Text", cx).child(text).child(ui::settings_caption("Any font installed on this computer. Figtree and Roboto Mono come with Waffle.", cx))),
-            Section::keyed("Motion", ui::settings_group("Motion", cx).child(motion).child(ui::settings_caption("Your computer's own reduce-motion setting turns this on too.", cx))),
             Section::keyed("App icon", ui::settings_group("App icon", cx).child(self.app_icon_grid(cx)).child(ui::settings_caption("How Waffle looks in your Dock: the same waffle in different media. Changes right away; no restart.", cx))),
         ];
         sections.splice(1..1, material);

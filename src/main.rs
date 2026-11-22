@@ -155,7 +155,7 @@ fn main() {
         // The design is drawn with `-webkit-font-smoothing: antialiased`; macOS smoothing would thicken every stroke.
         cx.text_system().set_font_smoothing(false);
         cx.set_http_client(std::sync::Arc::new(discord::Images::default()));
-        cx.set_reduce_motion(material::system_reduce_motion() || settings::Prefs::load().reduce_motion);
+        cx.set_reduce_motion(settings::Prefs::load().reduces_motion());
         settings::Prefs::load().app_icon.apply();
         // WAVE_DESIGN=1 opens only the design system gallery, no sign-in needed.
         if std::env::var_os("WAVE_DESIGN").is_some() {
