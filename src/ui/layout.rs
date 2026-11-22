@@ -7,7 +7,7 @@
 // The pointer: gpui hit-tests front to back until something occludes, so a surface drawn over others
 // passes hover and clicks to what's behind it unless it blocks them (CLAUDE.md, "nothing floats without
 // occluding"). `floating` and `floating_at` occlude for you.
-use gpui_kit::{Anchor, Deferred, Div, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, Point, SharedString, Styled, anchored, deferred, div};
+use gpui_kit::{Anchor, AnyElement, App, AvailableSpace, Canvas, Deferred, Div, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, Point, SharedString, Size, Styled, Window, anchored, canvas, deferred, div};
 
 use super::WINDOW_MARGIN;
 
@@ -36,4 +36,19 @@ pub fn floating(id: impl Into<ElementId>, content: impl IntoElement) -> Deferred
 /// `floating` with its `corner` pinned to the window point `at` (a click, a button's edge).
 pub fn floating_at(id: impl Into<ElementId>, at: Point<Pixels>, corner: Anchor, content: impl IntoElement) -> Deferred {
     deferred(anchored().position(at).anchor(corner).snap_to_window_with_margin(WINDOW_MARGIN).child(div().id(id).occlude().child(content)))
+}
+
+/// Content built for the size its slot has this frame, for layouts that pick their shape from the space
+/// (a grid choosing its columns), without the one-frame lag of measuring and re-rendering.
+pub fn sized(build: impl FnOnce(Size<Pixels>, &mut Window, &mut App) -> AnyElement + 'static) -> Canvas<AnyElement> {
+    canvas(
+        move |bounds, window, cx| {
+            let content = build(bounds.size, window, cx);
+            let mut el = div().w(bounds.size.width).h(bounds.size.height).child(content).into_any_element();
+            el.prepaint_as_root(bounds.origin, bounds.size.map(AvailableSpace::Definite), window, cx);
+            el
+        },
+        |_, mut el, window, cx| el.paint(window, cx),
+    )
+    .size_full()
 }

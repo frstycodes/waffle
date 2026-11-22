@@ -177,6 +177,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::line` — One line of text that ends in an ellipsis when it doesn't fit.
 - `ui::floating` — A surface floating over everything after it, placed by its parent's position and kept inside the window.
 - `ui::floating_at` — `floating` with its `corner` pinned to the window point `at` (a click, a button's edge).
+- `ui::sized` — Content built for the size its slot has this frame, for layouts that pick their shape from the space (a grid choosing its columns), without 
 
 ## src/ui/overflow.rs
 

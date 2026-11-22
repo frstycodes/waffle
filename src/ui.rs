@@ -59,7 +59,7 @@ pub use tabs::{Tab, pill_tabs, segmented_live, tabs};
 pub use tri::{Tri, tri_state};
 pub use tunnel::{TUNNEL_GRACE, Tunnel};
 pub use tokens::*;
-pub use layout::{col, floating, floating_at, line, row};
+pub use layout::{col, floating, floating_at, line, row, sized};
 
 /// Rounds an element with the design's soft squircle.
 pub trait Squircle: Styled + Sized {

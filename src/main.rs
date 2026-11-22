@@ -997,7 +997,6 @@ pub struct Waffle {
     // The call card shown big (`call::tile_key`), or None for the even grid.
     call_focus: Option<String>,
     // The call stage's measured card area, which the grid is fitted to.
-    call_area: Rc<std::cell::Cell<(f32, f32)>>,
     // Profiles by user and server, shown at once from the last fetch while a fresh one loads.
     profiles: query::Query<discord::Profile>,
     // Profile effect layers by sku; None while fetching or after it failed, which draws no effect.
@@ -1366,7 +1365,6 @@ impl Waffle {
             focused_message: None,
             feed_focus,
             call_focus: None,
-            call_area: Rc::new(std::cell::Cell::new((0., 0.))),
             profiles: query::Query::new("profiles", Duration::from_secs(5 * 60)),
             profile_effects: HashMap::new(),
             link_previews: link_preview::previews(),
