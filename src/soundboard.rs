@@ -300,8 +300,7 @@ impl Waffle {
         let (Some(call), Some(me)) = (&self.call, self.me.as_ref()) else { return };
         let (channel_id, me) = (call.channel.id.clone(), me.id.clone());
         self.play_clip(format!("{me}-{}", sound.id), sound.id.clone(), self.sound_gain(sound.volume), Some(channel_id.clone()), cx);
-        // Not verified: which animation Discord's echo of our own play carries; the Basic launch stands in.
-        self.add_tile_effect(me, sound.emoji.clone(), Family::Launch, Some(sound.name.clone()), cx);
+        self.add_tile_effect(me, sound.emoji.clone(), Family::random(), Some(sound.name.clone()), cx);
         let id = sound.id.clone();
         self.update_prefs(cx, |p| match p.soundboard_uses.iter_mut().find(|(s, _)| *s == id) {
             Some((_, n)) => *n += 1,

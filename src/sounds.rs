@@ -113,12 +113,63 @@ pub fn stop_clips() {
 
 // How long a clip plays: from its header when it says, else by decoding it.
 pub fn clip_length(bytes: &bytes::Bytes) -> Option<Duration> {
-    let decoder = rodio::Decoder::try_from(std::io::Cursor::new(bytes.clone())).ok()?;
-    if let Some(length) = decoder.total_duration() {
+    let source = clip_source(bytes.clone())?;
+    if let Some(length) = source.total_duration() {
         return Some(length);
     }
-    let per_second = decoder.sample_rate().get() as f32 * f32::from(decoder.channels().get());
-    Some(Duration::from_secs_f32(decoder.count() as f32 / per_second))
+    let per_second = source.sample_rate().get() as f32 * f32::from(source.channels().get());
+    Some(Duration::from_secs_f32(source.count() as f32 / per_second))
+}
+
+// rodio reads mp3 and Ogg Vorbis but not Ogg Opus, which Discord keeps some uploaded sounds as; libopus,
+// linked for voice, decodes those.
+fn clip_source(bytes: bytes::Bytes) -> Option<Box<dyn Source + Send>> {
+    if let Some(samples) = ogg_opus(&bytes) {
+        let (channels, rate) = (std::num::NonZero::new(2)?, std::num::NonZero::new(OPUS_RATE)?);
+        return Some(Box::new(rodio::buffer::SamplesBuffer::new(channels, rate, samples)));
+    }
+    let decoder = rodio::Decoder::try_from(std::io::Cursor::new(bytes)).ok()?;
+    Some(Box::new(decoder))
+}
+
+const OPUS_RATE: u32 = 48_000;
+
+// An Ogg Opus file as interleaved stereo at 48kHz, its pre-skip dropped; None for anything else.
+fn ogg_opus(bytes: &[u8]) -> Option<Vec<f32>> {
+    let packets = ogg_packets(bytes);
+    let head = packets.first().filter(|p| p.starts_with(b"OpusHead"))?;
+    let pre_skip = usize::from(u16::from_le_bytes([*head.get(10)?, *head.get(11)?]));
+    let mut decoder = opus::Decoder::new(OPUS_RATE, opus::Channels::Stereo).ok()?;
+    // 120ms, Opus's longest packet, in stereo.
+    let mut frame = vec![0f32; 5760 * 2];
+    let mut out = Vec::new();
+    for packet in packets.iter().skip(2) {
+        let Ok(n) = decoder.decode_float(packet, &mut frame, false) else { continue };
+        out.extend_from_slice(&frame[..n * 2]);
+    }
+    out.drain(..(pre_skip * 2).min(out.len()));
+    Some(out)
+}
+
+// The packets of an Ogg stream's pages, in order (one logical stream assumed, as a sound file has).
+fn ogg_packets(mut bytes: &[u8]) -> Vec<Vec<u8>> {
+    let (mut packets, mut packet) = (Vec::new(), Vec::new());
+    while bytes.starts_with(b"OggS") && bytes.len() >= 27 {
+        let segments = usize::from(bytes[26]);
+        let Some(table) = bytes.get(27..27 + segments) else { break };
+        let mut body = &bytes[27 + segments..];
+        for &lace in table {
+            let Some(chunk) = body.get(..usize::from(lace)) else { return packets };
+            packet.extend_from_slice(chunk);
+            body = &body[chunk.len()..];
+            // A lacing value under 255 ends the packet; 255 continues it into the next segment.
+            if lace < 255 {
+                packets.push(std::mem::take(&mut packet));
+            }
+        }
+        bytes = body;
+    }
+    packets
 }
 
 fn send(cue: Cue, looping: Option<Arc<AtomicBool>>) {
@@ -151,7 +202,11 @@ fn request(request: Request) {
                         }
                     }
                     Request::Clip { key, bytes, volume } => {
-                        let Ok(sound) = rodio::Decoder::try_from(std::io::Cursor::new(bytes)) else { continue };
+                        let bytes_len = bytes.len();
+                        let Some(sound) = clip_source(bytes) else {
+                            eprintln!("soundboard: can't decode a {}-byte clip", bytes_len);
+                            continue;
+                        };
                         let stop = Arc::new(AtomicBool::new(false));
                         if let Some(old) = clips.insert(key, stop.clone()) {
                             old.store(true, Ordering::Relaxed);
@@ -176,5 +231,26 @@ fn stopper<S: Source>(stop: Arc<AtomicBool>) -> impl FnMut(&mut rodio::source::S
         if stop.load(Ordering::Relaxed) {
             s.stop();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // ffmpeg -f lavfi -i sine=d=0.2 -ac 1 -c:a libopus: a mono Ogg Opus file, as Discord serves some sounds.
+    const OPUS: &[u8] = include_bytes!("../assets/sounds/test_opus.ogg");
+
+    #[test]
+    fn ogg_opus_decodes_to_stereo_at_its_length() {
+        let samples = super::ogg_opus(OPUS).expect("decodes");
+        let secs = samples.len() as f32 / 2. / super::OPUS_RATE as f32;
+        assert!((secs - 0.2).abs() < 0.03, "{secs}s");
+        assert!(samples.iter().any(|s| s.abs() > 0.1), "silent");
+        let length = super::clip_length(&bytes::Bytes::from_static(OPUS)).expect("measured");
+        assert!((length.as_secs_f32() - 0.2).abs() < 0.03);
+    }
+
+    #[test]
+    fn non_opus_isnt_taken_for_opus() {
+        assert!(super::ogg_opus(include_bytes!("../assets/sounds/mute.mp3")).is_none());
     }
 }
