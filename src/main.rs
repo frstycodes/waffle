@@ -606,8 +606,10 @@ struct ProfileCard {
     guild_id: Option<String>,
     at: gpui_kit::Point<gpui_kit::Pixels>,
     profile: Option<Profile>,
-    // Every activity card, after "Show more".
+    // Every activity card, after the peeking card under the first was clicked.
     all_activity: bool,
+    // Their avatar full size over the window.
+    avatar_full: bool,
 }
 
 // Where a picked emoji goes.
@@ -642,6 +644,7 @@ enum Part {
     Fold(String),
     Chevron(String),
     Banner,
+    ActivityPeek,
 }
 
 type ComposerState = TextareaState;
@@ -908,6 +911,8 @@ pub struct Waffle {
     call_area: Rc<std::cell::Cell<(f32, f32)>>,
     // Profiles by user and server, shown at once from the last fetch while a fresh one loads.
     profiles: query::Query<discord::Profile>,
+    // Profile effect layers by sku; None while fetching or after it failed, which draws no effect.
+    profile_effects: HashMap<String, Option<Vec<discord::EffectLayer>>>,
     // Previews of Discord's own links (messages, invites), shared with the rows that draw them.
     link_previews: link_preview::Previews,
     // Who reacted, by message and emoji (`Emoji::path`), fetched on a pill's first hover; dropped when it changes.
@@ -1225,6 +1230,7 @@ impl Waffle {
             call_focus: None,
             call_area: Rc::new(std::cell::Cell::new((0., 0.))),
             profiles: query::Query::new("profiles", Duration::from_secs(5 * 60)),
+            profile_effects: HashMap::new(),
             link_previews: link_preview::previews(),
             reactors: HashMap::new(),
             reactions_dialog: None,

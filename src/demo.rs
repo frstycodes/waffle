@@ -9,7 +9,7 @@ use crate::{
     Waffle, Feed, Status,
     drafts::Draft,
     discord::{
-        Activity, ActivityKind, Channel, ChannelKind, Embed, Emoji, Event, Folder, Guild, GuildTag, ListItem, ListOp, Media, MediaKind, Member, Message, Presence, Reaction, Reactor, ReadState, Ready, Relation, Relationship, Role,
+        Activity, ActivityKind, Channel, ChannelKind, Connection, Embed, Emoji, Event, Folder, Guild, GuildTag, ListItem, ListOp, Media, MediaKind, Member, Message, Presence, Reaction, Reactor, ReadState, Ready, Relation, Relationship, Role,
         Status as Presence_, User, VoiceState, avatar_url,
     },
     login::Login,
@@ -147,6 +147,15 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             })
             .detach(),
         "profile" => demo_profile(waffle, cx),
+        // Someone you share nothing with, opened from a DM: the Discord date alone, no Friends Since, no connections.
+        "profile-stranger" => {
+            waffle.guild_id = None;
+            let ferris = user("20971520", "ferris");
+            waffle.open_profile(ferris, gpui_kit::point(gpui_kit::px(520.), gpui_kit::px(120.)), cx);
+            if let Some(card) = waffle.profile_card.as_mut() {
+                card.profile = Some(crate::discord::Profile { username: "ferris.rs".into(), ..Default::default() });
+            }
+        }
         // No theme, banner, badges or games: the plain surface, and the Add role row in view.
         "profile-plain" => {
             demo_profile(waffle, cx);
@@ -696,7 +705,8 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
     }
 }
 
-// Wren's popout with every section filled: theme, decoration, tag, badges, mutuals, an emoji bio, games and a joinable party.
+// Wren's popout with every section filled: theme, decoration, tag, badges, mutuals, an emoji bio, Member Since
+// with the server, Friends Since, connections, games, and a joinable party with her voice channel peeking under it.
 fn demo_profile(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
     let started = chrono::Utc::now().timestamp_millis() - 7 * 60_000 - 2_000;
     let rich = crate::discord::RichPresence {
@@ -712,6 +722,9 @@ fn demo_profile(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
     };
     let playing = Activity { kind: ActivityKind::Playing, text: rich.name.clone(), rest: Vec::new() };
     waffle.presences.insert("8388608".into(), Presence { status: Presence_::Dnd, custom: None, activity: Some(playing), rich: Some(rich), ..Default::default() });
+    if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
+        guild.voice_states.push(VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "8388608".into(), user: Some(user("8388608", "Wren")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false });
+    }
     let mut zoe = user("8388608", "Wren");
     zoe.tag = Some(GuildTag { text: "wony".into(), badge: Some("brand/icons/sticker.png".into()) });
     zoe.decoration = Some("demo/decoration.png".into());
@@ -729,6 +742,12 @@ fn demo_profile(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
         mutual_friend_count: 5,
         mutual_server_count: 1,
         games: ["peek", "riso", "blueprint", "sticker", "paper"].iter().map(|n| format!("brand/icons/{n}.png")).collect(),
+        joined: Some("2022-06-18T19:30:00+00:00".into()),
+        connections: vec![
+            Connection { kind: "spotify".into(), id: "31wrenlark".into(), name: "wren.lark".into(), verified: true },
+            Connection { kind: "twitch".into(), id: "88".into(), name: "wrenplays_after_dark".into(), verified: false },
+            Connection { kind: "xbox".into(), id: "77".into(), name: "WrenLark".into(), verified: false },
+        ],
         ..Default::default()
     };
     if let Some(card) = waffle.profile_card.as_mut() {
@@ -1022,9 +1041,9 @@ fn ready(me: User) -> Ready {
         ],
         presences: vec![("8388608".into(), Presence { status: Presence_::Online, custom: None, activity: None, rich: None, ..Default::default() })],
         relationships: vec![
-            Relationship { user: user("8388608", "Wren"), kind: Relation::Friend },
-            Relationship { user: user("12582912", "moss lantern"), kind: Relation::Friend },
-            Relationship { user: user("16777216", "toma reed"), kind: Relation::Incoming },
+            Relationship { user: user("8388608", "Wren"), kind: Relation::Friend, since: Some("2023-08-09T18:20:00+00:00".into()) },
+            Relationship { user: user("12582912", "moss lantern"), kind: Relation::Friend, since: Some("2024-02-14T09:00:00+00:00".into()) },
+            Relationship { user: user("16777216", "toma reed"), kind: Relation::Incoming, since: None },
         ],
     }
 }
