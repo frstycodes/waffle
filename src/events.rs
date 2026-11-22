@@ -1093,7 +1093,7 @@ impl Waffle {
                     .items_center()
                     .gap(px(8.))
                     .min_w_0()
-                    .child(ui::live_badge().gap(px(4.)).child(ui::bars_still(gpui_kit::white(), 10.)))
+                    .child(ui::live_badge())
                     .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(event.name.clone())),
             )
             .child(div().flex().items_center().gap(px(4.)).min_w_0().text_size(px(12.)).text_color(palette::muted(cx)).child(lead.size(px(14.))).child(div().min_w_0().truncate().child(line)))
