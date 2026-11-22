@@ -23,6 +23,8 @@ const SPLASH_INSET: f32 = 48.;
 // The question card over a splash: room for the 640px column and the footer, no more.
 const SHEET_WIDTH: f32 = 760.;
 const SHEET_HEIGHT: f32 = 640.;
+// An option card's title line; its emoji centres on it.
+const TITLE_LINE: f32 = 22.;
 const RULES_HEIGHT: f32 = 300.;
 
 // One server's flow: where you are and what you picked, kept when closed halfway.
@@ -638,7 +640,7 @@ fn option_grid(guild: &Guild, prompt: &Prompt, picked: &HashSet<String>, cx: &mu
                 .flex()
                 .flex_col()
                 .gap(px(2.))
-                .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(option.title.clone()))
+                .child(div().text_size(px(15.)).line_height(px(TITLE_LINE)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(option.title.clone()))
                 .when_some(option.description.clone(), |d, desc| d.child(div().text_size(px(14.)).text_color(palette::muted(cx)).child(desc)))
                 .when(!gets.is_empty(), |d| d.child(div().mt(px(2.)).flex().flex_wrap().items_center().gap(px(4.)).text_size(px(12.)).text_color(ink).children(gets)));
             let edge = if on { palette::accent().opacity(0.7) } else { palette::line(cx) };
@@ -647,7 +649,8 @@ fn option_grid(guild: &Guild, prompt: &Prompt, picked: &HashSet<String>, cx: &mu
                 .id(gpui_kit::SharedString::from(format!("onboarding-option-{}", option.id)))
                 .min_h(px(56.))
                 .flex()
-                .items_center()
+                // The emoji sits on the title's line, not mid-card, so it stays put as descriptions wrap.
+                .items_start()
                 .gap(px(12.))
                 .px(px(14.))
                 .py(px(10.))
@@ -702,12 +705,14 @@ fn dropdown(prompt: &Prompt, picked: &HashSet<String>, window: &mut Window, cx: 
 }
 
 // A unicode emoji as text, a custom one as its image.
+// One title line tall, centred on it.
 fn option_emoji(emoji: &OptionEmoji) -> Option<AnyElement> {
+    let slot = div().w(px(28.)).h(px(TITLE_LINE)).flex_none().flex().items_center().justify_center();
     if let Some(url) = emoji.url() {
-        return Some(img(url).size(px(28.)).flex_none().object_fit(ObjectFit::Contain).into_any_element());
+        return Some(slot.child(img(url).size(px(22.)).object_fit(ObjectFit::Contain)).into_any_element());
     }
     let name = emoji.name.clone()?;
-    Some(div().w(px(28.)).flex_none().text_center().text_size(px(22.)).child(name).into_any_element())
+    Some(slot.text_size(px(20.)).line_height(px(TITLE_LINE)).child(name).into_any_element())
 }
 
 fn role_color(color: u32, cx: &App) -> Hsla {
