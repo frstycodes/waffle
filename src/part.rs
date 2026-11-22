@@ -57,7 +57,7 @@ impl Waffle {
                 waffle: waffle.downgrade(),
                 render,
                 images: crate::images::new_cache(cx),
-                _observe: cx.observe(&waffle, |_, _, cx| cx.notify()),
+                _observe: cx.observe(&waffle, |_, _, cx| cx.notify()), // lint-allow(global-notify): notifies this part, following the app
             })
         });
         AnyView::from(part.clone()).cached(style).into_any_element()
@@ -72,9 +72,9 @@ impl Waffle {
             Column::Panel => &self.parts.panel,
         };
         match part.clone() {
-            Some(part) => part.update(cx, |_, cx| cx.notify()),
+            Some(part) => part.update(cx, |_, cx| cx.notify()), // lint-allow(global-notify): notifies the part alone
             // Not drawn yet: nothing to keep, so the app's redraw draws it.
-            None => cx.notify(),
+            None => cx.notify(), // lint-allow(global-notify): the part doesn't exist yet
         }
     }
 
