@@ -711,6 +711,9 @@ pub struct Message {
     // Rich link cards (articles, YouTube, bots).
     pub embeds: Vec<Embed>,
     pub files: Vec<File>,
+    // The uploads among `media`, as files: `media_files[i]` is `media[i]`, since attachments lead `media`.
+    #[serde(default)]
+    pub media_files: Vec<File>,
     pub reactions: Vec<Reaction>,
     pub reply_to: Option<String>,
     pub reply: Option<Box<Message>>,
@@ -2346,20 +2349,25 @@ fn parse_pins(body: &Value) -> Vec<Message> {
 pub fn parse_message(m: &Value) -> Option<Message> {
     let mut media = Vec::new();
     let mut files = Vec::new();
+    let mut media_files = Vec::new();
     for a in m["attachments"].as_array().into_iter().flatten() {
         let url = a["url"].as_str().unwrap_or_default().to_owned();
         let kind = a["content_type"].as_str().unwrap_or_default();
-        let description = a["description"].as_str().map(str::to_owned);
-        match (a["width"].as_f64(), a["height"].as_f64()) {
-            (Some(w), Some(h)) if kind.starts_with("video/") => {
-                // Discord's media proxy returns a still frame for a video when asked for an image format.
+        let file = File { name: a["filename"].as_str().unwrap_or("file").to_owned(), url: url.clone(), size: a["size"].as_u64().unwrap_or(0) };
+        let (Some(w), Some(h)) = (a["width"].as_f64(), a["height"].as_f64()) else {
+            files.push(file);
+            continue;
+        };
+        media_files.push(file);
+        let kind = match kind.starts_with("video/") {
+            // Discord's media proxy returns a still frame for a video when asked for an image format.
+            true => {
                 let proxy = a["proxy_url"].as_str().unwrap_or(&url);
-                let poster = format!("{proxy}{}format=jpeg", if proxy.contains('?') { "&" } else { "?" });
-                media.push(Media { url, width: w as f32, height: h as f32, kind: MediaKind::Video { poster }, description })
+                MediaKind::Video { poster: format!("{proxy}{}format=jpeg", if proxy.contains('?') { "&" } else { "?" }) }
             }
-            (Some(w), Some(h)) => media.push(Media { url, width: w as f32, height: h as f32, kind: MediaKind::Image, description }),
-            _ => files.push(File { name: a["filename"].as_str().unwrap_or("file").to_owned(), url, size: a["size"].as_u64().unwrap_or(0) }),
-        }
+            false => MediaKind::Image,
+        };
+        media.push(Media { url, width: w as f32, height: h as f32, kind, description: a["description"].as_str().map(str::to_owned) });
     }
     let mut embeds = Vec::new();
     for e in m["embeds"].as_array().into_iter().flatten() {
@@ -2399,6 +2407,7 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         media,
         embeds,
         files,
+        media_files,
         reactions: m["reactions"]
             .as_array()
             .into_iter()
@@ -3261,6 +3270,7 @@ mod tests {
         assert_eq!(m.media[0].kind, MediaKind::Video { poster: "https://media/v.mp4?format=jpeg".into() });
         assert_eq!(m.media[1].url, "g.mp4");
         assert_eq!(m.media[1].kind, MediaKind::Gif { poster: "t.png".into() });
+        assert_eq!(m.media_files.iter().map(|f| f.url.as_str()).collect::<Vec<_>>(), ["v.mp4"], "only uploads have files");
         assert_eq!(m.embeds.len(), 1);
         assert_eq!(m.embeds[0].provider.as_deref(), Some("YouTube"));
     }
