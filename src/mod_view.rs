@@ -824,11 +824,12 @@ mod tests {
             my_roles: Vec::new(),
             premium_tier: 0,
             afk_channel_id: None,
+            community: false,
         }
     }
 
     fn role(id: &str, position: i64, permissions: u64) -> Role {
-        Role { id: id.into(), name: id.into(), color: 0, position, permissions, managed: false }
+        Role { id: id.into(), name: id.into(), color: 0, position, permissions, managed: false, icon: None }
     }
 
     fn at(s: &str) -> DateTime<Utc> {
