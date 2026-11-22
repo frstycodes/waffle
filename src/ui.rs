@@ -423,21 +423,27 @@ pub fn toggle_row(id: impl Into<ElementId>, title: impl Into<SharedString>, deta
     let id: ElementId = id.into();
     let pressed = control::pressed(&id, window, cx);
     let switch = switch_track(&control::part(&id, "switch"), on, pressed, window, cx);
-    control::choice(id, cx).child(choice_text(title, detail, cx)).child(switch)
+    control::choice(id, cx).child(choice_text(title.into(), detail, cx)).child(switch)
 }
 
 // One of a set to pick from: the check or radio first, then its title and detail.
 pub fn pick_row(id: impl Into<ElementId>, mark: impl IntoElement, title: impl Into<SharedString>, detail: Option<SharedString>, cx: &App) -> Control {
+    control::choice(id, cx).child(mark).child(choice_text(title.into(), detail, cx))
+}
+
+// A choice whose kind has an icon (a channel type, a place): the icon leads the title, as in Create Channel.
+pub fn pick_row_icon(id: impl Into<ElementId>, mark: impl IntoElement, icon: Icon, title: impl Into<SharedString>, detail: Option<SharedString>, cx: &App) -> Control {
+    let title = div().flex().items_center().gap(px(6.)).child(icon.size(px(18.)).flex_none()).child(title.into());
     control::choice(id, cx).child(mark).child(choice_text(title, detail, cx))
 }
 
-fn choice_text(title: impl Into<SharedString>, detail: Option<SharedString>, cx: &App) -> Div {
+fn choice_text(title: impl IntoElement, detail: Option<SharedString>, cx: &App) -> Div {
     div()
         .flex_1()
         .min_w_0()
         .flex()
         .flex_col()
-        .child(div().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child(title.into()))
+        .child(div().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child(title))
         .when_some(detail, |d, detail| d.child(div().text_size(px(12.)).text_color(palette::muted(cx)).child(detail)))
 }
 

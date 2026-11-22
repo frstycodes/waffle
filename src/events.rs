@@ -2027,15 +2027,15 @@ impl Waffle {
         let community = guild.is_some_and(|g| g.features.iter().any(|f| f == "COMMUNITY"));
         let me = self.my_id();
         let options = [
-            (ScheduledEvent::STAGE, "Stage Channel", "Great for larger community audio events."),
-            (ScheduledEvent::VOICE, "Voice Channel", "Hang out with voice, video, screenshare, and Go Live."),
-            (ScheduledEvent::EXTERNAL, "Somewhere Else", "Text channel, external link, or in-person location."),
+            (ScheduledEvent::STAGE, crate::sidebar::Nav::Stage.icon(), "Stage Channel", "Great for larger community audio events."),
+            (ScheduledEvent::VOICE, Icon::new(Glyph::VolumeHigh), "Voice Channel", "Hang out with voice, video, screenshare, and Go Live."),
+            (ScheduledEvent::EXTERNAL, Icon::new(Glyph::MapPoint), "Somewhere Else", "Text channel, external link, or in-person location."),
         ];
-        let rows: Vec<AnyElement> = options.into_iter().filter(|(kind, ..)| *kind != ScheduledEvent::STAGE || community).map(|(kind, name, hint)| {
+        let rows: Vec<AnyElement> = options.into_iter().filter(|(kind, ..)| *kind != ScheduledEvent::STAGE || community).map(|(kind, icon, name, hint)| {
             let empty = kind != ScheduledEvent::EXTERNAL && guild.is_none_or(|g| event_channels(g, me, kind).is_empty());
             let detail = if empty { "There are no available channels." } else { hint };
             let on = w.entity_type == kind;
-            ui::pick_row(SharedString::from(format!("event-kind-{kind}")), ui::radio(on, cx), name, Some(detail.into()), cx)
+            ui::pick_row_icon(SharedString::from(format!("event-kind-{kind}")), ui::radio(on, cx), icon, name, Some(detail.into()), cx)
                 .disabled(empty || w.started)
                 .on_click(cx.listener(move |this, _, _, cx| {
                     let first = this.events.wizard.as_ref().and_then(|w| this.event_guild(&w.guild_id)).and_then(|g| event_channels(g, this.my_id(), kind).first().map(|c| c.0.clone()));

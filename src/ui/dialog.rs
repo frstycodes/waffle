@@ -90,7 +90,7 @@ pub fn dialog_scroll(id: impl Into<ElementId>, children: impl IntoIterator<Item 
         .px(px(RING_ROOM))
         .overflow_y_scroll()
         .track_scroll(&handle)
-        .child(div().py(px(RING_ROOM)).flex().flex_col().gap(px(16.)).children(children));
+        .child(div().w_full().py(px(RING_ROOM)).flex().flex_col().gap(px(16.)).children(children));
     div().relative().flex_1().min_h_0().flex().flex_col().my(px(-RING_ROOM)).child(list).child(fades)
 }
 
