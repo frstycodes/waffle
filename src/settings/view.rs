@@ -41,26 +41,29 @@ impl Waffle {
     }
 
     pub(super) fn registry_row(&self, setting: &'static Setting, line: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let blocked = match setting.control {
-            Control::Switch(toggle) => self.toggle_blocked(toggle),
-            _ => None,
-        };
-        let row = ui::settings_row(setting.id, line, cx).child(ui::settings_text(setting.title, blocked.or(setting.caption), cx));
+        if let Control::Switch(toggle) = setting.control {
+            return self.toggle_row(setting, toggle, line, window, cx);
+        }
+        let row = ui::settings_row(setting.id, line, cx).child(ui::settings_text(setting.title, setting.caption, cx));
         match setting.control {
-            Control::Switch(toggle) if blocked.is_some() => {
-                let switch = ui::switch_live(SharedString::from(format!("{}-switch", setting.id)), self.toggle_value(toggle), window, cx);
-                row.child(switch.opacity(0.45)).into_any_element()
-            }
-            Control::Switch(toggle) => {
-                let switch = ui::switch_live(SharedString::from(format!("{}-switch", setting.id)), self.toggle_value(toggle), window, cx);
-                ui::settings_choice(row, cx).child(switch).on_click(cx.listener(move |this, _, _, cx| this.flip(toggle, cx))).into_any_element()
-            }
             Control::Link(url) => ui::settings_choice(row, cx)
                 .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(px(16.))))
                 .on_click(move |_, _, cx: &mut App| cx.open_url(url))
                 .into_any_element(),
-            Control::Choice(_) | Control::Custom => row.into_any_element(),
+            Control::Switch(_) | Control::Choice(_) | Control::Custom => row.into_any_element(),
         }
+    }
+
+    // A switch row bound to `toggle`, for registry switches and the custom rows that hold one. A blocked
+    // one dims its switch and says why under its title.
+    pub(super) fn toggle_row(&self, setting: &'static Setting, toggle: Toggle, line: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let blocked = self.toggle_blocked(toggle);
+        let row = ui::settings_row(setting.id, line, cx).child(ui::settings_text(setting.title, blocked.or(setting.caption), cx));
+        let switch = ui::switch_live(SharedString::from(format!("{}-switch", setting.id)), self.toggle_value(toggle), window, cx);
+        if blocked.is_some() {
+            return row.child(switch.opacity(0.45)).into_any_element();
+        }
+        ui::settings_choice(row, cx).child(switch).on_click(cx.listener(move |this, _, _, cx| this.flip(toggle, cx))).into_any_element()
     }
 
     // A choice fills its card with one radio row per option.
@@ -241,7 +244,7 @@ impl Waffle {
     }
 
     // Shown at once, saved to Discord after; if Discord refuses, the earlier value comes back with a toast.
-    fn save_account_settings(&mut self, patch: serde_json::Value, cx: &mut Context<Self>) {
+    pub(super) fn save_account_settings(&mut self, patch: serde_json::Value, cx: &mut Context<Self>) {
         cx.notify();
         let Some(client) = self.client.clone() else { return };
         let before = self.account_settings.clone();
