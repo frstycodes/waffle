@@ -238,6 +238,8 @@ pub struct Guild {
     pub channels: Vec<Channel>,
     pub roles: Vec<Role>,
     pub voice_states: Vec<VoiceState>,
+    // Stage channels that are live right now.
+    pub stage_instances: Vec<StageInstance>,
     pub emojis: Vec<Emoji>,
     pub stickers: Vec<Sticker>,
     pub owner_id: Option<String>,
@@ -361,6 +363,9 @@ pub mod perm {
     pub const MUTE_MEMBERS: u64 = 1 << 22;
     pub const DEAFEN_MEMBERS: u64 = 1 << 23;
     pub const MOVE_MEMBERS: u64 = 1 << 24;
+    pub const REQUEST_TO_SPEAK: u64 = 1 << 32;
+    // Discord's client calls you a stage moderator only with all three.
+    pub const STAGE_MODERATOR: u64 = MANAGE_CHANNELS | MUTE_MEMBERS | MOVE_MEMBERS;
     pub const SEND_MESSAGES: u64 = 1 << 11;
     pub const MANAGE_MESSAGES: u64 = 1 << 13;
     pub const MANAGE_NICKNAMES: u64 = 1 << 27;
@@ -377,10 +382,14 @@ pub mod perm {
 impl Guild {
     // Server-wide permissions (no channel overwrites): owner and Administrator have everything.
     pub fn permissions(&self, me: &str) -> u64 {
-        if self.owner_id.as_deref() == Some(me) {
+        self.permissions_with(me, &self.my_roles)
+    }
+
+    fn permissions_with(&self, user: &str, roles: &[String]) -> u64 {
+        if self.owner_id.as_deref() == Some(user) {
             return u64::MAX;
         }
-        let bits = self.roles.iter().filter(|r| r.id == self.id || self.my_roles.contains(&r.id)).fold(0, |acc, r| acc | r.permissions);
+        let bits = self.roles.iter().filter(|r| r.id == self.id || roles.contains(&r.id)).fold(0, |acc, r| acc | r.permissions);
         if bits & perm::ADMINISTRATOR != 0 { u64::MAX } else { bits }
     }
 
@@ -391,11 +400,16 @@ impl Guild {
     // Discord's order: server permissions, then the @everyone overwrite, then all our roles' overwrites
     // together, then one for us personally. Threads follow their parent channel.
     pub fn channel_permissions(&self, me: &str, channel: &Channel) -> u64 {
+        self.channel_permissions_with(me, &self.my_roles, channel)
+    }
+
+    // `user` holding `roles`: our own permissions with `my_roles`, someone else's with theirs from the member list.
+    pub fn channel_permissions_with(&self, user: &str, roles: &[String], channel: &Channel) -> u64 {
         // Roles not loaded yet: don't hide anything rather than hide everything.
         if self.roles.is_empty() {
             return u64::MAX;
         }
-        let base = self.permissions(me);
+        let base = self.permissions_with(user, roles);
         if base == u64::MAX {
             return base;
         }
@@ -408,15 +422,27 @@ impl Guild {
         if let Some(o) = channel.overwrites.iter().find(|o| o.id == self.id) {
             bits = apply(bits, o.allow, o.deny);
         }
-        let (allow, deny) = channel.overwrites.iter().filter(|o| self.my_roles.contains(&o.id)).fold((0, 0), |(a, d), o| (a | o.allow, d | o.deny));
+        let (allow, deny) = channel.overwrites.iter().filter(|o| roles.contains(&o.id)).fold((0, 0), |(a, d), o| (a | o.allow, d | o.deny));
         bits = apply(bits, allow, deny);
-        if let Some(o) = channel.overwrites.iter().find(|o| o.id == me) {
+        if let Some(o) = channel.overwrites.iter().find(|o| o.id == user) {
             bits = apply(bits, o.allow, o.deny);
         }
         bits
     }
 
     // A channel or one of the threads we know of.
+    pub fn stage(&self, channel_id: &str) -> Option<&StageInstance> {
+        self.stage_instances.iter().find(|s| s.channel_id == channel_id)
+    }
+
+    pub fn is_stage_moderator(&self, me: &str, channel: &Channel) -> bool {
+        self.is_stage_moderator_with(me, &self.my_roles, channel)
+    }
+
+    pub fn is_stage_moderator_with(&self, user: &str, roles: &[String], channel: &Channel) -> bool {
+        self.channel_permissions_with(user, roles, channel) & perm::STAGE_MODERATOR == perm::STAGE_MODERATOR
+    }
+
     pub fn channel(&self, id: &str) -> Option<&Channel> {
         self.channels.iter().chain(&self.threads).find(|c| c.id == id)
     }
@@ -471,6 +497,43 @@ pub struct VoiceState {
     // Live on Go Live, or camera on.
     pub streaming: bool,
     pub camera: bool,
+    // Stage channels: in the audience (Discord's `suppress`), and when they asked to speak
+    // (`request_to_speak_timestamp`, ISO 8601). See docs/discord-stage-re.md.
+    pub suppress: bool,
+    pub requested_at: Option<String>,
+}
+
+// Where someone stands on a stage, read from `suppress` and `request_to_speak_timestamp` exactly as
+// Discord's client derives it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OnStage {
+    Audience,
+    HandRaised,
+    // A moderator invited them; they haven't accepted yet.
+    Invited,
+    Speaker,
+}
+
+impl VoiceState {
+    pub fn on_stage(&self) -> OnStage {
+        match (self.suppress, self.requested_at.is_some()) {
+            (true, false) => OnStage::Audience,
+            (true, true) => OnStage::HandRaised,
+            (false, true) => OnStage::Invited,
+            (false, false) => OnStage::Speaker,
+        }
+    }
+}
+
+// A live stage: Discord's stage instance, keyed by its channel.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StageInstance {
+    pub channel_id: String,
+    pub topic: String,
+}
+
+pub fn parse_stage_instance(v: &Value) -> Option<StageInstance> {
+    Some(StageInstance { channel_id: v["channel_id"].as_str()?.to_owned(), topic: v["topic"].as_str().unwrap_or_default().to_owned() })
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -1107,6 +1170,8 @@ pub enum Event {
     Ack { channel_id: String, message_id: u64 },
     // With the session it belongs to: ours, or another client of ours.
     VoiceState(VoiceState, Option<String>),
+    // A stage went live or changed topic (`Some`), or ended (`None`).
+    StageInstance { guild_id: String, channel_id: String, instance: Option<StageInstance> },
     // A DM or group call started or changed; `ringing` is who it rings now.
     Call { channel_id: String, ringing: Vec<String> },
     CallEnded { channel_id: String },
@@ -2180,6 +2245,8 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
         }),
         "MESSAGE_ACK" => Some(Event::Ack { channel_id: s(&d["channel_id"]), message_id: snowflake(&d["message_id"]) }),
         "VOICE_STATE_UPDATE" => Some(Event::VoiceState(parse_voice_state(d), d["session_id"].as_str().map(str::to_owned))),
+        "STAGE_INSTANCE_CREATE" | "STAGE_INSTANCE_UPDATE" => Some(Event::StageInstance { guild_id: s(&d["guild_id"]), channel_id: s(&d["channel_id"]), instance: parse_stage_instance(d) }),
+        "STAGE_INSTANCE_DELETE" => Some(Event::StageInstance { guild_id: s(&d["guild_id"]), channel_id: s(&d["channel_id"]), instance: None }),
         "CHANNEL_INFO" => Some(Event::VoiceStartTimes {
             guild_id: s(&d["guild_id"]),
             times: d["channels"].as_array().into_iter().flatten().map(|c| (s(&c["id"]), c["voice_start_time"].as_u64())).collect(),
@@ -2296,6 +2363,7 @@ fn parse_guild(g: &Value) -> Option<Guild> {
             .collect(),
         // Guild payloads leave out each voice state's guild_id.
         voice_states: g["voice_states"].as_array().into_iter().flatten().map(|v| VoiceState { guild_id: Some(id.to_owned()), ..parse_voice_state(v) }).collect(),
+        stage_instances: g["stage_instances"].as_array().into_iter().flatten().filter_map(parse_stage_instance).collect(),
         emojis: g["emojis"].as_array().into_iter().flatten().map(parse_emoji).collect(),
         // Not verified: READY's user-account guild objects carrying `stickers` the way bot GUILD_CREATE does.
         stickers: g["stickers"].as_array().into_iter().flatten().filter_map(Sticker::parse).collect(),
@@ -2886,6 +2954,8 @@ fn parse_voice_state(v: &Value) -> VoiceState {
         server_deafened: v["deaf"].as_bool().unwrap_or(false),
         streaming: v["self_stream"].as_bool().unwrap_or(false),
         camera: v["self_video"].as_bool().unwrap_or(false),
+        suppress: v["suppress"].as_bool().unwrap_or(false),
+        requested_at: v["request_to_speak_timestamp"].as_str().map(str::to_owned),
     }
 }
 
@@ -3177,6 +3247,7 @@ mod tests {
             ],
             roles: vec![role("g", VIEW_CHANNEL), role("mods", 0), role("admins", perm::ADMINISTRATOR)],
             voice_states: Vec::new(),
+            stage_instances: Vec::new(),
             emojis: Vec::new(),
             stickers: Vec::new(),
             owner_id: Some("owner".into()),
@@ -3215,6 +3286,7 @@ mod tests {
             ],
             roles: vec![role("g", VIEW_CHANNEL), role("mods", perm::MANAGE_MESSAGES), role("admins", perm::ADMINISTRATOR)],
             voice_states: Vec::new(),
+            stage_instances: Vec::new(),
             emojis: Vec::new(),
             stickers: Vec::new(),
             owner_id: Some("owner".into()),

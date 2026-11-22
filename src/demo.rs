@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | call-streams-failed | call-streams-reconnecting | call-streams-issues | call-streams-hidden | inbox-saved | games | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | call-streams-failed | call-streams-reconnecting | call-streams-issues | call-streams-hidden | inbox-saved | games | stage | stage-audience | stage-requests | stage-invited | stage-waiting | stage-start | stage-start-dialog | stage-edit | stage-end | stage-full | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -690,6 +690,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                 _ => {}
             }
         }
+        _ if scene.starts_with("stage") => demo_stage(waffle, scene, window, cx),
         _ => {}
     }
 }
@@ -800,8 +801,12 @@ fn demo_games(waffle: &mut Waffle) {
 
 // A connected call in hangout with made-up stats; the session itself never reaches a server.
 fn demo_call(waffle: &mut Waffle) {
-    let Some(lounge) = waffle.guild().and_then(|g| g.channels.iter().find(|c| c.id == "lounge").cloned()) else { return };
-    let (session, _) = crate::voice::join("4194304".into(), Some("1".into()), "lounge".into(), crate::voice::GatewayHandle::new().0, Default::default());
+    demo_call_in(waffle, "lounge");
+}
+
+fn demo_call_in(waffle: &mut Waffle, channel_id: &str) {
+    let Some(lounge) = waffle.guild().and_then(|g| g.channels.iter().find(|c| c.id == channel_id).cloned()) else { return };
+    let (session, _) = crate::voice::join("4194304".into(), Some("1".into()), channel_id.into(), crate::voice::GatewayHandle::new().0, Default::default());
     let stats = crate::voice::Stats {
         ping_ms: 42,
         median_ping_ms: 47,
@@ -837,6 +842,81 @@ fn demo_call(waffle: &mut Waffle) {
     waffle.restore = None;
 }
 
+// #town-hall, a stage: four speakers (Wren moderates), fourteen listeners with three hands up and one
+// invite pending. `stage` has us moderating from the speakers; `stage-audience` puts our hand up, 2nd in
+// line, without moderating; `stage-invited` has us invited. The waiting and start scenes have no stage
+// running yet; the dialog scenes open the stage's dialogs over it.
+fn demo_stage(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
+    use crate::discord::{Overwrite, StageInstance, perm};
+    let live = !matches!(scene, "stage-waiting" | "stage-start" | "stage-start-dialog");
+    let moderator = !matches!(scene, "stage-audience" | "stage-invited" | "stage-waiting");
+    let ago = |secs: i64| (chrono::Utc::now() - chrono::Duration::seconds(secs)).to_rfc3339();
+    let mine = match scene {
+        "stage-audience" => (true, Some(ago(95))),
+        "stage-invited" => (false, Some(ago(30))),
+        _ if live && moderator => (false, None),
+        _ => (true, None),
+    };
+    let state = |id: &str, name: &str, suppress: bool, requested_at: Option<String>| VoiceState {
+        guild_id: Some("1".into()),
+        channel_id: Some("town-hall".into()),
+        user_id: id.into(),
+        user: Some(user(id, name)),
+        suppress,
+        requested_at,
+        ..Default::default()
+    };
+    let mut states = vec![
+        state("8388608", "Wren", false, None),
+        state("12582912", "moss lantern", false, None),
+        VoiceState { muted: true, ..state("16777216", "toma reed", false, None) },
+        state("4194304", "kiwi", mine.0, mine.1),
+    ];
+    if mine.0 {
+        states.push(state("20971520", "ferris", false, None));
+    }
+    let listeners = ["Jun", "Rosa", "Lea", "Omar", "Pia", "Kai", "Noor", "Eli", "Bartholomew Featherstonehaugh-Wright", "Ana", "Theo", "Mira", "Sol", "Ivy"];
+    states.extend(listeners.iter().enumerate().map(|(n, name)| {
+        let id = (31_000_000 + n).to_string();
+        match *name {
+            "Jun" => state(&id, name, true, Some(ago(140))),
+            "Lea" => state(&id, name, true, Some(ago(40))),
+            "Kai" => state(&id, name, true, Some(ago(3))),
+            "Noor" => state(&id, name, false, Some(ago(20))),
+            _ => state(&id, name, true, None),
+        }
+    }));
+    let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") else { return };
+    let mut hall = channel("town-hall", "town-hall", ChannelKind::Voice, Some("c1"));
+    hall.raw_type = crate::stage::STAGE;
+    hall.overwrites = vec![Overwrite { id: "1".into(), allow: perm::REQUEST_TO_SPEAK, deny: 0, member: false }];
+    guild.channels.push(hall);
+    guild.voice_states.extend(states);
+    // Council moderates every stage; Wren holds it.
+    if let Some(council) = guild.roles.iter_mut().find(|r| r.id == "r1") {
+        council.permissions |= perm::STAGE_MODERATOR;
+    }
+    if !moderator {
+        guild.owner_id = Some("8388608".into());
+        if let Some(everyone) = guild.roles.iter_mut().find(|r| r.id == "1") {
+            everyone.permissions = crate::discord::VIEW_CHANNEL | perm::CONNECT | perm::SEND_MESSAGES;
+        }
+    }
+    if live {
+        guild.stage_instances.push(StageInstance { channel_id: "town-hall".into(), topic: "Season 7 patch review: every change, ranked".into() });
+    }
+    waffle.member_roles.entry("1".into()).or_default().insert("8388608".into(), vec!["r1".into()]);
+    demo_call_in(waffle, "town-hall");
+    waffle.call_pointer_inside = true;
+    match scene {
+        "stage-requests" => cx.set_global(crate::stage_view::StageRequests(Some("town-hall".into()))),
+        "stage-start-dialog" | "stage-edit" => waffle.open_stage_topic("1".into(), "town-hall".into(), window, cx),
+        "stage-end" => waffle.open_end_stage("town-hall".into(), cx),
+        "stage-full" => waffle.open_stage_full(cx),
+        _ => {}
+    }
+}
+
 fn demo_thread() -> Channel {
     let mut thread = channel("t1", "gpui list virtualisation", ChannelKind::Thread, Some("general"));
     thread.thread = Some(crate::discord::ThreadMeta { joined: true, message_count: 12, ..Default::default() });
@@ -867,7 +947,7 @@ fn demo_dm_call(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut 
         text("304", &me, 3, "back now"),
     ];
     waffle.feeds.insert("dm".into(), Feed { messages: std::sync::Arc::new(messages), loaded: true, ..Default::default() });
-    let state = VoiceState { guild_id: None, channel_id: Some("dm".into()), user_id: zoe.id.clone(), user: Some(zoe), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false };
+    let state = VoiceState { guild_id: None, channel_id: Some("dm".into()), user_id: zoe.id.clone(), user: Some(zoe), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false, suppress: false, requested_at: None };
     waffle.on_event(Event::VoiceState(state, None), cx);
     let ringing = if matches!(scene, "call-joinable" | "call-dm" | "call-dm-camera") { vec![] } else { vec![me.id.clone()] };
     waffle.on_event(Event::Call { channel_id: "dm".into(), ringing }, cx);
@@ -959,6 +1039,7 @@ fn ready(me: User) -> Ready {
         channels,
         roles: roles.clone(),
         voice_states,
+        stage_instances: Vec::new(),
         threads: Vec::new(),
         default_notifications: 1,
         owner_id: Some("4194304".into()),
@@ -970,11 +1051,11 @@ fn ready(me: User) -> Ready {
         ..Default::default()
     };
     let lounge_states = vec![
-        VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "12582912".into(), user: Some(user("12582912", "moss lantern")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: true, camera: false },
-        VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "16777216".into(), user: Some(user("16777216", "toma reed")), muted: true, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false },
-        VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "8388608".into(), user: Some(user("8388608", "Wren")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false },
-        VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "20971520".into(), user: Some(user("20971520", "ferris")), muted: true, deafened: true, server_muted: false, server_deafened: false, streaming: false, camera: false },
-        VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "4194304".into(), user: Some(user("4194304", "kiwi")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false },
+        VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "12582912".into(), user: Some(user("12582912", "moss lantern")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: true, camera: false, suppress: false, requested_at: None },
+        VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "16777216".into(), user: Some(user("16777216", "toma reed")), muted: true, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false, suppress: false, requested_at: None },
+        VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "8388608".into(), user: Some(user("8388608", "Wren")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false, suppress: false, requested_at: None },
+        VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "20971520".into(), user: Some(user("20971520", "ferris")), muted: true, deafened: true, server_muted: false, server_deafened: false, streaming: false, camera: false, suppress: false, requested_at: None },
+        VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "4194304".into(), user: Some(user("4194304", "kiwi")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false, suppress: false, requested_at: None },
     ];
     let channels = vec![
         channel("c0", "General", ChannelKind::Category, None),
@@ -1062,6 +1143,7 @@ fn load_guilds(waffle: &mut Waffle) {
             channels: channels(g, LOAD_CHANNELS),
             roles: roles.clone(),
             voice_states: Vec::new(),
+            stage_instances: Vec::new(),
             threads: Vec::new(),
             default_notifications: 1,
             owner_id: Some("1".into()),
