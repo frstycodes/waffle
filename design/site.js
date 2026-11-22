@@ -32,6 +32,7 @@ const PAGES = [
   ["flows-voice.html", "Flows: voice and calls"],
   ["flows-call.html", "Flows: DM calls"],
   ["flows-community.html", "Flows: people and servers"],
+  ["flows-discord-map.html", "Flows: Discord map"],
 ];
 const FONTS = [["Figtree", "Figtree"], ["Gabarito", "Gabarito"], ["Onest", "Onest"], ["Rubik", "Rubik"], ["gg sans", "gg sans (current)"]];
 // The mark, tinted with --logo (honey, deeper on light) through a mask, from the file the app ships.

@@ -10,7 +10,9 @@ use gpui_kit::{
 use serde::{Deserialize, Serialize};
 
 mod advanced;
-mod profile;
+mod games;
+pub(crate) mod profile;
+pub(crate) mod proto;
 pub(crate) mod registry;
 mod updates;
 mod view;
@@ -161,8 +163,16 @@ pub struct Prefs {
     // Discord's per-user "Mute Soundboard" and "Disable Video", kept locally like the volume.
     pub soundboard_mutes: Vec<String>,
     pub hidden_video: Vec<String>,
+    // Voice channels where our own Go Live's preview is hidden (Discord's per-channel "Hide Preview").
+    pub hidden_self_streams: Vec<String>,
+    // Registered games: ids not to detect, programs added as games, and every game seen here.
+    pub games_off: Vec<String>,
+    pub games_added: Vec<crate::games::Added>,
+    pub games_seen: Vec<crate::games::Seen>,
     // How often we've reacted with each emoji, for the "frequently used" rows.
     pub emoji_uses: Vec<(crate::discord::Emoji, u32)>,
+    // When each emoji was last used (unix seconds, newest last, at most FRECENCY_SAMPLES), for Discord's frecency.
+    pub emoji_times: Vec<(crate::discord::Emoji, Vec<i64>)>,
     pub sticker_uses: Vec<(crate::discord::Sticker, u32)>,
     pub mention_filters: crate::inbox::MentionFilters,
     // Go Live quality: height (0 = source), frame rate, and whether the source's sound goes too.
@@ -182,6 +192,11 @@ pub struct Prefs {
     pub desktop_notifications: bool,
     pub dock_badge: bool,
     pub clock_24h: bool,
+    // Discord keeps this in its protobuf settings (textAndImages.viewImageDescriptions), which Waffle
+    // doesn't sync, so it's local.
+    pub show_image_descriptions: bool,
+    // Discord's "Allow playback and usage of /tts command" (textAndImages.enableTtsCommand), kept locally.
+    pub tts_command: bool,
     // Off: the updater still checks and says so, but downloads only when asked.
     pub auto_download_updates: bool,
     // Recent message searches per account id, newest first.
@@ -232,7 +247,12 @@ impl Default for Prefs {
             local_mutes: Vec::new(),
             soundboard_mutes: Vec::new(),
             hidden_video: Vec::new(),
+            hidden_self_streams: Vec::new(),
+            games_off: Vec::new(),
+            games_added: Vec::new(),
+            games_seen: Vec::new(),
             emoji_uses: Vec::new(),
+            emoji_times: Vec::new(),
             sticker_uses: Vec::new(),
             mention_filters: crate::inbox::MentionFilters::default(),
             stream_resolution: 720,
@@ -245,6 +265,8 @@ impl Default for Prefs {
             desktop_notifications: true,
             dock_badge: true,
             clock_24h: false,
+            show_image_descriptions: false,
+            tts_command: true,
             auto_download_updates: true,
             search_history: HashMap::new(),
             zoom: 1.,
@@ -369,11 +391,15 @@ impl Prefs {
 }
 
 impl Prefs {
-    // Most-used first, topped up with Discord's own defaults when we haven't reacted enough yet.
-    // ponytail: counts only; Discord's frecency (time-decayed, synced in settings-proto) is the upgrade.
+    // By Discord's frecency, topped up with Discord's own defaults when we haven't reacted enough yet.
+    // Synced with Discord's settings-proto (frecency_sync.rs).
     pub fn frequent_emojis(&self, n: usize, pad: &[&str]) -> Vec<crate::discord::Emoji> {
+        let now = chrono::Utc::now().timestamp();
         let mut uses = self.emoji_uses.clone();
-        uses.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+        uses.sort_by_key(|(emoji, count)| {
+            let times = self.emoji_times.iter().find(|(e, _)| e == emoji).map_or(&[][..], |(_, t)| t.as_slice());
+            std::cmp::Reverse(frecency(*count, times, now))
+        });
         let mut out: Vec<crate::discord::Emoji> = uses.into_iter().map(|(e, _)| e).take(n).collect();
         for name in pad {
             if out.len() >= n {
@@ -401,12 +427,62 @@ impl Prefs {
         }
     }
 
+    // Uses from another device (Discord's synced frecency): the higher count, and both sets of times.
+    pub fn merge_emoji_uses(&mut self, remote: Vec<(crate::discord::Emoji, u32, Vec<i64>)>) {
+        for (emoji, total, times) in remote {
+            match self.emoji_uses.iter_mut().find(|(e, _)| *e == emoji) {
+                Some((_, count)) => *count = (*count).max(total),
+                None => self.emoji_uses.push((emoji.clone(), total)),
+            }
+            match self.emoji_times.iter_mut().find(|(e, _)| *e == emoji) {
+                Some((_, kept)) => {
+                    kept.extend(times);
+                    kept.sort_unstable();
+                    kept.dedup();
+                    let excess = kept.len().saturating_sub(FRECENCY_SAMPLES);
+                    kept.drain(..excess);
+                }
+                None => self.emoji_times.push((emoji, times.into_iter().rev().take(FRECENCY_SAMPLES).rev().collect())),
+            }
+        }
+    }
+
     pub fn record_emoji(&mut self, emoji: &crate::discord::Emoji) {
         match self.emoji_uses.iter_mut().find(|(e, _)| e == emoji) {
             Some((_, count)) => *count += 1,
             None => self.emoji_uses.push((emoji.clone(), 1)),
         }
+        let now = chrono::Utc::now().timestamp();
+        match self.emoji_times.iter_mut().find(|(e, _)| e == emoji) {
+            Some((_, times)) => {
+                times.push(now);
+                let excess = times.len().saturating_sub(FRECENCY_SAMPLES);
+                times.drain(..excess);
+            }
+            None => self.emoji_times.push((emoji.clone(), vec![now])),
+        }
     }
+}
+
+const FRECENCY_SAMPLES: usize = 10;
+
+// Discord's frecency score (its web client, module 283047): each recent use weighs by its age (100 up
+// to 3 days, 70 to 15, 50 to 30, 30 to 45, 10 to 80, else 1), and the total use count scales their
+// average. A count with no recorded times (from before they were kept) scores as itself.
+fn frecency(total: u32, times: &[i64], now: i64) -> u64 {
+    if times.is_empty() {
+        return u64::from(total);
+    }
+    let weight = |at: &i64| match (now - at) / 86_400 {
+        ..=3 => 100,
+        4..=15 => 70,
+        16..=30 => 50,
+        31..=45 => 30,
+        46..=80 => 10,
+        _ => 1,
+    };
+    let sum: u64 = times.iter().map(weight).sum();
+    (u64::from(total) * sum).div_ceil(times.len() as u64)
 }
 
 fn prefs_file() -> Option<std::path::PathBuf> {
@@ -515,6 +591,8 @@ pub struct SettingsView {
     result: usize,
     pending_jump: Option<&'static str>,
     editing: Option<profile::ProfileEdit>,
+    // Add it!'s list of running programs, while open.
+    adding_game: Option<Vec<(String, String)>>,
 }
 
 #[derive(Default)]
@@ -560,6 +638,7 @@ impl SettingsView {
             result: 0,
             pending_jump: None,
             editing: None,
+            adding_game: None,
         }
     }
 }
@@ -607,6 +686,7 @@ impl Waffle {
         if let Some(call) = &self.call {
             self.prefs.apply_to(&call.session);
         }
+        crate::games::set_rules(crate::games::Rules { off: self.prefs.games_off.iter().cloned().collect(), added: self.prefs.games_added.clone() });
     }
 
     pub(crate) fn start_hotkeys(&mut self, cx: &mut Context<Self>) {
@@ -782,7 +862,8 @@ impl Waffle {
             Page::Appearance => self.appearance_page(window, cx),
             Page::Updates => self.updates_page(window, cx),
             Page::Advanced => self.advanced_page(cx),
-            Page::ContentSocial | Page::Chat | Page::ActivityPrivacy => Vec::new(),
+            Page::ActivityPrivacy => self.games_page(window, cx),
+            Page::ContentSocial | Page::Chat => Vec::new(),
         };
         sections.extend(self.registry_sections(page, window, cx));
         // Groups follow the registry's order; an unkeyed section stays with the one before it.
@@ -1922,10 +2003,12 @@ const MORE_CUES: [(&str, &str, Cue); 12] = [
 ];
 
 // Built-in shortcuts, each as one or more combos read "or".
-const DEFAULT_KEYBINDS: [(&str, &[&str]); 5] = [
+const DEFAULT_KEYBINDS: [(&str, &[&str]); 7] = [
     ("Quick switcher", &["cmd+k"]),
     ("Navigate between channels", &["alt+ArrowUp", "ArrowDown"]),
     ("Mark channel as read", &["escape"]),
+    ("Toggle Inbox", &["cmd+i"]),
+    ("Mark top Inbox channel as read", &["cmd+shift+e"]),
     ("Previous and next in the image viewer", &["ArrowLeft", "ArrowRight"]),
     ("Close a popup", &["escape"]),
 ];
@@ -2253,6 +2336,18 @@ fn advanced_summary(custom: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn frecency_favours_recent_use_over_old_bulk() {
+        let now = 100 * 86_400;
+        let days_ago = |d: i64| now - d * 86_400;
+        let old = frecency(10, &[days_ago(60); 10], now);
+        let fresh = frecency(3, &[days_ago(1); 3], now);
+        assert_eq!(old, 100, "ten uses two months back weigh 10 each");
+        assert_eq!(fresh, 300, "three uses yesterday weigh 100 each");
+        assert!(fresh > old);
+        assert_eq!(frecency(7, &[], now), 7, "counts from before times were kept");
+    }
 
     #[test]
     fn mic_test_gives_deafen_back_as_last_chosen() {

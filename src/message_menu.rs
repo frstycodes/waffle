@@ -1,12 +1,13 @@
 // Discord's message context menu (navId "message"), item-for-item from its menu code
 // (docs/discord-menus-user-message.md §5). Items for features Waffle doesn't have yet (translate,
-// bookmarks, reminders, apps, reports) are left out.
+// bookmarks, reminders, apps, report to mods) are left out. Report is hidden on your own messages and call records;
+// GAP: Discord also hides it on system-user messages and type 67 (friend request accepted), which `Message` doesn't carry.
 use gpui_kit::{Context, Pixels, Point};
 use reqwest::Method;
 
 use crate::{
     EmojiTarget, Waffle,
-    discord::{Emoji, Message, SendState, perm},
+    discord::{Emoji, Message, SendState, message_flag, perm},
     icons::Glyph,
     menu::{Entry, item, submenu},
 };
@@ -60,7 +61,7 @@ impl Waffle {
         out.push(Entry::Separator);
 
         // G5: secondary.
-        out.extend([MessageAction::CopyText, MessageAction::Pin, MessageAction::MarkUnread].into_iter().filter_map(action));
+        out.extend([MessageAction::CopyText, MessageAction::Pin, MessageAction::MarkUnread, MessageAction::Save].into_iter().filter_map(action));
         let m = message.clone();
         out.push(item("Copy message link", move |this, _, cx| {
             let link = this.message_link(&m);
@@ -102,6 +103,10 @@ impl Waffle {
             );
         }
         out.extend(action(MessageAction::Delete));
+        if !facts.mine && message.call.is_none() {
+            let m = message.clone();
+            out.push(item("Report message", move |this, _, cx| this.open_report(crate::report::ReportTarget::Message(Box::new(m.clone())), cx)).danger().icon(Glyph::Flag).entry());
+        }
         out.push(Entry::Separator);
 
         // G9: developer.
@@ -122,6 +127,7 @@ pub(crate) enum MessageAction {
     CopyText,
     Pin,
     MarkUnread,
+    Save,
     Delete,
     CopyId,
 }
@@ -135,10 +141,12 @@ pub(crate) struct Facts {
     pub in_dm: bool,
     pub threads: bool,
     pub developer: bool,
+    // In your saved-for-later messages.
+    pub saved: bool,
 }
 
 impl MessageAction {
-    pub const ALL: [Self; 10] = [Self::Edit, Self::Reply, Self::Forward, Self::Thread, Self::React, Self::CopyText, Self::Pin, Self::MarkUnread, Self::Delete, Self::CopyId];
+    pub const ALL: [Self; 11] = [Self::Edit, Self::Reply, Self::Forward, Self::Thread, Self::React, Self::CopyText, Self::Pin, Self::MarkUnread, Self::Save, Self::Delete, Self::CopyId];
 
     pub fn allowed(self, message: &Message, facts: &Facts) -> bool {
         match message.state {
@@ -148,7 +156,7 @@ impl MessageAction {
         }
         match self {
             Self::Edit => facts.mine,
-            Self::Reply | Self::React | Self::MarkUnread => true,
+            Self::Reply | Self::React | Self::MarkUnread | Self::Save => true,
             Self::Forward => message.call.is_none(),
             Self::Thread => facts.threads && message.thread.is_none(),
             Self::CopyText => !message.content.is_empty(),
@@ -160,7 +168,7 @@ impl MessageAction {
 
     // Keys in Waffle's saved-keybind form, with `secondary` for ⌘ on macOS and Ctrl elsewhere; the first
     // is the one the menu shows. Discord's own (support article 1500000056121): e, r, +, Backspace, p,
-    // ⌘/Ctrl+C, Alt+Enter. The rest aren't in it: d (Waffle's own delete, and d again confirms it), f, a, t, c,
+    // ⌘/Ctrl+C, Alt+Enter. The rest aren't in it: d (Waffle's own delete, and d again confirms it), f, a, t, c, s,
     // Delete, ⇧ to skip the delete confirm, ⇧⌘C.
     pub const fn keys(self) -> &'static [&'static str] {
         match self {
@@ -172,6 +180,7 @@ impl MessageAction {
             Self::CopyText => &["secondary+c", "c"],
             Self::Pin => &["p"],
             Self::MarkUnread => &["alt+enter"],
+            Self::Save => &["s"],
             Self::Delete => &["d", "backspace", "delete", "shift+d", "shift+backspace", "shift+delete"],
             Self::CopyId => &["shift+secondary+c"],
         }
@@ -193,6 +202,7 @@ impl Waffle {
             in_dm: self.dms.iter().any(|c| c.id == message.channel_id),
             threads: in_text && can(perm::CREATE_PUBLIC_THREADS),
             developer: self.developer_mode,
+            saved: self.saved_ids.contains(&message.id),
         }
     }
 
@@ -207,6 +217,8 @@ impl Waffle {
             MessageAction::Pin if message.pinned => ("Unpin message", Glyph::PinSlash),
             MessageAction::Pin => ("Pin message", Glyph::Pin),
             MessageAction::MarkUnread => ("Mark unread", Glyph::Envelope),
+            MessageAction::Save if self.saved_ids.contains(&message.id) => ("Remove from saved", Glyph::Bookmark),
+            MessageAction::Save => ("Save message", Glyph::Bookmark),
             MessageAction::Delete => ("Delete message", Glyph::Trash),
             MessageAction::CopyId => ("Copy message ID", Glyph::Id),
         };
@@ -235,6 +247,7 @@ impl Waffle {
             }
             MessageAction::Pin => self.toggle_pin(&m, cx),
             MessageAction::MarkUnread => self.mark_unread(&m, cx),
+            MessageAction::Save => self.toggle_saved(&m, cx),
             MessageAction::Delete if quick || m.state == SendState::Failed => self.delete(m, cx),
             MessageAction::Delete => {
                 self.confirm_delete("Delete message", crate::announcements::delete_body(&m), "Delete", move |this, _, cx| this.delete(m.clone(), cx), cx);
@@ -242,6 +255,44 @@ impl Waffle {
             }
             MessageAction::CopyId => self.copy_text(m.id, cx),
         }
+    }
+
+    // Discord's Save for later: PUT saves, DELETE removes, shown at once and undone if refused.
+    fn toggle_saved(&mut self, m: &Message, cx: &mut Context<Self>) {
+        let saved = !self.saved_ids.contains(&m.id);
+        let method = if saved { Method::PUT } else { Method::DELETE };
+        let path = format!("/users/@me/saved-messages/{}/{}", m.channel_id, m.id);
+        // Not verified: Discord's own client sends `source`; the endpoint is read from its bundle.
+        let body = saved.then(|| serde_json::json!({ "due_at": null }));
+        let (id1, id2, message) = (m.id.clone(), m.id.clone(), m.clone());
+        self.rest_optimistic(
+            method,
+            path,
+            body,
+            move |this| {
+                match saved {
+                    true => {
+                        std::rc::Rc::make_mut(&mut this.saved_ids).insert(id1.clone());
+                        if let Some(Some(Ok(list))) = &mut this.saved {
+                            list.insert(0, message.clone());
+                        }
+                    }
+                    false => {
+                        std::rc::Rc::make_mut(&mut this.saved_ids).remove(&id1);
+                        if let Some(Some(Ok(list))) = &mut this.saved {
+                            list.retain(|s| s.id != id1);
+                        }
+                    }
+                }
+            },
+            move |this| {
+                match saved {
+                    true => std::rc::Rc::make_mut(&mut this.saved_ids).remove(&id2),
+                    false => std::rc::Rc::make_mut(&mut this.saved_ids).insert(id2.clone()),
+                };
+            },
+            cx,
+        );
     }
 
     fn toggle_pin(&mut self, m: &Message, cx: &mut Context<Self>) {
@@ -274,6 +325,19 @@ impl Waffle {
 }
 
 impl Waffle {
+    // Discord's ✕ on an embed card: asks first unless Shift is held. Not optimistic, as in Discord: the
+    // embeds go when Discord's MESSAGE_UPDATE carries the flag.
+    // GAP: Discord unarchives an archived thread before the PATCH; Waffle sends it as is.
+    pub(crate) fn remove_embeds(&mut self, message: &Message, quick: bool, cx: &mut Context<Self>) {
+        let (path, flags) = (format!("/channels/{}/messages/{}", message.channel_id, message.id), message.flags | message_flag::SUPPRESS_EMBEDS);
+        let send = move |this: &mut Waffle, cx: &mut Context<Waffle>| this.rest(Method::PATCH, path.clone(), Some(serde_json::json!({ "flags": flags })), |_, _| {}, cx);
+        if quick {
+            return send(self, cx);
+        }
+        self.confirm("Are you sure?", "This will remove all embeds on this message for everyone.", "Remove All Embeds", move |this, _, cx| send(this, cx), cx);
+        self.set_dialog_note("Hold shift when clearing embeds to skip this modal.");
+    }
+
     // Removing reactions shows at once (`keep` decides which stay); they come back if refused.
     fn reactions_optimistic(&mut self, message: &Message, path: String, keep: impl Fn(&crate::discord::Reaction) -> bool + 'static, cx: &mut Context<Self>) {
         let before = self.message_mut(&message.channel_id, &message.id).map(|m| m.reactions.clone()).unwrap_or_default();

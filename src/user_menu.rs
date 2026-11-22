@@ -1,13 +1,14 @@
 // Discord's user context menus, built item-for-item from its own menu code (docs/discord-menus-user-
 // message.md, read from Discord web 2026-11-14). Each item carries Discord's show-condition; items
-// for features Waffle doesn't have (activities, apps, stages, mod view, E2EE codes) are left out.
+// for features Waffle doesn't have (activities, apps, mod view, E2EE codes) are left out.
 use gpui_kit::{Context, Pixels, Point, Window};
 use reqwest::Method;
 use serde_json::json;
 
 use crate::{
     Waffle,
-    discord::{ChannelKind, Relation, User, perm},
+    discord::{ChannelKind, Guild, OnStage, Relation, User, VoiceState, perm},
+    stage::STAGE,
     icons::Glyph,
     menu::{Entry, HeadLead, header, item, slider, submenu},
 };
@@ -21,6 +22,8 @@ pub enum Surface {
     ServerVoice,
     // A 1:1 DM: the DM list row or a DM author.
     Dm,
+    // The open group DM: its member list or an author in it.
+    Group,
     // No channel: the Friends list.
     Generic,
 }
@@ -49,7 +52,14 @@ impl Waffle {
             entries.extend(self.user_menu(&user, None, Surface::Dm, at).into_iter().filter(|e| !e.is_copy_id()));
         }
         let id = channel.id.clone();
-        entries.push(item("Close DM", move |this, _, cx| this.close_dm(&id, cx)).icon(Glyph::X).entry());
+        if channel.raw_type == 3 {
+            let edit = id.clone();
+            entries.push(item("Edit Group", move |this, window, cx| this.open_edit_group(edit.clone(), window, cx)).icon(Glyph::Pen).entry());
+            entries.push(Entry::Separator);
+            entries.push(item("Leave Group", move |this, _, cx| this.ask_leave_group(id.clone(), cx)).danger().icon(Glyph::DoorExit).entry());
+        } else {
+            entries.push(item("Close DM", move |this, _, cx| this.close_dm(&id, cx)).icon(Glyph::X).entry());
+        }
         entries.push(Entry::Separator);
         if self.developer_mode {
             if let Some(user) = &channel.recipient {
@@ -74,7 +84,13 @@ impl Waffle {
 
     // An author's name or avatar in chat: the server menu in a server, the DM menu in a DM.
     pub(crate) fn open_author_menu(&mut self, user: User, at: Point<Pixels>, cx: &mut Context<Self>) {
-        let surface = if self.guild_id.is_some() { Surface::ServerChat } else { Surface::Dm };
+        let surface = if self.guild_id.is_some() {
+            Surface::ServerChat
+        } else if self.open_group().is_some() {
+            Surface::Group
+        } else {
+            Surface::Dm
+        };
         let guild_id = self.guild_id.clone();
         self.open_user_menu(user, guild_id, surface, at, cx);
     }
@@ -91,6 +107,23 @@ impl Waffle {
         }
         let theirs = self.member_roles.get(guild_id).and_then(|r| r.get(target)).map(|roles| guild.roles.iter().filter(|r| roles.contains(&r.id)).map(|r| r.position).max().unwrap_or(0)).unwrap_or(0);
         guild.top_position(&me.id) > theirs
+    }
+
+    // On a stage: a moderator moves others between audience and speakers; anyone on stage can step down,
+    // and a moderator in the audience can step up.
+    fn stage_items(&self, guild: &Guild, state: &VoiceState, is_me: bool, me: &str) -> Option<Entry> {
+        let channel = guild.channel(state.channel_id.as_deref()?).filter(|c| c.raw_type == STAGE)?;
+        let moderator = guild.is_stage_moderator(me, channel);
+        let speaker = state.on_stage() == OnStage::Speaker;
+        let (gid, cid, uid) = (guild.id.clone(), channel.id.clone(), state.user_id.clone());
+        let row = match (is_me, speaker) {
+            (true, true) => item("Leave the Stage", move |this, _, cx| this.leave_the_stage(&gid, &cid, cx)).icon(Glyph::ArrowDown),
+            (true, false) if moderator => item("Speak on Stage", move |this, _, cx| this.set_my_suppress(&gid, &cid, false, false, cx)).icon(Glyph::Stage),
+            (false, true) if moderator => item("Move to Audience", move |this, _, cx| this.move_to_audience(&gid, &cid, &uid, cx)).icon(Glyph::ArrowDown),
+            (false, false) if moderator => item("Invite to Speak", move |this, _, cx| this.invite_to_speak(&gid, &cid, &uid, cx)).icon(Glyph::Hand),
+            _ => return None,
+        };
+        Some(row.entry())
     }
 
     fn user_menu(&self, user: &User, guild_id: Option<&str>, surface: Surface, at: Point<Pixels>) -> Vec<Entry> {
@@ -132,6 +165,15 @@ impl Waffle {
             out.push(item("Add friend nickname", move |this, window, cx| this.edit_friend_nickname(id.clone(), who.clone(), window, cx)).icon(Glyph::Tag).entry());
         }
         out.push(Entry::Separator);
+
+        // A group's owner over its other members.
+        if let Some(group) = self.open_group().filter(|g| surface == Surface::Group && !is_me && self.group_owner_is_me(g) && g.recipients.iter().any(|r| r.id == target)) {
+            let (gid, uid) = (group.id.clone(), target.clone());
+            out.push(item("Remove From Group", move |this, _, cx| this.remove_from_group(gid.clone(), uid.clone(), cx)).danger().icon(Glyph::UserMinus).entry());
+            let (gid, heir) = (group.id.clone(), user.clone());
+            out.push(item("Make Group Owner", move |this, _, cx| this.ask_make_group_owner(gid.clone(), heir.clone(), cx)).danger().icon(Glyph::Crown).entry());
+            out.push(Entry::Separator);
+        }
 
         // G3: volume.
         if media && !is_me {
@@ -226,6 +268,11 @@ impl Waffle {
                 .entry(),
             });
         }
+        // Discord's sits behind an experiment (2023-09_iar_user_reporting), taken here as rolled out.
+        if !is_me && !user.bot {
+            let (reported, guild_id) = (user.clone(), guild_id.map(str::to_owned));
+            out.push(item("Report user profile", move |this, _, cx| this.open_report(crate::report::ReportTarget::User { user: Box::new(reported.clone()), guild_id: guild_id.clone() }, cx)).danger().icon(Glyph::Flag).entry());
+        }
         out.push(Entry::Separator);
 
         // G6: roles and voice moves.
@@ -303,6 +350,7 @@ impl Waffle {
             let gid = guild.id.clone();
             // Voice moderation is per channel: overwrites on the channel they're in apply.
             let can = |bit| state.channel_id.as_ref().is_some_and(|c| self.can_in(c, bit));
+            out.extend(self.stage_items(guild, state, is_me, &me.id));
             if can(perm::MUTE_MEMBERS) {
                 let (gid, uid, on) = (gid.clone(), target.clone(), state.server_muted);
                 out.push(item("Server mute", move |this, _, cx| this.server_voice_optimistic(&gid, &uid, json!({ "mute": !on }), |v| v.server_muted = !v.server_muted, cx)).checked(on).hint(format!("Mutes {name} for everyone")).icon(Glyph::MicOff).entry());
@@ -507,7 +555,7 @@ impl Waffle {
         }, window, cx);
     }
 
-    fn set_ignored(&mut self, user_id: String, ignore: bool, cx: &mut Context<Self>) {
+    pub(crate) fn set_ignored(&mut self, user_id: String, ignore: bool, cx: &mut Context<Self>) {
         let method = if ignore { Method::PUT } else { Method::DELETE };
         let (a, b) = (user_id.clone(), user_id.clone());
         let flip = |this: &mut Waffle, id: String, on: bool| {

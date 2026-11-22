@@ -31,7 +31,7 @@ use crate::{
     attachments::{FileKind, PendingFile},
     discord::{Channel, ChannelKind, Emoji, ForumTag, MediaKind, Message, parse_message, parse_thread, perm},
     icons::Glyph,
-    mascot::Mood,
+    illustration::Illustration,
     menu::{Entry, emoji_face, item, label, submenu},
     palette::{self, Level},
     ui::{self, Squircle},
@@ -486,7 +486,7 @@ impl Waffle {
         let new_post = page.can_post.then(|| self.new_post_button("forum-new-post", &forum.id, cx));
         let guidelines = (page.can_post && guidelines_text(forum).is_some()).then(|| {
             let id = forum.id.clone();
-            ui::icon_button("forum-guidelines", Glyph::Book, "Post Guidelines", cx).on_click(cx.listener(move |this, _, window, cx| this.open_guidelines(id.clone(), window, cx)))
+            ui::icon_button("forum-guidelines", Glyph::BookOpen, "Post Guidelines", cx).on_click(cx.listener(move |this, _, window, cx| this.open_guidelines(id.clone(), window, cx)))
         });
         div()
             .flex_none()
@@ -637,6 +637,9 @@ impl Waffle {
         if is_empty {
             return column.child(self.forum_empty(forum, page, cx)).children(no_history);
         }
+        if page.listing.active.is_empty() && page.listing.older.is_empty() && !page.settled {
+            return column.children((0..4).map(|i| post_skeleton(i, cx)));
+        }
         let (active, older_posts) = match page.view.gallery || page.media {
             true => (self.gallery(forum, page, &page.listing.active, "active", window, cx), self.gallery(forum, page, &page.listing.older, "older", window, cx)),
             false => (self.post_list(forum, page, &page.listing.active, cx), self.post_list(forum, page, &page.listing.older, cx)),
@@ -647,7 +650,7 @@ impl Waffle {
     // No posts, none with these tags, or none matching the search.
     fn forum_empty(&self, forum: &Channel, page: &ForumPage, cx: &mut Context<Self>) -> Div {
         if !page.query.is_empty() {
-            return ui::empty_state("forum-empty", Mood::Idle, "No matching posts", "Search looks at post titles and the opening messages loaded so far.", cx);
+            return ui::empty_state("forum-empty", Illustration::SearchEmpty, "No matching posts", "Search looks at post titles and the opening messages loaded so far.", cx);
         }
         if !page.filter.is_empty() {
             let (title, body) = match page.filter.len() {
@@ -656,10 +659,10 @@ impl Waffle {
             };
             let id = forum.id.clone();
             let clear = ui::button("forum-empty-clear", ui::Tone::Secondary, cx).child("Clear all").on_click(cx.listener(move |this, _, _, cx| this.clear_forum_filter(&id, cx)));
-            return ui::empty_state("forum-empty", Mood::Idle, title, body, cx).child(div().mt(px(8.)).child(clear));
+            return ui::empty_state("forum-empty", Illustration::ForumEmpty, title, body, cx).child(div().mt(px(8.)).child(clear));
         }
         let new_post = page.can_post.then(|| div().mt(px(8.)).child(self.new_post_button("forum-empty-new", &forum.id, cx)));
-        ui::empty_state("forum-empty", Mood::Idle, "Make the first post!", "Be the first to start the conversation!", cx).children(new_post)
+        ui::empty_state("forum-empty", Illustration::ForumEmpty, "Make the first post!", "Be the first to start the conversation!", cx).children(new_post)
     }
 
     fn post_list(&self, forum: &Channel, page: &ForumPage, posts: &[Channel], cx: &mut Context<Self>) -> AnyElement {
@@ -1020,7 +1023,7 @@ impl Waffle {
                     .on_click(cx.listener(|this, _, window, cx| this.submit_new_post(window, cx))),
             );
         let reopen = (!composer.guidelines && guidelines_text(forum).is_some())
-            .then(|| ui::icon_button("new-post-guidelines", Glyph::Book, "Post Guidelines", cx).on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.guidelines = true, cx))));
+            .then(|| ui::icon_button("new-post-guidelines", Glyph::BookOpen, "Post Guidelines", cx).on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.guidelines = true, cx))));
         let head = div()
             .flex()
             .items_start()
@@ -1152,7 +1155,7 @@ impl Waffle {
             .flex()
             .items_center()
             .gap(px(4.))
-            .child(Icon::new(Glyph::Book).size(px(16.)).text_color(palette::muted(cx)))
+            .child(Icon::new(Glyph::BookOpen).size(px(16.)).text_color(palette::muted(cx)))
             .child(div().flex_1().ml(px(4.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Post Guidelines"))
             .children(edit)
             .child(close);
@@ -1467,9 +1470,21 @@ fn post_error(name: &str, has_message: bool, missing_tag: bool) -> Option<&'stat
 fn post_body(name: &str, content: &str, tags: &[String], files: &[crate::discord::Upload], archive_after: u32) -> Value {
     let mut message = json!({ "content": content });
     if !files.is_empty() {
-        message["attachments"] = files.iter().enumerate().map(|(i, f)| json!({ "id": i.to_string(), "filename": f.name })).collect();
+        message["attachments"] = files.iter().enumerate().map(|(i, f)| attachment_entry(i, f)).collect();
     }
     json!({ "name": name, "auto_archive_duration": archive_after, "applied_tags": tags, "message": message })
+}
+
+// Discord's serializer, as for chat uploads: alt text only when set, `is_spoiler` only when true.
+fn attachment_entry(index: usize, file: &crate::discord::Upload) -> Value {
+    let mut entry = json!({ "id": index.to_string(), "filename": file.name });
+    if let Some(description) = &file.description {
+        entry["description"] = json!(description);
+    }
+    if file.spoiler {
+        entry["is_spoiler"] = json!(true);
+    }
+    entry
 }
 
 // A file waiting in the composer: its kind, name and size; callers add the remove button.
@@ -1666,12 +1681,29 @@ pub(crate) mod demo {
                 waffle.open_new_post("forum".into(), window, cx);
                 if let Some(composer) = waffle.composer_mut() {
                     composer.tags = vec!["t-idea".into()];
-                    composer.files = vec![PendingFile { path: "brand/icons/blueprint.png".into(), name: "night-map-mockup.png".into(), size: 184_320, spoiler: false }];
+                    composer.files = vec![PendingFile { path: "brand/icons/blueprint.png".into(), name: "night-map-mockup.png".into(), size: 184_320, spoiler: false, description: None }];
                 }
             }
             _ => {}
         }
     }
+}
+
+// A post card still loading: title, two lines of its opening message, and the foot.
+fn post_skeleton(i: usize, cx: &gpui_kit::App) -> AnyElement {
+    let line = |part: &str, width: f32| ui::skeleton(SharedString::from(format!("post-skel-{part}-{i}")), 4., cx).h(px(12.)).w(gpui_kit::relative(width));
+    div()
+        .p(px(16.))
+        .flex()
+        .flex_col()
+        .gap(px(10.))
+        .squircle(ui::RADIUS_MD)
+        .bg(palette::surface(Level::Sidebar, cx))
+        .child(line("title", [0.5, 0.35, 0.6, 0.42][i % 4]).h(px(16.)))
+        .child(line("body", 0.9))
+        .child(line("body2", 0.7))
+        .child(line("foot", 0.25))
+        .into_any_element()
 }
 
 #[cfg(test)]
@@ -1758,7 +1790,7 @@ mod tests {
         assert_eq!(Mosaic::of(2), Some(Mosaic::Pair));
         assert_eq!(Mosaic::of(3), Some(Mosaic::OneTwo));
         assert_eq!(Mosaic::of(4), Some(Mosaic::Grid));
-        let first = Message { media: (0..6).map(|i| crate::discord::Media { url: format!("{i}.png"), width: 1., height: 1., kind: MediaKind::Image }).collect(), ..Default::default() };
+        let first = Message { media: (0..6).map(|i| crate::discord::Media { url: format!("{i}.png"), width: 1., height: 1., kind: MediaKind::Image, ..Default::default() }).collect(), ..Default::default() };
         assert_eq!(post_media(&first).len(), MOSAIC_MAX);
     }
 
@@ -1770,9 +1802,10 @@ mod tests {
 
     #[test]
     fn post_body_names_each_file_by_index() {
-        let file = |name: &str| crate::discord::Upload { path: name.into(), name: name.into(), size: 1, sent: Default::default() };
-        let body = post_body("t", "", &[], &[file("a.png"), file("b.png")], 4320);
-        assert_eq!(body["message"]["attachments"], json!([{ "id": "0", "filename": "a.png" }, { "id": "1", "filename": "b.png" }]));
+        let file = |name: &str| crate::discord::Upload { path: name.into(), name: name.into(), size: 1, description: None, spoiler: false, sent: Default::default() };
+        let alt = crate::discord::Upload { description: Some("The map".into()), spoiler: true, ..file("b.png") };
+        let body = post_body("t", "", &[], &[file("a.png"), alt], 4320);
+        assert_eq!(body["message"]["attachments"], json!([{ "id": "0", "filename": "a.png" }, { "id": "1", "filename": "b.png", "description": "The map", "is_spoiler": true }]));
         assert!(post_body("t", "m", &[], &[], 4320)["message"].get("attachments").is_none());
     }
 

@@ -37,15 +37,64 @@ pub(crate) struct Viewer {
     reveal: Cell<bool>,
     // Thumbnails asked for last frame, so the ones scrolled away can be dropped.
     loaded: Cell<Range<usize>>,
+    channel_id: String,
+    // Messages in the whole channel carrying an image or a video, from Discord's search; None until it answers.
+    // GAP: search counts messages, not files, so a message with several images counts once.
+    channel_total: Option<usize>,
 }
 
 impl Waffle {
     pub(crate) fn open_viewer(&mut self, url: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(feed) = self.channel.as_ref().and_then(|c| self.feeds.get(&c.id)) else { return };
-        let items: Vec<Media> = feed.messages.iter().flat_map(|m| std::iter::once(m).chain(m.forward.as_deref())).flat_map(|m| m.media.iter().chain(m.embeds.iter().filter(|e| !e.video).flat_map(|e| &e.images)).cloned()).collect();
+        let Some(channel) = self.channel.clone() else { return };
+        let Some(feed) = self.feeds.get(&channel.id) else { return };
+        let items = feed_media(&feed.messages);
         let Some(index) = items.iter().position(|m| m.url == url) else { return };
-        self.viewer = Some(Viewer { items, index, from: index, strip: ScrollHandle::new(), reveal: Cell::new(true), loaded: Cell::new(0..0) });
+        self.viewer = Some(Viewer { items, index, from: index, strip: ScrollHandle::new(), reveal: Cell::new(true), loaded: Cell::new(0..0), channel_id: channel.id.clone(), channel_total: None });
+        self.count_channel_media(&channel, cx);
         window.focus(&self.focus, cx);
+        cx.notify();
+    }
+
+    // Asks Discord's search how many messages in the channel carry an image and a video, for the counter.
+    fn count_channel_media(&mut self, channel: &discord::Channel, cx: &mut Context<Self>) {
+        let Some(client) = self.client.clone() else { return };
+        let scope = match &self.guild_id {
+            Some(guild) => format!("guilds/{guild}"),
+            None => format!("channels/{}", channel.id),
+        };
+        let channel_id = channel.id.clone();
+        let params = |has: &str| {
+            let mut params = vec![("has".to_owned(), has.to_owned())];
+            if scope.starts_with("guilds/") {
+                params.push(("channel_id".to_owned(), channel_id.clone()));
+            }
+            params
+        };
+        let (images, videos) = (params("image"), params("video"));
+        cx.spawn(async move |this, cx| {
+            let (images, videos) = futures::join!(client.search(&scope, "", &images), client.search(&scope, "", &videos));
+            let (Ok(images), Ok(videos)) = (images, videos) else { return };
+            this.update(cx, |this, cx| {
+                let Some(viewer) = this.viewer.as_mut().filter(|v| v.channel_id == channel_id) else { return };
+                viewer.channel_total = Some((images.total + videos.total) as usize);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    // The open channel's history grew: the viewer takes in what was added, keeping its place.
+    pub(crate) fn refresh_viewer(&mut self, cx: &mut Context<Self>) {
+        let Some(viewer) = &mut self.viewer else { return };
+        let Some(feed) = self.feeds.get(&viewer.channel_id) else { return };
+        let items = feed_media(&feed.messages);
+        let Some(current) = viewer.items.get(viewer.index).map(|m| m.url.clone()) else { return };
+        let Some(index) = items.iter().position(|m| m.url == current) else { return };
+        viewer.from = viewer.from + index - viewer.index.min(index);
+        viewer.index = index;
+        viewer.items = items;
+        viewer.reveal.set(true);
         cx.notify();
     }
 
@@ -58,6 +107,11 @@ impl Waffle {
     }
 
     pub(crate) fn step_viewer(&mut self, delta: isize, cx: &mut Context<Self>) {
+        let Some(viewer) = &self.viewer else { return };
+        // Nearing the oldest loaded, older history loads so stepping back carries on.
+        if delta < 0 && viewer.index as isize + delta <= MARGIN as isize {
+            self.load_older(cx);
+        }
         let Some(viewer) = &self.viewer else { return };
         let last = viewer.items.len() as isize - 1;
         self.show_in_viewer((viewer.index as isize + delta).clamp(0, last) as usize, cx);
@@ -98,6 +152,9 @@ impl Waffle {
         let viewer = self.viewer.as_ref()?;
         let item = viewer.items.get(viewer.index)?.clone();
         let (index, count) = (viewer.index, viewer.items.len());
+        // Counted from the newest, as the media is: the channel's older media sits before what's loaded.
+        let total = viewer.channel_total.map_or(count, |total| total.max(count));
+        let position = total - (count - index) + 1;
         let viewport = window.viewport_size();
         let viewport = (f32::from(viewport.width), f32::from(viewport.height));
         let (w, h) = stage_size(&item, viewport);
@@ -148,7 +205,7 @@ impl Waffle {
             .flex_col()
             .items_center()
             .gap_2()
-            .child(div().text_size(px(14.)).text_color(gpui_kit::white().opacity(0.8)).child(format!("{} / {count}", index + 1)))
+            .child(div().text_size(px(14.)).text_color(gpui_kit::white().opacity(0.8)).child(format!("{position} / {total}")))
             .child(strip);
         Some(
             div()
@@ -333,6 +390,11 @@ fn reveal_offset(index: usize, scroll: f32, view: f32, content: f32) -> Option<f
     Some(centred.clamp(0., (content - view).max(0.)))
 }
 
+// Every image and video in a feed, oldest first: attachments, forwarded ones, and embed images.
+fn feed_media(messages: &[discord::Message]) -> Vec<Media> {
+    messages.iter().flat_map(|m| std::iter::once(m).chain(m.forward.as_deref())).flat_map(|m| m.media.iter().chain(m.embeds.iter().filter(|e| !e.video).flat_map(|e| &e.images)).cloned()).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -360,7 +422,7 @@ mod tests {
 
     #[test]
     fn stage_fits_the_window_without_passing_2x() {
-        let media = |w, h| Media { url: String::new(), width: w, height: h, kind: MediaKind::Image };
+        let media = |w, h| Media { url: String::new(), width: w, height: h, kind: MediaKind::Image, ..Default::default() };
         assert_eq!(stage_size(&media(4000., 2000.), (1400., 900.)), (1200., 600.));
         assert_eq!(stage_size(&media(100., 100.), (1400., 900.)), (200., 200.));
     }

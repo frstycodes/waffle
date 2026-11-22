@@ -11,13 +11,14 @@ use gpui_motion_kit::core::{Bezier, Easing, Motion, Target, Transition};
 
 use crate::{
     Waffle, Edge, Part, RailEntry, Status,
-    discord::{ActivityKind, Channel, ChannelKind, Folder, Guild, Status as Status_},
+    discord::{ActivityKind, Channel, ChannelKind, Folder, Guild, OnStage, Status as Status_},
     drag::{RowDrag, hole},
     icons::Glyph,
     layout::{RAIL_WIDTH, avatar_with_status},
     motion, palette,
     rail_drag::RailDrag,
     sortable::{Board, Place},
+    stage::STAGE,
     ui::{self, Squircle},
 };
 
@@ -35,6 +36,8 @@ const MINI_INSET: f32 = (TILE - 2. * MINI - MINI_GAP) / 2.;
 const TRIP: Duration = Duration::from_millis(260);
 
 const ROW_HEIGHT: f32 = 32.;
+// A live stage's row: its name with the topic under it.
+const STAGE_ROW_HEIGHT: f32 = 44.;
 const ROW_GAP: f32 = 2.;
 
 #[derive(Clone)]
@@ -594,14 +597,17 @@ impl Waffle {
     pub fn render_channels(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let mut rows: Vec<AnyElement> = Vec::new();
         match (&self.status, self.guild().cloned()) {
-            (Status::Connecting, _) => rows.push(muted_line("Connecting to Discord…", cx)),
+            // Until the gateway's first READY: the list's shape, shimmering.
+            (Status::Connecting, guild) => rows.extend((0..8).map(|i| list_skeleton(i, guild.is_some(), cx))),
             (_, Some(guild)) => {
                 let me = self.my_id().to_owned();
                 // Beside the carried channel: "Move to Archive" while it's aimed into another category.
                 let tag = self.channel_board.dragged().zip(self.channel_board.hint()).and_then(|(moved, hint)| self.category_move(moved, hint.target.as_deref()?));
                 self.drag_motion.set_tag(tag);
                 rows.extend(self.event_rows(&guild, cx));
-                for (i, (category, channels)) in channel_sections(&guild, &me).into_iter().enumerate() {
+                rows.extend(self.guild_entry_rows(&guild, window, cx));
+                let sections = channel_sections(&guild, &me).into_iter().map(|(category, channels)| (category, channels.into_iter().filter(|c| self.shows_in_list(&guild, c)).collect::<Vec<_>>())).filter(|(_, channels)| !channels.is_empty()).collect::<Vec<_>>();
+                for (i, (category, channels)) in sections.into_iter().enumerate() {
                     let order: Vec<String> = channels.iter().map(|c| c.id.clone()).collect();
                     let list = self.channel_board.list(channel_list(category.as_ref()), order, window, cx);
                     // A channel's first row is the item; its people and threads move with it.
@@ -625,6 +631,7 @@ impl Waffle {
             (_, None) => {
                 rows.push(dm_find(cx).mb(px(8.)).on_click(cx.listener(|this, _, window, cx| this.open_switcher(window, cx))).into_any_element());
                 rows.push(self.friends_row(cx));
+                rows.extend(self.requests_row(cx));
                 let start = cat_add("dm-start", None, "Start a conversation", cx).on_click(cx.listener(|this, _, window, cx| this.open_switcher(window, cx)));
                 rows.push(div().mt(px(16.)).child(category_head("dm-head".into(), div().id("dm-head").child("Direct messages"), true, cx).child(start)).into_any_element());
                 match self.dms.is_empty() {
@@ -803,6 +810,7 @@ impl Waffle {
             false => muted.then(|| Nav::BellSlash.icon().size(px(16.))),
         };
         let faint = palette::faint(cx);
+        let topic = guild.stage(&channel.id).map(|s| s.topic.clone());
         let carried = self.drag_motion.row(&channel.id);
         let welcomes = channel.kind == ChannelKind::Voice && self.welcomes_voice_drop(channel, guild);
         let row = channel_row(SharedString::from(channel.id.clone()), group.clone(), state, cx).children(self.drag_motion.spot(&channel.id));
@@ -816,7 +824,8 @@ impl Waffle {
                     (false, true) => palette::muted(cx),
                     (false, false) => faint,
                 }))
-                .child(ui::truncating(format!("channel-name-{}", channel.id), channel.name.clone()).flex_1())
+                .when(topic.is_some(), |r| r.h(px(STAGE_ROW_HEIGHT)))
+                .child(channel_label(channel, topic, cx))
                 .children(elapsed)
                 .children(meta.filter(|_| !selected && !hovered).map(|icon| div().flex_none().flex().text_color(faint).child(icon)))
                 .when(selected || hovered, |r| r.child(self.row_actions(channel, guild, cx)))
@@ -970,7 +979,11 @@ impl Waffle {
         let watching: Vec<String> = self.call.as_ref().map(|c| c.watching.iter().map(|w| w.streamer_id.clone()).collect()).unwrap_or_default();
         let connected = self.call.as_ref().is_some_and(|c| c.connected && in_call);
         let can_drag_people = self.can_in(&channel.id, crate::discord::perm::MOVE_MEMBERS);
-        let mut present: Vec<&crate::discord::VoiceState> = guild.voice_states.iter().filter(|v| v.channel_id.as_ref() == Some(&channel.id)).collect();
+        let (mut present, audience): (Vec<&crate::discord::VoiceState>, Vec<_>) = guild
+            .voice_states
+            .iter()
+            .filter(|v| v.channel_id.as_ref() == Some(&channel.id))
+            .partition(|v| channel.raw_type != STAGE || v.on_stage() == OnStage::Speaker);
         // Whoever is streaming leads the list; the rest keep their order (a stable sort).
         present.sort_by_key(|v| !v.streaming);
         let avatar_of = |v: &crate::discord::VoiceState| v.user.as_ref().map(|u| u.avatar.clone()).unwrap_or_else(|| crate::discord::avatar_url(&v.user_id, None));
@@ -986,7 +999,6 @@ impl Waffle {
             let name = state.user.as_ref().map(|u| u.name.clone()).unwrap_or_else(|| self.user_name(&state.user_id));
             let avatar = avatar_of(state);
             let talking = speaking.contains(&state.user_id);
-            let streamer = state.user_id.clone();
             let is_watched = watching.contains(&state.user_id);
             let hover_key = stream_hover_key(&state.user_id);
             // Open while the row or the card itself is hovered, so the card's button can be reached.
@@ -1040,14 +1052,19 @@ impl Waffle {
                         cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.voice_user_menu(&user_id, e.position, cx))
                     })
                     .when(state.streaming, |r| r.on_hover(stream_hover).on_mouse_move(cx.listener(|this, e: &gpui_kit::MouseMoveEvent, _, _| this.stream_tunnel.track(e.position))).children(stream_card.map(|card| div().absolute().top_0().right(px(4.)).child(gpui_kit::deferred(gpui_kit::anchored().snap_to_window_with_margin(px(8.)).child(card))))))
-                    .when(state.streaming && connected, |r| {
-                        r.cursor_pointer()
-                            .when(is_watched, |r| r.bg(selected))
-                            .tooltip(|window, cx| Tooltip::new("Watch stream").build(window, cx))
-                            .on_click(cx.listener(move |this, _, _, cx| this.watch_stream(streamer.clone(), cx)))
+                    .when(is_watched, |r| r.bg(selected))
+                    // A click opens their profile beside the channel list, as Discord's; a stream is watched from
+                    // the preview its row shows on hover.
+                    .cursor_pointer()
+                    .on_click({
+                        let (user_id, x) = (state.user_id.clone(), crate::layout::RAIL_WIDTH + self.channels_width + 8.);
+                        cx.listener(move |this, e: &gpui_kit::ClickEvent, _, cx| this.open_voice_profile(&user_id, point(px(x), e.position().y - px(40.)), cx))
                     })
                     .into_any_element(),
             );
+        }
+        if !audience.is_empty() {
+            rows.push(audience_row(audience.len(), cx).into_any_element());
         }
         // .vd-slot: where the person held over this channel will sit.
         if self.welcomes_voice_drop(channel, guild) {
@@ -1331,6 +1348,30 @@ pub(crate) fn channel_glyph(channel: &Channel) -> Icon {
         (ChannelKind::Forum, _) => Icon::new(Glyph::Forum),
         _ => Icon::new(Glyph::Hashtag),
     }
+}
+
+// The channel's name; a live stage's topic is its second line, as Discord's.
+fn channel_label(channel: &Channel, topic: Option<String>, cx: &App) -> AnyElement {
+    let name = ui::truncating(format!("channel-name-{}", channel.id), channel.name.clone()).flex_1();
+    let Some(topic) = topic else { return name.into_any_element() };
+    let topic = div().text_size(px(12.)).line_height(px(16.)).font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).truncate().child(topic);
+    div().flex_1().min_w_0().flex().flex_col().child(name).child(topic).into_any_element()
+}
+
+// A stage lists only its speakers; everyone else folds into one row, as Discord's does.
+fn audience_row(count: usize, cx: &App) -> Div {
+    div()
+        .h(px(30.))
+        .flex_none()
+        .pl(px(35.))
+        .pr_2()
+        .flex()
+        .items_center()
+        .gap_2()
+        .font_weight(FontWeight::NORMAL)
+        .text_color(palette::muted(cx))
+        .child(Icon::new(Glyph::Headphones).size(px(16.)).flex_none())
+        .child(div().flex_1().min_w_0().truncate().child(format!("{count} in audience")))
 }
 
 // A voice occupant's avatar; while they speak, a green ring sits 1px clear of it, as Discord's does.
@@ -1742,7 +1783,6 @@ pub(crate) enum Nav {
     MicOffFill,
     DeafenedFill,
     CameraFill,
-    LiveFill,
     GameFill,
     MusicFill,
     TvFill,
@@ -1775,7 +1815,6 @@ impl Nav {
             Nav::MicOffFill => include_bytes!("../assets/icons/reicon/muted.svg"),
             Nav::DeafenedFill => include_bytes!("../assets/icons/reicon/deafened.svg"),
             Nav::CameraFill => include_bytes!("../assets/icons/reicon/video.svg"),
-            Nav::LiveFill => include_bytes!("../assets/icons/reicon/signal-stream.svg"),
             Nav::GameFill => include_bytes!("../assets/icons/reicon/gamepad.svg"),
             Nav::MusicFill => include_bytes!("../assets/icons/reicon/music-notes.svg"),
             Nav::TvFill => include_bytes!("../assets/icons/reicon/tv.svg"),
@@ -1796,10 +1835,28 @@ pub(crate) fn activity_glyph(kind: ActivityKind) -> Option<Icon> {
     match kind {
         ActivityKind::Playing | ActivityKind::Competing => Some(Nav::GameFill.icon()),
         ActivityKind::Listening => Some(Nav::MusicFill.icon()),
-        ActivityKind::Streaming => Some(Nav::LiveFill.icon()),
-        ActivityKind::Watching => Some(Nav::TvFill.icon()),
+        // Discord draws a TV for both.
+        ActivityKind::Streaming | ActivityKind::Watching => Some(Nav::TvFill.icon()),
         ActivityKind::Custom => None,
     }
+}
+
+// A row still loading, names of varying length: a DM's avatar and name, or a channel's icon and name.
+fn list_skeleton(i: usize, channels: bool, cx: &App) -> AnyElement {
+    let width = [0.62, 0.45, 0.7, 0.52, 0.38, 0.58, 0.48, 0.66][i % 8];
+    let mark = match channels {
+        true => ui::skeleton(SharedString::from(format!("list-skel-mark-{i}")), 4., cx).size(px(18.)).flex_none(),
+        false => ui::skeleton_circle(SharedString::from(format!("list-skel-mark-{i}")), 32., cx),
+    };
+    div()
+        .h(px(if channels { ROW_HEIGHT } else { 42. }))
+        .px_2()
+        .flex()
+        .items_center()
+        .gap(px(if channels { 8. } else { 12. }))
+        .child(mark)
+        .child(ui::skeleton(SharedString::from(format!("list-skel-name-{i}")), 4., cx).h(px(12.)).w(relative(width)))
+        .into_any_element()
 }
 
 fn muted_line(text: &'static str, cx: &App) -> AnyElement {
