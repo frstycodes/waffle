@@ -271,7 +271,7 @@ impl Waffle {
         !self.in_favorites() && self.guild_id.as_ref() == guild_id
     }
 
-    // The star tile after Home, once something is favourited (or Favorites was shown on purpose).
+    // The star tile after Home, while something is favourited.
     fn favorites_item(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         if !self.favorites.shown() {
             return None;

@@ -54,7 +54,7 @@ pub struct FavoriteCategoryDrag;
 pub struct Favorites {
     pub channels: BTreeMap<u64, FavoriteChannel>,
     pub muted: bool,
-    // Unset: shown once anything is favourited.
+    // Unset: shown once anything is favourited; never shown with nothing favourited.
     pub guild_visible: Option<bool>,
     unknown: Vec<u8>,
 }
@@ -198,7 +198,7 @@ impl Favorites {
     }
 
     pub fn shown(&self) -> bool {
-        self.guild_visible.unwrap_or(!self.channels.is_empty())
+        self.channels.values().any(|e| !e.is_category()) && self.guild_visible.unwrap_or(true)
     }
 
     // Uncategorised channels first, then each category by position; inside each, position order with voice last.
