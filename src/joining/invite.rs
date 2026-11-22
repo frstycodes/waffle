@@ -77,7 +77,7 @@ impl Waffle {
         let Some(body) = privacy_body(&self.account_settings, guild_id, &picked) else { return };
         // Not verified: Discord's own client writes these through its protobuf settings; the legacy
         // PATCH /users/@me/settings still takes both lists.
-        self.server_call(Call::new(reqwest::Method::PATCH, "/users/@me/settings".into(), Some(body.clone())), |this, result, cx| match result {
+        self.server_call(Call::new(reqwest::Method::PATCH, "/users/@me/settings".into(), Some(body.clone())), move |this, result, cx| match result {
             Ok(_) => this.account_settings.apply(&body),
             Err(error) => this.show_toast(error, cx),
         }, cx);
