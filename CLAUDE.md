@@ -63,7 +63,7 @@ gpui notifies `window.current_view()`, the view whose render built the element, 
 - Element ids are stable and unique: keyed by the data's id (`("message", id)`), never by index in a list that reorders.
 - No `unwrap`/`expect` on runtime data in render or event paths: guard and return. `expect` is for invariants, with the invariant as its message.
 - Enums over boolean pairs and stringly states; `match` exhaustively, no `_ =>` over an enum you own.
-- Done means `cargo clippy --all-targets` adds no warnings in `src/` and `cargo test` passes, `ui_rules` included (it runs `tools/ui_lint.py --check` and `tools/test_ui_lint.py`).
+- Done means `make check` passes: clippy with warnings as errors, `tools/ui_lint.py --check` and its tests, then `cargo test`. `make help` lists the other commands (run, demo scenes, the design page).
 
 ## Design system catalog
 
