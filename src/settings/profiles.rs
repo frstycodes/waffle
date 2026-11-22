@@ -12,7 +12,7 @@ use gpui_kit::{
     },
     div,
     prelude::FluentBuilder,
-    px, rgb,
+    px,
 };
 use serde_json::Value;
 
@@ -558,7 +558,7 @@ impl Waffle {
         }
         let none = ui::chip("pf-accent-default", None, "Default", editor.accent.is_none(), cx).on_click(cx.listener(|this, _, _, cx| this.edit_profile(cx, |e| e.accent = None)));
         let swatches = colours.into_iter().map(|colour| {
-            ui::swatch(SharedString::from(format!("pf-accent-{colour:06x}")), rgb(colour).into(), editor.accent == Some(colour), ring).on_click(cx.listener(move |this, _, _, cx| this.edit_profile(cx, |e| e.accent = Some(colour))))
+            ui::swatch(SharedString::from(format!("pf-accent-{colour:06x}")), palette::data_color(colour), editor.accent == Some(colour), ring).on_click(cx.listener(move |this, _, _, cx| this.edit_profile(cx, |e| e.accent = Some(colour))))
         });
         ui::settings_row("pf-accent", false, cx).child(div().flex().flex_wrap().items_center().gap_2().child(none).children(swatches))
     }

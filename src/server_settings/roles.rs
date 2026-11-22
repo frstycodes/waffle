@@ -393,7 +393,7 @@ impl Waffle {
         let ring = palette::surface(palette::Level::Group, cx);
         let swatches = |slot: u8, current: Option<u32>, cx: &mut Context<Self>| {
             let none = ui::swatch(SharedString::from(format!("ss-swatch-{slot}-none")), palette::faint(cx), current.is_none_or(|c| c == 0), ring).on_click(cx.listener(move |this, _, _, cx| this.edit_role_draft(cx, |d| set_color(d, slot, None))));
-            let rest = COLORS.map(|c| ui::swatch(SharedString::from(format!("ss-swatch-{slot}-{c:06x}")), gpui_kit::rgb(c).into(), current == Some(c), ring).on_click(cx.listener(move |this, _, _, cx| this.edit_role_draft(cx, |d| set_color(d, slot, Some(c))))).into_any_element());
+            let rest = COLORS.map(|c| ui::swatch(SharedString::from(format!("ss-swatch-{slot}-{c:06x}")), palette::data_color(c), current == Some(c), ring).on_click(cx.listener(move |this, _, _, cx| this.edit_role_draft(cx, |d| set_color(d, slot, Some(c))))).into_any_element());
             // Ten to a row, as Discord lays them out.
             div().max_w(px(400.)).flex().flex_wrap().gap_2().child(none).children(rest)
         };

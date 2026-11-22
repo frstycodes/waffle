@@ -5,7 +5,7 @@ use std::{collections::HashMap, time::Duration};
 use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, BoxShadow, Context, Div, ElementId, FontWeight, Hsla, MouseButton, Pixels, Radians, ScrollHandle, SharedString, Stateful, Task, Window, canvas,
     component::Icon,
-    div, img, point, prelude::*, px, relative, rgb,
+    div, img, point, prelude::*, px, relative,
 };
 use serde::{Deserialize, Serialize};
 
@@ -1155,7 +1155,7 @@ impl Waffle {
     fn account_page(&self, cx: &mut Context<Self>) -> Vec<Section> {
         let Some(me) = self.me.clone() else { return Vec::new() };
         let fill = palette::surface(Level::Group, cx);
-        let banner_fill = div().size_full().bg(gpui_kit::linear_gradient(135., gpui_kit::linear_color_stop(rgb(BANNER.0), 0.), gpui_kit::linear_color_stop(rgb(BANNER.1), 1.)));
+        let banner_fill = div().size_full().bg(gpui_kit::linear_gradient(135., gpui_kit::linear_color_stop(palette::data_color(BANNER.0), 0.), gpui_kit::linear_color_stop(palette::data_color(BANNER.1), 1.)));
         let banner_art = match &self.my_account.banner {
             Some(url) => ui::edge(crate::chat::animated_image(url.clone()).size_full().object_fit(gpui_kit::ObjectFit::Cover), ui::top(ui::RADIUS_XL)).into_any_element(),
             None => ui::edge(banner_fill, ui::top(ui::RADIUS_XL)).into_any_element(),
@@ -2387,21 +2387,21 @@ const MINI_DARK: Mini = Mini { rail: 0x0A0B0D, side: 0x111213, page: 0x17181A, i
 const MINI_LIGHT: Mini = Mini { rail: 0xDEE0E3, side: 0xECEEF0, page: 0xF8F9FB, ink: 0x2D2E30, faint: 0xBCBEC0 };
 
 fn mini_window(m: &Mini) -> Div {
-    let bar = |color: u32, width: f32| div().h_1().w(relative(width)).rounded_full().bg(rgb(color));
+    let bar = |color: u32, width: f32| div().h_1().w(relative(width)).rounded_full().bg(palette::data_color(color));
     // The rail runs along the window's rounded left edge, so it takes those corners: gpui clips only to
     // rectangles, and a square rail poked out past them.
     let rail = ui::edge(div(), ui::left(ui::RADIUS_MD))
         .w(relative(0.12))
         .h_full()
-        .bg(rgb(m.rail))
+        .bg(palette::data_color(m.rail))
         .pt_1p5()
         .flex()
         .flex_col()
         .items_center()
         .gap_1()
         .child(div().w(relative(0.6)).h_3p5().squircle(4.).bg(palette::accent()))
-        .child(div().w(relative(0.6)).h_3p5().squircle(4.).bg(rgb(m.faint)));
-    let side = div().w(relative(0.28)).h_full().bg(rgb(m.side)).py_2().px_1p5().flex().flex_col().gap(px(5.)).child(bar(m.faint, 1.)).child(bar(m.ink, 0.8)).child(bar(m.faint, 0.6)).child(bar(m.faint, 1.));
+        .child(div().w(relative(0.6)).h_3p5().squircle(4.).bg(palette::data_color(m.faint)));
+    let side = div().w(relative(0.28)).h_full().bg(palette::data_color(m.side)).py_2().px_1p5().flex().flex_col().gap(px(5.)).child(bar(m.faint, 1.)).child(bar(m.ink, 0.8)).child(bar(m.faint, 0.6)).child(bar(m.faint, 1.));
     let content = div()
         .flex_1()
         .h_full()
@@ -2415,8 +2415,8 @@ fn mini_window(m: &Mini) -> Div {
         .child(bar(m.faint, 0.85))
         .child(bar(m.ink, 0.4))
         .child(bar(m.faint, 0.85))
-        .child(div().mt_1().h_3().w_full().squircle(4.).bg(rgb(m.faint)));
-    div().w_full().h(px(MINI_HEIGHT)).squircle(ui::RADIUS_MD).bg(rgb(m.page)).flex().child(rail).child(side).child(content)
+        .child(div().mt_1().h_3().w_full().squircle(4.).bg(palette::data_color(m.faint)));
+    div().w_full().h(px(MINI_HEIGHT)).squircle(ui::RADIUS_MD).bg(palette::data_color(m.page)).flex().child(rail).child(side).child(content)
 }
 
 const MINI_HEIGHT: f32 = 130.;

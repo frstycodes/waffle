@@ -329,7 +329,7 @@ impl PreviewLook {
     }
 
     fn name(&self, sample: &Sample, cx: &Context<Waffle>) -> Div {
-        let role = gpui_kit::rgb(sample.color).into();
+        let role = palette::data_color(sample.color);
         let role = if self.desaturate_user_colors { self.saturate(role) } else { role };
         let ink = if self.role_style == RoleStyle::InNames { role } else { palette::strong(cx) };
         let dot = (self.role_style == RoleStyle::NextToNames).then(|| div().size_2p5().flex_none().rounded_full().bg(role));
