@@ -17,7 +17,7 @@ use crate::{
     Waffle,
     discord::{Channel, MediaKind, Message, parse_message, parse_thread},
     icons::Glyph,
-    mascot::Mood,
+    illustration::Illustration,
     palette::{self, Level},
     ui::{self, Squircle},
 };
@@ -199,7 +199,7 @@ impl Waffle {
                         .gap(px(12.))
                         .when(!empty, |d| d.child(div().flex().justify_end().child(new_post)))
                         .children(error)
-                        .when(empty, |d| d.child(ui::empty_state("forum-empty", Mood::Idle, "No posts yet", "Start the first one. Each post gets its own thread.", cx)))
+                        .when(empty, |d| d.child(ui::empty_state("forum-empty", Illustration::ForumEmpty, "No posts yet", "Start the first one. Each post gets its own thread.", cx)))
                         .child(div().flex().flex_col().gap(px(8.)).children(cards))
                         .children(more.map(|m| div().flex().justify_center().child(m))),
                 ),
