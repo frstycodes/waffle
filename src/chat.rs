@@ -75,6 +75,11 @@ impl Waffle {
             Some(Feed { error: Some(error), .. }) => empty_state("failed", crate::illustration::Illustration::LoadFailed, "Couldn't load messages", error.clone(), cx),
             _ => skeleton(cx),
         };
+        let gate = self.composer_gate(&channel, window, cx);
+        let composer = match gate.or_else(|| self.follow_blocker(&channel, cx)) {
+            Some(blocker) => blocker,
+            None => self.render_composer(window, cx).into_any_element(),
+        };
         let chat = div()
             .relative()
             .flex_1()
@@ -87,10 +92,7 @@ impl Waffle {
             // The feed stops under the header, a hard edge.
             .child(header)
             // The composer floats over the feed, which scrolls on under its glass.
-            .child(div().relative().flex_1().min_h_0().child(body).children(unread_bar).child(match self.composer_gate(&channel, window, cx) {
-                Some(gate) => gate,
-                None => self.render_composer(window, cx).into_any_element(),
-            }));
+            .child(div().relative().flex_1().min_h_0().child(body).children(unread_bar).child(composer));
         // The members column beside the feed runs to the window's top with a header of its own on the same line.
         let panel = self.panel_column_width().map(|w| self.part(crate::part::Column::Panel, gpui_kit::StyleRefinement::default().w(px(w)).h_full().flex_none(), cx));
         let drop_zone = self.drop_zone(&channel, cx);
@@ -109,6 +111,7 @@ impl Waffle {
         let lead = match channel.kind {
             ChannelKind::Dm => ui::dm_face(&channel.face(), 24., palette::surface(Level::Page, cx)),
             ChannelKind::Thread => Icon::new(Glyph::Thread).size(px(20.)).text_color(faint).into_any_element(),
+            _ if channel.raw_type == 5 => Icon::new(Glyph::Megaphone).size(px(20.)).text_color(faint).into_any_element(),
             _ => Icon::new(Glyph::Hashtag).size(px(20.)).text_color(faint).into_any_element(),
         };
         let here = div()
@@ -204,7 +207,7 @@ impl Waffle {
             .window_control_area(WindowControlArea::Drag)
             .child(crumbs)
             .children(topic)
-            .child(div().ml_auto().flex_none().flex().items_center().gap(px(2.)).children(join).children(calls.into_iter().flatten()).children(threads).children(bell).child(pins).children(add_members).children(members).children(search))
+            .child(div().ml_auto().flex_none().flex().items_center().gap(px(2.)).children(self.follow_button(channel, cx)).children(join).children(calls.into_iter().flatten()).children(threads).children(bell).child(pins).children(add_members).children(members).children(search))
             .child(self.caption_clearance(!self.panel_shown()));
         ui::hard_edge(|| false, cx).child(bar)
     }
@@ -505,6 +508,7 @@ impl Waffle {
             saved_ids: self.saved_ids.clone(),
             poll_picks: self.poll_picks.clone(),
             poll_peek: self.poll_peek.clone(),
+            announce: self.newsroom(channel),
             notices: self.notice_facts(messages, channel),
         })
     }
@@ -1073,6 +1077,7 @@ pub(crate) struct RowContext {
     column: f32,
     poll_picks: HashMap<String, Vec<u32>>,
     poll_peek: std::collections::HashSet<String>,
+    announce: crate::announcements::Newsroom,
     pub(crate) notices: crate::system_message::Facts,
 }
 
@@ -1122,6 +1127,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .text_color(ink)
         .children(message.reply.as_ref().filter(|_| ctx.compact).map(|reply| reply_preview(reply, message.reply_to.clone(), ctx, cx)))
         .children(lead)
+        .children(crate::announcements::publish_bump(message, mine, &ctx.announce, ctx.this.clone(), cx))
         .children(message.forward.as_ref().map(|original| forward_card(original, ctx, cx)))
         .children(media.map(|m| div().when(pending, |d| d.opacity(0.6)).child(m)))
         .children(message.stickers.iter().map(|s| div().when(pending, |d| d.opacity(0.6)).child(crate::stickers::in_chat(s, ctx.media.stickers.plays(ctx.hovers(message)), cx))))
@@ -1182,7 +1188,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
             div()
                 .flex()
                 .gap(px(16.))
-                .child(profile_trigger(format!("avatar-{}", message.id), &message.author, ctx).flex_none().mt(px(2.)).child(crate::layout::decorated_avatar(
+                .child(author_trigger(format!("avatar-{}", message.id), message, ctx).flex_none().mt(px(2.)).child(crate::layout::decorated_avatar(
                     &message.author.avatar,
                     message.author.decoration.as_deref(),
                     AVATAR,
@@ -1274,6 +1280,11 @@ pub(crate) fn message_head(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
         .when(message.pinned, |h| h.child(div().flex_none().self_center().text_color(palette::muted(cx)).child(Icon::new(Glyph::Pin).size(px(14.)))))
 }
 
+// A crosspost's author is its source server, whose card opens instead of the webhook's profile.
+fn author_trigger(id: String, message: &Message, ctx: &Rc<RowContext>) -> Stateful<Div> {
+    crate::announcements::source_trigger(id.clone(), message, ctx.this.clone()).unwrap_or_else(|| profile_trigger(id, &message.author, ctx))
+}
+
 // The name in its display-name style (unless those are off) and its role colour or dot, per Role colors,
 // then the server tag and APP for a bot.
 fn author(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Div {
@@ -1287,14 +1298,15 @@ fn author(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Div {
         .gap(px(8.))
         .min_w_0()
         .child(
-            crate::name_fonts::styled(profile_trigger(format!("name-{}", message.id), &message.author, ctx).min_w_0().truncate().text_size(px(ctx.font_size)).font_weight(FontWeight::MEDIUM), style)
+            crate::name_fonts::styled(author_trigger(format!("name-{}", message.id), message, ctx).min_w_0().truncate().text_size(px(ctx.font_size)).font_weight(FontWeight::MEDIUM), style)
                 .text_color(ink.unwrap_or(palette::strong(cx)))
                 .hover(|s| s.underline())
                 .child(StyledText::new(name).with_highlights(runs)),
         )
         .children(dot.map(role_dot))
         .children(message.author.tag.as_ref().map(|tag| guild_tag(tag, cx)))
-        .when(message.author.bot, |h| h.child(ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px(px(6.)).gap(px(3.)).child(Icon::new(Glyph::Checkmark).size(px(11.))).child("APP")))
+        .when(crate::announcements::is_crosspost(message), |h| h.child(crate::announcements::server_tag(message, cx)))
+        .when(message.author.bot && !crate::announcements::is_crosspost(message), |h| h.child(ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px(px(6.)).gap(px(3.)).child(Icon::new(Glyph::Checkmark).size(px(11.))).child("APP")))
 }
 
 // Not verified: Discord's compact time column and avatar; 52px and 18px in design/explore-settings.html,
@@ -1648,6 +1660,9 @@ pub(crate) fn starter_message(parent: &Message, ctx: &Rc<RowContext>, cx: &mut A
 }
 
 pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyElement> {
+    if message.flags & Message::SOURCE_MESSAGE_DELETED != 0 {
+        return Some(crate::announcements::source_deleted(cx));
+    }
     // A lone link whose media the setting keeps out of line stays as its text.
     if message.content.is_empty() || (ctx.media.links && only_media_link(message)) {
         return None;
@@ -3336,6 +3351,7 @@ fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> Any
             );
         }
         bar = bar.child(sep()).children([A::React, A::Edit, A::Reply, A::Forward, A::Thread].into_iter().filter_map(offer).map(|a| action(a, cx)));
+        bar = bar.children(crate::announcements::publish_button(message, mine, &ctx.announce, ctx.this.clone(), cx));
     }
     if !ctx.shift || !sent {
         let (this, msg) = (ctx.this.clone(), message.clone());

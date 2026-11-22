@@ -239,6 +239,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         }
         "settings" => waffle.open_settings(crate::settings::Page::Account, window, cx),
         "create-channel" => waffle.open_create_channel("1".into(), 0, Some("c0".into()), window, cx),
+        "events" | "events-create" | "events-occurrence" => demo_events(waffle, scene, window, cx),
         "zoom" => crate::layout::apply_zoom(window, 1.5, cx),
         "advanced" => {
             waffle.developer_mode = true;
@@ -478,6 +479,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // and an expired code, a message you can't see (no card), and two still loading.
         "link-previews" => demo_link_previews(waffle),
         "forwarded" => demo_forwarded(waffle),
+        scene if scene.starts_with("announcements") => demo_announcements(waffle, scene, window, cx),
         // An upload, a link image, a GIF, an animated emoji, a sticker and spoilers, with uploads kept out of
         // line, GIFs still until hovered, stickers moving on hover and spoilers always shown.
         "chat-media-settings" => demo_media_settings(waffle),
@@ -687,6 +689,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         s if ["invite", "onboarding", "rules", "roles", "guide"].iter().any(|p| s.starts_with(p)) => crate::joining::demo(waffle, scene, window, cx),
         "server-settings" | "server-settings-engagement" | "server-settings-roles" | "server-settings-role" | "server-settings-role-perms" | "server-settings-audit" | "server-settings-bans" | "server-settings-automod" | "server-settings-invites" | "server-settings-dirty" => crate::server_settings::demo::open(waffle, scene, window, cx),
         "channel-settings" | "channel-settings-search" | "channel-settings-perms" | "channel-settings-voice" | "channel-settings-voice-perms" | "channel-settings-invites" | "channel-settings-dirty" => demo_channel_settings(waffle, scene, window, cx),
+        "forum" | "forum-gallery" | "forum-search" | "forum-sort" | "forum-new-post" => crate::forum::demo::open(waffle, scene, window, cx),
         "channel-menu" => {
             let general = waffle.guild().and_then(|g| g.channels.iter().find(|c| c.id == "general").cloned());
             if let Some(channel) = general {
@@ -2433,4 +2436,141 @@ fn reactors(count: usize) -> Vec<Reactor> {
         ("31000010", "mikey", "mickeeeyyyyyy"),
     ];
     people.iter().take(count).map(|&(id, name, username)| Reactor { user: user(id, name), username: username.into() }).collect()
+}
+
+// Night Owls as a NEWS server with #announcements: a crosspost from Bevy and one whose source was deleted, our
+// published message and a fresh one under its Publish bump, the toolbar up. `-publish` opens the confirm (12
+// following servers, 3 of 10 used), `-limit` the rate-limit alert, `-follow` the Follow dialog, `-member` the
+// blocker a member who can't post sees, `-settings` the channel's Announcement Channel switch, `-followed` the
+// Integrations page's Channels Followed, and `-source` the source-server card Bevy's crosspost opens.
+fn demo_announcements(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
+    let mut news = channel("news", "announcements", ChannelKind::Text, Some("c0"));
+    (news.raw_type, news.topic) = (5, Some("Patch notes and server news".into()));
+    let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") else { return };
+    guild.features.push("NEWS".into());
+    guild.channels.insert(1, news.clone());
+    if scene == "announcements-member" {
+        guild.owner_id = Some("8388608".into());
+        for everyone in guild.roles.iter_mut().filter(|r| r.id == "1") {
+            everyone.permissions = crate::discord::VIEW_CHANNEL | crate::discord::perm::READ_MESSAGE_HISTORY;
+        }
+    }
+    let me = user("4194304", "kiwi");
+    let post = |id: &str, author: User, days: i64, content: &str, flags: u64| Message {
+        id: id.into(),
+        channel_id: "news".into(),
+        guild_id: Some("1".into()),
+        author,
+        content: content.into(),
+        timestamp: (chrono::Utc::now() - chrono::Duration::days(days)).to_rfc3339(),
+        flags,
+        crosspost_from: (flags & Message::IS_CROSSPOST != 0).then(|| crate::discord::CrosspostSource { guild_id: "bevy".into(), channel_id: "bevy-news".into() }),
+        ..Default::default()
+    };
+    let bevy =User { id: "77".into(), name: "Bevy #announcements".into(), avatar: avatar_url("5", None), bot: true, ..Default::default() };
+    let fresh = post("954", me.clone(), 0, "Patch 7.1 is live! Healer ult range now shows on the minimap. Full notes in #patch-notes.", 0);
+    let messages = vec![
+        post("951", bevy.clone(), 3, "Bevy 0.17 is out: required components everywhere and a new picking backend.", Message::IS_CROSSPOST),
+        post("952", bevy, 2, "", Message::IS_CROSSPOST | Message::SOURCE_MESSAGE_DELETED),
+        post("953", me, 1, "Ranked season 7 starts Friday.", Message::CROSSPOSTED),
+        fresh.clone(),
+    ];
+    waffle.feeds.insert("news".into(), Feed { messages: std::sync::Arc::new(messages), loaded: true, ..Default::default() });
+    waffle.open_channel(news.clone(), window, cx);
+    waffle.offer_publish_bump(&fresh);
+    waffle.demo_announcement_stats("news", 3);
+    match scene {
+        "announcements-publish" => waffle.open_publish(fresh, cx),
+        "announcements-limit" => waffle.demo_publish_limit(1415.),
+        "announcements-follow" => waffle.open_follow(news, cx),
+        "announcements-settings" => waffle.open_channel_settings(news, "1".into(), window, cx),
+        "announcements-member" => {}
+        "announcements-followed" => demo_followed_channels(waffle, window, cx),
+        "announcements-source" => {
+            let crosspost = waffle.feeds.get("news").and_then(|f| f.messages.iter().find(|m| m.id == "951").cloned());
+            if let Some(crosspost) = crosspost {
+                waffle.demo_source_card(&crosspost, gpui_kit::point(gpui_kit::px(380.), gpui_kit::px(170.)), cx);
+            }
+        }
+        _ => waffle.hovered_message = Some("954".into()),
+    }
+}
+
+// Night Owls' Integrations page with two followed channels: Bevy's news into #general and Discord's
+// community updates into #staff.
+fn demo_followed_channels(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<Waffle>) {
+    crate::server_settings::demo::open(waffle, "server-settings", window, cx);
+    if let Some(view) = waffle.server_settings.as_mut() {
+        view.page = crate::server_settings::access::Page::Integrations;
+    }
+    let follow = |id: &str, name: &str, into: &str, guild: &str, channel: &str| {
+        serde_json::json!({ "id": id, "type": 2, "name": name, "channel_id": into, "source_guild": { "id": guild, "name": name.rsplit_once(' ').map_or(name, |(g, _)| g), "icon": null }, "source_channel": { "id": format!("{guild}-news"), "name": channel } })
+    };
+    let hooks = serde_json::json!([follow("f1", "Bevy #announcements", "general", "bevy", "announcements"), follow("f2", "Discord Updates #community-updates", "staff", "667560445975986187", "community-updates")]);
+    waffle.demo_followed_channels("1", hooks);
+}
+
+// Night Owls' events: a stage that's live, a voice hangout starting within the hour (yours, marked
+// Interested), a weekly stream somewhere else with a cover and next week's stream canceled, and a canceled
+// one. "-create" opens the wizard at its second step instead of the list; "-occurrence" opens the weekly
+// stream's details, where its occurrences and their menus are.
+fn demo_events(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
+    use chrono::{Datelike, Duration, Utc};
+
+    use crate::discord::ScheduledEvent;
+    let at = |minutes: i64| (Utc::now() + Duration::minutes(minutes)).to_rfc3339();
+    let weekly_start = Utc::now() + Duration::days(3);
+    let next_week = weekly_start + Duration::weeks(1);
+    let event = |id: &str, name: &str, start: String, status: u8, entity_type: u8, creator: User| ScheduledEvent {
+        id: id.into(),
+        guild_id: "1".into(),
+        creator_id: Some(creator.id.clone()),
+        creator: Some(creator),
+        name: name.into(),
+        start,
+        status,
+        entity_type,
+        ..Default::default()
+    };
+    let live = ScheduledEvent {
+        channel_id: Some("stage".into()),
+        description: Some("Round two of the autumn bracket, called live from the stage. Raise a hand to ask the players anything between matches.".into()),
+        interested: 1112,
+        ..event("ev-live", "Community cup: round two of the autumn bracket, with commentary from the whole Night Owls crew", at(-20), ScheduledEvent::ACTIVE, ScheduledEvent::STAGE, user("8388608", "Wren"))
+    };
+    let soon = ScheduledEvent {
+        channel_id: Some("lounge".into()),
+        description: Some("We're watching the director's cut of The Long Night. Bring snacks, keep spoilers in the thread, and stay for the vote on next week's pick, which always runs longer than the film.".into()),
+        interested: 24,
+        me_interested: true,
+        ..event("ev-soon", "Movie night: The Long Night", at(12), ScheduledEvent::SCHEDULED, ScheduledEvent::VOICE, me_user())
+    };
+    let weekly = ScheduledEvent {
+        end: Some((weekly_start + Duration::hours(4)).to_rfc3339()),
+        location: Some("https://twitch.tv/nightowls-community-cup-autumn-bracket-finals".into()),
+        description: Some("Every week on the channel: the bracket, the highlights and the long arguments about map picks.".into()),
+        interested: 318,
+        image: Some("demo/banner.png".into()),
+        recurrence: Some(serde_json::json!({ "start": weekly_start.to_rfc3339(), "frequency": 2, "interval": 1, "by_weekday": [weekly_start.weekday().num_days_from_monday()] })),
+        exceptions: vec![crate::discord::EventException { id: crate::events::recurrence_id(next_week), start: Some(next_week.to_rfc3339()), end: None, canceled: true }],
+        ..event("ev-weekly", "Night Owls weekly stream", weekly_start.to_rfc3339(), ScheduledEvent::SCHEDULED, ScheduledEvent::EXTERNAL, user("16777216", "toma reed"))
+    };
+    let canceled = ScheduledEvent { channel_id: Some("hub".into()), interested: 3, ..event("ev-canceled", "Snack rota planning", at(60 * 26), ScheduledEvent::CANCELED, ScheduledEvent::VOICE, user("20971520", "ferris")) };
+    if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
+        let mut stage = channel("stage", "Friday stage", ChannelKind::Voice, Some("c1"));
+        stage.raw_type = 13;
+        guild.channels.push(stage);
+        guild.features.push("COMMUNITY".into());
+        guild.events = vec![live, soon, weekly, canceled];
+    }
+    match scene {
+        "events-create" => {}
+        "events-occurrence" => {
+            waffle.open_events("1".into(), cx);
+            return waffle.open_event_details("1".into(), "ev-weekly".into(), cx);
+        }
+        _ => return waffle.open_events("1".into(), cx),
+    }
+    waffle.open_event_wizard("1".into(), None, window, cx);
+    waffle.fill_event_wizard("Community cup: round two", ScheduledEvent::EXTERNAL, "twitch.tv/nightowls", window, cx);
 }

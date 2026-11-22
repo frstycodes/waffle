@@ -33,6 +33,7 @@ use gpui_kit::{
 use crate::{discord::Status, icons::Glyph, illustration::Illustration, mascot, motion, palette, settings::Density};
 
 mod control;
+mod date;
 mod dialog;
 mod feedback;
 mod field;
@@ -42,8 +43,9 @@ mod tabs;
 mod tri;
 mod tunnel;
 
-pub use control::{Control, Pressable, button, chip, hover_fade, icon_button, menu_row, pressable, round_button, swatch, tip};
-pub use dialog::{dialog, dialog_body, modal};
+pub use control::{Control, Pressable, button, chip, chip_lead, hover_fade, icon_button, menu_row, pressable, round_button, swatch, tip};
+pub use date::{date_field, time_field};
+pub use dialog::{dialog, dialog_body, dialog_scroll, modal};
 pub use feedback::{meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
 pub use field::{code_cell, drop_zone, dropdown, field, field_error, field_frame, field_hint, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
 pub use group::{settings_caption, settings_card, settings_choice, settings_close, settings_column, settings_group, SettingsHighlight, settings_warning, settings_nav_item, settings_page, SETTINGS_NAV_WIDTH, SETTINGS_WIDTH, settings_row, settings_nav_edge, settings_sidebar, settings_switch, settings_text, settings_title, settings_window};
@@ -476,21 +478,27 @@ pub fn toggle_row(id: impl Into<ElementId>, title: impl Into<SharedString>, deta
     let id: ElementId = id.into();
     let pressed = control::pressed(&id, window, cx);
     let switch = switch_track(&control::part(&id, "switch"), on, pressed, window, cx);
-    control::choice(id, cx).child(choice_text(title, detail, cx)).child(switch)
+    control::choice(id, cx).child(choice_text(title.into(), detail, cx)).child(switch)
 }
 
 // One of a set to pick from: the check or radio first, then its title and detail.
 pub fn pick_row(id: impl Into<ElementId>, mark: impl IntoElement, title: impl Into<SharedString>, detail: Option<SharedString>, cx: &App) -> Control {
+    control::choice(id, cx).child(mark).child(choice_text(title.into(), detail, cx))
+}
+
+// A choice whose kind has an icon (a channel type, a place): the icon leads the title, as in Create Channel.
+pub fn pick_row_icon(id: impl Into<ElementId>, mark: impl IntoElement, icon: Icon, title: impl Into<SharedString>, detail: Option<SharedString>, cx: &App) -> Control {
+    let title = div().flex().items_center().gap(px(6.)).child(icon.size(px(18.)).flex_none()).child(title.into());
     control::choice(id, cx).child(mark).child(choice_text(title, detail, cx))
 }
 
-fn choice_text(title: impl Into<SharedString>, detail: Option<SharedString>, cx: &App) -> Div {
+fn choice_text(title: impl IntoElement, detail: Option<SharedString>, cx: &App) -> Div {
     div()
         .flex_1()
         .min_w_0()
         .flex()
         .flex_col()
-        .child(div().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child(title.into()))
+        .child(div().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child(title))
         .when_some(detail, |d, detail| d.child(div().text_size(px(12.)).text_color(palette::muted(cx)).child(detail)))
 }
 

@@ -302,7 +302,9 @@ impl Waffle {
             | std::mem::take(&mut self.status_menu)
             | self.status_editor.take().is_some()
             | self.poll_creator.take().is_some()
+            | self.close_events()
             | self.forward_dialog.take().is_some()
+            | self.dismiss_announcement_dialog()
             | self.report_dialog.take().is_some()
             | self.group_dialog.take().is_some()
             | self.reactions_dialog.take().is_some()
@@ -328,7 +330,9 @@ impl Waffle {
         out.extend(self.status_menu_overlay(cx));
         out.extend(self.status_editor_overlay(window, cx));
         out.extend(self.poll_creator_overlay(window, cx));
+        out.extend(self.events_overlay(window, cx));
         out.extend(self.forward_overlay(window, cx));
+        out.extend(self.announcement_overlay(window, cx));
         out.extend(self.report_overlay(window, cx));
         out.extend(self.group_overlay(window, cx));
         out.extend(self.reactions_overlay(window, cx));

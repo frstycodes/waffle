@@ -20,6 +20,7 @@ mod channel_menu;
 mod channel_settings;
 mod dm_call;
 mod dm_start;
+mod announcements;
 mod chat;
 mod composer_emoji;
 #[cfg(debug_assertions)]
@@ -39,6 +40,7 @@ mod mascot;
 mod material;
 mod forum;
 mod forward;
+mod events;
 mod report;
 mod group_dm;
 mod reactions;
@@ -683,6 +685,8 @@ pub struct Waffle {
     // Folded runs of joins opened to their lines, by the run's first message.
     open_join_runs: HashSet<String>,
     forward_dialog: Option<forward::ForwardDialog>,
+    announcements: announcements::Announcements,
+    events: events::Events,
     report_dialog: Option<report::ReportDialog>,
     group_dialog: Option<group_dm::GroupDialog>,
     status_flyout: status_menu::Flyout,
@@ -1123,6 +1127,8 @@ impl Waffle {
             poll_peek: HashSet::new(),
             open_join_runs: HashSet::new(),
             forward_dialog: None,
+            announcements: Default::default(),
+            events: Default::default(),
             report_dialog: None,
             group_dialog: None,
             status_flyout: status_menu::Flyout::default(),
@@ -1552,6 +1558,39 @@ impl Waffle {
                 }
                 guild.channels.sort_by_key(|c| c.position);
             }
+            Event::ScheduledEvent(event) => {
+                let Some(guild) = self.guilds.iter_mut().find(|g| g.id == event.guild_id) else { return };
+                match guild.events.iter_mut().find(|e| e.id == event.id) {
+                    // Updates carry neither the counts nor our own Interested: keep what we know.
+                    Some(existing) => *existing = discord::ScheduledEvent { interested: existing.interested, me_interested: existing.me_interested, creator: event.creator.clone().or(existing.creator.take()), ..event },
+                    None => guild.events.push(event),
+                }
+            }
+            Event::ScheduledEventDelete { guild_id, id } => {
+                if let Some(guild) = self.guilds.iter_mut().find(|g| g.id == guild_id) {
+                    guild.events.retain(|e| e.id != id);
+                }
+            }
+            Event::ScheduledEventException { guild_id, event_id, id, exception } => {
+                let event = self.guilds.iter_mut().filter(|g| g.id == guild_id).flat_map(|g| g.events.iter_mut()).find(|e| e.id == event_id);
+                if let Some(event) = event {
+                    event.exceptions.retain(|x| x.id != id);
+                    event.exceptions.extend(exception);
+                }
+            }
+            Event::ScheduledEventUser { guild_id, event_id, user_id, added } => {
+                let mine = self.me.as_ref().is_some_and(|me| me.id == user_id);
+                // Our own Interested echoes back after the optimistic toggle already counted it.
+                let echo = |e: &discord::ScheduledEvent| mine && e.me_interested == added;
+                if let Some(event) = self.guilds.iter_mut().filter(|g| g.id == guild_id).flat_map(|g| g.events.iter_mut()).find(|e| e.id == event_id && !echo(e)) {
+                    event.interested = if added { event.interested + 1 } else { event.interested.saturating_sub(1) };
+                    if mine {
+                        event.me_interested = added;
+                    }
+                }
+            }
+            Event::ForumUnreads { forum_id, counts } => self.on_forum_unreads(&forum_id, counts),
+            Event::ForumPostCreated { forum_id, post_id, owner_id } => self.on_forum_post_created(&forum_id, post_id, &owner_id),
             Event::ChannelDelete { guild_id, id } => {
                 if let Some(guild) = self.guilds.iter_mut().find(|g| g.id == guild_id) {
                     guild.channels.retain(|c| c.id != id);
@@ -1647,7 +1686,10 @@ impl Waffle {
                     self.open_joined_guild(id, cx);
                 }
             }
-            Event::MessageCreate(message) => self.on_message(*message, cx),
+            Event::MessageCreate(message) => {
+                self.offer_publish_bump(&message);
+                self.on_message(*message, cx)
+            }
             Event::MessageUpdate(patch) => {
                 let (channel_id, id) = (patch["channel_id"].as_str().unwrap_or_default(), patch["id"].as_str().unwrap_or_default());
                 if let Some(m) = self.message_mut(channel_id, id) {
@@ -1968,6 +2010,7 @@ impl Waffle {
 
     fn show_channel(&mut self, channel: Channel, window: &mut Window, cx: &mut Context<Self>) {
         self.call_view = false;
+        self.announcement_channel_opened(&channel, cx);
         let placeholder = format!("Message {}", channel_mention(&channel));
         self.composer.update(cx, |state, cx| state.set_placeholder(placeholder, window, cx));
         self.last_channel.insert(self.guild_id.clone(), channel.id.clone());
@@ -2344,7 +2387,7 @@ impl Waffle {
         self.last_typing_sent = None;
         if let Some(editing) = self.editing.take() {
             self.restore_draft(window, cx);
-            return self.edit(editing, content, cx);
+            return self.save_edit(editing, content, cx);
         }
         self.drafts.clear(&channel.id);
         self.save_drafts_soon(cx);

@@ -112,6 +112,11 @@ pub fn chip(id: impl Into<ElementId>, glyph: Option<Glyph>, label: impl Into<Sha
     chip_look(id, on, cx).when_some(glyph, |c, glyph| c.child(Icon::new(glyph).size(px(16.)))).child(label.into())
 }
 
+// A chip led by something other than a glyph (a forum tag's emoji).
+pub fn chip_lead(id: impl Into<ElementId>, lead: Option<AnyElement>, label: impl Into<SharedString>, on: bool, cx: &App) -> Control {
+    chip_look(id, on, cx).children(lead).child(label.into())
+}
+
 fn chip_look(id: impl Into<ElementId>, on: bool, cx: &App) -> Control {
     let look = if on {
         let soft = palette::accent_soft(cx);
@@ -232,6 +237,15 @@ impl Control {
     pub fn danger(mut self, cx: &App) -> Self {
         let fill = palette::danger();
         self.look = Look { hover: fill, press: fill, ink: palette::danger_ink(cx), ink_hover: gpui_kit::white(), ..self.look };
+        self
+    }
+
+    // A field trigger whose value failed validation: the danger edge, hovered or not.
+    pub fn invalid(mut self, invalid: bool, cx: &App) -> Self {
+        if invalid {
+            let ink = palette::danger_ink(cx);
+            self.look.edge = Some((ink, ink));
+        }
         self
     }
 

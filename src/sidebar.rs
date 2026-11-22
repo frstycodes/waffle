@@ -617,6 +617,7 @@ impl Waffle {
                 // Beside the carried channel: "Move to Archive" while it's aimed into another category.
                 let tag = self.channel_board.dragged().zip(self.channel_board.hint()).and_then(|(moved, hint)| self.category_move(moved, hint.target.as_deref()?));
                 self.drag_motion.set_tag(tag);
+                rows.extend(self.event_rows(&guild, cx));
                 rows.extend(self.guild_entry_rows(&guild, window, cx));
                 let sections = channel_sections(&guild, &me).into_iter().map(|(category, channels)| (category, channels.into_iter().filter(|c| self.shows_in_list(&guild, c)).collect::<Vec<_>>())).filter(|(_, channels)| !channels.is_empty()).collect::<Vec<_>>();
                 for (i, (category, channels)) in sections.into_iter().enumerate() {
