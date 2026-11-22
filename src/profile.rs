@@ -17,7 +17,7 @@ use crate::{
     user_menu::Surface,
 };
 
-const WIDTH: f32 = 320.;
+pub(crate) const WIDTH: f32 = 320.;
 const BORDER: f32 = 2.;
 // Discord banners are 5:2; at that height a cover fit crops nothing.
 const BANNER: f32 = WIDTH * 0.4;
@@ -533,7 +533,7 @@ pub(crate) fn name_block(user: &User, profile: &Profile, ink: Ink) -> Div {
         })
 }
 
-fn badges(badges: &[Badge], ink: Ink) -> Option<Div> {
+pub(crate) fn badges(badges: &[Badge], ink: Ink) -> Option<Div> {
     if badges.is_empty() {
         return None;
     }
@@ -569,7 +569,7 @@ fn mutuals(profile: &Profile, ink: Ink) -> Option<Div> {
 }
 
 // Discord markdown with custom emoji as images, as a message renders it; Discord gives the bio no heading.
-fn bio_view(user_id: &str, bio: &str, ink: Ink) -> Div {
+pub(crate) fn bio_view(user_id: &str, bio: &str, ink: Ink) -> Div {
     let view = TextView::markdown(SharedString::from(format!("bio-{user_id}")), crate::chat::inline_emoji(&crate::chat::discord_breaks(bio))).selectable(true);
     div().text_size(px(14.)).text_color(ink.text).max_h(px(160.)).child(view)
 }
