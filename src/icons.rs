@@ -341,7 +341,7 @@ pub struct Assets;
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
-        match GLYPHS.iter().chain(BRAND.iter()).chain(crate::app_icon::BRAND_ICONS.iter()).find(|(p, _)| *p == path) {
+        match GLYPHS.iter().chain(BRAND.iter()).chain(crate::app_icon::BRAND_ICONS.iter()).chain(crate::illustration::ASSETS.iter()).find(|(p, _)| *p == path) {
             Some((_, bytes)) => Ok(Some(Cow::Borrowed(bytes))),
             None => gpui_kit::assets::Assets.load(path),
         }
@@ -349,7 +349,7 @@ impl AssetSource for Assets {
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
         let mut paths = gpui_kit::assets::Assets.list(path)?;
-        paths.extend(GLYPHS.iter().chain(BRAND.iter()).chain(crate::app_icon::BRAND_ICONS.iter()).map(|(p, _)| *p).filter(|p| p.starts_with(path)).map(SharedString::from));
+        paths.extend(GLYPHS.iter().chain(BRAND.iter()).chain(crate::app_icon::BRAND_ICONS.iter()).chain(crate::illustration::ASSETS.iter()).map(|(p, _)| *p).filter(|p| p.starts_with(path)).map(SharedString::from));
         Ok(paths)
     }
 }

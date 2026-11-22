@@ -26,6 +26,7 @@ mod drafts;
 mod frecency_sync;
 mod drag;
 mod icons;
+mod illustration;
 mod images;
 mod layout;
 mod link_preview;

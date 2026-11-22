@@ -6,6 +6,7 @@ use crate::{
     Waffle,
     discord::{Channel, ChannelKind, Message},
     icons::Glyph,
+    illustration::Illustration,
     palette,
     ui::{self, RADIUS_SM, Squircle},
 };
@@ -151,8 +152,8 @@ impl Waffle {
     /// The open tab's list: Mentions under its filter chips (at most `limit`), or the unread channels.
     pub(crate) fn inbox_body(&self, limit: Option<usize>, cx: &mut Context<Self>) -> AnyElement {
         match self.inbox_tab {
-            InboxTab::Mentions => div().flex().flex_col().gap_2().child(self.mention_filters(cx)).child(self.message_cards(&self.inbox, limit, "You're all caught up!", cx)).into_any_element(),
-            InboxTab::Saved => self.message_cards(&self.saved, limit, "Save a message from its menu to find it here later.", cx),
+            InboxTab::Mentions => div().flex().flex_col().gap_2().child(self.mention_filters(cx)).child(self.message_cards(&self.inbox, limit, ("You're all caught up!", "Mentions of you and your roles land here."), cx)).into_any_element(),
+            InboxTab::Saved => self.message_cards(&self.saved, limit, ("No saved messages", "Save a message from its menu to find it here later."), cx),
             InboxTab::Unreads => self.unread_list(cx),
         }
     }
@@ -172,16 +173,7 @@ impl Waffle {
     fn unread_list(&self, cx: &mut Context<Self>) -> AnyElement {
         let unreads = self.unreads();
         if unreads.is_empty() {
-            return div()
-                .p_6()
-                .flex()
-                .flex_col()
-                .items_center()
-                .gap_1()
-                .text_center()
-                .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("You're all caught up"))
-                .child(div().text_color(palette::muted(cx)).child("New messages in channels you follow will gather here."))
-                .into_any_element();
+            return ui::empty_state("unreads-empty", Illustration::InboxEmpty, "You're all caught up", "New messages in channels you follow will gather here.", cx).into_any_element();
         }
         let messages: Vec<Message> = unreads.iter().flat_map(|u| u.messages.iter().cloned()).collect();
         let ctx = self.row_context_everywhere(&messages, 380., cx);
