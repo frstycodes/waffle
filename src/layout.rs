@@ -578,7 +578,7 @@ pub fn nameplate(plate: &discord::Nameplate, surface: Hsla, corners: [f32; 4], d
 }
 
 pub fn nameplate_tint(plate: &discord::Nameplate, dark: bool) -> Hsla {
-    gpui_kit::rgb(if dark { plate.tint.0 } else { plate.tint.1 }).into()
+    palette::data_color(if dark { plate.tint.0 } else { plate.tint.1 })
 }
 
 /// Discord's `height: 100%; width: auto` art, pinned to the right edge and rounding its own right corners.

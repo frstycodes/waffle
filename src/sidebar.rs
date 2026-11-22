@@ -5,7 +5,7 @@ use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, Context, Div, FontWeight, Hsla, Radians, SharedString, Stateful, TooltipPlacement, Window,
     base::{Transition as Tween, transition},
     component::{ActiveTheme, Icon},
-    div, img, point, prelude::*, px, relative, rgb, svg,
+    div, img, point, prelude::*, px, relative, svg,
 };
 use gpui_motion_kit::core::{Bezier, Easing, Motion, Target, Transition};
 
@@ -359,7 +359,7 @@ impl Waffle {
         let open = self.folder_shown_open(&folder);
         let key = format!("folder-{}", folder.id);
         let motion = FolderMotion::frame(&key, open, window, cx);
-        let tint: Hsla = folder.color.map(|c| rgb(c).into()).unwrap_or(palette::faint(cx));
+        let tint: Hsla = folder.color.map(palette::data_color).unwrap_or(palette::faint(cx));
         let (unread, mentions) = guilds.iter().map(|g| self.guild_badge(g)).fold((false, 0), |(u, m), (gu, gm)| (u || gu, m + gm));
         let has_selected = guilds.iter().any(|g| self.rail_selected(Some(&g.id)));
         let name: SharedString = folder.name.clone().unwrap_or_else(|| guilds.iter().map(|g| g.name.as_str()).take(3).collect::<Vec<_>>().join(", ")).into();
@@ -1937,7 +1937,7 @@ fn media_badge(media: Media, rail: Hsla, cx: &App) -> Div {
         MediaKind::Screen => Icon::new(Glyph::ShareScreen),
     };
     // Dark with white ink in both themes, as Discord draws it; green while you're connected.
-    let fill = if media.connected { palette::status_in(Status_::Online, cx) } else { gpui_kit::hsla(0., 0., 0.08, 1.) };
+    let fill = if media.connected { palette::status_in(Status_::Online, cx) } else { palette::media_badge() };
     ui::cut_out(div().absolute().right(px(RAIL_WIDTH - TILE_X - TILE - 4. - RING)).top(px(-4. - RING)).p(px(RING)).rounded_full(), rail).child(
         div().size_5().rounded_full().bg(fill).flex().items_center().justify_center().text_color(gpui_kit::white()).child(icon.size(ui::ICON_XS)),
     )

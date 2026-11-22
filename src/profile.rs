@@ -4,7 +4,7 @@ use std::time::Duration;
 use gpui_kit::{
     AnimationExt, AnyElement, App, Context, Div, FontWeight, Hsla, MouseButton, Pixels, Point, SharedString, Stateful, StyledText, Window,
     component::{ActiveTheme, Icon, text::TextView},
-    div, img, linear_color_stop, linear_gradient, prelude::*, px, relative, rgb, svg,
+    div, img, linear_color_stop, linear_gradient, prelude::*, px, relative, svg,
 };
 
 use crate::{
@@ -485,7 +485,7 @@ impl Waffle {
             .children(state.map(|s| div().flex().items_center().gap_1().min_w_0().text_color(ink.text).when(rich.party.is_some(), |d| d.child(Icon::new(Glyph::Users).size(ui::ICON_SM).flex_none())).child(div().truncate().child(s))))
             .children(elapsed.map(|time| {
                 // Status green is ~2:1 on a light card; a deeper green keeps it readable there.
-                let green = if luminance(ink.strong) < 0.5 { rgb(0x1E7A46).into() } else { palette::status(crate::discord::Status::Online) };
+                let green = if luminance(ink.strong) < 0.5 { palette::online_on_light() } else { palette::status(crate::discord::Status::Online) };
                 div().flex().items_center().gap_1().text_color(green).child(Icon::new(Glyph::Game).size(ui::ICON_SM)).child(div().font_family(mono).child(time))
             }));
         div()
@@ -510,7 +510,7 @@ impl Waffle {
             return None;
         }
         let chips = roles.into_iter().map(|r| {
-            let color = if r.color == 0 { palette::status_in(crate::discord::Status::Offline, cx) } else { rgb(r.color).into() };
+            let color = if r.color == 0 { palette::status_in(crate::discord::Status::Offline, cx) } else { palette::data_color(r.color) };
             ui::role_chip(r.name.clone(), color, cx).bg(ink.tile).text_color(ink.text)
         });
         let (user, guild_id) = (card.user.clone(), guild.id.clone());
@@ -554,11 +554,11 @@ impl Ink {
             let surface = palette::surface(palette::Level::Overlay, cx);
             return Ink { top: surface, bottom: surface, border: None, strong: palette::strong(cx), text: palette::text(cx), muted: palette::muted(cx), tile: palette::selected(cx) };
         };
-        let (from, to): (Hsla, Hsla) = (rgb(from).into(), rgb(to).into());
+        let (from, to): (Hsla, Hsla) = (palette::data_color(from), palette::data_color(to));
         let dark = cx.theme().is_dark();
         let ground: Hsla = if dark { gpui_kit::black() } else { gpui_kit::white() };
         let (top, bottom) = (ui::mix(from, ground, 0.55), ui::mix(to, ground, 0.55));
-        let strong: Hsla = if luminance(ui::mix(top, bottom, 0.5)) > 0.4 { gpui_kit::rgb(0x1A1A1E).into() } else { gpui_kit::white() };
+        let strong: Hsla = if luminance(ui::mix(top, bottom, 0.5)) > 0.4 { palette::ink_on_light() } else { gpui_kit::white() };
         Ink { top, bottom, border: Some((from, to)), strong, text: strong.opacity(0.92), muted: strong.opacity(0.72), tile: strong.opacity(0.1) }
     }
 }
@@ -573,7 +573,7 @@ pub(crate) fn banner(profile: &Profile, ink: Ink, radius: f32, cx: &App) -> (Any
     match (&profile.banner, ink.border, profile.accent) {
         (Some(url), _, _) => (ui::media(url.clone(), ui::top(radius)).w_full().h(px(BANNER)).object_fit(gpui_kit::ObjectFit::Cover).into_any_element(), BANNER),
         (None, Some((color, _)), _) => (banner_fill(color, radius).into_any_element(), BANNER_PLAIN),
-        (None, None, Some(accent)) => (banner_fill(rgb(accent).into(), radius).into_any_element(), BANNER_PLAIN),
+        (None, None, Some(accent)) => (banner_fill(palette::data_color(accent), radius).into_any_element(), BANNER_PLAIN),
         (None, None, None) => (banner_fill(palette::selected(cx), radius).into_any_element(), BANNER_PLAIN),
     }
 }
@@ -907,8 +907,8 @@ fn connection_chip(i: usize, c: &Connection, ink: Ink, cx: &App) -> Stateful<Div
 
 // The mark tinted dark or light by its colour; a service without a mark gets its initial.
 fn brand_tile(kind: &str, platform: &str, color: Option<u32>) -> Div {
-    let fill: Hsla = color.map_or_else(|| palette::oklch(0.5, 0.1, ui::name_hue(kind)), |c| rgb(c).into());
-    let ink: Hsla = if luminance(fill) > 0.5 { rgb(0x1A1A1E).into() } else { gpui_kit::white() };
+    let fill: Hsla = color.map_or_else(|| palette::oklch(0.5, 0.1, ui::name_hue(kind)), palette::data_color);
+    let ink: Hsla = if luminance(fill) > 0.5 { palette::ink_on_light() } else { gpui_kit::white() };
     let tile = div().size_5().flex_none().squircle(RADIUS_XS).bg(fill).flex().items_center().justify_center().text_color(ink);
     match crate::icons::brand_mark(kind) {
         Some(path) => tile.child(svg().path(path).size(px(13.)).text_color(ink)),

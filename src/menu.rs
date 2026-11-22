@@ -826,7 +826,7 @@ pub(crate) fn menu_item_row(id: SharedString, item: &Item, sub_open: bool, lead_
         Lead::Emoji(emoji) => emoji_face(emoji, LEAD).into_any_element(),
         // The 14px presence mark with no ring of its own; its cut-outs take the menu's colour.
         Lead::Status(status) => ui::status_mark(*status, 14., palette::surface(palette::Level::Overlay, cx), cx).border_0().into_any_element(),
-        Lead::Dot(color) => div().size_3().rounded_full().bg(gpui_kit::rgb(*color)).into_any_element(),
+        Lead::Dot(color) => div().size_3().rounded_full().bg(palette::data_color(*color)).into_any_element(),
         Lead::Server { icon, name } => ui::server_tile(icon.as_deref(), name, 20., cx),
     });
     let lead = lead.or_else(|| lead_slot.then(|| div().size(px(LEAD)).into_any_element()));
