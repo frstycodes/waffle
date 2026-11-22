@@ -146,12 +146,7 @@ impl Waffle {
         let (strong, ink) = (palette::strong(cx), palette::accent_ink(cx));
         let bar = div()
             .id("guide-action-bar")
-            // Floats over the feed: the messages under it must not take its hover or clicks.
-            .occlude()
-            .absolute()
-            .left(px(16.))
-            .right(px(16.))
-            .bottom(px(self.composer_height.get() + 8.))
+            .mx(px(16.))
             .min_h(px(44.))
             .pl(px(14.))
             .pr(px(6.))
