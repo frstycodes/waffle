@@ -24,11 +24,12 @@ pub struct RulesView {
     refusal: Option<Refusal>,
     // Agreed on Discord's side: the next frame closes the dialog and hands the composer focus.
     done: bool,
+    rules_scroll: gpui_kit::ScrollHandle,
 }
 
 impl RulesView {
     fn new(guild_id: &str) -> Self {
-        RulesView { guild_id: guild_id.to_owned(), agreed: false, nudged: false, submitting: false, refusal: None, done: false }
+        RulesView { guild_id: guild_id.to_owned(), agreed: false, nudged: false, submitting: false, refusal: None, done: false, rules_scroll: gpui_kit::ScrollHandle::new() }
     }
 }
 
@@ -108,7 +109,7 @@ impl Waffle {
         let body = match form {
             // GAP: apply-to-join forms (questions beyond the rules) aren't filled in here yet; Discord takes them.
             _ if applies => body.child(apply_in_discord(&guild.id, cx)),
-            Some(Load::Ready(form)) => body.child(rules_list(form, cx)).child(agree_row(view, window, cx)).children(view.refusal.as_ref().map(|r| ui::callout(Notice::Danger, Glyph::WarningCircle, r.title.clone(), r.detail.unwrap_or_default(), cx))).child(
+            Some(Load::Ready(form)) => body.child(rules_list(form, &view.rules_scroll, cx)).child(agree_row(view, window, cx)).children(view.refusal.as_ref().map(|r| ui::callout(Notice::Danger, Glyph::WarningCircle, r.title.clone(), r.detail.unwrap_or_default(), cx))).child(
                 div().flex().justify_end().child(ui::button("rules-submit", Tone::Primary, cx).large().loading(view.submitting.then_some("Submitting")).child("Submit").on_click(cx.listener(|this, _, _, cx| this.submit_rules(cx)))),
             ),
             Some(Load::Failed(error)) => body.child(load_failed(&guild.id, error, cx)),
@@ -222,7 +223,7 @@ fn rules_head(guild: &Guild, applies: bool, cx: &mut Context<Waffle>) -> impl In
 }
 
 // "Agree to rules" and its count, the description, then the numbered rules in one group that scrolls when long.
-fn rules_list(form: &Form, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
+fn rules_list(form: &Form, scroll: &gpui_kit::ScrollHandle, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
     let count = match form.rules.len() {
         1 => "1 rule".to_owned(),
         n => format!("{n} rules"),
@@ -257,7 +258,7 @@ fn rules_list(form: &Form, cx: &mut Context<Waffle>) -> impl IntoElement + use<>
                 .child(div().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(count)),
         )
         .children(form.description.clone().map(|d| div().mx(px(4.)).mb(px(8.)).text_size(px(14.)).text_color(palette::text(cx)).child(d)))
-        .child(div().p(px(4.)).squircle(RADIUS_LG).bg(palette::surface(Level::Group, cx)).child(div().id("rules-list").max_h(px(RULES_HEIGHT)).overflow_y_scroll().flex().flex_col().children(rows)))
+        .child(div().p(px(4.)).squircle(RADIUS_LG).bg(palette::surface(Level::Group, cx)).child(ui::scroll_fade(div().id("rules-list").max_h(px(RULES_HEIGHT)).flex().flex_col().children(rows), scroll, palette::surface(Level::Group, cx))))
 }
 
 // A rule's number: an accent-soft disc in the 24px column the agree row's checkbox shares.

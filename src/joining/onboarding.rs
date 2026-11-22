@@ -3,7 +3,7 @@ use std::{collections::HashSet, iter, time::Duration};
 
 use gpui_kit::{
     AnyElement, App, Context, Div, FontWeight, Hsla, ImgResourceLoader, InteractiveElement, IntoElement, ObjectFit, ParentElement, Resource, ScrollHandle, StatefulInteractiveElement, Styled, Window,
-    component::{Icon, scroll::ScrollableElement as _},
+    component::Icon,
     div, img, point, prelude::*, px, relative, rgb,
 };
 
@@ -20,9 +20,11 @@ use crate::{
 // Discord's cover moves on by itself after 3 s.
 const COVER_HOLD: Duration = Duration::from_millis(3000);
 const SPLASH_INSET: f32 = 48.;
-// The question card over a splash: room for the 640px column and the footer, no more.
+// The question card over a splash: room for the 640px column; a step taller than STEP_MAX_HEIGHT scrolls.
 const SHEET_WIDTH: f32 = 760.;
-const SHEET_HEIGHT: f32 = 640.;
+const STEP_MAX_HEIGHT: f32 = 520.;
+// The footer's height with its hint line, kept free when the window is short.
+const FOOTER_ROOM: f32 = 120.;
 // An option card's title line; its emoji centres on it.
 const TITLE_LINE: f32 = 22.;
 const RULES_HEIGHT: f32 = 300.;
@@ -417,21 +419,31 @@ impl Waffle {
         };
         let page = palette::surface(palette::Level::Page, cx);
         let close = if on_splash_cover { ui::round_button("onboarding-close", Glyph::X, "Close", 40.) } else { ui::icon_button("onboarding-close", Glyph::X, "Close", cx).large() };
-        // Over a splash the questions are a card, so the server's image shows all around. It keeps one size
-        // from step to step rather than resizing to each.
-        let card = splash.is_some() && !on_splash_cover;
-        let frame = div()
-            .relative()
-            .w_full()
-            .flex_1()
-            .min_h_0()
-            .flex()
-            .flex_col()
-            .when(!on_splash_cover, |d| d.bg(page))
-            .when(card, |d| d.max_w(px(SHEET_WIDTH)).max_h(px(SHEET_HEIGHT)).squircle(ui::RADIUS_XL).overflow_hidden().shadow(ui::shadow_pop(cx)))
-            .child(ui::scroll_area(div().id("onboarding-body").child(body), &view.body_scroll))
-            .child(self.onboarding_footer(&prompts, &rules, on_splash_cover, cx))
-            .child(div().absolute().top(px(16.)).right(px(16.)).child(close.on_click(cx.listener(|this, _, _, cx| this.close_onboarding(cx)))));
+        let close = div().absolute().top(px(16.)).right(px(16.)).child(close.on_click(cx.listener(|this, _, _, cx| this.close_onboarding(cx))));
+        let footer = self.onboarding_footer(&prompts, &rules, on_splash_cover, cx);
+        // Over a splash the questions are a dialog card that springs to each step's height (as the share
+        // picker does), so the server's image shows all around; past its cap the step scrolls, edges fading.
+        let frame = match splash.is_some() && !on_splash_cover {
+            true => {
+                let room = f32::from(window.viewport_size().height) - 2. * SPLASH_INSET;
+                let list = div().id("onboarding-body").max_h(px((room - FOOTER_ROOM).min(STEP_MAX_HEIGHT))).child(body);
+                let card = div().relative().bg(page).flex().flex_col().child(ui::scroll_fade(list, &view.body_scroll, page)).child(footer).child(close);
+                let width = SHEET_WIDTH.min(f32::from(window.viewport_size().width) - 2. * SPLASH_INSET);
+                ui::dialog("onboarding-card", width, card, window, cx).into_any_element()
+            }
+            false => div()
+                .relative()
+                .w_full()
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .flex_col()
+                .when(!on_splash_cover, |d| d.bg(page))
+                .child(ui::scroll_area(div().id("onboarding-body").child(body), &view.body_scroll))
+                .child(footer)
+                .child(close)
+                .into_any_element(),
+        };
         let root = div()
             .id("onboarding")
             .occlude()
@@ -588,8 +600,9 @@ fn rules_list(rules: &[String], scroll: &ScrollHandle, cx: &App) -> Div {
             .child(div().flex_1().min_w_0().text_size(px(15.)).line_height(relative(1.45)).text_color(palette::strong(cx)).child(rule.clone()))
             .when(i < last, |d| d.child(ui::inset_rule(12., cx).left(px(48.))))
     });
-    let list = div().id("onboarding-rules").max_h(px(RULES_HEIGHT)).overflow_y_scroll().track_scroll(scroll).flex().flex_col().children(rows);
-    div().relative().squircle(ui::RADIUS_LG).bg(palette::surface(palette::Level::Group, cx)).p(px(4.)).child(list).vertical_scrollbar(scroll)
+    let group = palette::surface(palette::Level::Group, cx);
+    let list = div().id("onboarding-rules").max_h(px(RULES_HEIGHT)).flex().flex_col().children(rows);
+    div().squircle(ui::RADIUS_LG).bg(group).p(px(4.)).child(ui::scroll_fade(list, scroll, group))
 }
 
 fn column() -> Div {
