@@ -8,7 +8,7 @@ use std::{
 
 use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, Context, Div, ElementId, FontFeatures, FontWeight, Hsla, ImageSource, MouseButton, MouseDownEvent, Pixels, Point, SharedString, Stateful, Window,
-    component::{ActiveTheme, Icon, tooltip::Tooltip},
+    component::{ActiveTheme, Icon},
     div, prelude::*, px, relative, rgb,
 };
 
@@ -440,7 +440,7 @@ impl Waffle {
             .when(self.connection_info, |d| d.bg(hover))
             .child(div().h_5().flex().items_center().gap_1p5().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(tone).child(bars).child(div().truncate().child(link.label())))
             .child(second)
-            .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+            .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.connection_info = !this.connection_info;
                 cx.notify();
@@ -1013,7 +1013,7 @@ impl Waffle {
             .font_weight(FontWeight::MEDIUM)
             .child(ui::avatar_stack(faces, 22., stage::bg()))
             .child(count.to_string())
-            .tooltip(move |window, cx| Tooltip::new(format!("{count} in {}", if count == 1 { "the call alone" } else { "the call" })).build(window, cx));
+            .tooltip(move |window, cx| ui::tip(format!("{count} in {}", if count == 1 { "the call alone" } else { "the call" }), window, cx));
         let health = watching.filter(|w| !several && !w.arrivals.is_empty()).map(|w| {
             let (health, fps) = stream_health(&w.arrivals, Instant::now());
             let lossy = call.issues.contains(&(w.streamer_id.clone(), voice::issues::STREAM_VIEW_HIGH_PACKET_LOSS));
@@ -1046,7 +1046,7 @@ impl Waffle {
                     if lossy {
                         tip.push_str(&format!(" {} Error code: {}", issue_line(voice::issues::STREAM_VIEW_HIGH_PACKET_LOSS), voice::issues::STREAM_VIEW_HIGH_PACKET_LOSS));
                     }
-                    Tooltip::new(tip).build(window, cx)
+                    ui::tip(tip, window, cx)
                 })
         });
         let stop = watching.map(|_| keeps_chrome(stage_button("stop-watching", if several { "Stop all" } else { "Stop watching" }), cx).occlude().on_click(cx.listener(|this, _, _, cx| this.stop_watching(cx))));
@@ -1110,7 +1110,7 @@ impl Waffle {
             .hover(|s| s.bg(gpui_kit::black().opacity(0.75)))
             .child(Icon::new(glyph).size(ui::ICON_SM))
             .child(Icon::new(Glyph::Users).size(ui::ICON_MD))
-            .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+            .tooltip(move |window, cx| ui::tip(tip, window, cx))
             .on_click(cx.listener(|this, _, _, cx| {
                 cx.stop_propagation();
                 this.call_strip_hidden = !this.call_strip_hidden;
@@ -1600,7 +1600,7 @@ impl Waffle {
             .cursor_pointer()
             .hover(|s| s.bg(palette::danger_hover()))
             .child(icon)
-            .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+            .tooltip(move |window, cx| ui::tip(tip, window, cx))
             .on_click(cx.listener(move |this, _, _, cx| match watching.clone() {
                 Some(id) => {
                     this.call_focus = None;
@@ -2104,7 +2104,7 @@ fn panel_action(id: &'static str, glyph: Glyph, tip: &'static str, enabled: bool
         .child(Icon::new(glyph).size(ui::ICON_LG))
         .when(enabled, |b| b.cursor_pointer().hover(move |s| s.bg(press)))
         .when(!enabled, |b| b.opacity(0.45).cursor(gpui_kit::CursorStyle::OperationNotAllowed))
-        .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(tip, window, cx))
 }
 
 // .iconbtn on the stage: muted until hovered; `pressed` holds the selected fill.
@@ -2123,7 +2123,7 @@ pub(crate) fn stage_icon_button(id: impl Into<ElementId>, glyph: Glyph, tip: &'s
         .hover(|s| s.bg(stage::wash(0.05)).text_color(stage::strong()))
         .active(|s| s.bg(stage::wash(0.09)))
         .child(Icon::new(glyph).size(ui::ICON_XL))
-        .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(tip, window, cx))
 }
 
 // .btn.btn--sm on the stage: the quiet fill.
@@ -2201,7 +2201,7 @@ pub(crate) fn control(id: &'static str, glyph: Glyph, tip: &'static str, state: 
         .child(Icon::new(glyph).size(px(if chevron { 12. } else { 20. })))
         .when(enabled, |b| b.cursor_pointer().hover(move |s| s.bg(hover).text_color(ink)))
         .when(!enabled, |b| b.opacity(0.4).cursor(gpui_kit::CursorStyle::OperationNotAllowed))
-        .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(tip, window, cx))
 }
 
 fn mirrored<E: Styled>(mut el: E) -> E {
@@ -2588,6 +2588,6 @@ fn issue_chip(id: SharedString, codes: Vec<u16>) -> gpui_kit::Stateful<Div> {
         .child(Icon::new(Glyph::Warning).size(ui::ICON_SM).text_color(stage::idle()))
         .tooltip(move |window, cx| {
             let tip = codes.iter().map(|code| format!("{} Error code: {code}", issue_line(*code))).collect::<Vec<_>>().join("\n");
-            Tooltip::new(tip).build(window, cx)
+            ui::tip(tip, window, cx)
         })
 }

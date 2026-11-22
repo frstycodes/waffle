@@ -13,7 +13,7 @@ use std::{
 use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, Bounds, Context, Entity, FocusHandle, FontFeatures, Global, ImageSource, KeyDownEvent, MouseButton,
     ObjectFit, Pixels, Render, RenderImage, SharedString, WeakEntity, Window, canvas,
-    component::{Icon, tooltip::Tooltip},
+    component::Icon,
     div, img, linear_color_stop, linear_gradient, prelude::*, px, relative,
 };
 use gpui_motion_kit::{
@@ -642,7 +642,7 @@ impl VideoPlayer {
     fn control(&mut self, control: Control, label: &'static str, body: gpui_kit::Div, action: impl Fn(&mut Self, &mut Window, &mut Context<Self>) + 'static, cx: &mut Context<Self>) -> AnyElement {
         body.id(SharedString::from(format!("video-{control:?}")))
             .cursor_pointer()
-            .tooltip(move |window, cx| Tooltip::new(label).build(window, cx))
+            .tooltip(move |window, cx| ui::tip(label, window, cx))
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 match *hovered {
                     true => this.hot = Some(control),

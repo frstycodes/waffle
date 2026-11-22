@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use gpui_kit::{
     AnyElement, Context, Div, FontWeight, Global, MouseButton, MouseDownEvent, SharedString, Stateful, Window,
-    component::{Icon, tooltip::Tooltip},
+    component::Icon,
     div, prelude::*, px, relative,
 };
 
@@ -474,7 +474,7 @@ pub(crate) fn moderator_mark(user_id: &str) -> Stateful<Div> {
         .id(SharedString::from(format!("stage-moderator-{user_id}")))
         .flex_none()
         .child(Icon::new(Glyph::Shield).size(ui::ICON_SM).text_color(gpui_kit::white()))
-        .tooltip(|window, cx| Tooltip::new("Stage Moderator").build(window, cx))
+        .tooltip(|window, cx| ui::tip("Stage Moderator", window, cx))
 }
 
 // A section's label over its people, sentence case, counts in tabular figures.

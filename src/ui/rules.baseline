@@ -7,7 +7,6 @@ src/app_modal.rs	global-notify	6
 src/audio_player.rs	raw-floating	2
 src/audio_player.rs	raw-px	8
 src/call.rs	global-notify	21
-src/call.rs	kit-tooltip	9
 src/call.rs	raw-color	3
 src/call.rs	raw-px	17
 src/call_previews.rs	global-notify	4
@@ -35,7 +34,6 @@ src/create_server.rs	raw-px	4
 src/demo.rs	raw-px	32
 src/design_system.rs	raw-px	20
 src/dm_call.rs	global-notify	5
-src/dm_call.rs	kit-tooltip	4
 src/dm_call.rs	raw-px	9
 src/drag.rs	global-notify	1
 src/drag.rs	raw-px	23
@@ -142,7 +140,6 @@ src/splash.rs	raw-px	4
 src/stage_dialogs.rs	global-notify	4
 src/stage_dialogs.rs	raw-px	2
 src/stage_view.rs	global-notify	1
-src/stage_view.rs	kit-tooltip	1
 src/stage_view.rs	raw-px	12
 src/status_menu.rs	global-notify	10
 src/status_menu.rs	raw-px	1
@@ -153,11 +150,9 @@ src/system_message.rs	global-notify	2
 src/system_message.rs	raw-px	51
 src/text_file.rs	global-notify	1
 src/text_file.rs	raw-px	13
-src/video.rs	kit-tooltip	1
 src/video.rs	raw-px	3
 src/viewer.rs	global-notify	5
 src/viewer.rs	raw-px	13
 src/voice/capture_windows.rs	raw-px	12
 src/voice_status.rs	global-notify	7
-src/voice_status.rs	kit-tooltip	1
 src/voice_status.rs	raw-px	3

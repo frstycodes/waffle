@@ -9,7 +9,7 @@ use std::{
 
 use gpui_kit::{
     Animation, AnimationExt, AnyElement, Context, Div, FontWeight, Hsla, ImageSource, RenderImage, SharedString, Stateful,
-    component::{Icon, tooltip::Tooltip},
+    component::Icon,
     div, prelude::*, px,
 };
 
@@ -485,7 +485,7 @@ impl Waffle {
             .hover(|s| s.bg(palette::danger_hover()))
             .text_color(gpui_kit::white())
             .child(Icon::new(Glyph::CallEnd).size(px(19.)))
-            .tooltip(|window, cx| Tooltip::new("Leave call").build(window, cx))
+            .tooltip(|window, cx| ui::tip("Leave call", window, cx))
             .on_click(cx.listener(|this, _, _, cx| this.leave_voice(cx)));
         let group = div().p_0p5().flex().gap_0p5().squircle(12.).bg(stage::wash(0.06)).child(mic).child(camera).child(share);
         div().h(px(BAR)).flex_none().pb_1().flex().items_center().justify_center().gap_1p5().child(group).child(leave)
@@ -528,7 +528,7 @@ impl Waffle {
                         .child("Join")
                         .on_click(cx.listener(move |this, _, _, cx| this.answer_dm_call(&id, cx))),
                 )
-                .tooltip(move |window, cx| Tooltip::new(format!("In the call: {names}")).build(window, cx))
+                .tooltip(move |window, cx| ui::tip(format!("In the call: {names}"), window, cx))
                 .into_any_element(),
         )
     }
@@ -579,7 +579,7 @@ fn window_icon_button(id: &'static str, glyph: Glyph, tip: &'static str) -> Stat
         .text_color(stage::muted())
         .hover(|s| s.bg(stage::wash(0.08)).text_color(stage::strong()))
         .child(Icon::new(glyph).size(ui::ICON_LG))
-        .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(tip, window, cx))
 }
 
 fn stage_wash_button(id: &'static str, glyph: Glyph, label: SharedString) -> Stateful<Div> {
@@ -630,7 +630,7 @@ fn window_control(id: &'static str, glyph: Glyph, tip: &'static str, look: Look,
         .child(Icon::new(glyph).size(px(17.)))
         .when(enabled, |b| b.cursor_pointer().hover(move |s| s.bg(hover)))
         .when(!enabled, |b| b.opacity(0.4).cursor(gpui_kit::CursorStyle::OperationNotAllowed))
-        .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(tip, window, cx))
 }
 
 // A two-person call stacks its two faces; a group lays them out two to a row.

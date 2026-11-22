@@ -7,7 +7,6 @@ use gpui_kit::{
     component::{
         Icon,
         input::{Input, InputEvent, InputState as SearchState},
-        tooltip::Tooltip,
     },
     div, img,
     px,
@@ -229,7 +228,7 @@ impl Waffle {
             line.occlude()
                 .cursor_pointer()
                 .hover(move |s| s.text_color(strong))
-                .tooltip(|window, cx| Tooltip::new("Set a channel status").build(window, cx))
+                .tooltip(|window, cx| ui::tip("Set a channel status", window, cx))
                 .on_click(cx.listener(move |this, _, window, cx| this.open_voice_status(&open, window, cx))),
         )
     }
