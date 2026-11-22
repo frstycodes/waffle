@@ -221,15 +221,21 @@ impl Waffle {
 
     fn report_follow_up(&mut self, action: &'static str, user: User, cx: &mut Context<Self>) {
         let Some(dialog) = self.report_dialog.as_mut() else { return };
-        dialog.done.insert(action);
         let message = match &dialog.target {
             ReportTarget::Message(m) => Some((**m).clone()),
             ReportTarget::User { .. } => None,
         };
+        if action == "delete" {
+            dialog.done.insert(action);
+        }
         let id = user.id.clone();
         match action {
+            "block" if self.relation(&id) == Some(Relation::Blocked) => self.relation_optimistic(&id, None, Method::DELETE, None, cx),
             "block" => self.relation_optimistic(&id, Some((user, Relation::Blocked)), Method::PUT, Some(json!({ "type": 2 })), cx),
-            "ignore" => self.set_ignored(id, true, cx),
+            "ignore" => {
+                let ignored = self.ignored.contains(&id);
+                self.set_ignored(id, !ignored, cx);
+            }
             "delete" => {
                 if let Some(m) = message {
                     self.delete(m, cx);
@@ -406,9 +412,9 @@ impl Waffle {
     fn report_action(&self, dialog: &ReportDialog, kind: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         let person = dialog.target.person().clone();
         let name = &person.name;
-        let (action, glyph, title, detail, verb, past) = match kind {
-            "block_users" => ("block", Glyph::Prohibit, format!("Block {name}"), "Stop seeing their messages", "Block", "Blocked"),
-            "ignore_users" => ("ignore", Glyph::EyeSlash, format!("Ignore {name}"), "Get space without letting them know", "Ignore", "Ignored"),
+        let (action, glyph, title, detail, verb, undo) = match kind {
+            "block_users" => ("block", Glyph::Prohibit, format!("Block {name}"), "Stop seeing their messages", "Block", "Unblock"),
+            "ignore_users" => ("ignore", Glyph::EyeSlash, format!("Ignore {name}"), "Get space without letting them know", "Ignore", "Unignore"),
             // Discord offers it only where you could delete the message yourself.
             "delete_message" => {
                 let ReportTarget::Message(m) = &dialog.target else { return None };
@@ -419,14 +425,15 @@ impl Waffle {
             }
             _ => return None,
         };
-        let done = dialog.done.contains(action)
-            || match action {
-                "block" => self.relation(&person.id) == Some(Relation::Blocked),
-                "ignore" => self.ignored.contains(&person.id),
-                _ => false,
-            };
-        let button = ui::button(SharedString::from(format!("report-{action}")), ui::Tone::Secondary, cx).small().disabled(done).child(if done { past } else { verb });
-        let button = match done {
+        let active = match action {
+            "block" => self.relation(&person.id) == Some(Relation::Blocked),
+            "ignore" => self.ignored.contains(&person.id),
+            _ => dialog.done.contains(action),
+        };
+        // Block and ignore toggle so a slip can be undone here; a deleted message can't come back.
+        let deleted = action == "delete" && active;
+        let button = ui::button(SharedString::from(format!("report-{action}")), ui::Tone::Secondary, cx).small().disabled(deleted).child(if active { undo } else { verb });
+        let button = match deleted {
             true => button,
             false => button.on_click(cx.listener(move |this, _, _, cx| this.report_follow_up(action, person.clone(), cx))),
         };
