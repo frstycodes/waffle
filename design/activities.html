@@ -1,0 +1,1252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Waffle Activities</title>
+<meta name="description" content="Games and apps people play together inside a call or a chat: every way in, every layout, every way it can fail.">
+<link rel="icon" href="/assets/brand/icons/paper.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gabarito:wght@400..800&family=Onest:wght@400..800&family=Figtree:wght@400..800&family=Rubik:wght@400..800&family=Fragment+Mono&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="site.css">
+<link rel="stylesheet" href="css/primitives.css">
+<link rel="stylesheet" href="css/navigation.css">
+<link rel="stylesheet" href="css/messages.css">
+<link rel="stylesheet" href="css/voice.css">
+<link rel="stylesheet" href="css/overlays.css">
+<link rel="stylesheet" href="css/settings.css">
+<link rel="stylesheet" href="css/menus.css">
+<link rel="stylesheet" href="css/panels.css">
+<link rel="stylesheet" href="css/media.css">
+<link rel="stylesheet" href="css/auth.css">
+<link rel="stylesheet" href="css/profile.css">
+<link rel="stylesheet" href="css/community.css">
+<link rel="stylesheet" href="css/server-settings.css">
+<link rel="stylesheet" href="css/flows.css">
+<script>try{const p=JSON.parse(localStorage.getItem("waffle-ds")||"{}"),r=document.documentElement;if(p.theme)r.dataset.theme=p.theme;if(p.font)r.style.setProperty("--font-ui",`"${p.font}", system-ui, sans-serif`)}catch{}</script>
+<style>
+/* New parts for Activities. Each is a candidate for the kit once Activities ships; everything else on
+   this page is an existing component. */
+
+/* App art: the app's own cover. Gap: the real thing is the app's cover image from the shelf's assets;
+   here a gradient on the app's hue with a glyph stands in. */
+.ac-art { --h: 140; position: relative; display: grid; place-items: center; aspect-ratio: 16/9; min-width: 0; border-radius: var(--radius-lg); overflow: hidden; color: #fff; isolation: isolate;
+  background: radial-gradient(110% 90% at 15% 0%, oklch(0.78 0.13 calc(var(--h) + 40)), transparent 60%), radial-gradient(110% 100% at 100% 100%, oklch(0.5 0.17 var(--h)), transparent 62%), oklch(0.36 0.09 calc(var(--h) - 30)); }
+.ac-art::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px oklch(1 0 0 / 0.08); pointer-events: none; }
+.ac-art > i { font-size: 44px; filter: drop-shadow(0 3px 8px oklch(0 0 0 / 0.35)); }
+.ac-art.sq { aspect-ratio: 1; border-radius: var(--radius-md); }
+.ac-art.sq > i { font-size: 22px; }
+.ac-art.xs { width: 20px; border-radius: 6px; }
+.ac-art.xs > i { font-size: 12px; }
+.ac-art.sm { width: 32px; }
+.ac-art.sm > i { font-size: 18px; }
+.ac-art.md { width: 44px; }
+.ac-art.lg { width: 64px; border-radius: var(--radius-lg); }
+.ac-art.lg > i { font-size: 32px; }
+
+/* NEW and UPDATED, the shelf's label_type, over the art's top left. */
+.ac-label { position: absolute; top: 8px; left: 8px; z-index: 1; }
+
+/* The launcher: a popover rising from the Activities control, tabs for Activities and Soundboard. */
+.ac-launcher { --lw: 440px; width: min(100%, var(--lw)); max-height: 560px; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: var(--space-3); padding: var(--space-3); border-radius: var(--radius-xl); background: var(--bg-overlay); box-shadow: var(--shadow-pop); color: var(--text); text-align: left; }
+.ac-launcher > header { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.ac-launcher > header .pills { flex: 1; min-width: 0; }
+.ac-scroll { min-height: 0; overflow: auto; display: grid; gap: var(--space-4); align-content: start; padding: 2px 2px var(--space-2); mask-image: linear-gradient(#000 calc(100% - 20px), transparent); scrollbar-width: thin; }
+.ac-sec { display: grid; gap: var(--space-2); }
+.ac-sec > .mlabel { display: flex; align-items: center; gap: 6px; padding: 0 4px; }
+.ac-sec > .mlabel .btn { margin-left: auto; }
+
+/* Recent: small square icons in one row; Featured and All: cards. */
+.ac-recent { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: var(--space-2); }
+.ac-recent button { all: unset; display: grid; gap: 6px; justify-items: center; padding: 8px 4px; border-radius: var(--radius-md); cursor: pointer; min-width: 0; transition: background var(--dur-hover); }
+.ac-recent button:hover, .ac-recent button.is-hover { background: var(--hover); }
+.ac-recent button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ac-recent .ac-art { width: 48px; }
+.ac-recent span { max-width: 100%; color: var(--text); font-size: var(--text-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.ac-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: var(--space-3); }
+.ac-card { all: unset; display: grid; gap: 8px; align-content: start; min-width: 0; padding: 6px; border-radius: var(--radius-lg); cursor: pointer; transition: background var(--dur-hover); }
+.ac-card:hover, .ac-card.is-hover { background: var(--hover); }
+.ac-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ac-card .meta { display: grid; gap: 2px; padding: 0 2px 2px; min-width: 0; }
+.ac-card b { color: var(--text-strong); font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-card small { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: var(--text-xs); min-width: 0; white-space: nowrap; }
+.ac-card small span { overflow: hidden; text-overflow: ellipsis; }
+.ac-card small i { font-size: 14px; flex: none; }
+/* Who's already in it here: the one fact that asks for you, so it leads the meta line. */
+.ac-card .here { color: var(--online-ink); font-weight: var(--weight-semibold); }
+.ac-card[aria-disabled="true"] { cursor: default; }
+.ac-card[aria-disabled="true"] .ac-art { filter: saturate(0.2) brightness(0.7); }
+
+/* App detail, drilled into from a card. */
+.ac-detail { display: grid; gap: var(--space-4); min-width: 0; }
+.ac-detail .top { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+.ac-detail .top b { display: block; color: var(--text-strong); font-size: var(--text-lg); font-weight: var(--weight-bold); line-height: var(--leading-tight); overflow-wrap: anywhere; }
+.ac-detail .top span { color: var(--text-muted); font-size: var(--text-xs); }
+.ac-facts { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--text-muted); font-size: var(--text-xs); }
+.ac-facts span { display: inline-flex; align-items: center; gap: 6px; }
+.ac-facts i { font-size: 15px; }
+.ac-facts b { color: var(--text); font-weight: var(--weight-semibold); }
+.ac-shots { display: grid; grid-auto-flow: column; grid-auto-columns: 78%; gap: var(--space-2); overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; scrollbar-width: thin; }
+.ac-shots .ac-art { scroll-snap-align: start; }
+.ac-detail p { color: var(--text); text-wrap: pretty; }
+.ac-detail footer { display: flex; gap: var(--space-2); align-items: center; }
+.ac-detail footer .btn--primary { flex: 1; }
+
+/* The running activity: the app's page, square and flush wherever it docks. Gap: a stand-in drawing;
+   the real content is the app's web page. */
+.ac-frame { --h: 140; position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; isolation: isolate; color: #fff;
+  background: radial-gradient(60% 50% at 50% 55%, oklch(0.62 0.15 var(--h)), transparent 70%), repeating-linear-gradient(135deg, oklch(0.42 0.11 var(--h)) 0 18px, oklch(0.45 0.12 var(--h)) 18px 36px); }
+.ac-frame .hud { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 6px; justify-content: space-between; font-size: var(--text-xs); font-weight: var(--weight-bold); }
+.ac-frame .hud span { padding: 3px 8px; border-radius: 8px; background: oklch(0 0 0 / 0.35); white-space: nowrap; }
+.ac-frame .ball { position: absolute; left: 30%; top: 62%; width: 14px; height: 14px; border-radius: 50%; background: oklch(0.98 0 0); box-shadow: 0 2px 4px oklch(0 0 0 / 0.4); }
+.ac-frame .hole { position: absolute; left: 66%; top: 34%; width: 20px; height: 12px; border-radius: 50%; background: oklch(0.15 0.02 140); }
+.ac-frame .flag { position: absolute; left: calc(66% + 9px); top: calc(34% - 34px); width: 2px; height: 40px; background: oklch(0.95 0 0); }
+.ac-frame .flag::after { content: ""; position: absolute; left: 2px; top: 0; width: 18px; height: 12px; background: oklch(0.65 0.2 25); clip-path: polygon(0 0, 100% 50%, 0 100%); }
+.ac-frame.board { --h: 60; background: repeating-conic-gradient(oklch(0.82 0.06 80) 0 25%, oklch(0.55 0.08 60) 0 50%) 50% 50% / 56px 56px; }
+.ac-frame.draw { background: oklch(0.97 0.01 90); color: oklch(0.25 0.02 260); }
+
+/* The activity on the stage: a tile like a stream's, so it docks in the grid with the same corners. */
+.tile.ac-tile { background: none; }
+.tile.ac-tile.tall { aspect-ratio: 4/3; }
+.tile.ac-tile > .ac-frame { position: absolute; inset: 0; z-index: -1; }
+/* Not playing: the app's art dimmed, who's in it, and Join. */
+.tile.ac-tile.is-out > .ac-frame { filter: brightness(0.45) saturate(0.7); }
+.ac-join { position: relative; z-index: 2; display: grid; justify-items: center; gap: 6px; padding: 8px; text-align: center; }
+.ac-join b { font-size: var(--text-md); font-weight: var(--weight-bold); text-shadow: 0 1px 2px oklch(0 0 0 / 0.5); }
+.ac-join span { color: oklch(1 0 0 / 0.82); font-size: var(--text-xs); text-shadow: 0 1px 2px oklch(0 0 0 / 0.5); }
+.ac-join .stackav .av { --size: 24px; }
+
+/* The bar over a running activity: what it is, who's in it, and its four controls. */
+.ac-bar { display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding: 0 4px; height: 40px; color: var(--text-strong); }
+.ac-bar .ttl { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.ac-bar .ttl b { font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-bar .ttl .ac-art { flex: none; }
+.ac-bar .people { flex: none; }
+.ac-bar .iconbtn { flex: none; }
+.ac-bar .btn { flex: none; }
+
+/* Starting: the app's art behind a centred progress. */
+.ac-starting { position: absolute; inset: 0; display: grid; place-items: center; z-index: 1; background: oklch(0 0 0 / 0.5); }
+.ac-starting > div { display: grid; justify-items: center; gap: 8px; width: min(calc(100% - 24px), 320px); text-align: center; }
+.ac-starting .row { flex-wrap: nowrap; justify-content: center; }
+/* A tile's height comes from its width, so its states fit by dropping decoration first: the art, then
+   the faces, then the explanation, never the action. */
+.tile.ac-tile { container-type: size; }
+@container (max-height: 260px) { .ac-starting .ac-art { width: 40px; } .ac-starting .ac-art > i { font-size: 20px; } }
+@container (max-height: 170px) { .ac-starting .ac-art, .ac-starting > div > i { display: none; } }
+@container (max-height: 130px) { .ac-starting span, .ac-join .stackav { display: none; } }
+@container (max-height: 105px) { .ac-join > span { display: none; } }
+/* The pop-out window's own bar sits where the app's corner readout would be. */
+.popout .ac-frame .hud { display: none; }
+/* Not joined: the dimmed art without the game's own pieces, so nothing sits on the text. */
+.tile.ac-tile.is-out > .ac-frame > * { display: none; }
+.ac-starting b { font-weight: var(--weight-semibold); }
+.ac-starting span { color: oklch(1 0 0 / 0.75); font-size: var(--text-xs); text-wrap: pretty; }
+.ac-starting .progress { width: 100%; }
+
+/* PiP: the activity in a corner of the app while you read elsewhere. */
+.ac-pip { position: absolute; right: 12px; bottom: 12px; width: min(56%, 280px); aspect-ratio: 16/10; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-pop); z-index: 3; }
+.ac-pip .ac-frame { position: absolute; inset: 0; }
+.ac-pip .foot { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 6px; padding: 24px 8px 8px; background: linear-gradient(transparent, oklch(0 0 0 / 0.6)); color: #fff; }
+.ac-pip .foot b { flex: 1; min-width: 0; font-size: var(--text-xs); font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-pip .foot .iconbtn { color: #fff; }
+
+/* A running activity under its voice channel in the sidebar. */
+.ac-row { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: calc(100% - 34px); margin: 0 6px 0 28px; padding: 6px 8px; border-radius: var(--radius-md); background: var(--hover); color: var(--text); font-size: var(--text-sm); }
+.ac-row > div { flex: 1; min-width: 0; display: grid; }
+.ac-row b { font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-row small { color: var(--text-muted); font-size: var(--text-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-row .btn { flex: none; }
+.vp .ac-art.xs { flex: none; }
+
+/* The message posted when an activity starts in a chat, and its invite. */
+.ac-msgcard { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; max-width: 440px; padding: var(--space-3); border-radius: var(--radius-lg); background: var(--bg-raised); box-shadow: inset 0 0 0 1px var(--line); }
+.ac-msgcard > div { display: grid; gap: 2px; min-width: 0; }
+.ac-msgcard b { color: var(--text-strong); font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-msgcard small { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: var(--text-xs); min-width: 0; }
+.ac-msgcard small .stackav .av { --size: 18px; }
+.ac-msgcard.is-ended { background: var(--bg-group); }
+.ac-msgcard.is-ended .ac-art { filter: saturate(0.2) brightness(0.8); }
+
+/* Consent: what the app gets, one plain line per scope. */
+.ac-consent { display: grid; gap: var(--space-4); }
+.ac-pair { display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--text-faint); }
+.ac-pair .av { --size: 56px; }
+.ac-scopes { display: grid; gap: 2px; padding: 6px; border-radius: var(--radius-lg); background: var(--bg-group); }
+.ac-scopes > div { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; padding: 8px 6px; }
+.ac-scopes i { font-size: 18px; margin-top: 1px; color: var(--online-ink); }
+.ac-scopes i.no { color: var(--text-faint); }
+.ac-scopes b { display: block; color: var(--text-strong); font-weight: var(--weight-medium); }
+.ac-scopes span { color: var(--text-muted); font-size: var(--text-xs); }
+.ac-url { padding: 10px 12px; border-radius: var(--radius-md); background: var(--bg-group); color: var(--text-strong); overflow-wrap: anywhere; }
+.ac-legal { color: var(--text-muted); font-size: var(--text-xs); text-wrap: pretty; }
+
+/* Text-channel activity: the app takes the top of the chat, the chat stays under it. */
+.ac-split { display: grid; grid-template-rows: minmax(0, 1.3fr) auto minmax(0, 1fr); height: 100%; min-height: 0; }
+.ac-split .grip { height: 8px; display: grid; place-items: center; cursor: row-resize; }
+.ac-split .grip::before { content: ""; width: 36px; height: 4px; border-radius: 2px; background: var(--line-strong); }
+
+/* Frame-only layout for storyboards on this page, as on the flow pages. */
+.flow .call { flex: 1; border-radius: 0; padding: 10px; gap: 8px; align-content: center; grid-template-columns: minmax(0, 1fr); }
+.flow .tile .av { --size: 36px; }
+.flow .controls { gap: 8px; }
+.flow .cbtn { width: 44px; height: 40px; border-radius: 14px; }
+.flow .cbtn i { font-size: 20px; }
+.flow .cbtn.leave { width: 56px; }
+.flow .csplit > .cbtn:first-child { border-radius: 14px 6px 6px 14px; }
+.flow .csplit > .cbtn.chev { border-radius: 6px 14px 14px 6px; }
+.flow .side { background: none; flex: none; }
+.ac-pad { padding: 12px; display: grid; gap: 8px; justify-items: center; }
+.ac-pad.start { justify-items: stretch; }
+.flow .ac-launcher { --lw: 316px; max-height: 100%; }
+.flow .ac-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+
+/* Stage strip of people beside a focused activity. */
+.ac-strip { display: flex; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.ac-strip .tile { flex: 0 0 112px; }
+.ac-strip .tile .av { --size: 32px; }
+
+/* Next to Discord: Discord's surface drawn on the left, Waffle's on the right, what changed under them.
+   Discord's side keeps its own dark palette and plain rounded corners in both themes: it's a picture of
+   Discord, not a Waffle component. Drawn from Discord's docs, blog and desktop app, simplified. */
+.ac-vs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: var(--space-4) var(--space-6); align-items: start; margin-top: var(--space-3); }
+.ac-vs > figure { margin: 0; display: grid; gap: var(--space-2); min-width: 0; align-content: start; }
+.ac-vs figcaption { display: flex; align-items: center; gap: 8px; color: var(--text-strong); font-size: var(--text-xs); font-weight: var(--weight-semibold); }
+.ac-vs figcaption small { color: var(--text-faint); font-weight: var(--weight-regular); }
+.ac-who { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; font-size: 12px; }
+.ac-who.dc-mark { background: #5865f2; color: #fff; }
+.ac-who.wf-mark { background: var(--accent); color: var(--on-accent); }
+.ac-pane { position: relative; min-width: 0; }
+
+/* Numbered pins tie a spot in a drawing to a line in the list under it. */
+.ac-pin { display: inline-grid; place-items: center; width: 18px; height: 18px; flex: none; border-radius: 50%; background: oklch(0.62 0.2 25); color: #fff; font: var(--weight-bold) 11px/1 var(--font-ui); font-variant-numeric: tabular-nums; box-shadow: 0 0 0 2px oklch(0 0 0 / 0.35); }
+.dc .pinned { position: relative; }
+.dc .pinned > .ac-pin { position: absolute; top: -7px; right: -7px; z-index: 3; }
+.ac-gains .ac-pin { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.ac-pains, .ac-gains { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ac-pains li, .ac-gains li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: start; color: var(--text); font-size: var(--text-sm); text-wrap: pretty; }
+.ac-pains li .ac-pin { margin-top: 1px; }
+.ac-gains li .ac-pin { margin-top: 1px; }
+.ac-pains li small, .ac-gains li small { display: block; color: var(--text-muted); font-size: var(--text-xs); }
+.ac-nv { color: var(--text-faint); font-style: italic; }
+
+/* "Better than Discord" marker, set on the note or line that carries the change. */
+.ac-better { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; margin-right: 6px; border-radius: var(--radius-full); background: var(--accent-soft); color: var(--accent-ink); font-size: 11px; font-weight: var(--weight-bold); white-space: nowrap; vertical-align: 1px; }
+.ac-better i { font-size: 12px; }
+
+/* Discord, sketched. */
+.dc { --dc-deep: #1e1f22; --dc-side: #2b2d31; --dc-bg: #313338; --dc-raised: #383a40; --dc-line: #3f4147; --dc-text: #dbdee1; --dc-head: #f2f3f5; --dc-muted: #949ba4; --dc-blurple: #5865f2; --dc-green: #23a55a; --dc-red: #da373c;
+  position: relative; min-width: 0; border-radius: 8px; background: var(--dc-deep); color: var(--dc-text); font-size: 14px; line-height: 1.35; overflow: hidden; color-scheme: dark; }
+.dc b { color: var(--dc-head); font-weight: 600; }
+.dc .m { color: var(--dc-muted); font-size: 12px; }
+.dc-pop { width: min(100%, 420px); padding: 12px; background: var(--dc-side); border-radius: 8px; box-shadow: 0 8px 16px rgb(0 0 0 / 0.24); display: grid; gap: 10px; }
+.dc-search { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border-radius: 4px; background: var(--dc-deep); color: var(--dc-muted); font-size: 13px; }
+.dc-h { color: var(--dc-head); font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.dc-icons { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.dc-icons > div { display: grid; justify-items: center; gap: 4px; min-width: 0; }
+.dc-icons > div > span:nth-child(2) { max-width: 100%; color: var(--dc-muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dc-ic { --h: 140; display: grid; place-items: center; width: 44px; aspect-ratio: 1; border-radius: 12px; color: #fff; background: linear-gradient(135deg, oklch(0.62 0.14 var(--h)), oklch(0.42 0.12 calc(var(--h) - 30))); }
+.dc-ic i { font-size: 20px; }
+.dc-ic.sm { width: 32px; border-radius: 8px; }
+.dc-ic.sm i { font-size: 15px; }
+.dc-banner { --h: 300; position: relative; display: grid; align-content: end; gap: 2px; height: 96px; padding: 10px; border-radius: 8px; color: #fff; background: linear-gradient(120deg, oklch(0.55 0.18 var(--h)), oklch(0.4 0.14 calc(var(--h) + 50))); }
+.dc-banner small { color: rgb(255 255 255 / 0.8); font-size: 11px; }
+.dc-tagp { position: absolute; top: 8px; left: 8px; padding: 1px 6px; border-radius: 4px; background: rgb(0 0 0 / 0.45); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.dc-rows { display: grid; gap: 2px; }
+.dc-rows > div { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px; border-radius: 4px; }
+.dc-rows > div > div { display: grid; min-width: 0; }
+.dc-rows .m { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dc-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: 4px; background: var(--dc-blurple); color: #fff; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.dc-btn.sec { background: #4e5058; }
+.dc-btn.sm { height: 26px; padding: 0 10px; font-size: 12px; }
+.dc-btn.link { background: none; color: var(--dc-text); }
+.dc-btn.green { background: #248046; }
+.dc-modal { width: min(100%, 400px); margin: 0 auto; border-radius: 8px; background: var(--dc-bg); overflow: hidden; }
+.dc-modal .body { display: grid; gap: 10px; padding: 16px; justify-items: center; text-align: center; }
+.dc-modal .list { display: grid; gap: 8px; width: 100%; text-align: left; padding-top: 10px; border-top: 1px solid var(--dc-line); }
+.dc-modal .list div { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; font-size: 13px; }
+.dc-modal .list i { color: var(--dc-green); font-size: 16px; }
+.dc-modal .fine { display: grid; gap: 4px; width: 100%; text-align: left; padding-top: 10px; border-top: 1px solid var(--dc-line); color: var(--dc-muted); font-size: 11px; }
+.dc-modal footer { display: flex; justify-content: space-between; padding: 12px 16px; background: var(--dc-side); }
+.dc-pair { display: flex; align-items: center; gap: 8px; color: var(--dc-muted); }
+.dc-av { --h: 20; display: inline-grid; place-items: center; width: 40px; aspect-ratio: 1; border-radius: 50%; flex: none; background: oklch(0.6 0.12 var(--h)); color: #fff; font-size: 14px; font-weight: 700; }
+.dc-av.sm { width: 20px; font-size: 10px; }
+.dc-av.xs { width: 16px; font-size: 9px; }
+.dc-stage { display: grid; gap: 8px; padding: 10px; background: #000; }
+.dc-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.dc-tile { --h: 20; position: relative; display: grid; place-items: center; aspect-ratio: 16/9; border-radius: 8px; background: oklch(0.32 0.03 var(--h)); min-width: 0; }
+.dc-tile .nm { position: absolute; left: 6px; bottom: 6px; padding: 1px 6px; border-radius: 4px; background: rgb(0 0 0 / 0.6); color: #fff; font-size: 11px; }
+.dc-tile.app { background: linear-gradient(135deg, oklch(0.45 0.12 140), oklch(0.3 0.08 120)); }
+.dc-tile.app > div { display: grid; justify-items: center; gap: 6px; }
+.dc-bar { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 0 0; }
+.dc-cb { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #2b2d31; color: #fff; }
+.dc-cb i { font-size: 18px; }
+.dc-cb.red { background: var(--dc-red); }
+.dc-cb.on { background: #fff; color: #000; }
+.dc-chat { display: grid; gap: 10px; padding: 12px; background: var(--dc-bg); }
+.dc-msg { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; }
+.dc-msg > div { display: grid; gap: 4px; min-width: 0; }
+.dc-embed { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; max-width: 360px; padding: 10px; border-radius: 8px; background: var(--dc-side); }
+.dc-embed > div { display: grid; gap: 2px; min-width: 0; }
+.dc-faces { display: flex; }
+.dc-faces .dc-av { margin-left: -4px; box-shadow: 0 0 0 2px var(--dc-side); }
+.dc-faces .dc-av:first-child { margin-left: 0; }
+.dc-side { display: grid; gap: 2px; padding: 8px; background: var(--dc-side); }
+.dc-ch { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px; border-radius: 4px; color: var(--dc-muted); font-weight: 500; }
+.dc-ch.hover { background: #35373c; color: var(--dc-text); }
+.dc-ch i { font-size: 18px; }
+.dc-ch .end { margin-left: auto; display: flex; gap: 4px; }
+.dc-vm { display: flex; align-items: center; gap: 8px; height: 28px; margin-left: 28px; padding: 0 8px; color: var(--dc-muted); font-size: 13px; }
+.dc-vm .end { margin-left: auto; color: var(--dc-muted); }
+.dc-tip { position: absolute; z-index: 2; padding: 6px 10px; border-radius: 6px; background: #111214; color: var(--dc-head); font-size: 13px; font-weight: 600; box-shadow: 0 8px 16px rgb(0 0 0 / 0.24); white-space: nowrap; }
+.dc-pip { position: absolute; right: 10px; bottom: 10px; width: 46%; aspect-ratio: 16/9; border-radius: 8px; background: linear-gradient(135deg, oklch(0.45 0.12 140), oklch(0.3 0.08 120)); box-shadow: 0 8px 16px rgb(0 0 0 / 0.4); }
+
+/* The interactive demo. */
+.ac-live { display: grid; gap: var(--space-3); }
+.ac-live .call { min-height: 460px; grid-template-rows: auto minmax(0, 1fr) auto; }
+.ac-live .stagebody { position: relative; min-height: 0; display: grid; gap: 10px; }
+.ac-live .stagebody[data-mode="grid"] { grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: center; }
+.ac-live .stagebody[data-mode="focus"] { grid-template-rows: minmax(0, 1fr) auto; }
+.ac-live .stagebody[data-mode="focus"] > .focusarea { position: relative; min-height: 260px; border-radius: var(--radius-lg); overflow: hidden; }
+.ac-live .pop-anchor { position: absolute; left: 50%; top: 0; bottom: 0; transform: translateX(-50%); z-index: 5; width: min(calc(100% - 16px), 440px); display: grid; align-items: end; pointer-events: none; }
+.ac-live .pop-anchor > * { pointer-events: auto; }
+.ac-live .pop-anchor .ac-launcher { --lw: 100%; max-height: min(100%, 420px); transform-origin: bottom center; animation: rise var(--dur-pop) var(--ease-out) backwards; }
+.ac-live .dlg-anchor { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; padding: 12px; background: var(--scrim); }
+.ac-live .dlg-anchor .dialog { animation: pop var(--dur-panel) var(--ease-out) backwards; }
+.ac-live [hidden] { display: none !important; }
+.ac-log { color: var(--text-muted); font-size: var(--text-xs); }
+
+/* "How it works" diagram. */
+.ac-arch { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: var(--space-3); }
+.ac-arch > div { display: grid; gap: 6px; align-content: start; padding: var(--space-4); border-radius: var(--radius-lg); background: var(--bg-group); }
+.ac-arch b { color: var(--text-strong); font-weight: var(--weight-semibold); display: flex; align-items: center; gap: 8px; }
+.ac-arch b i { font-size: 18px; color: var(--text-muted); }
+.ac-arch span { color: var(--text-muted); font-size: var(--text-xs); text-wrap: pretty; }
+.ac-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); border-radius: var(--radius-lg); overflow: hidden; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.ac-table th, .ac-table td { text-align: left; padding: 10px 14px; border-top: 1px solid var(--line); vertical-align: top; }
+.ac-table thead th { border-top: 0; background: var(--bg-group); color: var(--text-strong); font-weight: var(--weight-semibold); font-size: var(--text-xs); }
+.ac-table td:first-child { white-space: nowrap; color: var(--text-strong); font-weight: var(--weight-medium); }
+.ac-table td { color: var(--text); }
+.ac-table code { font-size: 0.9em; }
+.ac-wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div class="layout">
+<nav class="toc" id="toc" aria-label="Design system"></nav>
+<main>
+
+<section id="activities">
+  <h1>Activities</h1>
+  <p class="lede">Games and apps people play together without leaving the call: Putt Party, Gartic Phone, Chess in the Park, Watch Together. One launcher starts them from a call or a chat; the running app docks on the stage like a stream, follows you into a corner when you look away, and every way it can fail says why where you clicked.</p>
+  <div class="flow-index">
+    <a class="flow-card" href="#try"><b>Try it</b><span>Open the launcher, authorize, start, switch layouts, leave</span></a>
+    <a class="flow-card" href="#entry-points"><b>Ways in</b><span>Call controls, voice panel, composer, sidebar, chat card, profile, link</span></a>
+    <a class="flow-card" href="#launcher"><b>Launcher</b><span>Recent, featured, all apps, search, loading, empty, offline, no permission</span></a>
+    <a class="flow-card" href="#app-detail"><b>App detail</b><span>Art, players, age, platforms, already running here, unavailable</span></a>
+    <a class="flow-card" href="#authorize"><b>Authorize</b><span>First launch consent, more access later, declined</span></a>
+    <a class="flow-card" href="#on-stage"><b>On the stage</b><span>Starting, focused, grid, not joined, full screen, pop-out, corner</span></a>
+    <a class="flow-card" href="#in-chat"><b>In a chat</b><span>Text channels and DMs without voice, the started card, ended</span></a>
+    <a class="flow-card" href="#presence"><b>Who's playing</b><span>Sidebar rows, voice members, profiles, Active Now</span></a>
+    <a class="flow-card" href="#invite"><b>Invite</b><span>From the activity, the invite card, the link</span></a>
+    <a class="flow-card" href="#asks"><b>What apps can ask</b><span>Open a link, buy something, share, look you up</span></a>
+    <a class="flow-card" href="#leave"><b>Leave and end</b><span>Leave, switch apps, leave the call, the app closes, last one out</span></a>
+    <a class="flow-card" href="#failures"><b>When it fails</b><span>Every launch failure Discord reports, and the copy for each</span></a>
+    <a class="flow-card" href="#flows"><b>Flows</b><span>Start one, join one, play in a chat, end to end</span></a>
+    <a class="flow-card" href="#better-than-discord"><b>Better than Discord</b><span>Twelve changes, each beside Discord's version in its section</span></a>
+    <a class="flow-card" href="#how"><b>How it works</b><span>What Waffle has to host, the bridge, the open question</span></a>
+  </div>
+</section>
+
+<!-- ============================================================ TRY IT -->
+<section id="try">
+  <h2>Try it</h2>
+  <p class="lede">A call in Lounge. Press Activities, pick an app, authorize it the first time, and play; switch between focus and grid in the header, then leave. Mira is already playing Putt Party, so its card says so and starting it joins her.</p>
+  <div class="ac-live">
+    <div class="call" data-ac-demo>
+      <div class="callhead">
+        <i class="ph ph-speaker-high"></i><span class="title">Lounge</span><span class="timer">0:42:10</span>
+        <span class="spacer"></span>
+        <button class="people" aria-label="4 people in Lounge"><span class="stackav"><span class="av" data-av="Mira"></span><span class="av" data-av="Theo"></span><span class="av" data-av="Jun"></span></span>4</button>
+        <span class="sep"></span>
+        <button class="iconbtn" data-ac-layout aria-label="Layout: grid" title="Layout: grid. Switch to focus"><i class="ph ph-squares-four"></i></button>
+        <button class="iconbtn hide-narrow" aria-label="Full screen" title="Full screen"><i class="ph ph-corners-out"></i></button>
+      </div>
+      <div class="stagebody" data-mode="grid">
+        <div class="tile ac-tile is-out" data-ac-tile style="--hue: 140">
+          <div class="ac-frame"><div class="hud"><span>Hole 3 · Par 2</span><span>Mira 4</span></div><span class="hole"></span><span class="flag"></span><span class="ball"></span></div>
+          <div class="ac-join" data-ac-joinui><span class="stackav"><span class="av" data-av="Mira"></span></span><b>Putt Party</b><span>Mira is playing</span><button class="btn btn--sm btn--primary" data-ac-join><i class="ph-fill ph-play"></i>Join activity</button></div>
+          <span class="name"><i class="ph-fill ph-rocket-launch scr"></i><span class="who">Putt Party</span></span>
+        </div>
+        <div class="tile speaking" style="--hue: 20"><span class="av" data-av="Mira"></span><span class="name"><span class="bars"><i></i><i></i><i></i></span><span class="who">Mira</span></span></div>
+        <div class="tile" style="--hue: 200"><span class="av" data-av="Theo"></span><span class="name"><span class="who">Theo</span></span></div>
+        <div class="tile" style="--hue: 300"><span class="av" data-av="You"></span><span class="name"><span class="who">You</span></span></div>
+        <div class="pop-anchor" data-ac-pop hidden></div>
+        <div class="dlg-anchor" data-ac-dlg hidden></div>
+      </div>
+      <div class="controls">
+        <div class="csplit"><button class="cbtn" aria-label="Mute" title="Mute"><i class="ph-fill ph-microphone"></i></button><button class="cbtn chev" aria-label="Microphone options"><i class="ph-bold ph-caret-up"></i></button></div>
+        <div class="csplit"><button class="cbtn" aria-label="Turn on camera" title="Turn on camera"><i class="ph-fill ph-video-camera-slash"></i></button><button class="cbtn chev" aria-label="Camera options"><i class="ph-bold ph-caret-up"></i></button></div>
+        <button class="cbtn" aria-label="Share your screen" title="Share your screen"><i class="ph-fill ph-screencast"></i></button>
+        <button class="cbtn" data-ac-open aria-label="Activities" aria-expanded="false" title="Activities and soundboard"><i class="ph-fill ph-rocket-launch"></i></button>
+        <button class="cbtn" aria-label="More options" title="More options"><i class="ph-bold ph-dots-three"></i></button>
+        <span class="gap"></span>
+        <button class="cbtn leave" aria-label="Leave call" title="Leave call"><i class="ph-fill ph-phone-x"></i></button>
+      </div>
+    </div>
+    <p class="ac-log" data-ac-log role="status">Mira is playing Putt Party. You're watching the call.</p>
+  </div>
+</section>
+
+<!-- ============================================================ ENTRY POINTS -->
+<section id="entry-points">
+  <h2>Ways in</h2>
+  <p class="lede">Seven doors, one launcher. Every door that starts something opens the same launcher scoped to where you are; every door that joins goes straight in.</p>
+
+  <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); align-items: start">
+    <div>
+      <h3 style="margin-top: 0">1. Call controls</h3>
+      <div class="onstage"><div class="controls" style="justify-content: flex-start">
+        <div class="csplit"><button class="cbtn" aria-label="Mute"><i class="ph-fill ph-microphone"></i></button><button class="cbtn chev" aria-label="Microphone options"><i class="ph-bold ph-caret-up"></i></button></div>
+        <button class="cbtn" aria-label="Share your screen"><i class="ph-fill ph-screencast"></i></button>
+        <button class="cbtn active" aria-label="Activities" aria-expanded="true" title="Activities and soundboard"><i class="ph-fill ph-rocket-launch"></i></button>
+        <span class="gap"></span>
+        <button class="cbtn leave" aria-label="Leave call"><i class="ph-fill ph-phone-x"></i></button>
+      </div></div>
+      <p class="note" style="margin-top: 8px">Where it is today, in every call: server voice, DM and group DM. It stays pressed while the launcher is open. While an activity runs, it becomes Leave activity's twin: pressed with the app's icon in its corner.</p>
+    </div>
+    <div>
+      <h3 style="margin-top: 0">2. Voice panel</h3>
+      <div class="side" style="border-radius: var(--radius-lg); padding: 6px; background: var(--bg-sidebar)">
+        <div class="voicebar">
+          <div class="top-line"><button class="status-btn"><b><span class="bars still"><i></i><i></i><i></i></span>Voice connected</b><div class="chan">Lounge · Night Shift</div></button><button class="iconbtn" aria-label="Disconnect"><i class="ph-bold ph-phone-x"></i></button></div>
+          <div class="acts"><button class="btn btn--sm" aria-label="Turn on camera"><i class="ph-bold ph-video-camera"></i></button><button class="btn btn--sm" aria-label="Share your screen"><i class="ph-bold ph-screencast"></i></button><button class="btn btn--sm" aria-label="Activities" title="Activities and soundboard" style="background: var(--selected)"><i class="ph-bold ph-rocket-launch"></i></button></div>
+        </div>
+      </div>
+      <p class="note" style="margin-top: 8px">The same launcher from the sidebar, rising over the channel list. Starting from here opens the call stage, since that's where the app runs.</p>
+    </div>
+    <div>
+      <h3 style="margin-top: 0">3. Composer</h3>
+      <div class="composer"><button class="iconbtn" aria-label="Upload a file"><i class="ph-bold ph-plus-circle"></i></button><textarea rows="1" placeholder="Message #general" aria-label="Message #general"></textarea><button class="iconbtn" aria-label="Apps" title="Apps: play an activity here" style="background: var(--selected)"><i class="ph-fill ph-squares-four"></i></button><button class="iconbtn" aria-label="Emoji"><i class="ph ph-smiley"></i></button></div>
+      <p class="note" style="margin-top: 8px">Discord's "shapes" App Launcher. Here it opens the launcher filtered to apps that run without voice in this kind of chat (server channel, DM, group DM). Starting posts the started card and opens the app over the chat.</p>
+    </div>
+    <div>
+      <h3 style="margin-top: 0">4. The sidebar</h3>
+      <div class="side" style="border-radius: var(--radius-lg); padding: 6px; background: var(--bg-sidebar)"><div class="chlist" style="padding: 0">
+        <div class="ch"><i class="ph ph-speaker-high"></i><a class="nm" href="#entry-points">Lounge</a></div>
+        <div class="ac-row"><span class="ac-art sq sm" style="--h: 140"><i class="ph-fill ph-golf"></i></span><div><b>Putt Party</b><small>Mira, Theo</small></div><button class="btn btn--sm">Join</button></div>
+        <button class="vp"><span class="av" data-av="Mira"></span><span class="nm">Mira</span><span class="end"><span class="ac-art sq xs" style="--h: 140" title="In Putt Party"><i class="ph-fill ph-golf"></i></span></span></button>
+        <button class="vp"><span class="av" data-av="Theo"></span><span class="nm">Theo</span><span class="end"><span class="ac-art sq xs" style="--h: 140" title="In Putt Party"><i class="ph-fill ph-golf"></i></span></span></button>
+      </div></div>
+      <p class="note" style="margin-top: 8px">A running activity sits under its channel as one row, Join on it. Joining from outside the call joins the voice channel and the activity in one click.</p>
+    </div>
+    <div>
+      <h3 style="margin-top: 0">5. A card in the chat</h3>
+      <div class="ac-msgcard"><span class="ac-art sq md" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><div><b>Gartic Phone</b><small><span class="stackav"><span class="av" data-av="Ana"></span><span class="av" data-av="Jun"></span></span>Ana and Jun are playing</small></div><button class="btn btn--sm btn--primary">Join</button></div>
+      <p class="note" style="margin-top: 8px">Posted when someone starts an activity in a chat, or sends an activity invite. See <a href="#in-chat">In a chat</a>.</p>
+    </div>
+    <div>
+      <h3 style="margin-top: 0">6. Profile and Active Now</h3>
+      <article class="acard" style="max-width: 360px"><button class="acard-who"><span class="av" data-av="Mira"><span class="status online"></span></span><div><b>Mira</b><span>In Putt Party</span></div><time>12m</time></button>
+        <div class="acard-act"><span class="ac-art sq md" style="--h: 140"><i class="ph-fill ph-golf"></i></span><div><b>Putt Party</b><small><span>Lounge · Night Shift</span></small></div><button class="btn btn--sm">Join</button></div></article>
+      <p class="note" style="margin-top: 8px">Rich presence says where, so Join is honest about what it does: it puts you in Lounge. It shows only if you could join that channel.</p>
+    </div>
+    <div>
+      <h3 style="margin-top: 0">7. A link</h3>
+      <div class="msg first"><span class="av" data-av="Theo"></span><div><div class="head"><span class="name">Theo</span><span class="time">Today at 9:12 PM</span></div><div class="body"><a href="#entry-points" class="btn--link">discord.com/activities/945737671223947305</a></div>
+        <div class="ac-msgcard" style="margin-top: 6px"><span class="ac-art sq md" style="--h: 260"><i class="ph-fill ph-strategy"></i></span><div><b>Chess in the Park</b><small>Activity · 2 players</small></div><button class="btn btn--sm btn--primary"><i class="ph-fill ph-play"></i>Play</button></div></div></div>
+      <p class="note" style="margin-top: 8px">An activity link unfurls into a card. Play asks where to start it if you're nowhere (this chat, or a voice channel you're in).</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ LAUNCHER -->
+<section id="launcher">
+  <h2>Launcher</h2>
+  <p class="lede">One surface with two tabs, Activities and Soundboard, since both live behind the same control. Search on top; what's running here first, then recent, featured and everything. Cards lead with the art, name the app, and say who's in it here or how many can play.</p>
+
+  <div class="board"><div class="row" style="align-items: flex-start; gap: 24px; flex-wrap: wrap">
+    <div class="ac-launcher" role="dialog" aria-label="Activities">
+      <header>
+        <div class="pills" role="tablist" aria-label="Show"><button class="tab" role="tab" aria-selected="true">Activities</button><button class="tab" role="tab" aria-selected="false">Soundboard</button></div>
+      </header>
+      <label class="input"><i class="ph ph-magnifying-glass"></i><input placeholder="Search activities" aria-label="Search activities"></label>
+      <div class="ac-scroll">
+        <div class="ac-sec">
+          <div class="mlabel">Running in Lounge</div>
+          <div class="ac-cards">
+            <button class="ac-card"><span class="ac-art" style="--h: 140"><i class="ph-fill ph-golf"></i></span><span class="meta"><b>Putt Party</b><small class="here"><span class="stackav"><span class="av" data-av="Mira" style="--size: 16px"></span></span><span>Mira is playing</span></small></span></button>
+          </div>
+        </div>
+        <div class="ac-sec">
+          <div class="mlabel">Recent</div>
+          <div class="ac-recent">
+            <button><span class="ac-art sq" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><span>Gartic Phone</span></button>
+            <button class="is-hover"><span class="ac-art sq" style="--h: 330"><i class="ph-fill ph-popcorn"></i></span><span>Watch Together</span></button>
+            <button><span class="ac-art sq" style="--h: 260"><i class="ph-fill ph-strategy"></i></span><span>Chess in the Park</span></button>
+            <button><span class="ac-art sq" style="--h: 90"><i class="ph-fill ph-cards"></i></span><span>Blazing 8s</span></button>
+          </div>
+        </div>
+        <div class="ac-sec">
+          <div class="mlabel">Featured</div>
+          <div class="ac-cards">
+            <button class="ac-card is-hover"><span class="ac-art" style="--h: 330"><i class="ph-fill ph-popcorn"></i></span><span class="meta"><b>Watch Together</b><small><i class="ph ph-users"></i><span>Any number</span></small></span></button>
+            <button class="ac-card"><span class="ac-art" style="--h: 50"><span class="tag ac-label">New</span><i class="ph-fill ph-soccer-ball"></i></span><span class="meta"><b>Bobble League</b><small><i class="ph ph-users"></i><span>2–8 players</span></small></span></button>
+          </div>
+        </div>
+        <div class="ac-sec">
+          <div class="mlabel">All activities</div>
+          <div class="ac-cards">
+            <button class="ac-card"><span class="ac-art" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><span class="meta"><b>Gartic Phone</b><small><i class="ph ph-users"></i><span>4–50 players</span></small></span></button>
+            <button class="ac-card"><span class="ac-art" style="--h: 160"><i class="ph-fill ph-poker-chip"></i></span><span class="meta"><b>Poker Night</b><small><i class="ph ph-users"></i><span>7 players, 17 watching</span></small></span></button>
+            <button class="ac-card"><span class="ac-art" style="--h: 220"><i class="ph-fill ph-paint-brush"></i></span><span class="meta"><b>Sketch Heads: The Extremely Long Name Edition Deluxe</b><small><i class="ph ph-users"></i><span>2–16 players</span></small></span></button>
+            <button class="ac-card" aria-disabled="true" title="Not available on desktop yet"><span class="ac-art" style="--h: 0"><i class="ph-fill ph-crown"></i></span><span class="meta"><b>Land-io</b><small><i class="ph ph-device-mobile"></i><span>Phone only</span></small></span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ac-launcher" role="dialog" aria-label="Activities, searching">
+      <header><div class="pills" role="tablist" aria-label="Show"><button class="tab" role="tab" aria-selected="true">Activities</button><button class="tab" role="tab" aria-selected="false">Soundboard</button></div></header>
+      <label class="input"><i class="ph ph-magnifying-glass"></i><input value="ches" aria-label="Search activities"><button class="iconbtn iconbtn--sm" aria-label="Clear search"><i class="ph-bold ph-x"></i></button></label>
+      <div class="ac-scroll">
+        <div class="ac-sec"><div class="mlabel">2 results</div>
+          <div class="ac-cards">
+            <button class="ac-card is-hover"><span class="ac-art" style="--h: 260"><i class="ph-fill ph-strategy"></i></span><span class="meta"><b>Chess in the Park</b><small><i class="ph ph-users"></i><span>2 players</span></small></span></button>
+            <button class="ac-card"><span class="ac-art" style="--h: 200"><i class="ph-fill ph-puzzle-piece"></i></span><span class="meta"><b>Checkers in the Park</b><small><i class="ph ph-users"></i><span>2 players</span></small></span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="margin-top: 12px"><span class="ac-better"><i class="ph-fill ph-sparkle" aria-hidden="true"></i>Better than Discord</span>Left: the full launcher, with something running here (its card says who), recent apps as icons, featured, then all; NEW on the art, a worst-case name, and a phone-only app greyed with its reason in the tooltip. Right: search, Enter starts the highlighted top hit. 440 wide, at most 560 tall; it scrolls inside and fades at its foot while there's more.</p></div>
+
+  <h3>States</h3>
+  <div class="board"><div class="row" style="align-items: flex-start; gap: 24px; flex-wrap: wrap">
+    <div class="ac-launcher" role="dialog" aria-label="Activities, loading" aria-busy="true" style="--lw: 316px">
+      <header><div class="pills" role="tablist"><button class="tab" role="tab" aria-selected="true">Activities</button><button class="tab" role="tab" aria-selected="false">Soundboard</button></div></header>
+      <label class="input"><i class="ph ph-magnifying-glass"></i><input placeholder="Search activities" aria-label="Search activities"></label>
+      <div class="ac-scroll">
+        <div class="ac-sec"><div class="mlabel">Recent</div>
+          <div class="ac-recent"><span class="skeleton" style="width: 48px; height: 48px; border-radius: var(--radius-md); justify-self: center"></span><span class="skeleton" style="width: 48px; height: 48px; border-radius: var(--radius-md); justify-self: center"></span><span class="skeleton" style="width: 48px; height: 48px; border-radius: var(--radius-md); justify-self: center"></span></div></div>
+        <div class="ac-sec"><div class="mlabel">All activities</div>
+          <div class="ac-cards" style="grid-template-columns: repeat(2, minmax(0, 1fr))">
+            <div class="stack" style="gap: 8px; padding: 6px"><span class="skeleton" style="aspect-ratio: 16/9; border-radius: var(--radius-lg)"></span><span class="skeleton line" style="width: 70%"></span><span class="skeleton line" style="width: 45%; height: 8px"></span></div>
+            <div class="stack" style="gap: 8px; padding: 6px"><span class="skeleton" style="aspect-ratio: 16/9; border-radius: var(--radius-lg)"></span><span class="skeleton line" style="width: 60%"></span><span class="skeleton line" style="width: 50%; height: 8px"></span></div>
+          </div></div>
+      </div>
+    </div>
+    <div class="ac-launcher" role="dialog" aria-label="Activities, nothing found" style="--lw: 316px">
+      <header><div class="pills" role="tablist"><button class="tab" role="tab" aria-selected="true">Activities</button><button class="tab" role="tab" aria-selected="false">Soundboard</button></div></header>
+      <label class="input"><i class="ph ph-magnifying-glass"></i><input value="minecraft" aria-label="Search activities"><button class="iconbtn iconbtn--sm" aria-label="Clear search"><i class="ph-bold ph-x"></i></button></label>
+      <div class="empty"><div class="mascot idle" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div><b>No activities match “minecraft”</b><p>Try a shorter name, or browse everything.</p><button class="btn">Clear search</button></div>
+    </div>
+    <div class="ac-launcher" role="dialog" aria-label="Activities, couldn't load" style="--lw: 316px">
+      <header><div class="pills" role="tablist"><button class="tab" role="tab" aria-selected="true">Activities</button><button class="tab" role="tab" aria-selected="false">Soundboard</button></div></header>
+      <div class="empty"><div class="mascot idle" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div><b>Couldn't load activities</b><p>Discord didn't answer. Your call is fine.</p><button class="btn"><i class="ph-bold ph-arrow-clockwise"></i>Try again</button></div>
+    </div>
+    <div class="stack" style="gap: 10px; align-items: flex-start">
+      <div class="onstage"><div class="controls" style="justify-content: flex-start">
+        <button class="cbtn" aria-label="Share your screen"><i class="ph-fill ph-screencast"></i></button>
+        <button class="cbtn" aria-label="Soundboard" title="Soundboard"><i class="ph-fill ph-rocket-launch"></i></button>
+      </div></div>
+      <span class="tooltip" role="tooltip">Activities are off in Lounge<small>A moderator turned off Use Activities here. The soundboard still works.</small></span>
+    </div>
+  </div>
+  <p class="note" style="margin-top: 12px">Loading copies the real layout. Nothing matched: what was searched, one way out. Couldn't load: the call is untouched, retry in place. Without Use Activities the control stays and opens straight to Soundboard; its tooltip names why the other tab is gone. Without either permission it goes away.</p></div>
+
+  <h3>Next to Discord</h3>
+  <div class="ac-vs">
+    <figure><figcaption><span class="ac-who dc-mark" aria-hidden="true"><i class="ph-fill ph-discord-logo"></i></span>Discord <small>drawn from its docs, blog and desktop app</small></figcaption>
+      <div class="dc ac-pane" style="padding: 12px; background: #000"><div class="dc-pop">
+        <div class="dc-search"><i class="ph ph-magnifying-glass"></i>Search apps &amp; commands</div>
+        <div class="dc-h">Recents<span class="ac-pin">3</span></div>
+        <div class="dc-icons"><div><span class="dc-ic " style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><span>Gartic Phone</span></div><div class="pinned"><span class="dc-ic " style="--h: 200"><i class="ph-fill ph-robot"></i></span><span>MEE6</span><span class="ac-pin">1</span></div><div><span class="dc-ic " style="--h: 260"><i class="ph-fill ph-strategy"></i></span><span>Chess in the Park</span></div><div><span class="dc-ic " style="--h: 330"><i class="ph-fill ph-popcorn"></i></span><span>Watch Together</span></div></div>
+        <div class="dc-h">Featured &amp; Promoted Apps</div>
+        <div class="dc-banner pinned" style="--h: 300"><span class="dc-tagp">Promoted</span><span class="ac-pin">2</span><b style="color:#fff">Farm Merge Valley</b><small>Merge, grow and trade with friends</small></div>
+        <div class="dc-h">Trending</div>
+        <div class="dc-rows"><div><span class="dc-ic sm" style="--h: 40"><i class="ph-fill ph-music-notes"></i></span><div><b>Jockie Music</b><span class="m">App · /play, /queue, /skip</span></div><span class="dc-btn sec sm">Add</span></div><div><span class="dc-ic sm" style="--h: 140"><i class="ph-fill ph-golf"></i></span><div><b>Putt Party</b><span class="m">Activity</span></div><span class="dc-btn sm pinned">Launch<span class="ac-pin">4</span></span></div></div>
+      </div></div>
+      <ul class="ac-pains" aria-label="Where Discord falls short"><li><span class="ac-pin">1</span><div>Bots and slash commands share the list with games: a music bot sits next to Putt Party, so the launcher reads like an app store, not “what can we play”.</div></li><li><span class="ac-pin">2</span><div>Paid placement leads: “Featured &amp; Promoted” is the first big section after Recents.</div></li><li><span class="ac-pin">3</span><div>Nothing says what's already running in your call; starting the same app again is how you find out. <span class="ac-nv">Not verified.</span></div></li><li><span class="ac-pin">4</span><div>No player counts or platform on the list, so a phone-only or 2-player game is a launch away from failing.</div></li><li><span class="ac-pin">5</span><div>The soundboard is a separate control in the call bar, beside a launcher with a different icon than the rocket people learned. <span class="ac-nv">Not verified.</span></div></li></ul></figure>
+    <figure><figcaption><span class="ac-who wf-mark" aria-hidden="true"><i class="ph-fill ph-sparkle"></i></span>Waffle</figcaption>
+      <div class="ac-launcher" style="--lw: 100%; max-height: 360px"><header><div class="pills" role="tablist"><button class="tab" role="tab" aria-selected="true">Activities</button><button class="tab" role="tab" aria-selected="false">Soundboard</button></div></header>
+        <div class="ac-scroll"><div class="ac-sec"><div class="mlabel">Running in Lounge</div><div class="ac-cards" style="grid-template-columns: repeat(2, minmax(0,1fr))"><button class="ac-card"><span class="ac-art" style="--h: 140"><i class="ph-fill ph-golf"></i></span><span class="meta"><b>Putt Party</b><small class="here"><span>Mira is playing</span></small></span></button><button class="ac-card" aria-disabled="true"><span class="ac-art" style="--h: 0"><i class="ph-fill ph-crown"></i></span><span class="meta"><b>Land-io</b><small><i class="ph ph-device-mobile"></i><span>Phone only</span></small></span></button></div></div></div></div>
+      <ul class="ac-gains" aria-label="Better than Discord"><li><span class="ac-pin">1</span><div>Only things you can play together. Bots and commands stay in the composer's / menu, where they act.</div></li><li><span class="ac-pin">2</span><div>No promoted section. Featured is Discord's own ranking, shown under what you've played.</div></li><li><span class="ac-pin">3</span><div>What's running in this call comes first, with who's in it, and its button reads Join, not Start.</div></li><li><span class="ac-pin">4</span><div>Every card says how many can play; an app that can't run here is greyed with the reason before you press it.</div></li><li><span class="ac-pin">5</span><div>Activities and Soundboard are two tabs behind one control, the rocket people already know.</div></li></ul></figure>
+  </div>
+</section>
+
+<!-- ============================================================ APP DETAIL -->
+<section id="app-detail">
+  <h2>App detail</h2>
+  <p class="lede">A card opens its app in place, inside the launcher, with Back in the header: art, what it is, how many can play, then one button that says exactly what happens. Starting an app nobody here runs starts it; one that's running joins it.</p>
+  <div class="board"><div class="row" style="align-items: flex-start; gap: 24px; flex-wrap: wrap">
+    <div class="ac-launcher" role="dialog" aria-label="Putt Party" style="--lw: 380px">
+      <header><button class="iconbtn" aria-label="Back to activities" title="Back"><i class="ph-bold ph-caret-left"></i></button><b style="flex: 1; color: var(--text-strong)">Putt Party</b></header>
+      <div class="ac-scroll"><div class="ac-detail">
+        <div class="ac-shots"><span class="ac-art" style="--h: 140"><i class="ph-fill ph-golf"></i></span><span class="ac-art" style="--h: 110"><i class="ph-fill ph-flag-pennant"></i></span><span class="ac-art" style="--h: 170"><i class="ph-fill ph-trophy"></i></span></div>
+        <div class="ac-facts"><span><i class="ph ph-users"></i><b>1–8 players</b>, more can watch</span><span><i class="ph ph-desktop"></i>Desktop and phone</span><span><i class="ph ph-clock"></i>About 15 minutes</span></div>
+        <p>Mini golf with friends. Bounce off walls, ride the ramps and sink it in fewer strokes than everyone else.</p>
+        <div class="callout callout--info"><i class="ph-fill ph-users-three"></i><div><b>Mira is playing in Lounge</b>You'll join her game.</div></div>
+      </div></div>
+      <div class="ac-detail"><footer><button class="btn btn--primary"><i class="ph-fill ph-play"></i>Join Putt Party</button><button class="iconbtn" aria-label="More" title="Share, copy link, report"><i class="ph-bold ph-dots-three-vertical"></i></button></footer></div>
+    </div>
+
+    <div class="stack" style="gap: 16px; flex: 1; min-width: min(100%, 300px)">
+      <div class="ac-launcher" role="dialog" aria-label="Poker Night, age restricted" style="--lw: 100%">
+        <div class="ac-detail">
+          <div class="top"><span class="ac-art sq lg" style="--h: 160"><i class="ph-fill ph-poker-chip"></i></span><div><b>Poker Night</b><span>Texas hold 'em · 7 players, 17 watching</span></div></div>
+          <div class="callout callout--warning"><i class="ph-fill ph-warning"></i><div><b>For 18 and over</b>Discord asks for your age the first time you play.</div></div>
+          <footer><button class="btn btn--primary"><i class="ph-fill ph-play"></i>Start Poker Night</button></footer>
+        </div>
+      </div>
+      <div class="ac-launcher" role="dialog" aria-label="Land-io, unavailable" style="--lw: 100%">
+        <div class="ac-detail">
+          <div class="top"><span class="ac-art sq lg" style="--h: 0"><i class="ph-fill ph-crown"></i></span><div><b>Land-io</b><span>Claim land, cut off your friends · 2–16 players</span></div></div>
+          <div class="callout"><i class="ph-fill ph-device-mobile"></i><div><b>Only on phones for now</b>Its maker hasn't released it for desktop. People on phones in this call can start it, and you can watch.</div></div>
+          <footer><button class="btn btn--primary" disabled title="Not on desktop yet"><i class="ph-fill ph-play"></i>Start Land-io</button></footer>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="margin-top: 12px"><span class="ac-better"><i class="ph-fill ph-sparkle" aria-hidden="true"></i>Better than Discord</span>The button's name is the outcome: Start for a new game, Join when someone here is in it. Anything that stops it shows above the button, in its tone, before you press: age (warning), platform or region (neutral, it's nobody's fault). More holds Share, Copy link and Report.</p></div>
+</section>
+
+<!-- ============================================================ AUTHORIZE -->
+<section id="authorize">
+  <h2>Authorize</h2>
+  <p class="lede">The first time you open an app, it asks to know who you are. One dialog names the app, lists what it gets in plain words, and says where it runs. It appears over the stage after you press Start, the app loading behind it.</p>
+  <div class="board"><div class="row" style="align-items: flex-start; gap: 24px; flex-wrap: wrap">
+    <div class="dialog" role="dialog" aria-labelledby="au1">
+      <div class="ac-consent">
+        <div class="ac-pair"><span class="ac-art sq" style="--h: 140; width: 56px; border-radius: var(--radius-lg)"><i class="ph-fill ph-golf" style="font-size: 28px"></i></span><i class="ph-bold ph-dots-three"></i><span class="av" data-av="You"></span></div>
+        <div class="dhead" style="text-align: center; grid-template-columns: minmax(0,1fr)"><h4 id="au1">Putt Party wants to know who you are</h4><p>So it can show your name and avatar to the others in the game.</p></div>
+        <div class="ac-scopes">
+          <div><i class="ph-fill ph-check-circle"></i><div><b>Your username, avatar and banner</b></div></div>
+          <div><i class="ph-fill ph-check-circle"></i><div><b>Which voice channel you're in</b><span>And who else is in it</span></div></div>
+          <div><i class="ph-fill ph-check-circle"></i><div><b>Show Putt Party on your profile</b><span>"Playing Putt Party" under your name</span></div></div>
+          <div><i class="ph ph-x-circle no"></i><div><b>It can't read your messages or post as you</b></div></div>
+        </div>
+        <p class="ac-legal">By authorizing you agree to Putt Party's privacy policy and terms. You can remove it any time in Settings › Authorized apps.</p>
+        <footer><button class="btn">Not now</button><button class="btn btn--primary">Authorize</button></footer>
+      </div>
+    </div>
+    <div class="dialog" role="dialog" aria-labelledby="au2">
+      <div class="ac-consent">
+        <div class="dhead"><h4 id="au2">Watch Together wants more access</h4><p>You already use it. Now it asks for one more thing.</p></div>
+        <div class="ac-scopes">
+          <div><i class="ph-fill ph-plus-circle" style="color: var(--accent-ink)"></i><div><b>Your friends list</b><span>To invite friends who aren't in the call</span></div></div>
+        </div>
+        <footer><button class="btn">Keep it as is</button><button class="btn btn--primary">Allow</button></footer>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="margin-top: 12px">Left: first launch. Each scope the app requests (<code>identify</code>, <code>guilds</code>, <code>rpc.voice.read</code>, <code>rpc.activities.write</code>…) maps to one plain line; what it can't do closes the list, since that's the question people actually have. Right: an app asking for more later lists only what's new. Not now closes the app and you stay in the call; the app may keep working without it, and if it can't it closes itself with its own message (see <a href="#leave">Leave and end</a>).</p></div>
+
+  <h3>Next to Discord</h3>
+  <div class="ac-vs">
+    <figure><figcaption><span class="ac-who dc-mark" aria-hidden="true"><i class="ph-fill ph-discord-logo"></i></span>Discord <small>drawn from its docs, blog and desktop app</small></figcaption>
+      <div class="dc ac-pane" style="padding: 12px; background: #000"><div class="dc-modal">
+        <div class="body"><div class="dc-pair"><span class="dc-ic " style="--h: 140"><i class="ph-fill ph-golf"></i></span><i class="ph-bold ph-dots-three"></i><span class="dc-av" style="--h: 300">Y</span></div>
+          <span class="m pinned">An external application<span class="ac-pin">1</span></span><b style="font-size: 18px">Putt Party</b><span class="m">wants to access your Discord account</span>
+          <span class="m">Signed in as <b>you</b> · <span style="color: #00a8fc">Not you?</span></span>
+          <div class="list"><span class="m" style="font-weight:700; text-transform:uppercase; font-size: 11px">This will allow the developer of Putt Party to:</span><div><i class="ph-fill ph-check-circle"></i>Access your username, avatar, and banner</div><div class="pinned"><i class="ph-fill ph-check-circle"></i>Access your voice settings and listen for events<span class="ac-pin">2</span></div><div><i class="ph-fill ph-check-circle"></i>Update your activity</div></div>
+          <div class="fine"><span>The developer of Putt Party's privacy policy and terms of service apply to this application.</span><span>Active since Oct 2022 · Used in 1,000,000+ servers</span><span class="pinned">This application cannot read your messages or send messages as you.<span class="ac-pin">3</span></span></div>
+        </div>
+        <footer><span class="dc-btn link">Cancel</span><span class="dc-btn">Authorize</span></footer>
+      </div></div>
+      <ul class="ac-pains" aria-label="Where Discord falls short"><li><span class="ac-pin">1</span><div>Starts from “An external application … wants to access your Discord account”: a security warning's framing for picking a game with friends.</div></li><li><span class="ac-pin">2</span><div>Scopes read in API terms (“listen for events”, “update your activity”), not what changes for you.</div></li><li><span class="ac-pin">3</span><div>The one reassurance people look for, that it can't read your messages, sits in the fine print at the foot.</div></li><li><span class="ac-pin">4</span><div>Shown before anything loads; Authorize, then wait for the app. <span class="ac-nv">Not verified.</span></div></li><li><span class="ac-pin">5</span><div>Cancel leaves you on a dead tile with an error from the app. <span class="ac-nv">Not verified.</span></div></li></ul><p class="note">The modal's name, Authorize Activity, is from Discord's patch notes. The copy drawn here is Discord's standard sign-in screen from memory. <span class="ac-nv">Not verified.</span></p></figure>
+    <figure><figcaption><span class="ac-who wf-mark" aria-hidden="true"><i class="ph-fill ph-sparkle"></i></span>Waffle</figcaption>
+      <div class="dialog" style="--dw: 100%"><div class="ac-consent"><div class="dhead"><h4>Putt Party wants to know who you are</h4><p>So it can show your name and avatar to the others in the game.</p></div><div class="ac-scopes"><div><i class="ph-fill ph-check-circle"></i><div><b>Your username, avatar and banner</b></div></div><div><i class="ph-fill ph-check-circle"></i><div><b>Show Putt Party on your profile</b></div></div><div><i class="ph ph-x-circle no"></i><div><b>It can't read your messages or post as you</b></div></div></div><footer><button class="btn">Not now</button><button class="btn btn--primary">Authorize</button></footer></div></div>
+      <ul class="ac-gains" aria-label="Better than Discord"><li><span class="ac-pin">1</span><div>Titled with why the app asks (“wants to know who you are”) and what it does with it, in one line under it.</div></li><li><span class="ac-pin">2</span><div>Each scope is what changes for you (“Show Putt Party on your profile”), never its API name.</div></li><li><span class="ac-pin">3</span><div>What it can't do closes the list at full size, where the eye ends.</div></li><li><span class="ac-pin">4</span><div>The app starts loading behind the dialog, so Authorize lands you straight in the game.</div></li><li><span class="ac-pin">5</span><div>Not now keeps you in the call, and the tile says what the app needs instead of failing quietly.</div></li></ul></figure>
+  </div>
+</section>
+
+<!-- ============================================================ ON STAGE -->
+<section id="on-stage">
+  <h2>On the stage</h2>
+  <p class="lede">A running activity is a tile like a stream: it takes the first slot, and focusing it runs it edge to edge with everyone in a strip below. Over it, one bar names the app and who's in it, with Invite, Pop out, Full screen and Leave activity.</p>
+
+  <h3>Starting</h3>
+  <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); align-items: start">
+    <div class="stack"><div class="call"><div class="tiles" style="grid-template-columns: 1fr"><div class="tile ac-tile tall" style="--hue: 140"><div class="ac-frame is-out" style="filter: brightness(0.6)"></div><div class="ac-starting"><div><span class="ac-art sq lg" style="--h: 140"><i class="ph-fill ph-golf"></i></span><b>Starting Putt Party…</b><div class="progress progress--indeterminate" role="progressbar" aria-label="Starting"></div></div></div></div></div></div><span class="note">Starting. The tile takes its slot at once with the app's art; Leave activity already works.</span></div>
+    <div class="stack"><div class="call"><div class="tiles" style="grid-template-columns: 1fr"><div class="tile ac-tile tall" style="--hue: 140"><div class="ac-frame" style="filter: brightness(0.6)"></div><div class="ac-starting"><div><span class="ac-art sq lg" style="--h: 140"><i class="ph-fill ph-golf"></i></span><b>Still starting Putt Party</b><span>It's taking longer than usual. Its servers may be busy.</span><div class="row" style="gap: 8px"><button class="btn btn--sm">Leave activity</button><button class="btn btn--sm"><i class="ph-bold ph-arrow-clockwise"></i>Reload</button></div></div></div></div></div></div><span class="note">After 15 seconds the wait says so and offers a way out.</span></div>
+    <div class="stack"><div class="call"><div class="tiles" style="grid-template-columns: 1fr"><div class="tile ac-tile tall" style="--hue: 140"><div class="ac-frame" style="filter: brightness(0.35) saturate(0.4)"></div><div class="ac-starting"><div><i class="ph-fill ph-warning-circle" style="font-size: 28px; color: var(--warning)"></i><b>Putt Party didn't load</b><span>It couldn't reach its servers. Your call is fine.</span><div class="row" style="gap: 8px"><button class="btn btn--sm">Leave activity</button><button class="btn btn--sm btn--primary"><i class="ph-bold ph-arrow-clockwise"></i>Try again</button></div></div></div></div></div></div><span class="note">Failed to load: what happened, that the call is fine, retry in the same slot.</span></div>
+  </div>
+
+  <h3>Focused, edge to edge</h3>
+  <div class="call focused" style="max-width: 860px">
+    <div class="callhead"><i class="ph ph-speaker-high"></i><span class="title">Lounge</span><span class="timer">0:44:02</span><span class="spacer"></span><button class="iconbtn" aria-label="Layout: focus" title="Layout: focus. Switch to grid"><i class="ph ph-square-split-horizontal"></i></button><button class="iconbtn" aria-label="Chat"><i class="ph ph-chat-circle-text"></i></button></div>
+    <div class="ac-bar callhead"><span class="ttl"><span class="ac-art sq sm" style="--h: 140"><i class="ph-fill ph-golf"></i></span><b>Putt Party</b></span><button class="people" aria-label="3 playing" title="Mira, Theo and you are playing"><span class="stackav"><span class="av" data-av="Mira"></span><span class="av" data-av="Theo"></span><span class="av" data-av="You"></span></span>3</button><span class="sep"></span><button class="iconbtn" aria-label="Invite to Putt Party" title="Invite to Putt Party"><i class="ph-bold ph-user-plus"></i></button><button class="iconbtn hide-narrow" aria-label="Pop out" title="Pop out into its own window"><i class="ph ph-arrow-square-out"></i></button><button class="iconbtn hide-narrow" aria-label="Full screen" title="Full screen"><i class="ph ph-corners-out"></i></button><button class="btn btn--sm" title="Leave Putt Party. You stay in the call"><i class="ph-bold ph-sign-out"></i>Leave activity</button></div>
+    <div style="position: relative; aspect-ratio: 16/9; border-radius: var(--radius-lg); overflow: hidden"><div class="ac-frame" style="position: absolute; inset: 0"><div class="hud"><span>Hole 3 · Par 2</span><span>Mira 4 · Theo 6 · You 5</span></div><span class="hole"></span><span class="flag"></span><span class="ball"></span></div></div>
+    <div class="ac-strip">
+      <div class="tile speaking" style="--hue: 20"><span class="av" data-av="Mira"></span><span class="name"><span class="bars"><i></i><i></i><i></i></span><span class="who">Mira</span></span></div>
+      <div class="tile" style="--hue: 200"><span class="av" data-av="Theo"></span><span class="name"><span class="who">Theo</span></span></div>
+      <div class="tile" style="--hue: 120"><span class="av" data-av="Jun"></span><span class="name"><i class="ph-fill ph-microphone-slash"></i><span class="who">Jun</span></span></div>
+      <div class="tile" style="--hue: 300"><span class="av" data-av="You"></span><span class="name"><span class="who">You</span></span></div>
+    </div>
+    <div class="controls">
+      <div class="csplit"><button class="cbtn" aria-label="Mute"><i class="ph-fill ph-microphone"></i></button><button class="cbtn chev" aria-label="Microphone options"><i class="ph-bold ph-caret-up"></i></button></div>
+      <button class="cbtn" aria-label="Share your screen"><i class="ph-fill ph-screencast"></i></button>
+      <button class="cbtn active" aria-label="Activities" title="Activities and soundboard"><i class="ph-fill ph-rocket-launch"></i></button>
+      <span class="gap"></span>
+      <button class="cbtn leave" aria-label="Leave call"><i class="ph-fill ph-phone-x"></i></button>
+    </div>
+  </div>
+  <p class="note" style="margin-top: 8px"><span class="ac-better"><i class="ph-fill ph-sparkle" aria-hidden="true"></i>Better than Discord</span>The app gets the stage's width at its own aspect (the app's focused lock: landscape, portrait or free), letterboxed on the other axis, square and flush. Speaking still shows in the strip; the app hears who speaks too. Leave activity is a labelled button, since an X here reads as "leave call". The Activities control stays pressed while you're in one.</p>
+
+  <h3>Grid, and not joined</h3>
+  <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); align-items: start">
+    <div class="stack"><div class="call"><div class="tiles g2">
+      <div class="tile ac-tile" style="--hue: 140"><div class="ac-frame"><div class="hud"><span>Hole 3</span></div><span class="hole"></span><span class="flag"></span><span class="ball"></span></div><span class="name"><i class="ph-fill ph-rocket-launch scr"></i><span class="who">Putt Party · 3</span></span></div>
+      <div class="tile speaking" style="--hue: 20"><span class="av" data-av="Mira"></span><span class="name"><span class="bars"><i></i><i></i><i></i></span><span class="who">Mira</span></span></div>
+      <div class="tile" style="--hue: 200"><span class="av" data-av="Theo"></span><span class="name"><span class="who">Theo</span></span></div>
+      <div class="tile" style="--hue: 300"><span class="av" data-av="You"></span><span class="name"><span class="who">You</span></span></div>
+    </div></div><span class="note">In it, grid layout: the app is a live tile in the first slot (the app is told it's in grid and may simplify). Click it to focus.</span></div>
+    <div class="stack"><div class="call"><div class="tiles g2">
+      <div class="tile ac-tile is-out" style="--hue: 140"><div class="ac-frame"><span class="hole"></span><span class="flag"></span><span class="ball"></span></div><div class="ac-join"><span class="stackav"><span class="av" data-av="Mira"></span><span class="av" data-av="Theo"></span></span><b>Putt Party</b><span>Mira and Theo are playing</span><button class="btn btn--sm btn--primary"><i class="ph-fill ph-play"></i>Join activity</button></div></div>
+      <div class="tile speaking" style="--hue: 20"><span class="av" data-av="Mira"></span><span class="name"><span class="bars"><i></i><i></i><i></i></span><span class="who">Mira</span></span></div>
+      <div class="tile" style="--hue: 200"><span class="av" data-av="Theo"></span><span class="name"><span class="who">Theo</span></span></div>
+      <div class="tile" style="--hue: 300"><span class="av" data-av="You"></span><span class="name"><span class="who">You</span></span></div>
+    </div></div><span class="note">Not in it: the same slot shows the app's art dimmed, who's playing, and Join activity. Nothing loads until you press it.</span></div>
+  </div>
+
+  <h3>Away from the call: the corner, and pop-out</h3>
+  <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); align-items: start">
+    <div class="stack">
+      <div style="position: relative; height: 280px; border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-page); box-shadow: inset 0 0 0 1px var(--line-strong)">
+        <div class="feed" style="padding: 12px; display: grid; gap: 10px">
+          <div class="msg first"><span class="av" data-av="Ana"></span><div><div class="head"><span class="name">Ana</span><span class="time">9:40 PM</span></div><div class="body">who's on for ranked after?</div></div></div>
+          <div class="msg first"><span class="av" data-av="Jun"></span><div><div class="head"><span class="name">Jun</span><span class="time">9:41 PM</span></div><div class="body">after this hole lol</div></div></div>
+        </div>
+        <div class="ac-pip" role="group" aria-label="Putt Party, in a corner"><div class="ac-frame"><span class="hole"></span><span class="flag"></span><span class="ball"></span></div>
+          <div class="foot"><b>Putt Party · Lounge</b><button class="iconbtn iconbtn--sm" aria-label="Return to call" title="Return to call"><i class="ph-bold ph-arrow-square-in"></i></button><button class="iconbtn iconbtn--sm" aria-label="Leave activity" title="Leave Putt Party"><i class="ph-bold ph-sign-out"></i></button></div></div>
+      </div>
+      <span class="note">Open a text channel mid-game and the app shrinks into the corner, still running and still playable by click (the app opts into interactive corners; otherwise a click returns to the call). Drag it to any corner, like self-view.</span>
+    </div>
+    <div class="stack">
+      <div class="board" style="display: grid; justify-items: center">
+        <div class="popout is-hover" role="group" aria-label="Putt Party, popped out" style="width: min(100%, 360px)">
+          <div class="tile ac-tile" style="--hue: 140"><div class="ac-frame"><div class="hud"><span>Hole 3</span></div><span class="hole"></span><span class="flag"></span><span class="ball"></span></div></div>
+          <div class="popout-bar"><span class="popout-lights" aria-hidden="true"><i></i><i></i><i></i></span><span class="title">Putt Party · Lounge</span></div>
+          <div class="popout-foot"><button class="btn btn--sm"><i class="ph-bold ph-arrow-square-in"></i>Return to call</button><button class="iconbtn" aria-label="Leave activity" title="Leave Putt Party"><i class="ph-bold ph-sign-out"></i></button></div>
+        </div>
+      </div>
+      <span class="note">Pop out puts the app in its own window you can make big on a second screen. The call keeps the tile with "In a pop-out" and Return to call, as for streams. Closing the window returns it; it never ends the game.</span>
+    </div>
+  </div>
+  <p class="note" style="margin-top: 8px">Full screen: the app is the whole screen, the bar floats over it and fades after 3 still seconds; Esc leaves full screen first, and only a second Esc reaches the app. Keyboard: Tab moves into the app and back out to Waffle's controls, so nobody gets trapped in it.</p>
+
+  <h3>Next to Discord</h3>
+  <div class="ac-vs">
+    <figure><figcaption><span class="ac-who dc-mark" aria-hidden="true"><i class="ph-fill ph-discord-logo"></i></span>Discord <small>drawn from its docs, blog and desktop app</small></figcaption>
+      <div class="dc ac-pane"><div class="dc-stage">
+        <div class="dc-tiles"><div class="dc-tile app pinned"><div><b style="color:#fff">Putt Party</b><span class="dc-btn sm">Join Activity</span></div><span class="ac-pin">1</span></div><div class="dc-tile" style="--h: 20"><span class="dc-av">M</span><span class="nm">Mira</span></div><div class="dc-tile" style="--h: 200"><span class="dc-av" style="--h: 200">T</span><span class="nm">Theo</span></div><div class="dc-tile" style="--h: 300"><span class="dc-av" style="--h: 300">Y</span><span class="nm">you</span></div></div>
+        <div class="dc-bar"><span class="dc-cb"><i class="ph-fill ph-video-camera-slash"></i></span><span class="dc-cb"><i class="ph-fill ph-screencast"></i></span><span class="dc-cb"><i class="ph-fill ph-squares-four"></i></span><span class="dc-cb"><i class="ph-fill ph-microphone"></i></span><span class="dc-cb pinned"><i class="ph-bold ph-sign-out"></i><span class="ac-pin">2</span></span><span class="dc-cb red"><i class="ph-fill ph-phone-x"></i></span></div>
+      </div><div class="dc-pip" style="display:none"></div></div>
+      <ul class="ac-pains" aria-label="Where Discord falls short"><li><span class="ac-pin">1</span><div>The Join Activity tile names the app but not who's in it, so you can't tell if your friends are playing or it's someone else's leftover game. <span class="ac-nv">Not verified.</span></div></li><li><span class="ac-pin">2</span><div>Leave Activity is an icon in the call controls beside Disconnect: the two exits look alike and sit a few pixels apart.</div></li><li><span class="ac-pin">3</span><div>Away from the call, the activity drops into a small corner window you can't play in unless the app opts in, with no labelled way back. <span class="ac-nv">Not verified.</span></div></li><li><span class="ac-pin">4</span><div>Starting another app from the launcher pulls you out of the current one without a word.</div></li></ul></figure>
+    <figure><figcaption><span class="ac-who wf-mark" aria-hidden="true"><i class="ph-fill ph-sparkle"></i></span>Waffle</figcaption>
+      <div class="call" style="padding: 10px"><div class="tiles g2"><div class="tile ac-tile is-out" style="--hue: 140"><div class="ac-frame"><span class="hole"></span><span class="flag"></span><span class="ball"></span></div><div class="ac-join"><span class="stackav"><span class="av" data-av="Mira"></span><span class="av" data-av="Theo"></span></span><b>Putt Party</b><span>Mira and Theo are playing</span><button class="btn btn--sm btn--primary"><i class="ph-fill ph-play"></i>Join activity</button></div></div><div class="tile speaking" style="--hue: 20"><span class="av" data-av="Mira"></span><span class="name"><span class="who">Mira</span></span></div><div class="tile" style="--hue: 200"><span class="av" data-av="Theo"></span><span class="name"><span class="who">Theo</span></span></div><div class="tile" style="--hue: 300"><span class="av" data-av="You"></span><span class="name"><span class="who">You</span></span></div></div></div>
+      <ul class="ac-gains" aria-label="Better than Discord"><li><span class="ac-pin">1</span><div>The tile shows who's playing, faces and names, so Join is a decision about people, not an app.</div></li><li><span class="ac-pin">2</span><div>Leave activity is a labelled button in the activity's own bar, away from Disconnect, and a toast holds Rejoin for 6 seconds.</div></li><li><span class="ac-pin">3</span><div>The corner keeps Return to call and Leave on it, snaps to any corner, and pop-out leaves its slot with “In a pop-out”.</div></li><li><span class="ac-pin">4</span><div>Switching apps asks only when you'd walk out on people, naming who keeps playing.</div></li></ul></figure>
+  </div>
+</section>
+
+<!-- ============================================================ IN CHAT -->
+<section id="in-chat">
+  <h2>In a chat</h2>
+  <p class="lede">Some apps run in a text channel, DM or group DM with no voice at all. Starting one posts a card in the chat for everyone, and opens the app over the top of the chat; the conversation stays under it and you can drag the split.</p>
+  <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); align-items: start">
+    <div class="stack">
+      <div style="height: 420px; border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-page); box-shadow: inset 0 0 0 1px var(--line-strong)">
+        <div class="ac-split">
+          <div style="display: grid; grid-template-rows: auto minmax(0, 1fr); padding: 8px 8px 0; gap: 4px; min-height: 0">
+            <div class="ac-bar callhead"><span class="ttl"><span class="ac-art sq sm" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><b>Gartic Phone</b></span><button class="people" aria-label="3 playing"><span class="stackav"><span class="av" data-av="Ana"></span><span class="av" data-av="Jun"></span><span class="av" data-av="You"></span></span>3</button><button class="iconbtn" aria-label="Invite"><i class="ph-bold ph-user-plus"></i></button><button class="iconbtn" aria-label="Pop out"><i class="ph ph-arrow-square-out"></i></button><button class="btn btn--sm"><i class="ph-bold ph-sign-out"></i>Leave</button></div>
+            <div style="position: relative; border-radius: var(--radius-lg); overflow: hidden; min-height: 0"><div class="ac-frame draw" style="position: absolute; inset: 0; display: grid; place-items: center"><b style="font-size: var(--text-lg)">Draw: a cat riding a waffle</b></div></div>
+          </div>
+          <div class="grip" role="separator" aria-label="Resize the activity" tabindex="0"></div>
+          <div class="feed" style="padding: 0 12px 12px; display: grid; gap: 8px; align-content: end; min-height: 0; overflow: hidden">
+            <div class="sys"><i class="ph ph-rocket-launch go"></i><div><b>Ana</b> started <b>Gartic Phone</b>.<span class="time">9:02 PM</span></div></div>
+            <div class="msg first"><span class="av" data-av="Jun"></span><div><div class="head"><span class="name">Jun</span><span class="time">9:03 PM</span></div><div class="body">my cat has six legs dont @ me</div></div></div>
+          </div>
+        </div>
+      </div>
+      <span class="note">Playing in #general. The bar is the same as on the stage; Leave drops you out of the app and the chat takes the space back. No voice controls appear, since there's no call. Joining voice is a separate click.</span>
+    </div>
+    <div class="stack" style="gap: 16px">
+      <div class="stack" style="gap: 8px">
+        <div class="sys"><i class="ph ph-rocket-launch go"></i><div><b>Ana</b> started <b>Gartic Phone</b>.<span class="time">Today at 9:02 PM</span></div></div>
+        <div class="ac-msgcard"><span class="ac-art sq md" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><div><b>Gartic Phone</b><small><span class="stackav"><span class="av" data-av="Ana"></span><span class="av" data-av="Jun"></span></span>Ana and Jun are playing</small></div><button class="btn btn--sm btn--primary">Join</button></div>
+      </div>
+      <div class="ac-msgcard"><span class="ac-art sq md" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><div><b>Gartic Phone</b><small><span class="stackav"><span class="av" data-av="Ana"></span><span class="av" data-av="Jun"></span><span class="av" data-av="You"></span></span>You're playing</small></div><button class="btn btn--sm">Open</button></div>
+      <div class="ac-msgcard"><span class="ac-art sq md" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><div><b>Gartic Phone</b><small><span class="stackav"><span class="av" data-av="Ana"></span><span class="av" data-av="Jun"></span><span class="av" data-av="Rosa"></span><span class="av" data-av="Kai"></span><span class="av" data-av="Omar"></span></span>Ana, Jun and 3 others are playing</small></div><button class="btn btn--sm" disabled title="Gartic Phone is full: 50 of 50">Full</button></div>
+      <div class="ac-msgcard is-ended"><span class="ac-art sq md" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><div><b>Gartic Phone</b><small>Ended · 4 played for 38 minutes</small></div><button class="btn btn--sm">Play again</button></div>
+      <p class="note"><span class="ac-better"><i class="ph-fill ph-sparkle" aria-hidden="true"></i>Better than Discord</span>The card is live: who's in it now, then You're playing (Open brings it back if you closed the view), Full with the count in the tooltip, and Ended with a summary and Play again, which starts a fresh game here. A system line names who started it; repeats in a row fold into one line.</p>
+    </div>
+  </div>
+
+  <h3>Next to Discord</h3>
+  <div class="ac-vs">
+    <figure><figcaption><span class="ac-who dc-mark" aria-hidden="true"><i class="ph-fill ph-discord-logo"></i></span>Discord <small>drawn from its docs, blog and desktop app</small></figcaption>
+      <div class="dc ac-pane"><div class="dc-chat">
+        <div class="dc-msg"><span class="dc-av" style="--h: 120">A</span><div><span><b>Ana</b> <span class="m">Today at 9:02 PM</span></span><span class="m pinned" style="justify-self: start">used <span style="color:#00a8fc">/launch</span><span class="ac-pin">1</span></span>
+          <div class="dc-embed pinned"><span class="dc-ic sm" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><span class="ac-pin">2</span><div><b>Gartic Phone</b><span class="dc-faces"><span class="dc-av xs" style="--h:120">A</span><span class="dc-av xs" style="--h:220">J</span></span></div><span class="dc-btn green sm">Join</span></div></div></div>
+        <div class="dc-msg"><span class="dc-av" style="--h: 120">A</span><div><span><b>Ana</b> <span class="m">Yesterday at 8:40 PM</span></span>
+          <div class="dc-embed pinned"><span class="dc-ic sm" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><span class="ac-pin">3</span><div><b>Gartic Phone</b><span class="m">Ended</span></div><span class="dc-btn sec sm">Join</span></div></div></div>
+      </div></div>
+      <ul class="ac-pains" aria-label="Where Discord falls short"><li><span class="ac-pin">1</span><div>The launch posts as a command reply (“used /launch”), the plumbing showing through.</div></li><li><span class="ac-pin">2</span><div>The card shows faces but no names or count, and doesn't say when you're already in it. <span class="ac-nv">Not verified.</span></div></li><li><span class="ac-pin">3</span><div>After the game ends the card lingers without a summary or a way to start a new one. <span class="ac-nv">Not verified.</span></div></li><li><span class="ac-pin">4</span><div>The app opens as a call stage over the chat, so a text game feels like you joined voice. <span class="ac-nv">Not verified.</span></div></li></ul></figure>
+    <figure><figcaption><span class="ac-who wf-mark" aria-hidden="true"><i class="ph-fill ph-sparkle"></i></span>Waffle</figcaption>
+      <div class="stack" style="gap: 8px"><div class="sys"><i class="ph ph-rocket-launch go"></i><div><b>Ana</b> started <b>Gartic Phone</b>.</div></div><div class="ac-msgcard"><span class="ac-art sq md" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><div><b>Gartic Phone</b><small>You're playing</small></div><button class="btn btn--sm">Open</button></div><div class="ac-msgcard is-ended"><span class="ac-art sq md" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><div><b>Gartic Phone</b><small>Ended · 4 played for 38 minutes</small></div><button class="btn btn--sm">Play again</button></div></div>
+      <ul class="ac-gains" aria-label="Better than Discord"><li><span class="ac-pin">1</span><div>A plain system line, “Ana started Gartic Phone”; repeats in a row fold into one.</div></li><li><span class="ac-pin">2</span><div>The card is live: names who's playing, then You're playing with Open, then Full with the count.</div></li><li><span class="ac-pin">3</span><div>Ended carries a summary and Play again, which starts a fresh game in the same chat.</div></li><li><span class="ac-pin">4</span><div>The app opens over the top of the chat with the conversation kept under it and a drag to split; no voice controls appear.</div></li></ul></figure>
+  </div>
+</section>
+
+<!-- ============================================================ PRESENCE -->
+<section id="presence">
+  <h2>Who's playing</h2>
+  <p class="lede">Anyone can see a game is on without opening the call: under the voice channel, on each member's row, in their profile and in Active Now.</p>
+  <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); align-items: start">
+    <div class="stack">
+      <div class="side" style="border-radius: var(--radius-lg); padding: 6px; background: var(--bg-sidebar)"><div class="chlist" style="padding: 0">
+        <div class="ch sel"><i class="ph ph-speaker-high"></i><a class="nm" href="#presence" aria-current="page">Lounge</a></div>
+        <div class="ac-row"><span class="ac-art sq sm" style="--h: 140"><i class="ph-fill ph-golf"></i></span><div><b>Putt Party</b><small>Mira, Theo and you</small></div></div>
+        <button class="vp speaking"><span class="av" data-av="Mira"></span><span class="nm">Mira</span><span class="end"><span class="ac-art sq xs" style="--h: 140" title="In Putt Party"><i class="ph-fill ph-golf"></i></span></span></button>
+        <button class="vp"><span class="av" data-av="Theo"></span><span class="nm">Theo</span><span class="end"><span class="ac-art sq xs" style="--h: 140" title="In Putt Party"><i class="ph-fill ph-golf"></i></span></span></button>
+        <button class="vp"><span class="av" data-av="Jun"></span><span class="nm">Jun</span><span class="end"><i class="ph-fill ph-microphone-slash" aria-label="Muted"></i></span></button>
+        <button class="vp"><span class="av" data-av="You"></span><span class="nm">You</span><span class="end"><span class="ac-art sq xs" style="--h: 140" title="In Putt Party"><i class="ph-fill ph-golf"></i></span></span></button>
+        <div class="ch"><i class="ph ph-speaker-high"></i><a class="nm" href="#presence">Ranked grind</a></div>
+        <div class="ac-row"><span class="ac-art sq sm" style="--h: 330"><i class="ph-fill ph-popcorn"></i></span><div><b>Watch Together</b><small>Rosa</small></div><button class="btn btn--sm">Join</button></div>
+        <button class="vp"><span class="av" data-av="Rosa"></span><span class="nm">Rosa</span><span class="end"><span class="ac-art sq xs" style="--h: 330" title="In Watch Together"><i class="ph-fill ph-popcorn"></i></span></span></button>
+      </div></div>
+      <span class="note"><span class="ac-better"><i class="ph-fill ph-sparkle" aria-hidden="true"></i>Better than Discord</span>You're in it: the row has no Join. Elsewhere: Join puts you in Ranked grind and in the app. A member's mark is the app's icon at the row's end; it yields to LIVE and the soundboard's emoji, one mark per row. Two apps in one channel get two rows.</span>
+    </div>
+    <div class="stack">
+      <article class="acard"><button class="acard-who"><span class="av" data-av="Mira"><span class="status online"></span></span><div><b>Mira</b><span>In Putt Party</span></div><time>12m</time></button>
+        <div class="acard-act"><span class="ac-art sq md" style="--h: 140"><i class="ph-fill ph-golf"></i></span><div><b>Putt Party</b><small><span>Hole 3 of 9 · Lounge</span></small></div><button class="btn btn--sm">Join</button></div></article>
+      <article class="acard"><button class="acard-who"><span class="av" data-av="Rosa"><span class="status idle"></span></span><div><b>Rosa</b><span>In Watch Together</span></div><time>1h 4m</time></button>
+        <div class="acard-act"><span class="ac-art sq md" style="--h: 330"><i class="ph-fill ph-popcorn"></i></span><div><b>Watch Together</b><small><span>In a voice channel you can't join</span></small></div></div></article>
+      <span class="note">Active Now and the profile's activity card: the app sets its own lines (Hole 3 of 9) and Waffle adds where. When you couldn't join, the card says so and has no button.</span>
+    </div>
+    <div class="stack">
+      <div class="msg first"><span class="av" data-av="Theo"></span><div><div class="head"><span class="name">Theo</span><span class="time">Today at 9:15 PM</span></div><div class="body">come play</div>
+        <div class="ac-msgcard" style="margin-top: 6px"><span class="ac-art sq md" style="--h: 140"><i class="ph-fill ph-golf"></i></span><div><b>Join Theo in Putt Party</b><small>Lounge · Night Shift · 3 playing</small></div><button class="btn btn--sm btn--primary">Join</button></div></div></div>
+      <span class="note">Ask to join from rich presence sends this. It stays valid while Theo is still in the game, at most 6 hours, then reads Ended.</span>
+    </div>
+  </div>
+
+  <h3>Next to Discord</h3>
+  <div class="ac-vs">
+    <figure><figcaption><span class="ac-who dc-mark" aria-hidden="true"><i class="ph-fill ph-discord-logo"></i></span>Discord <small>drawn from its docs, blog and desktop app</small></figcaption>
+      <div class="dc ac-pane"><div class="dc-side">
+        <div class="dc-ch hover pinned"><i class="ph ph-speaker-high"></i>Lounge<span class="ac-pin">1</span><span class="end"><i class="ph ph-user-plus" style="font-size: 15px"></i><i class="ph ph-gear-six" style="font-size: 15px"></i></span></div>
+        <div class="dc-vm"><span class="dc-av sm">M</span>Mira<span class="end pinned"><i class="ph-fill ph-rocket-launch"></i><span class="ac-pin">2</span></span></div>
+        <div class="dc-vm"><span class="dc-av sm" style="--h:200">T</span>Theo<span class="end"><i class="ph-fill ph-rocket-launch"></i></span></div>
+        <div class="dc-vm"><span class="dc-av sm" style="--h:120">J</span>Jun</div>
+      </div><span class="dc-tip" style="left: 110px; top: 4px">Join Activity</span></div>
+      <ul class="ac-pains" aria-label="Where Discord falls short"><li><span class="ac-pin">1</span><div>Joining from the sidebar hides behind hovering the channel: nothing at rest says a game is on.</div></li><li><span class="ac-pin">2</span><div>Members in it carry a generic activity mark, not the app, so two games in one channel look the same. <span class="ac-nv">Not verified.</span></div></li><li><span class="ac-pin">3</span><div>Active Now can't be turned off and lists people who aren't your friends.</div></li></ul></figure>
+    <figure><figcaption><span class="ac-who wf-mark" aria-hidden="true"><i class="ph-fill ph-sparkle"></i></span>Waffle</figcaption>
+      <div class="side" style="border-radius: var(--radius-lg); padding: 6px; background: var(--bg-sidebar)"><div class="chlist" style="padding: 0"><div class="ch"><i class="ph ph-speaker-high"></i><a class="nm" href="#presence">Lounge</a></div><div class="ac-row"><span class="ac-art sq sm" style="--h: 140"><i class="ph-fill ph-golf"></i></span><div><b>Putt Party</b><small>Mira, Theo</small></div><button class="btn btn--sm">Join</button></div><button class="vp"><span class="av" data-av="Mira"></span><span class="nm">Mira</span><span class="end"><span class="ac-art sq xs" style="--h: 140"><i class="ph-fill ph-golf"></i></span></span></button><button class="vp"><span class="av" data-av="Jun"></span><span class="nm">Jun</span></button></div></div>
+      <ul class="ac-gains" aria-label="Better than Discord"><li><span class="ac-pin">1</span><div>A running game is a row under its channel at rest, with who's in it and Join; Join connects voice and the game in one click.</div></li><li><span class="ac-pin">2</span><div>Each member's mark is the app's own icon, so two games in one channel read apart.</div></li><li><span class="ac-pin">3</span><div>Activity cards say where the game is and drop Join when you couldn't get in, instead of a button that fails.</div></li></ul></figure>
+  </div>
+</section>
+
+<!-- ============================================================ INVITE -->
+<section id="invite">
+  <h2>Invite</h2>
+  <p class="lede">Invite in the activity's bar opens the invite dialog the app already has, pointed at the game: friends to send to on one side, the link on the other. Apps can open it themselves too.</p>
+  <div class="board">
+    <div class="dialog dialog--lg" role="dialog" aria-labelledby="inv1">
+      <div class="dhead"><h4 id="inv1">Invite friends to Putt Party</h4><p>They join you in Lounge, Night Shift.</p><button class="iconbtn" aria-label="Close"><i class="ph ph-x"></i></button></div>
+      <div class="input"><i class="ph ph-magnifying-glass"></i><input aria-label="Search friends" placeholder="Search friends"></div>
+      <div class="dscroll stack" style="gap: 2px">
+        <div class="friendrow"><span class="av" data-av="Ana"><span class="status online" style="--bg-ring: var(--bg-raised)"></span></span><div><b>Ana</b><span>ana.k</span></div><button class="btn btn--sm">Invite</button></div>
+        <div class="friendrow"><span class="av" data-av="Rosa"><span class="status idle" style="--bg-ring: var(--bg-raised)"></span></span><div><b>Rosa</b><span>rosa</span></div><button class="btn btn--sm sent" aria-disabled="true"><i class="ph-bold ph-check"></i>Sent</button></div>
+        <div class="friendrow"><span class="av" data-av="Bartholomew"><span class="status offline" style="--bg-ring: var(--bg-raised)"></span></span><div><b>Bartholomew Featherstonehaugh-Wright</b><span>Can't join Lounge</span></div><button class="btn btn--sm" disabled title="Bartholomew isn't in Night Shift">Invite</button></div>
+      </div>
+      <div class="divider">Or send a link</div>
+      <div class="linkrow"><div class="input"><input aria-label="Invite link" value="discord.gg/nightshift-7Kq2?activity=putt" readonly></div><button class="btn btn--primary">Copy</button></div>
+    </div>
+  </div>
+  <p class="note" style="margin-top: 8px">Friends who can't reach the channel stay listed with the reason, disabled. In a DM there's no channel invite, so the dialog shows friends only. Without Create Invite the link half is gone and the dialog says why.</p>
+</section>
+
+<!-- ============================================================ ASKS -->
+<section id="asks">
+  <h2>What apps can ask</h2>
+  <p class="lede">A running app can ask Waffle to do a few things for it. Each one is Waffle's own dialog, never the app's, so you always know who's asking.</p>
+  <div class="board"><div class="row" style="align-items: flex-start; gap: 24px; flex-wrap: wrap">
+    <div class="dialog" role="dialog" aria-labelledby="as1">
+      <div class="dhead"><h4 id="as1">Leaving Waffle</h4><p>Putt Party wants to open a link in your browser.</p></div>
+      <p class="ac-url">https://puttparty.example/leaderboard?season=4&amp;friends=mira,theo</p>
+      <label class="choice"><span class="check" role="checkbox" aria-checked="false"></span><div><b>Trust puttparty.example</b><span>Open its links without asking</span></div></label>
+      <footer><button class="btn">Go back</button><button class="btn btn--primary">Open link</button></footer>
+    </div>
+    <div class="dialog" role="dialog" aria-labelledby="as2">
+      <div class="dhead"><h4 id="as2">Buy Golden Putter?</h4><p>Sold by Putt Party, paid through Discord.</p></div>
+      <div class="ac-scopes"><div><span class="ac-art sq sm" style="--h: 80"><i class="ph-fill ph-trophy"></i></span><div><b>Golden Putter</b><span>Cosmetic. Yours in every game.</span></div></div></div>
+      <div class="callout"><i class="ph-fill ph-info"></i><div><b>Waffle can't take payments</b>Finish in your browser on discord.com; the putter shows up here once it's paid.</div></div>
+      <footer><button class="btn">Not now</button><button class="btn btn--primary"><i class="ph-bold ph-arrow-square-out"></i>Continue in browser</button></footer>
+    </div>
+    <div class="dialog" role="dialog" aria-labelledby="as3">
+      <div class="dhead"><h4 id="as3">Share this moment</h4><p>Putt Party made a picture of your hole in one.</p></div>
+      <span class="ac-art" style="--h: 140"><i class="ph-fill ph-golf"></i></span>
+      <div class="input"><i class="ph ph-magnifying-glass"></i><input aria-label="Send to" placeholder="Send to a channel or friend"></div>
+      <footer><button class="btn">Cancel</button><button class="btn btn--primary" disabled title="Pick where to send it">Send</button></footer>
+    </div>
+  </div>
+  <p class="note" style="margin-top: 12px">Open a link: the full URL, wrapped, trusting is per domain. Buying: Waffle hands off to discord.com, since a third-party client can't run Discord's checkout (decision for later). Share: a picture the app made, sent where you pick. Also asked for, without their own dialog: open someone's profile (the regular profile card), your language, and logs (kept locally for a bug report).</p></div>
+</section>
+
+<!-- ============================================================ LEAVE -->
+<section id="leave">
+  <h2>Leave and end</h2>
+  <p class="lede">Leaving the app and leaving the call are separate, and nothing asks unless leaving costs something. A game ends when its last player leaves.</p>
+  <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); align-items: start">
+    <div class="stack">
+      <div class="toast" data-tone="undo"><i class="ph-fill ph-sign-out"></i><p>You left Putt Party<small>Mira and Theo are still playing</small></p><button class="btn btn--sm">Rejoin</button></div>
+      <span class="note"><span class="ac-better"><i class="ph-fill ph-sparkle" aria-hidden="true"></i>Better than Discord</span>Leave activity: you stay in the call, the tile goes back to Join activity, and a toast holds Rejoin for 6 seconds.</span>
+    </div>
+    <div class="stack">
+      <div class="dialog" role="dialog" aria-labelledby="lv1"><div class="dhead"><h4 id="lv1">Switch to Gartic Phone?</h4><p>You'll leave Putt Party. Mira and Theo keep playing.</p></div><footer><button class="btn">Stay in Putt Party</button><button class="btn btn--primary">Start Gartic Phone</button></footer></div>
+      <span class="note">You can be in one app at a time. Starting another asks only when you'd leave a game others are in; alone, it just switches.</span>
+    </div>
+    <div class="stack">
+      <div class="dialog" role="dialog" aria-labelledby="lv2"><div class="dhead"><h4 id="lv2">Leave the call?</h4><p>You're playing Putt Party with Mira and Theo. Leaving Lounge takes you out of the game too.</p></div><footer><button class="btn">Stay</button><button class="btn btn--danger">Leave call</button></footer></div>
+      <span class="note">Leaving voice while in a voice activity ends your part in it, so it asks once, naming who you leave. Switching voice channels says the same.</span>
+    </div>
+    <div class="stack">
+      <div class="call"><div class="tiles" style="grid-template-columns: 1fr"><div class="tile ac-tile tall" style="--hue: 140"><div class="ac-frame" style="filter: brightness(0.35) saturate(0.4)"></div><div class="ac-starting"><div><span class="ac-art sq lg" style="--h: 140"><i class="ph-fill ph-golf"></i></span><b>Putt Party closed</b><span>“Round over! Thanks for playing.” it said.</span><div class="row" style="gap: 8px"><button class="btn btn--sm">Dismiss</button><button class="btn btn--sm btn--primary">Play again</button></div></div></div></div></div></div>
+      <span class="note"><span class="ac-better"><i class="ph-fill ph-sparkle" aria-hidden="true"></i>Better than Discord</span>The app closed itself with a message: it's quoted as the app's words, in its slot, with Play again. A normal close (the app says nothing) just removes the tile.</span>
+    </div>
+    <div class="stack">
+      <div class="sys"><i class="ph ph-rocket-launch"></i><div><b>Putt Party</b> ended after 42 minutes. Mira won.<span class="time">Today at 9:44 PM</span></div></div>
+      <span class="note">Last one out ends it for everyone; the tile leaves the stage and the started card turns to Ended. Nobody hands over a "host": the game's own rules decide, Waffle doesn't.</span>
+    </div>
+    <div class="stack">
+      <div class="toast" data-tone="info"><i class="ph-fill ph-wifi-slash"></i><p>Reconnecting to Putt Party<small>Your connection dropped. The game keeps your spot.</small></p></div>
+      <span class="note">Connection lost: the app stays on screen frozen under the toast; when voice comes back, Waffle rejoins the same game.</span>
+    </div>
+  </div>
+
+  <h3>Next to Discord</h3>
+  <div class="ac-vs">
+    <figure><figcaption><span class="ac-who dc-mark" aria-hidden="true"><i class="ph-fill ph-discord-logo"></i></span>Discord <small>drawn from its docs, blog and desktop app</small></figcaption>
+      <div class="dc ac-pane"><div class="dc-stage" style="min-height: 150px; align-content: center"><div class="dc-tiles" style="grid-template-columns: 1fr 1fr"><div class="dc-tile" style="--h: 300"><span class="dc-av" style="--h:300">Y</span><span class="nm">you</span></div><div class="dc-tile" style="--h: 20"><span class="dc-av">M</span><span class="nm">Mira</span></div></div><div class="dc-bar"><span class="dc-cb"><i class="ph-fill ph-squares-four"></i></span><span class="dc-cb"><i class="ph-fill ph-microphone"></i></span><span class="dc-cb red pinned"><i class="ph-fill ph-phone-x"></i><span class="ac-pin">1</span></span></div></div></div>
+      <ul class="ac-pains" aria-label="Where Discord falls short"><li><span class="ac-pin">1</span><div>Disconnect ends your game too, with no warning that you're leaving people mid-round.</div></li><li><span class="ac-pin">2</span><div>Starting another app quietly drops you from this one.</div></li><li><span class="ac-pin">3</span><div>When the app closes itself, its message shows briefly and the tile disappears. <span class="ac-nv">Not verified.</span></div></li></ul></figure>
+    <figure><figcaption><span class="ac-who wf-mark" aria-hidden="true"><i class="ph-fill ph-sparkle"></i></span>Waffle</figcaption>
+      <div class="dialog" style="--dw: 100%"><div class="dhead"><h4>Leave the call?</h4><p>You're playing Putt Party with Mira and Theo. Leaving Lounge takes you out of the game too.</p></div><footer><button class="btn">Stay</button><button class="btn btn--danger">Leave call</button></footer></div>
+      <ul class="ac-gains" aria-label="Better than Discord"><li><span class="ac-pin">1</span><div>Leaving voice asks once, naming who you'd leave; alone, it just leaves.</div></li><li><span class="ac-pin">2</span><div>Switching apps asks under the same rule.</div></li><li><span class="ac-pin">3</span><div>An app's closing message stays in its slot, quoted as the app's words, with Play again.</div></li></ul></figure>
+  </div>
+</section>
+
+<!-- ============================================================ FAILURES -->
+<section id="failures">
+  <h2>When it fails</h2>
+  <p class="lede">Discord reports why a launch failed with a reason code. Each one gets a sentence in Waffle's words, shown where you pressed (the app's detail, or a toast if you joined from elsewhere).</p>
+  <div class="ac-wrap"><table class="ac-table">
+    <thead><tr><th>Why</th><th>What you see</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>No Use Activities permission</td><td>Activities are off in Lounge. A moderator turned off Use Activities here.</td><td>Tooltip, launcher opens on Soundboard</td></tr>
+      <tr><td>AFK channel</td><td>You can't start activities in the AFK channel.</td><td>Launcher, in place of the list</td></tr>
+      <tr><td>Server verification level</td><td>Night Shift needs a verified phone number before you can play here.</td><td>Detail, with Verify</td></tr>
+      <tr><td>Age gate</td><td>Poker Night is for 18 and over.</td><td>Detail, before Start</td></tr>
+      <tr><td>Region</td><td>Putt Party isn't available where you are.</td><td>Detail, Start disabled</td></tr>
+      <tr><td>Platform not supported or not released</td><td>Only on phones for now.</td><td>Card greyed, detail</td></tr>
+      <tr><td>Channel type or location</td><td>Gartic Phone can't run in DMs. Start it in a server channel or a call.</td><td>Detail</td></tr>
+      <tr><td>Unknown app, channel or server</td><td>That activity isn't around any more.</td><td>Toast; the link card reads Ended</td></tr>
+      <tr><td>No access to the activity</td><td>You don't have access to Putt Party.</td><td>Toast</td></tr>
+      <tr><td>Full (the app's own limit)</td><td>Gartic Phone is full: 50 of 50. You can watch if it lets you.</td><td>Card button, tile</td></tr>
+      <tr><td>Failed to launch</td><td>Putt Party didn't start. Try again in a moment.</td><td>Tile, with Try again</td></tr>
+      <tr><td>Waffle can't host this app</td><td>This one needs the Discord app for now. Open in Discord.</td><td>Detail; see How it works</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note" style="margin-top: 8px">Codes 3–20 from the gateway's interaction failure event (unofficial docs, not verified against live traffic). The last row is ours: anything the bridge below can't serve.</p>
+</section>
+
+<!-- ============================================================ FLOWS -->
+<section id="flows">
+  <h2>Flows</h2>
+
+  <h3>Start one in a call</h3>
+  <div class="flow" style="--frame-h: 300px">
+    <div class="flow-step">
+      <div class="flow-head"><span class="flow-n">1</span><b>Press Activities</b><span>The launcher rises from the control, Activities tab first.</span></div>
+      <div class="flow-frame stage"><div class="flow-clip"><div class="ac-pad">
+        <div class="ac-launcher" style="--lw: 100%; max-height: 270px"><label class="input"><i class="ph ph-magnifying-glass"></i><input placeholder="Search activities" aria-label="Search activities"></label><div class="ac-scroll"><div class="ac-sec"><div class="mlabel">Recent</div><div class="ac-cards"><button class="ac-card is-hover"><span class="ac-art" style="--h: 140"><i class="ph-fill ph-golf"></i></span><span class="meta"><b>Putt Party</b></span></button><button class="ac-card"><span class="ac-art" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><span class="meta"><b>Gartic Phone</b></span></button></div></div></div></div>
+      </div></div></div>
+      <div class="flow-edges">
+        <div class="flow-edge"><span class="flow-if bad"><i class="ph-bold ph-x-circle"></i>Use Activities is off</span><p>Opens on Soundboard; the tab strip shows only Soundboard and the control's tooltip says why.</p></div>
+        <div class="flow-edge"><span class="flow-if"><i class="ph-bold ph-git-branch"></i>Still connecting to voice</span><p>The control is disabled with "Available once you're connected", like camera and share.</p></div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-head"><span class="flow-n">2</span><b>Pick Putt Party</b><span>Its detail opens in place; the button says Start, or Join if someone here is playing.</span></div>
+      <div class="flow-frame stage"><div class="flow-clip"><div class="ac-pad">
+        <div class="ac-launcher" style="--lw: 100%"><div class="ac-detail"><div class="top"><span class="ac-art sq lg" style="--h: 140"><i class="ph-fill ph-golf"></i></span><div><b>Putt Party</b><span>1–8 players</span></div></div><footer><button class="btn btn--primary"><i class="ph-fill ph-play"></i>Start Putt Party</button></footer></div></div>
+      </div></div></div>
+      <div class="flow-edges">
+        <div class="flow-edge"><span class="flow-if warn"><i class="ph-bold ph-warning"></i>Age-gated or phone-only</span><p>Said above the button before you press. See <a href="#app-detail">App detail</a>.</p></div>
+        <div class="flow-edge"><span class="flow-if"><i class="ph-bold ph-git-branch"></i>Already in another app</span><p>Asks only if others are in your current game. See <a href="#leave">Switch</a>.</p></div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-head"><span class="flow-n">3</span><b>Authorize, first time only</b><span>The tile is already loading behind the dialog.</span></div>
+      <div class="flow-frame stage center"><div class="flow-clip" style="background: var(--scrim); display: grid; place-items: center"><div class="dialog" style="--dw: 260px; padding: var(--space-4); gap: var(--space-3)"><div class="dhead"><h4>Putt Party wants to know who you are</h4></div><footer><button class="btn btn--sm">Not now</button><button class="btn btn--sm btn--primary">Authorize</button></footer></div></div></div>
+      <div class="flow-edges">
+        <div class="flow-edge"><span class="flow-if"><i class="ph-bold ph-git-branch"></i>Not now</span><p>The app decides: most close with their own message; you stay in the call.</p></div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-head"><span class="flow-n">4</span><b>Playing</b><span>Focused, edge to edge. Everyone else sees Join activity on the same tile and the row under Lounge.</span></div>
+      <div class="flow-frame stage"><div class="flow-clip"><div class="call" style="grid-template-rows: auto minmax(0,1fr) auto">
+        <div class="ac-bar callhead"><span class="ttl"><span class="ac-art sq sm" style="--h: 140"><i class="ph-fill ph-golf"></i></span><b>Putt Party</b></span><button class="btn btn--sm"><i class="ph-bold ph-sign-out"></i>Leave</button></div>
+        <div style="position: relative; border-radius: var(--radius-lg); overflow: hidden"><div class="ac-frame" style="position: absolute; inset: 0"><span class="hole"></span><span class="flag"></span><span class="ball"></span></div></div>
+        <div class="ac-strip"><div class="tile speaking" style="--hue: 20; flex-basis: 72px"><span class="av" data-av="Mira"></span></div><div class="tile" style="--hue: 300; flex-basis: 72px"><span class="av" data-av="You"></span></div></div>
+      </div></div></div>
+      <div class="flow-edges">
+        <div class="flow-edge"><span class="flow-if bad"><i class="ph-bold ph-x-circle"></i>Didn't load</span><p>Same slot, what happened, Try again. See <a href="#on-stage">Starting</a>.</p></div>
+        <div class="flow-edge"><span class="flow-if"><i class="ph-bold ph-git-branch"></i>You open a text channel</span><p>It shrinks into the corner and keeps running.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Join one from outside the call</h3>
+  <div class="flow" style="--frame-h: 220px">
+    <div class="flow-step">
+      <div class="flow-head"><span class="flow-n">1</span><b>Join on the sidebar row</b><span>Or on a profile, Active Now or a chat card.</span></div>
+      <div class="flow-frame sidebar"><div class="flow-clip"><div class="side"><div class="chlist">
+        <div class="ch"><i class="ph ph-speaker-high"></i><a class="nm" href="#flows">Lounge</a></div>
+        <div class="ac-row"><span class="ac-art sq sm" style="--h: 140"><i class="ph-fill ph-golf"></i></span><div><b>Putt Party</b><small>Mira, Theo</small></div><button class="btn btn--sm">Join</button></div>
+        <button class="vp"><span class="av" data-av="Mira"></span><span class="nm">Mira</span></button>
+      </div></div></div></div>
+      <div class="flow-edges">
+        <div class="flow-edge"><span class="flow-if"><i class="ph-bold ph-git-branch"></i>In a DM call or streaming</span><p>The usual "Leave your call with…?" from joining voice, naming what ends.</p></div>
+        <div class="flow-edge"><span class="flow-if warn"><i class="ph-bold ph-warning"></i>Lounge is full</span><p>Waffle waits in line for the channel; the app joins with you.</p></div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-head"><span class="flow-n">2</span><b>Into Lounge and the game</b><span>Voice connects and the app starts in one go; the stage opens focused on it.</span></div>
+      <div class="flow-frame stage"><div class="flow-clip"><div class="call"><div class="tiles" style="grid-template-columns: 1fr"><div class="tile ac-tile tall" style="--hue: 140"><div class="ac-frame" style="filter: brightness(0.6)"></div><div class="ac-starting"><div><b>Joining Putt Party…</b><div class="progress progress--indeterminate" role="progressbar" aria-label="Joining"></div></div></div></div></div></div></div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-head"><span class="flow-n">3</span><b>Playing with Mira and Theo</b><span>The join chime plays once, for voice; the app makes its own sounds.</span></div>
+      <div class="flow-frame stage"><div class="flow-clip"><div class="call"><div class="tiles" style="grid-template-columns: 1fr"><div class="tile ac-tile tall" style="--hue: 140"><div class="ac-frame"><div class="hud"><span>Hole 3</span><span>3 playing</span></div><span class="hole"></span><span class="flag"></span><span class="ball"></span></div></div></div></div></div></div>
+    </div>
+  </div>
+
+  <h3>Play in a chat, no voice</h3>
+  <div class="flow" style="--frame-h: 220px">
+    <div class="flow-step">
+      <div class="flow-head"><span class="flow-n">1</span><b>Apps in the composer</b><span>The launcher lists only apps that run in this kind of chat.</span></div>
+      <div class="flow-frame"><div class="flow-clip"><div class="ac-pad start"><div class="composer"><textarea rows="1" placeholder="Message #general" aria-label="Message #general"></textarea><button class="iconbtn" aria-label="Apps" style="background: var(--selected)"><i class="ph-fill ph-squares-four"></i></button></div></div></div></div>
+      <div class="flow-edges"><div class="flow-edge"><span class="flow-if"><i class="ph-bold ph-git-branch"></i>In a DM</span><p>Only apps that allow DMs; no invite link half.</p></div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-head"><span class="flow-n">2</span><b>Start Gartic Phone</b><span>A card is posted for everyone in the channel.</span></div>
+      <div class="flow-frame"><div class="flow-clip"><div class="ac-pad start"><div class="sys"><i class="ph ph-rocket-launch go"></i><div><b>You</b> started <b>Gartic Phone</b>.</div></div><div class="ac-msgcard"><span class="ac-art sq md" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><div><b>Gartic Phone</b><small>You're playing</small></div><button class="btn btn--sm">Open</button></div></div></div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-head"><span class="flow-n">3</span><b>Others press Join</b><span>The app opens over their chat; the card's faces grow as they come.</span></div>
+      <div class="flow-frame"><div class="flow-clip"><div class="ac-pad start"><div class="ac-msgcard"><span class="ac-art sq md" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><div><b>Gartic Phone</b><small><span class="stackav"><span class="av" data-av="You"></span><span class="av" data-av="Ana"></span><span class="av" data-av="Jun"></span></span>You, Ana and Jun</small></div><button class="btn btn--sm">Open</button></div></div></div></div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-head"><span class="flow-n">4</span><b>Last one leaves</b><span>The card turns to Ended with Play again.</span></div>
+      <div class="flow-frame"><div class="flow-clip"><div class="ac-pad start"><div class="ac-msgcard is-ended"><span class="ac-art sq md" style="--h: 20"><i class="ph-fill ph-pencil-simple-line"></i></span><div><b>Gartic Phone</b><small>Ended · 3 played for 22 minutes</small></div><button class="btn btn--sm">Play again</button></div></div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ BETTER -->
+<section id="better-than-discord">
+  <h2>Better than Discord</h2>
+  <p class="lede">Where Activities differ from Discord on purpose. Discord's side comes from its developer docs, blog, support articles and feedback forum; lines marked <span class="ac-nv">Not verified</span> in the drawings above are from memory of its desktop app.</p>
+  <div class="btd">
+    <div><span>Discord does</span><span>Waffle does</span><span>Why</span></div>
+    <div><p>The launcher mixes bots, slash commands and paid promotion in with games.</p><p><b><a href="#launcher">Only things to play</a></b>Running here, recent, featured and everything; no promoted section, no bots.</p><p>The question at that button is “what can we play”, not “what can I install”.</p></div>
+    <div><p>Nothing in the launcher says what's already running in your call.</p><p><b><a href="#launcher">Running in Lounge first</a></b>With who's in it, and its button reads Join.</p><p>Joining friends is the common case; starting a second copy is the mistake.</p></div>
+    <div><p>Phone-only, age-gated and region-locked apps fail after you press Launch.</p><p><b><a href="#app-detail">Said before you press</a></b>Greyed cards with the reason; a callout above the button in the detail.</p><p>A failure you could have seen coming is a failure of the interface.</p></div>
+    <div><p>The authorize modal opens with “An external application wants to access your Discord account” and API-worded scopes.</p><p><b><a href="#authorize">Why it asks, in plain words</a></b>“Wants to know who you are”, scopes as what changes for you, what it can't do at full size.</p><p>It's consent; people should be able to read it in five seconds.</p></div>
+    <div><p>The app waits for Authorize before it starts loading.</p><p><b><a href="#authorize">Loads behind the dialog</a></b>Authorize lands you in a ready game.</p><p>The wait overlaps the reading.</p></div>
+    <div><p>The Join Activity tile names the app, not who's playing.</p><p><b><a href="#on-stage">Faces on the tile</a></b>“Mira and Theo are playing” over the dimmed art.</p><p>You join people, not software.</p></div>
+    <div><p>Leave Activity is an icon beside Disconnect in the call bar.</p><p><b><a href="#on-stage">A labelled Leave activity</a></b>In the activity's own bar, with Rejoin held in a toast.</p><p>Two exits that look alike, side by side, get mixed up.</p></div>
+    <div><p>Starting another app or disconnecting drops you from a game silently.</p><p><b><a href="#leave">Asks when people lose you</a></b>Names who keeps playing; never asks when you're alone.</p><p>A confirm only where leaving costs someone something.</p></div>
+    <div><p>An activity started in a chat posts as a /launch command reply, and its card goes stale when the game ends.</p><p><b><a href="#in-chat">A live card</a></b>Who's playing, You're playing, Full, then Ended with a summary and Play again.</p><p>The card is the game's place in the conversation; it should stay true.</p></div>
+    <div><p>A game in a voice channel shows only on hover.</p><p><b><a href="#presence">A row under the channel</a></b>The app, who's in it, Join at rest; members carry the app's icon.</p><p>What's happening should be visible without hunting for it.</p></div>
+    <div><p>Activities and the soundboard are separate controls.</p><p><b><a href="#launcher">One control, two tabs</a></b>Activities and Soundboard behind the rocket.</p><p>Both are “things to do together in this call”; one place to look.</p></div>
+    <div><p>Each launch failure reads as a generic error.</p><p><b><a href="#failures">A sentence per reason</a></b>Shown where you pressed, with the fix when there is one.</p><p>“Why” is what people need to do anything about it.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================ HOW -->
+<section id="how">
+  <h2>How it works</h2>
+  <p class="lede">What Waffle would have to build, from Discord's developer docs, the Embedded App SDK's source and the Discord desktop app on this Mac. Read before deciding: the last part is the risk.</p>
+  <div class="ac-arch">
+    <div><b><i class="ph ph-globe"></i>The app is a web page</b><span>Served from <code>https://&lt;app id&gt;.discordsays.com</code> with <code>frame_id</code>, <code>instance_id</code>, <code>platform</code>, <code>channel_id</code>, <code>guild_id</code> in the URL. Discord's proxy fronts its servers.</span></div>
+    <div><b><i class="ph ph-browser"></i>The client hosts it</b><span>Discord desktop puts it in a sandboxed iframe (scripts, same-origin, forms, popups, pointer lock) inside a native view layered over the window, then moves and clips that view to whatever slot the app is in: focused, grid tile, corner, pop-out.</span></div>
+    <div><b><i class="ph ph-arrows-left-right"></i>A postMessage bridge</b><span>The app's SDK sends <code>[opcode, payload]</code> messages: a handshake, then commands (authorize, get the channel, set activity, open link, invite dialog, purchase…) and events the client pushes (who's in it, who's speaking, layout mode). The client answers each one.</span></div>
+    <div><b><i class="ph ph-plug"></i>Discord's servers</b><span>Starting or joining runs the app's entry-point command (or the older <code>POST /activities/{channel}/{app}</code>); leaving is <code>POST …/instances/{id}/leave</code>. The gateway sends instance updates, and guilds carry <code>activity_instances</code>. These come from unofficial docs, not verified.</span></div>
+  </div>
+
+  <h3>What Waffle needs</h3>
+  <div class="ac-wrap"><table class="ac-table">
+    <thead><tr><th>Piece</th><th>What it is</th><th>Size</th></tr></thead>
+    <tbody>
+      <tr><td>Web view</td><td>A native web view (WKWebView on macOS, WebView2 on Windows) placed over the gpui window at the app's slot, moved and clipped as the layout changes. gpui has no web view of its own.</td><td>Large: new platform code per OS</td></tr>
+      <tr><td>Bridge</td><td>Answer about 35 SDK commands and push about 12 events. Most are reads Waffle already has (user, channel, guild, voice states, speaking).</td><td>Medium</td></tr>
+      <tr><td>Authorize</td><td>Complete the OAuth authorize as the user, after the consent dialog, and hand the code to the app.</td><td>Small, not verified</td></tr>
+      <tr><td>Launch, join, leave</td><td>Entry-point interaction or the legacy endpoint; leave endpoint; instance updates from the gateway.</td><td>Small</td></tr>
+      <tr><td>Launcher data</td><td><code>GET /activities/shelf</code>: apps, art, player counts, platforms, age gate, labels.</td><td>Small</td></tr>
+      <tr><td>Purchases</td><td>Hand off to discord.com in the browser.</td><td>Small</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout callout--info" style="margin-top: var(--space-4)"><i class="ph-fill ph-flask"></i><div><b>Spike, Nov 22: a non-Discord host can run an activity</b>A bare macOS web view framed Putt Party from <code>945737671223947305.discordsays.com</code> and played the SDK's host. Putt Party loaded, handshook and asked to authorize, with the host page's origin either <code>"null"</code> or the activity's own (the SDK allows both); discordsays.com sends no <code>frame-ancestors</code> or <code>X-Frame-Options</code>. Authorizing as the user worked: <code>POST /oauth2/authorize</code> returned a code once it was a user install (<code>integration_type: 1</code>; a server install needs a server). Putt Party's own server then refused the code with 404 for the made-up <code>instance_id</code>, so the last piece is a real instance from Discord's launch call while in voice. That's ordinary client work, not a wall.</div></div>
+</section>
+
+</main>
+</div>
+<script src="site.js"></script>
+<script>
+// The demo: launcher → (authorize) → playing → leave. Grid and focus switch in the header.
+(() => {
+  const demo = document.querySelector("[data-ac-demo]");
+  if (!demo) return;
+  const $ = (s) => demo.querySelector(s);
+  const stage = $(".stagebody"), tile = $("[data-ac-tile]"), pop = $("[data-ac-pop]"), dlg = $("[data-ac-dlg]");
+  const openBtn = $("[data-ac-open]"), layoutBtn = $("[data-ac-layout]");
+  const log = document.querySelector("[data-ac-log]");
+  const APPS = {
+    putt: { name: "Putt Party", h: 140, icon: "golf", players: "1–8 players", frame: "", scene: `<div class="hud"><span>Hole 3 · Par 2</span><span>Mira 4</span></div><span class="hole"></span><span class="flag"></span><span class="ball"></span>` },
+    gartic: { name: "Gartic Phone", h: 20, icon: "pencil-simple-line", players: "4–50 players", frame: "draw", scene: `<div style="position: absolute; inset: 0; display: grid; place-items: center"><b style="font-size: var(--text-lg)">Draw: a cat riding a waffle</b></div>` },
+    chess: { name: "Chess in the Park", h: 260, icon: "strategy", players: "2 players", frame: "board", scene: `<div class="hud"><span>Your move</span><span>Mira 12:40</span></div>` },
+  };
+  const authorized = new Set();
+  let current = null; // the app you're in
+  let running = "putt"; // the app running in the call
+
+  const say = (t) => { log.textContent = t; };
+  const art = (a, cls = "") => `<span class="ac-art ${cls}" style="--h: ${a.h}"><i class="ph-fill ph-${a.icon}"></i></span>`;
+  const close = () => { pop.hidden = true; pop.innerHTML = ""; openBtn.setAttribute("aria-expanded", "false"); openBtn.classList.toggle("active", !!current); };
+
+  function launcher() {
+    const card = (k) => { const a = APPS[k]; const here = k === running && current !== k; return `<button class="ac-card" data-app="${k}">${art(a)}<span class="meta"><b>${a.name}</b><small class="${here ? "here" : ""}">${here ? `<span>Mira is playing</span>` : `<i class="ph ph-users"></i><span>${a.players}</span>`}</small></span></button>`; };
+    pop.innerHTML = `<div class="ac-launcher" role="dialog" aria-label="Activities"><header><div class="pills" role="tablist"><button class="tab" role="tab" aria-selected="true">Activities</button><button class="tab" role="tab" aria-selected="false">Soundboard</button></div><button class="iconbtn" data-close aria-label="Close"><i class="ph ph-x"></i></button></header><label class="input"><i class="ph ph-magnifying-glass"></i><input placeholder="Search activities" aria-label="Search activities" data-search></label><div class="ac-scroll"><div class="ac-sec"><div class="mlabel">All activities</div><div class="ac-cards" data-cards>${Object.keys(APPS).map(card).join("")}</div></div></div></div>`;
+    pop.hidden = false; openBtn.setAttribute("aria-expanded", "true"); openBtn.classList.add("active");
+    pop.querySelector("[data-search]").focus();
+  }
+
+  function detail(k) {
+    const a = APPS[k]; const join = k === running && current !== k;
+    pop.innerHTML = `<div class="ac-launcher" role="dialog" aria-label="${a.name}"><header><button class="iconbtn" data-back aria-label="Back"><i class="ph-bold ph-caret-left"></i></button><b style="flex: 1; color: var(--text-strong)">${a.name}</b><button class="iconbtn" data-close aria-label="Close"><i class="ph ph-x"></i></button></header><div class="ac-detail"><div class="top">${art(a, "sq lg")}<div><b>${a.name}</b><span>${a.players}</span></div></div>${join ? `<div class="callout callout--info"><i class="ph-fill ph-users-three"></i><div><b>Mira is playing in Lounge</b>You'll join her game.</div></div>` : ""}<footer><button class="btn btn--primary" data-start="${k}"><i class="ph-fill ph-play"></i>${join ? "Join" : "Start"} ${a.name}</button></footer></div></div>`;
+  }
+
+  function start(k) {
+    close();
+    if (current && current !== k && running === current) {
+      // Leaving a game others are in: ask.
+      dlg.innerHTML = `<div class="dialog" role="dialog"><div class="dhead"><h4>Switch to ${APPS[k].name}?</h4><p>You'll leave ${APPS[current].name}. Mira keeps playing.</p></div><footer><button class="btn" data-cancel>Stay in ${APPS[current].name}</button><button class="btn btn--primary" data-go="${k}">Start ${APPS[k].name}</button></footer></div>`;
+      dlg.hidden = false; return;
+    }
+    play(k);
+  }
+
+  function play(k) {
+    const a = APPS[k];
+    current = k; running = k;
+    tile.classList.add("is-out");
+    tile.querySelector(".ac-frame").className = `ac-frame ${a.frame}`;
+    tile.querySelector(".ac-frame").innerHTML = a.scene;
+    openBtn.classList.add("active");
+    tile.style.setProperty("--hue", a.h);
+    tile.querySelector(".ac-frame").style.setProperty("--h", a.h);
+    tile.querySelector("[data-ac-joinui]").innerHTML = `<span class="ac-art sq lg" style="--h: ${a.h}"><i class="ph-fill ph-${a.icon}"></i></span><b>Starting ${a.name}…</b><div class="progress progress--indeterminate" style="width: 160px" role="progressbar" aria-label="Starting"></div>`;
+    tile.querySelector(".who").textContent = a.name;
+    say(`Starting ${a.name}…`);
+    if (!authorized.has(k)) {
+      dlg.innerHTML = `<div class="dialog" role="dialog"><div class="ac-consent"><div class="ac-pair">${art(a, "sq lg")}<i class="ph-bold ph-dots-three"></i><span class="av" data-av="You"></span></div><div class="dhead" style="text-align: center; grid-template-columns: minmax(0,1fr)"><h4>${a.name} wants to know who you are</h4><p>So it can show your name and avatar to the others in the game.</p></div><footer><button class="btn" data-deny>Not now</button><button class="btn btn--primary" data-auth="${k}">Authorize</button></footer></div></div>`;
+      dlg.hidden = false;
+      window.paintAvatars?.(dlg);
+      return;
+    }
+    setTimeout(() => ready(k), 900);
+  }
+
+  function ready(k) {
+    if (current !== k) return;
+    const a = APPS[k];
+    tile.querySelector("[data-ac-joinui]").innerHTML = "";
+    tile.classList.remove("is-out");
+    setMode("focus");
+    say(`Playing ${a.name}. Leave activity keeps you in the call.`);
+    const bar = document.createElement("div");
+    bar.className = "ac-bar callhead"; bar.dataset.acBar = "";
+    bar.innerHTML = `<span class="ttl">${art(a, "sq sm")}<b>${a.name}</b></span><button class="iconbtn" aria-label="Invite" title="Invite to ${a.name}"><i class="ph-bold ph-user-plus"></i></button><button class="iconbtn" aria-label="Pop out" title="Pop out into its own window"><i class="ph ph-arrow-square-out"></i></button><button class="btn btn--sm" data-leave><i class="ph-bold ph-sign-out"></i>Leave activity</button>`;
+    demo.querySelector("[data-ac-bar]")?.remove();
+    demo.insertBefore(bar, stage);
+  }
+
+  function leave() {
+    const a = APPS[current];
+    current = null; running = "putt";
+    demo.querySelector("[data-ac-bar]")?.remove();
+    const p = APPS.putt;
+    tile.classList.add("is-out");
+    tile.querySelector(".ac-frame").className = "ac-frame";
+    tile.querySelector(".ac-frame").innerHTML = p.scene;
+    openBtn.classList.remove("active");
+    tile.querySelector(".ac-frame").style.setProperty("--h", p.h);
+    tile.querySelector(".who").textContent = p.name;
+    tile.querySelector("[data-ac-joinui]").innerHTML = `<span class="stackav"><span class="av" data-av="Mira"></span></span><b>Putt Party</b><span>Mira is playing</span><button class="btn btn--sm btn--primary" data-ac-join><i class="ph-fill ph-play"></i>Join activity</button>`;
+    window.paintAvatars?.(tile);
+    setMode("grid");
+    say(`You left ${a.name}. You're still in Lounge.`);
+  }
+
+  function setMode(m) {
+    stage.dataset.mode = m;
+    layoutBtn.setAttribute("aria-label", `Layout: ${m}`);
+    layoutBtn.title = m === "grid" ? "Layout: grid. Switch to focus" : "Layout: focus. Switch to grid";
+    layoutBtn.innerHTML = `<i class="ph ${m === "grid" ? "ph-squares-four" : "ph-square-split-horizontal"}"></i>`;
+    const people = [...stage.querySelectorAll(":scope > .tile:not([data-ac-tile]), :scope > .ac-strip > .tile")];
+    stage.querySelector(".focusarea")?.replaceWith(tile);
+    stage.querySelector(".ac-strip")?.remove();
+    if (m === "focus") {
+      const area = document.createElement("div"); area.className = "focusarea";
+      const strip = document.createElement("div"); strip.className = "ac-strip";
+      stage.prepend(area); area.append(tile); tile.style.position = "absolute"; tile.style.inset = "0"; tile.style.aspectRatio = "auto";
+      people.forEach((p) => strip.append(p)); area.after(strip);
+    } else {
+      tile.style.position = ""; tile.style.inset = ""; tile.style.aspectRatio = "";
+      stage.prepend(tile); people.forEach((p) => stage.insertBefore(p, pop));
+    }
+  }
+
+  demo.addEventListener("click", (e) => {
+    const t = e.target.closest("button"); if (!t) return;
+    if (t === openBtn) return pop.hidden ? launcher() : close();
+    if (t === layoutBtn) return setMode(stage.dataset.mode === "grid" ? "focus" : "grid");
+    if (t.matches("[data-close]")) return close();
+    if (t.matches("[data-back]")) return launcher();
+    if (t.dataset.app) return detail(t.dataset.app);
+    if (t.dataset.start) return start(t.dataset.start);
+    if (t.matches("[data-ac-join]")) return play("putt");
+    if (t.dataset.auth) { authorized.add(t.dataset.auth); dlg.hidden = true; const k = t.dataset.auth; setTimeout(() => ready(k), 700); return; }
+    if (t.matches("[data-deny]")) { dlg.hidden = true; const a = APPS[current]; leave(); say(`${a.name} needs to know who you are to play. You're still in Lounge.`); return; }
+    if (t.matches("[data-cancel]")) { dlg.hidden = true; return; }
+    if (t.dataset.go) { dlg.hidden = true; current = null; play(t.dataset.go); return; }
+    if (t.matches("[data-leave]")) return leave();
+  });
+  demo.addEventListener("input", (e) => {
+    if (!e.target.matches("[data-search]")) return;
+    const q = e.target.value.trim().toLowerCase();
+    for (const c of demo.querySelectorAll("[data-cards] .ac-card")) c.hidden = !!q && !APPS[c.dataset.app].name.toLowerCase().includes(q);
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !pop.hidden) close(); });
+})();
+</script>
+</body>
+</html>
