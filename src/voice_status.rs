@@ -239,7 +239,8 @@ impl Waffle {
         let (strong, muted) = (palette::strong(cx), palette::muted(cx));
         let typed = dialog.input.read(cx).value().chars().count();
         let over = typed > MAX_CHARS;
-        let hero = div()
+        // The card clips to a rectangle, so the hero's tint takes the dialog's top corners itself.
+        let hero = ui::edge(div(), ui::top(ui::RADIUS_XL))
             .relative()
             .h(px(HERO_HEIGHT))
             .flex_none()
