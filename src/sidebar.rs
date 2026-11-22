@@ -1087,7 +1087,7 @@ impl Waffle {
             return vec![div().h(px(30.)).pl_8().flex().items_center().child(ui::avatar_stack(present.iter().map(|v| avatar_of(v)), 22., sidebar)).into_any_element()];
         }
         let (hover, selected, text) = (palette::hover(cx), palette::selected(cx), palette::text(cx));
-        let mut rows = Vec::new();
+        let mut rows = self.activity_rows(channel, cx);
         let me = self.me.as_ref().map(|m| m.id.clone());
         let elsewhere = |user_id: &str| me.as_deref() == Some(user_id) && !in_call;
         for state in present {
@@ -1104,7 +1104,7 @@ impl Waffle {
             });
             let stream_hover = cx.listener(move |this, hovered: &bool, window, cx| this.hover_stream_row(&hover_key, *hovered, window.mouse_position(), cx));
             let end = voice_mark_for(state, cx);
-            let game = self.playing(&state.user_id, cx).map(|game| {
+            let game = self.activity_mark(&state.user_id, &channel.id).or_else(|| self.playing(&state.user_id, cx)).map(|game| {
                 div()
                     .id(SharedString::from(format!("voice-game-{}", state.user_id)))
                     .flex_none()

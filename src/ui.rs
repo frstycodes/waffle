@@ -111,6 +111,8 @@ pub enum Tone {
     Positive,
     // Translucent black over video and images.
     OnMedia,
+    // Solid white over art and video: the one action there (Join Activity, Play), as Discord's overlay-primary.
+    Overlay,
     // Just the accent ink, underlined on hover: "View all members".
     Link,
 }

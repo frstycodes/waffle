@@ -10,6 +10,10 @@ mod recent_commands;
 mod components;
 mod interactions;
 mod active_now;
+mod activities;
+mod activity_launcher;
+mod toast;
+mod activity_frame;
 mod attachments;
 mod send_options;
 mod app_keys;
@@ -24,6 +28,8 @@ mod cache;
 mod captcha;
 mod query;
 mod call;
+mod emphasis;
+mod call_issues;
 mod call_previews;
 mod channel_menu;
 mod channel_settings;
@@ -862,6 +868,8 @@ pub struct Waffle {
     alt_input: Entity<TextareaState>,
     // A short notice at the bottom, e.g. why a moderation action failed.
     toast: Option<SharedString>,
+    // A toast that carries a way back (Rejoin): its line under the title and its one action.
+    toast_action: Option<toast::ToastAction>,
     // The Friends page's Add friend tab: the username field and how the last request went.
     add_friend_input: Entity<SearchState>,
     add_friend_note: Entity<TextareaState>,
@@ -969,6 +977,7 @@ pub struct Waffle {
     muted: bool,
     deafened: bool,
     call: Option<Call>,
+    activities: activities::Activities,
     voice_error: Option<SharedString>,
     // The banner over the main column after another client of ours took the call.
     voice_notice: Option<VoiceNotice>,
@@ -1283,6 +1292,7 @@ impl Waffle {
             dialog_input,
             alt_input,
             toast: None,
+            toast_action: None,
             add_friend_input,
             add_friend_note,
             add_friend_result: None,
@@ -1348,6 +1358,7 @@ impl Waffle {
             muted: false,
             deafened: false,
             call: None,
+            activities: Default::default(),
             voice_error: None,
             voice_notice: None,
             last_call: None,
@@ -1829,6 +1840,7 @@ impl Waffle {
                 read.mentions = 0;
             }
             Event::VoiceState(state, session) => {
+                self.activity_voice_state(&state, cx);
                 let ours = self.call.as_ref().map(|c| c.channel.id.clone());
                 let me = self.me.as_ref().map(|m| m.id.clone());
                 if Some(&state.user_id) == me.as_ref() && state.channel_id.is_some() && session.is_some_and(|s| s != self.gateway_session) {
@@ -1855,7 +1867,7 @@ impl Waffle {
                 let was_live = states.iter().any(|v| v.user_id == state.user_id && v.channel_id == ours && v.streaming);
                 let is_live = is_here && state.streaming;
                 let silent = self.call.as_ref().is_some_and(|c| c.channel.raw_type == 13);
-                if let Some(cue) = member_cue(mine, was_here, is_here).filter(|_| !silent) {
+                if let Some(cue) = sounds::member_cue(mine, was_here, is_here).filter(|_| !silent) {
                     sounds::play(cue);
                 } else if !mine && !was_live && is_live {
                     sounds::play(sounds::Cue::StreamStarted);
@@ -1877,6 +1889,7 @@ impl Waffle {
             Event::Call { channel_id, ringing } => self.on_dm_call(channel_id, ringing, cx),
             Event::CallEnded { channel_id } => self.on_dm_call_ended(&channel_id),
             Event::VoiceServer(_) => {}
+            Event::ActivityInstance(instance) => self.on_activity_instance(instance, cx),
             Event::VoiceEffect(effect) => self.on_voice_effect(effect, cx),
             Event::SoundboardSounds { guild_id, sounds, all } => self.soundboard.store_sounds(guild_id, sounds, all),
             Event::SoundboardSoundDelete { guild_id, sound_id } => self.soundboard.remove_sound(&guild_id, &sound_id),
@@ -1909,7 +1922,7 @@ impl Waffle {
                 };
                 let before = self.stream_viewers.get(&key).map_or(0, Vec::len);
                 if self.in_stream(&key)
-                    && let Some(cue) = viewer_cue(before, viewers.len())
+                    && let Some(cue) = sounds::viewer_cue(before, viewers.len())
                 {
                     sounds::play(cue);
                 }
@@ -1928,6 +1941,7 @@ impl Waffle {
             Event::InteractionSuccess { nonce } => self.on_interaction_success(nonce, cx),
             Event::InteractionFailure { nonce, reason_code } => {
                 self.autocomplete_failed(&nonce, cx);
+                self.on_interaction_failed(&nonce, reason_code.unwrap_or(0), cx);
                 self.interaction_failed(&nonce, reason_code, cx);
             }
             Event::ModalCreate(modal) => self.open_app_modal(modal, cx),
@@ -3202,7 +3216,8 @@ impl Waffle {
     }
 
     fn join_voice(&mut self, channel: Channel, cx: &mut Context<Self>) {
-        self.join_voice_in(self.guild_id.clone(), channel, cx);
+        let guild_id = self.guild_id.clone();
+        self.switch_call_asking(channel.clone(), cx, move |this, cx| this.join_voice_in(guild_id.clone(), channel.clone(), cx));
     }
 
     // The call's server, not the one on screen: a move can come while another server is open.
@@ -3330,6 +3345,7 @@ impl Waffle {
         self.camera_on_connect = false;
         self.stop_ringing_out();
         let Some(call) = self.call.take() else { return false };
+        self.end_activities(cx);
         self.soundboard.leave_call();
         self.call_focus = None;
         self.call_chat = false;
@@ -3347,6 +3363,9 @@ impl Waffle {
     fn on_voice(&mut self, event: voice::VoiceEvent, cx: &mut Context<Self>) {
         // A stream picked from the hover card before we'd joined: watch it once connected.
         let mut start_watch: Option<String> = None;
+        if let voice::VoiceEvent::Speaking { user_id, speaking } = &event {
+            self.activity_speaking(user_id, *speaking, cx);
+        }
         let mut lapsed: Option<String> = None;
         let mut ready_checks: Vec<String> = Vec::new();
         let Some(call) = &mut self.call else { return };
@@ -3357,12 +3376,13 @@ impl Waffle {
                     self.ring_dm(channel, cx);
                 }
                 start_watch = self.watch_on_connect.take();
+                self.activity_on_connect(cx);
                 let Some(call) = &mut self.call else { return };
                 call.connected = true;
                 call.stage = voice::Stage::Connected;
                 // Stages make no join or leave sounds (docs/discord-stage-re.md).
                 if call.channel.raw_type != 13 {
-                    sounds::play(connected_cue(self.call_switched));
+                    sounds::play(sounds::connected_cue(self.call_switched));
                 }
                 self.fetch_soundboard(cx);
                 if std::mem::take(&mut self.camera_on_connect) {
@@ -4066,56 +4086,6 @@ mod tests {
     #[test]
     fn nonce_looks_like_a_snowflake() {
         assert!(nonce().parse::<u64>().unwrap() > 1 << 40);
-    }
-}
-
-// The cue for someone's voice state changing, seen from our call. Others arriving or going sound as
-// a join or a leave, from or to another channel too. Our own come from the call: a join when it
-// connects, or a move when it switched channels in the same server (see `connected_cue`).
-fn member_cue(mine: bool, was_here: bool, is_here: bool) -> Option<sounds::Cue> {
-    match (mine, was_here, is_here) {
-        (true, ..) => None,
-        (false, false, true) => Some(sounds::Cue::UserJoin),
-        (false, true, false) => Some(sounds::Cue::UserLeave),
-        _ => None,
-    }
-}
-
-fn connected_cue(switched: bool) -> sounds::Cue {
-    if switched { sounds::Cue::UserMoved } else { sounds::Cue::UserJoin }
-}
-
-// Discord's cue when the viewer count of the stream we're in changes (it stays quiet past 25).
-fn viewer_cue(before: usize, after: usize) -> Option<sounds::Cue> {
-    match () {
-        _ if before > 25 => None,
-        _ if after > before => Some(sounds::Cue::StreamUserJoined),
-        _ if after < before => Some(sounds::Cue::StreamUserLeft),
-        _ => None,
-    }
-}
-
-#[cfg(test)]
-mod viewer_tests {
-    use super::*;
-
-    #[test]
-    fn viewer_cues() {
-        assert_eq!(viewer_cue(0, 1), Some(sounds::Cue::StreamUserJoined));
-        assert_eq!(viewer_cue(2, 1), Some(sounds::Cue::StreamUserLeft));
-        assert_eq!(viewer_cue(1, 1), None);
-        assert_eq!(viewer_cue(30, 31), None);
-    }
-
-    // A channel hop is one move for us, and a join or leave for whoever we're in the call with.
-    #[test]
-    fn voice_state_cues() {
-        assert_eq!(member_cue(false, false, true), Some(sounds::Cue::UserJoin), "someone hops in from another channel");
-        assert_eq!(member_cue(false, true, false), Some(sounds::Cue::UserLeave), "someone hops out to another channel");
-        assert_eq!(member_cue(false, true, true), None);
-        assert_eq!(member_cue(true, true, false), None, "our own hop sounds once, from the call");
-        assert_eq!(connected_cue(true), sounds::Cue::UserMoved);
-        assert_eq!(connected_cue(false), sounds::Cue::UserJoin);
     }
 }
 

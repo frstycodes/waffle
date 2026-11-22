@@ -193,8 +193,8 @@ impl Waffle {
         let until = minutes.map(|m| Local::now() + TimeDelta::minutes(m));
         self.status_until = until;
         if let Some(client) = self.client.clone() {
-            let (custom, game) = (self.custom_status.clone(), self.shared_game().cloned());
-            crate::discord::runtime().spawn(async move { client.set_status(status, custom.as_ref(), game.as_ref()).await });
+            let (custom, game, activity) = (self.custom_status.clone(), self.shared_game().cloned(), self.activity_presence());
+            crate::discord::runtime().spawn(async move { client.set_status(status, custom.as_ref(), game.as_ref(), activity).await });
         }
         if let Some(until) = until {
             self.run_at(until, move |this, cx| {
@@ -241,7 +241,7 @@ impl Waffle {
 
     pub(crate) fn publish_presence(&self) {
         if let Some(client) = &self.client {
-            client.send_presence(self.my_status, self.custom_status.as_ref(), self.shared_game());
+            client.send_presence(self.my_status, self.custom_status.as_ref(), self.shared_game(), self.activity_presence());
         }
     }
 

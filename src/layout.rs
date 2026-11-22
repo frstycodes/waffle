@@ -99,6 +99,7 @@ impl Waffle {
             crate::gif::set_covered(true);
             return root.child(video).into_any_element();
         }
+        self.sync_activity_frame(cx);
         if self.call_fullscreen && self.call_view
             && let Some(call) = self.render_call_with_chat(window, cx)
         {
@@ -136,7 +137,9 @@ impl Waffle {
         let combos = self.render_keyboard_combos(window, cx);
         crate::gif::set_covered(combos.is_some() || !call_overlays.is_empty() || menu.is_some() || dialog.is_some() || viewer.is_some() || settings.is_some() || channel_settings.is_some() || server_settings.is_some());
         // Over everything but popups: a DM call's window, or, away from a server call, the stream we watch.
-        let pip = self.call_window(cx).or_else(|| (!self.call_view).then(|| self.stream_pip(cx)).flatten());
+        // An activity away from its call outranks the DM call's window (it carries the way back); a ring outranks both.
+        let activity = (!self.call_view && self.ringing_in.is_none()).then(|| self.activity_pip(cx)).flatten();
+        let pip = activity.or_else(|| self.call_window(cx)).or_else(|| (!self.call_view).then(|| self.stream_pip(cx)).flatten());
         self.pip_drop_zone(root, cx)
             .child(body)
             .children(pip)
@@ -179,7 +182,10 @@ impl Waffle {
                 let forum = self.channel.clone().expect("checked above");
                 self.render_forum(forum, window, cx)
             }
-            None => self.render_chat(window, cx).into_any_element(),
+            None => {
+                let chat = self.render_chat(window, cx).into_any_element();
+                self.chat_with_activity(chat, cx)
+            }
         }
     }
 

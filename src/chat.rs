@@ -17,6 +17,7 @@ use gpui_kit::{
 };
 use gpui_motion_kit::core::{Motion, Target};
 
+pub(crate) use crate::emphasis::emphasised;
 use crate::{
     EmojiTarget, Feed, Waffle, components,
     discord::{Channel, ChannelKind, Embed, Emoji, MediaKind, Message, NameEffect, NameStyle, Poll, PollAnswer, SendState, User},
@@ -447,6 +448,7 @@ impl Waffle {
 
     pub(crate) fn row_context(&self, messages: &[Message], channel: Option<&Channel>, has_more: bool, column: f32, cx: &mut Context<Self>) -> Rc<RowContext> {
         Rc::new(RowContext {
+            activity_cards: Rc::new(self.chat_cards(messages, cx)),
             me: self.me.clone(),
             uploads: self.uploads.clone(),
             previews: self.file_previews.clone(),
@@ -549,7 +551,8 @@ impl Waffle {
                 ui::icon_button(id, glyph, label, cx).toggled(open_picker == Some(picker), cx).on_click(cx.listener(move |this, _, window, cx| this.show_composer_picker(picker, window, cx)))
             }))
             // Not verified: the tooltip; Discord's chat box shows its button only when this setting is on.
-            .when(self.prefs.send_button, |r| r.child(ui::icon_button("composer-send", Glyph::PaperPlane, "Send Message", cx).disabled(!self.has_draft).on_click(cx.listener(|this, _, window, cx| this.submit(false, window, cx)))));
+            .when(self.prefs.send_button, |r| r.child(ui::icon_button("composer-send", Glyph::PaperPlane, "Send Message", cx).disabled(!self.has_draft).on_click(cx.listener(|this, _, window, cx| this.submit(false, window, cx)))))
+            .child(self.composer_activities_button(cx));
         let card = div()
             .relative()
             .mx_4()
@@ -1114,6 +1117,8 @@ pub(crate) struct RowContext {
     joined: std::collections::HashSet<String>,
     unread_marker: Option<u64>,
     this: WeakEntity<Waffle>,
+    // What each activity a message posts is doing now, for its live card.
+    activity_cards: Rc<crate::activities::ChatCards>,
     has_more: bool,
     dm_start: Option<crate::dm_start::DmStart>,
     // The toolbar's three quick reactions: most used, padded with 💯 😆 💖.
@@ -1187,6 +1192,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .children(media.map(|m| div().when(pending, |d| d.opacity(0.6)).child(m)))
         .children(message.stickers.iter().map(|s| div().when(pending, |d| d.opacity(0.6)).child(crate::stickers::in_chat(s, ctx.media.stickers.plays(ctx.hovers(message)), cx))))
         .children(message.poll.as_ref().map(|p| poll_card(message, p, ctx, cx)))
+        .children(message.activity.as_ref().map(|a| crate::activities::activity_message_card(message, a, &ctx.activity_cards, ctx.this.clone(), cx)))
         .children(shown_embeds(message, ctx).iter().enumerate().map(|(i, e)| embed_card(e, Some(message), message.reply_to.as_deref(), format!("embed-{}-{i}", message.id), ctx, cx)))
         .children(link_cards(message, ctx, cx))
         .children(message.thread.as_ref().map(|t| thread_card(t, ctx, cx)))
@@ -3761,20 +3767,6 @@ fn typing_parts(names: &[&str]) -> Vec<(String, bool)> {
         [a, b, c] => vec![name(a), word(", "), name(b), word(" and "), name(c), word(" are typing…")],
         _ => vec![word("Several people are typing…")],
     }
-}
-
-// One line of text with some runs in strong semibold, as the design's <b>.
-pub(crate) fn emphasised(parts: &[(String, bool)], strong: Hsla) -> StyledText {
-    let mut text = String::new();
-    let mut runs = Vec::new();
-    for (part, bold) in parts {
-        let start = text.len();
-        text.push_str(part);
-        if *bold {
-            runs.push((start..text.len(), HighlightStyle { color: Some(strong), font_weight: Some(FontWeight::MEDIUM), ..Default::default() }));
-        }
-    }
-    StyledText::new(text).with_highlights(runs)
 }
 
 // A strip at the top of the composer: replying, editing, or a send waiting out slowmode.

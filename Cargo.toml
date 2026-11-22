@@ -73,6 +73,8 @@ rtcp = "0.17"
 interceptor = "0.17"
 webrtc-util = { version = "0.17", default-features = false, features = ["marshal"] }
 async-trait = "0.1"
+# The activity frame: WKWebView on macOS, WebView2 on Windows, placed as a child of the gpui window.
+wry = { version = "0.57", default-features = false }
 rodio = { version = "0.23.0", default-features = false, features = ["playback", "mp3", "symphonia-aac", "wav", "flac", "vorbis", "mp4"] }
 
 [dev-dependencies]
@@ -86,6 +88,8 @@ embed-resource = "3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
+# The completion handler of WKWebView's snapshot (an activity's still under a menu); already in the tree through wry.
+block2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSRunningApplication", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphicsContext", "NSGraphics", "NSWorkspace", "objc2-core-foundation"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "NSString", "NSProcessInfo"] }
 screencapturekit = { version = "11", features = ["macos_14_0"] }

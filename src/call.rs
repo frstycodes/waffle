@@ -13,6 +13,7 @@ use gpui_kit::{
 };
 
 use crate::{
+    call_issues::{failure_line, issue_chip, issue_line},
     Waffle,
     discord::{self, User, VoiceState},
     icons::Glyph,
@@ -103,6 +104,8 @@ enum Tile {
     Stream(VoiceState),
     // A stream we watched that ended, kept in its place until closed (by its streamer's id).
     Ended(String),
+    // An activity running in the call (by its app's id), or the one we're starting.
+    Activity(String),
 }
 
 // How a tile is drawn: a 16:9 card of this width, or filling the stage edge to edge.
@@ -122,7 +125,7 @@ fn order_tiles(people: Vec<VoiceState>, ended: &[String], opened: impl Fn(&str) 
     let mut tiles: Vec<Tile> = streams.chain(ended).chain(people.iter().cloned().map(Tile::User)).collect();
     tiles.sort_by_key(|tile| match tile {
         Tile::Stream(s) if opened(&s.user_id) => 0,
-        Tile::Ended(_) => 0,
+        Tile::Ended(_) | Tile::Activity(_) => 0,
         Tile::Stream(_) => 1,
         Tile::User(s) if camera(s) => 2,
         Tile::User(_) => 3,
@@ -136,6 +139,7 @@ fn tile_key(tile: &Tile) -> String {
         Tile::User(s) => format!("user:{}", s.user_id),
         // Shares its stream's key, so a focused stream that ends stays the big card.
         Tile::Stream(VoiceState { user_id, .. }) | Tile::Ended(user_id) => format!("stream:{user_id}"),
+        Tile::Activity(app_id) => crate::activities::activity_key(app_id),
     }
 }
 
@@ -372,14 +376,14 @@ impl Waffle {
 
     pub(crate) fn voice_panel_height(&self) -> f32 {
         match (&self.call, &self.voice_error) {
-            (Some(_), _) => VOICE_HEIGHT,
+            (Some(_), _) => VOICE_HEIGHT + self.activity_panel_height(),
             (None, Some(_)) => ERROR_HEIGHT,
             (None, None) => 0.,
         }
     }
 
     pub(crate) fn dismiss_call_menus(&mut self) -> bool {
-        std::mem::take(&mut self.connection_info) | self.device_menu.take().is_some()
+        std::mem::take(&mut self.connection_info) | self.device_menu.take().is_some() | self.activities.launcher.take().is_some()
     }
 
     // .voicebar: the connection's state and where you are (or why it needs you), the one button
@@ -459,34 +463,31 @@ impl Waffle {
                 cx.notify();
             }));
         let leave_tip = if link == Link::Connecting { "Cancel joining" } else { "Disconnect" };
-        let top = div().flex().items_center().gap_2().child(status).child(ui::icon_button("hang-up", Glyph::CallEnd, leave_tip, cx).on_click(cx.listener(|this, _, _, cx| this.leave_voice(cx))));
+        let top = div().flex().items_center().gap_2().child(status).child(ui::icon_button("hang-up", Glyph::CallEnd, leave_tip, cx).on_click(cx.listener(|this, _, _, cx| this.leave_call_asking(cx))));
         let wait = if link == Link::Lost { "Available once you're reconnected" } else { "Available once you're connected" };
         let ready = |label: &'static str| if connected { label } else { wait };
         let sharing = call.sharing.is_some();
-        let camera = panel_action("panel-camera", Glyph::Video, ready(if call.camera_on { "Turn off camera" } else { "Turn on camera" }), connected, cx)
+        let camera = panel_action("panel-camera", Glyph::Video, ready(if call.camera_on { "Turn off camera" } else { "Turn on camera" }), connected, false, cx)
             .when(call.camera_on, |b| b.bg(palette::strong(cx)).text_color(palette::surface(palette::Level::Page, cx)))
             .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_camera(cx))));
         let share = match sharing {
-            true => panel_action("panel-share", Glyph::ShareScreen, "Stream options", true, cx)
-                .bg(palette::accent())
-                .text_color(palette::on_accent())
-                .hover(|s| s.bg(palette::accent_hover()))
+            true => panel_action("panel-share", Glyph::ShareScreen, "Stream options", true, true, cx)
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_stream_menu(e.position, cx))),
-            false => panel_action("panel-share", Glyph::ShareScreen, ready("Share your screen"), connected, cx).when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_screen_share(cx)))),
+            false => panel_action("panel-share", Glyph::ShareScreen, ready("Share your screen"), connected, false, cx).when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_screen_share(cx)))),
         };
-        let activities = panel_action("panel-activities", Glyph::Activities, ready("Activities"), connected, cx)
-            .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.show_toast("Activities aren't in Waffle yet", cx))));
+        let activities = panel_action("panel-activities", Glyph::Activities, ready("Activities"), connected, false, cx)
+            .when(connected, |b| b.on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, window, cx| this.open_launcher_from_panel(e.position, window, cx))));
         let access = self.soundboard_access();
         let soundboard = (access != soundboard::Access::Hidden).then(|| {
             let on = connected && access == soundboard::Access::Ready;
-            panel_action("panel-soundboard", Glyph::Soundboard, if connected { access.tip() } else { wait }, on, cx)
+            panel_action("panel-soundboard", Glyph::Soundboard, if connected { access.tip() } else { wait }, on, false, cx)
                 .relative()
                 .when(self.soundboard_open(), |b| b.bg(palette::press(cx)))
                 .child(self.soundboard_probe(soundboard::PANEL_CONTROL))
                 .when(on, |b| b.on_click(cx.listener(|this, _, window, cx| this.open_soundboard(Some(soundboard::PANEL_CONTROL), window, cx))))
         });
         let voice = div()
-            .h(px(VOICE_HEIGHT))
+            .h(px(VOICE_HEIGHT + self.activity_panel_height()))
             .flex_none()
             .p(px(PANEL_PAD))
             .flex()
@@ -495,7 +496,7 @@ impl Waffle {
             .rounded_t(px(RADIUS_MD)).corner_shape(ui::SQUIRCLE)
             .relative()
             .child(ui::inset_rule(PANEL_PAD, cx))
-            .child(top)
+            .children(self.activity_panel_row(cx)).child(top)
             .child(div().flex().gap_1p5().child(camera).child(share).children(soundboard).child(activities));
         Some(voice.into_any_element())
     }
@@ -636,12 +637,14 @@ impl Waffle {
         let Some(call) = &self.call else { return Vec::new() };
         let focused = self.focused_stream();
         let me = self.me.as_ref().map(|m| m.id.as_str());
-        order_tiles(
+        let activities = self.activity_tiles().into_iter().map(Tile::Activity);
+        let people = order_tiles(
             self.participants(),
             &call.ended,
             |id| call.watched(id).is_some() || focused.as_deref() == Some(id),
             |s| s.camera || call.cameras.contains_key(&s.user_id) || (me == Some(s.user_id.as_str()) && call.camera_on),
-        )
+        );
+        activities.chain(people).collect()
     }
 
     // The call view, with the voice channel's chat beside it when open (the stage shrinks; the
@@ -736,7 +739,10 @@ impl Waffle {
         // The chrome steps aside whenever the pointer has left the stage, and with a stream focused,
         // as Discord's does, also while it rests.
         let menus_closed = self.device_menu.is_none() && self.menu.is_none();
+        // The webview over a focused activity hides the pointer from the stage, so its chrome stays.
+        let activity_focused = self.call_focus.as_deref().is_some_and(|k| k.starts_with("activity:"));
         let rest = match self.focused_stream() {
+            _ if activity_focused => false,
             Some(_) => self.call_idle(),
             None => !self.call_pointer_inside && !self.call_pointer_on_chrome && menus_closed,
         };
@@ -809,11 +815,18 @@ impl Waffle {
         let head = self.stage_head(self.call_header(cx));
         let (in_flow, floating) = if overlay_head { (None, Some(head)) } else { (Some(head), None) };
         let toggle_bottom = if strip { STRIP_GAP } else { band + STRIP_GAP };
+        // The activity's webview covers whatever is drawn over it, so it keeps clear of the pill, the floating
+        // controls and, in full screen, the header.
+        let clear = matches!(big, Tile::Activity(_)).then(|| {
+            let foot = crate::activities::TIP_ROOM + if others.is_empty() { band } else { toggle_bottom + STRIP_TOGGLE + STRIP_GAP };
+            (if overlay_head { FOCUS_HEAD } else { 0. }, foot)
+        });
         let media = div()
             .relative()
             .flex_1()
             .min_h_0()
             .bg(gpui_kit::black())
+            .when_some(clear, |d, (top, foot)| d.pt(px(top)).pb(px(foot)))
             .child(self.tile(big, TileSize::Fill, cx))
             .when(!others.is_empty(), |d| d.child(div().absolute().left_0().right_0().bottom(px(toggle_bottom)).flex().justify_center().opacity(shown).child(self.strip_toggle(strip, cx))));
         self.stage_root(cx)
@@ -908,6 +921,7 @@ impl Waffle {
             .filter(|t| match t {
                 Tile::User(s) | Tile::Stream(s) => s.on_stage() == discord::OnStage::Speaker,
                 Tile::Ended(_) => true,
+                Tile::Activity(_) => false,
             })
             .collect();
         let cols = match width {
@@ -971,7 +985,7 @@ impl Waffle {
                 Some(app) => format!("{} • {} playing {app}", call.channel.name, self.user_name(&id)),
                 None => format!("{} • {}'s screen", call.channel.name, self.user_name(&id)),
             },
-            None => call.channel.name.clone(),
+            None => self.activity_title(&call.channel.name, cx),
         };
         let glyph = Glyph::VolumeHigh;
         let timer = div()
@@ -1055,7 +1069,7 @@ impl Waffle {
             .child(div().min_w_0().flex().flex_col().child(div().min_w_0().truncate().text_size(ui::TEXT_MD).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).child(title)).children(self.call_status_line(&call.channel, cx)))
             .child(timer)
             .children(health)
-            .child(div().flex_1())
+            .child(div().flex_1()).children(self.activity_invite_button(cx))
             .children(back)
             .children(stop)
             .child(who)
@@ -1268,9 +1282,10 @@ impl Waffle {
             TileSize::Fill => (true, f32::INFINITY),
         };
         let radius = if fill { 0. } else { RADIUS_LG };
-        let (Tile::User(state) | Tile::Stream(state)) = tile else {
-            let Tile::Ended(streamer) = tile else { unreachable!() };
-            return self.ended_tile(streamer, size, cx);
+        let state = match tile {
+            Tile::User(state) | Tile::Stream(state) => state,
+            Tile::Ended(streamer) => return self.ended_tile(streamer, size, cx),
+            Tile::Activity(app_id) => return self.activity_tile(app_id, (!fill).then_some(w), cx),
         };
         let user = state.user.clone().unwrap_or_else(|| User {
             id: state.user_id.clone(),
@@ -1528,8 +1543,13 @@ impl Waffle {
         let call = self.call.as_ref().expect("in a call");
         let connected = call.stage == Stage::Connected;
         let (mic, camera, share) = (self.mic_control(cx), self.camera_control(cx), self.share_control(cx));
-        let activities = control("call-activities", Glyph::ActivitiesFill, "Activities", Control::Rest, connected)
-            .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.show_toast("Activities aren't in Waffle yet", cx))));
+        // While a game runs the control stays pressed, its app's icon in the corner.
+        let running = self.running_app_icon(cx);
+        let launcher = if self.activities.launcher.is_some() || running.is_some() { Control::Open } else { Control::Rest };
+        let activities = control("call-activities", Glyph::ActivitiesFill, "Activities", launcher, connected)
+            .relative()
+            .children(running)
+            .when(connected, |b| b.on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, window, cx| this.toggle_launcher(e.position, window, cx))));
         let access = self.soundboard_access();
         let soundboard = (access != soundboard::Access::Hidden).then(|| {
             let on = connected && access == soundboard::Access::Ready;
@@ -1573,7 +1593,7 @@ impl Waffle {
         let watching = self.focused_stream().filter(|id| call.watched(id).is_some() && me != Some(id.as_str()));
         let (glyph, tip) = match watching {
             Some(_) => (Glyph::ScreenOff, "Stop watching"),
-            None => (Glyph::CallEnd, "Leave call"),
+            None => self.red_button_look(),
         };
         let icon = div().child(Icon::new(glyph).size(ui::ICON_XL)).with_animation(
             ElementId::Name(SharedString::from(format!("call-leave-{tip}"))),
@@ -1599,7 +1619,7 @@ impl Waffle {
                     this.call_focus = None;
                     this.unwatch_stream(&id, cx);
                 }
-                None => this.leave_voice(cx),
+                None => this.press_red_button(cx),
             }))
     }
 
@@ -1679,6 +1699,9 @@ impl Waffle {
         let mut out = Vec::new();
         out.extend(self.connection_overlay(cx));
         out.extend(self.device_overlay(window, cx));
+        out.extend(self.render_launcher(cx));
+        out.extend(self.render_activity_consent(window, cx));
+        out.extend(self.render_activity_ask(window, cx));
         out
     }
 
@@ -2081,8 +2104,12 @@ fn why_line(text: impl Into<SharedString>, tone: Hsla) -> Div {
 }
 
 // .voicebar .acts .btn: equal-width 32px buttons; disabled until connected, saying why.
-fn panel_action(id: &'static str, glyph: Glyph, tip: &'static str, enabled: bool, cx: &App) -> Stateful<Div> {
-    let (fill, press, ink) = (palette::selected(cx), palette::press(cx), palette::strong(cx));
+// `accent`: the action that's on (our stream), in the accent fill.
+fn panel_action(id: &'static str, glyph: Glyph, tip: &'static str, enabled: bool, accent: bool, cx: &App) -> Stateful<Div> {
+    let (fill, press, ink) = match accent {
+        true => (palette::accent(), palette::accent_hover(), palette::on_accent()),
+        false => (palette::selected(cx), palette::press(cx), palette::strong(cx)),
+    };
     div()
         .id(id)
         .flex_1()
@@ -2416,7 +2443,7 @@ async fn avatar_color(url: &str) -> Option<Hsla> {
 }
 
 // The alpha-weighted mean colour of RGBA pixels; None when fully transparent.
-fn average_color(rgba: &[u8]) -> Option<(u8, u8, u8)> {
+pub(crate) fn average_color(rgba: &[u8]) -> Option<(u8, u8, u8)> {
     let (mut sum, mut weight) = ([0u64; 3], 0u64);
     for px in rgba.as_chunks::<4>().0 {
         let a = px[3] as u64;
@@ -2561,44 +2588,3 @@ mod order_tests {
     }
 }
 
-fn failure_line(code: u16) -> &'static str {
-    match code {
-        crate::STREAM_FAILED_TO_START => "Discord didn't connect us to it in time.",
-        _ => "Something went wrong with this stream.",
-    }
-}
-
-// What each of Discord's AV errors means here, as a tile or tooltip says it.
-fn issue_line(code: u16) -> &'static str {
-    use voice::issues::*;
-    match code {
-        SOUNDSHARE_FAILED => "Your stream's sound stopped.",
-        crate::STREAM_VIEW_LOW_FPS => "The stream is arriving at a low frame rate.",
-        STREAM_VIEW_HIGH_PACKET_LOSS => "Over 10% of this stream is being lost on the way.",
-        STREAM_SEND_HIGH_PACKET_LOSS => "Viewers are losing over 10% of your stream.",
-        STREAM_SEND_LOW_FPS => "Your computer is encoding the stream under its frame rate.",
-        STREAM_SEND_NETWORK_QUALITY => "Your connection to the stream server is poor.",
-        SENDER_READY_TIMEOUT => "Your video hasn't sent a picture yet.",
-        RECEIVER_READY_TIMEOUT => "Their video hasn't arrived yet.",
-        CAMERA_SEND_LOW_FPS => "Your camera is sending under 10 frames a second.",
-        SCREENSHARE_OS_ERROR => "Your system stopped the screen capture.",
-        _ => "Something is wrong with this video.",
-    }
-}
-
-// A warning mark for a tile's corner; hovering lists each issue with its code.
-fn issue_chip(id: SharedString, codes: Vec<u16>) -> gpui_kit::Stateful<Div> {
-    div()
-        .id(id)
-        .size_6()
-        .squircle(RADIUS_XS)
-        .flex()
-        .items_center()
-        .justify_center()
-        .bg(gpui_kit::black().opacity(0.6))
-        .child(Icon::new(Glyph::Warning).size(ui::ICON_SM).text_color(stage::idle()))
-        .tooltip(move |window, cx| {
-            let tip = codes.iter().map(|code| format!("{} Error code: {code}", issue_line(*code))).collect::<Vec<_>>().join("\n");
-            ui::tip(tip, window, cx)
-        })
-}

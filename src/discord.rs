@@ -5,6 +5,12 @@ use serde_json::{Value, json};
 use tokio::runtime::Runtime;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
+mod activity;
+pub use activity::*;
+use activity::{launch_error, parse_message_activity};
+#[cfg(test)]
+use activity::{oauth_code, parse_shelf};
+
 const GATEWAY: &str = "wss://gateway.discord.gg/?v=10&encoding=json";
 pub const API: &str = "https://discord.com/api/v10";
 pub(crate) const CDN: &str = "https://cdn.discordapp.com";
@@ -520,43 +526,7 @@ pub fn parse_guild_settings(g: &Value) -> (String, GuildSettings) {
     (key, settings)
 }
 
-// Discord's permission bits used by the menus.
-pub mod perm {
-    pub const CREATE_INSTANT_INVITE: u64 = 1;
-    pub const MANAGE_CHANNELS: u64 = 1 << 4;
-    pub const KICK_MEMBERS: u64 = 1 << 1;
-    pub const BAN_MEMBERS: u64 = 1 << 2;
-    pub const ADMINISTRATOR: u64 = 1 << 3;
-    pub const MUTE_MEMBERS: u64 = 1 << 22;
-    pub const DEAFEN_MEMBERS: u64 = 1 << 23;
-    pub const MOVE_MEMBERS: u64 = 1 << 24;
-    pub const REQUEST_TO_SPEAK: u64 = 1 << 32;
-    // Discord's client calls you a stage moderator only with all three.
-    pub const STAGE_MODERATOR: u64 = MANAGE_CHANNELS | MUTE_MEMBERS | MOVE_MEMBERS;
-    pub const SEND_MESSAGES: u64 = 1 << 11;
-    pub const SEND_MESSAGES_IN_THREADS: u64 = 1 << 38;
-    pub const BYPASS_SLOWMODE: u64 = 1 << 52;
-    pub const MANAGE_MESSAGES: u64 = 1 << 13;
-    pub const CHANGE_NICKNAME: u64 = 1 << 26;
-    pub const MANAGE_NICKNAMES: u64 = 1 << 27;
-    pub const MANAGE_ROLES: u64 = 1 << 28;
-    pub const MANAGE_WEBHOOKS: u64 = 1 << 29;
-    pub const MANAGE_THREADS: u64 = 1 << 34;
-    pub const CREATE_PUBLIC_THREADS: u64 = 1 << 35;
-    pub const MODERATE_MEMBERS: u64 = 1 << 40;
-    pub const SEND_POLLS: u64 = 1 << 49;
-    pub const SET_VOICE_CHANNEL_STATUS: u64 = 1 << 48;
-    pub const PIN_MESSAGES: u64 = 1 << 51;
-    pub const CONNECT: u64 = 1 << 20;
-    pub const SPEAK: u64 = 1 << 21;
-    pub const USE_SOUNDBOARD: u64 = 1 << 42;
-    pub const USE_EXTERNAL_SOUNDS: u64 = 1 << 45;
-    pub const READ_MESSAGE_HISTORY: u64 = 1 << 16;
-    pub const MANAGE_EVENTS: u64 = 1 << 33;
-    pub const CREATE_EVENTS: u64 = 1 << 44;
-    pub const SEND_TTS_MESSAGES: u64 = 1 << 12;
-    pub const MENTION_EVERYONE: u64 = 1 << 17;
-}
+pub mod perm;
 
 pub mod message_flag {
     pub const SUPPRESS_EMBEDS: u64 = 1 << 2;
@@ -1238,6 +1208,9 @@ pub struct Message {
     // Discord's "X pinned a message" notice (type 6): never drawn, it names who pinned `reply_to`.
     #[serde(default)]
     pub pin_notice: bool,
+    // An activity this message stands for (a launch's post, or an invite to one).
+    #[serde(default)]
+    pub activity: Option<MessageActivity>,
     // An app's answer to a command, button or form: who triggered it.
     #[serde(default)]
     pub interaction: Option<crate::app_commands::InteractionMeta>,
@@ -1780,6 +1753,8 @@ pub enum Event {
     CallEnded { channel_id: String },
     // Raw voice server info (endpoint, token) for the voice engine.
     VoiceServer(Value),
+    // An activity started, changed who's in it, or ended (no participants).
+    ActivityInstance(ActivityInstance),
     // A sound or emoji played in a voice channel.
     VoiceEffect(VoiceEffect),
     // A server's whole soundboard (`all`), or sounds added or changed on it.
@@ -2216,15 +2191,16 @@ impl Client {
 
     /// Changes your status everywhere: the gateway presence now, the saved setting for next time.
     /// `custom` rides along so the presence update doesn't wipe your custom status.
-    pub async fn set_status(&self, status: Status, custom: Option<&CustomStatus>, game: Option<&crate::games::Game>) {
-        self.send_presence(status, custom, game);
+    pub async fn set_status(&self, status: Status, custom: Option<&CustomStatus>, game: Option<&crate::games::Game>, activity: Option<Value>) {
+        self.send_presence(status, custom, game, activity);
         let req = self.request(reqwest::Method::PATCH, "/users/@me/settings").json(&json!({ "status": status_wire(status) }));
         let _ = self.run(req).await;
     }
 
-    // A custom status travels as a type-4 activity in the presence, the game you're playing as type 0.
-    pub fn send_presence(&self, status: Status, custom: Option<&CustomStatus>, game: Option<&crate::games::Game>) {
-        let activities: Vec<Value> = custom.map(CustomStatus::activity).into_iter().chain(game.map(crate::games::Game::activity)).collect();
+    // A custom status travels as a type-4 activity in the presence, the game you're playing as type 0, and an
+    // activity you're in (Discord's embedded app) as its own type-0 entry, which leads.
+    pub fn send_presence(&self, status: Status, custom: Option<&CustomStatus>, game: Option<&crate::games::Game>, activity: Option<Value>) {
+        let activities: Vec<Value> = custom.map(CustomStatus::activity).into_iter().chain(activity).chain(game.map(crate::games::Game::activity)).collect();
         self.gateway(json!({ "op": 3, "d": { "status": status_wire(status), "since": 0, "activities": activities, "afk": false } }));
     }
 
@@ -2700,6 +2676,7 @@ impl From<ApiError> for String {
 fn error_text(status: u16, body: &Value) -> String {
     match status {
         401 => SESSION_EXPIRED.to_owned(),
+        _ if let Some(why) = body["code"].as_u64().and_then(launch_error) => why.to_owned(),
         // 40002 (verify your account), 50035 (invalid form) and the rest read as Discord words them.
         _ => api_error(body).unwrap_or_else(|| reqwest::StatusCode::from_u16(status).map_or_else(|_| status.to_string(), |s| s.to_string())),
     }
@@ -3308,6 +3285,11 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
         "VOICE_SERVER_UPDATE" => Some(Event::VoiceServer(d.clone())),
         "CALL_CREATE" | "CALL_UPDATE" => Some(Event::Call { channel_id: s(&d["channel_id"]), ringing: strings(&d["ringing"]) }),
         "CALL_DELETE" => Some(Event::CallEnded { channel_id: s(&d["channel_id"]) }),
+        "EMBEDDED_ACTIVITY_UPDATE_V2" => parse_activity_instance(d).map(Event::ActivityInstance),
+        // Activities already running when we connected.
+        "READY_SUPPLEMENTAL" => Some(Event::Batch(
+            d["guilds"].as_array().into_iter().flatten().flat_map(|g| g["activity_instances"].as_array().into_iter().flatten()).filter_map(parse_activity_instance).map(Event::ActivityInstance).collect(),
+        )),
         "VOICE_CHANNEL_EFFECT_SEND" => parse_voice_effect(d).map(Event::VoiceEffect),
         // Not verified: the reply's shape, `{ guild_id, soundboard_sounds }`, is the public API's.
         "SOUNDBOARD_SOUNDS" | "GUILD_SOUNDBOARD_SOUNDS_UPDATE" => Some(Event::SoundboardSounds {
@@ -3669,6 +3651,7 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         poll: m["poll"].is_object().then(|| parse_poll(&m["poll"])),
         forward: parse_forward(m),
         pin_notice: m["type"] == 6,
+        activity: parse_message_activity(m),
         kind: m["type"].as_u64().unwrap_or(0) as u8,
         flags,
         reference_channel: m["message_reference"]["channel_id"].as_str().map(str::to_owned),
@@ -4235,6 +4218,44 @@ pub fn snowflake(v: &Value) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn activity_payloads() {
+        let update = json!({
+            "application_id": "945737671223947305",
+            "launch_id": "l1",
+            "location": { "id": "gc-9-7", "kind": "gc", "channel_id": "7", "guild_id": "9" },
+            "participants": [{ "user_id": "u1", "session_id": "s1", "nonce": null }],
+        });
+        let instance = parse_activity_instance(&update).expect("parses");
+        assert_eq!((instance.instance_id.as_str(), instance.location_id.as_str(), instance.channel_id.as_str()), ("l1", "gc-9-7", "7"));
+        assert_eq!(instance.participants, vec![ActivityParticipant { user_id: "u1".into(), session_id: "s1".into() }]);
+        let composite = json!({ "application_id": "1", "launch_id": "l", "composite_instance_id": "c", "location": { "id": "pc-3", "channel_id": "3" } });
+        let dm = parse_activity_instance(&composite).expect("parses");
+        assert_eq!((dm.instance_id.as_str(), dm.guild_id.as_deref(), dm.participants.len()), ("c", None, 0));
+
+        let shelf = json!({
+            "activities": [{ "application_id": "b", "shelf_rank": 2 }, { "application_id": "a", "shelf_rank": 1 }, { "application_id": "gone", "shelf_rank": 0 }],
+            "applications": [{ "id": "a", "name": "Alpha", "icon": "h" }, { "id": "b", "name": "Beta", "description": "golf" }],
+        });
+        let apps = parse_shelf(&shelf);
+        assert_eq!(apps.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(), ["Alpha", "Beta"]);
+        assert!(apps[0].icon.as_deref().is_some_and(|u| u.contains("/app-icons/a/h.png")));
+
+        // A /launch post as the API returns it (2026-11-23): the app under `application`, no `application_id`.
+        let launch = json!({
+            "id": "m1", "channel_id": "7", "type": 23, "content": "", "timestamp": "2026-11-22T21:15:24.986000+00:00",
+            "author": { "id": "945737671223947305", "username": "Putt Party", "bot": true },
+            "application": { "id": "945737671223947305", "name": "Putt Party" },
+            "activity_instance": { "id": "i-1-gc-9-7" },
+            "interaction_metadata": { "id": "1", "type": 2, "user": { "id": "u1", "username": "_frsty", "global_name": "frsty" } },
+        });
+        let posted = parse_message(&launch).and_then(|m| m.activity).expect("an activity post");
+        assert_eq!((posted.instance_id.as_str(), posted.app_id.as_str(), posted.starter.as_deref()), ("i-1-gc-9-7", "945737671223947305", Some("frsty")));
+        assert_eq!(posted.app_name.as_deref(), Some("Putt Party"));
+        assert_eq!(oauth_code("https://x.discordsays.com/?code=abc&state=s").as_deref(), Some("abc"));
+        assert_eq!(oauth_code("https://x.discordsays.com/?error=access_denied"), None);
+    }
 
     #[test]
     fn channel_info_carries_start_times_and_statuses() {
