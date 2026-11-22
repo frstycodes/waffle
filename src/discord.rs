@@ -181,6 +181,10 @@ pub struct RichPresence {
     pub party: Option<(u64, u64)>,
     // Unix milliseconds the activity started.
     pub started: Option<i64>,
+    // Unix milliseconds it ends: a Spotify track's end, for its progress.
+    pub ends: Option<i64>,
+    // Discord's party id: people sharing one play together (Active Now groups them).
+    pub party_id: Option<String>,
     pub joinable: bool,
 }
 
@@ -629,6 +633,22 @@ pub struct ChannelProps {
     pub video_full: bool,
     // Minutes until an idle thread hides (default_auto_archive_duration); 0 when Discord sent none.
     pub archive_after: u32,
+    // A group DM's owner, the only one who may remove members.
+    #[serde(default)]
+    pub owner_id: Option<String>,
+    // A DM from someone we aren't friends with, waiting in Message Requests (is_message_request).
+    #[serde(default)]
+    pub message_request: bool,
+    // Filtered into Message Requests' Spam tab (is_spam).
+    #[serde(default)]
+    pub spam: bool,
+}
+
+impl Channel {
+    // Waits in Message Requests (either tab) instead of the DM list.
+    pub fn is_request(&self) -> bool {
+        self.props.message_request || self.props.spam
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1154,6 +1174,10 @@ pub struct AccountSettings {
     pub friends_all: bool,
     pub friends_mutual_friends: bool,
     pub friends_mutual_guilds: bool,
+    // From the settings proto (settings::proto): DmSpamFilterV2, 0 while unset.
+    pub dm_spam_filter: u8,
+    // Message Requests on: `default_message_request_restricted` off.
+    pub message_requests: bool,
     // Servers whose members can't DM you, and servers that don't see your activity.
     pub restricted_guilds: Vec<String>,
     pub activity_restricted_guilds: Vec<String>,
@@ -1171,6 +1195,8 @@ impl Default for AccountSettings {
             friends_all: true,
             friends_mutual_friends: true,
             friends_mutual_guilds: true,
+            dm_spam_filter: 0,
+            message_requests: true,
             restricted_guilds: Vec::new(),
             activity_restricted_guilds: Vec::new(),
         }
@@ -1228,6 +1254,11 @@ pub enum Event {
     MemberUpdate { guild_id: String, user: User, roles: Vec<String>, membership: Membership },
     // A friend, block or request was added, changed or removed (`None` kind = removed).
     RelationshipChange { user_id: String, relationship: Option<Relationship> },
+    // A DM or group DM was opened, changed (name, icon, owner, request state) or closed.
+    DmUpsert(Channel),
+    DmDelete(String),
+    // Someone joined or left a group DM (CHANNEL_RECIPIENT_ADD / _REMOVE).
+    RecipientChange { channel_id: String, user: User, added: bool },
     // Our membership of a thread changed (joined or left).
     ThreadJoined { id: String, joined: bool },
     GuildSettings((String, GuildSettings)),
@@ -1539,7 +1570,12 @@ impl Client {
 
     /// Opens (or finds) the DM channel with a user.
     pub async fn open_dm(&self, user_id: &str) -> Result<Channel, String> {
-        let req = self.request(reqwest::Method::POST, "/users/@me/channels").json(&json!({ "recipients": [user_id] }));
+        self.open_private(&[user_id.to_owned()]).await
+    }
+
+    /// The DM with one recipient, or a new group DM with several (type 3 in the answer).
+    pub async fn open_private(&self, recipients: &[String]) -> Result<Channel, String> {
+        let req = self.request(reqwest::Method::POST, "/users/@me/channels").json(&json!({ "recipients": recipients }));
         let body = self.run(req).await?;
         parse_dm(&body, &Value::Null).ok_or_else(|| "Unexpected response".into())
     }
@@ -1626,12 +1662,12 @@ impl Client {
     /// A call Discord may answer with a captcha (joining a server, sending a friend request): its page goes
     /// out on `captcha_url` for the browser, and the call is retried with the solved key, as the sign-in
     /// does (`auth::exchange_ticket`). Other failures read as `send` words them.
-    pub async fn call_with_captcha(&self, method: reqwest::Method, path: String, body: Option<Value>, captcha_url: mpsc::UnboundedSender<String>) -> Result<Value, String> {
+    pub async fn call_with_captcha(&self, method: reqwest::Method, path: String, body: Option<Value>, captcha_url: mpsc::UnboundedSender<String>) -> Result<Value, ApiError> {
         let client = self.clone();
-        runtime().spawn(async move { client.captcha_loop(method, &path, body, captcha_url).await }).await.map_err(|e| e.to_string())?
+        runtime().spawn(async move { client.captcha_loop(method, &path, body, captcha_url).await }).await.map_err(|e| ApiError::from(e.to_string()))?
     }
 
-    async fn captcha_loop(&self, method: reqwest::Method, path: &str, body: Option<Value>, captcha_url: mpsc::UnboundedSender<String>) -> Result<Value, String> {
+    async fn captcha_loop(&self, method: reqwest::Method, path: &str, body: Option<Value>, captcha_url: mpsc::UnboundedSender<String>) -> Result<Value, ApiError> {
         let mut solved: Option<(crate::captcha::Challenge, String)> = None;
         for _ in 0..3 {
             let mut req = self.request(method.clone(), path);
@@ -1651,13 +1687,13 @@ impl Client {
             }
             let Some(challenge) = crate::captcha::Challenge::from_response(&body) else {
                 eprintln!("http: {status} {path} (code {}): {body}", body["code"]);
-                return Err(error_text(status.as_u16(), &body));
+                return Err(ApiError { status: status.as_u16(), code: body["code"].as_u64(), text: error_text(status.as_u16(), &body) });
             };
             let pending = crate::captcha::serve(&challenge).await?;
             let _ = captcha_url.unbounded_send(pending.url.clone());
             solved = Some((challenge, pending.solved().await?));
         }
-        Err("Discord kept asking for a captcha".into())
+        Err(ApiError::from("Discord kept asking for a captcha".to_owned()))
     }
 
     /// Marks several channels read at once (a server's "Mark As Read").
@@ -1842,6 +1878,27 @@ fn retry_wait(status: u16, body: &Value, header_wait: Option<f64>, idempotent: b
 }
 
 const SESSION_EXPIRED: &str = "Your session has expired. Sign in again.";
+
+// A failed call as Discord answered it: the HTTP status (0 when no answer came), its JSON error code, and
+// the text `error_text` words it as. For callers that word errors themselves (Add Friend).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ApiError {
+    pub status: u16,
+    pub code: Option<u64>,
+    pub text: String,
+}
+
+impl From<String> for ApiError {
+    fn from(text: String) -> Self {
+        ApiError { status: 0, code: None, text }
+    }
+}
+
+impl From<ApiError> for String {
+    fn from(error: ApiError) -> Self {
+        error.text
+    }
+}
 
 fn error_text(status: u16, body: &Value) -> String {
     match status {
@@ -2275,6 +2332,9 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
         "READY" => Some(Event::Ready(Box::new(parse_ready(d)))),
         "USER_SETTINGS_UPDATE" => Some(Event::UserSettings(d.clone())),
         "GUILD_CREATE" => parse_guild(d).map(Event::GuildCreate),
+        "CHANNEL_CREATE" | "CHANNEL_UPDATE" if d["guild_id"].is_null() && matches!(d["type"].as_u64(), Some(1 | 3)) => parse_dm(d, &Value::Null).map(Event::DmUpsert),
+        "CHANNEL_DELETE" if d["guild_id"].is_null() => Some(Event::DmDelete(d["id"].as_str()?.to_owned())),
+        "CHANNEL_RECIPIENT_ADD" | "CHANNEL_RECIPIENT_REMOVE" => Some(Event::RecipientChange { channel_id: d["channel_id"].as_str()?.to_owned(), user: parse_user(&d["user"]), added: kind == "CHANNEL_RECIPIENT_ADD" }),
         "CHANNEL_CREATE" | "CHANNEL_UPDATE" | "THREAD_CREATE" | "THREAD_UPDATE" => {
             let guild_id = d["guild_id"].as_str()?.to_owned();
             parse_channel(d, &guild_id).map(|channel| Event::ChannelUpsert { guild_id, channel })
@@ -2395,6 +2455,8 @@ fn parse_ready(d: &Value) -> Ready {
         account_settings: {
             let mut settings = AccountSettings::default();
             settings.apply(&d["user_settings"]);
+            // Not verified: READY carries the settings proto as base64 under `user_settings_proto`.
+            settings.apply_proto(d["user_settings_proto"].as_str().unwrap_or_default());
             settings
         },
         guild_settings: d["user_guild_settings"]["entries"].as_array().or(d["user_guild_settings"].as_array()).into_iter().flatten().map(parse_guild_settings).collect(),
@@ -2540,6 +2602,7 @@ pub(crate) fn parse_channel(c: &Value, guild_id: &str) -> Option<Channel> {
             rtc_region: c["rtc_region"].as_str().map(str::to_owned),
             video_full: c["video_quality_mode"].as_u64() == Some(2),
             archive_after: c["default_auto_archive_duration"].as_u64().unwrap_or(0) as u32,
+            ..Default::default()
         }),
     })
 }
@@ -2573,7 +2636,12 @@ fn parse_dm(c: &Value, users: &Value) -> Option<Channel> {
         thread: None,
         raw_type: c["type"].as_u64().unwrap_or(1) as u8,
         overwrites: Vec::new(),
-        props: Default::default(),
+        props: Box::new(ChannelProps {
+            owner_id: c["owner_id"].as_str().map(str::to_owned),
+            message_request: c["is_message_request"].as_bool().unwrap_or(false),
+            spam: c["is_spam"].as_bool().unwrap_or(false),
+            ..Default::default()
+        }),
     })
 }
 
@@ -3012,11 +3080,15 @@ pub fn app_icon_url(app_id: &str, icon: &str) -> String {
     format!("{CDN}/app-icons/{app_id}/{icon}.png?size=64")
 }
 
-// Large asset keys: "mp:…" is a media proxy path, anything else an app asset id.
+// Large asset keys: "mp:…" is a media proxy path, "spotify:…" an album cover, anything else an app asset id.
 fn activity_image(a: &Value) -> Option<String> {
     let key = a["assets"]["large_image"].as_str()?;
     if let Some(path) = key.strip_prefix("mp:") {
         return Some(format!("https://media.discordapp.net/{path}"));
+    }
+    // Not verified: Spotify covers resolve on Spotify's image CDN, as Discord's activity asset docs describe.
+    if let Some(id) = key.strip_prefix("spotify:") {
+        return Some(format!("https://i.scdn.co/image/{id}"));
     }
     Some(format!("{CDN}/app-assets/{}/{key}.png", a["application_id"].as_str()?))
 }
@@ -3043,6 +3115,8 @@ fn parse_rich(a: &Value) -> Option<RichPresence> {
             _ => None,
         },
         started: a["timestamps"]["start"].as_i64(),
+        ends: a["timestamps"]["end"].as_i64(),
+        party_id: a["party"]["id"].as_str().map(str::to_owned),
         joinable: a["party"]["id"].is_string() && (a["flags"].as_u64().unwrap_or(0) & JOIN != 0 || a["secrets"]["join"].is_string()),
     })
 }
@@ -3301,6 +3375,19 @@ mod tests {
         assert_eq!(left.face(), DmFace::One(avatar_url("1", Some("x"))));
         let alone = parse_dm(&json!({ "id": "g", "type": 3, "name": "squad", "recipients": [] }), &users).unwrap();
         assert_eq!(alone.face(), DmFace::Letters("squad".into()));
+    }
+
+    #[test]
+    fn dm_events_and_request_flags() {
+        let Some(Event::DmUpsert(dm)) = dispatch("CHANNEL_CREATE", &json!({ "id": "d", "type": 1, "is_message_request": true, "recipients": [{ "id": "1", "username": "a" }] })) else { panic!("a DM create is a DmUpsert") };
+        assert!(dm.props.message_request && !dm.props.spam && dm.is_request());
+        let Some(Event::DmUpsert(group)) = dispatch("CHANNEL_UPDATE", &json!({ "id": "g", "type": 3, "owner_id": "1", "is_spam": true, "recipients": [] })) else { panic!("a group update is a DmUpsert") };
+        assert_eq!(group.props.owner_id.as_deref(), Some("1"));
+        assert!(group.is_request());
+        assert!(matches!(dispatch("CHANNEL_DELETE", &json!({ "id": "d", "type": 1 })), Some(Event::DmDelete(id)) if id == "d"));
+        assert!(matches!(dispatch("CHANNEL_CREATE", &json!({ "id": "c", "type": 0, "guild_id": "s" })), Some(Event::ChannelUpsert { .. })));
+        let Some(Event::RecipientChange { channel_id, user, added }) = dispatch("CHANNEL_RECIPIENT_REMOVE", &json!({ "channel_id": "g", "user": { "id": "2", "username": "b" } })) else { panic!("recipient remove") };
+        assert_eq!((channel_id.as_str(), user.id.as_str(), added), ("g", "2", false));
     }
 
     #[test]

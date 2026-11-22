@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DMs and Requests</title>
+<meta name="description" content="Group DMs, Active Now and Message Requests, prototyped in Waffle's look with Discord's behaviour.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  /* Waffle's tokens (tokens.css), inlined so the page stands alone. */
+:root {
+  --n-h: 260;
+  --n-c: 0.004;
+
+  /* Brand */
+  --logo: #efa831;
+  --accent: #efa831;
+  --accent-hover: #e29a1d;
+  --accent-press: #d68d0a;
+  --on-accent: #2a1c00;
+
+  /* Type */
+  --font-ui: "Figtree", system-ui, sans-serif;
+  --font-mono: "Fragment Mono", ui-monospace, monospace;
+  --text-xs: 12px;   /* timestamps, section labels, badges */
+  --text-sm: 14px;   /* rows, menus, buttons */
+  --text-md: 16px;   /* message body */
+  --text-lg: 20px;   /* panel and dialog titles */
+  --text-xl: 28px;   /* empty states, onboarding */
+  --leading-tight: 1.2;
+  --leading-body: 1.45;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Space: 4px scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Radius, drawn with a soft squircle (corner-shape in css/primitives.css). A squircle's curve hugs
+     the corner, so radii run ~1.4x a circular arc's to read as soft, not boxy. Controls 14, surfaces 20,
+     dialogs 28; pills only for counts, status and the wave's bars. */
+  --radius-xs: 8px;
+  --radius-sm: 11px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-full: 999px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-move: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Touch-driven spring: ~0.3 bounce that settles inside 250ms. */
+  --ease-spring: linear(0, 0.42 12%, 0.82 25%, 1.06 40%, 1.1 48%, 1.04 62%, 0.99 78%, 1);
+  --dur-press: 120ms;
+  --dur-hover: 150ms;
+  --dur-pop: 200ms;
+  --dur-panel: 260ms;
+
+  /* Status: hue never alone, always with a shape (dot, moon, bar, minus) */
+  --online: oklch(0.74 0.16 155);
+  --idle: oklch(0.80 0.15 78);
+  /* What asks for you: counts, LIVE, Do Not Disturb. A true red, so it never reads as the accent. */
+  --alert: oklch(0.58 0.21 25);
+  --dnd: var(--alert);
+  --offline: oklch(0.62 0.01 var(--n-h));
+  --danger: #c21f3a;
+  --danger-hover: #a8172f;
+  --success: oklch(0.49 0.13 155);
+  --warning: oklch(0.80 0.15 78);
+}
+
+/* Dark: depth from lighter surfaces, never shadows. */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-rail: oklch(0.150 var(--n-c) var(--n-h));
+  --bg-sidebar: oklch(0.180 var(--n-c) var(--n-h));
+  --bg-page: oklch(0.210 var(--n-c) var(--n-h));
+  --bg-raised: oklch(0.250 calc(var(--n-c) * 1.2) var(--n-h));
+  --bg-group: var(--bg-raised);
+  --bg-overlay: oklch(0.275 calc(var(--n-c) * 1.2) var(--n-h));
+  --hover: oklch(1 0 0 / 0.05);
+  --press: oklch(1 0 0 / 0.09);
+  --selected: oklch(1 0 0 / 0.08);
+  --line: oklch(1 0 0 / 0.08);
+  --line-strong: oklch(1 0 0 / 0.14);
+  --text-strong: oklch(0.97 0.004 var(--n-h));
+  --text: oklch(0.88 0.008 var(--n-h));
+  --text-muted: oklch(0.72 0.012 var(--n-h));
+  --text-faint: oklch(0.65 0.012 var(--n-h));
+  --accent-ink: #f6b84d;
+  --accent-soft: oklch(0.78 0.15 75 / 0.16);
+  --danger-ink: #ff7a8c;
+  --online-ink: oklch(0.78 0.15 155);
+  --info-ink: oklch(0.74 0.11 240);
+  --warning-ink: oklch(0.82 0.14 80);
+  --shimmer: oklch(1 0 0 / 0.06);
+  --track-rest: oklch(0.33 0.008 var(--n-h));
+  --seg-track: oklch(0 0 0 / 0.3);
+  --seg-thumb: oklch(1 0 0 / 0.15);
+  --seg-shadow: 0 1px 3px oklch(0 0 0 / 0.4), inset 0 0.5px 0 oklch(1 0 0 / 0.14);
+  --shadow-pop: 0 12px 32px oklch(0 0 0 / 0.45), 0 0 0 1px var(--line-strong);
+  --scrim: oklch(0.08 var(--n-c) var(--n-h) / 0.7);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-rail: oklch(0.905 calc(var(--n-c) * 1.2) var(--n-h));
+  --bg-sidebar: oklch(0.948 var(--n-c) var(--n-h));
+  --bg-page: oklch(0.982 calc(var(--n-c) * 0.6) var(--n-h));
+  --bg-raised: oklch(0.995 calc(var(--n-c) * 0.3) var(--n-h));
+  --bg-group: oklch(0.960 calc(var(--n-c) * 0.8) var(--n-h));
+  --bg-overlay: oklch(0.998 calc(var(--n-c) * 0.2) var(--n-h));
+  --hover: oklch(0.3 0.008 var(--n-h) / 0.06);
+  --press: oklch(0.3 0.008 var(--n-h) / 0.1);
+  --selected: oklch(0.3 0.008 var(--n-h) / 0.09);
+  --line: oklch(0.3 0.008 var(--n-h) / 0.1);
+  --line-strong: oklch(0.3 0.008 var(--n-h) / 0.18);
+  --text-strong: oklch(0.20 0.009 var(--n-h));
+  --text: oklch(0.30 0.009 var(--n-h));
+  --text-muted: oklch(0.46 0.009 var(--n-h));
+  --text-faint: oklch(0.49 0.009 var(--n-h));
+  --accent-ink: #8a5601;
+  --logo: #bf7d06;
+  --accent-soft: oklch(0.7 0.15 75 / 0.14);
+  --danger-ink: #b0182f;
+  --online-ink: oklch(0.48 0.13 155);
+  --info-ink: oklch(0.50 0.13 245);
+  --warning-ink: oklch(0.52 0.12 65);
+  --shimmer: oklch(1 0 0 / 0.6);
+  --track-rest: oklch(0.87 0.009 var(--n-h));
+  --seg-track: oklch(0.3 0.008 var(--n-h) / 0.1);
+  --seg-thumb: oklch(1 0 0);
+  --seg-shadow: 0 1px 3px oklch(0.3 0.008 var(--n-h) / 0.2), 0 0 0 0.5px oklch(0.3 0.008 var(--n-h) / 0.1);
+  --online: oklch(0.62 0.16 155);
+  --idle: oklch(0.72 0.15 75);
+  --shadow-pop: 0 12px 32px oklch(0.3 0.008 var(--n-h) / 0.16), 0 0 0 1px var(--line-strong);
+  --scrim: oklch(0.2 var(--n-c) var(--n-h) / 0.4);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --bg-rail: oklch(0.905 calc(var(--n-c) * 1.2) var(--n-h));
+    --bg-sidebar: oklch(0.948 var(--n-c) var(--n-h));
+    --bg-page: oklch(0.982 calc(var(--n-c) * 0.6) var(--n-h));
+    --bg-raised: oklch(0.995 calc(var(--n-c) * 0.3) var(--n-h));
+    --bg-group: oklch(0.960 calc(var(--n-c) * 0.8) var(--n-h));
+    --bg-overlay: oklch(0.998 calc(var(--n-c) * 0.2) var(--n-h));
+    --hover: oklch(0.3 0.008 var(--n-h) / 0.06);
+    --press: oklch(0.3 0.008 var(--n-h) / 0.1);
+    --selected: oklch(0.3 0.008 var(--n-h) / 0.09);
+    --line: oklch(0.3 0.008 var(--n-h) / 0.1);
+    --line-strong: oklch(0.3 0.008 var(--n-h) / 0.18);
+    --text-strong: oklch(0.20 0.009 var(--n-h));
+    --text: oklch(0.30 0.009 var(--n-h));
+    --text-muted: oklch(0.46 0.009 var(--n-h));
+    --text-faint: oklch(0.49 0.009 var(--n-h));
+    --accent-ink: #8a5601;
+    --logo: #bf7d06;
+    --accent-soft: oklch(0.7 0.15 75 / 0.14);
+    --danger-ink: #b0182f;
+    --online-ink: oklch(0.48 0.13 155);
+    --info-ink: oklch(0.50 0.13 245);
+    --warning-ink: oklch(0.52 0.12 65);
+    --shimmer: oklch(1 0 0 / 0.6);
+    --track-rest: oklch(0.87 0.009 var(--n-h));
+    --seg-track: oklch(0.3 0.008 var(--n-h) / 0.1);
+    --seg-thumb: oklch(1 0 0);
+    --seg-shadow: 0 1px 3px oklch(0.3 0.008 var(--n-h) / 0.2), 0 0 0 0.5px oklch(0.3 0.008 var(--n-h) / 0.1);
+    --online: oklch(0.62 0.16 155);
+    --idle: oklch(0.72 0.15 75);
+    --shadow-pop: 0 12px 32px oklch(0.3 0.008 var(--n-h) / 0.16), 0 0 0 1px var(--line-strong);
+    --scrim: oklch(0.2 var(--n-c) var(--n-h) / 0.4);
+  }
+}
+  * { box-sizing: border-box; corner-shape: superellipse(1.4); }
+  .av, .dot, .check, .switch, .switch::after { corner-shape: round; }
+  body { margin: 0; background: var(--bg-page); color: var(--text); font-family: var(--font-ui); font-size: 14px; line-height: 1.45; }
+  main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 96px; }
+  header.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 28px; margin: 0; color: var(--text-strong); flex: 1; }
+  h2 { font-size: 20px; color: var(--text-strong); margin: 48px 0 4px; }
+  h3 { font-size: 16px; color: var(--text-strong); margin: 24px 0 4px; }
+  p.lede, p.note { color: var(--text-muted); margin: 0 0 16px; max-width: 76ch; }
+  p.note b { color: var(--text); font-weight: 600; }
+  .ic { width: 1em; height: 1em; display: inline-block; vertical-align: -0.15em; flex: none; }
+  .ic svg { width: 100%; height: 100%; display: block; }
+
+  .btn { font: inherit; font-weight: 600; font-size: 14px; height: 36px; padding: 0 14px; border: 0; border-radius: var(--radius-md); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; color: var(--text-strong); background: var(--selected); white-space: nowrap; transition: transform var(--dur-press) var(--ease-out); }
+  .btn:hover { background: var(--line-strong); }
+  .btn:active { transform: scale(0.97); }
+  .btn.primary { background: var(--accent); color: var(--on-accent); }
+  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.danger { background: var(--danger); color: oklch(0.99 0 0); }
+  .btn.danger:hover { background: var(--danger-hover); }
+  .btn.ghost { background: transparent; color: var(--text-muted); }
+  .btn.ghost:hover { background: var(--hover); color: var(--text-strong); }
+  .btn.sm { height: 32px; padding: 0 12px; }
+  .btn[disabled] { opacity: 0.5; cursor: default; }
+  .iconbtn { width: 32px; height: 32px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); font-size: 20px; cursor: pointer; display: grid; place-items: center; }
+  .iconbtn:hover, .iconbtn.on { background: var(--hover); color: var(--text-strong); }
+  .iconbtn.on { background: var(--selected); }
+  .badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--alert); color: oklch(0.99 0 0); font-size: 12px; font-weight: 700; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
+
+  .stage { border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; display: flex; min-height: 520px; background: var(--bg-page); }
+  .side { width: 240px; flex: none; background: var(--bg-sidebar); padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+  .row { display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 8px; border-radius: var(--radius-md); color: var(--text); cursor: pointer; font-weight: 500; }
+  .row:hover { background: var(--hover); }
+  .row.sel { background: var(--selected); color: var(--text-strong); }
+  .row .ic { font-size: 20px; }
+  .row .grow { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cap { padding: 16px 8px 4px; font-size: 12px; font-weight: 600; color: var(--text-faint); }
+  .dmrow { height: 44px; }
+  .dmrow small { display: block; font-size: 12px; color: var(--text-faint); font-weight: 400; }
+
+  .av { width: 32px; height: 32px; border-radius: 50%; flex: none; position: relative; }
+  .av.lg { width: 40px; height: 40px; }
+  .av .dot { position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px; border-radius: 50%; background: var(--online); box-shadow: 0 0 0 3px var(--bg-sidebar); }
+  .gface { width: 32px; height: 32px; position: relative; flex: none; }
+  .gface .av { width: 22px; height: 22px; position: absolute; }
+  .gface .av:first-child { left: 0; top: 0; }
+  .gface .av:last-child { right: 0; bottom: 0; box-shadow: 0 0 0 2px var(--bg-sidebar); }
+
+  .pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .bar { height: 48px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line-strong); }
+  .bar .title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: var(--text-strong); min-width: 0; }
+  .bar .title .ic { font-size: 20px; color: var(--text-faint); }
+  .bar .tools { margin-left: auto; display: flex; gap: 2px; }
+  .pills { display: flex; gap: 4px; padding-left: 12px; border-left: 1px solid var(--line-strong); }
+  .pill { font: inherit; font-weight: 600; border: 0; background: transparent; color: var(--text-muted); height: 30px; padding: 0 12px; border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .pill:hover { background: var(--hover); color: var(--text-strong); }
+  .pill[aria-selected="true"] { background: var(--selected); color: var(--text-strong); }
+  .pill.accent { background: var(--accent); color: var(--on-accent); }
+  .body { flex: 1; min-height: 0; display: flex; }
+  .list { flex: 1; min-width: 0; padding: 16px; overflow: auto; }
+  .label { font-size: 12px; font-weight: 600; color: var(--text-faint); padding: 0 8px 6px; display: flex; gap: 6px; align-items: center; }
+  .label a { color: var(--text-muted); cursor: pointer; text-decoration: none; font-weight: 600; }
+  .label a:hover { color: var(--text-strong); }
+  .person { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px; border-radius: var(--radius-md); cursor: pointer; }
+  .person:hover { background: var(--hover); }
+  .person .who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .person b { color: var(--text-strong); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .person span.sub { color: var(--text-muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+  .person time { color: var(--text-faint); font-size: 12px; font-weight: 400; margin-left: 6px; }
+  .acts { display: flex; gap: 8px; flex: none; }
+  .mutual { display: inline-flex; }
+  .mutual i { width: 16px; height: 16px; border-radius: 5px; margin-right: -4px; box-shadow: 0 0 0 2px var(--bg-page); }
+  .mutual i + i { }
+
+  /* Active Now */
+  .now { width: 360px; flex: none; border-left: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+  .now h4 { margin: 4px 0 4px; font-size: 20px; color: var(--text-strong); }
+  .card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 12px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; }
+  .card:hover { border-color: var(--line-strong); }
+  .card .head { display: flex; align-items: center; gap: 10px; }
+  .card .head .who { flex: 1; min-width: 0; }
+  .card .head b { display: block; color: var(--text-strong); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .head small { display: block; color: var(--text-muted); font-size: 13px; }
+  .card .app { width: 24px; height: 24px; border-radius: 7px; flex: none; }
+  .card .inner { background: var(--bg-group); border-radius: var(--radius-md); padding: 10px; display: flex; align-items: center; gap: 10px; }
+  .card .inner .meta { flex: 1; min-width: 0; }
+  .card .inner b { display: block; color: var(--text-strong); font-size: 14px; }
+  .card .inner small { display: block; color: var(--text-muted); font-size: 12px; }
+  .faces { display: flex; }
+  .faces .av { width: 24px; height: 24px; margin-right: -6px; box-shadow: 0 0 0 2px var(--bg-group); }
+  .art { width: 48px; height: 48px; border-radius: 10px; flex: none; }
+  .track { height: 4px; border-radius: 2px; background: var(--line-strong); margin-top: 6px; overflow: hidden; }
+  .track i { display: block; height: 100%; width: 42%; background: var(--text-muted); }
+  .quiet { text-align: center; padding: 24px 8px; }
+  .quiet b { display: block; color: var(--text-strong); font-size: 16px; margin-bottom: 4px; }
+  .quiet span { color: var(--text-muted); }
+
+  /* Dialogs */
+  .scrim { border-radius: var(--radius-lg); background: var(--scrim); padding: 32px 16px; display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; align-items: flex-start; }
+  .dialog { width: min(100%, 440px); background: var(--bg-raised); border-radius: var(--radius-xl); box-shadow: var(--shadow-pop); overflow: hidden; display: flex; flex-direction: column; }
+  .dhead { padding: 20px 20px 4px 24px; display: flex; gap: 12px; align-items: flex-start; }
+  .dhead h5 { margin: 0; font-size: 20px; color: var(--text-strong); flex: 1; }
+  .dsub { padding: 0 24px; color: var(--text-muted); }
+  .dsub b { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+  .dbody { padding: 16px 24px; display: flex; flex-direction: column; gap: 12px; }
+  .dfoot { padding: 16px 24px 20px; display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
+  .dfoot .left { margin-right: auto; color: var(--text-muted); font-size: 13px; }
+  .field { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 40px; padding: 4px 8px; border-radius: var(--radius-md); background: var(--bg-group); border: 1px solid var(--line); }
+  .field:focus-within { border-color: var(--accent); }
+  .field input { flex: 1; min-width: 80px; border: 0; background: transparent; font: inherit; font-size: 14px; color: var(--text-strong); outline: none; height: 30px; }
+  .field .to { color: var(--text-faint); font-weight: 600; padding-left: 4px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 4px 0 4px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; cursor: pointer; }
+  .chip .av { width: 18px; height: 18px; }
+  .chip .ic { font-size: 14px; opacity: 0.8; }
+  .meter { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .meter .segs { display: flex; gap: 3px; flex: 1; }
+  .meter .segs i { flex: 1; height: 4px; border-radius: 2px; background: var(--line-strong); transition: background var(--dur-hover); }
+  .meter .segs i.you { background: var(--text-muted); }
+  .meter .segs i.on { background: var(--accent); }
+  .meter.full { color: var(--danger-ink); }
+  .pick { max-height: 300px; overflow: auto; display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; }
+  .pick .label { padding-top: 6px; }
+  .opt { display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 8px; border-radius: var(--radius-md); cursor: pointer; }
+  .opt:hover { background: var(--hover); }
+  .opt .who { flex: 1; min-width: 0; }
+  .opt b { display: block; color: var(--text-strong); font-weight: 600; }
+  .opt small { display: block; color: var(--text-faint); font-size: 12px; }
+  .opt.off { opacity: 0.45; cursor: default; }
+  .opt.off:hover { background: transparent; }
+  .check { width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--line-strong); display: grid; place-items: center; color: var(--on-accent); font-size: 14px; flex: none; corner-shape: superellipse(1.4); }
+  .opt.on .check, .check.on { background: var(--accent); border-color: var(--accent); }
+  .check .ic { opacity: 0; }
+  .opt.on .check .ic, .check.on .ic { opacity: 1; }
+  .inline { display: flex; gap: 12px; align-items: center; }
+  .upload { width: 64px; height: 64px; border-radius: 50%; corner-shape: round; border: 2px dashed var(--line-strong); display: grid; place-items: center; color: var(--text-muted); font-size: 22px; flex: none; position: relative; cursor: pointer; }
+  .upload.set { border: 0; background: linear-gradient(135deg, oklch(0.7 0.12 30), oklch(0.6 0.12 330)); }
+  .upload .pen { position: absolute; right: -2px; bottom: -2px; width: 24px; height: 24px; border-radius: 50%; corner-shape: round; background: var(--text-strong); color: var(--bg-raised); display: grid; place-items: center; font-size: 13px; box-shadow: 0 0 0 3px var(--bg-raised); }
+  .tlabel { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; display: flex; }
+  .tlabel span { margin-left: auto; color: var(--text-faint); font-weight: 400; font-variant-numeric: tabular-nums; }
+  .linkish { color: var(--accent-ink); font-weight: 600; cursor: pointer; background: none; border: 0; font: inherit; padding: 0; }
+  .linkish.danger { color: var(--danger-ink); }
+  .tick { display: flex; gap: 10px; align-items: center; cursor: pointer; color: var(--text); }
+  .transfer { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 8px 0; color: var(--text-faint); font-size: 22px; }
+  .transfer .av { width: 64px; height: 64px; }
+
+  /* Member panel + menu */
+  .members { width: 240px; flex: none; margin: 8px; border-radius: var(--radius-lg); background: var(--bg-raised); padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+  .mem { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 8px; border-radius: var(--radius-md); cursor: pointer; position: relative; }
+  .mem:hover { background: var(--hover); }
+  .mem b { font-weight: 600; color: var(--text-strong); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mem .crown { color: var(--warning-ink); font-size: 14px; }
+  .mem.offline { opacity: 0.5; }
+  .invite { margin-top: auto; }
+  .menu { position: absolute; right: 120px; top: 30px; z-index: 5; width: 220px; padding: 6px; border-radius: var(--radius-lg); background: var(--bg-overlay); box-shadow: var(--shadow-pop); display: flex; flex-direction: column; }
+  .mi { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 8px; border-radius: var(--radius-sm); color: var(--text); font-weight: 500; cursor: pointer; }
+  .mi:hover { background: var(--hover); color: var(--text-strong); }
+  .mi .ic { font-size: 16px; color: var(--text-muted); }
+  .mi.danger, .mi.danger .ic { color: var(--danger-ink); }
+  .mi.danger:hover { background: var(--danger); color: oklch(0.99 0 0); }
+  .mi.danger:hover .ic { color: inherit; }
+  .sep { height: 1px; background: var(--line); margin: 4px 6px; }
+  .sysmsg { display: flex; gap: 12px; padding: 6px 16px; color: var(--text-muted); align-items: center; }
+  .sysmsg .ic { font-size: 18px; width: 40px; flex: none; }
+  .sysmsg b { color: var(--text-strong); font-weight: 600; }
+  .sysmsg .ic.add { color: var(--online-ink); }
+  .sysmsg .ic.rm { color: var(--danger-ink); }
+  .sysmsg time { color: var(--text-faint); font-size: 12px; }
+  .toast { display: inline-flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; border-radius: var(--radius-lg); background: var(--bg-overlay); box-shadow: var(--shadow-pop); color: var(--text-strong); }
+
+  /* Requests */
+  .banner { margin: 0 16px 8px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--bg-group); display: flex; align-items: center; gap: 12px; color: var(--text-muted); }
+  .banner .ic { font-size: 18px; color: var(--warning-ink); }
+  .empty { display: grid; place-items: center; text-align: center; gap: 8px; padding: 48px 16px; color: var(--text-muted); }
+  .empty b { color: var(--text-strong); font-size: 16px; }
+  .empty .glyph { width: 72px; height: 72px; border-radius: 24px; background: var(--bg-group); display: grid; place-items: center; font-size: 32px; color: var(--text-faint); }
+
+  /* Settings */
+  .settings { max-width: 640px; display: flex; flex-direction: column; gap: 24px; }
+  .sgroup { background: var(--bg-group); border-radius: var(--radius-lg); padding: 4px 16px; }
+  .sgroup h6 { margin: 12px 0 2px; font-size: 14px; color: var(--text-strong); }
+  .sgroup p { margin: 0 0 8px; color: var(--text-muted); }
+  .radio { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); cursor: pointer; color: var(--text-strong); }
+  .radio i { width: 18px; height: 18px; border-radius: 50%; corner-shape: round; border: 2px solid var(--line-strong); flex: none; }
+  .radio.on i { border: 5px solid var(--accent); }
+  .radio small { color: var(--text-faint); margin-left: 4px; }
+  .toggle { display: flex; gap: 16px; align-items: center; padding: 12px 0; }
+  .toggle .t { flex: 1; }
+  .toggle .t b { display: block; color: var(--text-strong); font-weight: 600; }
+  .toggle .t span { color: var(--text-muted); }
+  .switch { width: 40px; height: 24px; border-radius: 12px; background: var(--accent); position: relative; flex: none; cursor: pointer; border: 0; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 19px; width: 18px; height: 18px; border-radius: 50%; background: oklch(0.99 0 0); transition: left var(--dur-hover) var(--ease-out); }
+  .switch.off { background: var(--track-rest); }
+  .switch.off::after { left: 3px; }
+
+  @media (max-width: 1000px) { .now { display: none; } }
+  @media (max-width: 720px) { .side, .members { display: none; } .pills { overflow: auto; } }
+</style>
+<script>try{const t=localStorage.getItem("dmsocial-theme");if(t)document.documentElement.dataset.theme=t}catch{}</script>
+<script>/* Reicon subset (icons-data.js) */
+const REICON = {"arrow-left": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M10.53 5.47a.75.75 0 0 1 0 1.06l-4.72 4.72H20a.75.75 0 0 1 0 1.5H5.81l4.72 4.72a.75.75 0 1 1-1.06 1.06l-6-6a.75.75 0 0 1 0-1.06l6-6a.75.75 0 0 1 1.06 0\" clip-rule=\"evenodd\"/></g>", "arrow-right": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M13.47 5.47a.75.75 0 0 1 1.06 0l6 6a.75.75 0 0 1 0 1.06l-6 6a.75.75 0 1 1-1.06-1.06l4.72-4.72H4a.75.75 0 0 1 0-1.5h14.19l-4.72-4.72a.75.75 0 0 1 0-1.06\" clip-rule=\"evenodd\"/></g>", "camera": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M7.598 4.487c.267-1.31 1.433-2.237 2.768-2.237h3.268c1.335 0 2.5.927 2.768 2.237a.656.656 0 0 0 .62.524h.033c1.403.062 2.481.234 3.381.825c.567.372 1.055.85 1.435 1.409c.473.694.681 1.492.781 2.456c.098.943.098 2.124.098 3.62v.085c0 1.496 0 2.678-.098 3.62c-.1.964-.308 1.762-.781 2.457a5.2 5.2 0 0 1-1.435 1.409c-.703.461-1.51.665-2.488.762c-.958.096-2.159.096-3.685.096H9.737c-1.526 0-2.727 0-3.685-.096c-.978-.097-1.785-.3-2.488-.762a5.2 5.2 0 0 1-1.435-1.41c-.473-.694-.681-1.492-.781-2.456c-.098-.942-.098-2.124-.098-3.62v-.085c0-1.496 0-2.677.098-3.62c.1-.964.308-1.762.781-2.456a5.2 5.2 0 0 1 1.435-1.41c.9-.59 1.978-.762 3.381-.823l.017-.001h.016a.656.656 0 0 0 .62-.524m2.768-.737c-.64 0-1.177.443-1.298 1.036c-.195.96-1.047 1.716-2.072 1.725c-1.348.06-2.07.225-2.61.579a3.7 3.7 0 0 0-1.017.999c-.276.405-.442.924-.53 1.767c-.088.856-.089 1.96-.089 3.508s0 2.651.09 3.507c.087.843.253 1.362.53 1.768c.268.394.613.734 1.017.999c.417.273.951.438 1.814.524c.874.087 2 .088 3.577.088h4.444c1.576 0 2.702 0 3.577-.088c.863-.086 1.397-.25 1.814-.524c.404-.265.75-.605 1.018-1c.276-.405.442-.924.53-1.767c.088-.856.089-1.96.089-3.507s0-2.652-.09-3.508c-.087-.843-.253-1.362-.53-1.767a3.7 3.7 0 0 0-1.017-1c-.538-.353-1.26-.518-2.61-.578c-1.024-.01-1.876-.764-2.071-1.725a1.314 1.314 0 0 0-1.298-1.036zm1.634 7a2.25 2.25 0 1 0 0 4.5a2.25 2.25 0 0 0 0-4.5M8.25 13a3.75 3.75 0 1 1 7.5 0a3.75 3.75 0 0 1-7.5 0m9-3a.75.75 0 0 1 .75-.75h1a.75.75 0 0 1 0 1.5h-1a.75.75 0 0 1-.75-.75\" clip-rule=\"evenodd\"/></g>", "chat-round": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M22.75 12c0-5.937-4.813-10.75-10.75-10.75S1.25 6.063 1.25 12c0 1.718.404 3.345 1.122 4.787c.107.215.13.435.08.62l-.595 2.226c-.408 1.524.986 2.918 2.51 2.51l2.226-.596a.9.9 0 0 1 .62.08A10.7 10.7 0 0 0 12 22.75c5.937 0 10.75-4.813 10.75-10.75M12 2.75a9.25 9.25 0 0 1 0 18.5a9.2 9.2 0 0 1-4.118-.965a2.38 2.38 0 0 0-1.676-.187l-2.227.596a.55.55 0 0 1-.673-.674l.596-2.226a2.38 2.38 0 0 0-.187-1.676A9.2 9.2 0 0 1 2.75 12A9.25 9.25 0 0 1 12 2.75\" clip-rule=\"evenodd\"/></g>", "check": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path d=\"M21.5303 5.46967C21.8232 5.76256 21.8232 6.23744 21.5303 6.53033L9.53033 18.5303C9.23744 18.8232 8.76256 18.8232 8.46967 18.5303L2.46967 12.5303C2.17678 12.2374 2.17678 11.7626 2.46967 11.4697C2.76256 11.1768 3.23744 11.1768 3.53033 11.4697L9 16.9393L20.4697 5.46967C20.7626 5.17678 21.2374 5.17678 21.5303 5.46967Z\" fill=\"currentColor\"/></g>", "crown": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M12 2.25a2.75 2.75 0 0 0-1.898 4.74l-.2.356l-1.797 3.223a8 8 0 0 1-.373.633a1 1 0 0 1-.06.077a1 1 0 0 1-.08-.058a8 8 0 0 1-.533-.507l-.08-.079a24 24 0 0 0-.872-.844a2.25 2.25 0 1 0-2.848 1.334l.01.173c.024.325.066.714.113 1.158l.185 1.717l.087.83c.112 1.083.22 2.118.38 2.991c.1.552.228 1.072.404 1.523c.175.448.417.875.774 1.195c.63.564 1.39.81 2.296.926c.875.112 1.978.112 3.352.112h2.28c1.374 0 2.477 0 3.352-.112c.907-.116 1.666-.362 2.296-.926c.357-.32.599-.747.774-1.195c.176-.451.304-.971.405-1.523c.16-.873.267-1.908.379-2.99l.087-.83l.185-1.717c.047-.445.09-.834.112-1.159l.011-.173a2.25 2.25 0 1 0-2.848-1.334c-.264.237-.554.526-.873.844l-.079.079c-.258.258-.412.41-.533.507a1 1 0 0 1-.08.058a1 1 0 0 1-.06-.077a8 8 0 0 1-.373-.633l-1.797-3.223l-.2-.356A2.75 2.75 0 0 0 12 2.25M10.75 5a1.25 1.25 0 1 1 2.5 0a1.25 1.25 0 0 1-2.5 0m.455 3.09q.12-.217.224-.4a2.8 2.8 0 0 0 1.142 0q.104.183.224.4l1.807 3.24c.155.278.298.535.438.734c.149.211.351.445.662.582c.268.118.564.159.854.119c.336-.047.595-.216.796-.378c.188-.153.397-.361.624-.586l.024-.024c.375-.374.65-.645.86-.837q.18.106.379.178l-.005.074c-.02.294-.06.657-.11 1.116l-.182 1.705l-.092.87c-.07.67-.134 1.295-.209 1.867H5.359a72 72 0 0 1-.21-1.868l-.09-.87l-.184-1.704a34 34 0 0 1-.114-1.19q.2-.073.38-.178c.21.192.484.463.86.837l.023.024c.227.225.436.433.624.586c.201.162.46.331.796.378c.29.04.586-.001.854-.12c.31-.136.514-.37.662-.581a9 9 0 0 0 .438-.735zM5.618 18.25q.097.414.217.72c.13.33.261.52.377.624c.317.283.739.46 1.487.556c.768.099 1.775.1 3.213.1h2.176c1.438 0 2.445-.001 3.213-.1c.748-.095 1.17-.273 1.487-.556c.116-.104.248-.294.377-.623q.12-.307.217-.721zM3.25 9a.75.75 0 1 1 .759.75H4A.75.75 0 0 1 3.25 9m16 0a.75.75 0 1 1 .75.75h-.009A.747.747 0 0 1 19.25 9\" clip-rule=\"evenodd\"/></g>", "dark-light": "<g fill=\"none\"><path fill=\"currentColor\" d=\"M12 8v8a4 4 0 1 0 0-8m0 8a4 4 0 1 1 0-8V2.333c-5.339 0-9.667 4.328-9.667 9.667S6.661 21.667 12 21.667z\"/><circle cx=\"12\" cy=\"12\" r=\"9.667\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"/></g>", "envelope-unread": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M19 2.75a2.25 2.25 0 1 0 0 4.5a2.25 2.25 0 0 0 0-4.5M15.25 5a3.75 3.75 0 1 1 7.5 0a3.75 3.75 0 0 1-7.5 0M9.944 3.25H13a.75.75 0 0 1 0 1.5h-3c-1.907 0-3.261.002-4.29.14c-1.005.135-1.585.389-2.008.812S3.025 6.705 2.89 7.71c-.138 1.028-.14 2.382-.14 4.289s.002 3.262.14 4.29c.135 1.005.389 1.585.812 2.008s1.003.677 2.009.812c1.028.138 2.382.14 4.289.14h4c1.907 0 3.262-.002 4.29-.14c1.005-.135 1.585-.389 2.008-.812s.677-1.003.812-2.009c.138-1.028.14-2.382.14-4.289c0-.373.003-.645.005-.88c.004-.379.007-.658-.005-1.1a.75.75 0 0 1 1.5-.04c.012.467.009.785.005 1.187c-.002.234-.005.497-.005.833v.056c0 1.838 0 3.294-.153 4.433c-.158 1.172-.49 2.121-1.238 2.87c-.749.748-1.698 1.08-2.87 1.238c-1.14.153-2.595.153-4.433.153H9.944c-1.838 0-3.294 0-4.433-.153c-1.172-.158-2.121-.49-2.87-1.238c-.748-.749-1.08-1.698-1.238-2.87c-.153-1.14-.153-2.595-.153-4.433v-.112c0-1.838 0-3.294.153-4.433c.158-1.172.49-2.121 1.238-2.87c.749-.748 1.698-1.08 2.87-1.238c1.14-.153 2.595-.153 4.433-.153m-4.52 4.27a.75.75 0 0 1 1.056-.096l2.16 1.8c.933.777 1.58 1.315 2.128 1.667c.529.34.888.455 1.233.455s.704-.114 1.233-.455c.547-.352 1.195-.89 2.128-1.667a.75.75 0 1 1 .96 1.152l-.037.032c-.887.738-1.605 1.337-2.24 1.745c-.66.425-1.303.693-2.044.693s-1.384-.269-2.045-.693c-.634-.408-1.352-1.007-2.239-1.745L5.52 8.577a.75.75 0 0 1-.096-1.057\" clip-rule=\"evenodd\"/></g>", "forbidden": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M10.706 1.25c-1.087 0-1.843 0-2.535.286c-.691.286-1.225.82-1.994 1.59l-3.05 3.05c-.77.77-1.305 1.304-1.591 1.995S1.25 9.62 1.25 10.706v2.588c0 1.088 0 1.843.286 2.535c.286.691.82 1.226 1.59 1.994l3.05 3.05c.77.77 1.304 1.305 1.995 1.592c.692.286 1.448.286 2.535.285h2.588c1.088 0 1.843.001 2.535-.285c.691-.287 1.226-.822 1.994-1.591l3.05-3.05c.77-.77 1.305-1.304 1.592-1.995c.286-.692.286-1.447.285-2.535v-2.588c0-1.087.001-1.843-.285-2.535c-.287-.691-.822-1.225-1.591-1.994l-3.05-3.05c-.77-.77-1.304-1.305-1.995-1.591s-1.447-.286-2.535-.286zm-1.96 1.671c.38-.158.816-.17 2.103-.17h2.302c1.288 0 1.722.012 2.104.17c.381.158.698.456 1.608 1.367l.895.894L5.182 17.758l-.894-.895c-.91-.91-1.209-1.227-1.367-1.608c-.158-.382-.17-.816-.17-2.104V10.85c0-1.287.012-1.722.17-2.104c.158-.381.456-.698 1.367-1.608l2.849-2.85c.91-.91 1.227-1.208 1.608-1.366M6.241 18.818l.895.894c.91.91 1.227 1.209 1.608 1.367c.382.158.817.171 2.104.171h2.302c1.288 0 1.722-.013 2.104-.171c.381-.158.698-.456 1.608-1.367l2.85-2.849c.91-.91 1.208-1.227 1.366-1.608c.158-.382.171-.816.171-2.104V10.85c0-1.287-.013-1.722-.171-2.104c-.158-.381-.456-.698-1.367-1.608l-.894-.894z\" clip-rule=\"evenodd\"/></g>", "image": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><g fill=\"currentColor\" fill-rule=\"evenodd\" clip-rule=\"evenodd\"><path d=\"M7.5 6.75a2.25 2.25 0 1 0 0 4.5a2.25 2.25 0 0 0 0-4.5M6.75 9a.75.75 0 1 1 1.5 0a.75.75 0 0 1-1.5 0\"/><path d=\"M7.067 2.75h9.866c.952 0 1.713 0 2.327.05c.63.052 1.172.16 1.67.413a4.25 4.25 0 0 1 1.857 1.858c.253.497.361 1.04.413 1.67c.05.613.05 1.374.05 2.326v5.913c0 .943 0 1.696-.052 2.306c-.053.619-.16 1.153-.411 1.644a4.25 4.25 0 0 1-1.857 1.857c-.498.254-1.04.361-1.67.413c-.614.05-1.375.05-2.327.05H7.068c-.953 0-1.713 0-2.328-.05c-.63-.052-1.172-.16-1.67-.413l-.037-.02a4.25 4.25 0 0 1-1.82-1.838C.96 18.433.852 17.89.8 17.26c-.05-.613-.05-1.374-.05-2.326V9.067c0-.952 0-1.713.05-2.327c.052-.63.16-1.172.413-1.67a4.25 4.25 0 0 1 1.858-1.857c.497-.253 1.04-.361 1.67-.413c.613-.05 1.374-.05 2.326-.05M21.75 9.1v4.07l-4.013-4.013a1.75 1.75 0 0 0-2.474 0L9.499 14.92l-1.242-1.243a1.75 1.75 0 0 0-2.475 0l-3.485 3.485l-.002-.024c-.044-.546-.045-1.246-.045-2.238V9.1c0-.992 0-1.692.045-2.238c.044-.537.127-.86.255-1.11A2.75 2.75 0 0 1 3.752 4.55c.25-.128.573-.21 1.11-.255c.546-.044 1.246-.045 2.238-.045h9.8c.992 0 1.692 0 2.238.045c.537.044.86.127 1.11.255a2.75 2.75 0 0 1 1.202 1.202c.128.25.21.573.255 1.11c.044.546.045 1.246.045 2.238M3.656 19.399a2.7 2.7 0 0 1-.799-.676l3.985-3.985a.25.25 0 0 1 .354 0l1.773 1.773a.75.75 0 0 0 1.06 0l6.294-6.293a.25.25 0 0 1 .354 0l5.073 5.073c-.001.79-.007 1.375-.045 1.847c-.044.537-.127.86-.255 1.11a2.75 2.75 0 0 1-1.201 1.202c-.252.128-.574.21-1.111.255c-.546.044-1.246.045-2.238.045H7.1c-.992 0-1.692 0-2.238-.045c-.537-.044-.86-.127-1.11-.255z\"/></g></g>", "inbox": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M11.943 1.25h.114c2.309 0 4.118 0 5.53.19c1.444.194 2.584.6 3.479 1.494c.895.895 1.3 2.035 1.494 3.48c.19 1.411.19 3.22.19 5.529v1.087c-.004 1.852-.027 3.35-.19 4.556c-.194 1.445-.6 2.585-1.494 3.48c-.895.895-2.035 1.3-3.48 1.494c-1.411.19-3.22.19-5.529.19h-.114c-2.309 0-4.118 0-5.53-.19c-1.444-.194-2.584-.6-3.479-1.494c-.895-.895-1.3-2.035-1.494-3.48c-.163-1.207-.186-2.704-.19-4.556v-1.087c0-2.309 0-4.118.19-5.53c.194-1.444.6-2.584 1.494-3.479c.895-.895 2.035-1.3 3.48-1.494c1.411-.19 3.22-.19 5.529-.19m-9.19 12.5c.01 1.503.045 2.68.173 3.636c.172 1.279.5 2.05 1.069 2.62c.57.569 1.34.896 2.619 1.068c1.3.174 3.008.176 5.386.176s4.086-.002 5.386-.176c1.279-.172 2.05-.5 2.62-1.069c.569-.57.896-1.34 1.068-2.619c.128-.956.163-2.133.172-3.636H18.84c-.974 0-1.229.016-1.442.114c-.214.099-.392.282-1.026 1.02l-.605.707l-.088.102c-.502.587-.9 1.052-1.45 1.305s-1.162.253-1.934.252h-.589c-.773 0-1.385.002-1.935-.252c-.55-.253-.948-.718-1.45-1.305l-.088-.102l-.605-.706c-.634-.74-.812-.922-1.026-1.02c-.213-.099-.468-.115-1.442-.115zm18.497-1.5h-2.544c-.773 0-1.385-.002-1.935.252c-.55.253-.948.718-1.45 1.305l-.088.102l-.605.706c-.634.74-.812.922-1.026 1.02c-.213.099-.468.115-1.442.115h-.32c-.974 0-1.229-.016-1.442-.114c-.214-.099-.392-.282-1.026-1.02l-.605-.707l-.088-.102c-.502-.587-.9-1.052-1.45-1.305c-.55-.254-1.162-.253-1.934-.252H2.75V12c0-2.378.002-4.086.176-5.386c.172-1.279.5-2.05 1.069-2.62c.57-.569 1.34-.896 2.619-1.068c1.3-.174 3.008-.176 5.386-.176s4.086.002 5.386.176c1.279.172 2.05.5 2.62 1.069c.569.57.896 1.34 1.068 2.619c.174 1.3.176 3.008.176 5.386z\" clip-rule=\"evenodd\"/></g>", "message-add": "<g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\" stroke-width=\"2\"><path d=\"M22 7.43v6c0 1.5-.5 2.75-1.38 3.63c-.87.87-2.12 1.37-3.62 1.37v2.13c0 .8-.89 1.28-1.55.84L11 18.43H8.88q.12-.45.12-.93c0-1.02-.39-1.96-1.03-2.67A3.94 3.94 0 0 0 5 13.5c-1.12 0-2.14.46-2.87 1.21c-.09-.4-.13-.83-.13-1.28v-6c0-3 2-5 5-5h10c3 0 5 2 5 5\"/><path d=\"M9 17.5q0 .48-.12.93c-.09.4-.25.79-.46 1.13A3.97 3.97 0 0 1 5 21.5a3.92 3.92 0 0 1-2.66-1.03c-.3-.26-.56-.57-.76-.91A3.9 3.9 0 0 1 1 17.5a3.995 3.995 0 0 1 4-4c1.18 0 2.25.51 2.97 1.33c.64.71 1.03 1.65 1.03 2.67m-2.51-.02H3.51M5 16.02v2.99m3.5-8.51h7\"/></g>", "music-notes": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M8.512 3.698A2.44 2.44 0 0 0 10 4.25a.75.75 0 0 1 0 1.5c-.72 0-1.551-.24-2.25-.745V11c0 .16-.05.307-.135.429A3.252 3.252 0 0 1 1.25 10.5a3.25 3.25 0 0 1 5-2.74V2h1.5c0 .798.328 1.34.762 1.698M6.25 10.5a1.75 1.75 0 1 0-3.5 0a1.75 1.75 0 0 0 3.5 0m13.323-6.559c-.672.171-1.552.537-2.828 1.071l-2 .838c-.61.255-1.012.424-1.308.588c-.28.154-.4.27-.478.386s-.137.272-.171.59c-.037.336-.038.772-.038 1.434v2.044l8.5-3.4c-.002-1.108-.015-1.907-.103-2.503c-.1-.672-.27-.901-.454-1.024c-.185-.123-.463-.191-1.12-.024m3.177 4.042v-.035c0-1.306 0-2.37-.12-3.179c-.123-.836-.4-1.582-1.106-2.053c-.708-.47-1.503-.437-2.322-.228c-.792.201-1.774.612-2.978 1.116l-2.094.877c-.565.236-1.043.436-1.418.644c-.4.22-.743.48-1.001.868s-.366.805-.415 1.259c-.046.426-.046.944-.046 1.556v7.953A3.25 3.25 0 1 0 12.712 19h.038v-6.493l8.5-3.4v5.653a3.25 3.25 0 1 0 1.482 2.393h.018zM19.5 15.75a1.75 1.75 0 1 0 0 3.5a1.75 1.75 0 0 0 0-3.5m-10 2a1.75 1.75 0 1 0 0 3.5a1.75 1.75 0 0 0 0-3.5\" clip-rule=\"evenodd\"/></g>", "note-text": "<path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-miterlimit=\"10\" stroke-width=\"2\" d=\"M8 2v3m8-3v3m5 3.5V17c0 3-1.5 5-5 5H8c-3.5 0-5-2-5-5V8.5c0-3 1.5-5 5-5h8c3.5 0 5 2 5 5M8 11h8m-8 5h4\"/>", "pen": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M14.757 2.621a4.682 4.682 0 0 1 6.622 6.622l-9.486 9.486c-.542.542-.86.86-1.216 1.137q-.628.492-1.35.835c-.406.193-.834.336-1.56.578l-3.332 1.11l-.802.268a1.81 1.81 0 0 1-2.29-2.29l1.378-4.133c.242-.727.385-1.155.578-1.562q.344-.72.835-1.35c.276-.354.595-.673 1.137-1.215zM4.4 20.821l2.841-.948c.791-.264 1.127-.377 1.44-.526q.572-.274 1.073-.663c.273-.214.525-.463 1.115-1.053l7.57-7.57a7.36 7.36 0 0 1-2.757-1.744A7.36 7.36 0 0 1 13.94 5.56l-7.57 7.57c-.59.589-.84.84-1.053 1.114q-.39.5-.663 1.073c-.149.313-.262.649-.526 1.44L3.18 19.6zM15.155 4.343c.035.175.092.413.189.69a5.86 5.86 0 0 0 1.4 2.222a5.86 5.86 0 0 0 2.221 1.4c.278.097.516.154.691.189l.662-.662a3.182 3.182 0 0 0-4.5-4.5z\" clip-rule=\"evenodd\"/></g>", "phone": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M5.733 2.043c1.217-1.21 3.221-.995 4.24.367l1.262 1.684c.83 1.108.756 2.656-.229 3.635l-.238.238a.65.65 0 0 0-.008.306c.063.408.404 1.272 1.832 2.692s2.298 1.76 2.712 1.824a.7.7 0 0 0 .315-.009l.408-.406c.876-.87 2.22-1.033 3.304-.444l1.91 1.04c1.637.888 2.05 3.112.71 4.445l-1.421 1.412c-.448.445-1.05.816-1.784.885c-1.81.169-6.027-.047-10.46-4.454c-4.137-4.114-4.931-7.702-5.032-9.47l.749-.042l-.749.042c-.05-.894.372-1.65.91-2.184zm3.04 1.266c-.507-.677-1.451-.731-1.983-.202l-1.57 1.56c-.33.328-.488.69-.468 1.036c.08 1.405.72 4.642 4.592 8.492c4.062 4.038 7.813 4.159 9.263 4.023c.296-.027.59-.181.865-.454l1.42-1.413c.578-.574.451-1.62-.367-2.064l-1.91-1.039c-.528-.286-1.146-.192-1.53.19l-.455.453l-.53-.532c.53.532.529.533.528.533l-.001.002l-.003.003l-.007.006l-.015.014a1 1 0 0 1-.136.106c-.08.053-.186.112-.319.161c-.27.101-.628.155-1.07.087c-.867-.133-2.016-.724-3.543-2.242c-1.526-1.518-2.122-2.66-2.256-3.526c-.069-.442-.014-.8.088-1.07a1.5 1.5 0 0 1 .238-.42l.032-.035l.014-.015l.006-.006l.003-.003l.002-.002l.53.53l-.53-.531l.288-.285c.428-.427.488-1.134.085-1.673z\" clip-rule=\"evenodd\"/></g>", "pin": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M3.25 10.143C3.25 5.244 7.155 1.25 12 1.25s8.75 3.994 8.75 8.893c0 2.365-.674 4.905-1.866 7.099c-1.19 2.191-2.928 4.095-5.103 5.112a4.2 4.2 0 0 1-3.562 0c-2.175-1.017-3.913-2.92-5.103-5.112c-1.192-2.194-1.866-4.734-1.866-7.099M12 2.75c-3.992 0-7.25 3.297-7.25 7.393c0 2.097.603 4.392 1.684 6.383c1.082 1.993 2.612 3.624 4.42 4.469a2.7 2.7 0 0 0 2.291 0c1.809-.845 3.339-2.476 4.421-4.469c1.081-1.99 1.684-4.286 1.684-6.383c0-4.096-3.258-7.393-7.25-7.393m0 5a2.25 2.25 0 1 0 0 4.5a2.25 2.25 0 0 0 0-4.5M8.25 10a3.75 3.75 0 1 1 7.5 0a3.75 3.75 0 0 1-7.5 0\" clip-rule=\"evenodd\"/></g>", "shield-tick": "<g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"><path d=\"M10.49 2.23L5.5 4.11c-1.15.43-2.09 1.79-2.09 3.01v7.43c0 1.18.78 2.73 1.73 3.44l4.3 3.21c1.41 1.06 3.73 1.06 5.14 0l4.3-3.21c.95-.71 1.73-2.26 1.73-3.44V7.12c0-1.23-.94-2.59-2.09-3.02l-4.99-1.87c-.85-.31-2.21-.31-3.04 0\"/><path d=\"m9.05 11.87l1.61 1.61l4.3-4.3\"/></g>", "user": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M12 1.25a4.75 4.75 0 1 0 0 9.5a4.75 4.75 0 0 0 0-9.5M8.75 6a3.25 3.25 0 1 1 6.5 0a3.25 3.25 0 0 1-6.5 0M12 12.25c-2.313 0-4.445.526-6.024 1.414C4.42 14.54 3.25 15.866 3.25 17.5v.102c-.001 1.162-.002 2.62 1.277 3.662c.629.512 1.51.877 2.7 1.117c1.192.242 2.747.369 4.773.369s3.58-.127 4.774-.369c1.19-.24 2.07-.605 2.7-1.117c1.279-1.042 1.277-2.5 1.276-3.662V17.5c0-1.634-1.17-2.96-2.725-3.836c-1.58-.888-3.711-1.414-6.025-1.414M4.75 17.5c0-.851.622-1.775 1.961-2.528c1.316-.74 3.184-1.222 5.29-1.222c2.104 0 3.972.482 5.288 1.222c1.34.753 1.961 1.677 1.961 2.528c0 1.308-.04 2.044-.724 2.6c-.37.302-.99.597-2.05.811c-1.057.214-2.502.339-4.476.339s-3.42-.125-4.476-.339c-1.06-.214-1.68-.509-2.05-.81c-.684-.557-.724-1.293-.724-2.601\" clip-rule=\"evenodd\"/></g>", "user-add": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><g fill=\"currentColor\"><path fill-rule=\"evenodd\" d=\"M7.25 6a4.75 4.75 0 1 1 9.5 0a4.75 4.75 0 0 1-9.5 0M12 2.75a3.25 3.25 0 1 0 0 6.5a3.25 3.25 0 0 0 0-6.5\" clip-rule=\"evenodd\"/><path d=\"M18 13.917a.75.75 0 0 1 .75.75v.583h.583a.75.75 0 0 1 0 1.5h-.583v.583a.75.75 0 0 1-1.5 0v-.583h-.583a.75.75 0 0 1 0-1.5h.583v-.583a.75.75 0 0 1 .75-.75\"/><path fill-rule=\"evenodd\" d=\"M14.775 12.513A14.5 14.5 0 0 0 12 12.25c-2.313 0-4.445.526-6.024 1.414C4.42 14.54 3.25 15.866 3.25 17.5v.102c-.001 1.162-.002 2.62 1.277 3.662c.629.512 1.51.877 2.7 1.117c1.192.242 2.747.369 4.773.369c2.868 0 4.81-.254 6.12-.741c1.179-.44 1.877-1.082 2.25-1.892a4.75 4.75 0 1 0-5.596-7.604M6.71 14.972c-1.34.753-1.96 1.677-1.96 2.528c0 1.308.04 2.044.723 2.6c.37.302.99.597 2.05.811c1.057.214 2.502.339 4.476.339c2.578 0 4.24-.213 5.311-.55a4.75 4.75 0 0 1-3.555-6.835A13 13 0 0 0 12 13.75c-2.105 0-3.973.482-5.289 1.222M14.751 16a3.25 3.25 0 1 1 6.5 0a3.25 3.25 0 0 1-6.5 0\" clip-rule=\"evenodd\"/></g></g>", "user-minus": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><g fill=\"currentColor\"><path fill-rule=\"evenodd\" d=\"M12 1.25a4.75 4.75 0 1 0 0 9.5a4.75 4.75 0 0 0 0-9.5M8.75 6a3.25 3.25 0 1 1 6.5 0a3.25 3.25 0 0 1-6.5 0\" clip-rule=\"evenodd\"/><path d=\"M17 15.25a.75.75 0 0 0 0 1.5h2a.75.75 0 0 0 0-1.5z\"/><path fill-rule=\"evenodd\" d=\"M12 12.25c.969 0 1.902.092 2.775.263a4.75 4.75 0 1 1 5.596 7.604c-.374.81-1.072 1.453-2.251 1.892c-1.31.487-3.252.741-6.12.741c-2.026 0-3.58-.127-4.774-.369c-1.19-.24-2.07-.605-2.7-1.117c-1.278-1.042-1.277-2.5-1.276-3.662V17.5c0-1.634 1.17-2.96 2.726-3.836c1.58-.888 3.71-1.414 6.024-1.414M4.75 17.5c0-.851.622-1.775 1.961-2.528c1.316-.74 3.184-1.222 5.29-1.222c.605 0 1.193.04 1.755.115A4.75 4.75 0 0 0 17.31 20.7c-1.07.337-2.733.55-5.31.55c-1.975 0-3.42-.125-4.477-.339c-1.06-.214-1.68-.509-2.05-.81c-.684-.557-.724-1.293-.724-2.601M18 12.75a3.25 3.25 0 1 0 0 6.5a3.25 3.25 0 0 0 0-6.5\" clip-rule=\"evenodd\"/></g></g>", "users": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><g fill=\"currentColor\"><path fill-rule=\"evenodd\" d=\"M9 1.25a4.75 4.75 0 1 0 0 9.5a4.75 4.75 0 0 0 0-9.5M5.75 6a3.25 3.25 0 1 1 6.5 0a3.25 3.25 0 0 1-6.5 0\" clip-rule=\"evenodd\"/><path d=\"M15 2.25a.75.75 0 0 0 0 1.5a2.25 2.25 0 0 1 0 4.5a.75.75 0 0 0 0 1.5a3.75 3.75 0 1 0 0-7.5\"/><path fill-rule=\"evenodd\" d=\"M3.678 13.52c1.4-.8 3.283-1.27 5.322-1.27s3.922.47 5.322 1.27c1.378.788 2.428 1.99 2.428 3.48s-1.05 2.692-2.428 3.48c-1.4.8-3.283 1.27-5.322 1.27s-3.922-.47-5.322-1.27C2.3 19.692 1.25 18.49 1.25 17s1.05-2.692 2.428-3.48m.744 1.303C3.267 15.483 2.75 16.28 2.75 17s.517 1.517 1.672 2.177C5.556 19.825 7.173 20.25 9 20.25s3.444-.425 4.578-1.073c1.155-.66 1.672-1.458 1.672-2.177s-.517-1.517-1.672-2.177C12.444 14.175 10.827 13.75 9 13.75s-3.444.425-4.578 1.073\" clip-rule=\"evenodd\"/><path d=\"M18.16 13.267a.75.75 0 0 0-.32 1.466c.792.173 1.425.472 1.843.814s.567.677.567.953c0 .25-.12.545-.453.854c-.335.311-.85.598-1.513.798a.75.75 0 1 0 .432 1.437c.823-.248 1.558-.631 2.102-1.136c.546-.507.932-1.174.932-1.953c0-.865-.474-1.588-1.117-2.114c-.644-.527-1.51-.908-2.472-1.119\"/></g></g>", "video": "<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M12.332 3.75H6.168c-.883 0-1.591 0-2.164.047c-.588.048-1.099.149-1.57.389A4 4 0 0 0 .686 5.934c-.24.471-.341.982-.39 1.57C.25 8.077.25 8.785.25 9.668v4.664c0 .883 0 1.591.047 2.164c.048.588.149 1.099.389 1.57a4 4 0 0 0 1.748 1.748c.471.24.982.341 1.57.39c.573.046 1.281.046 2.164.046h6.164c.883 0 1.591 0 2.164-.047c.588-.048 1.099-.149 1.57-.389a4 4 0 0 0 1.748-1.748c.24-.471.341-.982.39-1.57c.03-.373.04-.804.044-1.302l2.742 2.492c1.06.964 2.76.212 2.76-1.22V7.535c0-1.433-1.7-2.185-2.76-1.221l-2.742 2.492a18 18 0 0 0-.045-1.302c-.048-.588-.149-1.099-.389-1.57a4 4 0 0 0-1.748-1.748c-.471-.24-.982-.341-1.57-.39c-.573-.046-1.281-.046-2.164-.046m5.918 7.082v2.336L22 16.577a.14.14 0 0 0 .076.04a.2.2 0 0 0 .085-.014a.16.16 0 0 0 .066-.054a.14.14 0 0 0 .023-.083V7.535a.14.14 0 0 0-.023-.084a.16.16 0 0 0-.066-.054a.16.16 0 0 0-.085-.013a.14.14 0 0 0-.077.04zM16.75 9.7c0-.922 0-1.57-.042-2.074c-.04-.495-.116-.787-.23-1.011a2.5 2.5 0 0 0-1.093-1.093c-.224-.114-.516-.19-1.011-.23c-.505-.041-1.152-.042-2.074-.042H6.2c-.922 0-1.57 0-2.074.042c-.495.04-.787.116-1.011.23a2.5 2.5 0 0 0-1.093 1.093c-.114.224-.19.516-.23 1.011c-.041.505-.042 1.152-.042 2.074v4.6c0 .922 0 1.57.042 2.073c.04.496.116.788.23 1.012a2.5 2.5 0 0 0 1.093 1.092c.224.115.516.19 1.011.231c.505.041 1.152.042 2.074.042h6.1c.922 0 1.57 0 2.073-.042c.496-.04.788-.116 1.012-.23a2.5 2.5 0 0 0 1.092-1.093c.115-.224.19-.516.231-1.012c.041-.504.042-1.15.042-2.073z\" clip-rule=\"evenodd\"/></g>", "volume-high": "<g fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M2 10v4q0 3 3 3h1.43c.37 0 .74.11 1.06.3l2.92 1.83c2.52 1.58 4.59.43 4.59-2.54V7.41c0-2.98-2.07-4.12-4.59-2.54L7.49 6.7c-.32.19-.69.3-1.06.3H5q-3 0-3 3Z\"/><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M18 8a6.66 6.66 0 0 1 0 8m1.83-10.5a10.83 10.83 0 0 1 0 13\"/></g>", "xmark": "<path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M18.667 5.333L5.333 18.667m0-13.334l13.334 13.334\"/>"};</script>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>Group DMs, Active Now, Message Requests</h1>
+    <button class="btn" id="theme"><span data-ic="dark-light"></span>Light / dark</button>
+  </header>
+  <p class="lede">Behaviour, copy, limits and endpoints follow Discord's client (docs/discord-*-re.md). Surfaces are Waffle's: the DM list, friends page, dialogs and menus already in the app. Proposed "do better" touches are marked <b>Better</b>.</p>
+
+  <!-- 1. GROUP DMS -->
+  <h2>1. Group DMs</h2>
+  <p class="note">A group gets Discord's header tools: call, video, pins, <b>Add Members</b> (the person-plus icon) and the member list toggle. The member list is the floating member card, owner marked with a crown. Right-click a member for Discord's group items; right-click the group in the DM list for <b>Edit Group</b> and <b>Leave Group</b>.</p>
+  <div class="stage">
+    <div class="side">
+      <div class="row"><span data-ic="users"></span><span class="grow">Friends</span></div>
+      <div class="row"><span data-ic="envelope-unread"></span><span class="grow">Message Requests</span><span class="badge">3</span></div>
+      <div class="cap">Direct Messages</div>
+      <div class="row dmrow sel" id="gdm-row"><span class="gface"><span class="av" style="background:oklch(0.65 0.12 30)"></span><span class="av" style="background:oklch(0.62 0.1 230)"></span></span><span class="grow">road trip 🚐<small>5 members</small></span></div>
+      <div class="row dmrow"><span class="av" style="background:oklch(0.64 0.11 150)"><span class="dot"></span></span><span class="grow">Rosa</span></div>
+      <div class="row dmrow"><span class="av" style="background:oklch(0.6 0.1 300)"></span><span class="grow">mikey</span></div>
+    </div>
+    <div class="pane">
+      <div class="bar">
+        <div class="title"><span class="gface" style="width:24px;height:24px"><span class="av" style="width:16px;height:16px;background:oklch(0.65 0.12 30)"></span><span class="av" style="width:16px;height:16px;background:oklch(0.62 0.1 230)"></span></span>road trip 🚐</div>
+        <div class="tools">
+          <button class="iconbtn" aria-label="Start Voice Call" title="Start Voice Call"><span data-ic="phone"></span></button>
+          <button class="iconbtn" aria-label="Start Video Call" title="Start Video Call"><span data-ic="video"></span></button>
+          <button class="iconbtn" aria-label="Pinned Messages" title="Pinned Messages"><span data-ic="pin"></span></button>
+          <button class="iconbtn" aria-label="Add Members" title="Add Members" id="open-add"><span data-ic="user-add"></span></button>
+          <button class="iconbtn on" aria-label="Hide Member List" title="Hide Member List"><span data-ic="users"></span></button>
+        </div>
+      </div>
+      <div class="body">
+        <div class="list" style="padding:16px 0">
+          <div class="sysmsg"><span class="ic add" data-ic="arrow-right"></span><span><b>kiwi</b> added <b>Rosa</b> to the group. <time>Today at 4:12 PM</time></span></div>
+          <div class="sysmsg"><span class="ic" data-ic="pen"></span><span><b>Rosa</b> changed the group name: <b>road trip 🚐</b>. <button class="linkish">Edit Group</button> <time>Today at 4:13 PM</time></span></div>
+          <div class="sysmsg"><span class="ic" data-ic="image"></span><span><b>Rosa</b> changed the group icon. <button class="linkish">Edit Group</button> <time>Today at 4:14 PM</time></span></div>
+          <div class="sysmsg"><span class="ic rm" data-ic="arrow-left"></span><span><b>superman</b> left the group. <time>Today at 5:02 PM</time></span></div>
+          <div class="sysmsg"><span class="ic rm" data-ic="arrow-left"></span><span><b>kiwi</b> removed <b>valse</b> from the group. <time>Today at 5:03 PM</time></span></div>
+          <p class="note" style="padding:12px 16px 0">System messages 1, 2, 4, 5 with Discord's copy; "Edit Group" opens the Edit Group dialog.</p>
+        </div>
+        <div class="members">
+          <div class="label" style="padding-top:8px">Members · 5</div>
+          <div class="mem"><span class="av" style="background:oklch(0.65 0.12 70)"></span><b>kiwi</b><span class="crown" data-ic="crown" title="Group Owner"></span></div>
+          <div class="mem" id="rosa"><span class="av" style="background:oklch(0.64 0.11 150)"></span><b>Rosa</b>
+            <div class="menu" role="menu">
+              <div class="mi"><span data-ic="user"></span>Profile</div>
+              <div class="mi"><span data-ic="chat-round"></span>Message</div>
+              <div class="mi"><span data-ic="phone"></span>Call</div>
+              <div class="mi"><span data-ic="note-text"></span>Add Note</div>
+              <div class="sep"></div>
+              <div class="mi danger"><span data-ic="user-minus"></span>Remove From Group</div>
+              <div class="mi danger" id="mk-owner"><span data-ic="crown"></span>Make Group Owner</div>
+              <div class="sep"></div>
+              <div class="mi"><span data-ic="user-minus"></span>Remove Friend</div>
+              <div class="mi"><span data-ic="forbidden"></span>Block</div>
+            </div>
+          </div>
+          <div class="mem"><span class="av" style="background:oklch(0.62 0.1 230)"></span><b>Dhalon</b></div>
+          <div class="mem"><span class="av" style="background:oklch(0.6 0.1 300)"></span><b>mikey</b></div>
+          <div class="mem offline"><span class="av" style="background:oklch(0.62 0.1 20)"></span><b>Bartholomew Featherstonehaugh-Wright</b></div>
+          <button class="btn ghost invite"><span data-ic="user-add"></span>Invite to Group DM</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:8px">The member menu shows Remove From Group and Make Group Owner only to the owner, and never on the owner's own row. Remove is instant, as in Discord: no confirm.</p>
+
+  <h3>The picker: New Group DM, Add to DM, Invite to Group DM</h3>
+  <p class="note">One dialog, three entry points: the Friends header's <b>New Group DM</b> icon, Add Members in a 1:1 DM (which makes a new group and leaves the DM alone), and Add Members or Invite to Group DM in a group. Friends only; 10 including you. <b>Better</b>: the limit is a meter, ten segments, yours filled grey, your picks in the accent, "6 of 10".</p>
+  <div class="scrim">
+    <div class="dialog" role="dialog" aria-labelledby="pick-title" id="picker">
+      <div class="dhead"><h5 id="pick-title">New Message</h5><button class="iconbtn" aria-label="Close"><span data-ic="xmark"></span></button></div>
+      <div class="dsub" id="pick-sub">Group DMs can have up to 10 members.</div>
+      <div class="dbody">
+        <div class="field" id="to"><span class="to">To:</span><input placeholder="Search" aria-label="Search friends"></div>
+        <div class="meter" id="meter"><div class="segs"></div><span></span></div>
+        <div class="pick" id="pick"></div>
+        <div id="gname" hidden>
+          <div class="inline">
+            <div class="upload" aria-label="Group icon" title="Upload icon"><span data-ic="camera"></span></div>
+            <div style="flex:1"><div class="tlabel">Group Name (optional)</div><div class="field"><input id="gname-in" placeholder=""></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="dfoot"><button class="btn ghost">Cancel</button><button class="btn primary" id="create" disabled>Create Message</button></div>
+    </div>
+    <div class="dialog" role="dialog" aria-labelledby="full-title">
+      <div class="dhead"><h5 id="full-title">The party is full!</h5><button class="iconbtn" aria-label="Close"><span data-ic="xmark"></span></button></div>
+      <div class="dsub">This group has a 10 member limit.</div>
+      <div class="dbody">
+        <div class="meter full"><div class="segs"></div><span>10 of 10</span></div>
+        <p class="note" style="margin:0">Opened from a full group. Add buttons in the header and member list stay, as in Discord, and land here.</p>
+      </div>
+      <div class="dfoot"><button class="btn">Close</button></div>
+    </div>
+  </div>
+
+  <h3>Edit Group, Leave Group, Transfer Ownership</h3>
+  <p class="note"><b>Edit Group</b>: name up to 100 characters (the auto name is the placeholder), icon up to 8 MB, Remove Icon. Save stays dim until something changes. <b>Leave Group</b>: Discord's confirm, with its "leave without notifying" checkbox. <b>Better</b>: when the owner leaves, the confirm names who takes over.</p>
+  <div class="scrim">
+    <div class="dialog" role="dialog" aria-labelledby="edit-title">
+      <div class="dhead"><h5 id="edit-title">Edit Group</h5><button class="iconbtn" aria-label="Close"><span data-ic="xmark"></span></button></div>
+      <div class="dbody">
+        <div class="inline">
+          <div class="upload set" aria-label="Edit Group Icon"><span class="pen" data-ic="pen"></span></div>
+          <button class="linkish danger">Remove Icon</button>
+        </div>
+        <div><div class="tlabel">Group Name<span id="ecount">12 / 100</span></div><div class="field"><input id="ename" value="road trip 🚐" maxlength="100" placeholder="Rosa, Dhalon, mikey, Bartholomew…"></div></div>
+      </div>
+      <div class="dfoot"><button class="btn ghost">Cancel</button><button class="btn primary" id="esave" disabled>Save</button></div>
+    </div>
+    <div class="dialog" role="dialog" aria-labelledby="leave-title">
+      <div class="dhead"><h5 id="leave-title">Leave 'road trip 🚐'</h5><button class="iconbtn" aria-label="Close"><span data-ic="xmark"></span></button></div>
+      <div class="dbody">
+        <div>Are you sure you want to leave <b style="color:var(--text-strong)">road trip 🚐</b>? You won't be able to rejoin this group unless you are re-invited.</div>
+        <div class="note" style="margin:0;color:var(--text-muted)"><span data-ic="crown" style="color:var(--warning-ink)"></span> You own this group. <b style="color:var(--text-strong)">Rosa</b> becomes the owner.</div>
+        <label class="tick" id="silent"><span class="check"><span data-ic="check"></span></span>Leave without notifying other members</label>
+      </div>
+      <div class="dfoot"><button class="btn ghost">Cancel</button><button class="btn danger">Leave Group</button></div>
+    </div>
+    <div class="dialog" role="dialog" aria-labelledby="own-title">
+      <div class="dhead"><h5 id="own-title">Transfer Group Ownership</h5><button class="iconbtn" aria-label="Close"><span data-ic="xmark"></span></button></div>
+      <div class="dbody">
+        <div class="transfer"><span class="av" style="background:oklch(0.65 0.12 70)"></span><span data-ic="arrow-right"></span><span class="av" style="background:oklch(0.64 0.11 150)"></span></div>
+        <div style="text-align:center">Transfer ownership of this group to <b style="color:var(--text-strong)">Rosa</b>?</div>
+      </div>
+      <div class="dfoot"><button class="btn ghost">Cancel</button><button class="btn danger">Confirm</button></div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:8px">Not built: group invite links (Discord's "Or, send an invite link" footer) and Clean Up Inactive Group DMs; adding non-friends through invite links. Say if you want them in this PR.</p>
+
+  <!-- 2. FRIENDS -->
+  <h2>2. Friends: Active Now</h2>
+  <p class="note">Add Friend already ships. Active Now is Discord's right column: one card per friend or party, grouped by voice channel or party, sorted voice and streams first, Spotify last. Hidden under 1200px window width. Click a card for the profile; Join on voice and streams. Errors on Add Friend now use Discord's copy per code (below).</p>
+  <div class="stage">
+    <div class="side">
+      <div class="row sel"><span data-ic="users"></span><span class="grow">Friends</span><span class="badge">2</span></div>
+      <div class="row"><span data-ic="envelope-unread"></span><span class="grow">Message Requests</span><span class="badge">3</span></div>
+      <div class="cap">Direct Messages</div>
+      <div class="row dmrow"><span class="gface"><span class="av" style="background:oklch(0.65 0.12 30)"></span><span class="av" style="background:oklch(0.62 0.1 230)"></span></span><span class="grow">road trip 🚐<small>5 members</small></span></div>
+    </div>
+    <div class="pane">
+      <div class="bar">
+        <div class="title"><span data-ic="users"></span>Friends</div>
+        <div class="pills"><button class="pill" aria-selected="true">Online</button><button class="pill">All</button><button class="pill">Pending <span class="badge">2</span></button><button class="pill">Blocked</button><button class="pill accent">Add friend</button></div>
+        <div class="tools"><button class="iconbtn" aria-label="New Group DM" title="New Group DM"><span data-ic="message-add"></span></button></div>
+      </div>
+      <div class="body">
+        <div class="list">
+          <div class="label">Online · 3</div>
+          <div class="person"><span class="av lg" style="background:oklch(0.64 0.11 150)"><span class="dot" style="box-shadow:0 0 0 3px var(--bg-page)"></span></span><div class="who"><b>Rosa</b><span class="sub">Playing Celeste</span></div></div>
+          <div class="person"><span class="av lg" style="background:oklch(0.62 0.1 230)"><span class="dot" style="box-shadow:0 0 0 3px var(--bg-page)"></span></span><div class="who"><b>Dhalon</b><span class="sub">Online</span></div></div>
+          <div class="person"><span class="av lg" style="background:oklch(0.6 0.1 300)"><span class="dot" style="box-shadow:0 0 0 3px var(--bg-page)"></span></span><div class="who"><b>mikey</b><span class="sub">Listening to Spotify</span></div></div>
+        </div>
+        <aside class="now" id="now">
+          <h4>Active Now</h4>
+          <div class="card">
+            <div class="head"><div class="faces"><span class="av" style="background:oklch(0.64 0.11 150)"></span><span class="av" style="background:oklch(0.62 0.1 230)"></span></div><div class="who"><b>Rosa and Dhalon</b><small>In a Voice Channel</small></div></div>
+            <div class="inner"><span data-ic="volume-high" style="font-size:20px;color:var(--text-muted)"></span><div class="meta"><b>gaming</b><small>The Waffle House</small></div><button class="btn sm">Join</button></div>
+          </div>
+          <div class="card">
+            <div class="head"><span class="av" style="background:oklch(0.64 0.11 150)"></span><div class="who"><b>Rosa</b><small>1:12:04</small></div><span class="app" style="background:linear-gradient(135deg,oklch(0.6 0.15 350),oklch(0.55 0.15 280))"></span></div>
+            <div class="inner"><span class="art" style="background:linear-gradient(135deg,oklch(0.6 0.15 350),oklch(0.55 0.15 280))"></span><div class="meta"><b>Celeste</b><small>Chapter 7 · The Summit</small></div></div>
+          </div>
+          <div class="card">
+            <div class="head"><span class="av" style="background:oklch(0.6 0.1 300)"></span><div class="who"><b>mikey</b><small>Listening to Spotify</small></div><span data-ic="music-notes" style="font-size:20px;color:var(--online-ink)"></span></div>
+            <div class="inner"><span class="art" style="background:linear-gradient(135deg,oklch(0.7 0.12 80),oklch(0.55 0.1 40))"></span><div class="meta"><b>Midnight City</b><small>by M83</small><div class="track"><i></i></div></div></div>
+          </div>
+          <button class="btn ghost sm" id="quiet-toggle" style="align-self:flex-start">Show the empty state</button>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <h3>Add Friend results</h3>
+  <p class="note">Shown under the username card, as now. Copy is Discord's per error code; 429 rate limit gets its own line instead of Discord's "WOAH THERE. WAY TOO SPICY" modal.</p>
+  <div class="sgroup" style="padding:12px 16px;max-width:640px;display:flex;flex-direction:column;gap:8px">
+    <div style="color:var(--online-ink)">Success! Your friend request to <b>rosa</b> was sent.</div>
+    <div style="color:var(--danger-ink)">Hm, didn't work. Double check that the username is correct.</div>
+    <div style="color:var(--danger-ink)">You're already friends with that user!</div>
+    <div style="color:var(--danger-ink)">rosa is not accepting friend requests.</div>
+    <div style="color:var(--danger-ink)">You've hit the 1,000 friend limit. Remove a friend to add someone new.</div>
+    <div style="color:var(--danger-ink)">You're sending requests too quickly. Wait a moment and try again.</div>
+  </div>
+
+  <!-- 3. REQUESTS -->
+  <h2>3. Message Requests and Spam</h2>
+  <p class="note"><b>Message Requests</b> joins Friends at the top of the DM list only while a request or spam is waiting; its badge counts requests, not spam. Request and spam DMs leave the normal DM list. Click a row to read it in a side panel before deciding. <b>Better</b>: rows show mutual servers, and Spam rows get <b>Not spam</b> beside Report Spam.</p>
+  <div class="stage">
+    <div class="side">
+      <div class="row"><span data-ic="users"></span><span class="grow">Friends</span></div>
+      <div class="row sel"><span data-ic="envelope-unread"></span><span class="grow">Message Requests</span><span class="badge">3</span></div>
+      <div class="cap">Direct Messages</div>
+      <div class="row dmrow"><span class="av" style="background:oklch(0.64 0.11 150)"><span class="dot"></span></span><span class="grow">Rosa</span></div>
+    </div>
+    <div class="pane">
+      <div class="bar">
+        <div class="title"><span data-ic="envelope-unread"></span>Message Requests</div>
+        <div class="pills" role="tablist"><button class="pill" role="tab" aria-selected="true" data-tab="req">Requests</button><button class="pill" role="tab" aria-selected="false" data-tab="spam">Spam (2)</button></div>
+      </div>
+      <div class="body"><div class="list" id="reqlist"></div></div>
+    </div>
+  </div>
+
+  <h3>Settings › Privacy</h3>
+  <p class="note">Discord's two settings, under its own headings. Both are user settings protos (<code>textAndImages.dmSpamFilterV2</code>, <code>privacy.defaultMessageRequestRestricted</code>).</p>
+  <div class="settings">
+    <div class="sgroup">
+      <h6>Automatically filter suspected spam messages</h6>
+      <p>Discord can filter out some messages that contain spam. These messages go to your Spam inbox.</p>
+      <div class="radio"><i></i>Filter all spam</div>
+      <div class="radio on"><i></i>Filter messages from non-friends<small>Recommended</small></div>
+      <div class="radio"><i></i>Don't filter spam</div>
+    </div>
+    <div class="sgroup">
+      <div class="toggle"><div class="t"><b>Message requests</b><span>Filter messages from server members you may not know.</span></div><button class="switch" aria-label="Message requests" aria-pressed="true"></button></div>
+    </div>
+  </div>
+</main>
+<script>
+const ic = n => `<span class="ic">${(typeof REICON !== "undefined" && REICON[n]) ? `<svg viewBox="0 0 24 24">${REICON[n]}</svg>` : ""}</span>`;
+const svg = n => (typeof REICON !== "undefined" && REICON[n]) ? `<svg viewBox="0 0 24 24">${REICON[n]}</svg>` : "";
+const paint = root => root.querySelectorAll("[data-ic]:not([data-done])").forEach(el => { el.insertAdjacentHTML("afterbegin", el.classList.contains("ic") ? svg(el.dataset.ic) : ic(el.dataset.ic)); el.dataset.done = 1; });
+
+// Picker
+const FR = [["Rosa","rosa",150],["Dhalon","dhalon",230],["mikey","mickeeeyyyyyy",300],["Bartholomew Featherstonehaugh-Wright","bart.fw",20],["saik","saik03",60],["Laryke","laryke",100],["h y p r",".thehypr",180],["pouyas","pouyas",260],["Thy","herorj",340],["valse","valsesn",80],["J","yqsod",120]];
+const picked = new Set([0, 1]);
+const LIMIT = 10;
+function picker() {
+  const n = picked.size, total = n + 1, left = LIMIT - total;
+  document.getElementById("pick-title").textContent = "New Message";
+  document.getElementById("pick-sub").innerHTML = n < 2 ? "Group DMs can have up to 10 members." : left > 0 ? `You can add <b>${left}</b> more ${left === 1 ? "person" : "people"}.` : "This group has a 10 member limit.";
+  const m = document.getElementById("meter");
+  m.querySelector(".segs").innerHTML = Array.from({ length: LIMIT }, (_, i) => `<i class="${i === 0 ? "you" : i < total ? "on" : ""}"></i>`).join("");
+  m.querySelector("span").textContent = `${total} of ${LIMIT}`;
+  m.classList.toggle("full", left <= 0);
+  const to = document.getElementById("to");
+  to.querySelectorAll(".chip").forEach(c => c.remove());
+  [...picked].forEach(i => to.querySelector("input").insertAdjacentHTML("beforebegin", `<span class="chip" data-i="${i}"><span class="av" style="background:oklch(0.62 0.1 ${FR[i][2]})"></span>${FR[i][0].split(" ")[0]}${ic("xmark")}</span>`));
+  to.querySelector("input").placeholder = n ? "" : "Search";
+  document.getElementById("pick").innerHTML = `<div class="label">Friends</div>` + FR.map((f, i) => {
+    const on = picked.has(i), off = !on && left <= 0;
+    return `<div class="opt${on ? " on" : ""}${off ? " off" : ""}" data-i="${i}" role="checkbox" aria-checked="${on}"><span class="av" style="background:oklch(0.62 0.1 ${f[2]})"></span><div class="who"><b>${f[0]}</b><small>${f[1]}</small></div><span class="check">${ic("check")}</span></div>`;
+  }).join("");
+  document.getElementById("gname").hidden = n < 2;
+  document.getElementById("gname-in").placeholder = [...picked].map(i => FR[i][0]).join(", ");
+  const c = document.getElementById("create");
+  c.disabled = n === 0; c.textContent = n > 1 ? "Create Group Message" : "Create Message";
+  document.querySelectorAll("#pick .opt:not(.off)").forEach(o => o.onclick = () => { const i = +o.dataset.i; picked.has(i) ? picked.delete(i) : picked.add(i); picker(); });
+  to.querySelectorAll(".chip").forEach(o => o.onclick = () => { picked.delete(+o.dataset.i); picker(); });
+}
+document.querySelector(".meter.full .segs").innerHTML = '<i class="you"></i>' + '<i class="on"></i>'.repeat(9);
+
+// Edit group
+const en = document.getElementById("ename");
+en.oninput = () => { document.getElementById("ecount").textContent = `${[...en.value].length} / 100`; document.getElementById("esave").disabled = en.value === "road trip 🚐"; };
+document.getElementById("silent").onclick = e => { e.preventDefault(); e.currentTarget.querySelector(".check").classList.toggle("on"); };
+
+// Active Now
+let quiet = false;
+const nowHTML = document.getElementById("now").innerHTML;
+function now() {
+  const el = document.getElementById("now");
+  el.innerHTML = quiet ? `<h4>Active Now</h4><div class="quiet"><b>It's quiet for now...</b><span>When a friend starts an activity, like playing a game or hanging out on voice, we'll show it here!</span></div><button class="btn ghost sm" id="quiet-toggle" style="align-self:flex-start">Show cards</button>` : nowHTML;
+  paint(el);
+  document.getElementById("quiet-toggle").onclick = () => { quiet = !quiet; now(); };
+}
+
+// Requests
+const REQ = [
+  { n: "lunar.moth", u: "lunar.moth", h: 200, t: "2h", mutual: 2, prev: "hey! saw your post in #art, do you take commissions?" },
+  { n: "Gabe", u: "gabe_k", h: 40, t: "Yesterday", mutual: 1, prev: "you dropped this in voice earlier 😅" },
+  { n: "Featherstonehaugh Bartholomew the Third of Many", u: "bart.iii", h: 320, t: "3d", mutual: 0, prev: "Hello" },
+];
+const SPAM = [
+  { n: "Free Nitro", u: "nitro.gift.2026", h: 10, t: "1h", mutual: 0, prev: "Message content hidden just to be safe." },
+  { n: "crypto_dan", u: "crypto_dan", h: 140, t: "5d", mutual: 1, prev: "Message content hidden just to be safe." },
+];
+let tab = "req";
+const mutual = r => r.mutual ? `<span class="mutual">${"<i style='background:oklch(0.6 0.1 " + (r.h + 40) + ")'></i>".repeat(Math.min(3, r.mutual))}</span>${r.mutual} Mutual Server${r.mutual === 1 ? "" : "s"}` : "No Mutual Servers";
+function reqs() {
+  const L = tab === "req" ? REQ : SPAM, el = document.getElementById("reqlist");
+  document.querySelectorAll("[data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === tab));
+  if (!L.length) { el.innerHTML = `<div class="empty"><span class="glyph">${ic(tab === "req" ? "inbox" : "shield-tick")}</span><b>${tab === "req" ? "No pending requests" : "No spam"}</b><span>${tab === "req" ? "There are no pending message requests." : "There are no spam requests."}</span></div>`; return; }
+  el.innerHTML = `<div class="label">${tab === "req" ? `Pending Requests · ${L.length}` : `Spam · ${L.length}`}<a id="clear">Clear All</a></div>` + L.map((r, i) => `
+    <div class="person" title="${r.prev}"><span class="av lg" style="background:oklch(0.62 0.1 ${r.h})"></span>
+      <div class="who"><b>${r.n}<time>${r.t}</time></b><span class="sub">${r.u} · ${mutual(r)}</span></div>
+      <div class="acts">${tab === "req"
+        ? `<button class="btn sm" data-x="${i}">Ignore</button><button class="btn sm primary" data-x="${i}">Accept DM</button>`
+        : `<button class="btn sm" data-x="${i}">Not spam</button><button class="btn sm danger" data-x="${i}">Report Spam</button>`}</div>
+    </div>`).join("");
+  el.querySelectorAll("[data-x]").forEach(b => b.onclick = e => { e.stopPropagation(); L.splice(+b.dataset.x, 1); reqs(); });
+  el.querySelector("#clear").onclick = () => { L.length = 0; reqs(); };
+}
+document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { tab = b.dataset.tab; reqs(); });
+
+document.getElementById("theme").onclick = () => {
+  const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === "dark" : !matchMedia("(prefers-color-scheme: light)").matches;
+  root.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("dmsocial-theme", root.dataset.theme); } catch {}
+};
+picker(); now(); reqs(); paint(document);
+</script>
+</body>
+</html>

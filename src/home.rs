@@ -17,7 +17,7 @@ use serde_json::json;
 
 use crate::{
     Waffle, SearchState,
-    discord::{Relation, Relationship, Status},
+    discord::{ApiError, Channel, Relation, Relationship, Status},
     icons::Glyph,
     illustration::Illustration,
     layout::avatar_with_status,
@@ -85,9 +85,34 @@ impl Waffle {
 
     pub(crate) fn open_home(&mut self, cx: &mut Context<Self>) {
         self.inbox_page = false;
+        self.requests_page = None;
         self.guild_id = None;
         self.channel = None;
         self.call_view = false;
+        cx.notify();
+    }
+
+    // A DM opened or changed: it lands in the DM list or in Message Requests by its request state, so an
+    // accepted request moves over. An update without recipients keeps the ones we know.
+    pub(crate) fn upsert_dm(&mut self, mut dm: Channel, cx: &mut Context<Self>) {
+        let known = self.dms.iter().chain(&self.dm_requests).find(|d| d.id == dm.id);
+        if dm.recipients.is_empty()
+            && let Some(known) = known
+        {
+            dm.recipients = known.recipients.clone();
+            dm.recipient = known.recipient.clone();
+        }
+        let at = self.dms.iter().position(|d| d.id == dm.id);
+        self.dms.retain(|d| d.id != dm.id);
+        self.dm_requests.retain(|d| d.id != dm.id);
+        if let Some(open) = self.channel.as_mut().filter(|c| c.id == dm.id) {
+            *open = dm.clone();
+        }
+        match (dm.is_request(), at) {
+            (true, _) => self.dm_requests.insert(0, dm),
+            (false, Some(at)) => self.dms.insert(at, dm),
+            (false, None) => self.dms.insert(0, dm),
+        }
         cx.notify();
     }
 
@@ -100,6 +125,7 @@ impl Waffle {
     pub(crate) fn open_inbox_page(&mut self, cx: &mut Context<Self>) {
         self.inbox_open = false;
         self.inbox_page = true;
+        self.requests_page = None;
         if self.inbox.is_none() {
             self.fetch_mentions(cx);
         }
@@ -256,7 +282,7 @@ impl Waffle {
 
     /// The Friends row at the top of the DM list (.ch.navrow).
     pub(crate) fn friends_row(&self, cx: &mut Context<Self>) -> AnyElement {
-        let selected = self.guild_id.is_none() && self.channel.is_none();
+        let selected = self.guild_id.is_none() && self.channel.is_none() && self.requests_page.is_none();
         let pending = self.relationships.iter().filter(|r| r.kind == Relation::Incoming).count() as u32;
         let state = RowState { selected, unread: false, muted: false, strong: false };
         channel_row("friends-row".into(), "friends-row".into(), state, cx)
@@ -336,6 +362,7 @@ impl Waffle {
             })
             .ok();
         }, window, cx);
+        let new_group = ui::icon_button("new-group-dm", Glyph::ThreadNew, "New Group DM", cx).occlude().on_click(cx.listener(|this, _, window, cx| this.open_group_picker(None, window, cx)));
         let header = div()
             .occlude()
             .h(px(crate::layout::HEADER_HEIGHT))
@@ -361,7 +388,7 @@ impl Waffle {
                     .child("Friends"),
             )
             .child(div().min_w_0().overflow_hidden().occlude().child(tabs))
-            .child(div().ml_auto().child(self.caption_clearance(true)));
+            .child(div().ml_auto().flex().items_center().child(new_group).child(self.caption_clearance(true)));
         let heading = match tab {
             FriendsTab::Online => "Online",
             FriendsTab::All => "All friends",
@@ -404,7 +431,14 @@ impl Waffle {
             .text_color(palette::text(cx))
             .text_size(px(14.))
             .child(ui::hard_edge(|| false, cx).child(header))
-            .child(div().id("friends-list").flex_1().min_h_0().overflow_y_scrollbar().pt(px(16.)).px_4().pb_6().child(body))
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .child(div().id("friends-list").flex_1().min_w_0().h_full().overflow_y_scrollbar().pt(px(16.)).px_4().pb_6().child(body))
+                    .children(self.active_now_column(window, cx)),
+            )
             .into_any_element()
     }
 
@@ -521,7 +555,7 @@ impl Waffle {
             this.update(cx, |this, cx| {
                 this.add_friend_result = Some(match result {
                     Ok(_) => Ok(format!("Success! Your friend request to {username} was sent.").into()),
-                    Err(error) => Err(error.into()),
+                    Err(error) => Err(add_friend_error(&error, &username).into()),
                 });
                 cx.notify();
             })
@@ -607,6 +641,21 @@ impl Waffle {
     }
 }
 
+// Discord's inline copy per relationship error code. No answer at all, or a signed-out session, keeps its
+// own words rather than blaming the username.
+fn add_friend_error(error: &ApiError, username: &str) -> String {
+    match (error.status, error.code) {
+        (0 | 401, _) => error.text.clone(),
+        (429, _) => "You're sending requests too quickly. Wait a moment and try again.".into(),
+        (_, Some(80000)) => format!("{username} is not accepting friend requests."),
+        (_, Some(80007)) => "You're already friends with that user!".into(),
+        (_, Some(30002)) => "You've hit the 1,000 friend limit. Remove a friend to add someone new.".into(),
+        (_, Some(30078)) => "You've maxed out your pending outgoing friend requests.".into(),
+        (_, Some(40068 | 340007)) => "Your account has limited access".into(),
+        _ => "Hm, didn't work. Double check that the username is correct.".into(),
+    }
+}
+
 // A friend row's action (.friend .acts .iconbtn): a raised 36px tile with a hairline; `tone` is the
 // ink it hovers to (accept green, ignore coral).
 fn friend_action(id: (&'static str, &str), icon: Icon, tooltip: &'static str, tone: Option<Hsla>, cx: &App) -> Stateful<Div> {
@@ -627,4 +676,24 @@ fn friend_action(id: (&'static str, &str), icon: Icon, tooltip: &'static str, to
         .hover(move |s| s.text_color(ink))
         .child(icon.size(px(20.)))
         .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn error(status: u16, code: Option<u64>) -> ApiError {
+        ApiError { status, code, text: "raw".into() }
+    }
+
+    #[test]
+    fn add_friend_errors_use_discords_copy() {
+        assert_eq!(add_friend_error(&error(400, Some(80000)), "rosa"), "rosa is not accepting friend requests.");
+        assert_eq!(add_friend_error(&error(400, Some(80007)), "rosa"), "You're already friends with that user!");
+        assert_eq!(add_friend_error(&error(400, Some(30002)), "rosa"), "You've hit the 1,000 friend limit. Remove a friend to add someone new.");
+        assert_eq!(add_friend_error(&error(429, None), "rosa"), "You're sending requests too quickly. Wait a moment and try again.");
+        assert_eq!(add_friend_error(&error(400, Some(80004)), "rosa"), "Hm, didn't work. Double check that the username is correct.");
+        assert_eq!(add_friend_error(&error(404, None), "rosa"), "Hm, didn't work. Double check that the username is correct.");
+        assert_eq!(add_friend_error(&error(0, None), "rosa"), "raw");
+    }
 }
