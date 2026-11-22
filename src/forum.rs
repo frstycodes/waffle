@@ -1044,9 +1044,7 @@ impl Waffle {
                 }
             }))
             .child(head)
-            .children(guidelines)
-            .children(fields)
-            .children(error)
+            .child(div().id("new-post-scroll").flex_1().min_h_0().overflow_y_scroll().flex().flex_col().gap(px(16.)).children(guidelines).children(fields).children(error))
             .child(actions);
         let backdrop = div().id("new-post-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_new_post(cx)));
         Some(ui::modal(backdrop, ui::dialog("new-post", 520., body, window, cx), cx))
