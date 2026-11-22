@@ -14,7 +14,7 @@ use crate::{
     icons::Glyph,
     menu::{Entry, HeadLead, header, item, submenu},
     palette,
-    sidebar::{Nav, ROW_GAP, ROW_HEIGHT, RowState, category_head, channel_glyph, channel_row},
+    sidebar::{Nav, RowState, row_gap, row_height, category_head, channel_glyph, channel_row},
     sortable::{Board, Finished, Place},
     ui,
 };
@@ -656,12 +656,12 @@ impl Waffle {
             let Some(category) = category else {
                 // With no uncategorised channels, a carried channel still needs somewhere to land at the top.
                 let landing = channel_rows.is_empty() && self.carrying_favorite_channel();
-                rows.extend(landing.then(|| Board::head::<_, FavoriteDrag, _>(div().h(px(ROW_HEIGHT)), favorite_board, group_list(0), cx).into_any_element()));
+                rows.extend(landing.then(|| Board::head::<_, FavoriteDrag, _>(div().h(px(row_height())), favorite_board, group_list(0), cx).into_any_element()));
                 rows.extend(channel_rows);
                 continue;
             };
             let key = category.to_string();
-            let section = div().flex().flex_col().gap(px(ROW_GAP)).child(self.favorite_category_head(category, collapsed, cx)).children(channel_rows);
+            let section = div().flex().flex_col().gap(px(row_gap())).child(self.favorite_category_head(category, collapsed, cx)).children(channel_rows);
             let section = Board::target(section, favorite_board, CATEGORY_LIST, key.clone(), |_: &FavoriteCategoryDrag| false, cx);
             let spaced = !rows.is_empty();
             rows.push(div().when(spaced, |d| d.mt(px(14.))).child(categories.item(&key, section)).into_any_element());
@@ -725,7 +725,7 @@ impl Waffle {
                 .children(origin.map(|o| div().flex_none().max_w(px(96.)).truncate().text_size(px(12.)).font_weight(FontWeight::NORMAL).text_color(faint).child(o)))
                 .when(mentions > 0, |r| r.child(ui::count_badge(mentions))),
         };
-        let size = point(px(self.channels_width - 16.), px(ROW_HEIGHT));
+        let size = point(px(self.channels_width - 16.), px(row_height()));
         let look = Look::Channel { channel: Box::new(Channel { name, ..channel.clone() }), people: Vec::new() };
         let ghost = pick_up(cx.weak_entity(), carry_key.into(), look, size, 1.05, 0., true);
         let row = row.on_drag(FavoriteDrag, Board::lift(cx.weak_entity(), favorite_board, id.to_string(), ghost));

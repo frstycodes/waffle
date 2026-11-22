@@ -1400,8 +1400,10 @@ impl Element for Scrollbar {
                 px(0.)
             };
 
-            // Hide scrollbar, if the scroll area is smaller than the container.
-            if scroll_area_size <= container_size {
+            // Hide scrollbar, if the scroll area is smaller than the container. The pixel of slack
+            // absorbs layout snapping to device pixels: at a fractional scale a 22pt editor box
+            // lands at 21.82pt around its 22pt line and showed a thumb for nothing to scroll.
+            if scroll_area_size <= container_size + px(1.) {
                 has_both = false;
                 continue;
             }

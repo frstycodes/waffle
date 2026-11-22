@@ -16,6 +16,20 @@ pub fn settings_caption(text: impl Into<SharedString>, cx: &App) -> Div {
     div().px(px(4.)).text_size(px(12.)).line_height(px(17.)).text_color(palette::muted(cx)).child(text.into())
 }
 
+// A caption that warns: the settings above it currently have no effect.
+pub fn settings_warning(text: impl Into<SharedString>, cx: &App) -> Div {
+    div()
+        .px(px(4.))
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .text_size(px(12.))
+        .line_height(px(17.))
+        .text_color(palette::warning_ink(cx))
+        .child(div().flex_none().child(Icon::new(Glyph::Warning).size(px(14.))))
+        .child(text.into())
+}
+
 const CARD_INSET: f32 = 4.;
 
 // Rows on the raised surface, one step from the page with no border, inset so their fills clear its edge.

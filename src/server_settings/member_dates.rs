@@ -240,7 +240,7 @@ impl Waffle {
             .when(active, |d| d.child(div().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).child(menu.filter.label())))
             .child(Icon::new(if active { Glyph::Filter } else { Glyph::ChevronDown }).size(px(12.)).flex_none())
             .on_click(cx.listener(move |this, _, _, cx| this.member_pop(Some(Pop::Date(column)), cx)));
-        let list = open.then(|| ui::dropdown(SharedString::from(format!("ss-date-menu-{}", column.key())), 20., Align::Start, self.date_menu_rows(column, menu, cx), self.member_dismiss(cx), cx));
+        let list = open.then(|| ui::menu_dropdown(SharedString::from(format!("ss-date-menu-{}", column.key())), 20., Align::Start, self.date_menu_rows(column, menu, cx), self.member_dismiss(cx), cx));
         div().relative().min_w_0().child(trigger).children(list).into_any_element()
     }
 

@@ -864,7 +864,7 @@ mod tests {
             my_roles: Vec::new(),
             premium_tier: 0,
             afk_channel_id: None,
-            community: false,
+            ..Default::default()
         }
     }
 

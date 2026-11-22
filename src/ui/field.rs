@@ -19,12 +19,20 @@ use crate::{icons::Glyph, motion, palette};
 
 // A labelled field: the label, then whatever the caller adds (a frame, a hint, an error).
 pub fn field(label: impl Into<SharedString>, cx: &App) -> Div {
-    div()
+    field_marked(label, false, cx)
+}
+
+// The same, with the danger-ink mark after a label the form can't go without.
+pub fn field_marked(label: impl Into<SharedString>, required: bool, cx: &App) -> Div {
+    let label = div()
         .flex()
-        .flex_col()
-        .gap(px(6.))
-        .min_w_0()
-        .child(div().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(label.into()))
+        .gap(px(4.))
+        .text_size(px(12.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(palette::muted(cx))
+        .child(label.into())
+        .when(required, |d| d.child(div().text_color(palette::danger_ink(cx)).child("*")));
+    div().flex().flex_col().gap(px(6.)).min_w_0().child(label)
 }
 
 // Help under a field, with an optional count or note at the far end.
@@ -306,7 +314,7 @@ pub fn select_options(
                 .into_any_element()
         })
         .collect();
-    dropdown(id, top, Align::Start, rows, on_dismiss, cx)
+    menu_dropdown(id, top, Align::Start, rows, on_dismiss, cx)
 }
 
 // Options any number of which can be on, each with its checkbox; choosing one toggles it and leaves the
@@ -331,7 +339,7 @@ pub fn check_options(
                 .into_any_element()
         })
         .collect();
-    dropdown(id, top, Align::Start, rows, on_dismiss, cx)
+    menu_dropdown(id, top, Align::Start, rows, on_dismiss, cx)
 }
 
 // Which edge of its trigger a dropdown lines up with.
@@ -342,11 +350,23 @@ pub enum Align {
 }
 
 // A menu surface of `rows` rising from under its trigger, which sits `top` px tall above it in the same
-// relative parent. Deferred, so it paints above whatever sits below the trigger. A press anywhere else
-// dismisses it.
-pub fn dropdown(id: impl Into<SharedString>, top: f32, align: Align, rows: Vec<AnyElement>, on_dismiss: impl Fn(&mut Window, &mut App) + 'static, cx: &App) -> AnyElement {
+// relative parent; `align` picks the trigger edge it lines up with.
+pub fn menu_dropdown(id: impl Into<SharedString>, top: f32, align: Align, rows: Vec<AnyElement>, on_dismiss: impl Fn(&mut Window, &mut App) + 'static, cx: &App) -> AnyElement {
     let id: SharedString = id.into();
     let menu = super::surface(cx).id(id.clone()).squircle(RADIUS_LG).max_h(px(280.)).overflow_y_scroll().gap(px(1.)).occlude().children(rows);
+    dropdown_at(id, menu, top, align, on_dismiss)
+}
+
+// A floating panel under its trigger (`top` is the trigger's height), dismissed by a press anywhere else:
+// a select's list, or a picker with its own search. `panel` brings its own id and `occlude`.
+pub fn dropdown(id: impl Into<SharedString>, panel: impl IntoElement, top: f32, on_dismiss: impl Fn(&mut Window, &mut App) + 'static) -> AnyElement {
+    dropdown_at(id, panel, top, Align::Start, on_dismiss)
+}
+
+// `dropdown`, lined up with either edge of its trigger. Deferred, so it paints above whatever sits below
+// the trigger.
+pub fn dropdown_at(id: impl Into<SharedString>, panel: impl IntoElement, top: f32, align: Align, on_dismiss: impl Fn(&mut Window, &mut App) + 'static) -> AnyElement {
+    let id: SharedString = id.into();
     // Rises from the trigger: 0.95 scale about its top edge, with the fade.
     // The trigger is outside the list's box, so a press on it would read as outside too and close the list
     // just before the trigger's own toggle reopened it: the list's last bounds place the trigger above it.
@@ -361,7 +381,7 @@ pub fn dropdown(id: impl Into<SharedString>, top: f32, align: Align, rows: Vec<A
             Align::End => d.right_0(),
         })
         .child(gpui_kit::canvas(move |b, _, _| record.set(Some(b)), |_, _, _, _| {}).absolute().size_full())
-        .child(menu)
+        .child(panel)
         .on_mouse_down_out(move |event, window, cx| {
             let on_trigger = bounds.get().is_some_and(|b| gpui_kit::Bounds::new(point(b.left(), b.top() - px(top + 4.)), gpui_kit::size(b.size.width, px(top))).contains(&event.position));
             if !on_trigger {

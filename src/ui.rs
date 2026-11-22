@@ -15,7 +15,10 @@
 // painted against a rounded edge (an image, a header strip, a hover fill) must round itself to
 // match, or sit inset by the surface's padding. `surface` insets its content; `media` and `edge`
 // round theirs.
-use std::time::Duration;
+use std::{
+    sync::atomic::{AtomicBool, AtomicU8, Ordering},
+    time::Duration,
+};
 
 use gpui_kit::{
     Animation, AnimationElement, AnimationExt, AnyElement, App, BoxShadow, Corners, Div, ElementId, FontWeight, Hsla, ImageSource, Img, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, SharedString, SizeRefinement,
@@ -27,23 +30,27 @@ use gpui_kit::{
     div, img, linear_color_stop, linear_gradient, point, prelude::FluentBuilder, px, relative,
 };
 
-use crate::{discord::Status, icons::Glyph, mascot, motion, palette};
+use crate::{discord::Status, icons::Glyph, illustration::Illustration, mascot, motion, palette, settings::Density};
 
 mod control;
+mod date;
 mod dialog;
 mod feedback;
 mod field;
 mod group;
 mod table;
+mod overflow;
 mod tabs;
 mod tri;
 mod tunnel;
 
-pub use control::{Control, Pressable, button, chip, hover_fade, icon_button, menu_row, pressable, round_button, swatch, tip};
-pub use dialog::{dialog, dialog_body, modal};
+pub use control::{Control, Pressable, button, chip, chip_lead, hover_fade, icon_button, menu_row, pressable, round_button, swatch, tip};
+pub use date::{date_field, time_field};
+pub use dialog::{dialog, dialog_body, dialog_scroll, modal};
 pub use feedback::{meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
-pub use field::{Align, check_options, code_cell, drop_zone, dropdown, field, field_error, field_frame, field_hint, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
-pub use group::{settings_caption, settings_card, settings_choice, settings_close, settings_column, settings_group, SettingsHighlight, settings_nav_item, settings_page, SETTINGS_NAV_WIDTH, SETTINGS_WIDTH, settings_row, settings_nav_edge, settings_sidebar, settings_switch, settings_text, settings_title, settings_window};
+pub use field::{Align, check_options, code_cell, drop_zone, dropdown, field, field_error, field_marked, field_frame, field_hint, menu_dropdown, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
+pub use group::{settings_caption, settings_card, settings_choice, settings_close, settings_column, settings_group, SettingsHighlight, settings_warning, settings_nav_item, settings_page, SETTINGS_NAV_WIDTH, SETTINGS_WIDTH, settings_row, settings_nav_edge, settings_sidebar, settings_switch, settings_text, settings_title, settings_window};
+pub use overflow::{Entry, overflow_list};
 pub use table::{Col, table, table_head, table_min_width, table_row};
 pub use tabs::{Tab, pill_tabs, segmented_live, tabs};
 pub use tri::{Tri, tri_state};
@@ -71,6 +78,33 @@ impl<T: Styled> Squircle for T {}
 // Padding a surface keeps between its rounded edge and its rows.
 pub const SURFACE_INSET: f32 = 6.;
 
+// Settings › Accessibility's density and switch indicators, read while laying out (atomics: the rail's
+// geometry helpers run without an App).
+static DENSITY: AtomicU8 = AtomicU8::new(Density::Default as u8);
+static SWITCH_ICONS: AtomicBool = AtomicBool::new(false);
+
+pub fn set_density(density: Density) {
+    DENSITY.store(density as u8, Ordering::Relaxed);
+}
+
+pub fn set_switch_icons(on: bool) {
+    SWITCH_ICONS.store(on, Ordering::Relaxed);
+}
+
+// UI density, the space between the server, channel and member lists: `default` is the Default
+// density's padding or gap, about a quarter less in Compact and more in Spacious. Discord's channel
+// rows step 4px either way (`NAME_LINE_HEIGHT` 20/24/28), which a 16px row padding scaled here matches.
+// Not verified: Discord's rail and member list gaps per density; these are scaled, not its numbers.
+pub fn density_pad(default: f32) -> f32 {
+    const COMPACT: u8 = Density::Compact as u8;
+    const SPACIOUS: u8 = Density::Spacious as u8;
+    match DENSITY.load(Ordering::Relaxed) {
+        COMPACT => default * 0.75,
+        SPACIOUS => default * 1.25,
+        _ => default,
+    }
+}
+
 // Motion tokens (design/tokens.css): press, hover, pop, panel.
 pub const DUR_PRESS: Duration = Duration::from_millis(120);
 pub const DUR_HOVER: Duration = Duration::from_millis(150);
@@ -87,6 +121,8 @@ pub enum Tone {
     Ghost,
     // The destructive step itself.
     Danger,
+    // A confirming step (an app's Success button): the positive fill.
+    Positive,
     // Translucent black over video and images.
     OnMedia,
     // Just the accent ink, underlined on hover: "View all members".
@@ -120,6 +156,20 @@ pub fn hard_edge(scrolled: impl Fn() -> bool + 'static, cx: &App) -> Div {
     div().relative().flex_none().w_full().child(rule.absolute().bottom_0().left_0().right_0().h(px(1.)))
 }
 
+/// A fade over the foot of a scrolling list while more of it lies below, dissolving into `fill` (the surface under
+/// the list); it goes once the list reaches its end. Asked as the frame paints, like `hard_edge`. Lay it absolutely
+/// over the list's bottom edge, inside the list's relative parent.
+pub fn more_below(scroll: &gpui_kit::ScrollHandle, fill: Hsla) -> Div {
+    let scroll = scroll.clone();
+    let fade = gpui_kit::canvas(|_, _, _| {}, move |bounds, _, window, _| {
+        let max = scroll.max_offset().y;
+        if max > px(0.) && scroll.offset().y > -max + px(1.) {
+            window.paint_quad(gpui_kit::fill(bounds, linear_gradient(180., linear_color_stop(fill.opacity(0.), 0.), linear_color_stop(fill, 1.))));
+        }
+    });
+    div().absolute().left_0().right_0().bottom_0().h(px(32.)).child(fade.size_full())
+}
+
 /// A vertical scroll area moving `list` on `scroll`, with the kit's scrollbar over it. Not `overflow_y_scrollbar`: that
 /// tracks a handle of its own, which nothing outside can read.
 pub fn scroll_area(list: Stateful<Div>, scroll: &gpui_kit::ScrollHandle) -> Div {
@@ -131,6 +181,22 @@ pub fn scroll_area(list: Stateful<Div>, scroll: &gpui_kit::ScrollHandle) -> Div 
         .vertical_scrollbar(scroll)
 }
 
+/// A list that scrolls inside a fixed box, its top and bottom edges fading into `surface` wherever there is
+/// more to scroll to: a short box of rows doesn't look scrollable on its own, and the fade says it is.
+pub fn scroll_fade(list: Stateful<Div>, scroll: &gpui_kit::ScrollHandle, surface: Hsla) -> Div {
+    // gpui's offset runs negative as you scroll down; max_offset is positive.
+    let (scrolled, max) = (-f32::from(scroll.offset().y), f32::from(scroll.max_offset().y));
+    let edge = |top: bool| {
+        let fade = div().absolute().left_0().right_0().h(px(32.)).bg(linear_gradient(if top { 180. } else { 0. }, linear_color_stop(surface, 0.), linear_color_stop(surface.opacity(0.), 1.)));
+        if top { fade.top_0() } else { fade.bottom_0() }
+    };
+    div()
+        .relative()
+        .child(list.overflow_y_scroll().track_scroll(scroll))
+        .children((scrolled > 1.).then(|| edge(true)))
+        .children((scrolled < max - 1.).then(|| edge(false)))
+        .vertical_scrollbar(scroll)
+}
 
 thread_local! {
     // Labels whose text overflowed their box when last painted, by key; they show the full text on hover.
@@ -245,8 +311,7 @@ pub fn pill(cx: &App) -> Div {
 
 // A keycap: the raised fill, a hairline ring and a deeper bottom edge, so it reads as a key you could press.
 pub fn kbd(key: impl Into<SharedString>, cx: &App) -> Div {
-    let line = palette::line_strong(cx);
-    key_cap(key).bg(palette::surface(palette::Level::Raised, cx)).shadow(vec![shadow(line, 0., -1., 0., 0., true), shadow(line, 0., 0., 0., 1., false)]).text_color(palette::strong(cx))
+    raised_cap(key_cap(key), cx)
 }
 
 // A key cap on a coloured fill (a danger button): a wash of `ink` with an inset edge, lettered in `ink`,
@@ -255,7 +320,26 @@ pub fn kbd_translucent(key: impl Into<SharedString>, ink: Hsla) -> Div {
     key_cap(key).bg(ink.opacity(0.16)).shadow(vec![shadow(ink.opacity(0.24), 0., 0., 0., 1., true)]).text_color(ink)
 }
 
+// A keycap lettered with `glyph` (the arrow keys).
+pub fn kbd_glyph(glyph: Glyph, cx: &App) -> Div {
+    raised_cap(key_cap_shell(), cx).child(Icon::new(glyph).size(px(12.)))
+}
+
+fn raised_cap(cap: Div, cx: &App) -> Div {
+    let line = palette::line_strong(cx);
+    cap.bg(palette::surface(palette::Level::Raised, cx)).shadow(vec![shadow(line, 0., -1., 0., 0., true), shadow(line, 0., 0., 0., 1., false)]).text_color(palette::strong(cx))
+}
+
+// What a key does, after its caps: "[Esc] Cancel".
+pub fn key_hint(caps: impl IntoElement, label: impl Into<SharedString>, cx: &App) -> Div {
+    div().flex_none().flex().items_center().gap(px(6.)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(caps).child(label.into())
+}
+
 fn key_cap(key: impl Into<SharedString>) -> Div {
+    key_cap_shell().child(key.into())
+}
+
+fn key_cap_shell() -> Div {
     div()
         .min_w(px(22.))
         .h(px(22.))
@@ -268,7 +352,6 @@ fn key_cap(key: impl Into<SharedString>) -> Div {
         .flex()
         .items_center()
         .justify_center()
-        .child(key.into())
 }
 
 // A shortcut: its keys side by side.
@@ -340,8 +423,15 @@ fn switch_track(id: &ElementId, on: bool, pressed: bool, window: &mut Window, cx
         .bg(mix(gpui_kit::white(), gpui_kit::white().opacity(0.42), glass))
         .shadow(knob_glass(glass))
         // The backdrop blur keeps to the knob's unscaled box: gpui's blur doesn't follow transforms.
-        .when(glass > 0., |k| k.backdrop_blur(px(2. * glass)).backdrop_saturate(1. + 0.8 * glass));
+        .when(glass > 0., |k| k.backdrop_blur(px(2. * glass)).backdrop_saturate(1. + 0.8 * glass))
+        .when(SWITCH_ICONS.load(Ordering::Relaxed), |k| k.flex().items_center().justify_center().child(switch_indicator(fill > 0.5)));
     div().w(px(40.)).h(px(24.)).flex_none().relative().rounded_full().bg(mix(palette::track(cx), palette::accent(), fill.clamp(0., 1.))).child(knob)
+}
+
+// "Show on/off indicators": a tick or a cross in the knob, which is white in both themes.
+fn switch_indicator(on: bool) -> Icon {
+    let (glyph, alpha) = if on { (Glyph::Checkmark, 1.) } else { (Glyph::X, 0.6) };
+    Icon::new(glyph).size(px(12.)).text_color(palette::on_accent().opacity(alpha))
 }
 
 // The knob's shadows, from resting (`t` 0) to pressed glass (`t` 1): a lit inner rim and a deeper drop.
@@ -428,21 +518,27 @@ pub fn toggle_row(id: impl Into<ElementId>, title: impl Into<SharedString>, deta
     let id: ElementId = id.into();
     let pressed = control::pressed(&id, window, cx);
     let switch = switch_track(&control::part(&id, "switch"), on, pressed, window, cx);
-    control::choice(id, cx).child(choice_text(title, detail, cx)).child(switch)
+    control::choice(id, cx).child(choice_text(title.into(), detail, cx)).child(switch)
 }
 
 // One of a set to pick from: the check or radio first, then its title and detail.
 pub fn pick_row(id: impl Into<ElementId>, mark: impl IntoElement, title: impl Into<SharedString>, detail: Option<SharedString>, cx: &App) -> Control {
+    control::choice(id, cx).child(mark).child(choice_text(title.into(), detail, cx))
+}
+
+// A choice whose kind has an icon (a channel type, a place): the icon leads the title, as in Create Channel.
+pub fn pick_row_icon(id: impl Into<ElementId>, mark: impl IntoElement, icon: Icon, title: impl Into<SharedString>, detail: Option<SharedString>, cx: &App) -> Control {
+    let title = div().flex().items_center().gap(px(6.)).child(icon.size(px(18.)).flex_none()).child(title.into());
     control::choice(id, cx).child(mark).child(choice_text(title, detail, cx))
 }
 
-fn choice_text(title: impl Into<SharedString>, detail: Option<SharedString>, cx: &App) -> Div {
+fn choice_text(title: impl IntoElement, detail: Option<SharedString>, cx: &App) -> Div {
     div()
         .flex_1()
         .min_w_0()
         .flex()
         .flex_col()
-        .child(div().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child(title.into()))
+        .child(div().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child(title))
         .when_some(detail, |d, detail| d.child(div().text_size(px(12.)).text_color(palette::muted(cx)).child(detail)))
 }
 
@@ -475,20 +571,25 @@ pub fn dm_face(face: &crate::discord::DmFace, size: f32, ring: Hsla) -> AnyEleme
 // An avatar without a photo: the name's initial on a gradient picked from the name. Below 24px it
 // drops the initial.
 pub fn monogram(name: &str, size: f32) -> Div {
-    let hue = name_hue(name);
-    let initial: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
+    monogram_face(name_hue(name), size).rounded_full().when(size >= 24., |d| d.child(initial(name)))
+}
+
+// The monogram's gradient and type at `size`, on `hue`, with no shape or letter yet.
+fn monogram_face(hue: f32, size: f32) -> Div {
     div()
         .size(px(size))
         .flex_none()
-        .rounded_full()
-        .bg(linear_gradient(135., linear_color_stop(palette::oklch(0.53, 0.12, hue), 0.), linear_color_stop(palette::oklch(0.41, 0.13, hue + 35.), 1.)))
+        .bg(linear_gradient(135., linear_color_stop(palette::picture_oklch(0.53, 0.12, hue), 0.), linear_color_stop(palette::picture_oklch(0.41, 0.13, hue + 35.), 1.)))
         .flex()
         .items_center()
         .justify_center()
         .text_color(gpui_kit::white())
         .font_weight(FontWeight::SEMIBOLD)
         .text_size(px(size * 0.38))
-        .when(size >= 24., |d| d.child(initial))
+}
+
+fn initial(name: &str) -> String {
+    name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default()
 }
 
 // The design's avatar hue: a stable hash of the name onto the colour wheel.
@@ -529,10 +630,10 @@ pub fn stacked(avatars: impl IntoIterator<Item = AnyElement>, size: f32, ring: H
 
 // At most `cap` faces; past that the last slot becomes a "+n" chip in `more_fill`, so the stack stays a
 // glance, not a roster.
-pub fn capped_stack(urls: &[String], cap: usize, size: f32, ring: Hsla, more_fill: Hsla, more_ink: Hsla) -> Div {
-    let shown = if urls.len() > cap { cap - 1 } else { urls.len() };
-    let more = urls.len() - shown;
-    let faces = urls[..shown].iter().map(|url| avatar(url.clone(), size).into_any_element());
+pub fn capped_stack(people: &[Entry], cap: usize, size: f32, ring: Hsla, more_fill: Hsla, more_ink: Hsla) -> Div {
+    let shown = if people.len() > cap { cap - 1 } else { people.len() };
+    let more = people.len() - shown;
+    let faces = people[..shown].iter().map(|p| avatar(p.icon.clone(), size).into_any_element());
     let more_chip = (more > 0).then(|| {
         div()
             .size(px(size))
@@ -548,6 +649,16 @@ pub fn capped_stack(urls: &[String], cap: usize, size: f32, ring: Hsla, more_fil
             .into_any_element()
     });
     stacked(faces.chain(more_chip), size, ring)
+}
+
+// A capped stack whose "+n" isn't a dead end: hovering it lists everyone, under `title`.
+#[allow(clippy::too_many_arguments)]
+pub fn listed_stack(id: impl Into<ElementId>, title: impl Into<SharedString>, people: Vec<Entry>, cap: usize, size: f32, ring: Hsla, more_fill: Hsla, more_ink: Hsla) -> Stateful<Div> {
+    let el = div().id(id).flex_none().child(capped_stack(&people, cap, size, ring, more_fill, more_ink));
+    match people.len() > cap {
+        true => overflow_list(el, title, people),
+        false => el,
+    }
 }
 
 // Paints `el` in the surface colour it stands in for; over the native sidebar, where that colour is
@@ -587,6 +698,15 @@ pub fn server_tile(icon: Option<&str>, name: &str, size: f32, cx: &App) -> AnyEl
         .justify_center()
         .child(crate::sidebar::initials(name))
         .into_any_element()
+}
+
+// An app's icon as a server tile, or without one its initial on the monogram gradient, hued by `id` so an
+// app keeps its colour whatever it's called.
+pub fn app_tile(icon: Option<&str>, name: &str, id: &str, size: f32, cx: &App) -> AnyElement {
+    if icon.is_some() {
+        return server_tile(icon, name, size, cx);
+    }
+    monogram_face(name_hue(id), size).squircle(size * SERVER_TILE_ROUNDING).child(initial(name)).into_any_element()
 }
 
 // A server tile with `badge` (a channel's kind) on a round mark at its bottom-right, ringed 2px in
@@ -728,6 +848,11 @@ fn callout_text(title: impl Into<SharedString>, body: impl Into<SharedString>, c
 // A toast: one line (and an optional detail) on the floating surface, rising in over 240ms from 8px lower
 // and 0.97. GAP: the design also un-blurs it from 4px (`filter: blur`); gpui has no element blur.
 pub fn toast(id: impl Into<ElementId>, glyph: Glyph, ink: Hsla, title: impl Into<SharedString>, detail: Option<SharedString>, cx: &App) -> AnyElement {
+    toast_with(id, glyph, ink, title, detail, None, cx)
+}
+
+// A toast with its one action (Undo) at the end.
+pub fn toast_with(id: impl Into<ElementId>, glyph: Glyph, ink: Hsla, title: impl Into<SharedString>, detail: Option<SharedString>, action: Option<AnyElement>, cx: &App) -> AnyElement {
     let (strong, muted) = (palette::strong(cx), palette::muted(cx));
     div()
         .relative()
@@ -754,12 +879,18 @@ pub fn toast(id: impl Into<ElementId>, glyph: Glyph, ink: Hsla, title: impl Into
                 .child(title.into())
                 .when_some(detail, |d, detail| d.child(div().text_size(px(12.)).font_weight(FontWeight::NORMAL).text_color(muted).child(detail))),
         )
+        .children(action)
         .with_animation(id, Animation::new(Duration::from_millis(240)).with_easing(|t| motion::ease_out().sample(t)), |toast, t| toast.opacity(t).translate_y(px(8. * (1. - t))).scale(0.97 + 0.03 * t))
         .into_any_element()
 }
 
-// An empty or waiting state: the mascot, what's missing, and room for one action.
-pub fn empty_state(id: &'static str, mood: mascot::Mood, title: impl Into<SharedString>, body: impl Into<SharedString>, cx: &App) -> Div {
+// An empty or waiting state: spot art (the mascot, or an illustration where Discord leads with one), what's
+// missing, and room for one action.
+pub fn empty_state(id: &'static str, art: impl Into<Art>, title: impl Into<SharedString>, body: impl Into<SharedString>, cx: &App) -> Div {
+    let art = match art.into() {
+        Art::Mascot(mood) => mascot::mascot_at(id, mood, 0.6, cx),
+        Art::Illustration(art) => img(art.path()).w(px(200.)).h(px(150.)).into_any_element(),
+    };
     div()
         .flex()
         .flex_col()
@@ -768,9 +899,26 @@ pub fn empty_state(id: &'static str, mood: mascot::Mood, title: impl Into<Shared
         .py(px(32.))
         .px(px(16.))
         .text_center()
-        .child(div().mb(px(8.)).child(mascot::mascot_at(id, mood, 0.6, cx)))
+        .child(div().mb(px(8.)).child(art))
         .child(div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.into()))
         .child(div().max_w(px(320.)).text_color(palette::muted(cx)).child(body.into()))
+}
+
+pub enum Art {
+    Mascot(mascot::Mood),
+    Illustration(Illustration),
+}
+
+impl From<mascot::Mood> for Art {
+    fn from(mood: mascot::Mood) -> Self {
+        Self::Mascot(mood)
+    }
+}
+
+impl From<Illustration> for Art {
+    fn from(art: Illustration) -> Self {
+        Self::Illustration(art)
+    }
 }
 
 // A divider, with an optional label naming what follows.

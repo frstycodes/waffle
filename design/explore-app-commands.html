@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>App Commands</title>
+<meta name="description" content="Slash commands, app replies, message components and app modals, before building them.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Waffle's tokens (tokens.css), inlined so the page stands alone. */
+  :root, :root[data-theme="light"] { color-scheme: light; --bg-page: oklch(0.982 0.002 80); --bg-raised: oklch(0.995 0.001 80); --bg-overlay: oklch(0.995 0.001 80); --bg-sunk: oklch(0.955 0.003 80); --hover: oklch(0.3 0.008 80 / 0.06); --selected: oklch(0.3 0.008 80 / 0.09); --line: oklch(0.3 0.008 80 / 0.1); --line-strong: oklch(0.3 0.008 80 / 0.18); --text-strong: oklch(0.20 0.009 80); --text: oklch(0.30 0.009 80); --text-muted: oklch(0.46 0.009 80); --text-faint: oklch(0.49 0.009 80); --accent: #efa831; --accent-fill: #efa831; --on-accent: #2a1c00; --accent-soft: oklch(0.7 0.15 75 / 0.14); --accent-ink: #8a5601; --danger: #c21f3a; --danger-ink: #b0182f; --positive: #2f8f4e; --link: #1f6fd1; --scrim: oklch(0.2 0.01 80 / 0.3); --shadow: 0 1px 2px oklch(0 0 0 / 0.08), 0 12px 32px oklch(0 0 0 / 0.14); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; --bg-page: oklch(0.210 0.004 80); --bg-raised: oklch(0.250 0.005 80); --bg-overlay: oklch(0.265 0.005 80); --bg-sunk: oklch(0.19 0.004 80); --hover: oklch(1 0 0 / 0.05); --selected: oklch(1 0 0 / 0.08); --line: oklch(1 0 0 / 0.08); --line-strong: oklch(1 0 0 / 0.14); --text-strong: oklch(0.97 0.004 80); --text: oklch(0.88 0.008 80); --text-muted: oklch(0.72 0.012 80); --text-faint: oklch(0.65 0.012 80); --accent-soft: oklch(0.78 0.15 75 / 0.16); --accent-ink: #f6b84d; --danger-ink: #ff6b7f; --positive: #4cc275; --link: #6aa8ff; --scrim: oklch(0 0 0 / 0.45); --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 16px 40px oklch(0 0 0 / 0.4); } }
+  :root[data-theme="dark"] { color-scheme: dark; --bg-page: oklch(0.210 0.004 80); --bg-raised: oklch(0.250 0.005 80); --bg-overlay: oklch(0.265 0.005 80); --bg-sunk: oklch(0.19 0.004 80); --hover: oklch(1 0 0 / 0.05); --selected: oklch(1 0 0 / 0.08); --line: oklch(1 0 0 / 0.08); --line-strong: oklch(1 0 0 / 0.14); --text-strong: oklch(0.97 0.004 80); --text: oklch(0.88 0.008 80); --text-muted: oklch(0.72 0.012 80); --text-faint: oklch(0.65 0.012 80); --accent-soft: oklch(0.78 0.15 75 / 0.16); --accent-ink: #f6b84d; --danger-ink: #ff6b7f; --positive: #4cc275; --link: #6aa8ff; --scrim: oklch(0 0 0 / 0.45); --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 16px 40px oklch(0 0 0 / 0.4); }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg-page); color: var(--text); font-family: "Figtree", system-ui, sans-serif; font-size: 16px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 16px 80px; }
+  header.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  h1 { font-size: 28px; margin: 0; color: var(--text-strong); flex: 1; }
+  h2 { font-size: 18px; color: var(--text-strong); margin: 40px 0 4px; }
+  p.lede, p.note { color: var(--text-muted); margin: 0 0 16px; max-width: 74ch; line-height: 1.5; font-size: 14px; }
+  .board { position: relative; background: var(--bg-page); border: 1px solid var(--line); border-radius: 20px; padding: 16px; }
+  .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 16px; }
+  svg.i { width: 1em; height: 1em; flex: none; }
+  code, .mono { font-family: "Roboto Mono", ui-monospace, monospace; }
+
+  /* Buttons (primitives). */
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; font: inherit; font-size: 14px; font-weight: 600; border: 1px solid transparent; border-radius: 12px; cursor: pointer; color: var(--text-strong); background: var(--selected); }
+  .btn:hover { filter: brightness(1.06); }
+  .btn.primary { background: var(--accent-fill); color: var(--on-accent); }
+  .btn.success { background: var(--positive); color: white; }
+  .btn.danger { background: var(--danger); color: white; }
+  .btn.link { background: transparent; color: var(--link); border-color: var(--line-strong); }
+  .btn.ghost { background: transparent; color: var(--text-muted); }
+  .btn[disabled] { opacity: 0.5; cursor: default; }
+
+  /* Messages. */
+  .msg { display: grid; grid-template-columns: 40px 1fr; gap: 0 12px; padding: 6px 8px; border-radius: 12px; }
+  .msg + .msg { margin-top: 10px; }
+  .av { width: 40px; height: 40px; border-radius: 50%; flex: none; display: grid; place-items: center; color: white; font-weight: 700; }
+  .av.sm { width: 18px; height: 18px; font-size: 10px; }
+  .av.app { border-radius: 12px; }
+  .head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+  .name { color: var(--text-strong); font-weight: 600; }
+  .tag { display: inline-flex; align-items: center; gap: 3px; height: 16px; padding: 0 5px; border-radius: 5px; background: var(--accent-soft); color: var(--accent-ink); font-size: 11px; font-weight: 700; transform: translateY(-1px); }
+  .time { color: var(--text-faint); font-size: 12px; }
+  .body { color: var(--text-strong); line-height: 1.45; margin-top: 2px; }
+  .used { grid-column: 2; display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13px; margin-bottom: 2px; }
+  .used b { color: var(--text-strong); font-weight: 600; }
+  .used .cmd { color: var(--accent-ink); font-weight: 600; }
+  .msg.ephemeral { background: color-mix(in oklch, var(--text-strong) 4%, transparent); }
+  .foot { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 12px; margin-top: 6px; }
+  .foot a { color: var(--link); cursor: pointer; }
+  .thinking { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-style: italic; }
+  .bars { display: inline-flex; gap: 3px; align-items: center; height: 14px; }
+  .bars i { width: 3px; height: 6px; border-radius: 2px; background: var(--accent-ink); animation: bar 1s ease-in-out infinite; }
+  .bars i:nth-child(2) { animation-delay: .15s } .bars i:nth-child(3) { animation-delay: .3s }
+  @keyframes bar { 50% { height: 14px } }
+  .failed { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 8px 12px; border-radius: 12px; background: color-mix(in oklch, var(--danger) 10%, transparent); color: var(--text-strong); font-size: 14px; }
+  .failed svg { color: var(--danger-ink); }
+
+  /* Composer + pickers. */
+  .stage { position: relative; display: flex; flex-direction: column; justify-content: flex-end; min-height: 500px; }
+  .composer { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 6px 10px; border-radius: 16px; background: var(--bg-raised); border: 1px solid var(--line); }
+  .composer .plus { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: var(--text-muted); background: var(--selected); }
+  .typed { flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--text-strong); }
+  .caret { width: 1.5px; height: 20px; background: var(--text-strong); animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0 } }
+  .cmdchip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 4px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+  .opt { display: inline-flex; align-items: center; height: 28px; border-radius: 9px; overflow: hidden; border: 1px solid var(--line-strong); }
+  .opt .k { padding: 0 8px; height: 100%; display: grid; place-items: center; background: var(--selected); color: var(--text-muted); font-size: 13px; font-weight: 600; }
+  .opt .v { padding: 0 8px; display: flex; align-items: center; gap: 2px; color: var(--text-strong); }
+  .opt.active { border-color: var(--accent-ink); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .opt.missing .v { color: var(--text-faint); }
+  .pop { position: absolute; left: 0; right: 0; bottom: 64px; background: var(--bg-overlay); border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; }
+  .picker { display: grid; grid-template-columns: 52px 1fr; max-height: 360px; }
+  .picker .rail { border-right: 1px solid var(--line); padding: 8px 6px; display: flex; flex-direction: column; gap: 4px; align-items: center; }
+  .picker .rail button { width: 36px; height: 36px; border: 0; border-radius: 11px; background: transparent; display: grid; place-items: center; cursor: pointer; color: var(--text-muted); }
+  .picker .rail button[aria-selected="true"] { background: var(--selected); color: var(--text-strong); }
+  .picker .rail .av { width: 28px; height: 28px; font-size: 12px; border-radius: 9px; }
+  .picker .list { overflow: auto; padding: 6px; max-height: 340px; }
+  .sec { display: flex; align-items: center; gap: 8px; padding: 8px 10px 4px; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+  .sec .av { width: 16px; height: 16px; border-radius: 5px; font-size: 9px; }
+  .cmd-row { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 10px; border-radius: 12px; cursor: pointer; }
+  .cmd-row:hover, .cmd-row.on { background: var(--selected); }
+  .cmd-row .what { flex: 1; min-width: 0; }
+  .cmd-row b { color: var(--text-strong); font-weight: 600; }
+  .cmd-row b mark { background: none; color: var(--accent-ink); }
+  .cmd-row .args { color: var(--text-faint); font-size: 13px; margin-left: 4px; }
+  .cmd-row .desc { display: block; color: var(--text-muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cmd-row .from { color: var(--text-faint); font-size: 12px; white-space: nowrap; }
+  .pop-foot { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--line); color: var(--text-faint); font-size: 12px; }
+  kbd { font-family: inherit; font-size: 11px; padding: 1px 5px; border-radius: 5px; background: var(--selected); color: var(--text-muted); }
+  .hint { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .hint b { color: var(--text-strong); }
+  .hint .req { color: var(--danger-ink); font-size: 12px; font-weight: 600; }
+  .hint .opt-add { margin-left: auto; display: flex; gap: 6px; align-items: center; color: var(--text-faint); font-size: 12px; }
+  .hint .opt-add button { height: 24px; padding: 0 8px; border-radius: 8px; border: 1px dashed var(--line-strong); background: transparent; color: var(--text-muted); font: inherit; font-size: 12px; cursor: pointer; }
+  .choice { display: flex; align-items: center; gap: 10px; padding: 8px 14px; cursor: pointer; }
+  .choice.on, .choice:hover { background: var(--selected); }
+  .choice span { color: var(--text-muted); font-size: 13px; margin-left: auto; }
+
+  /* Components. */
+  .comps { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; max-width: 520px; }
+  .arow { display: flex; flex-wrap: wrap; gap: 8px; }
+  .select { position: relative; display: flex; align-items: center; justify-content: space-between; height: 40px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--bg-raised); color: var(--text-faint); cursor: pointer; }
+  .select.open { border-color: var(--accent-ink); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .menu { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 3; background: var(--bg-overlay); border-radius: 14px; box-shadow: var(--shadow); padding: 6px; }
+  .mi { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; color: var(--text-strong); }
+  .mi:hover, .mi.on { background: var(--selected); }
+  .mi small { display: block; color: var(--text-muted); font-size: 12px; }
+  .mi .e { font-size: 18px; }
+  .mi .chk { margin-left: auto; width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid var(--line-strong); display: grid; place-items: center; }
+  .mi.picked .chk { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--on-accent); }
+  .container { border-radius: 16px; background: var(--bg-raised); border: 1px solid var(--line); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .container.accented { background: color-mix(in oklch, var(--accent) 7%, var(--bg-raised)); border-color: color-mix(in oklch, var(--accent) 35%, transparent); }
+  .section { display: flex; gap: 14px; align-items: flex-start; }
+  .section .txt { flex: 1; min-width: 0; line-height: 1.45; color: var(--text-strong); }
+  .section .txt h3.t { margin: 0 0 2px; font-size: 16px; }
+  .section .txt small { color: var(--text-muted); font-size: 13px; }
+  .thumb { width: 72px; height: 72px; border-radius: 12px; flex: none; }
+  .sep { height: 1px; background: var(--line); }
+  .sep.lg { margin: 6px 0; }
+  .gallery { display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: 90px 90px; gap: 4px; border-radius: 12px; overflow: hidden; }
+  .gallery span:first-child { grid-row: span 2; }
+
+  /* Modal. */
+  .scrim { border-radius: 20px; background: var(--scrim); padding: 32px 16px; display: grid; place-items: center; }
+  .dialog { width: min(100%, 460px); background: var(--bg-raised); border-radius: 24px; box-shadow: var(--shadow); padding: 22px 24px 20px; display: flex; flex-direction: column; gap: 16px; }
+  .dhead { display: flex; align-items: center; gap: 12px; }
+  .dhead h3 { margin: 0; font-size: 20px; color: var(--text-strong); flex: 1; }
+  .dhead .from { display: block; color: var(--text-muted); font-size: 13px; font-weight: 400; margin-top: 2px; }
+  .field label { display: flex; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+  .field label .req { color: var(--danger-ink); }
+  .input { width: 100%; min-height: 40px; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--bg-page); color: var(--text-strong); font: inherit; font-size: 15px; }
+  .input.area { min-height: 96px; resize: none; }
+  .count { display: flex; justify-content: space-between; color: var(--text-faint); font-size: 12px; margin-top: 4px; }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; }
+</style>
+<script>try{const t=localStorage.getItem("appcmd-theme");if(t)document.documentElement.dataset.theme=t}catch{}</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="slash" viewBox="0 0 24 24"><path d="M15 4 9 20" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 7.5V12l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="12" cy="12" r="3" fill="currentColor"/></symbol>
+  <symbol id="warn" viewBox="0 0 24 24"><path d="M12 3.5 22 20H2L12 3.5Z" fill="currentColor"/><path d="M12 10v4.5M12 17.2v.3" stroke="var(--bg-raised)" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="out" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  <symbol id="down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></symbol>
+</svg>
+<main>
+  <header class="top"><h1>App commands</h1><button class="btn" id="theme">Light / dark</button></header>
+  <p class="lede">Slash commands, what an app's reply looks like, the buttons and menus apps attach, Components V2 layouts and app forms. Discord's behaviour, Waffle's look: chips and dialogs from the primitives we already ship. Do better than Discord: only commands you can run here, your most used first, failures say which app and offer a retry.</p>
+
+  <h2>1 · Typing / opens the picker</h2>
+  <p class="note">At the start of the composer. Apps with commands here sit in a rail (Recent first); the list groups by app and filters as you type, matching the name and the description. ↑↓ move, Tab or Enter picks, Esc closes. Commands you lack permission for aren't listed.</p>
+  <div class="board"><div class="stage">
+    <div class="composer"><span class="plus"><svg class="i"><use href="#plus"/></svg></span><div class="typed">/pl<span class="caret"></span></div></div>
+    <div class="pop"><div class="picker">
+      <div class="rail" role="tablist">
+        <button aria-selected="true" title="Recent"><svg class="i" style="font-size:18px"><use href="#clock"/></svg></button>
+        <button title="Wavebot"><span class="av" style="background:#5865f2">W</span></button>
+        <button title="Pollster"><span class="av" style="background:#2f8f4e">P</span></button>
+        <button title="Quizzy"><span class="av" style="background:#c2410c">Q</span></button>
+      </div>
+      <div class="list">
+        <div class="sec"><svg class="i"><use href="#clock"/></svg>Recent</div>
+        <div class="cmd-row on"><span class="av app" style="width:32px;height:32px;background:#5865f2;font-size:13px">W</span><div class="what"><b>/<mark>pl</mark>ay</b><span class="args">query</span><span class="desc">Play a song or playlist in your voice channel</span></div><span class="from">Wavebot</span></div>
+        <div class="sec"><span class="av" style="background:#5865f2">W</span>Wavebot</div>
+        <div class="cmd-row"><span class="av app" style="width:32px;height:32px;background:#5865f2;font-size:13px">W</span><div class="what"><b>/<mark>pl</mark>aylist</b><span class="args">name</span><span class="desc">Queue one of your saved playlists</span></div><span class="from">Wavebot</span></div>
+        <div class="cmd-row"><span class="av app" style="width:32px;height:32px;background:#5865f2;font-size:13px">W</span><div class="what"><b>/queue</b><span class="desc">Songs coming up, and who <mark style="background:none;color:var(--accent-ink)">pl</mark>aced them</span></div><span class="from">Wavebot</span></div>
+        <div class="sec"><span class="av" style="background:#2f8f4e">P</span>Pollster</div>
+        <div class="cmd-row"><span class="av app" style="width:32px;height:32px;background:#2f8f4e;font-size:13px">P</span><div class="what"><b>/<mark>pl</mark>ace-vote</b><span class="args">poll choice</span><span class="desc">Vote in an open Pollster poll</span></div><span class="from">Pollster</span></div>
+      </div>
+    </div><div class="pop-foot"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Tab</kbd> pick</span><span><kbd>Esc</kbd> close</span></div></div>
+  </div></div>
+
+  <h2>2 · Filling in options</h2>
+  <p class="note">The picked command becomes a chip; each required option follows as a key/value chip, the active one ringed. Above the composer: what the active option wants, and the optional ones to add. Choices and autocomplete list underneath it; a missing required option stops Enter and names itself.</p>
+  <div class="board"><div class="stage" style="min-height:360px">
+    <div class="composer"><span class="plus"><svg class="i"><use href="#plus"/></svg></span><div class="typed">
+      <span class="cmdchip"><span class="av sm" style="background:#5865f2">W</span>/play</span>
+      <span class="opt active"><span class="k">query</span><span class="v">midnight ar<span class="caret"></span></span></span>
+      <span class="opt"><span class="k">volume</span><span class="v">80</span></span>
+    </div></div>
+    <div class="pop">
+      <div class="hint"><b>query</b><span style="color:var(--text-muted)">A song name or link</span><span class="req">Required</span><span class="opt-add">Optional<button>+ shuffle</button><button>+ loop</button></span></div>
+      <div class="choice on"><span style="margin:0;color:var(--text-strong)">Midnight Arcade</span><span>Neon Harbor · 3:41</span></div>
+      <div class="choice"><span style="margin:0;color:var(--text-strong)">Midnight Arcade (Slowed)</span><span>Neon Harbor · 4:12</span></div>
+      <div class="choice"><span style="margin:0;color:var(--text-strong)">Arcade Midnight Run</span><span>Pixel Club · 2:58</span></div>
+      <div class="pop-foot"><span>Suggestions from Wavebot</span><span style="margin-left:auto"><kbd>Enter</kbd> run</span></div>
+    </div>
+  </div></div>
+
+  <h2>3 · Running it: thinking, the reply, only you, failures</h2>
+  <p class="note">The reply is marked with who used which command. While the app works: "Wavebot is thinking…". An ephemeral reply has a tint and "Only you can see this". If the app doesn't answer, the failure stays in place with the app's name and Try again, not a red line.</p>
+  <div class="board">
+    <div class="msg"><div class="used" style="grid-column:2"><span class="av sm" style="background:#7c8794">M</span><b>Mira</b> used <span class="cmd">/play</span></div><span class="av app" style="background:#5865f2">W</span><div><div class="head"><span class="name">Wavebot</span><span class="tag"><svg class="i"><use href="#check"/></svg>App</span><span class="time">Today at 10:02 PM</span></div><div class="body thinking"><span class="bars"><i></i><i></i><i></i></span>Wavebot is thinking…</div></div></div>
+    <div class="msg"><div class="used"><span class="av sm" style="background:#7c8794">M</span><b>Mira</b> used <span class="cmd">/queue</span></div><span class="av app" style="background:#5865f2">W</span><div><div class="head"><span class="name">Wavebot</span><span class="tag"><svg class="i"><use href="#check"/></svg>App</span><span class="time">Today at 10:03 PM</span></div><div class="body">Now playing <b>Midnight Arcade</b> by Neon Harbor in <b>Lounge</b>. 3 songs in the queue.</div></div></div>
+    <div class="msg ephemeral"><div class="used"><span class="av sm" style="background:oklch(0.65 0.12 70)">K</span><b>You</b> used <span class="cmd">/play</span></div><span class="av app" style="background:#5865f2">W</span><div><div class="head"><span class="name">Wavebot</span><span class="tag"><svg class="i"><use href="#check"/></svg>App</span><span class="time">Today at 10:04 PM</span></div><div class="body">Join a voice channel first, then try /play again.</div><div class="foot"><svg class="i"><use href="#eye"/></svg>Only you can see this · <a>Dismiss message</a></div></div></div>
+    <div class="msg ephemeral"><div class="used"><span class="av sm" style="background:oklch(0.65 0.12 70)">K</span><b>You</b> used <span class="cmd">/trivia</span></div><span class="av app" style="background:#c2410c">Q</span><div><div class="head"><span class="name">Quizzy</span><span class="tag"><svg class="i"><use href="#check"/></svg>App</span><span class="time">Today at 10:05 PM</span></div><div class="failed"><svg class="i" style="font-size:16px"><use href="#warn"/></svg><span><b>Quizzy didn't answer in time.</b> It may be offline.</span><button class="btn ghost" style="margin-left:auto;height:28px">Try again</button></div><div class="foot"><svg class="i"><use href="#eye"/></svg>Only you can see this · <a>Dismiss message</a></div></div></div>
+  </div>
+
+  <h2>4 · Buttons and select menus</h2>
+  <p class="note">Up to five buttons a row, in the app's styles mapped to ours: primary is our accent, success and danger keep their meaning, link opens the browser and says so. A select opens our menu; multi-select uses checks and a Done. A clicked button shows its own spinner until the app answers; disabled ones dim.</p>
+  <div class="row2">
+    <div class="board">
+      <div class="msg"><span class="av app" style="background:#2f8f4e">P</span><div><div class="head"><span class="name">Pollster</span><span class="tag"><svg class="i"><use href="#check"/></svg>App</span><span class="time">Today at 9:30 PM</span></div><div class="body">Map vote for tonight's scrim is open.</div>
+        <div class="comps">
+          <div class="arow"><button class="btn primary">Vote Ashen Peaks</button><button class="btn">Drowned Harbor</button><button class="btn success">Ready</button><button class="btn danger">Leave lobby</button><button class="btn link">Rules <svg class="i"><use href="#out"/></svg></button></div>
+          <div class="arow"><button class="btn" disabled>Results (after vote)</button><button class="btn"><span class="bars"><i></i><i></i><i></i></span>Checking…</button></div>
+        </div></div></div>
+    </div>
+    <div class="board" style="padding-bottom:200px">
+      <div class="msg"><span class="av app" style="background:#c2410c">Q</span><div><div class="head"><span class="name">Quizzy</span><span class="tag"><svg class="i"><use href="#check"/></svg>App</span><span class="time">Today at 9:41 PM</span></div><div class="body">Pick the categories for this round.</div>
+        <div class="comps">
+          <div class="select open">Choose up to 3 categories<svg class="i"><use href="#down"/></svg>
+            <div class="menu">
+              <div class="mi picked"><span class="e">🎮</span><div>Games<small>Consoles, PC, retro</small></div><span class="chk"><svg class="i" style="font-size:12px"><use href="#check"/></svg></span></div>
+              <div class="mi on"><span class="e">🎬</span><div>Movies<small>Since 1990</small></div><span class="chk"></span></div>
+              <div class="mi picked"><span class="e">🎵</span><div>Music</div><span class="chk"><svg class="i" style="font-size:12px"><use href="#check"/></svg></span></div>
+              <div class="mi"><span class="e">🌍</span><div>Geography</div><span class="chk"></span></div>
+            </div>
+          </div>
+        </div></div></div>
+    </div>
+  </div>
+
+  <h2>5 · Components V2 layouts</h2>
+  <p class="note">Containers, sections with a thumbnail or button beside text, separators and media galleries. A container's accent colour (when the app sets one) becomes a light tint and a tinted hairline, never a coloured stripe.</p>
+  <div class="board">
+    <div class="msg"><span class="av app" style="background:#5865f2">W</span><div><div class="head"><span class="name">Wavebot</span><span class="tag"><svg class="i"><use href="#check"/></svg>App</span><span class="time">Today at 10:10 PM</span></div>
+      <div class="comps">
+        <div class="container accented">
+          <div class="section"><div class="txt"><h3 class="t">Midnight Arcade</h3>Neon Harbor · <small>3:41 · requested by Mira</small><div style="margin-top:6px;color:var(--text-muted);font-size:14px">Up next: Glass Desert, Ferris Wheel at Dawn</div></div><span class="thumb" style="background:linear-gradient(135deg,#c2410c,#efa831)"></span></div>
+          <div class="sep"></div>
+          <div class="arow"><button class="btn">Pause</button><button class="btn">Skip</button><button class="btn">Shuffle</button><button class="btn danger">Stop</button></div>
+        </div>
+        <div class="container">
+          <div class="section"><div class="txt"><h3 class="t">Screenshots from tonight</h3><small>3 images · uploaded by Theo</small></div><button class="btn">Open album</button></div>
+          <div class="gallery"><span style="background:linear-gradient(135deg,#0ea5e9,#22c55e)"></span><span style="background:linear-gradient(135deg,#f59e0b,#ef4444)"></span><span style="background:linear-gradient(135deg,#64748b,#0f766e)"></span></div>
+        </div>
+      </div></div></div>
+  </div>
+
+  <h2>6 · App forms (modals)</h2>
+  <p class="note">When a button or command asks for a form, the app's fields open in our dialog: its title, which app is asking, text fields (short or long) with required marks and limits, Cancel and Submit. Submitting shows the spinner in Submit; an error from the app shows under the fields and keeps what you typed.</p>
+  <div class="scrim">
+    <div class="dialog" role="dialog" aria-labelledby="m-title">
+      <div class="dhead"><span class="av app" style="background:#c2410c">Q</span><h3 id="m-title">Suggest a question<span class="from">Quizzy is asking</span></h3><button class="btn ghost" aria-label="Close" style="width:32px;padding:0;justify-content:center"><svg class="i"><use href="#x"/></svg></button></div>
+      <div class="field"><label>Question<span class="req">*</span></label><input class="input" value="Which game shipped first: Doom or Myst?"><div class="count"><span></span><span>39 / 200</span></div></div>
+      <div class="field"><label>Answer<span class="req">*</span></label><input class="input" value="Myst"></div>
+      <div class="field"><label>Why it's fun (optional)</label><textarea class="input area" placeholder="A line on why people will like it"></textarea><div class="count"><span></span><span>0 / 400</span></div></div>
+      <div class="actions"><button class="btn">Cancel</button><button class="btn primary">Submit</button></div>
+    </div>
+  </div>
+</main>
+<script>
+document.getElementById("theme").onclick = () => {
+  const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  r.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("appcmd-theme", r.dataset.theme); } catch {}
+};
+</script>
+</body>
+</html>

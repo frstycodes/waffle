@@ -567,7 +567,7 @@ impl Waffle {
         let shown: Vec<&Member> = rows.iter().skip(m.page * m.page_size).take(m.page_size).collect();
         let selecting = bulk.any();
         let page_ids: Vec<&str> = shown.iter().map(|r| r.id.as_str()).collect();
-        let check_all = selecting.then(|| self.select_box("ss-member-check-all".into(), member_bulk::page_check(&m.selected, &page_ids), |this, cx| this.toggle_page_selected(cx), cx));
+        let check_all = selecting.then(|| self.member_select_box("ss-member-check-all".into(), member_bulk::page_check(&m.selected, &page_ids), |this, cx| this.toggle_page_selected(cx), cx));
         let label = |text: &'static str| div().truncate().child(text).into_any_element();
         // Discord hides how members joined from anyone without Manage server, and only they can filter by date.
         let columns: Vec<(Col, AnyElement)> = [
@@ -597,7 +597,7 @@ impl Waffle {
             let mut cells: Vec<AnyElement> = Vec::new();
             if selecting {
                 let id = member.id.clone();
-                cells.push(self.select_box(SharedString::from(format!("ss-member-check-{id}")), if picked { Check::On } else { Check::Off }, move |this, cx| this.toggle_member_selected(id.clone(), cx), cx));
+                cells.push(self.member_select_box(SharedString::from(format!("ss-member-check-{id}")), if picked { Check::On } else { Check::Off }, move |this, cx| this.toggle_member_selected(id.clone(), cx), cx));
             }
             cells.extend([
                 name_cell(member, cx),
@@ -647,7 +647,7 @@ impl Waffle {
         let open = self.server_settings.as_ref().is_some_and(|v| v.lists.members.pop == Some(Pop::Row(id.clone())));
         let pop = Pop::Row(id.clone());
         let more = ui::icon_button(SharedString::from(format!("ss-member-more-{id}")), Glyph::MoreVertical, "More options", cx).small().on_click(cx.listener(move |this, _, _, cx| this.member_pop(Some(pop.clone()), cx)));
-        let menu = open.then(|| ui::dropdown(SharedString::from(format!("ss-member-menu-{id}")), 24., Align::End, self.member_menu_rows(member, powers, cx), self.member_dismiss(cx), cx));
+        let menu = open.then(|| ui::menu_dropdown(SharedString::from(format!("ss-member-menu-{id}")), 24., Align::End, self.member_menu_rows(member, powers, cx), self.member_dismiss(cx), cx));
         cell = cell.child(div().relative().child(more).children(menu));
         cell.into_any_element()
     }

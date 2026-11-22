@@ -92,6 +92,14 @@ impl Waffle {
             self.show_toast("Banners need Nitro: set yours on Discord", cx);
             return cx.open_url(DISCORD);
         }
+        self.prompt_profile_image(cx, move |this, _, uri, cx| {
+            let key = if image == ProfileImage::Avatar { "avatar" } else { "banner" };
+            this.send_profile_patch(json!({ key: uri }), cx);
+        });
+    }
+
+    // Asks for a picture and hands over its file and data URI. Animated ones need Nitro, so those go to Discord.
+    pub(super) fn prompt_profile_image(&mut self, cx: &mut Context<Self>, then: impl FnOnce(&mut Self, std::path::PathBuf, String, &mut Context<Self>) + 'static) {
         let paths = cx.prompt_for_paths(gpui_kit::PathPromptOptions { files: true, directories: false, multiple: false, prompt: None });
         let premium = self.my_account.premium;
         cx.spawn(async move |this, cx| {
@@ -103,10 +111,7 @@ impl Waffle {
                     this.show_toast("Animated avatars need Nitro: set yours on Discord", cx);
                     cx.open_url(DISCORD);
                 }
-                Ok((uri, _)) => {
-                    let key = if image == ProfileImage::Avatar { "avatar" } else { "banner" };
-                    this.send_profile_patch(json!({ key: uri }), cx);
-                }
+                Ok((uri, _)) => then(this, path, uri, cx),
                 Err(e) => this.show_toast(e, cx),
             });
         })
@@ -175,7 +180,7 @@ fn needs_discord(error: &str) -> bool {
 }
 
 // A picked image as Discord's image data (a data URI), and whether it's animated.
-fn image_data_uri(path: &std::path::Path) -> Result<(String, bool), String> {
+pub(crate) fn image_data_uri(path: &std::path::Path) -> Result<(String, bool), String> {
     let mime = match path.extension().and_then(|e| e.to_str()).map(str::to_lowercase).as_deref() {
         Some("png") => "image/png",
         Some("jpg" | "jpeg") => "image/jpeg",

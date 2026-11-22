@@ -67,12 +67,11 @@ fn window_choice(window: &ShareableWindow) -> (ShareSource, String) {
     (ShareSource::Window(window.id), window.title.clone())
 }
 
-// What the Toggle Screen Share keybind shares: the detected game, else the app in front when it's
-// pressed (as Discord's Go Live does), else the remembered source. None opens the picker. Waffle in front
-// has no windows on offer, so it falls through. Takes the app's first listed window: a game that keeps a
-// launcher window open may need picking by size instead.
-pub fn keybind_source(game_pid: Option<i32>, last: Option<&LastShare>, windows: &[ShareableWindow], screens: &[ShareableScreen]) -> Option<(ShareSource, String)> {
-    game_pid.and_then(|pid| windows.iter().find(|w| w.pid == pid)).map(window_choice).or_else(|| last.and_then(|l| l.find(windows, screens)))
+// What the Toggle Screen Share keybind shares: the detected game's window, else the whole primary screen,
+// never whatever app happens to be in front. None (no screen at all) opens the picker. Takes the game's
+// first listed window: a game that keeps a launcher window open may need picking by size instead.
+pub fn keybind_source(game_pid: Option<i32>, windows: &[ShareableWindow], screens: &[ShareableScreen]) -> Option<(ShareSource, String)> {
+    game_pid.and_then(|pid| windows.iter().find(|w| w.pid == pid)).map(window_choice).or_else(|| screens.first().map(screen_choice))
 }
 
 #[derive(Debug, PartialEq)]
@@ -101,11 +100,10 @@ impl Waffle {
         }
     }
 
-    // The game, or the app in front, is read now at the key press; listing windows takes tens of milliseconds, so it
-    // runs off the UI thread, and the call may have changed by the time it's back.
+    // The game is read now at the key press; listing windows takes tens of milliseconds, so it runs off the
+    // UI thread, and the call may have changed by the time it's back.
     fn share_from_keybind(&mut self, cx: &mut Context<Self>) {
-        let game = crate::games::running_pid().map(|pid| pid as i32).or_else(voice::frontmost_pid);
-        let last = self.prefs.last_share.clone();
+        let game = crate::games::running_pid().map(|pid| pid as i32);
         let listing = cx.background_spawn(async { (voice::shareable_windows().unwrap_or_default(), voice::screens().unwrap_or_default()) });
         cx.spawn(async move |this, cx| {
             let (windows, screens) = listing.await;
@@ -114,7 +112,7 @@ impl Waffle {
                 if !ready {
                     return;
                 }
-                match keybind_source(game, last.as_ref(), &windows, &screens) {
+                match keybind_source(game, &windows, &screens) {
                     Some((source, label)) => this.share_and_remember(source, label, &windows, cx),
                     None => this.open_share_picker(cx),
                 }
@@ -555,12 +553,13 @@ mod tests {
     }
 
     #[test]
-    fn keybind_shares_the_app_in_front_then_the_remembered_source() {
+    fn keybind_shares_the_game_else_the_screen() {
         let windows = [window(10, 100, "Figma"), window(20, 200, "Valorant")];
-        let figma = LastShare::Window { id: 10, pid: 100, app_name: "Figma".into() };
-        let source = |front, last| keybind_source(front, last, &windows, &screens()).map(|(s, _)| s);
-        assert_eq!(source(Some(200), Some(&figma)), Some(ShareSource::Window(20)), "the game in front wins over the last share");
-        assert_eq!(source(Some(1), Some(&figma)), Some(ShareSource::Window(10)), "Waffle in front: the last share");
-        assert_eq!(source(None, None), None, "nothing to go on: the picker");
+        let source = |game| keybind_source(game, &windows, &screens()).map(|(s, _)| s);
+        let screen = screens()[0].id;
+        assert_eq!(source(Some(200)), Some(ShareSource::Window(20)), "the game's window");
+        assert_eq!(source(None), Some(ShareSource::Screen(screen)), "no game: the whole screen, not the app in front");
+        assert_eq!(source(Some(1)), Some(ShareSource::Screen(screen)), "a game with no window on offer: the screen");
+        assert_eq!(keybind_source(None, &windows, &[]).map(|(s, _)| s), None, "no screen at all: the picker");
     }
 }

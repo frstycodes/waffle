@@ -163,7 +163,8 @@ pub fn parse_sticker(v: &Value) -> Option<Expression> {
 }
 
 pub fn parse_sound(v: &Value) -> Option<Expression> {
-    Some(Expression { id: v["sound_id"].as_str()?.to_owned(), name: v["name"].as_str().unwrap_or_default().to_owned(), url: None, by_id: v["user"]["id"].as_str().map(str::to_owned), by: name_of(&v["user"]) })
+    let sound = crate::discord::SoundboardSound::parse(v)?;
+    Some(Expression { id: sound.id, name: sound.name, url: None, by_id: v["user"]["id"].as_str().map(str::to_owned), by: name_of(&v["user"]) })
 }
 
 pub fn parse_ban(v: &Value) -> Option<Person> {
@@ -188,6 +189,9 @@ pub fn parse_integration(v: &Value) -> Option<Expression> {
 }
 
 pub fn parse_hook(v: &Value) -> Option<Hook> {
+    if crate::announcements::is_follower_webhook(v) {
+        return None;
+    }
     let id = v["id"].as_str()?.to_owned();
     Some(Hook {
         url: v["token"].as_str().map(|token| format!("https://discord.com/api/webhooks/{id}/{token}")),
@@ -266,7 +270,11 @@ impl Waffle {
             Page::Invites => self.server_call(api::invites(g), |this, r, _| _ = this.lists().map(|l| l.invites = list(r, parse_invite)), cx),
             Page::Integrations => {
                 self.server_call(api::integrations(g), |this, r, _| _ = this.lists().map(|l| l.integrations = list(r, parse_integration)), cx);
-                self.server_call(api::webhooks(g), |this, r, _| _ = this.lists().map(|l| l.webhooks = list(r, parse_hook)), cx);
+                let guild = guild_id.clone();
+                self.server_call(api::webhooks(g), move |this, r, _| {
+                    this.store_followed_channels(guild, &r);
+                    _ = this.lists().map(|l| l.webhooks = list(r, parse_hook));
+                }, cx);
             }
             Page::AutoMod => self.server_call(api::automod_rules(g), |this, r, _| _ = this.lists().map(|l| l.rules = list(r, parse_rule)), cx),
             Page::AuditLog => {
@@ -591,6 +599,7 @@ impl Waffle {
             let create = first.map(|channel| {
                 ui::button("ss-hook-new", Tone::Secondary, cx).small().child(Icon::new(Glyph::Plus).size(px(16.))).child("New webhook").on_click(cx.listener(move |this, _, _, cx| this.act_and_reload(api::create_webhook(&channel, "Captain Hook"), Page::Integrations, cx)))
             });
+            out.push(self.followed_channels_group(&guild_id, cx));
             out.push(ui::settings_group("Webhooks", cx).child(ui::settings_card(cx).id("ss-webhooks").children(hooks)).child(div().flex().justify_end().children(create)).into_any_element());
         }
         out.push(link_out("app-directory", "App directory", "Find and add apps on Discord.", format!("https://discord.com/application-directory?guild_id={guild_id}"), cx));
@@ -739,7 +748,7 @@ impl Waffle {
         let body = open.then(|| {
             div().pl(px(30.)).pt(px(8.)).flex().flex_col().gap(px(4.)).children(details.into_iter().map(|d| {
                 let change = match (&d.old, &d.new) {
-                    (Some(old), Some(new)) => div().flex().items_center().gap(px(6.)).child(div().text_color(palette::muted(cx)).line_through().child(old.clone())).child(Icon::new(Glyph::ArrowRightBold).size(px(12.))).child(div().text_color(palette::strong(cx)).child(new.clone())),
+                    (Some(old), Some(new)) => div().flex().items_center().gap(px(6.)).child(div().text_color(palette::muted(cx)).line_through().child(old.clone())).child(Icon::new(Glyph::ArrowRight).size(px(12.))).child(div().text_color(palette::strong(cx)).child(new.clone())),
                     (None, Some(new)) => div().text_color(palette::strong(cx)).child(new.clone()),
                     (Some(old), None) => div().text_color(palette::muted(cx)).line_through().child(old.clone()),
                     (None, None) => div().text_color(palette::muted(cx)).child("Cleared"),

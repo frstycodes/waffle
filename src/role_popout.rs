@@ -145,6 +145,7 @@ impl Waffle {
                 user: (*user).clone(),
                 roles: roles.and_then(|r| r.get(&user.id)).cloned().unwrap_or_default(),
                 presence: self.presences.get(&user.id).cloned().unwrap_or_default(),
+                boosting_since: user.boosting_since.clone(),
             };
             self.member_row(&member, spot, cx)
         });

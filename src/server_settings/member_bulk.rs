@@ -255,7 +255,7 @@ impl Waffle {
     }
 
     // A row's or the header's checkbox.
-    pub(super) fn select_box(&self, id: SharedString, state: Check, on_toggle: impl Fn(&mut Waffle, &mut Context<Waffle>) + 'static, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn member_select_box(&self, id: SharedString, state: Check, on_toggle: impl Fn(&mut Waffle, &mut Context<Waffle>) + 'static, cx: &mut Context<Self>) -> AnyElement {
         div().id(id).cursor_pointer().child(ui::check(state, cx)).on_click(cx.listener(move |this, _, _, cx| on_toggle(this, cx))).into_any_element()
     }
 }

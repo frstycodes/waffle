@@ -15,7 +15,7 @@ pub struct Call {
 }
 
 impl Call {
-    fn new(method: Method, path: String, body: Option<Value>) -> Self {
+    pub(crate) fn new(method: Method, path: String, body: Option<Value>) -> Self {
         Call { method, path, body }
     }
 

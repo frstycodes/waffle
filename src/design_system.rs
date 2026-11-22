@@ -544,6 +544,7 @@ impl DesignSystem {
                         .child(div().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Page, cx)).child(ui::empty_state("empty-idle", Mood::Idle, "No one's around", "None of your friends are online. Invite someone to play.", cx).child(ui::button("e-add", Tone::Primary, cx).mt(px(8.)).child("Add friend"))))
                         .child(div().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Page, cx)).child(ui::empty_state("empty-wait", Mood::Waiting, "Loading messages…", "Fetching the last 50 messages in #general.", cx))),
                 )
+                .child(div().flex().flex_wrap().gap(px(16.)).children(crate::illustration::Illustration::ALL.map(|art| div().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Page, cx)).child(gpui_kit::img(art.path()).w(px(200.)).h(px(150.))))))
                 .child(div().flex().flex_col().items_center().gap(px(8.)).child(ui::toast("toast", Glyph::Checkmark, palette::positive_ink(cx), "Invite link copied", None, cx))),
         )
     }

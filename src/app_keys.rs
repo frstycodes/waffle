@@ -1,12 +1,15 @@
-// App shortcuts: ⌘R / ⌘Q on macOS, Ctrl+R / Ctrl+Q on Windows and Linux; ⌘= / ⌘- / ⌘0 zoom like Discord; ⌘F / Ctrl+F in a channel or DM
-// (the "Chat" key context, so Settings can bind its own). Alt+F4 on Windows stays
-// the window's close, which hides Waffle to the tray like Discord (tray.rs).
+// App shortcuts: ⌘R / ⌘Q on macOS, Ctrl+R / Ctrl+Q on Windows and Linux; ⌘= / ⌘- / ⌘0 zoom like Discord; ⌘⇧B the soundboard in a call; ⌘F / Ctrl+F in a channel or DM
+// (the "Chat" key context, so Settings can bind its own); ⌘I toggles the Inbox and ⌘⇧E reads its top unread
+// channel, as Discord's. Alt+F4 on Windows stays the window's close, which hides Waffle to the tray like
+// Discord (tray.rs).
 use gpui_kit::{App, KeyBinding, actions};
 
-actions!(waffle, [Quit, Restart, FocusSearch, ZoomIn, ZoomOut, ResetZoom]);
+use crate::Waffle;
+
+actions!(waffle, [Quit, Restart, FocusSearch, ZoomIn, ZoomOut, ResetZoom, ToggleInbox, MarkTopUnreadRead, ToggleSoundboard, AddServer]);
 
 // Discord's zoom levels.
-const ZOOM_STEPS: [f32; 11] = [0.5, 0.67, 0.75, 0.8, 0.9, 1., 1.1, 1.25, 1.5, 1.75, 2.];
+pub(crate) const ZOOM_STEPS: [f32; 11] = [0.5, 0.67, 0.75, 0.8, 0.9, 1., 1.1, 1.25, 1.5, 1.75, 2.];
 
 pub fn init(cx: &mut App) {
     // `secondary` is ⌘ on macOS and Ctrl elsewhere.
@@ -18,13 +21,31 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("secondary-+", ZoomIn, None),
         KeyBinding::new("secondary--", ZoomOut, None),
         KeyBinding::new("secondary-0", ResetZoom, None),
+        KeyBinding::new("secondary-i", ToggleInbox, None),
+        KeyBinding::new("secondary-shift-e", MarkTopUnreadRead, None),
+        // Waffle's own: Discord leaves its Toggle Soundboard keybind unset. The window's root handles it (soundboard.rs).
+        KeyBinding::new("secondary-shift-b", ToggleSoundboard, None),
+        // Discord's "Create or join a server".
+        KeyBinding::new("secondary-shift-n", AddServer, None),
     ]);
+    cx.on_action(|_: &ToggleInbox, cx| update_main(cx, Waffle::toggle_inbox));
+    cx.on_action(|_: &MarkTopUnreadRead, cx| update_main(cx, Waffle::mark_top_unread_read));
     cx.on_action(|_: &Quit, cx| cx.quit());
     // In a call it asks first, then leaves voice (restart.rs).
     cx.on_action(|_: &Restart, cx| crate::restart::restart_app(cx));
     cx.on_action(|_: &ZoomIn, cx| set_zoom(cx, |z| ZOOM_STEPS.into_iter().find(|s| *s > z + 0.001)));
     cx.on_action(|_: &ZoomOut, cx| set_zoom(cx, |z| ZOOM_STEPS.into_iter().rev().find(|s| *s < z - 0.001)));
     cx.on_action(|_: &ResetZoom, cx| set_zoom(cx, |_| Some(1.)));
+}
+
+// Settings › Accessibility's Zoom level slider, through the same path as the shortcuts.
+pub(crate) fn set_zoom_to(cx: &mut App, zoom: f32) {
+    set_zoom(cx, |_| Some(zoom));
+}
+
+fn update_main(cx: &mut App, act: fn(&mut Waffle, &mut gpui_kit::Context<Waffle>)) {
+    let Some(main) = cx.try_global::<crate::restart::Main>().and_then(|m| m.0.upgrade()) else { return };
+    main.update(cx, act);
 }
 
 // Every window follows the saved zoom; `next` None means already at the end of the range.

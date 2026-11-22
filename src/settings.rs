@@ -9,11 +9,21 @@ use gpui_kit::{
 };
 use serde::{Deserialize, Serialize};
 
+mod accessibility;
+mod activity;
 mod advanced;
-mod profile;
+mod games;
+pub(crate) mod profile;
+mod profile_draft;
+mod profile_preview;
+mod profiles;
+pub(crate) mod proto;
 pub(crate) mod registry;
 mod updates;
 mod view;
+
+#[cfg(debug_assertions)]
+pub(crate) use profiles::ProfileTab;
 
 use crate::{
     Waffle,
@@ -29,8 +39,10 @@ use crate::{
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
     Account,
+    Profiles,
     ContentSocial,
     Appearance,
+    Accessibility,
     VoiceVideo,
     Chat,
     Notifications,
@@ -44,8 +56,10 @@ impl Page {
     pub(crate) fn label(self) -> &'static str {
         match self {
             Page::Account => "My account",
+            Page::Profiles => "Profiles",
             Page::ContentSocial => "Content and social",
             Page::Appearance => "Appearance",
+            Page::Accessibility => "Accessibility",
             Page::VoiceVideo => "Voice and video",
             Page::Chat => "Chat",
             Page::Notifications => "Notifications",
@@ -59,8 +73,10 @@ impl Page {
     fn glyph(self) -> Glyph {
         match self {
             Page::Account => Glyph::UserCircle,
+            Page::Profiles => Glyph::Id,
             Page::ContentSocial => Glyph::Shield,
             Page::Appearance => Glyph::Palette,
+            Page::Accessibility => Glyph::Eye,
             Page::VoiceVideo => Glyph::Mic,
             Page::Chat => Glyph::ChatRound,
             Page::Notifications => Glyph::Bell,
@@ -82,8 +98,8 @@ impl Page {
 
 // Discord's three headings. My account sits on its own as the identity row at the top of the nav.
 const NAV: [(&str, &[Page]); 3] = [
-    ("User settings", &[Page::ContentSocial]),
-    ("App settings", &[Page::Appearance, Page::VoiceVideo, Page::Chat, Page::Notifications, Page::Keybinds, Page::Advanced, Page::Updates]),
+    ("User settings", &[Page::Profiles, Page::ContentSocial]),
+    ("App settings", &[Page::Appearance, Page::Accessibility, Page::VoiceVideo, Page::Chat, Page::Notifications, Page::Keybinds, Page::Advanced, Page::Updates]),
     ("Activity settings", &[Page::ActivityPrivacy]),
 ];
 
@@ -93,6 +109,34 @@ pub enum ThemePref {
     System,
     Dark,
     Light,
+}
+
+// Discord's choices and ranges (docs/discord-settings-re.md).
+pub const CHAT_FONT_SIZES: [u8; 7] = [12, 14, 15, 16, 18, 20, 24];
+pub const GROUP_SPACINGS: [u8; 5] = [0, 4, 8, 16, 24];
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum Density {
+    Compact,
+    #[default]
+    Default,
+    Spacious,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum RoleStyle {
+    #[default]
+    InNames,
+    NextToNames,
+    Hidden,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum Spoilers {
+    #[default]
+    OnClick,
+    IfModerator,
+    Always,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
@@ -125,8 +169,33 @@ pub struct Prefs {
     // The interface's font family: Figtree (bundled) unless picked in Appearance.
     pub ui_font: String,
     pub mono_font: String,
-    // On top of the system's own reduce-motion setting.
+    // Discord's "Enable Reduced Motion": used while `reduce_motion_sync` is off, which follows the OS instead.
     pub reduce_motion: bool,
+    pub reduce_motion_sync: bool,
+    // Accessibility, kept on this computer as Discord does (docs/discord-settings-re.md §2).
+    // Text size in chat, one of `CHAT_FONT_SIZES`.
+    pub chat_font_size: u8,
+    // Space between message groups, one of `GROUP_SPACINGS`; None follows the display (16 cozy, 0 compact).
+    pub group_spacing: Option<u8>,
+    pub ui_density: Density,
+    // 0..=1, in 0.05 steps. Leaves images, video and user colours alone unless `desaturate_user_colors`.
+    pub saturation: f32,
+    pub desaturate_user_colors: bool,
+    pub high_contrast: bool,
+    // Discord's "Show on/off indicators": a tick or cross inside each switch's thumb.
+    pub switch_icons: bool,
+    pub role_style: RoleStyle,
+    pub underline_links: bool,
+    pub display_name_styles: bool,
+    // Toasts stay at least this long, 3..=20 s.
+    pub min_toast_secs: u8,
+    // Text-to-speech rate, 0..=10 in 0.25 steps, 1 is normal.
+    pub tts_rate: f32,
+    // Chat. Not verified: Discord syncs these three, but only in the protobuf settings Waffle doesn't use
+    // (`display_compact_avatars`, `render_spoilers`); the send button is local in Discord too.
+    pub compact_avatars: bool,
+    pub spoilers: Spoilers,
+    pub send_button: bool,
     pub app_icon: crate::app_icon::AppIcon,
     pub input_device: Option<String>,
     pub output_device: Option<String>,
@@ -161,10 +230,29 @@ pub struct Prefs {
     // Discord's per-user "Mute Soundboard" and "Disable Video", kept locally like the volume.
     pub soundboard_mutes: Vec<String>,
     pub hidden_video: Vec<String>,
+    // Discord's Soundboard Volume as it stores it: amplitude, 100 = as uploaded, 0 = soundboard muted.
+    // Shown on its perceptual scale (soundboard::perceptual).
+    pub soundboard_volume: f32,
+    // Soundboard favorites by sound id, oldest first, and how often we've played each sound. Discord syncs
+    // both in its frecency settings; Waffle keeps them here.
+    pub soundboard_favorites: Vec<String>,
+    pub soundboard_uses: Vec<(String, u32)>,
+    // Voice channels where our own Go Live's preview is hidden (Discord's per-channel "Hide Preview").
+    pub hidden_self_streams: Vec<String>,
+    // Registered games: ids not to detect, programs added as games, and every game seen here.
+    pub games_off: Vec<String>,
+    pub games_added: Vec<crate::games::Added>,
+    pub games_seen: Vec<crate::games::Seen>,
     // How often we've reacted with each emoji, for the "frequently used" rows.
     pub emoji_uses: Vec<(crate::discord::Emoji, u32)>,
+    // When each emoji was last used (unix seconds, newest last, at most FRECENCY_SAMPLES), for Discord's frecency.
+    pub emoji_times: Vec<(crate::discord::Emoji, Vec<i64>)>,
     pub sticker_uses: Vec<(crate::discord::Sticker, u32)>,
     pub mention_filters: crate::inbox::MentionFilters,
+    // The voice channel chat's width beside the call, and the voice channels whose new message
+    // previews are off (Discord's "Show New Message Previews", local only).
+    pub call_chat_width: f32,
+    pub call_previews_off: Vec<String>,
     // Go Live quality: height (0 = source), frame rate, and whether the source's sound goes too.
     pub stream_resolution: u32,
     pub stream_fps: u32,
@@ -182,6 +270,11 @@ pub struct Prefs {
     pub desktop_notifications: bool,
     pub dock_badge: bool,
     pub clock_24h: bool,
+    // Discord keeps this in its protobuf settings (textAndImages.viewImageDescriptions), which Waffle
+    // doesn't sync, so it's local.
+    pub show_image_descriptions: bool,
+    // Discord's "Allow playback and usage of /tts command" (textAndImages.enableTtsCommand), kept locally.
+    pub tts_command: bool,
     // Off: the updater still checks and says so, but downloads only when asked.
     pub auto_download_updates: bool,
     // Recent message searches per account id, newest first.
@@ -190,6 +283,12 @@ pub struct Prefs {
     pub zoom: f32,
     // The server voice channel (guild, channel) a restart left, offered back once the new session is ready.
     pub rejoin_voice: Option<(String, String)>,
+    // Announcement channels whose "Share with your followers!" bump was turned off with Don't show again.
+    pub publish_bump_hidden: Vec<String>,
+    // Discord's one playback speed for every voice message.
+    pub voice_rate: f32,
+    // Where each voice message was left, by attachment id, oldest first; Discord keeps 25.
+    pub voice_resume: Vec<(String, f32)>,
 }
 
 const KEYBINDS_VERSION: u32 = 1;
@@ -203,6 +302,22 @@ impl Default for Prefs {
             ui_font: UI_FONT.into(),
             mono_font: MONO_FONT.into(),
             reduce_motion: false,
+            reduce_motion_sync: true,
+            chat_font_size: 16,
+            group_spacing: None,
+            ui_density: Density::Default,
+            saturation: 1.,
+            desaturate_user_colors: false,
+            high_contrast: false,
+            switch_icons: false,
+            role_style: RoleStyle::InNames,
+            underline_links: false,
+            display_name_styles: true,
+            min_toast_secs: 3,
+            tts_rate: 1.,
+            compact_avatars: false,
+            spoilers: Spoilers::OnClick,
+            send_button: false,
             app_icon: crate::app_icon::AppIcon::default(),
             input_device: None,
             output_device: None,
@@ -230,9 +345,19 @@ impl Default for Prefs {
             local_mutes: Vec::new(),
             soundboard_mutes: Vec::new(),
             hidden_video: Vec::new(),
+            soundboard_volume: 100.,
+            soundboard_favorites: Vec::new(),
+            soundboard_uses: Vec::new(),
+            hidden_self_streams: Vec::new(),
+            games_off: Vec::new(),
+            games_added: Vec::new(),
+            games_seen: Vec::new(),
             emoji_uses: Vec::new(),
+            emoji_times: Vec::new(),
             sticker_uses: Vec::new(),
             mention_filters: crate::inbox::MentionFilters::default(),
+            call_chat_width: crate::call::CHAT_MIN_WIDTH,
+            call_previews_off: Vec::new(),
             stream_resolution: 720,
             stream_fps: 30,
             stream_audio: true,
@@ -243,10 +368,15 @@ impl Default for Prefs {
             desktop_notifications: true,
             dock_badge: true,
             clock_24h: false,
+            show_image_descriptions: false,
+            tts_command: true,
             auto_download_updates: true,
             search_history: HashMap::new(),
             zoom: 1.,
             rejoin_voice: None,
+            publish_bump_hidden: Vec::new(),
+            voice_rate: 1.,
+            voice_resume: Vec::new(),
         }
     }
 }
@@ -257,7 +387,12 @@ fn share_keybind() -> Keybind {
 
 impl Prefs {
     pub fn load() -> Self {
-        let mut prefs: Self = prefs_file().and_then(|path| std::fs::read_to_string(path).ok()).and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default();
+        let text = prefs_file().and_then(|path| std::fs::read_to_string(path).ok()).unwrap_or_default();
+        let mut prefs: Self = serde_json::from_str(&text).unwrap_or_default();
+        // Before the sync switch, Reduce motion added to the OS setting; a file that had it on keeps it on.
+        if prefs.reduce_motion && !text.contains("\"reduce_motion_sync\"") {
+            prefs.reduce_motion_sync = false;
+        }
         prefs.add_new_keybinds();
         // 480p left the picker; the nearest offered quality takes its place.
         if prefs.stream_resolution == 480 {
@@ -274,6 +409,15 @@ impl Prefs {
             self.keybinds.push(share_keybind());
         }
         self.keybinds_version = KEYBINDS_VERSION;
+    }
+
+    pub fn reduces_motion(&self) -> bool {
+        if self.reduce_motion_sync { crate::material::system_reduce_motion() } else { self.reduce_motion }
+    }
+
+    // Discord's default spacing is 16 in cozy and 0 in compact until it's moved.
+    pub fn group_spacing(&self, compact: bool) -> u8 {
+        self.group_spacing.unwrap_or(if compact { 0 } else { 16 })
     }
 
     pub(crate) fn save(&self) {
@@ -366,11 +510,15 @@ impl Prefs {
 }
 
 impl Prefs {
-    // Most-used first, topped up with Discord's own defaults when we haven't reacted enough yet.
-    // ponytail: counts only; Discord's frecency (time-decayed, synced in settings-proto) is the upgrade.
+    // By Discord's frecency, topped up with Discord's own defaults when we haven't reacted enough yet.
+    // Synced with Discord's settings-proto (frecency_sync.rs).
     pub fn frequent_emojis(&self, n: usize, pad: &[&str]) -> Vec<crate::discord::Emoji> {
+        let now = chrono::Utc::now().timestamp();
         let mut uses = self.emoji_uses.clone();
-        uses.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+        uses.sort_by_key(|(emoji, count)| {
+            let times = self.emoji_times.iter().find(|(e, _)| e == emoji).map_or(&[][..], |(_, t)| t.as_slice());
+            std::cmp::Reverse(frecency(*count, times, now))
+        });
         let mut out: Vec<crate::discord::Emoji> = uses.into_iter().map(|(e, _)| e).take(n).collect();
         for name in pad {
             if out.len() >= n {
@@ -398,12 +546,62 @@ impl Prefs {
         }
     }
 
+    // Uses from another device (Discord's synced frecency): the higher count, and both sets of times.
+    pub fn merge_emoji_uses(&mut self, remote: Vec<(crate::discord::Emoji, u32, Vec<i64>)>) {
+        for (emoji, total, times) in remote {
+            match self.emoji_uses.iter_mut().find(|(e, _)| *e == emoji) {
+                Some((_, count)) => *count = (*count).max(total),
+                None => self.emoji_uses.push((emoji.clone(), total)),
+            }
+            match self.emoji_times.iter_mut().find(|(e, _)| *e == emoji) {
+                Some((_, kept)) => {
+                    kept.extend(times);
+                    kept.sort_unstable();
+                    kept.dedup();
+                    let excess = kept.len().saturating_sub(FRECENCY_SAMPLES);
+                    kept.drain(..excess);
+                }
+                None => self.emoji_times.push((emoji, times.into_iter().rev().take(FRECENCY_SAMPLES).rev().collect())),
+            }
+        }
+    }
+
     pub fn record_emoji(&mut self, emoji: &crate::discord::Emoji) {
         match self.emoji_uses.iter_mut().find(|(e, _)| e == emoji) {
             Some((_, count)) => *count += 1,
             None => self.emoji_uses.push((emoji.clone(), 1)),
         }
+        let now = chrono::Utc::now().timestamp();
+        match self.emoji_times.iter_mut().find(|(e, _)| e == emoji) {
+            Some((_, times)) => {
+                times.push(now);
+                let excess = times.len().saturating_sub(FRECENCY_SAMPLES);
+                times.drain(..excess);
+            }
+            None => self.emoji_times.push((emoji.clone(), vec![now])),
+        }
     }
+}
+
+const FRECENCY_SAMPLES: usize = 10;
+
+// Discord's frecency score (its web client, module 283047): each recent use weighs by its age (100 up
+// to 3 days, 70 to 15, 50 to 30, 30 to 45, 10 to 80, else 1), and the total use count scales their
+// average. A count with no recorded times (from before they were kept) scores as itself.
+fn frecency(total: u32, times: &[i64], now: i64) -> u64 {
+    if times.is_empty() {
+        return u64::from(total);
+    }
+    let weight = |at: &i64| match (now - at) / 86_400 {
+        ..=3 => 100,
+        4..=15 => 70,
+        16..=30 => 50,
+        31..=45 => 30,
+        46..=80 => 10,
+        _ => 1,
+    };
+    let sum: u64 = times.iter().map(weight).sum();
+    (u64::from(total) * sum).div_ceil(times.len() as u64)
 }
 
 fn prefs_file() -> Option<std::path::PathBuf> {
@@ -414,6 +612,7 @@ fn prefs_file() -> Option<std::path::PathBuf> {
 enum Slider {
     InputVolume,
     OutputVolume,
+    SoundboardVolume,
     Sensitivity,
     ReleaseDelay,
     Attenuation,
@@ -424,6 +623,7 @@ impl Slider {
         match self {
             Slider::InputVolume => prefs.input_volume / 2.,
             Slider::OutputVolume => prefs.output_volume / 2.,
+            Slider::SoundboardVolume => crate::soundboard::slider_fraction(prefs.soundboard_volume),
             Slider::Sensitivity => (prefs.sensitivity_db + 100.) / 100.,
             Slider::ReleaseDelay => prefs.ptt_release_ms as f32 / 2000.,
             Slider::Attenuation => f32::from(prefs.attenuation) / 100.,
@@ -435,6 +635,7 @@ impl Slider {
         match self {
             Slider::InputVolume => prefs.input_volume = f * 2.,
             Slider::OutputVolume => prefs.output_volume = f * 2.,
+            Slider::SoundboardVolume => prefs.soundboard_volume = crate::soundboard::amplitude(f * 100.),
             Slider::Sensitivity => prefs.sensitivity_db = (f * 100. - 100.).round(),
             Slider::ReleaseDelay => prefs.ptt_release_ms = (f * 2000.).round() as u32,
             Slider::Attenuation => prefs.attenuation = (f * 100.).round() as u8,
@@ -450,6 +651,7 @@ enum Select {
     Action(usize),
     UiFont,
     MonoFont,
+    JoinActivity,
 }
 
 // The live drag payload for a slider; drawn as nothing.
@@ -512,6 +714,10 @@ pub struct SettingsView {
     result: usize,
     pending_jump: Option<&'static str>,
     editing: Option<profile::ProfileEdit>,
+    // The Profiles page's drafts, kept while Settings stays open.
+    profiles: Option<profiles::ProfileEditor>,
+    // Add it!'s list of running programs, while open.
+    adding_game: Option<Vec<(String, String)>>,
 }
 
 #[derive(Default)]
@@ -557,6 +763,8 @@ impl SettingsView {
             result: 0,
             pending_jump: None,
             editing: None,
+            profiles: None,
+            adding_game: None,
         }
     }
 }
@@ -585,18 +793,25 @@ impl Waffle {
         cx.notify();
     }
 
-    // Saves, then pushes every setting that has a live effect: sounds, hotkeys, the voice engine.
+    // Saves, then pushes every setting that has a live effect: sounds, hotkeys, the voice engine, the look.
     pub(crate) fn update_prefs(&mut self, cx: &mut Context<Self>, change: impl FnOnce(&mut Prefs)) {
         change(&mut self.prefs);
         self.prefs.save();
+        let restyled = palette::set_look(&self.prefs);
         self.apply_prefs();
-        cx.set_reduce_motion(crate::material::system_reduce_motion() || self.prefs.reduce_motion);
+        if restyled {
+            palette::apply(cx);
+        }
+        cx.set_reduce_motion(self.prefs.reduces_motion());
         cx.notify();
     }
 
     pub(crate) fn apply_prefs(&mut self) {
         sounds::silence(&self.prefs.silenced_cues);
         crate::chat::set_clock_24(self.prefs.clock_24h);
+        palette::set_look(&self.prefs);
+        crate::ui::set_density(self.prefs.ui_density);
+        crate::ui::set_switch_icons(self.prefs.switch_icons);
         if let Some(hotkeys) = &mut self.hotkeys {
             let active: Vec<Keybind> = self.prefs.keybinds.iter().filter(|k| self.prefs.push_to_talk || k.action != Action::PushToTalk).cloned().collect();
             self.keybind_errors = hotkeys.bind(&active);
@@ -604,6 +819,7 @@ impl Waffle {
         if let Some(call) = &self.call {
             self.prefs.apply_to(&call.session);
         }
+        crate::games::set_rules(crate::games::Rules { off: self.prefs.games_off.iter().cloned().collect(), added: self.prefs.games_added.clone() });
     }
 
     pub(crate) fn start_hotkeys(&mut self, cx: &mut Context<Self>) {
@@ -673,6 +889,7 @@ impl Waffle {
             Action::ToggleVoiceMode => self.update_prefs(cx, |p| p.push_to_talk = !p.push_to_talk),
             Action::ToggleScreenShare => self.toggle_share_keybind(cx),
             Action::Disconnect => self.leave_voice(cx),
+            Action::ToggleVoiceChannelChat => self.toggle_call_chat_keybind(cx),
             Action::Unassigned => {}
         }
         cx.notify();
@@ -696,6 +913,11 @@ impl Waffle {
         self.keep_mic_test_choice();
         sounds::play(if self.deafened { Cue::Deafen } else { Cue::Undeafen });
         self.sync_voice_flags();
+        // Deafening stops every soundboard sound playing, as Discord's does.
+        if self.deafened {
+            self.soundboard.stop_playing();
+            self.soundboard.close_picker();
+        }
         cx.notify();
     }
 
@@ -769,17 +991,23 @@ impl Waffle {
     // Settings take the whole window: the nav on the sidebar tone, one page on the right with a big
     // title, and a close button pinned top right (design/settings.html, .set).
     pub(crate) fn render_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let view = self.settings.as_ref()?;
-        let (page, scroll) = (view.page, view.scroll.clone());
+        let page = self.settings.as_ref()?.page;
+        if page == Page::Profiles {
+            self.ensure_profile_editor(window, cx);
+        }
+        let scroll = self.settings.as_ref()?.scroll.clone();
         let mut sections: Vec<Section> = match page {
             Page::Account => self.account_page(cx),
+            Page::Profiles => self.profiles_page(window, cx),
             Page::Notifications => self.notifications_page(window, cx),
             Page::VoiceVideo => self.voice_page(window, cx),
             Page::Keybinds => self.keybinds_page(cx),
             Page::Appearance => self.appearance_page(window, cx),
             Page::Updates => self.updates_page(window, cx),
             Page::Advanced => self.advanced_page(cx),
-            Page::ContentSocial | Page::Chat | Page::ActivityPrivacy => Vec::new(),
+            Page::Accessibility => self.accessibility_page(window, cx),
+            Page::ActivityPrivacy => [self.activity_sharing_page(window, cx), self.games_page(window, cx)].into_iter().flatten().collect(),
+            Page::ContentSocial | Page::Chat => Vec::new(),
         };
         sections.extend(self.registry_sections(page, window, cx));
         // Groups follow the registry's order; an unkeyed section stays with the one before it.
@@ -804,8 +1032,12 @@ impl Waffle {
         let anchors: Vec<usize> = page.sections().iter().map(|name| sections.iter().position(|s| s.anchor == Some(*name)).map_or(0, |i| i + 1)).collect();
         let title = (page != Page::Keybinds).then(|| ui::settings_title(page.label(), cx).flex_none());
         let body = ui::settings_page("settings-scroll", &scroll)
-            .children(title.map(ui::settings_column))
-            .children(sections.into_iter().map(|s| ui::settings_column(s.body)));
+            .children(title.map(|t| column(page, t)))
+            .children(sections.into_iter().map(|s| column(page, s.body)));
+        let (bar, undo) = match page {
+            Page::Profiles => (self.profiles_bar(cx), self.profiles_undo(cx)),
+            _ => (None, None),
+        };
         let main = div()
             .relative()
             .flex_1()
@@ -813,6 +1045,8 @@ impl Waffle {
             .h_full()
             .bg(palette::surface(Level::Page, cx))
             .child(div().size_full().relative().child(body).child(gpui_kit::component::scroll::Scrollbar::vertical(&scroll)).with_animation(SharedString::from(format!("set-page-{page:?}")), Animation::new(ui::DUR_POP).with_easing(|t| motion::ease_out().sample(t)), |el, t| el.top(px(-4. * (1. - t))).opacity(t)))
+            .children(bar)
+            .children(undo)
             .child(ui::settings_close("settings-close", cx.listener(|this, _, _, cx| this.close_settings(cx)), cx));
         let nav = self.settings_nav(&anchors, cx).into_any_element();
         Some(self.settings_frame("settings", nav, main, cx).capture_key_down(cx.listener(Self::settings_search_key)).into_any_element())
@@ -1055,12 +1289,6 @@ impl Waffle {
         let text = ui::settings_card(cx)
             .child(self.font_row(Select::UiFont, "Interface font", Some("Menus, messages and everything else"), &self.prefs.ui_font, UI_FONT, false, cx))
             .child(self.font_row(Select::MonoFont, "Code font", Some("Code blocks and inline code"), &self.prefs.mono_font, MONO_FONT, true, cx));
-        let motion = ui::settings_card(cx).child(self.switch_row(
-            SwitchRow { id: "set-reduce-motion", title: "Reduce motion", detail: Some("Fades instead of springs and slides"), on: self.prefs.reduce_motion, enabled: true, field: |p| &mut p.reduce_motion },
-            false,
-            window,
-            cx,
-        ));
         let material = crate::material::setting_name().map(|name| {
             let row = self.switch_row(SwitchRow { id: "set-native-sidebar", title: name, detail: None, on: self.prefs.native_sidebar, enabled: true, field: |p| &mut p.native_sidebar }, false, window, cx);
             Section::keyed(
@@ -1069,9 +1297,8 @@ impl Waffle {
             )
         });
         let mut sections = vec![
-            Section::keyed("Theme", ui::settings_group("Theme", cx).child(picks).child(ui::settings_caption("Midnight is the darkest theme, the one Waffle is built on.", cx))),
+            Section::keyed("Theme", ui::settings_group("Theme", cx).child(picks).child(ui::settings_caption("Midnight is the darkest theme, the one Waffle is built on.", cx)).child(self.accessibility_link(cx))),
             Section::keyed("Text", ui::settings_group("Text", cx).child(text).child(ui::settings_caption("Any font installed on this computer. Figtree and Roboto Mono come with Waffle.", cx))),
-            Section::keyed("Motion", ui::settings_group("Motion", cx).child(motion).child(ui::settings_caption("Your computer's own reduce-motion setting turns this on too.", cx))),
             Section::keyed("App icon", ui::settings_group("App icon", cx).child(self.app_icon_grid(cx)).child(ui::settings_caption("How Waffle looks in your Dock: the same waffle in different media. Changes right away; no restart.", cx))),
         ];
         sections.splice(1..1, material);
@@ -1199,6 +1426,9 @@ impl Waffle {
             .gap(px(24.))
             .child(div().flex_1().min_w_0().child(self.volume("Microphone volume", &percent(prefs.input_volume), Slider::InputVolume, cx)))
             .child(div().flex_1().min_w_0().child(self.volume("Speaker volume", &percent(prefs.output_volume), Slider::OutputVolume, cx)));
+        // Discord's own name for it; it sits under the speaker it plays through.
+        let soundboard = format!("{}%", crate::soundboard::perceptual(prefs.soundboard_volume).round() as i32);
+        let soundboard = div().flex().gap(px(24.)).child(div().flex_1()).child(div().flex_1().min_w_0().child(self.volume("Soundboard Volume", &soundboard, Slider::SoundboardVolume, cx)));
         let test_button = ui::button("mic-test", Tone::Primary, cx)
             .min_w(px(112.))
             .child(Icon::new(if testing { Glyph::Stop } else { Glyph::Mic }).size(px(16.)))
@@ -1210,7 +1440,7 @@ impl Waffle {
         let notice = no_input.then(|| self.no_input_notice(mic, cx));
         ui::settings_group("Devices", cx).child(
             card_pad(cx)
-                .child(div().flex().flex_col().gap(px(16.)).child(devices).child(volumes))
+                .child(div().flex().flex_col().gap(px(16.)).child(devices).child(volumes).child(soundboard))
                 .child(mic_test)
                 .children(notice)
                 .child(ui::settings_caption(format!("Talk normally. You'll hear yourself back through {speaker}."), cx).px_0()),
@@ -1423,16 +1653,7 @@ impl Waffle {
         let mut lines = Hairlines::default();
         let rows: Vec<AnyElement> = self.prefs.keybinds.iter().enumerate().map(|(index, keybind)| self.keybind_row(index, keybind, lines.next(), cx)).collect();
         let yours = ui::settings_group("Your keybinds", cx).children(self.input_monitoring_notice(cx)).when(!rows.is_empty(), |g| g.child(ui::settings_card(cx).children(rows)));
-        let mut lines = Hairlines::default();
-        let defaults = DEFAULT_KEYBINDS.iter().map(|&(action, combos)| {
-            ui::settings_row(SharedString::from(format!("default-{action}")), lines.next(), cx).min_h(px(48.)).child(ui::settings_text(action, None::<&str>, cx)).child(combo_caps(combos, cx))
-        });
-        let platform = if cfg!(target_os = "macos") { "Built in and always on." } else { "Built in and always on. Ctrl reads \u{2318} on a Mac." };
-        vec![
-            Section::new(header),
-            Section::keyed("Your keybinds", yours),
-            Section::keyed("Default keybinds", ui::settings_group("Default keybinds", cx).child(ui::settings_card(cx).children(defaults)).child(ui::settings_caption(platform, cx))),
-        ]
+        vec![Section::new(header), Section::keyed("Your keybinds", yours), Section::keyed("Default keybinds", self.default_keybinds(cx))]
     }
 
     // macOS keeps keys from Waffle until it's allowed Input Monitoring; the hook starts once it is.
@@ -1769,6 +1990,9 @@ impl Waffle {
         if let Some(s) = &mut self.settings {
             s.select = None;
         }
+        if select == Select::JoinActivity {
+            return self.set_join_activity_default(id.parse().unwrap_or(0), cx);
+        }
         if matches!(select, Select::UiFont | Select::MonoFont) {
             self.update_prefs(cx, |p| match select {
                 Select::UiFont => p.ui_font = id.to_owned(),
@@ -1787,7 +2011,7 @@ impl Waffle {
                     bind.action = action;
                 }
             }
-            Select::UiFont | Select::MonoFont => {}
+            Select::UiFont | Select::MonoFont | Select::JoinActivity => {}
         });
     }
 
@@ -1918,15 +2142,6 @@ const MORE_CUES: [(&str, &str, Cue); 12] = [
     ("cue-incoming-ring", "Incoming ring", Cue::CallRinging),
 ];
 
-// Built-in shortcuts, each as one or more combos read "or".
-const DEFAULT_KEYBINDS: [(&str, &[&str]); 5] = [
-    ("Quick switcher", &["cmd+k"]),
-    ("Navigate between channels", &["alt+ArrowUp", "ArrowDown"]),
-    ("Mark channel as read", &["escape"]),
-    ("Previous and next in the image viewer", &["ArrowLeft", "ArrowRight"]),
-    ("Close a popup", &["escape"]),
-];
-
 fn os_name() -> &'static str {
     match std::env::consts::OS {
         "macos" => "macOS",
@@ -1967,6 +2182,11 @@ fn sub_items(page: Page, current: usize, anchors: &[usize], cx: &mut Context<Waf
                 cx.notify();
             }))
     }))
+}
+
+// The page's centred column; Profiles runs wider to fit its preview beside the fields.
+fn column(page: Page, child: impl IntoElement) -> Div {
+    ui::settings_column(child).when(page == Page::Profiles, |c| c.max_w(px(profiles::PAGE_WIDTH)))
 }
 
 fn card_pad(cx: &App) -> Div {
@@ -2116,14 +2336,6 @@ pub(crate) fn key_caps(keys: &str, cx: &App) -> Div {
     div().flex().items_center().gap(px(4.)).children(keys.split('+').map(|key| ui::kbd(key_name(key), cx)))
 }
 
-fn combo_caps(combos: &[&str], cx: &App) -> Div {
-    let muted = palette::muted(cx);
-    div().flex().items_center().gap(px(4.)).flex_none().children(combos.iter().enumerate().flat_map(|(i, combo)| {
-        let or = (i > 0).then(|| div().px(px(2.)).text_size(px(12.)).text_color(muted).child("or").into_any_element());
-        or.into_iter().chain([key_caps(combo, cx).into_any_element()])
-    }))
-}
-
 // ⌘ ⇧ ⌥ ⌃ on macOS, printed names elsewhere; arrows as arrows, letters upper-case.
 pub(crate) fn key_name(key: &str) -> SharedString {
     let mac = cfg!(target_os = "macos");
@@ -2250,6 +2462,18 @@ fn advanced_summary(custom: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn frecency_favours_recent_use_over_old_bulk() {
+        let now = 100 * 86_400;
+        let days_ago = |d: i64| now - d * 86_400;
+        let old = frecency(10, &[days_ago(60); 10], now);
+        let fresh = frecency(3, &[days_ago(1); 3], now);
+        assert_eq!(old, 100, "ten uses two months back weigh 10 each");
+        assert_eq!(fresh, 300, "three uses yesterday weigh 100 each");
+        assert!(fresh > old);
+        assert_eq!(frecency(7, &[], now), 7, "counts from before times were kept");
+    }
 
     #[test]
     fn mic_test_gives_deafen_back_as_last_chosen() {
