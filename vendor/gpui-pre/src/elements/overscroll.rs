@@ -58,6 +58,12 @@ pub(crate) fn rubber_bands(event: &ScrollWheelEvent, cx: &App) -> bool {
     cfg!(target_os = "macos") && event.delta.precise() && !cx.reduce_motion()
 }
 
+/// Whether momentum may stretch past an edge and rebound: the same platforms and settings as
+/// [`rubber_bands`], for motion stepped per frame rather than fed by an event.
+pub(crate) fn coasts_into_edges(cx: &App) -> bool {
+    cfg!(target_os = "macos") && !cx.reduce_motion()
+}
+
 #[derive(Clone, Copy, Debug)]
 struct Rebound {
     initial: f32,

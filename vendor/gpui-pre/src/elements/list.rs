@@ -7,7 +7,9 @@
 //!
 //! If all of your elements are the same height, see [`crate::UniformList`] for a simpler API
 
-use super::overscroll::{Overscroll, rubber_bands};
+use super::overscroll::{Overscroll, coasts_into_edges, rubber_bands};
+use super::scroll_motion::{ScrollInput, ScrollMotion};
+use crate::TouchPhase;
 use crate::{
     AnyElement, App, AvailableSpace, Bounds, ContentMask, DispatchPhase, Edges, Element, EntityId,
     FocusHandle, GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, IntoElement,
@@ -75,6 +77,8 @@ struct StateInner {
     pending_scroll: Option<PendingScroll>,
     follow_state: FollowState,
     overscroll: Overscroll,
+    /// Waffle: momentum and wheel easing, stepped once per frame.
+    scroll_motion: ScrollMotion,
 }
 
 /// Deferred scroll adjustment applied after the scroll-top item has been remeasured.
@@ -328,6 +332,7 @@ impl ListState {
             pending_scroll: None,
             follow_state: FollowState::default(),
             overscroll: Overscroll::default(),
+            scroll_motion: ScrollMotion::default(),
         })));
         this.splice(0..0, item_count);
         this
@@ -1580,6 +1585,29 @@ impl Element for List {
             state.measuring_behavior.reset();
         }
 
+        // Waffle: this frame's share of momentum or a notch's ease, sampled at draw time.
+        if state.scroll_motion.is_moving() && !state.reset {
+            let now = Instant::now();
+            let coasting = state.scroll_motion.is_coasting();
+            let (mut delta, more) = state.scroll_motion.step(now);
+            let top = state.logical_scroll_top();
+            let before = state.scroll_top(&top);
+            if coasting && coasts_into_edges(cx) {
+                delta = state.overscroll.scroll(point(px(0.), -before), point(px(0.), delta.y), TouchPhase::Moved, now);
+            }
+            if delta.y != px(0.) {
+                state.scroll(&top, bounds.size.height, point(px(0.), delta.y), window.current_view(), window, cx);
+            }
+            // Momentum that has reached an end is spent (the rubber band takes it from there).
+            if coasting && state.scroll_top(&state.logical_scroll_top()) == before {
+                state.scroll_motion.stop();
+            }
+            if more {
+                window.request_animation_frame();
+                window.note_scroll_motion();
+            }
+        }
+
         let padding = style
             .padding
             .to_pixels(bounds.size.into(), window.rem_size());
@@ -1625,8 +1653,15 @@ impl Element for List {
         let mut accumulated_stretch_delta = Point::<Pixels>::default();
         window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
             if phase == DispatchPhase::Bubble && hitbox_id.should_handle_scroll(window) {
+                // Waffle: the finger's own movement applies now; momentum and notches are stepped
+                // once per frame at prepaint.
+                let input = if event.delta.precise() { ScrollInput::Precise } else { ScrollInput::Notched };
+                let fed = list_state.0.borrow_mut().scroll_motion.input(event.delta.pixel_delta(px(20.)), input, event.touch_phase, !cx.reduce_motion(), Instant::now());
+                if list_state.0.borrow().scroll_motion.is_moving() {
+                    cx.notify(current_view);
+                }
                 let pixel_delta = if rubber_bands(event, cx) {
-                    let delta = event.delta.pixel_delta(px(20.));
+                    let delta = fed;
                     let position = point(px(0.), accumulated_stretch_delta.y - scroll_top_px);
                     let applied = list_state.0.borrow_mut().overscroll.scroll(
                         position,
@@ -1637,7 +1672,7 @@ impl Element for List {
                     accumulated_stretch_delta = accumulated_stretch_delta + applied;
                     accumulated_stretch_delta
                 } else {
-                    accumulated_scroll_delta = accumulated_scroll_delta.coalesce(event.delta);
+                    accumulated_scroll_delta = accumulated_scroll_delta.coalesce(ScrollDelta::Pixels(fed));
                     accumulated_scroll_delta.pixel_delta(px(20.))
                 };
                 list_state.0.borrow_mut().scroll(
