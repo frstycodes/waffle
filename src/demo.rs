@@ -1753,7 +1753,8 @@ fn reactors(count: usize) -> Vec<Reactor> {
 // Night Owls as a NEWS server with #announcements: a crosspost from Bevy and one whose source was deleted, our
 // published message and a fresh one under its Publish bump, the toolbar up. `-publish` opens the confirm (12
 // following servers, 3 of 10 used), `-limit` the rate-limit alert, `-follow` the Follow dialog, `-member` the
-// blocker a member who can't post sees, and `-settings` the channel's Announcement Channel switch.
+// blocker a member who can't post sees, `-settings` the channel's Announcement Channel switch, `-followed` the
+// Integrations page's Channels Followed, and `-source` the source-server card Bevy's crosspost opens.
 fn demo_announcements(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
     let mut news = channel("news", "announcements", ChannelKind::Text, Some("c0"));
     (news.raw_type, news.topic) = (5, Some("Patch notes and server news".into()));
@@ -1775,9 +1776,10 @@ fn demo_announcements(waffle: &mut Waffle, scene: &str, window: &mut Window, cx:
         content: content.into(),
         timestamp: (chrono::Utc::now() - chrono::Duration::days(days)).to_rfc3339(),
         flags,
+        crosspost_from: (flags & Message::IS_CROSSPOST != 0).then(|| crate::discord::CrosspostSource { guild_id: "bevy".into(), channel_id: "bevy-news".into() }),
         ..Default::default()
     };
-    let bevy = User { id: "77".into(), name: "Bevy #announcements".into(), avatar: avatar_url("5", None), bot: true, ..Default::default() };
+    let bevy =User { id: "77".into(), name: "Bevy #announcements".into(), avatar: avatar_url("5", None), bot: true, ..Default::default() };
     let fresh = post("954", me.clone(), 0, "Patch 7.1 is live! Healer ult range now shows on the minimap. Full notes in #patch-notes.", 0);
     let messages = vec![
         post("951", bevy.clone(), 3, "Bevy 0.17 is out: required components everywhere and a new picking backend.", Message::IS_CROSSPOST),
@@ -1795,8 +1797,29 @@ fn demo_announcements(waffle: &mut Waffle, scene: &str, window: &mut Window, cx:
         "announcements-follow" => waffle.open_follow(news, cx),
         "announcements-settings" => waffle.open_channel_settings(news, "1".into(), window, cx),
         "announcements-member" => {}
+        "announcements-followed" => demo_followed_channels(waffle, window, cx),
+        "announcements-source" => {
+            let crosspost = waffle.feeds.get("news").and_then(|f| f.messages.iter().find(|m| m.id == "951").cloned());
+            if let Some(crosspost) = crosspost {
+                waffle.demo_source_card(&crosspost, gpui_kit::point(gpui_kit::px(380.), gpui_kit::px(170.)), cx);
+            }
+        }
         _ => waffle.hovered_message = Some("954".into()),
     }
+}
+
+// Night Owls' Integrations page with two followed channels: Bevy's news into #general and Discord's
+// community updates into #staff.
+fn demo_followed_channels(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<Waffle>) {
+    crate::server_settings::demo::open(waffle, "server-settings", window, cx);
+    if let Some(view) = waffle.server_settings.as_mut() {
+        view.page = crate::server_settings::access::Page::Integrations;
+    }
+    let follow = |id: &str, name: &str, into: &str, guild: &str, channel: &str| {
+        serde_json::json!({ "id": id, "type": 2, "name": name, "channel_id": into, "source_guild": { "id": guild, "name": name.rsplit_once(' ').map_or(name, |(g, _)| g), "icon": null }, "source_channel": { "id": format!("{guild}-news"), "name": channel } })
+    };
+    let hooks = serde_json::json!([follow("f1", "Bevy #announcements", "general", "bevy", "announcements"), follow("f2", "Discord Updates #community-updates", "staff", "667560445975986187", "community-updates")]);
+    waffle.demo_followed_channels("1", hooks);
 }
 
 // Night Owls' events: a stage that's live, a voice hangout starting within the hour (yours, marked
