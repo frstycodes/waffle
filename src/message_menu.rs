@@ -7,7 +7,7 @@ use reqwest::Method;
 
 use crate::{
     EmojiTarget, Waffle,
-    discord::{Emoji, Message, SendState, perm},
+    discord::{Emoji, Message, SendState, message_flag, perm},
     icons::Glyph,
     menu::{Entry, item, submenu},
 };
@@ -344,6 +344,19 @@ impl Waffle {
 }
 
 impl Waffle {
+    // Discord's ✕ on an embed card: asks first unless Shift is held. Not optimistic, as in Discord: the
+    // embeds go when Discord's MESSAGE_UPDATE carries the flag.
+    // GAP: Discord unarchives an archived thread before the PATCH; Waffle sends it as is.
+    pub(crate) fn remove_embeds(&mut self, message: &Message, quick: bool, cx: &mut Context<Self>) {
+        let (path, flags) = (format!("/channels/{}/messages/{}", message.channel_id, message.id), message.flags | message_flag::SUPPRESS_EMBEDS);
+        let send = move |this: &mut Waffle, cx: &mut Context<Waffle>| this.rest(Method::PATCH, path.clone(), Some(serde_json::json!({ "flags": flags })), |_, _| {}, cx);
+        if quick {
+            return send(self, cx);
+        }
+        self.confirm("Are you sure?", "This will remove all embeds on this message for everyone.", "Remove All Embeds", move |this, _, cx| send(this, cx), cx);
+        self.set_dialog_note("Hold shift when clearing embeds to skip this modal.");
+    }
+
     // Removing reactions shows at once (`keep` decides which stay); they come back if refused.
     fn reactions_optimistic(&mut self, message: &Message, path: String, keep: impl Fn(&crate::discord::Reaction) -> bool + 'static, cx: &mut Context<Self>) {
         let before = self.message_mut(&message.channel_id, &message.id).map(|m| m.reactions.clone()).unwrap_or_default();
