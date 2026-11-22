@@ -33,6 +33,7 @@ mod mascot;
 mod material;
 mod forum;
 mod forward;
+mod events;
 mod reactions;
 mod gif;
 mod games;
@@ -627,6 +628,7 @@ pub struct Waffle {
     poll_picks: HashMap<String, Vec<u32>>,
     poll_peek: HashSet<String>,
     forward_dialog: Option<forward::ForwardDialog>,
+    events: events::Events,
     status_flyout: status_menu::Flyout,
     status_input: Entity<SearchState>,
     clear_after: status_menu::ClearAfter,
@@ -1011,6 +1013,7 @@ impl Waffle {
             poll_picks: HashMap::new(),
             poll_peek: HashSet::new(),
             forward_dialog: None,
+            events: Default::default(),
             status_flyout: status_menu::Flyout::default(),
             status_input,
             clear_after: status_menu::ClearAfter::default(),
@@ -1429,7 +1432,9 @@ impl Waffle {
             }
             Event::ScheduledEventUser { guild_id, event_id, user_id, added } => {
                 let mine = self.me.as_ref().is_some_and(|me| me.id == user_id);
-                if let Some(event) = self.guilds.iter_mut().filter(|g| g.id == guild_id).flat_map(|g| g.events.iter_mut()).find(|e| e.id == event_id) {
+                // Our own Interested echoes back after the optimistic toggle already counted it.
+                let echo = |e: &discord::ScheduledEvent| mine && e.me_interested == added;
+                if let Some(event) = self.guilds.iter_mut().filter(|g| g.id == guild_id).flat_map(|g| g.events.iter_mut()).find(|e| e.id == event_id && !echo(e)) {
                     event.interested = if added { event.interested + 1 } else { event.interested.saturating_sub(1) };
                     if mine {
                         event.me_interested = added;
