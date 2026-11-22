@@ -866,10 +866,10 @@ impl Waffle {
         let unread = self.unread(&channel.id) && !muted && (!is_voice || in_call);
         let mentions = self.mention_count(&channel.id);
         let hovered = self.hovered_row.as_deref() == Some(channel.id.as_str());
-        // In the channel with no count beside them, its buttons stay out without hover.
-        let actions_shown = selected || hovered || (is_voice && in_call && mentions == 0);
+        // A voice channel's buttons show on hover only, over its call timer.
+        let actions_shown = hovered || (selected && !is_voice);
         let state = RowState { selected, unread, muted, strong: in_call };
-        let elapsed = self.call.as_ref().filter(|c| c.channel.id == channel.id && c.connected).and_then(|_| self.voice_elapsed(&channel.id)).map(|secs| {
+        let elapsed = self.call.as_ref().filter(|c| !actions_shown && c.channel.id == channel.id && c.connected).and_then(|_| self.voice_elapsed(&channel.id)).map(|secs| {
             div().flex_none().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(palette::positive_ink(cx)).child(crate::call::clock(secs))
         });
         let group: SharedString = format!("ch-{}", channel.id).into();
