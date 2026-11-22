@@ -276,6 +276,26 @@ pub struct ScheduledEvent {
     pub me_interested: bool,
     // Discord's recurrence_rule as sent (start, frequency, interval, by_weekday, by_n_weekday, …).
     pub recurrence: Option<Value>,
+    // A series' per-occurrence changes (guild_scheduled_event_exceptions): moved or canceled occurrences.
+    pub exceptions: Vec<EventException>,
+}
+
+// One occurrence of a series changed: its id is the occurrence's recurrence id.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct EventException {
+    pub id: String,
+    pub start: Option<String>,
+    pub end: Option<String>,
+    pub canceled: bool,
+}
+
+pub fn parse_event_exception(e: &Value) -> Option<EventException> {
+    Some(EventException {
+        id: e["event_exception_id"].as_str()?.to_owned(),
+        start: e["scheduled_start_time"].as_str().map(str::to_owned),
+        end: e["scheduled_end_time"].as_str().map(str::to_owned),
+        canceled: e["is_canceled"].as_bool().unwrap_or(false),
+    })
 }
 
 impl ScheduledEvent {
@@ -314,6 +334,7 @@ pub fn parse_scheduled_event(e: &Value) -> Option<ScheduledEvent> {
         interested: e["user_count"].as_u64().unwrap_or(0) as u32,
         me_interested: false,
         recurrence: e["recurrence_rule"].is_object().then(|| e["recurrence_rule"].clone()),
+        exceptions: e["guild_scheduled_event_exceptions"].as_array().into_iter().flatten().filter_map(parse_event_exception).collect(),
     })
 }
 
