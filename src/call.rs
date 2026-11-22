@@ -62,6 +62,7 @@ const STAGE_GROUP: &str = "call-stage";
 const FOCUS_HEAD: f32 = 48.;
 const CONTROLS_IDLE: Duration = Duration::from_secs(3);
 // The voice channel's chat beside the call: at least 450 wide, leaving the stage 550 (Discord's numbers).
+const CHAT_SLIDE: Duration = Duration::from_millis(260);
 pub(crate) const CHAT_MIN_WIDTH: f32 = 450.;
 const CHAT_STAGE_ROOM: f32 = 550.;
 // The connection popover's colour bands (its legend): under 80 ms, 80 to 120, over 120.
@@ -632,13 +633,30 @@ impl Waffle {
 
     // The call view, with the voice channel's chat beside it when open (the stage shrinks; the
     // chat never covers the stream).
+    // The panel slides in from the window's right edge and back out the same way, the stage narrowing
+    // with it: its width rides one critically damped spring, so a click mid-slide reverses from where
+    // it is. The panel keeps its full width inside a clip that grows from the right.
     pub(crate) fn render_call_with_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let call_channel = self.call.as_ref()?.channel.clone();
-        let chat_open = self.call_chat_shown();
-        let drawer = chat_open.then(|| self.call_chat_drawer(&call_channel, window, cx));
+        let reveal = self.call_chat_reveal(window, cx);
+        // Leaving shows another channel's messages, so only the call's own chat slides out.
+        let on_call_channel = self.channel.as_ref().is_some_and(|c| c.id == call_channel.id);
+        let drawer = (reveal > 0.001 && on_call_channel).then(|| {
+            let width = self.call_chat_width(window);
+            let panel = self.call_chat_drawer(&call_channel, window, cx);
+            div().w(px(width * reveal)).flex_none().h_full().overflow_hidden().child(div().w(px(width)).h_full().child(panel))
+        });
         let call = self.render_call(window, cx)?;
         let previews = self.render_call_previews(cx);
         Some(div().size_full().flex().child(div().relative().flex_1().min_w_0().h_full().child(call).children(previews)).children(drawer).into_any_element())
+    }
+
+    // 0 closed to 1 open. A critically damped spring keeps its velocity when re-targeted, so reversing
+    // mid-slide never snaps; reduced motion lands at once. 260ms: Apple's drawer response (~0.3s) at the
+    // app's quicker pace.
+    fn call_chat_reveal(&self, window: &mut Window, cx: &mut App) -> f32 {
+        let target = if self.call_chat_shown() { 1. } else { 0. };
+        gpui_kit::base::spring("call-chat-reveal", target, gpui_kit::base::Spring::new(CHAT_SLIDE), window, cx)
     }
 
     fn call_chat_drawer(&mut self, channel: &discord::Channel, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -647,9 +665,7 @@ impl Waffle {
         let composer = self.render_composer(window, cx).into_any_element();
         div()
             .relative()
-            .w(px(self.call_chat_width(window)))
-            .flex_none()
-            .h_full()
+            .size_full()
             .flex()
             .flex_col()
             .bg(theme.background)
@@ -678,7 +694,6 @@ impl Waffle {
             .child(div().relative().flex_1().min_h_0().child(messages))
             .child(composer)
             .child(self.resize_handle(crate::Edge::CallChat, cx))
-            .with_animation("call-chat-in", Animation::new(Duration::from_millis(220)), |d, t| d.opacity(t.min(1.)).ml(px((1. - crate::motion::back_out(t)) * 24.)))
             .into_any_element()
     }
 
@@ -715,7 +730,7 @@ impl Waffle {
             return Some(self.focus_stage(big, &tiles, shown, cx));
         }
         let viewport = window.viewport_size();
-        let chat = if self.call_chat_shown() { self.call_chat_width(window) } else { 0. };
+        let chat = self.call_chat_width(window) * self.call_chat_reveal(window, cx);
         let stage_size = match self.call_fullscreen {
             true => (f32::from(viewport.width) - chat, f32::from(viewport.height)),
             false => (f32::from(viewport.width) - RAIL_WIDTH - self.channels_width - chat, f32::from(viewport.height) - 1.),
