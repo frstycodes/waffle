@@ -132,7 +132,7 @@ impl Waffle {
             for (channel_id, label) in &places {
                 let mut sent = client.forward_message(channel_id, &message, guild_id.as_deref(), &crate::nonce()).await.map(drop);
                 if sent.is_ok() && !note.is_empty() {
-                    sent = client.send_message(channel_id, &note, &crate::nonce(), None, false).await.map(drop);
+                    sent = client.send_message(channel_id, &note, &crate::nonce(), None, false, Default::default()).await.map(drop);
                 }
                 if sent.is_err() {
                     failed.push(label.clone());
@@ -324,8 +324,8 @@ mod tests {
 
     #[test]
     fn attachments_read_as_counts() {
-        let image = Media { url: "a.png".into(), width: 1., height: 1., kind: MediaKind::Image };
-        let file = File { name: "a.zip".into(), url: "a.zip".into(), size: 1 };
+        let image = Media { url: "a.png".into(), width: 1., height: 1., kind: MediaKind::Image, ..Default::default() };
+        let file = File { name: "a.zip".into(), url: "a.zip".into(), size: 1, ..Default::default() };
         let summary = |m: Message| attachment_summary(&m).map(|(_, label)| label);
         assert_eq!(summary(Message { media: vec![image.clone()], ..Default::default() }).as_deref(), Some("1 image"));
         assert_eq!(summary(Message { files: vec![file.clone(), file], ..Default::default() }).as_deref(), Some("2 files"));
