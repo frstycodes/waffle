@@ -180,6 +180,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             })
             .detach(),
         "profile" => demo_profile(waffle, cx),
+        "role-popout" => demo_role_popout(waffle, cx),
         // Someone you share nothing with, opened from a DM: the Discord date alone, no Friends Since, no connections.
         "profile-stranger" => {
             waffle.guild_id = None;
@@ -550,6 +551,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // and an expired code, a message you can't see (no card), and two still loading.
         "link-previews" => demo_link_previews(waffle),
         "forwarded" => demo_forwarded(waffle),
+        "favorites" => demo_favorites(waffle, window, cx),
         // An app thinking, its reply, an ephemeral reply, one with Discord's reason line, and a command it
         // never answered.
         "app-replies" => demo_app_replies(waffle),
@@ -576,7 +578,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         "forward-dialog" => {
             if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "2") {
                 guild.owner_id = Some("1".into());
-                guild.roles = vec![Role { id: "2".into(), name: "@everyone".into(), color: 0, position: 0, permissions: crate::discord::VIEW_CHANNEL, managed: false }];
+                guild.roles = vec![Role { id: "2".into(), name: "@everyone".into(), color: 0, position: 0, permissions: crate::discord::VIEW_CHANNEL, managed: false, icon: None }];
             }
             let Some(message) = waffle.feeds.get("general").and_then(|f| f.messages.iter().find(|m| m.id == "102").cloned()) else { return };
             waffle.open_forward(message, window, cx);
@@ -778,6 +780,8 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             waffle.on_event(Event::StreamUpdate { key, viewers: vec!["8388608".into(), "16777216".into(), "20971520".into(), "4194304".into()], paused: false }, cx);
             waffle.stream_card_hover = Some("stream-12582912".into());
         }
+        "mod-view" => demo_mod_view(waffle, cx),
+        "mod-view-loading" => demo_mod_view_loading(waffle, cx),
         "user-menu" => {
             demo_call(waffle);
             waffle.call_view = false;
@@ -791,7 +795,9 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         }
         s if ["invite", "onboarding", "rules", "roles", "guide"].iter().any(|p| s.starts_with(p)) => crate::joining::demo(waffle, scene, window, cx),
         "server-settings" | "server-settings-engagement" | "server-settings-roles" | "server-settings-role" | "server-settings-role-perms" | "server-settings-audit" | "server-settings-bans" | "server-settings-automod" | "server-settings-invites" | "server-settings-dirty" => crate::server_settings::demo::open(waffle, scene, window, cx),
+        "server-settings-members" | "server-settings-members-bulk" | "server-settings-members-filter" => demo_server_settings_members(waffle, scene, window, cx),
         "channel-settings" | "channel-settings-search" | "channel-settings-perms" | "channel-settings-voice" | "channel-settings-voice-perms" | "channel-settings-invites" | "channel-settings-dirty" => demo_channel_settings(waffle, scene, window, cx),
+        "nav-pins" => demo_pins(waffle, window, cx),
         "forum" | "forum-gallery" | "forum-search" | "forum-sort" | "forum-new-post" => crate::forum::demo::open(waffle, scene, window, cx),
         "channel-menu" => {
             let general = waffle.guild().and_then(|g| g.channels.iter().find(|c| c.id == "general").cloned());
@@ -1431,9 +1437,9 @@ fn ready(me: User) -> Ready {
     let mut media = channel("media", "📷-media", ChannelKind::Text, Some("c0"));
     media.last_message_id = Some("900".into());
     let roles = vec![
-        Role { id: "r1".into(), name: "Council".into(), color: 0xE91E63, position: 3, permissions: 0, managed: false },
-        Role { id: "r2".into(), name: "Rustacean".into(), color: 0xE67E22, position: 2, permissions: 0, managed: false },
-        Role { id: "1".into(), name: "@everyone".into(), color: 0, position: 0, permissions: 0, managed: false },
+        Role { id: "r1".into(), name: "Council".into(), color: 0xE91E63, position: 3, permissions: 0, managed: false, icon: None },
+        Role { id: "r2".into(), name: "Rustacean".into(), color: 0xE67E22, position: 2, permissions: 0, managed: false, icon: None },
+        Role { id: "1".into(), name: "@everyone".into(), color: 0, position: 0, permissions: 0, managed: false, icon: None },
     ];
     let guild = |id: &str, name: &str, channels: Vec<Channel>, voice_states: Vec<VoiceState>| Guild {
         id: id.into(),
@@ -1520,7 +1526,7 @@ const LOAD_ROLES: usize = 25;
 
 fn load_guilds(waffle: &mut Waffle) {
     let view = crate::discord::VIEW_CHANNEL;
-    let roles: Vec<Role> = (0..LOAD_ROLES).map(|r| Role { id: format!("lr{r}"), name: format!("role {r}"), color: 0x5865F2 + r as u32 * 0x0A0A, position: r as i64, permissions: if r == 0 { view } else { 0 }, managed: false }).collect();
+    let roles: Vec<Role> = (0..LOAD_ROLES).map(|r| Role { id: format!("lr{r}"), name: format!("role {r}"), color: 0x5865F2 + r as u32 * 0x0A0A, position: r as i64, permissions: if r == 0 { view } else { 0 }, managed: false, icon: None }).collect();
     let overwrites = |c: usize| (0..4).map(|o| crate::discord::Overwrite { id: format!("lr{}", (c + o) % LOAD_ROLES), allow: if o == 0 { view } else { 0 }, deny: 0, member: false }).collect::<Vec<_>>();
     let channels = |g: usize, count: usize| -> Vec<Channel> {
         (0..count)
@@ -2691,6 +2697,166 @@ fn reactors(count: usize) -> Vec<Reactor> {
         ("31000010", "mikey", "mickeeeyyyyyy"),
     ];
     people.iter().take(count).map(|&(id, name, username)| Reactor { user: user(id, name), username: username.into() }).collect()
+}
+
+// Mod View on Wren: timed out for 42 minutes, flagged for unusual DMs three days ago, two roles, joined
+// through an invite, with a short action log.
+fn demo_mod_view(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
+    mod_view_fixture(waffle);
+    let audit = serde_json::json!({
+        "audit_log_entries": [
+            { "id": "1441000000000000000", "action_type": 24, "user_id": "12582912", "target_id": "8388608", "reason": "spam in #media", "changes": [{ "key": "communication_disabled_until", "new_value": "2026-11-22T21:30:00+00:00" }] },
+            { "id": "1430000000000000000", "action_type": 25, "user_id": "4194304", "target_id": "8388608", "changes": [{ "key": "$add", "new_value": [{ "id": "r2", "name": "Rustacean" }] }] },
+            { "id": "1420000000000000000", "action_type": 24, "user_id": "8388608", "target_id": "8388608", "changes": [{ "key": "nick", "old_value": "wren", "new_value": "Wren" }] },
+        ],
+        "users": [{ "id": "12582912", "username": "moss", "global_name": "moss lantern" }, { "id": "4194304", "username": "kiwi.dev", "global_name": "kiwi" }, { "id": "8388608", "username": "wren.wav", "global_name": "Wren" }],
+    });
+    waffle.demo_mod_view("1".into(), "8388608".into(), audit, cx);
+}
+
+// Wren pings @Rustacean and its card is open: five of its fourteen members loaded (kiwi owns the server,
+// toma and moss boost it), the rest counted under "+9 more".
+fn demo_role_popout(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
+    let member = |id: &str, name: &str, roles: &[&str], boosting: bool| {
+        let mut user = user(id, name);
+        user.boosting_since = boosting.then(|| "2025-03-14T10:00:00+00:00".into());
+        (user, roles.iter().map(|r| r.to_string()).collect())
+    };
+    let members = vec![
+        member("4194304", "kiwi", &["r1", "r2"], false),
+        member("16777216", "toma reed", &["r2"], true),
+        member("12582912", "moss lantern", &["r2"], true),
+        member("8388608", "Wren", &["r2"], false),
+        member("31000001", "Dhalon", &["r2"], false),
+    ];
+    waffle.on_event(Event::MembersChunk { guild_id: "1".into(), members, facts: Vec::new() }, cx);
+    waffle.presences.insert("31000001".into(), Presence { status: Presence_::Online, ..Default::default() });
+    if let Some(feed) = waffle.feeds.get_mut("general") {
+        let mut messages = feed.messages.as_ref().clone();
+        let at = chrono::Utc::now().to_rfc3339();
+        let author = user("8388608", "Wren");
+        messages.push(Message { id: "990".into(), channel_id: "general".into(), guild_id: Some("1".into()), author, roles: Some(vec!["r2".into()]), content: "<@&r2> can someone check the build".into(), timestamp: at, ..Default::default() });
+        feed.messages = std::sync::Arc::new(messages);
+    }
+    waffle.role_popout.seed_counts("1", [("r2".to_owned(), 14)].into());
+    waffle.open_role_popout(Some("r2".into()), gpui_kit::point(gpui_kit::px(470.), gpui_kit::px(300.)), cx);
+}
+
+// Favorites open: #ranked-lfg loose, then Games holding #patch-notes (nicknamed) and #show-and-tell (3 mentions),
+// from two servers, the first one open.
+fn demo_favorites(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<Waffle>) {
+    let server = |waffle: &Waffle, id: &str, name: &str, channels: Vec<Channel>| {
+        let mut guild = waffle.guilds[1].clone();
+        guild.id = id.into();
+        guild.name = name.into();
+        guild.channels = channels;
+        guild
+    };
+    let night_shift = server(waffle, "6", "Night Shift", vec![channel("6001", "ranked-lfg", ChannelKind::Text, None), channel("6002", "patch-notes", ChannelKind::Text, None)]);
+    let pixel_club = server(waffle, "7", "Pixel Club", vec![channel("7001", "show-and-tell", ChannelKind::Text, None)]);
+    waffle.guilds.extend([night_shift, pixel_club]);
+    waffle.read_states.insert("7001".into(), ReadState { last_read: 100, mentions: 3 });
+    waffle.last_message.insert("7001".into(), 900);
+    let games = waffle.favorites.add_category("Games", 9000);
+    waffle.favorites.add_channel(6001, 0, 0);
+    waffle.favorites.add_channel(6002, 0, games);
+    waffle.favorites.add_channel(7001, 0, games);
+    if let Some(entry) = waffle.favorites.channels.get_mut(&6002) {
+        entry.nickname = "patch notes".into();
+    }
+    waffle.open_favorites(window, cx);
+}
+
+// Server settings on the Members table: six members covering every signal and join method shape;
+// `-filter` narrows it to the past 4 weeks with the date menu open, `-bulk` picks two rows for the bulk bar.
+fn demo_server_settings_members(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
+    crate::server_settings::demo::open(waffle, scene, window, cx);
+}
+
+// `nav-pins`: Night Shift, a Community server with opt-in on (Show all channels unticked): two pinned
+// channels above the rest, a few opted-in channels, #art kept in view by a mention, #clips by an
+// unread thread you joined, Gaming (two people in it) under Active Now, and #memes and Studio
+// hidden. Home lists six DMs with two pinned ones first.
+fn demo_pins(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<Waffle>) {
+    use crate::discord::{ChannelSettings, GuildSettings, channel_flag, guild_flag};
+    let Some(template) = waffle.guilds.first().cloned() else { return };
+    let layout = [
+        ("ns-welcome", "welcome", ChannelKind::Text, None),
+        ("ns-info", "Information", ChannelKind::Category, None),
+        ("ns-announcements", "announcements", ChannelKind::Text, Some("ns-info")),
+        ("ns-rules", "rules", ChannelKind::Text, Some("ns-info")),
+        ("ns-text", "Text", ChannelKind::Category, None),
+        ("ns-general", "general", ChannelKind::Text, Some("ns-text")),
+        ("ns-off-topic", "off-topic", ChannelKind::Text, Some("ns-text")),
+        ("ns-memes", "memes", ChannelKind::Text, Some("ns-text")),
+        ("ns-art", "art", ChannelKind::Text, Some("ns-text")),
+        ("ns-clips", "clips", ChannelKind::Text, Some("ns-text")),
+        ("ns-voice", "Voice", ChannelKind::Category, None),
+        ("ns-lounge", "Lounge", ChannelKind::Voice, Some("ns-voice")),
+        ("ns-gaming", "Gaming", ChannelKind::Voice, Some("ns-voice")),
+        ("ns-studio", "Studio", ChannelKind::Voice, Some("ns-voice")),
+    ];
+    let channels: Vec<Channel> = layout
+        .iter()
+        .enumerate()
+        .map(|(i, &(id, name, kind, parent))| Channel { position: i as i64, ..channel(id, name, kind, parent) })
+        .collect();
+    let general = channels.iter().find(|c| c.id == "ns-general").cloned();
+    let mut highlights = channel("ns-clips-best", "best of the week", ChannelKind::Thread, Some("ns-clips"));
+    highlights.thread = Some(crate::discord::ThreadMeta { joined: true, message_count: 8, ..Default::default() });
+    let gaming = |id: &str, name: &str| VoiceState { guild_id: Some("6".into()), channel_id: Some("ns-gaming".into()), user_id: id.into(), user: Some(user(id, name)), ..Default::default() };
+    let voice_states = vec![gaming("12582912", "moss lantern"), gaming("16777216", "toma reed")];
+    waffle.guilds.push(Guild { id: "6".into(), name: "Night Shift".into(), channels, voice_states, threads: vec![highlights], features: vec!["COMMUNITY".into()], ..template });
+
+    let pinned = channel_flag::FAVORITED | channel_flag::OPT_IN_ENABLED;
+    let flags = [("ns-general", pinned), ("ns-announcements", channel_flag::FAVORITED), ("ns-info", channel_flag::OPT_IN_ENABLED), ("ns-welcome", channel_flag::OPT_IN_ENABLED), ("ns-off-topic", channel_flag::OPT_IN_ENABLED), ("ns-lounge", channel_flag::OPT_IN_ENABLED)];
+    let channels = flags.iter().map(|&(id, flags)| (id.to_owned(), ChannelSettings { notifications: 3, flags, ..Default::default() })).collect();
+    waffle.guild_settings.insert("6".into(), GuildSettings { flags: guild_flag::OPT_IN_CHANNELS_ON, channels, ..Default::default() });
+    waffle.last_message.insert("ns-art".into(), 200);
+    waffle.read_states.insert("ns-art".into(), ReadState { last_read: 100, mentions: 1 });
+    waffle.last_message.insert("ns-clips-best".into(), 200);
+    waffle.read_states.insert("ns-clips-best".into(), ReadState { last_read: 100, mentions: 0 });
+
+    // Newest message first, as the list keeps them; "dm-mira" and the group are pinned.
+    let Some(wren) = waffle.dms.first().cloned() else { return };
+    let people = [("dm-toma", "toma reed", "16777216"), ("dm-moss", "moss lantern", "12582912"), ("dm-mira", "Mira", "20971520"), ("dm-ferris", "ferris", "25165824")];
+    for (id, name, user_id) in people {
+        waffle.dms.push(Channel { id: id.into(), name: name.into(), recipient: Some(user(user_id, name)), ..wren.clone() });
+    }
+    let mut group = channel("dm-squad", "Ranked squad", ChannelKind::Dm, None);
+    group.recipients = vec![user("12582912", "moss lantern"), user("16777216", "toma reed"), user("8388608", "Wren")];
+    waffle.dms.push(group);
+    let dm_pins = ["dm-mira", "dm-squad"].map(|id| (id.to_owned(), ChannelSettings { notifications: 3, flags: channel_flag::FAVORITED, ..Default::default() }));
+    waffle.guild_settings.insert("@me".into(), GuildSettings { channels: dm_pins.into_iter().collect(), ..Default::default() });
+
+    waffle.restore = None;
+    waffle.guild_id = Some("6".into());
+    if let Some(general) = general {
+        waffle.open_channel(general, window, cx);
+    }
+}
+
+// Mod View on Wren before anything answers: the skeleton.
+fn demo_mod_view_loading(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
+    mod_view_fixture(waffle);
+    waffle.demo_mod_view_loading("1".into(), "8388608".into(), cx);
+}
+
+// Moderation rights for us in server 1, and Wren's two roles there.
+fn mod_view_fixture(waffle: &mut Waffle) {
+    if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
+        for role in &mut guild.roles {
+            role.permissions = match role.id.as_str() {
+                "r1" => crate::discord::perm::MODERATE_MEMBERS | crate::discord::perm::MANAGE_MESSAGES | (1 << 17),
+                "r2" => crate::discord::perm::SEND_MESSAGES,
+                _ => role.permissions,
+            };
+        }
+    }
+    waffle.member_roles.entry("1".into()).or_default().insert("8388608".into(), vec!["r1".into(), "r2".into()]);
+    let members = waffle.members.entry("1".into()).or_default();
+    members.insert("8388608".into(), user("8388608", "Wren"));
+    members.insert("12582912".into(), user("12582912", "moss lantern"));
 }
 
 // Three apps' commands, the shapes `app_commands::parse_index` produces.

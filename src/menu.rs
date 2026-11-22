@@ -485,6 +485,14 @@ impl Waffle {
         cx.notify();
     }
 
+    pub(crate) fn alert(&mut self, title: impl Into<SharedString>, body: impl Into<SharedString>, cx: &mut Context<Self>) {
+        self.confirm(title, body, "Okay", |_, _, _| {}, cx);
+        if let Some(dialog) = &mut self.dialog {
+            dialog.danger = false;
+            dialog.other = Other::None;
+        }
+    }
+
     // A confirm for a deletion that can't be undone: the title leads with the warning mark.
     pub(crate) fn confirm_delete(
         &mut self,

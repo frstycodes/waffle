@@ -192,7 +192,7 @@ mod tests {
     use crate::discord::{Role, StageInstance, VoiceState, parse_channel, perm};
 
     fn guild(speakers: &[&str], live: bool) -> Guild {
-        let role = |id: &str, permissions: u64| Role { id: id.into(), name: id.into(), color: 0, position: 0, permissions, managed: false };
+        let role = |id: &str, permissions: u64| Role { id: id.into(), name: id.into(), color: 0, position: 0, permissions, managed: false, icon: None };
         let on_stage = |user: &str, suppress: bool| VoiceState { user_id: user.into(), channel_id: Some("s".into()), suppress, ..Default::default() };
         Guild {
             id: "g".into(),

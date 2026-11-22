@@ -10,7 +10,7 @@ pub fn install(waffle: &mut Waffle) {
     guild.rules_channel_id = Some("general".into());
     guild.me = Membership { pending: true, flags: 0, joined_at: Some(chrono::Utc::now().to_rfc3339()) };
     for (id, name, color) in [("r-ranked", "Ranked", 0xE8A33Du32), ("r-clips", "Clipper", 0xD9475B), ("r-eu", "EU", 0x4F8FE0), ("r-na", "NA", 0x3FAE7A), ("r-apac", "APAC", 0xA46AD8)] {
-        guild.roles.push(crate::discord::Role { id: id.into(), name: name.into(), color, position: 1, permissions: 0, managed: false });
+        guild.roles.push(crate::discord::Role { id: id.into(), name: name.into(), color, position: 1, permissions: 0, managed: false, icon: None });
     }
     waffle.join.forms.insert("1".into(), Load::Ready(form()));
     waffle.join.onboarding.insert("1".into(), Load::Ready(onboarding()));

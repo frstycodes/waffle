@@ -41,6 +41,47 @@ pub enum FriendsTab {
     AddFriend,
 }
 
+// A place Back and Forward return to: a channel, or with no channel, Friends (or an empty server).
+#[derive(Clone)]
+pub(crate) struct Stop {
+    pub guild_id: Option<String>,
+    pub channel: Option<Channel>,
+}
+
+// Browser-style history: opening somewhere new drops the forward entries.
+pub(crate) struct History<T> {
+    back: Vec<T>,
+    forward: Vec<T>,
+}
+
+impl<T> Default for History<T> {
+    fn default() -> Self {
+        Self { back: Vec::new(), forward: Vec::new() }
+    }
+}
+
+impl<T> History<T> {
+    pub(crate) fn visit(&mut self, from: T) {
+        self.back.push(from);
+        self.forward.clear();
+    }
+
+    // The stop one step back or forward; `current` goes on the other stack to return to.
+    pub(crate) fn step(&mut self, forward: bool, current: T) -> Option<T> {
+        let (from, to) = if forward { (&mut self.forward, &mut self.back) } else { (&mut self.back, &mut self.forward) };
+        let next = from.pop()?;
+        to.push(current);
+        Some(next)
+    }
+}
+
+impl History<Stop> {
+    // The server most recently left behind, for the shortcut that toggles back to it.
+    pub(crate) fn last_guild(&self) -> Option<String> {
+        self.back.iter().rev().find_map(|stop| stop.guild_id.clone())
+    }
+}
+
 // One file per account ("last-channel-<id>"); the shared file from before accounts is read as a fallback.
 fn last_channel_file(user_id: Option<&str>) -> Option<std::path::PathBuf> {
     let name = match user_id {
@@ -80,16 +121,31 @@ impl Waffle {
         if let Some(channel) = channel {
             self.guild_id = guild_id;
             self.open_channel(channel, window, cx);
+            // Launch lands here; there's nothing to go back to.
+            self.history = History::default();
         }
     }
 
+    /// Friends, which is a stop in Back/Forward like Discord's /channels/@me route.
     pub(crate) fn open_home(&mut self, cx: &mut Context<Self>) {
+        if self.guild_id.is_some() || self.channel.is_some() {
+            self.history.visit(self.here());
+        }
+        self.show_no_channel(None, cx);
+    }
+
+    // Friends (no server), or a server with no channel open.
+    pub(crate) fn show_no_channel(&mut self, guild_id: Option<String>, cx: &mut Context<Self>) {
         self.inbox_page = false;
         self.requests_page = None;
-        self.guild_id = None;
+        self.guild_id = guild_id;
         self.channel = None;
         self.call_view = false;
         cx.notify();
+    }
+
+    pub(crate) fn here(&self) -> Stop {
+        Stop { guild_id: self.guild_id.clone(), channel: self.channel.clone() }
     }
 
     // A DM opened or changed: it lands in the DM list or in Message Requests by its request state, so an
@@ -695,5 +751,19 @@ mod tests {
         assert_eq!(add_friend_error(&error(400, Some(80004)), "rosa"), "Hm, didn't work. Double check that the username is correct.");
         assert_eq!(add_friend_error(&error(404, None), "rosa"), "Hm, didn't work. Double check that the username is correct.");
         assert_eq!(add_friend_error(&error(0, None), "rosa"), "raw");
+    }
+
+    #[test]
+    fn back_and_forward_walk_visits_and_a_visit_drops_forward() {
+        let mut history = History::default();
+        history.visit("friends");
+        history.visit("general");
+        assert_eq!(history.step(false, "dm"), Some("general"));
+        assert_eq!(history.step(false, "general"), Some("friends"));
+        assert_eq!(history.step(false, "friends"), None);
+        assert_eq!(history.step(true, "friends"), Some("general"));
+        history.visit("general");
+        assert_eq!(history.step(true, "rules"), None);
+        assert_eq!(history.step(false, "rules"), Some("general"));
     }
 }

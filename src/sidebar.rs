@@ -11,7 +11,7 @@ use gpui_motion_kit::core::{Bezier, Easing, Motion, Target, Transition};
 
 use crate::{
     Waffle, Edge, Part, RailEntry, Status,
-    discord::{ActivityKind, Channel, ChannelKind, Folder, Guild, OnStage, Status as Status_},
+    discord::{ActivityKind, Channel, ChannelKind, Folder, Guild, GuildSettings, OnStage, Status as Status_, channel_flag},
     drag::{RowDrag, hole},
     icons::Glyph,
     layout::{RAIL_WIDTH, avatar_with_status},
@@ -41,11 +41,11 @@ fn rail_gap() -> f32 {
 }
 
 // A channel row: its 16px of text plus padding, 32px at Default density.
-fn row_height() -> f32 {
+pub(crate) fn row_height() -> f32 {
     16. + ui::density_pad(16.)
 }
 
-fn row_gap() -> f32 {
+pub(crate) fn row_gap() -> f32 {
     ui::density_pad(2.)
 }
 // A live stage's row: its name with the topic under it.
@@ -54,6 +54,7 @@ const STAGE_ROW_HEIGHT: f32 = 44.;
 #[derive(Clone)]
 pub(crate) enum Face {
     Home,
+    Favorites,
     // A DM on the rail: the person's avatar, round like every person, or a group's.
     Person(crate::discord::DmFace),
     Icon(String),
@@ -94,7 +95,7 @@ impl Waffle {
         let home = RailTile {
             key: "dms".into(),
             name: "Direct messages".into(),
-            selected: self.guild_id.is_none(),
+            selected: self.rail_selected(None),
             unread: false,
             mentions: dm_mentions,
             muted: false,
@@ -106,6 +107,7 @@ impl Waffle {
             handed: false,
         };
         let home = self.rail_item(home, window, cx);
+        let favorites = self.favorites_item(window, cx);
         let dm_tiles = self.rail_dm_tiles(window, cx);
         let entries = self.rail_entries();
         let order: Vec<String> = entries.iter().map(|e| crate::channel_menu::rail_key(e, &self.guilds)).collect();
@@ -144,6 +146,7 @@ impl Waffle {
             // and the rail still scrolls under it.
             .when(!lights, |rail| rail.child(div().absolute().top_0().left_0().w_full().h(px(crate::layout::HEADER_HEIGHT)).window_control_area(gpui_kit::WindowControlArea::Drag)))
             .child(if lights { home } else { div().block_mouse_except_scroll().child(home).into_any_element() })
+            .children(favorites)
             .child(dm_tiles)
             .child(separator)
             .children(items)
@@ -240,7 +243,7 @@ impl Waffle {
         let tile = RailTile {
             key: format!("dm-{}", dm.id),
             name: dm.recipient.as_ref().map_or_else(|| dm.name.clone(), |u| u.name.clone()).into(),
-            selected: self.guild_id.is_none() && self.channel.as_ref().is_some_and(|c| c.id == dm.id),
+            selected: self.rail_selected(None) && self.channel.as_ref().is_some_and(|c| c.id == dm.id),
             unread: false,
             // Every DM message counts as a mention, so this is its unread count.
             mentions,
@@ -261,6 +264,35 @@ impl Waffle {
                 this.open_channel(dm.clone(), window, cx);
             }))
             .into_any_element()
+    }
+
+    // Whether the rail marks this server (None: Home) as open; Favorites holds the mark while it shows.
+    fn rail_selected(&self, guild_id: Option<&String>) -> bool {
+        !self.in_favorites() && self.guild_id.as_ref() == guild_id
+    }
+
+    // The star tile after Home, once something is favourited (or Favorites was shown on purpose).
+    fn favorites_item(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if !self.favorites.shown() {
+            return None;
+        }
+        let (unread, mentions) = self.favorites_badge();
+        let tile = RailTile {
+            key: crate::favorites::RAIL_KEY.into(),
+            name: "Favorites".into(),
+            selected: self.in_favorites(),
+            unread,
+            mentions,
+            muted: self.favorites.muted,
+            media: None,
+            face: Face::Favorites,
+            guild_id: None,
+            badge_scale: 1.,
+            open: 0.,
+            handed: false,
+        };
+        let item = self.rail_item(tile, window, cx);
+        Some(div().id("rail-favorites-hit").child(item).on_click(cx.listener(|this, _, window, cx| this.open_favorites(window, cx))).into_any_element())
     }
 
     // Who's in the server's voice channels and who's live there, by avatar, for its hover card.
@@ -303,7 +335,7 @@ impl Waffle {
         RailTile {
             key: guild.id.clone(),
             name: guild.name.clone().into(),
-            selected: self.guild_id.as_ref() == Some(&guild.id),
+            selected: self.rail_selected(Some(&guild.id)),
             unread,
             mentions,
             muted: self.guild_settings.get(&guild.id).is_some_and(|s| s.is_muted()),
@@ -329,12 +361,12 @@ impl Waffle {
         let motion = FolderMotion::frame(&key, open, window, cx);
         let tint: Hsla = folder.color.map(|c| rgb(c).into()).unwrap_or(palette::faint(cx));
         let (unread, mentions) = guilds.iter().map(|g| self.guild_badge(g)).fold((false, 0), |(u, m), (gu, gm)| (u || gu, m + gm));
-        let has_selected = guilds.iter().any(|g| self.guild_id.as_ref() == Some(&g.id));
+        let has_selected = guilds.iter().any(|g| self.rail_selected(Some(&g.id)));
         let name: SharedString = folder.name.clone().unwrap_or_else(|| guilds.iter().map(|g| g.name.as_str()).take(3).collect::<Vec<_>>().join(", ")).into();
         let minis: Vec<Mini> = guilds.iter().map(|g| mini(g)).collect();
         let badges: Vec<Badge> = guilds.iter().map(|g| {
             let (unread, mentions) = self.guild_badge(g);
-            Badge { pill: pill_height(self.guild_id.as_ref() == Some(&g.id), false, unread), mentions }
+            Badge { pill: pill_height(self.rail_selected(Some(&g.id)), false, unread), mentions }
         }).collect();
         // The height the servers' pills split from and merge back into: the head's own, hover included.
         let media = guilds.iter().filter_map(|g| self.guild_media(g)).max_by_key(|m| (m.kind, m.connected));
@@ -460,7 +492,7 @@ impl Waffle {
             .when_some(guild_id.clone(), |item, guild_id| item.on_click(cx.listener(move |this, _, window, cx| this.open_guild(Some(guild_id.clone()), window, cx))))
             .when(key == "dms", |item| item.on_click(cx.listener(|this, _, window, cx| this.open_guild(None, window, cx))));
         let item = match key.as_str() {
-            k if k == "dms" || k.starts_with("dm-") => item,
+            k if k == "dms" || k == crate::favorites::RAIL_KEY || k.starts_with("dm-") => item,
             _ => self.rail_draggable(item, RailDrag { key: key.clone() }, look, self.rail_list_of(&key), cx),
         };
         let Some(guild_id) = guild_id else { return item.into_any_element() };
@@ -612,15 +644,26 @@ impl Waffle {
         match (&self.status, self.guild().cloned()) {
             // Until the gateway's first READY: the list's shape, shimmering.
             (Status::Connecting, guild) => rows.extend((0..8).map(|i| list_skeleton(i, guild.is_some(), cx))),
+            _ if self.in_favorites() => rows.extend(self.favorite_rows(window, cx)),
             (_, Some(guild)) => {
-                let me = self.my_id().to_owned();
                 // Beside the carried channel: "Move to Archive" while it's aimed into another category.
                 let tag = self.channel_board.dragged().zip(self.channel_board.hint()).and_then(|(moved, hint)| self.category_move(moved, hint.target.as_deref()?));
                 self.drag_motion.set_tag(tag);
                 rows.extend(self.event_rows(&guild, cx));
                 rows.extend(self.guild_entry_rows(&guild, window, cx));
-                let sections = channel_sections(&guild, &me).into_iter().map(|(category, channels)| (category, channels.into_iter().filter(|c| self.shows_in_list(&guild, c)).collect::<Vec<_>>())).filter(|(_, channels)| !channels.is_empty()).collect::<Vec<_>>();
-                for (i, (category, channels)) in sections.into_iter().enumerate() {
+                for (i, (section, channels)) in self.sidebar_sections(&guild).into_iter().enumerate() {
+                    let category = match section {
+                        Section::Pinned => {
+                            rows.push(self.static_section("pinned-head", "Pinned channels", &channels, &guild, window, cx).into_any_element());
+                            continue;
+                        }
+                        Section::ActiveNow => {
+                            rows.push(self.static_section("active-now-head", "Active now", &channels, &guild, window, cx).when(i > 0, |s| s.mt(px(16.))).into_any_element());
+                            continue;
+                        }
+                        Section::Uncategorised => None,
+                        Section::Category(category) => Some(*category),
+                    };
                     let order: Vec<String> = channels.iter().map(|c| c.id.clone()).collect();
                     let list = self.channel_board.list(channel_list(category.as_ref()), order, window, cx);
                     // A channel's first row is the item; its people and threads move with it.
@@ -637,7 +680,13 @@ impl Waffle {
                         .collect::<Vec<_>>();
                     match category {
                         Some(category) => rows.push(self.section(category, channel_rows, i > 0, window, cx)),
-                        None => rows.extend(channel_rows.into_iter().map(|row: ChannelRow| row.element)),
+                        None => {
+                            // Below Pinned channels, spaced like a category.
+                            if i > 0 {
+                                rows.push(div().h(px(16. - row_gap())).into_any_element());
+                            }
+                            rows.extend(channel_rows.into_iter().map(|row: ChannelRow| row.element));
+                        }
                     }
                 }
             }
@@ -649,7 +698,7 @@ impl Waffle {
                 rows.push(div().mt(px(ui::density_pad(16.))).child(category_head("dm-head".into(), div().id("dm-head").child("Direct messages"), true, cx).child(start)).into_any_element());
                 match self.dms.is_empty() {
                     true => rows.push(muted_line("No direct messages yet", cx)),
-                    false => rows.extend(self.dms.clone().iter().map(|c| self.dm_row(c, cx))),
+                    false => rows.extend(self.dm_order().iter().map(|c| self.dm_row(c, cx))),
                 }
             }
         }
@@ -728,6 +777,9 @@ impl Waffle {
 
     /// What heads the channel list: the open server's name, or "Home" (its search leads the list below).
     pub(crate) fn channel_list_head(&self, cx: &mut Context<Self>) -> AnyElement {
+        if self.in_favorites() {
+            return server_name_button("Favorites".into(), cx).into_any_element();
+        }
         match self.guild() {
             Some(guild) => server_name_button(guild.name.clone().into(), cx).into_any_element(),
             None => div()
@@ -804,8 +856,8 @@ impl Waffle {
         let selected = self.channel.as_ref().is_some_and(|c| c.id == channel.id);
         let settings = self.guild_settings.get(&guild.id);
         let muted = settings.is_some_and(|s| s.channel_muted(&channel.id) || channel.parent_id.as_ref().is_some_and(|p| s.channel_muted(p)));
-        // Discord's "Hide Muted Channels" keeps the open channel visible.
-        if muted && !selected && settings.is_some_and(|s| s.hide_muted) {
+        // Discord's "Hide Muted Channels" keeps the open channel and pinned channels visible.
+        if muted && !selected && settings.is_some_and(|s| s.hide_muted && !s.pinned(&channel.id)) {
             return Vec::new();
         }
         let is_voice = channel.kind == ChannelKind::Voice;
@@ -1120,6 +1172,13 @@ impl Waffle {
         if !self.can_arrange_channels(&guild.id) {
             return row;
         }
+        if self.guild_settings.get(&guild.id).is_some_and(|s| s.pinned(&channel.id)) {
+            let (this, guild_id, channel_id) = (cx.weak_entity(), guild.id.clone(), channel.id.clone());
+            return row.on_drag(crate::drag::PinnedDrag, move |_, _, _, cx| {
+                this.update(cx, |this, cx| this.ask_unpin(guild_id.clone(), channel_id.clone(), cx)).ok();
+                cx.new(|_| crate::drag::NoGhost)
+            });
+        }
         let drag = crate::drag::ChannelDrag { channel_id: channel.id.clone(), guild_id: guild.id.clone() };
         let people = match channel.kind {
             ChannelKind::Voice => self.voice_people(channel, guild),
@@ -1131,6 +1190,45 @@ impl Waffle {
         let ghost = crate::drag::pick_up(cx.weak_entity(), channel.id.clone().into(), look, size, 1.05, 0., true);
         let row = row.on_drag(drag, Board::lift(cx.weak_entity(), channel_board, channel.id.clone(), ghost));
         Board::target(row, channel_board, channel_list(self.guild().and_then(|g| g.channels.iter().find(|c| Some(&c.id) == channel.parent_id.as_ref()))), channel.id.clone(), |_: &crate::drag::ChannelDrag| false, cx)
+    }
+
+    // Discord's dialog for a drag on a pinned row: unpin it, or leave it.
+    fn ask_unpin(&mut self, guild_id: String, channel_id: String, cx: &mut Context<Self>) {
+        let body = "Unpin this channel before reordering. Pinning is only for you, but channel order applies to everyone.";
+        self.confirm("Trying to reorder a pinned channel?", body, "Unpin channel", move |this, _, cx| {
+            let flags = this.settings_for(&guild_id).channel_flags(&channel_id) & !channel_flag::FAVORITED;
+            this.set_channel_flags(guild_id.clone(), &channel_id, flags, cx);
+        }, cx);
+        if let Some(dialog) = &mut self.dialog {
+            dialog.danger = false;
+        }
+    }
+
+    // Pinned channels or Active Now under a static head: no fold, no add, not in any drag list.
+    fn static_section(&mut self, id: &'static str, title: &'static str, channels: &[Channel], guild: &Guild, window: &mut Window, cx: &mut Context<Self>) -> Div {
+        let head = category_head(id.into(), div().id(id).child(title), true, cx);
+        let mut rows = Vec::new();
+        for channel in channels {
+            rows.extend(self.channel_rows(channel, guild, window, cx).into_iter().map(|row| row.element));
+        }
+        div().flex().flex_col().gap(px(row_gap())).child(head).children(rows)
+    }
+
+    // The channel list's sections as drawn: what's open, in a call or mentioning us stays in view
+    // under opt-in, and so does a channel whose joined thread is unread or mentions us.
+    pub(crate) fn sidebar_sections(&self, guild: &Guild) -> Vec<(Section, Vec<Channel>)> {
+        let open = self.channel.as_ref().map(|c| c.id.as_str());
+        let in_call = self.call.as_ref().map(|c| c.channel.id.as_str());
+        let rules = guild.rules_channel_id.as_deref();
+        let keep = |c: &Channel| open == Some(c.id.as_str()) || in_call == Some(c.id.as_str()) || rules == Some(c.id.as_str()) || self.mention_count(&c.id) > 0;
+        let noticed = |t: &Channel| self.unread(&t.id) || self.mention_count(&t.id) > 0;
+        channel_sections(guild, self.my_id(), self.guild_settings.get(&guild.id), keep, noticed)
+    }
+
+    // DMs as listed and stepped through: pinned first, each group newest first.
+    pub(crate) fn dm_order(&self) -> Vec<Channel> {
+        let settings = self.guild_settings.get("@me");
+        pinned_first(&self.dms, |id| settings.is_some_and(|s| s.pinned(id)))
     }
 
     // "Move to Archive": the tag a channel carries over a row in another category.
@@ -1217,7 +1315,8 @@ impl Waffle {
         let (open, close_id) = (channel.clone(), channel.id.clone());
         let group: SharedString = format!("dm-{}", channel.id).into();
         let hovered = self.hovered_row.as_deref() == Some(channel.id.as_str());
-        // Hovered, the close button takes the count's place.
+        let pinned = self.guild_settings.get("@me").is_some_and(|s| s.pinned(&channel.id));
+        // Hovered, the close button takes the count's and the pin's place.
         let close = row_action(SharedString::from(format!("dm-close-{}", channel.id)), Nav::Close.icon(), "Close", cx)
             .flex_none()
             .on_click(cx.listener(move |this, _, _, cx| {
@@ -1241,6 +1340,7 @@ impl Waffle {
             )
             .when(mentions > 0 && !hovered, |r| r.child(ui::count_badge(mentions)))
             .when(mentions == 0 && !selected && !hovered && self.drafts.has(&channel.id), |r| r.child(div().flex_none().flex().text_color(faint).child(draft_mark())))
+            .when(pinned && !hovered, |r| r.child(div().flex_none().flex().text_color(faint).child(Icon::new(Glyph::Pin).size(px(14.)))))
             .when(hovered, |r| r.child(close))
             .on_click(cx.listener(move |this, _, window, cx| this.open_channel(open.clone(), window, cx)))
             .on_mouse_down(gpui_kit::MouseButton::Right, {
@@ -1487,16 +1587,71 @@ fn dm_find(cx: &App) -> Stateful<Div> {
     ui::search_button("dm-find", "Find or start a conversation", cx).occlude()
 }
 
-pub(crate) fn channel_sections(guild: &Guild, me: &str) -> Vec<(Option<Channel>, Vec<Channel>)> {
+// Every channel we can see, by category (uncategorised first), with no pins, opt-in or Active Now: what
+// the server guide, Browse Channels and the shortcuts list from.
+pub(crate) fn channel_groups(guild: &Guild, me: &str) -> Vec<(Option<Channel>, Vec<Channel>)> {
     let visible = |c: &&Channel| matches!(c.kind, ChannelKind::Text | ChannelKind::Voice | ChannelKind::Forum) && guild.can_view(me, c);
     let uncategorised: Vec<Channel> = guild.channels.iter().filter(visible).filter(|c| c.parent_id.is_none()).cloned().collect();
-    let mut sections = vec![(None, uncategorised)];
+    let mut groups = vec![(None, uncategorised)];
     for category in guild.channels.iter().filter(|c| c.kind == ChannelKind::Category) {
         let children = guild.channels.iter().filter(visible).filter(|c| c.parent_id.as_ref() == Some(&category.id)).cloned().collect();
-        sections.push((Some(category.clone()), children));
+        groups.push((Some(category.clone()), children));
     }
+    groups.retain(|(_, channels)| !channels.is_empty());
+    groups
+}
+
+pub(crate) enum Section {
+    Pinned,
+    Uncategorised,
+    Category(Box<Channel>),
+    ActiveNow,
+}
+
+// The channel list in order: Pinned channels (server order, voice after text), the uncategorised
+// channels, each category, then Active Now. Pinned channels leave their category and always show.
+// With opt-in on, the rest show only when they or their category are in our list, `keep` holds them,
+// or a joined active thread under them is `noticed`. Voice channels we haven't added that have
+// people in them leave their category for Active Now (Discord's `voiceChannelsCategory`, #791513).
+pub(crate) fn channel_sections(guild: &Guild, me: &str, settings: Option<&GuildSettings>, keep: impl Fn(&Channel) -> bool, noticed: impl Fn(&Channel) -> bool) -> Vec<(Section, Vec<Channel>)> {
+    let visible = |c: &&Channel| matches!(c.kind, ChannelKind::Text | ChannelKind::Voice | ChannelKind::Forum) && guild.can_view(me, c);
+    let pinned = |c: &Channel| settings.is_some_and(|s| s.pinned(&c.id));
+    let opt_in = settings.filter(|s| s.opt_in());
+    let added = |c: &Channel| opt_in.is_none_or(|s| s.opted_in(&c.id) || c.parent_id.as_ref().is_some_and(|p| s.opted_in(p)));
+    let active_now = |c: &Channel| opt_in.is_some() && c.kind == ChannelKind::Voice && !added(c) && guild.voice_states.iter().any(|v| v.channel_id.as_ref() == Some(&c.id));
+    let listed = |c: &Channel| added(c) || keep(c) || has_noticed_thread(guild, c, &noticed);
+    let shown = |c: &&Channel| visible(c) && !pinned(c) && !active_now(c) && listed(c);
+    let mut pins: Vec<Channel> = guild.channels.iter().filter(visible).filter(|c| pinned(c)).cloned().collect();
+    pins.sort_by_key(|c| (c.kind == ChannelKind::Voice, c.position));
+    let uncategorised = guild.channels.iter().filter(shown).filter(|c| c.parent_id.is_none()).cloned().collect();
+    let mut sections = vec![(Section::Pinned, pins), (Section::Uncategorised, uncategorised)];
+    for category in guild.channels.iter().filter(|c| c.kind == ChannelKind::Category) {
+        let children = guild.channels.iter().filter(shown).filter(|c| c.parent_id.as_ref() == Some(&category.id)).cloned().collect();
+        sections.push((Section::Category(Box::new(category.clone())), children));
+    }
+    let mut voice: Vec<Channel> = guild.channels.iter().filter(visible).filter(|c| !pinned(c) && active_now(c)).cloned().collect();
+    let category_position = |c: &Channel| c.parent_id.as_ref().and_then(|p| guild.channels.iter().find(|x| &x.id == p)).map_or(-1, |p| p.position);
+    voice.sort_by_key(|c| (category_position(c), c.position));
+    sections.push((Section::ActiveNow, voice));
     sections.retain(|(_, channels)| !channels.is_empty());
     sections
+}
+
+// Discord's `eN` (#791513): a joined, unarchived thread under the channel that is `noticed`.
+// GAP: Discord also counts a thread you recently visited and read; Waffle keeps no visit history.
+fn has_noticed_thread(guild: &Guild, channel: &Channel, noticed: impl Fn(&Channel) -> bool) -> bool {
+    guild
+        .threads
+        .iter()
+        .filter(|t| t.parent_id.as_ref() == Some(&channel.id))
+        .any(|t| t.thread.as_ref().is_some_and(|m| m.joined && !m.archived) && noticed(t))
+}
+
+// Stable, so each group keeps the recency order it came in.
+fn pinned_first(dms: &[Channel], pinned: impl Fn(&str) -> bool) -> Vec<Channel> {
+    let mut out = dms.to_vec();
+    out.sort_by_key(|c| !pinned(&c.id));
+    out
 }
 
 pub fn initials(name: &str) -> String {
@@ -1599,6 +1754,11 @@ pub(crate) fn render_face(face: Face, size: f32, radius: f32, selected: bool, op
         Face::Home => tile()
             .bg(if selected { palette::accent() } else { crate::material::lifted(palette::surface(palette::Level::Raised, cx), cx) })
             .child(svg().path(crate::icons::MARK).size(px(size / 2.)).text_color(if selected { palette::on_accent() } else { palette::logo_ink(cx) }))
+            .into_any_element(),
+        Face::Favorites => tile()
+            .bg(if selected { palette::accent() } else { crate::material::lifted(palette::surface(palette::Level::Raised, cx), cx) })
+            .text_color(if selected { palette::on_accent() } else { palette::warning_ink(cx) })
+            .child(Icon::new(Glyph::Star).size(px(size / 2.)))
             .into_any_element(),
         Face::Folder { tint, minis } => tile()
             .relative()
@@ -1964,6 +2124,131 @@ fn voice_row_click(in_call: Option<&str>, clicked: &str) -> VoiceRowClick {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::discord::{ChannelSettings, guild_flag};
+
+    fn channel(id: &str, kind: u8, position: i64, parent: Option<&str>) -> Channel {
+        crate::discord::parse_channel(&serde_json::json!({ "id": id, "type": kind, "position": position, "parent_id": parent }), "g").unwrap()
+    }
+
+    // Owned by "me", so every channel is viewable.
+    fn guild(channels: Vec<Channel>) -> Guild {
+        Guild {
+            id: "g".into(),
+            name: "g".into(),
+            icon: None,
+            channels,
+            roles: Vec::new(),
+            voice_states: Vec::new(),
+            emojis: Vec::new(),
+            stickers: Vec::new(),
+            owner_id: Some("me".into()),
+            default_notifications: 0,
+            threads: Vec::new(),
+            my_roles: Vec::new(),
+            premium_tier: 0,
+            afk_channel_id: None,
+            features: vec!["COMMUNITY".into()],
+            ..Default::default()
+        }
+    }
+
+    fn settings(guild_flags: u64, channels: &[(&str, u64)]) -> GuildSettings {
+        let channels = channels.iter().map(|&(id, flags)| (id.to_owned(), ChannelSettings { flags, ..Default::default() })).collect();
+        GuildSettings { flags: guild_flags, channels, ..Default::default() }
+    }
+
+    fn ids(sections: &[(Section, Vec<Channel>)]) -> Vec<(String, Vec<&str>)> {
+        sections
+            .iter()
+            .map(|(section, channels)| {
+                let name = match section {
+                    Section::Pinned => "pinned".to_owned(),
+                    Section::Uncategorised => "loose".to_owned(),
+                    Section::Category(c) => c.id.clone(),
+                    Section::ActiveNow => "active".to_owned(),
+                };
+                (name, channels.iter().map(|c| c.id.as_str()).collect())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn pinned_channels_leave_their_category_and_opt_in_hides_the_rest() {
+        let guild = guild(vec![
+            channel("loose", 0, 0, None),
+            channel("cat", 4, 1, None),
+            channel("lounge", 2, 2, Some("cat")),
+            channel("general", 0, 3, Some("cat")),
+            channel("memes", 0, 4, Some("cat")),
+            channel("art", 0, 5, Some("cat")),
+            channel("info", 4, 6, None),
+            channel("rules", 0, 7, Some("info")),
+        ]);
+        let pins = settings(0, &[("lounge", channel_flag::FAVORITED), ("general", channel_flag::FAVORITED)]);
+        let all = channel_sections(&guild, "me", Some(&pins), |_| false, |_| false);
+        assert_eq!(ids(&all), [("pinned".into(), vec!["general", "lounge"]), ("loose".into(), vec!["loose"]), ("cat".into(), vec!["memes", "art"]), ("info".into(), vec!["rules"])]);
+
+        let opt_in = settings(guild_flag::OPT_IN_CHANNELS_ON, &[("lounge", channel_flag::FAVORITED), ("memes", channel_flag::OPT_IN_ENABLED), ("info", channel_flag::OPT_IN_ENABLED)]);
+        let listed = channel_sections(&guild, "me", Some(&opt_in), |c| c.id == "art", |_| false);
+        assert_eq!(ids(&listed), [("pinned".into(), vec!["lounge"]), ("cat".into(), vec!["memes", "art"]), ("info".into(), vec!["rules"])]);
+    }
+
+    fn thread(id: &str, parent: &str, joined: bool, archived: bool) -> Channel {
+        let mut json = serde_json::json!({ "id": id, "type": 11, "parent_id": parent, "thread_metadata": { "archived": archived } });
+        if joined {
+            json["member"] = serde_json::json!({});
+        }
+        crate::discord::parse_channel(&json, "g").unwrap()
+    }
+
+    #[test]
+    fn opt_in_keeps_a_channel_whose_joined_active_thread_is_noticed() {
+        let mut guild = guild(vec![channel("cat", 4, 0, None), channel("general", 0, 1, Some("cat")), channel("art", 0, 2, Some("cat")), channel("memes", 0, 3, Some("cat")), channel("clips", 0, 4, Some("cat")), channel("quiet", 0, 5, Some("cat"))]);
+        guild.threads = vec![thread("art-t", "art", true, false), thread("memes-t", "memes", false, false), thread("clips-t", "clips", true, true), thread("quiet-t", "quiet", true, false)];
+        let opt_in = settings(guild_flag::OPT_IN_CHANNELS_ON, &[("general", channel_flag::OPT_IN_ENABLED)]);
+        let noticed = |t: &Channel| t.id != "quiet-t";
+        let listed = channel_sections(&guild, "me", Some(&opt_in), |_| false, noticed);
+        assert_eq!(ids(&listed), [("cat".into(), vec!["general", "art"])], "an unjoined, archived or read thread doesn't hold its channel");
+    }
+
+    #[test]
+    fn opt_in_gathers_occupied_unadded_voice_into_active_now_last() {
+        let mut guild = guild(vec![
+            channel("hangout", 2, 0, None),
+            channel("b", 4, 2, None),
+            channel("b-voice", 2, 0, Some("b")),
+            channel("a", 4, 1, None),
+            channel("a-text", 0, 0, Some("a")),
+            channel("a-voice", 2, 3, Some("a")),
+            channel("a-lounge", 2, 1, Some("a")),
+            channel("a-empty", 2, 2, Some("a")),
+            channel("a-added", 2, 4, Some("a")),
+            channel("a-pinned", 2, 5, Some("a")),
+        ]);
+        let state = |user: &str, channel: &str| crate::discord::VoiceState { user_id: user.into(), channel_id: Some(channel.into()), ..Default::default() };
+        guild.voice_states = ["hangout", "b-voice", "a-voice", "a-lounge", "a-lounge", "a-added", "a-pinned"].iter().enumerate().map(|(i, c)| state(&i.to_string(), c)).collect();
+        let opt_in = settings(guild_flag::OPT_IN_CHANNELS_ON, &[("a-text", channel_flag::OPT_IN_ENABLED), ("a-added", channel_flag::OPT_IN_ENABLED), ("a-pinned", channel_flag::FAVORITED)]);
+        let listed = channel_sections(&guild, "me", Some(&opt_in), |_| false, |_| false);
+        assert_eq!(
+            ids(&listed),
+            [("pinned".into(), vec!["a-pinned"]), ("a".into(), vec!["a-text", "a-added"]), ("active".into(), vec!["hangout", "a-lounge", "a-voice", "b-voice"])],
+            "by category position, then channel position; added, pinned and empty channels stay out"
+        );
+
+        guild.voice_states.retain(|v| v.channel_id.as_deref() != Some("a-voice"));
+        let left = channel_sections(&guild, "me", Some(&opt_in), |_| false, |_| false);
+        assert_eq!(left.last().map(|(_, c)| c.iter().map(|c| c.id.as_str()).collect::<Vec<_>>()), Some(vec!["hangout", "a-lounge", "b-voice"]), "empties leave as people do");
+
+        let all = channel_sections(&guild, "me", Some(&settings(0, &[])), |_| false, |_| false);
+        assert!(!all.iter().any(|(s, _)| matches!(s, Section::ActiveNow)), "no Active Now with opt-in off");
+    }
+
+    #[test]
+    fn pinned_dms_come_first_and_keep_their_recency_order() {
+        let dms: Vec<Channel> = ["a", "b", "c", "d"].iter().map(|id| channel(id, 1, 0, None)).collect();
+        let order = pinned_first(&dms, |id| id == "c" || id == "b");
+        assert_eq!(order.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["b", "c", "a", "d"]);
+    }
 
     #[test]
     fn folder_minis_fill_the_tile_for_how_many_there_are() {
@@ -2064,9 +2349,12 @@ pub(crate) fn server_name_button(name: SharedString, cx: &mut Context<Waffle>) -
         .child(ui::truncating("server-name", name).flex_1())
         .child(Nav::Caret.icon().size(px(16.)).text_color(palette::muted(cx)))
         .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(|this, _: &gpui_kit::MouseDownEvent, _, cx| {
-            let Some(guild_id) = this.guild_id.clone() else { return };
             // Drops from the button's bottom edge, at its left.
             let at = gpui_kit::point(px(RAIL_WIDTH + 8.), px(crate::layout::HEADER_HEIGHT - 4.));
+            if this.in_favorites() {
+                return this.open_favorites_menu(at, cx);
+            }
+            let Some(guild_id) = this.guild_id.clone() else { return };
             this.open_server_menu(guild_id, at, true, cx);
         }))
 }

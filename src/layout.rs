@@ -142,13 +142,14 @@ impl Waffle {
             .children(pip)
             .children(overlays)
             .children(call_overlays)
-            .children(self.render_toast(cx))
-            .children(menu)
-            .children(dialog)
             .children(viewer)
             .children(settings)
             .children(channel_settings)
             .children(server_settings)
+            // Over the settings views too: their menus, confirms and toasts come from the same places.
+            .children(self.render_toast(cx))
+            .children(menu)
+            .children(dialog)
             .children(combos)
             .children(crate::window_controls::render(window, cx))
             .children(self.render_landing(window, cx))
@@ -270,6 +271,9 @@ impl Waffle {
             return cx.stop_propagation();
         }
         if keystroke.key == "escape" && self.viewer.is_none() && self.dismiss_overlay(cx) {
+            return cx.stop_propagation();
+        }
+        if keystroke.key == "escape" && self.viewer.is_none() && self.mod_view_escape(cx) {
             return cx.stop_propagation();
         }
         // On a DM call's stage, Esc with nothing else to close goes back to the chat.

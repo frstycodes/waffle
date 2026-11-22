@@ -4,7 +4,7 @@
 // section with design/primitives.html.
 //
 // Pressable controls (buttons, icon buttons, chips, swatches, tab options, menu rows) live in `control`,
-// fields in `field`, the sliding strips in `tabs`, tracks and waits in `feedback`, grouped settings in
+// fields and dropdowns in `field`, the ruled data table in `table`, the sliding strips in `tabs`, tracks and waits in `feedback`, grouped settings in
 // `group`; this file holds the marks, badges, people, surfaces, motion helpers and the live switch, check
 // and radio.
 //
@@ -38,6 +38,7 @@ mod dialog;
 mod feedback;
 mod field;
 mod group;
+mod table;
 mod overflow;
 mod tabs;
 mod tri;
@@ -47,9 +48,10 @@ pub use control::{Control, Pressable, button, chip, chip_lead, hover_fade, icon_
 pub use date::{date_field, time_field};
 pub use dialog::{dialog, dialog_body, dialog_scroll, modal};
 pub use feedback::{meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
-pub use field::{code_cell, drop_zone, dropdown, field, field_error, field_marked, field_frame, field_hint, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
+pub use field::{Align, check_options, code_cell, drop_zone, dropdown, field, field_error, field_marked, field_frame, field_hint, menu_dropdown, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
 pub use group::{settings_caption, settings_card, settings_choice, settings_close, settings_column, settings_group, SettingsHighlight, settings_warning, settings_nav_item, settings_page, SETTINGS_NAV_WIDTH, SETTINGS_WIDTH, settings_row, settings_nav_edge, settings_sidebar, settings_switch, settings_text, settings_title, settings_window};
 pub use overflow::{Entry, overflow_list};
+pub use table::{Col, table, table_head, table_min_width, table_row};
 pub use tabs::{Tab, pill_tabs, segmented_live, tabs};
 pub use tri::{Tri, tri_state};
 pub use tunnel::{TUNNEL_GRACE, Tunnel};
@@ -283,8 +285,15 @@ pub fn unread_dot() -> Div {
     div().size(px(8.)).flex_none().rounded_full().bg(palette::alert())
 }
 
-// A role: its colour as a dot, never as the text's colour.
+// A role: its colour as a dot and a light tint of the capsule. The text keeps the normal ink, since role
+// colours are often too pale to read on their own tint.
 pub fn role_chip(name: impl Into<SharedString>, color: Hsla, cx: &App) -> Div {
+    let tint = if dark(cx) { 0.2 } else { 0.14 };
+    pill(cx).bg(color.opacity(tint)).child(div().size(px(10.)).rounded_full().bg(color)).child(name.into())
+}
+
+// The role chip's capsule, for a lead mark other than a colour dot (a permission's shield).
+pub fn pill(cx: &App) -> Div {
     div()
         .h(px(24.))
         .px(px(8.))
@@ -298,8 +307,6 @@ pub fn role_chip(name: impl Into<SharedString>, color: Hsla, cx: &App) -> Div {
         .text_size(px(12.))
         .font_weight(FontWeight::MEDIUM)
         .whitespace_nowrap()
-        .child(div().size(px(10.)).rounded_full().bg(color))
-        .child(name.into())
 }
 
 // A keycap: the raised fill, a hairline ring and a deeper bottom edge, so it reads as a key you could press.
@@ -741,6 +748,30 @@ pub fn surface(cx: &App) -> Div {
 // A floating surface's entrance (menus, popovers, pickers, dialogs): it fades in and grows from 0.95 over
 // the pop timing, after `delay` (a submenu's intent delay). It grows from the top-left corner unless the
 // caller set a `transform_origin` toward its trigger.
+// A bar that floats over a page's foot (unsaved changes, bulk actions): the overlay card at the settings
+// column's width. It occludes, so the rows under it never take its hover or clicks.
+pub fn floating_bar(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
+    div()
+        .id(id.into())
+        .occlude()
+        .w_full()
+        .max_w(px(SETTINGS_WIDTH))
+        .py(px(10.))
+        .pl(px(16.))
+        .pr(px(10.))
+        .squircle(RADIUS_LG)
+        .bg(palette::surface(palette::Level::Overlay, cx))
+        .shadow(shadow_pop(cx))
+        .flex()
+        .items_center()
+        .gap(px(12.))
+}
+
+// Docks a floating bar 16px above the foot of the nearest relative parent, centred, rising in.
+pub fn foot_dock(bar: impl IntoElement, id: impl Into<ElementId>) -> AnimationElement<Div> {
+    rise(div().absolute().bottom(px(16.)).left(px(40.)).right(px(40.)).flex().justify_center().child(bar), id, Duration::ZERO)
+}
+
 pub fn rise<E:IntoElement + Styled + 'static>(mut el: E, id: impl Into<ElementId>, delay: Duration) -> AnimationElement<E> {
     if el.style().transform_origin.x.is_none() {
         el = el.transform_origin(point(relative(0.), relative(0.)));

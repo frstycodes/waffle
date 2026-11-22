@@ -121,7 +121,7 @@ impl Waffle {
     }
 
     fn all_set(&self, guild: &Guild, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        let first = crate::sidebar::channel_sections(guild, self.my_id()).into_iter().flat_map(|(_, c)| c).find(|c| c.kind == ChannelKind::Text);
+        let first = crate::sidebar::channel_groups(guild, self.my_id()).into_iter().flat_map(|(_, c)| c).find(|c| c.kind == ChannelKind::Text);
         div()
             .flex()
             .flex_col()

@@ -290,8 +290,7 @@ pub fn drop_zone(over: bool, glyph: Glyph, title: impl Into<SharedString>, cx: &
 }
 
 // A select's open list, rising from under its trigger (`top` is the trigger's height); the chosen option
-// carries a check. Deferred, so it paints above whatever sits below the trigger.
-// A press anywhere else dismisses it.
+// carries a check (`dropdown`).
 pub fn select_options(
     id: impl Into<SharedString>,
     options: &[(String, String)],
@@ -315,15 +314,60 @@ pub fn select_options(
                 .into_any_element()
         })
         .collect();
+    menu_dropdown(id, top, Align::Start, rows, on_dismiss, cx)
+}
+
+// Options any number of which can be on, each with its checkbox; choosing one toggles it and leaves the
+// list open.
+pub fn check_options(
+    id: impl Into<SharedString>,
+    options: &[(String, String, bool)],
+    top: f32,
+    on_toggle: impl Fn(String, &mut Window, &mut App) + Clone + 'static,
+    on_dismiss: impl Fn(&mut Window, &mut App) + 'static,
+    cx: &App,
+) -> AnyElement {
+    let id: SharedString = id.into();
+    let rows: Vec<AnyElement> = options
+        .iter()
+        .map(|(value, name, on)| {
+            let (value, on_toggle) = (value.clone(), on_toggle.clone());
+            super::menu_row(SharedString::from(format!("{id}-{value}")), cx)
+                .child(super::check(if *on { super::Check::On } else { super::Check::Off }, cx))
+                .child(div().flex_1().min_w_0().truncate().child(name.clone()))
+                .on_click(move |_, window, cx| on_toggle(value.clone(), window, cx))
+                .into_any_element()
+        })
+        .collect();
+    menu_dropdown(id, top, Align::Start, rows, on_dismiss, cx)
+}
+
+// Which edge of its trigger a dropdown lines up with.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Align {
+    Start,
+    End,
+}
+
+// A menu surface of `rows` rising from under its trigger, which sits `top` px tall above it in the same
+// relative parent; `align` picks the trigger edge it lines up with.
+pub fn menu_dropdown(id: impl Into<SharedString>, top: f32, align: Align, rows: Vec<AnyElement>, on_dismiss: impl Fn(&mut Window, &mut App) + 'static, cx: &App) -> AnyElement {
+    let id: SharedString = id.into();
     let menu = super::surface(cx).id(id.clone()).squircle(RADIUS_LG).max_h(px(280.)).overflow_y_scroll().gap(px(1.)).occlude().children(rows);
-    dropdown(id, menu, top, on_dismiss)
+    dropdown_at(id, menu, top, align, on_dismiss)
 }
 
 // A floating panel under its trigger (`top` is the trigger's height), dismissed by a press anywhere else:
 // a select's list, or a picker with its own search. `panel` brings its own id and `occlude`.
 pub fn dropdown(id: impl Into<SharedString>, panel: impl IntoElement, top: f32, on_dismiss: impl Fn(&mut Window, &mut App) + 'static) -> AnyElement {
+    dropdown_at(id, panel, top, Align::Start, on_dismiss)
+}
+
+// `dropdown`, lined up with either edge of its trigger. Deferred, so it paints above whatever sits below
+// the trigger.
+pub fn dropdown_at(id: impl Into<SharedString>, panel: impl IntoElement, top: f32, align: Align, on_dismiss: impl Fn(&mut Window, &mut App) + 'static) -> AnyElement {
     let id: SharedString = id.into();
-    // Rises from the trigger: 0.95 scale about its top centre, with the fade.
+    // Rises from the trigger: 0.95 scale about its top edge, with the fade.
     // The trigger is outside the list's box, so a press on it would read as outside too and close the list
     // just before the trigger's own toggle reopened it: the list's last bounds place the trigger above it.
     let bounds = std::rc::Rc::new(std::cell::Cell::new(None::<gpui_kit::Bounds<gpui_kit::Pixels>>));
@@ -331,9 +375,11 @@ pub fn dropdown(id: impl Into<SharedString>, panel: impl IntoElement, top: f32, 
     let list = div()
         .absolute()
         .top(px(top + 4.))
-        .left_0()
-        .right_0()
         .min_w(px(200.))
+        .map(|d| match align {
+            Align::Start => d.left_0().right_0(),
+            Align::End => d.right_0(),
+        })
         .child(gpui_kit::canvas(move |b, _, _| record.set(Some(b)), |_, _, _, _| {}).absolute().size_full())
         .child(panel)
         .on_mouse_down_out(move |event, window, cx| {
@@ -342,5 +388,6 @@ pub fn dropdown(id: impl Into<SharedString>, panel: impl IntoElement, top: f32, 
                 on_dismiss(window, cx);
             }
         });
-    gpui_kit::deferred(super::rise(list.transform_origin(gpui_kit::point(gpui_kit::relative(0.5), gpui_kit::relative(0.))), SharedString::from(format!("{id}-in")), std::time::Duration::ZERO)).with_priority(2).into_any_element()
+    let origin = gpui_kit::point(gpui_kit::relative(if align == Align::End { 1. } else { 0.5 }), gpui_kit::relative(0.));
+    gpui_kit::deferred(super::rise(list.transform_origin(origin), SharedString::from(format!("{id}-in")), std::time::Duration::ZERO)).with_priority(2).into_any_element()
 }

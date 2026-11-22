@@ -288,7 +288,7 @@ impl Waffle {
         let me = self.my_id().to_owned();
         let mut order: Vec<(Option<String>, Channel)> = self.dms.iter().map(|c| (None, c.clone())).collect();
         for guild in self.rail_places().into_iter().flatten().filter_map(|id| self.guilds.iter().find(|g| g.id == id)) {
-            let text = crate::sidebar::channel_sections(guild, &me).into_iter().flat_map(|(_, c)| c).filter(|c| c.kind == ChannelKind::Text);
+            let text = crate::sidebar::channel_groups(guild, &me).into_iter().flat_map(|(_, c)| c).filter(|c| c.kind == ChannelKind::Text);
             order.extend(text.map(|c| (Some(guild.id.clone()), c)));
         }
         let wanted = |c: &Channel| if mentions { self.mention_count(&c.id) > 0 } else { self.unread(&c.id) };
@@ -315,7 +315,7 @@ impl Waffle {
         if self.guild_id.is_some() {
             return self.open_guild(None, window, cx);
         }
-        let Some(last) = self.back.iter().rev().find_map(|(guild, _)| guild.clone()) else { return };
+        let Some(last) = self.history.last_guild() else { return };
         self.open_guild(Some(last), window, cx);
     }
 

@@ -375,7 +375,7 @@ mod tests {
     use crate::discord::{Overwrite, Role, User, VIEW_CHANNEL};
 
     fn role(id: &str, position: i64, permissions: u64) -> Role {
-        Role { id: id.into(), name: id.into(), color: 0, position, permissions, managed: false }
+        Role { id: id.into(), name: id.into(), color: 0, position, permissions, managed: false, icon: None }
     }
 
     fn text_channel(slowmode: u32, overwrites: Vec<Overwrite>) -> Channel {

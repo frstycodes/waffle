@@ -2,7 +2,7 @@
 // design/navigation.html (channel header).
 //
 // GAP: hover fades (row fill, toolbar, 150ms) are instant: gpui's `.hover` styles don't transition.
-use std::{collections::HashMap, f32::consts::TAU, rc::Rc, time::Duration};
+use std::{cell::Cell, collections::HashMap, f32::consts::TAU, rc::Rc, time::Duration};
 
 use chrono::{DateTime, Local, NaiveDate};
 use gpui_kit::{
@@ -675,11 +675,18 @@ impl Waffle {
         div().relative().flex_1().min_w_0().child(field.py(px(4.)).px(px(2.))).children(self.option_boxes(cx)).into_any_element()
     }
 
-    // A mention badge's click: a person's profile beside it, or the channel it names.
-    fn open_mention(&mut self, url: &str, at: gpui_kit::Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    // A mention badge's click: a person's profile at the click, a role's card at `beside` (just off the
+    // badge's right edge), or the channel it names.
+    fn open_mention(&mut self, url: &str, at: gpui_kit::Point<Pixels>, beside: gpui_kit::Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = url.strip_prefix("waffle://user/") {
             let Some(user) = self.known_users().into_iter().find(|u| u.id == id) else { return };
             return self.open_profile(user, at, cx);
+        }
+        if let Some(id) = url.strip_prefix("waffle://role/") {
+            return self.open_role_popout(Some(id.to_owned()), beside, cx);
+        }
+        if url == "waffle://everyone" {
+            return self.open_role_popout(None, beside, cx);
         }
         let Some(id) = url.strip_prefix("waffle://channel/") else { return };
         let channel = self.guild().and_then(|g| g.channels.iter().find(|c| c.id == id).cloned());
@@ -1885,13 +1892,18 @@ impl MarkdownPlugin for MentionBadges {
     fn render_inline(&self, node: &MarkdownNode, _: &InlineRenderContext, _: &mut Window, _: &mut App) -> Option<InlineElement> {
         let mention = node.data::<Mention>()?.clone();
         let (this, hover) = (self.this.clone(), self.hover);
+        let bounds = Rc::new(Cell::new(None));
+        let measured = bounds.clone();
         let badge = mention_badge(mention.label.into(), self.fill, self.ink)
             .id(SharedString::from(format!("at-{}", mention.url)))
+            .relative()
             .cursor_pointer()
             .hover(move |s| s.bg(hover))
+            .child(gpui_kit::canvas(move |b, _, _| measured.set(Some(b)), |_, _, _, _| {}).absolute().size_full())
             .on_click(move |event, window, cx| { cx.stop_propagation();
                 let url = mention.url.clone();
-                this.update(cx, |this, cx| this.open_mention(&url, event.position(), window, cx)).ok();
+                let beside = bounds.get().map_or(event.position(), crate::role_popout::beside);
+                this.update(cx, |this, cx| this.open_mention(&url, event.position(), beside, window, cx)).ok();
             });
         Some(InlineElement::new(badge))
     }
@@ -3604,7 +3616,7 @@ fn readable_with(content: &str, ctx: &RowContext, inline_emoji: bool) -> String 
         };
         let token = &tail[1..end];
         let replacement = if let Some(id) = token.strip_prefix("@&") {
-            ctx.role_names.get(id).map(|n| format!("[@{n}](waffle://role/{id})"))
+            Some(ctx.role_names.get(id).map_or_else(|| "@unknown-role".to_owned(), |n| format!("[@{n}](waffle://role/{id})")))
         } else if let Some(id) = token.strip_prefix("@!").or_else(|| token.strip_prefix('@')) {
             Some(format!("[@{}](waffle://user/{id})", ctx.names.get(id).map_or("unknown-user", String::as_str)))
         } else if let Some(id) = token.strip_prefix('#') {
@@ -3669,7 +3681,7 @@ fn discord_timestamp(stamp: &str) -> Option<String> {
     }))
 }
 
-fn relative(delta: chrono::TimeDelta) -> String {
+pub(crate) fn relative(delta: chrono::TimeDelta) -> String {
     let (secs, future) = (delta.num_seconds().abs(), delta.num_seconds() < 0);
     let (n, unit) = match secs {
         s if s < 60 => (s, "second"),

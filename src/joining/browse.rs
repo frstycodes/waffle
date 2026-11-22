@@ -21,7 +21,7 @@ use crate::{
     icons::Glyph,
     mascot::Mood,
     palette,
-    sidebar::{channel_glyph, channel_sections},
+    sidebar::{channel_glyph, channel_groups},
     ui::{self, Check, Squircle},
 };
 
@@ -214,7 +214,7 @@ impl Waffle {
         let search = self.browse_search(window, cx);
         let query = search.read(cx).value().trim().to_lowercase();
         let settings = self.settings_for(&guild.id);
-        let sections = channel_sections(guild, self.my_id());
+        let sections = channel_groups(guild, self.my_id());
         let all: Vec<&Channel> = sections.iter().flat_map(|(_, channels)| channels).collect();
         let shown = all.iter().filter(|c| self.shows_in_list(guild, c)).count();
         let tally = div()

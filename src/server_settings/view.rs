@@ -29,7 +29,7 @@ use crate::{
     icons::Glyph,
     palette::{self, Level},
     settings::registry,
-    ui::{self, Notice, Squircle, Tone},
+    ui::{self, Notice, Tone},
 };
 
 // What GET /guilds/{id} tells the window beyond the draft.
@@ -348,6 +348,7 @@ impl Waffle {
             .child(body)
             .child(gpui_kit::component::scroll::Scrollbar::vertical(&scroll))
             .children(self.server_save_bar(cx))
+            .children(self.member_bulk_bar(cx))
             .child(ui::settings_close("server-settings-close", cx.listener(|this, _, _, cx| this.close_server_settings(false, cx)), cx));
         let nav = self.server_settings_nav(&guild_id, cx).into_any_element();
         Some(self.settings_frame("server-settings", nav, main, cx).into_any_element())
@@ -694,22 +695,11 @@ impl Waffle {
             }
         }));
         let save = ui::button("ss-save", Tone::Primary, cx).loading(saving.then_some("Saving")).child("Save changes").on_click(cx.listener(move |this, _, _, cx| this.save_server_settings(closing, cx)));
-        let bar = div()
-            .w_full()
-            .max_w(px(ui::SETTINGS_WIDTH))
-            .py(px(10.))
-            .pl(px(16.))
-            .pr(px(10.))
-            .squircle(ui::RADIUS_LG)
-            .bg(palette::surface(Level::Overlay, cx))
-            .shadow(ui::shadow_pop(cx))
-            .flex()
-            .items_center()
-            .gap(px(12.))
+        let bar = ui::floating_bar("ss-savebar", cx)
             .child(div().text_color(ink).flex_none().child(Icon::new(glyph).size(px(20.))))
             .child(div().flex_1().min_w_0().flex().flex_col().child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title)).children(detail.map(|d| div().text_size(px(12.)).line_height(px(17.)).text_color(palette::muted(cx)).child(d))))
             .child(div().flex().gap(px(8.)).flex_none().child(reset).child(save));
-        Some(ui::rise(div().absolute().bottom(px(16.)).left(px(40.)).right(px(40.)).flex().justify_center().child(bar), "ss-savebar-in", std::time::Duration::ZERO))
+        Some(ui::foot_dock(bar, "ss-savebar-in"))
     }
 
     // The last reversible change on this page, with its Undo.
@@ -854,8 +844,12 @@ fn minutes(seconds: u32) -> String {
 
 // A snowflake's creation time, in the reader's local time.
 pub fn snowflake_time(id: &str) -> String {
-    let ms = (id.parse::<u64>().unwrap_or(0) >> 22) + 1_420_070_400_000;
-    chrono::DateTime::from_timestamp_millis(ms as i64).map(|t| t.with_timezone(&chrono::Local).format("%-d %b %Y, %H:%M").to_string()).unwrap_or_default()
+    chrono::DateTime::from_timestamp_millis(snowflake_ms(id)).map(|t| t.with_timezone(&chrono::Local).format("%-d %b %Y, %H:%M").to_string()).unwrap_or_default()
+}
+
+// When a snowflake was made, in epoch milliseconds.
+pub fn snowflake_ms(id: &str) -> i64 {
+    ((id.parse::<u64>().unwrap_or(0) >> 22) + 1_420_070_400_000) as i64
 }
 
 pub fn sentence_spans(segs: &[audit::Seg], cx: &App) -> Div {

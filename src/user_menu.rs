@@ -1,13 +1,13 @@
 // Discord's user context menus, built item-for-item from its own menu code (docs/discord-menus-user-
 // message.md, read from Discord web 2026-11-14). Each item carries Discord's show-condition; items
-// for features Waffle doesn't have (activities, apps, mod view, E2EE codes) are left out.
+// for features Waffle doesn't have (activities, apps, E2EE codes) are left out.
 use gpui_kit::{Context, Pixels, Point, Window};
 use reqwest::Method;
 use serde_json::json;
 
 use crate::{
     Waffle,
-    discord::{ChannelKind, Guild, OnStage, Relation, User, VoiceState, perm},
+    discord::{ChannelKind, Guild, OnStage, Relation, User, VoiceState, channel_flag, perm},
     stage::STAGE,
     icons::Glyph,
     menu::{Entry, HeadLead, header, item, slider, submenu},
@@ -29,7 +29,7 @@ pub enum Surface {
 }
 
 // Discord's timeout lengths, in seconds.
-const TIMEOUTS: [(&str, i64); 6] = [("60 seconds", 60), ("5 minutes", 300), ("10 minutes", 600), ("1 hour", 3600), ("1 day", 86_400), ("1 week", 604_800)];
+pub(crate) const TIMEOUTS: [(&str, i64); 6] = [("60 seconds", 60), ("5 minutes", 300), ("10 minutes", 600), ("1 hour", 3600), ("1 day", 86_400), ("1 week", 604_800)];
 
 impl Waffle {
     pub(crate) fn open_user_menu(&mut self, user: User, guild_id: Option<String>, surface: Surface, at: Point<Pixels>, cx: &mut Context<Self>) {
@@ -48,6 +48,9 @@ impl Waffle {
         let read = item("Mark as read", move |this, _, cx| this.mark_channel_read(&id, cx)).icon(Glyph::Checks);
         entries.push(if unread { read } else { read.disabled() }.entry());
         entries.push(Entry::Separator);
+        entries.push(self.pin_dm_entry(&channel.id));
+        entries.extend(self.favorite_add_entry(channel));
+        entries.push(Entry::Separator);
         if let Some(user) = channel.recipient.clone() {
             entries.extend(self.user_menu(&user, None, Surface::Dm, at).into_iter().filter(|e| !e.is_copy_id()));
         }
@@ -61,6 +64,8 @@ impl Waffle {
             entries.push(item("Close DM", move |this, _, cx| this.close_dm(&id, cx)).icon(Glyph::X).entry());
         }
         entries.push(Entry::Separator);
+        entries.extend(self.favorite_remove_entry(channel));
+        entries.push(Entry::Separator);
         if self.developer_mode {
             if let Some(user) = &channel.recipient {
                 let uid = user.id.clone();
@@ -70,6 +75,15 @@ impl Waffle {
             entries.push(item("Copy channel ID", move |this, _, cx| this.copy_text(cid.clone(), cx)).icon(Glyph::Id).entry());
         }
         entries
+    }
+
+    // Discord's pin-dm, for DMs and group DMs: the DM override's FAVORITED bit under "@me".
+    fn pin_dm_entry(&self, channel_id: &str) -> Entry {
+        let flags = self.guild_settings.get("@me").map_or(0, |s| s.channel_flags(channel_id));
+        let pinned = flags & channel_flag::FAVORITED != 0;
+        let id = channel_id.to_owned();
+        let next = flags ^ channel_flag::FAVORITED;
+        item(if pinned { "Unpin" } else { "Pin" }, move |this, _, cx| this.set_channel_flags("@me".into(), &id, next, cx)).icon(if pinned { Glyph::PinSlash } else { Glyph::Pin }).entry()
     }
 
     // Closes a DM (Discord's DELETE on the channel only hides it from the list for us).
@@ -100,7 +114,7 @@ impl Waffle {
     }
 
     // Discord's canManageUser: the permission, and my highest role above theirs (or I own the server).
-    fn can_manage(&self, guild_id: &str, target: &str, bit: u64) -> bool {
+    pub(crate) fn can_manage(&self, guild_id: &str, target: &str, bit: u64) -> bool {
         let (Some(guild), Some(me)) = (self.guilds.iter().find(|g| g.id == guild_id), self.me.as_ref()) else { return false };
         if !guild.can(&me.id, bit) || guild.owner_id.as_deref() == Some(target) {
             return false;
@@ -278,40 +292,10 @@ impl Waffle {
         // G6: roles and voice moves.
         let voice = guild.and_then(|g| g.voice_states.iter().find(|v| v.user_id == target).map(|v| (g, v.clone())));
         if let Some(guild) = guild {
-            let theirs = self.member_roles.get(&guild.id).and_then(|r| r.get(&target)).cloned().unwrap_or_default();
-            let manage = guild.can(&me.id, perm::MANAGE_ROLES);
-            let top = guild.top_position(&me.id);
-            let mut roles: Vec<_> = guild.roles.iter().filter(|r| r.id != guild.id && !r.managed).collect();
-            roles.sort_by_key(|r| std::cmp::Reverse(r.position));
-            let rows: Vec<Entry> = roles
-                .into_iter()
-                .filter(|r| theirs.contains(&r.id) || (manage && r.position < top))
-                .map(|role| {
-                    let has = theirs.contains(&role.id);
-                    let dot = if role.color == 0 { None } else { Some(role.color) };
-                    if !manage {
-                        return item(role.name.clone(), |_, _, _| {}).dot(dot).entry();
-                    }
-                    let (gid, uid, rid) = (guild.id.clone(), target.clone(), role.id.clone());
-                    let row = item(role.name.clone(), move |this, _, cx| {
-                        let method = if has { Method::DELETE } else { Method::PUT };
-                        let (g1, u1, r1, g2, u2, r2) = (gid.clone(), uid.clone(), rid.clone(), gid.clone(), uid.clone(), rid.clone());
-                        this.rest_optimistic(
-                            method,
-                            format!("/guilds/{gid}/members/{uid}/roles/{rid}"),
-                            None,
-                            move |this| this.set_role(&g1, &u1, &r1, !has),
-                            move |this| this.set_role(&g2, &u2, &r2, has),
-                            cx,
-                        );
-                    })
-                    .checked(has)
-                    .dot(dot);
-                    if role.position >= top { row.disabled().hint("Above your highest role") } else { row }.entry()
-                })
-                .collect();
+            let rows = self.role_entries(guild, &target);
             if !rows.is_empty() {
                 let label = if rows.len() == 1 { "Role" } else { "Roles" };
+                let theirs = self.member_roles.get(&guild.id).and_then(|r| r.get(&target)).cloned().unwrap_or_default();
                 let mut held: Vec<_> = guild.roles.iter().filter(|r| theirs.contains(&r.id)).collect();
                 held.sort_by_key(|r| std::cmp::Reverse(r.position));
                 let names = held.iter().map(|r| r.name.as_str()).collect::<Vec<_>>().join(", ");
@@ -346,6 +330,10 @@ impl Waffle {
         out.push(Entry::Separator);
 
         // G8: moderation.
+        if let Some(guild) = guild.filter(|g| self.can_mod_view(&g.id)) {
+            let (gid, uid) = (guild.id.clone(), target.clone());
+            out.push(item("Open in Mod View", move |this, window, cx| this.open_mod_view(gid.clone(), uid.clone(), window, cx)).icon(Glyph::Shield).entry());
+        }
         if let Some((guild, state)) = &voice {
             let gid = guild.id.clone();
             // Voice moderation is per channel: overwrites on the channel they're in apply.
@@ -365,49 +353,16 @@ impl Waffle {
             }
         }
         if let Some(guild) = guild.filter(|_| !is_me) {
-            let theirs = self.member_roles.get(&guild.id).and_then(|r| r.get(&target)).cloned().unwrap_or_default();
-            let admin = guild.roles.iter().any(|r| theirs.contains(&r.id) && r.permissions & perm::ADMINISTRATOR != 0);
-            if !admin && self.can_manage(&guild.id, &target, perm::MODERATE_MEMBERS) {
-                let lengths: Vec<Entry> = TIMEOUTS
-                    .iter()
-                    .map(|&(label, seconds)| {
-                        let (gid, uid) = (guild.id.clone(), target.clone());
-                        item(label, move |this, _, cx| {
-                            let until = (chrono::Utc::now() + chrono::Duration::seconds(seconds)).to_rfc3339();
-                            this.rest(Method::PATCH, format!("/guilds/{gid}/members/{uid}"), Some(json!({ "communication_disabled_until": until })), |_, _| {}, cx);
-                        })
-                        .entry()
-                    })
-                    .collect();
-                out.push(submenu(format!("Timeout {name}"), lengths).danger().icon(Glyph::Timer).entry());
+            if self.can_timeout(&guild.id, &target) {
+                out.push(submenu(format!("Timeout {name}"), self.timeout_entries(&guild.id, &target)).danger().icon(Glyph::Timer).entry());
             }
             if self.can_manage(&guild.id, &target, perm::KICK_MEMBERS) {
                 let (gid, uid, who) = (guild.id.clone(), target.clone(), name.clone());
-                out.push(
-                    item(format!("Kick {name}"), move |this, _, cx| {
-                        let (gid, uid) = (gid.clone(), uid.clone());
-                        this.confirm(format!("Kick '{who}' from Server"), format!("Are you sure you want to kick {who} from the server? They will be able to rejoin again with a new invite."), "Kick", move |this, _, cx| {
-                            this.rest(Method::DELETE, format!("/guilds/{gid}/members/{uid}"), None, |_, _| {}, cx);
-                        }, cx);
-                    })
-                    .danger()
-                    .icon(Glyph::DoorOpen)
-                    .entry(),
-                );
+                out.push(item(format!("Kick {name}"), move |this, _, cx| this.ask_kick(gid.clone(), uid.clone(), who.clone(), cx)).danger().icon(Glyph::DoorOpen).entry());
             }
             if !user.bot && self.can_manage(&guild.id, &target, perm::BAN_MEMBERS) {
                 let (gid, uid, who) = (guild.id.clone(), target.clone(), name.clone());
-                out.push(
-                    item(format!("Ban {name}"), move |this, _, cx| {
-                        let (gid, uid) = (gid.clone(), uid.clone());
-                        this.confirm(format!("Ban '{who}'"), format!("Are you sure you want to ban {who}? They won't be able to rejoin unless unbanned."), "Ban", move |this, _, cx| {
-                            this.rest(Method::PUT, format!("/guilds/{gid}/bans/{uid}"), Some(json!({ "delete_message_seconds": 0 })), |_, _| {}, cx);
-                        }, cx);
-                    })
-                    .danger()
-                    .icon(Glyph::Gavel)
-                    .entry(),
-                );
+                out.push(item(format!("Ban {name}"), move |this, _, cx| this.ask_ban(gid.clone(), uid.clone(), who.clone(), cx)).danger().icon(Glyph::Gavel).entry());
             }
         }
         out.push(Entry::Separator);
@@ -418,6 +373,79 @@ impl Waffle {
             out.push(item("Copy user ID", move |this, _, cx| this.copy_text(id.clone(), cx)).icon(Glyph::Id).entry());
         }
         out
+    }
+
+    // Discord's timeout gate: canManageUser(MODERATE_MEMBERS), and the target isn't an administrator.
+    pub(crate) fn can_timeout(&self, guild_id: &str, target: &str) -> bool {
+        let Some(guild) = self.guilds.iter().find(|g| g.id == guild_id) else { return false };
+        let theirs = self.member_roles.get(guild_id).and_then(|r| r.get(target)).cloned().unwrap_or_default();
+        let admin = guild.roles.iter().any(|r| theirs.contains(&r.id) && r.permissions & perm::ADMINISTRATOR != 0);
+        !admin && self.can_manage(guild_id, target, perm::MODERATE_MEMBERS)
+    }
+
+    // The timeout lengths, each setting `communication_disabled_until` that far from now.
+    pub(crate) fn timeout_entries(&self, guild_id: &str, target: &str) -> Vec<Entry> {
+        TIMEOUTS
+            .iter()
+            .map(|&(label, seconds)| {
+                let (gid, uid) = (guild_id.to_owned(), target.to_owned());
+                item(label, move |this, _, cx| this.set_timeout(gid.clone(), uid.clone(), Some(chrono::Utc::now() + chrono::Duration::seconds(seconds)), cx)).entry()
+            })
+            .collect()
+    }
+
+    // Times a member out until `until`, or lifts their timeout with None.
+    pub(crate) fn set_timeout(&mut self, guild_id: String, user_id: String, until: Option<chrono::DateTime<chrono::Utc>>, cx: &mut Context<Self>) {
+        let wire = until.map(|t| t.to_rfc3339());
+        let path = format!("/guilds/{guild_id}/members/{user_id}");
+        self.rest(Method::PATCH, path, Some(json!({ "communication_disabled_until": wire })), move |this, cx| this.mod_view_timed_out(&guild_id, &user_id, until, cx), cx);
+    }
+
+    pub(crate) fn ask_kick(&mut self, guild_id: String, user_id: String, name: String, cx: &mut Context<Self>) {
+        self.confirm(format!("Kick '{name}' from Server"), format!("Are you sure you want to kick {name} from the server? They will be able to rejoin again with a new invite."), "Kick", move |this, _, cx| {
+            this.rest(Method::DELETE, format!("/guilds/{guild_id}/members/{user_id}"), None, |_, _| {}, cx);
+        }, cx);
+    }
+
+    pub(crate) fn ask_ban(&mut self, guild_id: String, user_id: String, name: String, cx: &mut Context<Self>) {
+        self.confirm(format!("Ban '{name}'"), format!("Are you sure you want to ban {name}? They won't be able to rejoin unless unbanned."), "Ban", move |this, _, cx| {
+            this.rest(Method::PUT, format!("/guilds/{guild_id}/bans/{user_id}"), Some(json!({ "delete_message_seconds": 0 })), |_, _| {}, cx);
+        }, cx);
+    }
+
+    // Discord's role toggles: the roles they hold, and with Manage roles every role below ours to add.
+    pub(crate) fn role_entries(&self, guild: &crate::discord::Guild, target: &str) -> Vec<Entry> {
+        let Some(me) = self.me.as_ref() else { return Vec::new() };
+        let theirs = self.member_roles.get(&guild.id).and_then(|r| r.get(target)).cloned().unwrap_or_default();
+        let manage = guild.can(&me.id, perm::MANAGE_ROLES);
+        let top = guild.top_position(&me.id);
+        role_choices(guild)
+            .into_iter()
+            .filter(|r| theirs.contains(&r.id) || (manage && r.position < top))
+            .map(|role| {
+                let has = theirs.contains(&role.id);
+                let dot = if role.color == 0 { None } else { Some(role.color) };
+                if !manage {
+                    return item(role.name.clone(), |_, _, _| {}).dot(dot).entry();
+                }
+                let (gid, uid, rid) = (guild.id.clone(), target.to_owned(), role.id.clone());
+                let row = item(role.name.clone(), move |this, _, cx| {
+                    let method = if has { Method::DELETE } else { Method::PUT };
+                    let (g1, u1, r1, g2, u2, r2) = (gid.clone(), uid.clone(), rid.clone(), gid.clone(), uid.clone(), rid.clone());
+                    this.rest_optimistic(
+                        method,
+                        format!("/guilds/{gid}/members/{uid}/roles/{rid}"),
+                        None,
+                        move |this| this.set_role(&g1, &u1, &r1, !has),
+                        move |this| this.set_role(&g2, &u2, &r2, has),
+                        cx,
+                    );
+                })
+                .checked(has)
+                .dot(dot);
+                if role.position >= top { row.disabled().hint("Above your highest role") } else { row }.entry()
+            })
+            .collect()
     }
 
     // Who the menu is about: their avatar and presence, their name, and in a call where they are.
@@ -608,6 +636,13 @@ impl Waffle {
         })
         .detach();
     }
+}
+
+// The roles a member can be given or lose, highest first: neither @everyone nor an integration's own.
+pub(crate) fn role_choices(guild: &crate::discord::Guild) -> Vec<&crate::discord::Role> {
+    let mut roles: Vec<_> = guild.roles.iter().filter(|r| r.id != guild.id && !r.managed).collect();
+    roles.sort_by_key(|r| std::cmp::Reverse(r.position));
+    roles
 }
 
 fn toggle(list: &mut Vec<String>, id: &str) {

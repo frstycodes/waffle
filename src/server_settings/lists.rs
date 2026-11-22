@@ -1,4 +1,4 @@
-// The list pages: expressions, members and prune, invites, apps and webhooks, AutoMod, the audit log,
+// The list pages: expressions, members (`members` draws its table) and prune, invites, apps and webhooks, AutoMod, the audit log,
 // bans, community and onboarding, and the template. Each loads when first opened and acts at once:
 // what can't be taken back asks in place first, and what can offers Undo.
 use std::collections::HashSet;
@@ -17,6 +17,7 @@ use super::{
     access::{self, Page},
     api::{self, AuditQuery, AutomodAction, AutomodRule, Trigger, automod},
     audit::{self, Directory},
+    members::Members,
     perms,
     view::{Select, failed, link_out, loading_line, mime_of, plural, sentence_spans, snowflake_time},
 };
@@ -43,7 +44,7 @@ pub struct Person {
     pub id: String,
     pub name: String,
     pub avatar: Option<String>,
-    // A ban's reason, or a member's join date.
+    // A ban's reason.
     pub note: Option<String>,
 }
 
@@ -97,8 +98,7 @@ pub struct Lists {
     pub emojis: Load<Vec<Expression>>,
     pub stickers: Load<Vec<Expression>>,
     pub sounds: Load<Vec<Expression>>,
-    pub members: Load<Vec<Person>>,
-    pub member_search: Entity<InputState>,
+    pub members: Members,
     pub prune_days: u8,
     pub prune_count: Option<Load<u64>>,
     pub invites: Load<Vec<Invite>>,
@@ -118,6 +118,7 @@ pub struct Lists {
 
 impl Lists {
     pub fn new(window: &mut Window, cx: &mut Context<Waffle>) -> Self {
+        let members = Members::new(window, cx);
         let mut input = |placeholder: &'static str| {
             let state = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
             cx.subscribe(&state, |_, _, _: &InputEvent, cx| cx.notify()).detach();
@@ -127,8 +128,7 @@ impl Lists {
             emojis: Load::Loading,
             stickers: Load::Loading,
             sounds: Load::Loading,
-            members: Load::Ready(Vec::new()),
-            member_search: input("Search by name or id"),
+            members,
             prune_days: 7,
             prune_count: None,
             invites: Load::Loading,
@@ -165,13 +165,6 @@ pub fn parse_sticker(v: &Value) -> Option<Expression> {
 pub fn parse_sound(v: &Value) -> Option<Expression> {
     let sound = crate::discord::SoundboardSound::parse(v)?;
     Some(Expression { id: sound.id, name: sound.name, url: None, by_id: v["user"]["id"].as_str().map(str::to_owned), by: name_of(&v["user"]) })
-}
-
-pub fn parse_member(v: &Value) -> Option<Person> {
-    let user = &v["user"];
-    let id = user["id"].as_str()?.to_owned();
-    let name = v["nick"].as_str().map(str::to_owned).or_else(|| name_of(user)).unwrap_or_else(|| id.clone());
-    Some(Person { avatar: user["avatar"].as_str().map(|h| avatar_url(&id, Some(h))), note: v["joined_at"].as_str().map(|t| t.get(..10).unwrap_or(t).to_owned()), name, id })
 }
 
 pub fn parse_ban(v: &Value) -> Option<Person> {
@@ -266,6 +259,7 @@ impl Waffle {
                 }
             }, cx),
             Page::Roles => self.load_roles(cx),
+            Page::Members => self.load_members(cx),
             Page::Emoji => self.server_call(api::emojis(g), |this, r, _| _ = this.lists().map(|l| l.emojis = list(r, parse_emoji)), cx),
             Page::Stickers => self.server_call(api::stickers(g), |this, r, _| _ = this.lists().map(|l| l.stickers = list(r, parse_sticker)), cx),
             Page::Soundboard => self.server_call(api::sounds(g), |this, r, _| {
@@ -346,7 +340,7 @@ impl Waffle {
         cx.notify();
     }
 
-    fn ask(&mut self, id: impl Into<String>, cx: &mut Context<Self>) {
+    pub(super) fn ask(&mut self, id: impl Into<String>, cx: &mut Context<Self>) {
         let id = id.into();
         if let Some(l) = self.lists() {
             l.asking = if l.asking.as_deref() == Some(id.as_str()) { None } else { Some(id) };
@@ -354,12 +348,12 @@ impl Waffle {
         cx.notify();
     }
 
-    fn asking(&self, id: &str) -> bool {
+    pub(super) fn asking(&self, id: &str) -> bool {
         self.server_settings.as_ref().and_then(|v| v.lists.asking.as_deref()) == Some(id)
     }
 
     // Runs a change that can't be taken back, then drops the row and reloads the page from Discord.
-    fn act_and_reload(&mut self, call: api::Call, page: Page, cx: &mut Context<Self>) {
+    pub(super) fn act_and_reload(&mut self, call: api::Call, page: Page, cx: &mut Context<Self>) {
         self.server_call(call, move |this, result, cx| {
             if let Some(l) = this.lists() {
                 l.asking = None;
@@ -483,90 +477,14 @@ impl Waffle {
         .detach();
     }
 
+    // The members table (`members`), then Prune for those who may kick.
     fn ss_members_page(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let Some(view) = self.server_settings.as_ref() else { return Vec::new() };
-        let guild_id = view.guild_id.clone();
-        let l = &view.lists;
-        let search = ui::search_field("ss-member-search-field", &l.member_search, cx);
-        let find = ui::button("ss-member-find", Tone::Secondary, cx).small().child("Search").on_click(cx.listener(|this, _, _, cx| this.search_members(cx)));
-        let (kick, ban, timeout) = self.with_access(&guild_id, |me| (me.has(perm::KICK_MEMBERS), me.has(perm::BAN_MEMBERS), me.has(perm::MODERATE_MEMBERS))).unwrap_or_default();
-        let results: Vec<AnyElement> = match &l.members {
-            Load::Loading => vec![loading_line("Searching…", cx)],
-            Load::Failed(error) => vec![failed("Couldn't search members", error, cx)],
-            Load::Ready(people) => people
-                .iter()
-                .enumerate()
-                .map(|(i, p)| {
-                    let avatar: AnyElement = match &p.avatar {
-                        Some(url) => ui::avatar(url.clone(), 32.).flex_none().into_any_element(),
-                        None => ui::monogram(&p.name, 32.).flex_none().into_any_element(),
-                    };
-                    let (g, id, name) = (guild_id.clone(), p.id.clone(), p.name.clone());
-                    let mut row = ui::settings_row(SharedString::from(format!("ss-member-{}", p.id)), i > 0, cx).child(avatar).child(ui::settings_text(p.name.clone(), p.note.as_ref().map(|d| format!("Joined {d}")), cx));
-                    if timeout {
-                        let (g, id, name) = (g.clone(), id.clone(), name.clone());
-                        row = row.child(ui::button(SharedString::from(format!("ss-timeout-{id}")), Tone::Secondary, cx).small().child("Time out 1 hour").on_click(cx.listener(move |this, _, _, cx| {
-                            let until = (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
-                            let (g2, id2, label) = (g.clone(), id.clone(), format!("Timed out {name} for an hour"));
-                            this.server_call(api::timeout(&g, &id, Some(&until)), move |this, r, cx| match r {
-                                Ok(_) => this.offer_undo(label, api::timeout(&g2, &id2, None), cx),
-                                Err(e) => this.show_toast(e, cx),
-                            }, cx);
-                        })));
-                    }
-                    if kick {
-                        row = row.child(self.ss_delete_control(&format!("kick-{id}"), &name, api::kick(&g, &id), Page::Members, cx));
-                    }
-                    if ban {
-                        row = row.child(self.ss_ban_control(&g, &id, &name, cx));
-                    }
-                    row.into_any_element()
-                })
-                .collect(),
-        };
-        let mut out = vec![div().flex().gap(px(12.)).items_center().child(div().flex_1().child(search)).child(find).into_any_element()];
-        if !results.is_empty() {
-            out.push(ui::settings_group("Results", cx).child(ui::settings_card(cx).children(results)).into_any_element());
-        }
-        if kick {
+        let Some(guild_id) = self.server_settings.as_ref().map(|v| v.guild_id.clone()) else { return Vec::new() };
+        let mut out = vec![self.members_group(cx)];
+        if self.with_access(&guild_id, |me| me.has(perm::KICK_MEMBERS)).unwrap_or(false) {
             out.push(self.ss_prune_group(cx));
         }
         out
-    }
-
-    fn ss_ban_control(&self, guild_id: &str, user_id: &str, name: &str, cx: &mut Context<Self>) -> AnyElement {
-        let ask_id = format!("ban-{user_id}");
-        let ask = ask_id.clone();
-        if !self.asking(&ask_id) {
-            return ui::button(SharedString::from(format!("ss-{ask_id}")), Tone::Secondary, cx).small().child("Ban").on_click(cx.listener(move |this, _, _, cx| this.ask(ask.clone(), cx))).into_any_element();
-        }
-        let (g, u, label) = (guild_id.to_owned(), user_id.to_owned(), format!("Banned {name}"));
-        let keep = ui::button(SharedString::from(format!("ss-keep-{ask_id}")), Tone::Secondary, cx).small().child("Keep").on_click(cx.listener(move |this, _, _, cx| this.ask(ask.clone(), cx)));
-        let yes = ui::button(SharedString::from(format!("ss-yes-{ask_id}")), Tone::Danger, cx).small().child(format!("Ban {name}")).on_click(cx.listener(move |this, _, _, cx| {
-            let (g2, u2, label) = (g.clone(), u.clone(), label.clone());
-            this.server_call(api::ban(&g, &u, 0), move |this, r, cx| {
-                if let Some(l) = this.lists() {
-                    l.asking = None;
-                }
-                match r {
-                    Ok(_) => this.offer_undo(label, api::unban(&g2, &u2), cx),
-                    Err(e) => this.show_toast(e, cx),
-                }
-            }, cx);
-        }));
-        div().flex().gap(px(6.)).flex_none().child(keep).child(yes).into_any_element()
-    }
-
-    fn search_members(&mut self, cx: &mut Context<Self>) {
-        let Some(view) = &mut self.server_settings else { return };
-        let query = view.lists.member_search.read(cx).value().trim().to_owned();
-        if query.is_empty() {
-            return;
-        }
-        view.lists.members = Load::Loading;
-        let call = api::search_members(&view.guild_id, &query);
-        self.server_call(call, |this, r, _| _ = this.lists().map(|l| l.members = list(r, parse_member)), cx);
-        cx.notify();
     }
 
     fn ss_prune_group(&mut self, cx: &mut Context<Self>) -> AnyElement {
@@ -1016,8 +934,6 @@ mod tests {
         assert_eq!((e.url.as_deref(), e.by.as_deref()), (Some("https://cdn.discordapp.com/emojis/5.gif?size=48"), Some("mika")));
         let b = parse_ban(&json!({ "reason": null, "user": { "id": "9", "username": "spam_bot" } })).unwrap();
         assert_eq!((b.name.as_str(), b.note), ("spam_bot", None));
-        let m = parse_member(&json!({ "nick": "Wren", "joined_at": "2026-01-02T03:04:05Z", "user": { "id": "3", "username": "wren" } })).unwrap();
-        assert_eq!((m.name.as_str(), m.note.as_deref()), ("Wren", Some("2026-01-02")));
         let r = parse_rule(&json!({ "id": "1", "name": "Words", "enabled": true, "trigger_type": 1, "trigger_metadata": { "keyword_filter": ["a", "b"] } })).unwrap();
         assert_eq!(r.words, vec!["a", "b"]);
         let h = parse_hook(&json!({ "id": "7", "token": "t", "channel_id": "c" })).unwrap();

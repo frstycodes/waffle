@@ -26,7 +26,7 @@ impl Waffle {
     // Whether the side panel is on screen: a server's (unless hidden), or search results anywhere.
     pub(crate) fn panel_shown(&self) -> bool {
         match self.right_panel {
-            RightPanel::Search(_) => true,
+            RightPanel::Search(_) | RightPanel::ModView(_) => true,
             RightPanel::Hidden => false,
             RightPanel::Members => self.guild_id.is_some() || self.open_group().is_some(),
             RightPanel::Activity => self.guild_id.is_some(),
@@ -40,22 +40,25 @@ impl Waffle {
             RightPanel::Hidden => None,
             RightPanel::Members | RightPanel::Activity => Some(self.panel_width),
             RightPanel::Search(_) => Some(crate::search_results::PANEL_WIDTH),
+            RightPanel::ModView(_) => Some(self.panel_width.max(crate::mod_view::PANEL_WIDTH)),
         }
     }
 
     pub fn render_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        self.close_mod_view_if_barred();
         let width = self.panel_column_width()?;
         // Its header sits on the window's top line beside the channel header's: "Members", or the search's
         // query with a way back to the members.
         let (head, body, foot): (Div, AnyElement, Option<AnyElement>) = match &self.right_panel {
             RightPanel::Hidden => return None,
-            RightPanel::Members if self.guild_id.is_none() => (self.panel_head("Members".into(), false, cx), self.group_member_list(cx), self.group_invite_foot(cx)),
-            RightPanel::Members => (self.panel_head("Members".into(), false, cx), self.member_list(window, cx), None),
-            RightPanel::Activity => (self.panel_head("Activity".into(), true, cx), self.activity_cards(usize::MAX, cx), None),
+            RightPanel::Members if self.guild_id.is_none() => (self.panel_head("Members".into(), None, Vec::new(), false, cx), self.group_member_list(cx), self.group_invite_foot(cx)),
+            RightPanel::Members => (self.panel_head("Members".into(), None, Vec::new(), false, cx), self.member_list(window, cx), None),
+            RightPanel::Activity => (self.panel_head("Activity".into(), None, Vec::new(), true, cx), self.activity_cards(usize::MAX, cx), None),
             RightPanel::Search(results) => {
                 let head = self.panel_frame(cx).child(self.search_head(results, self.back_button(cx), cx));
                 (head, self.search_body(results, cx), self.search_pager(results, cx))
             }
+            RightPanel::ModView(view) => (self.mod_view_head(view, cx), self.mod_view_body(view, cx), None),
         };
         let line = palette::line(cx);
         let scroll = self.panel_scroll.clone();
@@ -80,14 +83,18 @@ impl Waffle {
         )
     }
 
-    // The column's header row, clear of Windows' caption buttons at the window's top right; `back` adds the
-    // way back to the members.
-    fn panel_head(&self, title: SharedString, back: bool, cx: &mut Context<Self>) -> Div {
-        let back = back.then(|| self.back_button(cx));
-        self.panel_frame(cx).child(div().flex_1().min_w_0().truncate().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).child(title)).children(back)
+    // The column's header row, clear of Windows' caption buttons at the window's top right: an optional
+    // leading control, the title, the panel's own tools, and with `close` the way back to the members.
+    pub(crate) fn panel_head(&self, title: SharedString, lead: Option<ui::Control>, tools: Vec<ui::Control>, close: bool, cx: &mut Context<Self>) -> Div {
+        let close = close.then(|| self.back_button(cx));
+        self.panel_frame(cx)
+            .children(lead)
+            .child(div().flex_1().min_w_0().truncate().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).child(title))
+            .children(tools)
+            .children(close)
     }
 
-    fn panel_frame(&self, cx: &App) -> Div {
+    pub(crate) fn panel_frame(&self, cx: &App) -> Div {
         div()
             .h(px(crate::layout::HEADER_HEIGHT))
             .pl_4()
@@ -108,12 +115,17 @@ impl Waffle {
 
     // A group DM's members, you among them, the owner crowned. Its people have no roles or server: just online
     // and offline, as Discord lists a group.
+    // Where the side panel's member rows sit: its width less the list's inset, on the sidebar tone.
+    fn side_spot(&self, cx: &App) -> RowSpot {
+        RowSpot { width: self.panel_width - MEMBER_LIST_INSET, surface: palette::surface(palette::Level::Sidebar, cx), profile_x: None }
+    }
+
     fn group_member_list(&self, cx: &mut Context<Self>) -> AnyElement {
         let Some(group) = self.open_group() else { return div().into_any_element() };
         let people = self.me.iter().chain(&group.recipients);
         let rows: Vec<AnyElement> = people
             .map(|user| Member { user: user.clone(), roles: Vec::new(), presence: self.presences.get(&user.id).cloned().unwrap_or_default(), boosting_since: None })
-            .map(|member| self.member_row(&member, cx))
+            .map(|member| self.member_row(&member, self.side_spot(cx), cx))
             .collect();
         div().flex().flex_col().gap(px(2.)).child(group_label(format!("Members · {}", rows.len()), cx)).children(rows).into_any_element()
     }
@@ -138,6 +150,7 @@ impl Waffle {
         let Some(guild) = self.guild() else { return div().into_any_element() };
         let Some(list) = self.member_lists.get(&guild.id).filter(|l| !l.is_empty()) else { return members_loading(cx).into_any_element() };
         let mut first = activity.is_none();
+        let spot = self.side_spot(cx);
         let rows = list.iter().filter_map(|item| match item {
             ListItem::Group { id, count } => {
                 let count = self.member_groups.get(&guild.id).and_then(|g| g.get(id)).copied().unwrap_or(*count);
@@ -150,7 +163,7 @@ impl Waffle {
                 let spaced = !std::mem::take(&mut first);
                 Some(group_label(format!("{name} · {count}"), cx).when(spaced, |l| l.mt_3()).into_any_element())
             }
-            ListItem::Member(member) => Some(self.member_row(member, cx)),
+            ListItem::Member(member) => Some(self.member_row(member, spot, cx)),
         });
         div().flex().flex_col().gap(px(ui::density_pad(2.))).children(activity).children(rows.collect::<Vec<_>>()).into_any_element()
     }
@@ -292,7 +305,7 @@ impl Waffle {
 
     // A member (.mem): avatar with status, the name in their top role's colour, one line of activity.
     // Offline dims the avatar and drops the name to faint; the open profile's member keeps the fill.
-    fn member_row(&self, member: &Member, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn member_row(&self, member: &Member, spot: RowSpot, cx: &mut Context<Self>) -> AnyElement {
         let dark = cx.theme().is_dark();
         let offline = member.presence.status == Status::Offline;
         let (strong, faint, hover) = (palette::strong(cx), palette::faint(cx), palette::hover(cx));
@@ -300,7 +313,7 @@ impl Waffle {
         let name_ink = if offline { faint } else { role_ink.unwrap_or(strong) };
         let dot = dot.filter(|_| !offline);
         let name_style = member.user.name_style.as_ref().filter(|_| self.prefs.display_name_styles);
-        let surface = palette::surface(palette::Level::Sidebar, cx);
+        let surface = spot.surface;
         let owner = match self.guild() {
             Some(guild) => guild.owner_id.as_ref() == Some(&member.user.id),
             None => self.open_group().is_some_and(|g| g.props.owner_id.as_ref() == Some(&member.user.id)),
@@ -338,7 +351,7 @@ impl Waffle {
         };
         // Discord animates the avatar, decoration and nameplate while the row is hovered or its profile is open.
         let animate = (selected || self.member_hover.as_deref() == Some(member.user.id.as_str())) && crate::presence::may_animate();
-        let plate = member.user.nameplate.as_ref().map(|plate| member_nameplate(plate, names(format!("member-name-mask-{}", member.user.id)), fills, self.panel_width - MEMBER_LIST_INSET, selected, animate, dark));
+        let plate = member.user.nameplate.as_ref().map(|plate| member_nameplate(plate, names(format!("member-name-mask-{}", member.user.id)), fills, spot.width, selected, animate, dark));
         let plated = plate.is_some();
         let hover_id = member.user.id.clone();
         div()
@@ -369,7 +382,11 @@ impl Waffle {
             .child(names(format!("member-name-{}", member.user.id)).relative().flex_1())
             .on_click({
                 let user = member.user.clone();
-                cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_profile(user.clone(), event.position() - gpui_kit::point(px(320.), px(0.)), cx))
+                cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| {
+                    let at = event.position();
+                    let at = spot.profile_x.map_or(at - gpui_kit::point(px(320.), px(0.)), |x| gpui_kit::point(x, at.y));
+                    this.open_profile(user.clone(), at, cx)
+                })
             })
             .on_mouse_down(gpui_kit::MouseButton::Right, {
                 let (user, guild_id) = (member.user.clone(), self.guild_id.clone());
@@ -485,6 +502,15 @@ impl MemberStatus {
     }
 }
 
+// Where a member row is drawn: its width and the surface under it, which a nameplate's mask paints, and
+// the x its profile opens at (None: left of the click, clear of the side panel).
+#[derive(Clone, Copy)]
+pub(crate) struct RowSpot {
+    pub width: f32,
+    pub surface: gpui_kit::Hsla,
+    pub profile_x: Option<gpui_kit::Pixels>,
+}
+
 // The hover list over a member's activity line, as Discord's: each thing they're doing on its own line.
 struct ActivityTip(Vec<StatusItem>);
 
@@ -586,12 +612,12 @@ fn member_nameplate(plate: &crate::discord::Nameplate, names: Div, fills: (gpui_
 }
 
 // A group heading (.cat): "Online · 4".
-fn group_label(text: impl Into<SharedString>, cx: &App) -> Div {
+pub(crate) fn group_label(text: impl Into<SharedString>, cx: &App) -> Div {
     div().h(px(28.)).flex_none().px(px(6.)).flex().items_center().whitespace_nowrap().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(text.into())
 }
 
 // A wait names what it waits on, beside the mini wave (.pwait).
-fn wait_line(id: &'static str, text: &'static str, cx: &App) -> Div {
+pub(crate) fn wait_line(id: &'static str, text: &'static str, cx: &App) -> Div {
     div().min_h(px(32.)).px_2().flex().items_center().gap_2().text_color(palette::muted(cx)).font_weight(FontWeight::NORMAL).child(ui::bars(id, palette::muted(cx), 12.)).child(text)
 }
 

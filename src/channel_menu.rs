@@ -1,13 +1,14 @@
 // Discord's channel, category, server, folder and server-dropdown menus, item-for-item from its
-// menu code (docs/discord-menus-channel-server.md, read from Discord web 2026-11-14). Favorites,
-// stages, events, apps and the full server-settings screens aren't built, so their items are left out.
+// menu code (docs/discord-menus-channel-server.md, read from Discord web 2026-11-14). Stages, events,
+// apps and the full server-settings screens aren't built, so their items are left out. Favorites-mode
+// menus live in favorites.rs.
 use gpui_kit::{Context, Pixels, Point, SharedString, Window};
 use reqwest::Method;
 use serde_json::{Value, json};
 
 use crate::{
     Waffle,
-    discord::{Channel, ChannelKind, GuildSettings, parse_guild_settings, perm},
+    discord::{Channel, ChannelKind, GuildSettings, channel_flag, guild_flag, parse_guild_settings, perm},
     icons::Glyph,
     menu::{Entry, HeadLead, header, item, submenu},
 };
@@ -280,9 +281,13 @@ impl Waffle {
         let read = item("Mark as read", move |this, _, cx| this.mark_channel_read(&id, cx)).icon(Glyph::Checks);
         out.push(if self.unread(&channel.id) { read } else { read.disabled() }.entry());
         out.push(Entry::Separator);
+        out.extend(self.favorite_add_entry(channel));
+        out.push(Entry::Separator);
 
         let (gid, cid) = (guild_id.to_owned(), channel.id.clone());
         out.push(item(if voice { "Invite to voice" } else { "Invite people" }, move |this, window, cx| this.show_invite(gid.clone(), cid.clone(), window, cx)).brand().icon(Glyph::GroupPlus).entry());
+        out.push(self.pin_channel_entry(channel, guild_id));
+        out.extend(self.channel_list_entry(channel, guild_id));
         let link = format!("https://discord.com/channels/{guild_id}/{}", channel.id);
         out.push(item("Copy link", move |this, _, cx| this.copy_text(link.clone(), cx)).icon(Glyph::Link).entry());
         out.push(Entry::Separator);
@@ -327,6 +332,8 @@ impl Waffle {
             out.push(self.delete_channel_entry(channel, "Delete channel"));
             out.push(Entry::Separator);
         }
+        out.extend(self.favorite_remove_entry(channel));
+        out.push(Entry::Separator);
 
         if self.developer_mode {
             let id = channel.id.clone();
@@ -352,6 +359,7 @@ impl Waffle {
         out.push(if unread { read } else { read.disabled() }.entry());
         out.push(Entry::Separator);
 
+        out.extend(self.channel_list_entry(category, guild_id));
         let id = category.id.clone();
         out.push(item("Collapse category", move |this, _, cx| {
             if !this.folded.remove(&id) {
@@ -525,10 +533,8 @@ impl Waffle {
         let hide = settings.hide_muted;
         out.push(item("Hide muted channels", move |this, _, cx| this.patch_guild_settings(gid.clone(), json!({ "hide_muted_channels": !hide }), cx)).checked(hide).icon(Glyph::EyeSlash).entry());
         if guild.has_feature(crate::joining::features::COMMUNITY) {
-            use crate::joining::settings_flags::OPT_IN_CHANNELS_ON;
-            let (gid, flags) = (guild_id.to_owned(), settings.flags);
-            let show_all = flags & OPT_IN_CHANNELS_ON == 0;
-            out.push(item("Show All Channels", move |this, _, cx| this.patch_guild_settings(gid.clone(), json!({ "flags": flags ^ OPT_IN_CHANNELS_ON }), cx)).checked(show_all).icon(Glyph::Eye).entry());
+            let gid = guild_id.to_owned();
+            out.push(item("Show all channels", move |this, _, cx| this.toggle_show_all_channels(&gid, cx)).checked(!settings.opt_in()).icon(Glyph::Eye).entry());
         }
         out.push(Entry::Separator);
 
@@ -569,6 +575,49 @@ impl Waffle {
             out.push(item("Copy server ID", move |this, _, cx| this.copy_text(id.clone(), cx)).icon(Glyph::Id).entry());
         }
         out
+    }
+
+    // Discord's PinChannel: not for threads or categories (callers never pass those).
+    fn pin_channel_entry(&self, channel: &Channel, guild_id: &str) -> Entry {
+        let settings = self.settings_for(guild_id);
+        let pinned = settings.pinned(&channel.id);
+        let (gid, cid) = (guild_id.to_owned(), channel.id.clone());
+        let flags = pin_flags(&settings, channel, !pinned);
+        let row = item(if pinned { "Unpin channel" } else { "Pin channel to top" }, move |this, _, cx| this.set_channel_flags(gid.clone(), &cid, flags, cx));
+        row.icon(if pinned { Glyph::PinSlash } else { Glyph::Pin }).entry()
+    }
+
+    // Discord's ChannelListOptIn: only while a Community server has opt-in on. Under an opted-in
+    // category a channel offers to unfollow the category instead.
+    fn channel_list_entry(&self, channel: &Channel, guild_id: &str) -> Option<Entry> {
+        let community = self.guilds.iter().find(|g| g.id == guild_id).is_some_and(|g| g.has_feature(crate::joining::features::COMMUNITY));
+        let settings = self.settings_for(guild_id);
+        if !community || !settings.opt_in() {
+            return None;
+        }
+        let parent = channel.parent_id.clone().filter(|p| settings.opted_in(p));
+        let (target, label, on) = match parent {
+            Some(parent) => (parent, "Unfollow channel category", false),
+            None if settings.opted_in(&channel.id) => (channel.id.clone(), "Remove from channel list", false),
+            None => (channel.id.clone(), "Add to channel list", true),
+        };
+        let flags = opt_in_flags(settings.channel_flags(&target), on);
+        let gid = guild_id.to_owned();
+        let row = item(label, move |this, _, cx| this.set_channel_flags(gid.clone(), &target, flags, cx));
+        Some(row.icon(if on { Glyph::Eye } else { Glyph::EyeSlash }).entry())
+    }
+
+    // One channel override's flags, for a server or (under "@me") a DM.
+    pub(crate) fn set_channel_flags(&mut self, guild_key: String, channel_id: &str, flags: u64, cx: &mut Context<Self>) {
+        let mut overrides = serde_json::Map::new();
+        overrides.insert(channel_id.to_owned(), json!({ "flags": flags }));
+        self.patch_guild_settings(guild_key, json!({ "channel_overrides": overrides }), cx);
+    }
+
+    fn toggle_show_all_channels(&mut self, guild_id: &str, cx: &mut Context<Self>) {
+        let Some(guild) = self.guilds.iter().find(|g| g.id == guild_id) else { return };
+        let body = show_all_channels_body(&self.settings_for(guild_id), &guild.channels);
+        self.patch_guild_settings(guild_id.to_owned(), body, cx);
     }
 
     fn edit_own_nickname(&mut self, guild_id: String, current: String, window: &mut Window, cx: &mut Context<Self>) {
@@ -718,6 +767,8 @@ impl Waffle {
         out.push(if self.unread(&thread.id) { read } else { read.disabled() }.entry());
         out.extend(self.edit_tags_entry(&thread, manage, owner));
         out.push(Entry::Separator);
+        out.extend(self.favorite_add_entry(&thread));
+        out.push(Entry::Separator);
 
         if !meta.joined {
             let id = thread.id.clone();
@@ -790,8 +841,9 @@ impl Waffle {
             })
             .icon(Glyph::DoorExit)
             .entry());
-            out.push(Entry::Separator);
         }
+        out.extend(self.favorite_remove_entry(&thread));
+        out.push(Entry::Separator);
         if self.developer_mode {
             let id = thread.id.clone();
             out.push(item("Copy thread ID", move |this, _, cx| this.copy_text(id.clone(), cx)).icon(Glyph::Id).entry());
@@ -935,9 +987,98 @@ fn notification_label(level: u8) -> &'static str {
     }
 }
 
+// A channel's flags once pinned or unpinned. Pinning a channel outside our list while the server
+// has opt-in on also adds it to the list, as Discord's toggle does.
+fn pin_flags(settings: &GuildSettings, channel: &Channel, pin: bool) -> u64 {
+    let flags = settings.channel_flags(&channel.id);
+    if !pin {
+        return flags & !channel_flag::FAVORITED;
+    }
+    let listed = settings.opted_in(&channel.id) || channel.parent_id.as_ref().is_some_and(|p| settings.opted_in(p));
+    match settings.opt_in() && !listed {
+        true => flags | channel_flag::FAVORITED | channel_flag::OPT_IN_ENABLED,
+        false => flags | channel_flag::FAVORITED,
+    }
+}
+
+// Removing a channel from the list also unpins it, as Discord's opt-out does.
+fn opt_in_flags(flags: u64, on: bool) -> u64 {
+    match on {
+        true => flags | channel_flag::OPT_IN_ENABLED,
+        false => flags & !(channel_flag::OPT_IN_ENABLED | channel_flag::FAVORITED),
+    }
+}
+
+// The PATCH for ticking or unticking Show all channels. Unticking it (opt-in on) with nothing in the
+// list yet also adds every text and voice channel, so nothing vanishes at once.
+fn show_all_channels_body(settings: &GuildSettings, channels: &[Channel]) -> Value {
+    if settings.opt_in() {
+        // Not verified: that Discord sets OPT_IN_CHANNELS_OFF when ticking it back, rather than only clearing ON.
+        return json!({ "flags": (settings.flags & !guild_flag::OPT_IN_CHANNELS_ON) | guild_flag::OPT_IN_CHANNELS_OFF });
+    }
+    let mut body = json!({ "flags": (settings.flags & !guild_flag::OPT_IN_CHANNELS_OFF) | guild_flag::OPT_IN_CHANNELS_ON });
+    if settings.channels.values().any(|c| c.flags & channel_flag::OPT_IN_ENABLED != 0) {
+        return body;
+    }
+    // Not verified: Discord does this first opt-in through onboardExistingMember (POST
+    // /guilds/{id}/onboarding-responses); setting OPT_IN_ENABLED on each channel is assumed equivalent.
+    let overrides: serde_json::Map<String, Value> = channels
+        .iter()
+        .filter(|c| matches!(c.kind, ChannelKind::Text | ChannelKind::Voice))
+        .map(|c| (c.id.clone(), json!({ "flags": settings.channel_flags(&c.id) | channel_flag::OPT_IN_ENABLED })))
+        .collect();
+    body["channel_overrides"] = Value::Object(overrides);
+    body
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn channel(id: &str, kind: u8, parent: Option<&str>) -> Channel {
+        crate::discord::parse_channel(&json!({ "id": id, "type": kind, "parent_id": parent }), "g").unwrap()
+    }
+
+    fn with_flags(guild: u64, channels: &[(&str, u64)]) -> GuildSettings {
+        let mut settings = GuildSettings { flags: guild, ..Default::default() };
+        for &(id, flags) in channels {
+            settings.channels.insert(id.into(), crate::discord::ChannelSettings { flags, ..Default::default() });
+        }
+        settings
+    }
+
+    #[test]
+    fn pinning_adds_to_the_list_only_under_opt_in() {
+        let text = channel("t", 0, Some("cat"));
+        assert_eq!(pin_flags(&with_flags(0, &[]), &text, true), channel_flag::FAVORITED);
+        assert_eq!(pin_flags(&with_flags(guild_flag::OPT_IN_CHANNELS_ON, &[]), &text, true), channel_flag::FAVORITED | channel_flag::OPT_IN_ENABLED);
+        let under_listed_category = with_flags(guild_flag::OPT_IN_CHANNELS_ON, &[("cat", channel_flag::OPT_IN_ENABLED)]);
+        assert_eq!(pin_flags(&under_listed_category, &text, true), channel_flag::FAVORITED);
+        let pinned = with_flags(guild_flag::OPT_IN_CHANNELS_ON, &[("t", channel_flag::FAVORITED | channel_flag::OPT_IN_ENABLED | 1024)]);
+        assert_eq!(pin_flags(&pinned, &text, false), channel_flag::OPT_IN_ENABLED | 1024);
+        assert_eq!(opt_in_flags(channel_flag::FAVORITED | channel_flag::OPT_IN_ENABLED | 1024, false), 1024);
+    }
+
+    #[test]
+    fn first_opt_in_lists_every_text_and_voice_channel() {
+        let channels = [channel("t", 0, None), channel("v", 2, None), channel("c", 4, None)];
+        let body = show_all_channels_body(&with_flags(0, &[("t", channel_flag::FAVORITED)]), &channels);
+        assert_eq!(body["flags"], guild_flag::OPT_IN_CHANNELS_ON);
+        assert_eq!(body["channel_overrides"]["t"]["flags"], channel_flag::FAVORITED | channel_flag::OPT_IN_ENABLED);
+        assert_eq!(body["channel_overrides"]["v"]["flags"], channel_flag::OPT_IN_ENABLED);
+        assert!(body["channel_overrides"].get("c").is_none());
+        let again = show_all_channels_body(&with_flags(guild_flag::OPT_IN_CHANNELS_OFF, &[("t", channel_flag::OPT_IN_ENABLED)]), &channels);
+        assert_eq!(again, json!({ "flags": guild_flag::OPT_IN_CHANNELS_ON }));
+        let back = show_all_channels_body(&with_flags(guild_flag::OPT_IN_CHANNELS_ON, &[]), &channels);
+        assert_eq!(back, json!({ "flags": guild_flag::OPT_IN_CHANNELS_OFF }));
+    }
+
+    #[test]
+    fn flag_patches_apply_locally() {
+        let mut settings = GuildSettings::default();
+        merge_settings(&mut settings, &json!({ "flags": guild_flag::OPT_IN_CHANNELS_ON, "channel_overrides": { "9": { "flags": channel_flag::FAVORITED } } }));
+        assert!(settings.opt_in() && settings.pinned("9"));
+    }
 
     #[test]
     fn settings_patches_apply_locally() {

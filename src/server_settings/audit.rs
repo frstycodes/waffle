@@ -74,6 +74,44 @@ pub fn next_before(page: &Page) -> Option<String> {
     (page.entries.len() >= super::api::AUDIT_PAGE).then(|| page.entries.last().map(|e| e.id.clone())).flatten()
 }
 
+// Discord's Mod View log (chunk daf6e954…): an entry joins the group above it when it repeats the group's
+// action, target, actor and options less than 30 minutes after the group began, up to 50 joins.
+const MERGE_WINDOW_MS: i64 = 30 * 60 * 1000;
+const MERGE_CAP: usize = 50;
+// Deletes, pins, moves, disconnects, reorders, bot adds, command permissions and prune stay one per row.
+const NEVER_MERGE: [u16; 11] = [72, 73, 74, 75, 26, 27, 16, 33, 28, 121, 21];
+
+// One row of merged entries: the first entry carrying every entry's changes, the newest entry's id, and
+// how many entries it stands for.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Merged {
+    pub entry: Entry,
+    pub last_id: String,
+    pub count: usize,
+}
+
+// `entries` newest first, as Discord returns them; the rows come back newest first too.
+pub fn merge(entries: &[Entry]) -> Vec<Merged> {
+    let mut rows: Vec<Merged> = Vec::new();
+    for e in entries.iter().rev() {
+        if let Some(group) = rows.last_mut().filter(|g| joins(g, e)) {
+            group.entry.changes.extend(e.changes.iter().cloned());
+            (group.last_id, group.count) = (e.id.clone(), group.count + 1);
+            continue;
+        }
+        rows.push(Merged { entry: e.clone(), last_id: e.id.clone(), count: 1 });
+    }
+    rows.reverse();
+    rows
+}
+
+fn joins(group: &Merged, e: &Entry) -> bool {
+    let first = &group.entry;
+    let invite = (40..=42).contains(&e.action);
+    let elapsed = super::view::snowflake_ms(&e.id) - super::view::snowflake_ms(&first.id);
+    group.count <= MERGE_CAP && !NEVER_MERGE.contains(&e.action) && !invite && (first.action, &first.target_id, &first.user_id, &first.options) == (e.action, &e.target_id, &e.user_id, &e.options) && elapsed < MERGE_WINDOW_MS
+}
+
 // A sentence in runs: names are drawn strong, the rest plain.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Seg {
@@ -524,6 +562,40 @@ mod tests {
         let short = parse(&json!({ "audit_log_entries": [{ "id": "5", "action_type": 1 }] }));
         assert_eq!(next_before(&short), None);
         assert!(ACTIONS.windows(2).all(|w| w[0].0 < w[1].0));
+    }
+
+    // An entry `minutes` after Discord's epoch, so its id carries that time.
+    fn at(minutes: i64, action: u16, target: &str, actor: &str) -> Entry {
+        let id = ((minutes * 60_000) << 22).to_string();
+        parse_entry(&json!({ "id": id, "action_type": action, "user_id": actor, "target_id": target, "changes": [{ "key": "nick", "new_value": minutes }] })).unwrap()
+    }
+
+    fn newest_first(mut entries: Vec<Entry>) -> Vec<Entry> {
+        entries.reverse();
+        entries
+    }
+
+    #[test]
+    fn merges_repeats_within_half_an_hour() {
+        let rows = merge(&newest_first(vec![at(0, 24, "t", "u1"), at(10, 24, "t", "u1"), at(29, 24, "t", "u1"), at(30, 24, "t", "u1")]));
+        assert_eq!(rows.iter().map(|r| r.count).collect::<Vec<_>>(), vec![1, 3]);
+        assert_eq!((rows[1].entry.changes.len(), rows[1].last_id.as_str()), (3, at(29, 24, "t", "u1").id.as_str()));
+        // A different target, actor or action starts a new row.
+        let rows = merge(&newest_first(vec![at(0, 24, "t", "u1"), at(1, 24, "x", "u1"), at(2, 24, "x", "u2"), at(3, 25, "x", "u2")]));
+        assert_eq!(rows.len(), 4);
+    }
+
+    #[test]
+    fn never_merges_deletes_pins_moves_or_prune() {
+        for action in [72, 73, 74, 75, 26, 21, 40] {
+            assert_eq!(merge(&newest_first(vec![at(0, action, "t", "u1"), at(1, action, "t", "u1")])).len(), 2, "{action}");
+        }
+    }
+
+    #[test]
+    fn merge_caps_at_fifty_joins() {
+        let rows = merge(&newest_first((0..60).map(|i| at(i / 10, 24, "t", "u1")).collect()));
+        assert_eq!(rows.iter().map(|r| r.count).collect::<Vec<_>>(), vec![9, 51]);
     }
 
     #[test]

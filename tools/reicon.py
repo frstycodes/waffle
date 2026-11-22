@@ -410,7 +410,7 @@ EXTRA = {"podcast", "messages2", "gallery", "bullhorn", "inbox", "hashtag2", "vo
 
 # Line-only glyphs whose Reicon filled form wraps them in a tile or circle: Discord draws these as bare
 # lines in either weight, so they keep the outline. Mirrors LINE_ONLY in design/icons.html.
-LINE_ONLY = {"hashtag2", "add", "arrow-right5", "arrow-up5", "check-read", "sort", "search"}
+LINE_ONLY = {"hashtag2", "add", "arrow-right5", "arrow-up5", "check-read", "sort", "search", "refresh2"}
 ROOT_ATTRS = 'xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
 
 
@@ -424,10 +424,19 @@ def sq(x, y, w, h, r):
             f"V{f(y + e)}C{f(x)} {f(y + c)} {f(x + c)} {f(y)} {f(x + e)} {f(y)}Z")
 
 
+# Line glyphs that run edge to edge read a size up beside the rest; scaled about the centre, stroke kept at 2.
+OPTICAL = {"refresh2": 0.8}
+
+
 def glyph(reicon, name):
     if name not in LINE_ONLY and f"{name}-filled" in reicon:
         return f'<g stroke="none">{reicon[name + "-filled"]["body"]}</g>'
-    return thicken(reicon[name]["body"])
+    body = thicken(reicon[name]["body"])
+    if name in OPTICAL:
+        k = OPTICAL[name]
+        body = body.replace('stroke-width="2"', f'stroke-width="{2 / k:g}"')
+        body = f'<g transform="translate(12 12) scale({k}) translate(-12 -12)">{body}</g>'
+    return body
 
 
 def slashed(base):
@@ -451,6 +460,8 @@ def custom(reicon, name):
         base = {"text-locked": "hashtag2", "voice-locked": "volume-high", "announcement-locked": "bullhorn", "stage-locked": "podcast", "forum-locked": "messages2", "media-locked": "gallery"}[name]
         return badged(glyph(reicon, base), LOCK)
     return {
+        # A drag handle: two columns of three dots (design/css/server-settings.css .ss-grip).
+        "grip": lambda: '<g fill="currentColor" stroke="none">' + "".join(f'<circle cx="{x}" cy="{y}" r="1.6"/>' for y in (6, 12, 18) for x in (9, 15)) + "</g>",
         "muted": lambda: slashed(glyph(reicon, "microphone2")),
         "deafened": lambda: slashed(glyph(reicon, "headphone")),
         "camera-off": lambda: slashed(glyph(reicon, "video")),

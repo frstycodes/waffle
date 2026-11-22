@@ -223,25 +223,19 @@ impl Waffle {
             .enumerate()
             .filter(|(_, r)| query.is_empty() || r.role.name.to_lowercase().contains(&query))
             .map(|(i, r)| {
-                let (lock, movable_up, movable_down) = self
-                    .with_access(&guild_id, |me| {
-                        let up = i > 0 && access::can_drag_role(me, r.position, false) && access::can_drag_role(me, ranked[i - 1].position, false);
-                        let down = i + 1 < ranked.len() && access::can_drag_role(me, r.position, false);
-                        (access::role_lock(me, r.position, r.managed), up, down)
-                    })
-                    .unwrap_or((RoleLock::Above, false, false));
+                let lock = self.with_access(&guild_id, |me| access::role_lock(me, r.position, r.managed)).unwrap_or(RoleLock::Above);
+                let draggable = sorting && self.with_access(&guild_id, |me| access::can_drag_role(me, r.position, false)).unwrap_or(false);
                 let color = if r.role.color == 0 { palette::faint(cx) } else { palette::role_ink(r.role.color, dark) };
                 let count = counts.get(&r.id).map(|n| plural(*n, "member", "members"));
-                let (id, up_id, down_id) = (r.id.clone(), r.id.clone(), r.id.clone());
+                let id = r.id.clone();
+                // A grip on the rows that drag; the rest keep its slot so every name lines up.
+                let grip = div().w(px(16.)).flex_none().flex().justify_center().when(draggable, |g| g.cursor_grab().text_color(palette::faint(cx)).child(Icon::new(Glyph::Grip).size(px(16.))));
                 let row = ui::settings_row(SharedString::from(format!("ss-role-{}", r.id)), i > 0 || default_shown(&list, &guild_id), cx)
+                    .child(grip)
                     .child(div().size(px(12.)).m(px(2.)).rounded_full().bg(color).flex_none())
                     .child(ui::settings_text(r.role.name.clone(), count.or_else(|| lock.reason().map(str::to_owned)), cx))
-                    // Both arrows keep their slots, so a row without one doesn't shift the other.
-                    .child(div().w(px(32.)).flex_none().children(movable_up.then(|| ui::icon_button(SharedString::from(format!("ss-role-up-{up_id}")), Glyph::ArrowUp, "Move up", cx).on_click(cx.listener(move |this, _, _, cx| this.move_role(&up_id, -1, cx))))))
-                    .child(div().w(px(32.)).flex_none().children(movable_down.then(|| ui::icon_button(SharedString::from(format!("ss-role-down-{down_id}")), Glyph::ArrowDown, "Move down", cx).on_click(cx.listener(move |this, _, _, cx| this.move_role(&down_id, 1, cx))))))
                     .child(Icon::new(Glyph::ChevronRight).size(px(16.)));
                 let key = format!("ss-role-{}", r.id);
-                let draggable = sorting && self.with_access(&guild_id, |me| access::can_drag_role(me, r.position, false)).unwrap_or(false);
                 let carried = self.drag_motion.row(&key) != RowDrag::Rest;
                 let row = ui::settings_choice(row, cx)
                     .children(self.drag_motion.spot(&key))
@@ -283,14 +277,6 @@ impl Waffle {
             }
             Err(error) => this.show_toast(error, cx),
         }, cx);
-    }
-
-    // One step up (-1) or down (+1) among the ranked roles.
-    fn move_role(&mut self, id: &str, step: i64, cx: &mut Context<Self>) {
-        let Some(Load::Ready(list)) = self.server_settings.as_ref().map(|v| &v.roles.list) else { return };
-        let Some(i) = list.iter().position(|r| r.id == id) else { return };
-        let Some(neighbour) = i.checked_add_signed(step as isize).and_then(|j| list.get(j)).map(|r| r.id.clone()) else { return };
-        self.move_role_beside(id, &neighbour, if step < 0 { Place::Before } else { Place::After }, cx);
     }
 
     // A role dragged in the list, dropped beside another.

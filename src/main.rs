@@ -39,6 +39,7 @@ mod discord;
 mod drafts;
 mod frecency_sync;
 mod drag;
+mod favorites;
 mod emoticons;
 mod icons;
 mod illustration;
@@ -78,6 +79,7 @@ mod memory;
 mod name_fonts;
 mod menu;
 mod message_menu;
+mod mod_view;
 mod motion;
 mod palette;
 mod pip;
@@ -87,6 +89,7 @@ mod notify;
 mod panel;
 mod part;
 mod rail_drag;
+mod role_popout;
 mod sidebar;
 mod sortable;
 mod search;
@@ -447,6 +450,7 @@ enum RightPanel {
     // Every Activity card, from the section's chevron.
     Activity,
     Search(Box<search_results::Results>),
+    ModView(Box<mod_view::ModView>),
     Hidden,
 }
 
@@ -726,6 +730,7 @@ pub struct Waffle {
     rail_board: sortable::Board,
     channel_board: sortable::Board,
     role_board: sortable::Board,
+    favorite_board: sortable::Board,
     // Where a dragged channel would land: the row's id and above/below it.
     // What a drag in the rail or channel list carries, and what it is landing.
     drag_motion: drag::DragMotion,
@@ -976,6 +981,7 @@ pub struct Waffle {
     call_switched: bool,
     viewer: Option<viewer::Viewer>,
     profile_card: Option<ProfileCard>,
+    role_popout: role_popout::RolePopouts,
     status_menu: bool,
     // The channel or DM row under the pointer, which shows its hover-only controls.
     hovered_row: Option<String>,
@@ -1026,9 +1032,11 @@ pub struct Waffle {
     settings_nav_scroll: gpui_kit::ScrollHandle,
     panel_width: f32,
     drag: Option<Drag>,
-    back: Vec<(Option<String>, Channel)>,
-    forward: Vec<(Option<String>, Channel)>,
+    history: home::History<home::Stop>,
     folded: HashSet<String>,
+    favorites: favorites::Favorites,
+    // Set while the channel list shows Favorites: the channel opened from it, "" before one is.
+    favorites_open: Option<String>,
     hovered: Option<String>,
     // The member row under the pointer: its avatar and decoration animate, as Discord's do.
     member_hover: Option<String>,
@@ -1187,6 +1195,7 @@ impl Waffle {
             rail_board: Default::default(),
             channel_board: Default::default(),
             role_board: Default::default(),
+            favorite_board: Default::default(),
             drag_motion: Default::default(),
             members: HashMap::new(),
             dms: Vec::new(),
@@ -1347,6 +1356,7 @@ impl Waffle {
             call_switched: false,
             viewer: None,
             profile_card: None,
+            role_popout: Default::default(),
             status_menu: false,
             updates: updater::Updates::default(),
             hovered_row: None,
@@ -1382,9 +1392,10 @@ impl Waffle {
             settings_nav_scroll: gpui_kit::ScrollHandle::new(),
             panel_width: layout::PANEL_WIDTH,
             drag: None,
-            back: Vec::new(),
-            forward: Vec::new(),
+            history: home::History::default(),
             folded: HashSet::new(),
+            favorites: Default::default(),
+            favorites_open: None,
             hovered: None,
             member_hover: None,
             motions: Motions::new(),
@@ -1530,6 +1541,7 @@ impl Waffle {
 
     pub fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {
         match event {
+            Event::SettingsProto { proto, partial } => self.apply_settings_proto(&proto, partial, cx),
             Event::UserSettings(changed) => {
                 self.account_settings.apply(&changed);
                 self.developer_mode = self.account_settings.developer_mode;
@@ -1593,6 +1605,7 @@ impl Waffle {
                 self.load_activity_feed(cx);
                 self.splash_ready(cx);
                 self.rejoin_after_restart(cx);
+                self.load_favorites(cx);
             }
             Event::Batch(events) => {
                 for event in events {
@@ -1796,7 +1809,7 @@ impl Waffle {
                 }
                 self.apply_members(&guild_id);
             }
-            Event::MembersChunk { guild_id, members } => {
+            Event::MembersChunk { guild_id, members, facts } => {
                 let roles = self.member_roles.entry(guild_id.clone()).or_default();
                 let known = self.members.entry(guild_id.clone()).or_default();
                 for (user, member_roles) in members {
@@ -1804,6 +1817,7 @@ impl Waffle {
                     known.insert(user.id.clone(), user);
                 }
                 self.apply_members(&guild_id);
+                self.mod_view_members(&guild_id, facts);
             }
             Event::Ack { channel_id, message_id, manual: Some(mentions) } => {
                 if self.channel.as_ref().is_some_and(|c| c.id == channel_id) {
@@ -2037,14 +2051,15 @@ impl Waffle {
 
     fn open_guild(&mut self, guild_id: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         self.guild_id = guild_id.clone();
+        self.favorites_open = None;
         self.guild_page = None;
         self.refresh_stream_previews(cx);
         self.request_channel_info();
         let remembered = self.last_channel.get(&guild_id).cloned();
         // In sidebar order, and only channels we can open (Discord also lists hidden ones).
         let channels: Vec<Channel> = match &guild_id {
-            Some(_) => self.guild().map(|g| sidebar::channel_sections(g, self.my_id()).into_iter().flat_map(|(_, c)| c).collect()).unwrap_or_default(),
-            None => self.dms.clone(),
+            Some(_) => self.guild().map(|g| self.sidebar_sections(g).into_iter().flat_map(|(_, c)| c).collect()).unwrap_or_default(),
+            None => self.dm_order(),
         };
         let target = remembered
             .and_then(|id| channels.iter().find(|c| c.id == id).cloned())
@@ -2072,22 +2087,25 @@ impl Waffle {
         if matches!(&self.right_panel, RightPanel::Search(results) if !results.searched(&scope)) {
             self.right_panel = RightPanel::Members;
         }
-        if let Some(current) = self.channel.clone().filter(|c| c.id != channel.id) {
-            self.back.push((self.guild_id.clone(), current));
-            self.forward.clear();
+        if matches!(&self.right_panel, RightPanel::ModView(view) if Some(view.guild_id()) != self.guild_id.as_deref()) {
+            self.right_panel = RightPanel::Members;
+        }
+        if self.channel.as_ref().is_none_or(|c| c.id != channel.id) {
+            self.history.visit(self.here());
         }
         self.show_channel(channel, window, cx);
     }
 
-    /// Back/forward in the title bar, like a browser's history of channels.
+    /// Back/forward, like a browser's history of channels and Friends.
     fn navigate(&mut self, forward: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let (from, to) = if forward { (&mut self.forward, &mut self.back) } else { (&mut self.back, &mut self.forward) };
-        let Some((guild_id, channel)) = from.pop() else { return };
-        if let Some(current) = self.channel.clone() {
-            to.push((self.guild_id.clone(), current));
+        let Some(stop) = self.history.step(forward, self.here()) else { return };
+        match stop.channel {
+            Some(channel) => {
+                self.guild_id = stop.guild_id;
+                self.show_channel(channel, window, cx);
+            }
+            None => self.show_no_channel(stop.guild_id, cx),
         }
-        self.guild_id = guild_id;
-        self.show_channel(channel, window, cx);
     }
 
     fn show_channel(&mut self, channel: Channel, window: &mut Window, cx: &mut Context<Self>) {
@@ -2847,8 +2865,8 @@ impl Waffle {
     /// Alt+↑/↓: the previous or next text channel in the sidebar's order, as in Discord.
     fn step_channel(&mut self, delta: isize, window: &mut Window, cx: &mut Context<Self>) {
         let order: Vec<Channel> = match self.guild() {
-            Some(guild) => sidebar::channel_sections(guild, self.my_id()).into_iter().flat_map(|(_, c)| c).filter(|c| c.kind == ChannelKind::Text).collect(),
-            None => self.dms.clone(),
+            Some(guild) => self.sidebar_sections(guild).into_iter().flat_map(|(_, c)| c).filter(|c| c.kind == ChannelKind::Text).collect(),
+            None => self.dm_order(),
         };
         let current = self.channel.as_ref().and_then(|c| order.iter().position(|o| o.id == c.id)).unwrap_or(0) as isize;
         let next = (current + delta).clamp(0, order.len() as isize - 1);

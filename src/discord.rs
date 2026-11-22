@@ -24,6 +24,9 @@ pub struct User {
     // Avatar decoration frame drawn around the avatar.
     pub decoration: Option<String>,
     pub name_style: Option<NameStyle>,
+    // When they started boosting the server this user was read from (the member's `premium_since`).
+    #[serde(default)]
+    pub boosting_since: Option<String>,
     // The account's username (`name` is the shown one); empty where Discord didn't send it.
     #[serde(default)]
     pub username: String,
@@ -235,6 +238,8 @@ pub struct Role {
     pub permissions: u64,
     // Owned by an integration (a bot's role); nobody can hand these out.
     pub managed: bool,
+    // The role's own icon image. GAP: a `unicode_emoji` icon isn't read.
+    pub icon: Option<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -401,7 +406,7 @@ pub struct GuildSettings {
     pub mute_scheduled_events: bool,
     pub mobile_push: bool,
     pub hide_muted: bool,
-    // user_guild_settings flags; bit 14 (16384) is "pick your channels" (opt-in channels on).
+    // guild_flag bits.
     pub flags: u64,
     pub channels: HashMap<String, ChannelSettings>,
 }
@@ -431,8 +436,22 @@ pub struct ChannelSettings {
     pub muted: bool,
     pub mute_end: Option<String>,
     pub notifications: u8,
-    // channel_overrides flags; bit 12 (4096) follows the channel (or category) when opt-in is on.
+    // channel_flag bits.
     pub flags: u64,
+}
+
+// Bits of a channel override's `flags` (docs/discord-navigation-re.md §2, §3, §5).
+pub mod channel_flag {
+    // Pinned: a pinned DM, or a channel pinned to the top of its server.
+    pub const FAVORITED: u64 = 2048;
+    // In our channel list while the server has opt-in on.
+    pub const OPT_IN_ENABLED: u64 = 4096;
+}
+
+// Bits of a server's user-settings `flags`. Opt-in on is Show all channels unticked.
+pub mod guild_flag {
+    pub const OPT_IN_CHANNELS_OFF: u64 = 8192;
+    pub const OPT_IN_CHANNELS_ON: u64 = 16384;
 }
 
 impl GuildSettings {
@@ -443,6 +462,22 @@ impl GuildSettings {
 
     pub fn channel_muted(&self, channel_id: &str) -> bool {
         self.channels.get(channel_id).is_some_and(|c| c.muted && still_muted(c.mute_end.as_deref()))
+    }
+
+    pub fn channel_flags(&self, channel_id: &str) -> u64 {
+        self.channels.get(channel_id).map_or(0, |c| c.flags)
+    }
+
+    pub fn pinned(&self, channel_id: &str) -> bool {
+        self.channel_flags(channel_id) & channel_flag::FAVORITED != 0
+    }
+
+    pub fn opted_in(&self, channel_id: &str) -> bool {
+        self.channel_flags(channel_id) & channel_flag::OPT_IN_ENABLED != 0
+    }
+
+    pub fn opt_in(&self) -> bool {
+        self.flags & guild_flag::OPT_IN_CHANNELS_ON != 0
     }
 }
 
@@ -1458,6 +1493,31 @@ pub struct Member {
     pub boosting_since: Option<String>,
 }
 
+// What Mod View reads off a member object beyond its user and roles.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MemberFacts {
+    pub user_id: String,
+    pub joined_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub timed_out_until: Option<chrono::DateTime<chrono::Utc>>,
+    pub unusual_dm_until: Option<chrono::DateTime<chrono::Utc>>,
+    pub flags: u64,
+    pub pending: bool,
+}
+
+impl MemberFacts {
+    pub fn parse(m: &Value) -> Option<Self> {
+        let time = |key: &str| m[key].as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).map(|t| t.with_timezone(&chrono::Utc));
+        Some(MemberFacts {
+            user_id: m["user"]["id"].as_str()?.to_owned(),
+            joined_at: time("joined_at"),
+            timed_out_until: time("communication_disabled_until"),
+            unusual_dm_until: time("unusual_dm_activity_until"),
+            flags: m["flags"].as_u64().unwrap_or(0),
+            pending: m["pending"].as_bool().unwrap_or(false),
+        })
+    }
+}
+
 // Lists are almost all members; boxing them would allocate per row to shrink the rare group headers.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
@@ -1663,6 +1723,8 @@ pub enum Event {
     Ready(Box<Ready>),
     // Account settings changed here or in another client: only the changed fields.
     UserSettings(Value),
+    // PreloadedUserSettings (settings-proto type 1) as base64; `partial` carries only the changed top-level fields.
+    SettingsProto { proto: String, partial: bool },
     // A Go Live stream by its key: who is watching, and whether the streamer paused it (Not verified
     // that `paused` is sent here; a stalled stream reads as Stalled without it).
     StreamUpdate { key: String, viewers: Vec<String>, paused: bool },
@@ -1706,7 +1768,7 @@ pub enum Event {
     Typing { channel_id: String, user_id: String, name: Option<String> },
     Presence { user_id: String, presence: Presence },
     MemberList { guild_id: String, groups: Vec<(String, u32)>, ops: Vec<ListOp> },
-    MembersChunk { guild_id: String, members: Vec<(User, Vec<String>)> },
+    MembersChunk { guild_id: String, members: Vec<(User, Vec<String>)>, facts: Vec<MemberFacts> },
     // `manual`: Mark Unread from any of our devices, carrying the mention count after `message_id`.
     Ack { channel_id: String, message_id: u64, manual: Option<u32> },
     // With the session it belongs to: ours, or another client of ours.
@@ -1813,6 +1875,19 @@ impl Client {
             "op": 14,
             "d": { "guild_id": guild_id, "typing": true, "activities": true, "threads": true, "channels": { channel_id: [[0, 99]] } }
         }));
+    }
+
+    /// Members per role across the server, by role id.
+    pub async fn role_member_counts(&self, guild_id: &str) -> Result<HashMap<String, u32>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, &format!("/guilds/{guild_id}/roles/member-counts"))).await?;
+        Ok(body.as_object().into_iter().flatten().filter_map(|(role, count)| Some((role.clone(), count.as_u64()? as u32))).collect())
+    }
+
+    /// The ids of a role's members, as many as the server sends.
+    // Not verified: the cap on how many ids one response carries (the client sets none).
+    pub async fn role_member_ids(&self, guild_id: &str, role_id: &str) -> Result<Vec<String>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, &format!("/guilds/{guild_id}/roles/{role_id}/member-ids"))).await?;
+        Ok(strings(&body))
     }
 
     // Discord's REQUEST_FORUM_UNREADS (op 28): unread counts since each ack, answered by FORUM_UNREADS. Callers send at most 180.
@@ -3104,6 +3179,10 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
     match kind {
         "READY" => Some(Event::Ready(Box::new(parse_ready(d)))),
         "USER_SETTINGS_UPDATE" => Some(Event::UserSettings(d.clone())),
+        // Not verified: the payload shape `{settings: {type, proto}, partial}`, inferred from Discord's store handler.
+        "USER_SETTINGS_PROTO_UPDATE" if d["settings"]["type"].as_u64() == Some(1) => {
+            Some(Event::SettingsProto { proto: s(&d["settings"]["proto"]), partial: d["partial"].as_bool().unwrap_or(false) })
+        }
         "GUILD_CREATE" => parse_guild(d).map(Event::GuildCreate),
         "THREAD_CREATE" if d["newly_created"].as_bool() == Some(true) => {
             let guild_id = d["guild_id"].as_str()?.to_owned();
@@ -3206,6 +3285,7 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
         "GUILD_MEMBERS_CHUNK" => Some(Event::MembersChunk {
             guild_id: s(&d["guild_id"]),
             members: d["members"].as_array().into_iter().flatten().map(|m| (parse_member_user(m, &m["user"], d["guild_id"].as_str()), strings(&m["roles"]))).collect(),
+            facts: d["members"].as_array().into_iter().flatten().filter_map(MemberFacts::parse).collect(),
         }),
         "MESSAGE_ACK" => Some(Event::Ack {
             channel_id: s(&d["channel_id"]),
@@ -3344,6 +3424,7 @@ fn parse_guild(g: &Value) -> Option<Guild> {
                     position: r["position"].as_i64().unwrap_or(0),
                     permissions: permission(&r["permissions"]),
                     managed: r["managed"].as_bool().unwrap_or(false),
+                    icon: role_icon(r),
                 })
             })
             .collect(),
@@ -3686,7 +3767,13 @@ pub fn parse_member_user(member: &Value, user: &Value, guild_id: Option<&str>) -
     if let Some(style) = parse_name_style(&member["display_name_styles"]) {
         parsed.name_style = Some(style);
     }
+    parsed.boosting_since = member["premium_since"].as_str().map(str::to_owned);
     parsed
+}
+
+fn role_icon(role: &Value) -> Option<String> {
+    let (id, hash) = (role["id"].as_str()?, role["icon"].as_str()?);
+    Some(format!("{CDN}/role-icons/{id}/{hash}.png?size=32"))
 }
 
 pub fn parse_user(user: &Value) -> User {
@@ -3710,7 +3797,7 @@ pub fn parse_user(user: &Value) -> User {
     let decoration = user["avatar_decoration_data"]["asset"].as_str().map(|asset| format!("{CDN}/avatar-decoration-presets/{asset}.png?size=96&passthrough=false"));
     let name_style = parse_name_style(&user["display_name_styles"]);
     let username = user["username"].as_str().unwrap_or_default().to_owned();
-    User { id, name, avatar, bot: user["bot"].as_bool().unwrap_or(false), tag, nameplate, decoration, name_style, username }
+    User { id, name, avatar, bot: user["bot"].as_bool().unwrap_or(false), tag, nameplate, decoration, name_style, username, boosting_since: None }
 
 }
 
@@ -4459,7 +4546,7 @@ mod tests {
 
     #[test]
     fn hides_channels_we_cannot_view() {
-        let role = |id: &str, permissions: u64| Role { id: id.into(), name: id.into(), color: 0, position: 0, permissions, managed: false };
+        let role = |id: &str, permissions: u64| Role { id: id.into(), name: id.into(), color: 0, position: 0, permissions, managed: false, icon: None };
         let channel = |id: &str, overwrites: Value| parse_channel(&json!({ "id": id, "type": 0, "permission_overwrites": overwrites }), "g").unwrap();
         let deny_everyone = json!({ "id": "g", "type": 0, "deny": "1024", "allow": "0" });
         let guild = Guild {
@@ -4504,7 +4591,7 @@ mod tests {
 
     #[test]
     fn manage_messages_follows_owner_admin_roles_and_overwrites() {
-        let role = |id: &str, permissions: u64| Role { id: id.into(), name: id.into(), color: 0, position: 0, permissions, managed: false };
+        let role = |id: &str, permissions: u64| Role { id: id.into(), name: id.into(), color: 0, position: 0, permissions, managed: false, icon: None };
         let channel = |id: &str, overwrites: Value| parse_channel(&json!({ "id": id, "type": 0, "permission_overwrites": overwrites }), "g").unwrap();
         let thread = parse_channel(&json!({ "id": "t", "type": 11, "parent_id": "locked", "thread_metadata": {} }), "g").unwrap();
         let guild = Guild {
@@ -4548,7 +4635,7 @@ mod tests {
 
     #[test]
     fn voice_moves_and_invites_follow_channel_permissions() {
-        let role = |id: &str, permissions: u64| Role { id: id.into(), name: id.into(), color: 0, position: 0, permissions, managed: false };
+        let role = |id: &str, permissions: u64| Role { id: id.into(), name: id.into(), color: 0, position: 0, permissions, managed: false, icon: None };
         let channel = |id: &str, kind: u8, limit: u32, overwrites: Value| parse_channel(&json!({ "id": id, "type": kind, "user_limit": limit, "permission_overwrites": overwrites }), "g").unwrap();
         let in_voice = |user: &str, channel: &str| VoiceState { user_id: user.into(), channel_id: Some(channel.into()), ..Default::default() };
         let deny = |bits: u64| json!([{ "id": "mods", "type": 0, "allow": "0", "deny": bits.to_string() }]);
@@ -4779,6 +4866,25 @@ mod tests {
         assert!(!m.stickers[0].animated() && m.stickers[1].animated());
         let tagged = Sticker { name: "Wumpus wave".into(), tags: "👋, hello".into(), ..Sticker::default() };
         assert!(tagged.matches("wave") && tagged.matches("HELLO") && !tagged.matches("bye"));
+    }
+
+    #[test]
+    fn guild_settings_read_pin_and_opt_in_flags() {
+        let (key, settings) = parse_guild_settings(&json!({
+            "guild_id": "g",
+            "flags": guild_flag::OPT_IN_CHANNELS_ON,
+            "channel_overrides": [
+                { "channel_id": "pinned", "flags": channel_flag::FAVORITED | channel_flag::OPT_IN_ENABLED },
+                { "channel_id": "plain", "muted": true },
+            ],
+        }));
+        assert_eq!(key, "g");
+        assert!(settings.opt_in());
+        assert!(settings.pinned("pinned") && settings.opted_in("pinned"));
+        assert!(!settings.pinned("plain") && !settings.opted_in("plain") && !settings.pinned("missing"));
+        let (key, dms) = parse_guild_settings(&json!({ "guild_id": null, "channel_overrides": [{ "channel_id": "dm", "flags": 2048 }] }));
+        assert_eq!(key, "@me");
+        assert!(dms.pinned("dm") && !dms.opt_in());
     }
 
     #[test]

@@ -32,10 +32,9 @@ pub mod member_flags {
     pub const COMPLETED_HOME_ACTIONS: u64 = 1 << 6;
 }
 
-// user_guild_settings `flags`, and `channel_overrides[].flags`.
+// user_guild_settings `flags`, and `channel_overrides[].flags`, defined once in discord.rs.
 pub mod settings_flags {
-    pub const OPT_IN_CHANNELS_ON: u64 = 1 << 14;
-    pub const OPT_IN_ENABLED: u64 = 1 << 12;
+    pub use crate::discord::{channel_flag::OPT_IN_ENABLED, guild_flag::OPT_IN_CHANNELS_ON};
 }
 
 pub mod features {
