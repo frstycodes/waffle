@@ -228,11 +228,16 @@ impl Waffle {
         }, cx);
     }
 
-    // Takes the header row's place while any row is picked: the count, each action we may take, and clear.
-    pub(super) fn bulk_bar(&self, powers: BulkPowers, cx: &mut Context<Self>) -> AnyElement {
-        let Some(m) = self.server_settings.as_ref().map(|v| &v.lists.members) else { return div().into_any_element() };
+    // Floats over the Members page while any row is picked: the count, each action we may take, and clear.
+    pub(crate) fn member_bulk_bar(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let view = self.server_settings.as_ref().filter(|v| v.page == super::access::Page::Members)?;
+        let m = &view.lists.members;
+        if m.selected.is_empty() {
+            return None;
+        }
+        let powers = self.with_access(&view.guild_id, |me| BulkPowers::new(|bits| me.has(bits))).unwrap_or_default();
         let (count, busy) = (m.selected.len(), m.bulk_busy);
-        let button = |id: &'static str, glyph: Glyph, label: &'static str, cx: &mut Context<Self>| ui::button(id, Tone::Secondary, cx).small().disabled(busy).child(gpui_kit::component::Icon::new(glyph).size(px(14.))).child(label);
+        let button = |id: &'static str, glyph: Glyph, label: &'static str, cx: &mut Context<Self>| ui::button(id, Tone::Secondary, cx).disabled(busy).child(gpui_kit::component::Icon::new(glyph).size(px(16.))).child(label);
         let role = powers.role.then(|| button("ss-bulk-role", Glyph::Plus, "Add role", cx).on_click(cx.listener(|this, event: &ClickEvent, _, cx| this.open_bulk_roles(event, cx))));
         let timeout = powers.timeout.then(|| button("ss-bulk-timeout", Glyph::Timer, "Time out", cx).on_click(cx.listener(|this, event: &ClickEvent, _, cx| this.open_bulk_timeout(event, cx))));
         let kick = powers.kick.then(|| button("ss-bulk-kick", Glyph::DoorExit, "Kick", cx).danger(cx).on_click(cx.listener(|this, _, _, cx| this.ask_bulk_kick(cx))));
@@ -242,20 +247,11 @@ impl Waffle {
             let tip = SharedString::from(format!("Ban up to {} at a time", api::BULK_BAN_MAX));
             if too_many { ban.tooltip(move |window, cx| ui::tip(tip.clone(), window, cx)) } else { ban }
         });
-        let clear = ui::icon_button("ss-bulk-clear", Glyph::X, "Clear selection", cx).small().on_click(cx.listener(|this, _, _, cx| this.clear_member_selection(cx)));
-        div()
-            .id("ss-bulk")
-            .w_full()
-            .flex()
-            .items_center()
-            .gap(px(6.))
+        let clear = ui::icon_button("ss-bulk-clear", Glyph::X, "Clear selection", cx).on_click(cx.listener(|this, _, _, cx| this.clear_member_selection(cx)));
+        let bar = ui::floating_bar("ss-bulk", cx)
             .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).text_color(crate::palette::strong(cx)).child(format!("{count} selected")))
-            .children(role)
-            .children(timeout)
-            .children(kick)
-            .children(ban)
-            .child(clear)
-            .into_any_element()
+            .child(div().flex().flex_none().gap(px(8.)).children(role).children(timeout).children(kick).children(ban).child(clear));
+        Some(ui::foot_dock(bar, "ss-bulk-in").into_any_element())
     }
 
     // A row's or the header's checkbox.

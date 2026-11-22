@@ -584,13 +584,7 @@ impl Waffle {
         .flatten()
         .collect();
         let cols: Vec<Col> = columns.iter().map(|(c, _)| *c).collect();
-        let head = match selecting && !m.selected.is_empty() {
-            false => ui::table_head(&cols, columns.into_iter().map(|(_, cell)| cell), cx),
-            true => {
-                let check_all = columns.into_iter().next().map(|(_, cell)| cell);
-                ui::table_head(&[CHECK_COL, Col::Grow { weight: 1., min: 0. }], check_all.into_iter().chain([self.bulk_bar(bulk, cx)]), cx)
-            }
-        };
+        let head = ui::table_head(&cols, columns.into_iter().map(|(_, cell)| cell), cx);
         let guild_roles = self.guilds.iter().find(|g| g.id == guild_id).map(|g| g.roles.clone()).unwrap_or_default();
         let now = Utc::now();
         let mut rows: Vec<AnyElement> = Vec::new();

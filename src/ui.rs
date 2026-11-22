@@ -628,6 +628,30 @@ pub fn surface(cx: &App) -> Div {
 // A floating surface's entrance (menus, popovers, pickers, dialogs): it fades in and grows from 0.95 over
 // the pop timing, after `delay` (a submenu's intent delay). It grows from the top-left corner unless the
 // caller set a `transform_origin` toward its trigger.
+// A bar that floats over a page's foot (unsaved changes, bulk actions): the overlay card at the settings
+// column's width. It occludes, so the rows under it never take its hover or clicks.
+pub fn floating_bar(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
+    div()
+        .id(id.into())
+        .occlude()
+        .w_full()
+        .max_w(px(SETTINGS_WIDTH))
+        .py(px(10.))
+        .pl(px(16.))
+        .pr(px(10.))
+        .squircle(RADIUS_LG)
+        .bg(palette::surface(palette::Level::Overlay, cx))
+        .shadow(shadow_pop(cx))
+        .flex()
+        .items_center()
+        .gap(px(12.))
+}
+
+// Docks a floating bar 16px above the foot of the nearest relative parent, centred, rising in.
+pub fn foot_dock(bar: impl IntoElement, id: impl Into<ElementId>) -> AnimationElement<Div> {
+    rise(div().absolute().bottom(px(16.)).left(px(40.)).right(px(40.)).flex().justify_center().child(bar), id, Duration::ZERO)
+}
+
 pub fn rise<E:IntoElement + Styled + 'static>(mut el: E, id: impl Into<ElementId>, delay: Duration) -> AnimationElement<E> {
     if el.style().transform_origin.x.is_none() {
         el = el.transform_origin(point(relative(0.), relative(0.)));
