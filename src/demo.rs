@@ -1493,6 +1493,7 @@ fn demo_voice_messages(waffle: &mut Waffle) {
     messages.extend((0..4).map(|i| post(i, true)));
     messages.extend((4..6).map(|i| post(i, false)));
     feed.messages = std::sync::Arc::new(messages);
+    waffle.list.reset(waffle.feeds.get("general").map_or(0, |f| f.messages.len()));
 }
 
 // A mono 16-bit WAV of a voice-like hum: a low tone whose loudness swells like syllables.
