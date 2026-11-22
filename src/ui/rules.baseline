@@ -87,9 +87,9 @@ src/modify_attachment.rs	global-notify	5
 src/modify_attachment.rs	raw-px	7
 src/notification_settings.rs	global-notify	7
 src/notification_settings.rs	raw-px	36
-src/overlays.rs	global-notify	18
+src/overlays.rs	global-notify	17
 src/overlays.rs	raw-px	11
-src/panel.rs	global-notify	5
+src/panel.rs	global-notify	4
 src/panel.rs	raw-px	9
 src/pip.rs	global-notify	2
 src/pip.rs	raw-floating	2
@@ -149,7 +149,7 @@ src/settings/view.rs	global-notify	5
 src/settings/view.rs	raw-px	5
 src/shortcuts.rs	global-notify	4
 src/shortcuts.rs	raw-px	1
-src/sidebar.rs	global-notify	3
+src/sidebar.rs	global-notify	1
 src/sidebar.rs	raw-px	32
 src/soundboard.rs	global-notify	10
 src/soundboard.rs	raw-px	51

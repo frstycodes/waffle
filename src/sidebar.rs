@@ -402,7 +402,7 @@ impl Waffle {
                 if !this.open_folders.remove(&toggle_id) {
                     this.open_folders.insert(toggle_id.clone());
                 }
-                cx.notify();
+                this.redraw(crate::part::Column::Nav, cx);
             }));
         let count = indices.len();
         let landed = motion.trip >= 1.;
@@ -819,7 +819,7 @@ impl Waffle {
                 if !this.folded.remove(&id) {
                     this.folded.insert(id.clone());
                 }
-                cx.notify();
+                this.redraw(crate::part::Column::Nav, cx);
             }))
             .drag_over::<crate::drag::ChannelDrag>(move |s, _, _, _| s.text_color(target_ink))
             .on_mouse_down(gpui_kit::MouseButton::Right, {

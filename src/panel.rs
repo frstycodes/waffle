@@ -221,7 +221,7 @@ impl Waffle {
                 if !this.folded.remove(&key) {
                     this.folded.insert(key.clone());
                 }
-                cx.notify();
+                this.redraw(crate::part::Column::Panel, cx);
             }));
         let all = category_action("activity-all", Icon::new(Glyph::ChevronRight), None, "Show all activity", cx).on_click(cx.listener(|this, _, _, cx| {
             this.right_panel = RightPanel::Activity;

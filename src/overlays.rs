@@ -674,7 +674,7 @@ impl Waffle {
                     if *on {
                         hovered.update(cx, |h, cx| {
                             *h = Some(shown.clone());
-                            cx.notify();
+                            cx.notify(); // lint-allow(global-notify): notifies the hovered entry's own entity, not Waffle
                         });
                     }
                 })
