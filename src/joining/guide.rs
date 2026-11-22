@@ -46,13 +46,13 @@ impl Waffle {
             .items_center()
             .gap_2()
             .window_control_area(WindowControlArea::Drag)
-            .text_size(px(16.))
+            .text_size(ui::TEXT_MD)
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(palette::strong(cx))
-            .child(Icon::new(Glyph::Signature).size(px(20.)).text_color(palette::faint(cx)))
+            .child(Icon::new(Glyph::Signature).size(ui::ICON_XL).text_color(palette::faint(cx)))
             .child(div().min_w_0().truncate().child(format!("{} Server Guide", guild.name)))
             .child(div().ml_auto().child(self.caption_clearance(true)));
-        let column = div().w_full().max_w(px(720.)).mx_auto().flex().flex_col().gap(px(24.)).child(banner(guild)).child(body);
+        let column = div().w_full().max_w(px(720.)).mx_auto().flex().flex_col().gap_6().child(banner(guild)).child(body);
         div()
             .relative()
             .flex_1()
@@ -62,9 +62,9 @@ impl Waffle {
             .flex_col()
             .bg(palette::surface(Level::Page, cx))
             .text_color(palette::text(cx))
-            .text_size(px(14.))
+            .text_size(ui::TEXT_SM)
             .child(ui::hard_edge(move || ui::scrolled(&scroll), cx).child(header))
-            .child(ui::scroll_area(div().id("guide-page").pt(px(8.)).px(px(24.)).pb(px(32.)).child(column), &self.join.guide.scroll))
+            .child(ui::scroll_area(div().id("guide-page").pt_2().px_6().pb_8().child(column), &self.join.guide.scroll))
             .into_any_element()
     }
 
@@ -75,14 +75,14 @@ impl Waffle {
         let all_set = !new_member && welcome.resources.is_empty();
         let get_started = new_member.then(|| {
             let rows = todos.iter().map(|todo| todo_row(guild, todo, done.contains(&todo.channel_id), cx)).collect::<Vec<_>>();
-            section("Get Started", cx).child(div().flex().flex_col().p(px(6.)).squircle(RADIUS_LG).bg(palette::surface(Level::Group, cx)).children(rows))
+            section("Get Started", cx).child(div().flex().flex_col().p_1p5().squircle(RADIUS_LG).bg(palette::surface(Level::Group, cx)).children(rows))
         });
         let resources = (!welcome.resources.is_empty()).then(|| {
             let cards = welcome.resources.iter().enumerate().filter_map(|(ix, r)| Some(resource_card(ix, find_channel(guild, &r.channel_id)?, &r.title, r.description.clone(), cx))).collect::<Vec<_>>();
-            section("Resources", cx).child(div().grid().grid_cols(2).gap(px(8.)).children(cards))
+            section("Resources", cx).child(div().grid().grid_cols(2).gap_2().children(cards))
         });
         let explore = all_set.then(|| self.all_set(guild, cx));
-        div().flex().flex_col().gap(px(24.)).children(self.welcome_card(guild, welcome, cx)).children(get_started).children(resources).children(explore)
+        div().flex().flex_col().gap_6().children(self.welcome_card(guild, welcome, cx)).children(get_started).children(resources).children(explore)
     }
 
     fn welcome_card(&self, guild: &Guild, welcome: &Welcome, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
@@ -93,8 +93,8 @@ impl Waffle {
         Some(
             div()
                 .flex()
-                .gap(px(12.))
-                .p(px(16.))
+                .gap_3()
+                .p_4()
                 .squircle(RADIUS_LG)
                 .bg(palette::surface(Level::Group, cx))
                 .child(ui::avatar(avatar, 40.))
@@ -104,7 +104,7 @@ impl Waffle {
                         .min_w_0()
                         .flex()
                         .flex_col()
-                        .gap(px(4.))
+                        .gap_1()
                         .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(name))
                         .child(div().text_size(px(15.)).line_height(px(22.)).text_color(palette::text(cx)).child(message)),
                 ),
@@ -126,9 +126,9 @@ impl Waffle {
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(12.))
-            .py(px(24.))
-            .child(div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("You're all set!"))
+            .gap_3()
+            .py_6()
+            .child(div().text_size(ui::TEXT_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("You're all set!"))
             .children(first.map(|channel| ui::button("guide-explore", Tone::Primary, cx).child("Explore the Server").on_click(cx.listener(move |this, _, window, cx| this.open_channel(channel.clone(), window, cx)))))
     }
 
@@ -146,24 +146,24 @@ impl Waffle {
         let (strong, ink) = (palette::strong(cx), palette::accent_ink(cx));
         let bar = div()
             .id("guide-action-bar")
-            .mx(px(16.))
-            .min_h(px(44.))
-            .pl(px(14.))
-            .pr(px(6.))
-            .py(px(6.))
+            .mx_4()
+            .min_h_11()
+            .pl_3p5()
+            .pr_1p5()
+            .py_1p5()
             .flex()
             .items_center()
-            .gap(px(10.))
+            .gap_2p5()
             .squircle(RADIUS_SM)
             .bg(ui::mix(palette::surface(Level::Page, cx), palette::accent(), 0.16))
-            .text_size(px(14.))
+            .text_size(ui::TEXT_SM)
             .text_color(strong);
         if !done.contains(&todo.channel_id) {
             let send = (todo.kind == ActionKind::Chat).then(|| {
                 ui::button("guide-send", Tone::Primary, cx).small().child("Send a message").on_click(cx.listener(|this, _, window, cx| this.composer.update(cx, |state, cx| state.focus(window, cx))))
             });
             return Some(
-                bar.child(Icon::new(Glyph::ChatRound).size(px(18.)).text_color(ink))
+                bar.child(Icon::new(Glyph::ChatRound).size(ui::ICON_LG).text_color(ink))
                     .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).child(todo.title.clone()))
                     .children(send)
                     .into_any_element(),
@@ -172,8 +172,8 @@ impl Waffle {
         let next = next_todo(&todos, done)?;
         let target = find_channel(guild, &next.channel_id)?.clone();
         Some(
-            bar.child(Icon::new(Glyph::CheckCircle).size(px(18.)).text_color(ink))
-                .child(div().flex_1().min_w_0().flex().gap(px(4.)).child("Next:").child(div().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).child(next.title.clone())))
+            bar.child(Icon::new(Glyph::CheckCircle).size(ui::ICON_LG).text_color(ink))
+                .child(div().flex_1().min_w_0().flex().gap_1().child("Next:").child(div().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).child(next.title.clone())))
                 .child(ui::button("guide-go", Tone::Secondary, cx).small().child("Go").on_click(cx.listener(move |this, _, window, cx| this.open_channel(target.clone(), window, cx))))
                 .into_any_element(),
         )
@@ -289,9 +289,9 @@ fn banner(guild: &Guild) -> impl IntoElement + use<> {
         .child(
             div()
                 .absolute()
-                .left(px(20.))
-                .right(px(20.))
-                .bottom(px(16.))
+                .left_5()
+                .right_5()
+                .bottom_4()
                 .truncate()
                 .text_size(px(24.))
                 .font_weight(FontWeight::BOLD)
@@ -301,7 +301,7 @@ fn banner(guild: &Guild) -> impl IntoElement + use<> {
 }
 
 fn section(title: &'static str, cx: &mut Context<Waffle>) -> gpui_kit::Div {
-    div().flex().flex_col().gap(px(8.)).child(div().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
+    div().flex().flex_col().gap_2().child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
 }
 
 fn todo_row(guild: &Guild, todo: &MemberAction, done: bool, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
@@ -311,14 +311,14 @@ fn todo_row(guild: &Guild, todo: &MemberAction, done: bool, cx: &mut Context<Waf
     let title_ink = if done { palette::muted(cx) } else { palette::strong(cx) };
     let state = div().size(px(22.)).flex_none().rounded_full().flex().items_center().justify_center();
     let state = match done {
-        true => state.bg(cx.theme().success).text_color(gpui_kit::white()).child(Icon::new(Glyph::Checkmark).size(px(14.))),
+        true => state.bg(cx.theme().success).text_color(gpui_kit::white()).child(Icon::new(Glyph::Checkmark).size(ui::ICON_SM)),
         false => state.border(px(1.5)).border_color(palette::line_strong(cx)),
     };
     ui::menu_row(SharedString::from(format!("guide-todo-{}", todo.channel_id)), cx)
         .min_h(px(56.))
-        .px(px(12.))
-        .py(px(8.))
-        .gap(px(12.))
+        .px_3()
+        .py_2()
+        .gap_3()
         .squircle(RADIUS_MD)
         .aria_label(format!("{}, {status}", todo.title))
         .child(emoji_tile(todo.emoji.as_ref(), cx))
@@ -336,11 +336,11 @@ fn todo_row(guild: &Guild, todo: &MemberAction, done: bool, cx: &mut Context<Waf
 }
 
 fn emoji_tile(emoji: Option<&OptionEmoji>, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
-    let tile = div().size(px(36.)).flex_none().squircle(RADIUS_SM).bg(palette::surface(Level::Raised, cx)).flex().items_center().justify_center();
+    let tile = div().size_9().flex_none().squircle(RADIUS_SM).bg(palette::surface(Level::Raised, cx)).flex().items_center().justify_center();
     match (emoji.and_then(OptionEmoji::url), emoji.and_then(|e| e.name.clone())) {
-        (Some(url), _) => tile.child(img(url).size(px(20.))),
+        (Some(url), _) => tile.child(img(url).size_5()),
         (None, Some(name)) => tile.text_size(px(18.)).child(name),
-        (None, None) => tile.text_color(palette::faint(cx)).child(Icon::new(Glyph::Hashtag).size(px(18.))),
+        (None, None) => tile.text_color(palette::faint(cx)).child(Icon::new(Glyph::Hashtag).size(ui::ICON_LG)),
     }
 }
 
@@ -348,10 +348,10 @@ fn resource_card(ix: usize, channel: &Channel, title: &str, description: Option<
     let (group, channel) = (palette::surface(Level::Group, cx), channel.clone());
     let hover = ui::mix(group, palette::strong(cx), 0.04);
     ui::pressable(div().id(("guide-resource", ix)), 0.98)
-        .p(px(14.))
+        .p_3p5()
         .flex()
         .flex_col()
-        .gap(px(6.))
+        .gap_1p5()
         .squircle(16.)
         .bg(group)
         .hover(move |s| s.bg(hover))
@@ -365,7 +365,7 @@ fn guide_skeleton(cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
     div()
         .flex()
         .flex_col()
-        .gap(px(12.))
+        .gap_3()
         .child(ui::skeleton("guide-skeleton-welcome", RADIUS_LG, cx).h(px(88.)).w_full())
         .child(ui::skeleton("guide-skeleton-todos", RADIUS_LG, cx).h(px(180.)).w_full())
 }

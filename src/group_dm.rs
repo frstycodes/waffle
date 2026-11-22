@@ -406,19 +406,19 @@ impl Waffle {
             })
             .collect();
         let list = match (rows.is_empty(), friends.is_empty()) {
-            (false, _) => div().id("group-picker-list").flex().flex_col().gap(px(2.)).max_h(px(LIST_HEIGHT)).overflow_y_scroll().children(rows).into_any_element(),
-            (true, false) => div().py(px(16.)).text_color(palette::muted(cx)).child("No results found.").into_any_element(),
+            (false, _) => div().id("group-picker-list").flex().flex_col().gap_0p5().max_h(px(LIST_HEIGHT)).overflow_y_scroll().children(rows).into_any_element(),
+            (true, false) => div().py_4().text_color(palette::muted(cx)).child("No results found.").into_any_element(),
             (true, true) => div().into_any_element(),
         };
         let add = (picker.flavour == Flavour::Invite).then(|| {
             ui::button("group-picker-add", Tone::Primary, cx)
-                .h(px(40.))
+                .h_10()
                 .disabled(picked == 0)
                 .loading(picker.busy.then_some("Adding"))
                 .child(create_label(picker.flavour, picked))
                 .on_click(cx.listener(|this, _, window, cx| this.submit_group_picker(window, cx)))
         });
-        let to = div().flex().items_start().gap(px(8.)).child(div().flex_1().min_w_0().child(self.to_field(picker, cx))).children(add);
+        let to = div().flex().items_start().gap_2().child(div().flex_1().min_w_0().child(self.to_field(picker, cx))).children(add);
         let name = (picker.flavour == Flavour::New && picked > 1).then(|| {
             let focus = picker.name.read(cx).focus_handle(cx);
             ui::field("Group Name (optional)", cx).child(ui::text_field("group-picker-name", Input::new(&picker.name).appearance(false), &focus))
@@ -429,7 +429,7 @@ impl Waffle {
                 .loading(picker.busy.then_some("Creating"))
                 .child(create_label(picker.flavour, picked))
                 .on_click(cx.listener(|this, _, window, cx| this.submit_group_picker(window, cx)));
-            div().flex().justify_end().gap(px(8.)).child(cancel_button("group-picker-cancel", cx)).child(create)
+            div().flex().justify_end().gap_2().child(cancel_button("group-picker-cancel", cx)).child(create)
         });
         body.child(to)
             .child(member_meter(members, picked, cx))
@@ -447,26 +447,26 @@ impl Waffle {
             .map(|user| {
                 let chip_user = user.clone();
                 ui::chip(SharedString::from(format!("group-chip-{}", user.id)), None, user.name.clone(), true, cx)
-                    .child(Icon::new(Glyph::X).size(px(14.)))
+                    .child(Icon::new(Glyph::X).size(ui::ICON_SM))
                     .on_click(cx.listener(move |this, _, window, cx| this.toggle_group_pick(chip_user.clone(), window, cx)))
                     .into_any_element()
             })
             .collect();
         ui::field_frame(cx)
             .h_auto()
-            .min_h(px(40.))
-            .py(px(4.))
+            .min_h_10()
+            .py_1()
             .flex_wrap()
-            .gap(px(6.))
+            .gap_1p5()
             .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child("To:"))
             .children(chips)
-            .child(div().flex_1().min_w(px(96.)).child(Input::new(&picker.search).appearance(false)))
+            .child(div().flex_1().min_w_24().child(Input::new(&picker.search).appearance(false)))
     }
 
     fn friend_pick_row(&self, user: &User, state: RowState, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let surface = palette::surface(palette::Level::Raised, cx);
         let check = if matches!(state, RowState::Picked | RowState::Member) { Check::On } else { Check::Off };
-        let detail = (state == RowState::Member).then(|| div().text_size(px(12.)).text_color(palette::muted(cx)).child("Already in the group"));
+        let detail = (state == RowState::Member).then(|| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("Already in the group"));
         let text = div().flex_1().min_w_0().flex().flex_col().child(div().truncate().text_color(palette::strong(cx)).child(user.name.clone())).children(detail);
         let row = ui::menu_row(SharedString::from(format!("group-pick-{}", user.id)), cx)
             .disabled(matches!(state, RowState::Member | RowState::Full))
@@ -487,7 +487,7 @@ impl Waffle {
             .disabled(sent)
             .child(if sent { "Friend Request Sent" } else { "Send Friend Request" })
             .on_click(cx.listener(move |this, _, _, cx| this.befriend(stranger.clone(), cx)));
-        div().flex().justify_end().gap(px(8.)).child(cancel_button("group-picker-cancel", cx)).child(request)
+        div().flex().justify_end().gap_2().child(cancel_button("group-picker-cancel", cx)).child(request)
     }
 
     fn edit_body(&self, edit: &EditGroup, cx: &mut Context<Self>) -> gpui_kit::Div {
@@ -508,7 +508,7 @@ impl Waffle {
             .absolute()
             .right_0()
             .bottom_0()
-            .size(px(28.))
+            .size_7()
             .rounded_full()
             .border_2()
             .border_color(surface)
@@ -517,7 +517,7 @@ impl Waffle {
             .flex()
             .items_center()
             .justify_center()
-            .child(Icon::new(Glyph::Pen).size(px(14.)));
+            .child(Icon::new(Glyph::Pen).size(ui::ICON_SM));
         let icon = div()
             .id("group-edit-icon")
             .relative()
@@ -548,10 +548,10 @@ impl Waffle {
             .on_click(cx.listener(|this, _, _, cx| this.save_edit_group(cx)));
         ui::dialog_body()
             .child(dialog_head("Edit Group", None, cx))
-            .child(div().flex().items_center().gap(px(16.)).child(icon).children(remove))
+            .child(div().flex().items_center().gap_4().child(icon).children(remove))
             .child(name)
             .children(edit.error.clone().map(|e| ui::field_error(e, cx)))
-            .child(div().flex().justify_end().gap(px(8.)).child(cancel_button("group-edit-cancel", cx)).child(save))
+            .child(div().flex().justify_end().gap_2().child(cancel_button("group-edit-cancel", cx)).child(save))
     }
 }
 
@@ -574,9 +574,9 @@ fn leave_body(leave: &LeaveGroup, window: &mut Window, cx: &mut Context<Waffle>)
         div()
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap_1p5()
             .text_color(muted)
-            .child(div().flex_none().text_color(palette::warning_ink(cx)).child(Icon::new(Glyph::Crown).size(px(16.))))
+            .child(div().flex_none().text_color(palette::warning_ink(cx)).child(Icon::new(Glyph::Crown).size(ui::ICON_MD)))
             .child(emphasised(&line, strong))
     });
     let silent = ui::pick_row("group-leave-silent", ui::check_live("group-leave-silent-check", if leave.silent { Check::On } else { Check::Off }, window, cx), "Leave without notifying other members", None, cx).on_click(
@@ -593,7 +593,7 @@ fn leave_body(leave: &LeaveGroup, window: &mut Window, cx: &mut Context<Waffle>)
         .child(div().text_color(muted).child(emphasised(&warning, strong)))
         .children(owner)
         .child(silent)
-        .child(div().flex().justify_end().gap(px(8.)).child(cancel_button("group-leave-cancel", cx)).child(confirm))
+        .child(div().flex().justify_end().gap_2().child(cancel_button("group-leave-cancel", cx)).child(confirm))
 }
 
 fn dialog_head(title: impl Into<SharedString>, subtitle: Option<SharedString>, cx: &mut Context<Waffle>) -> gpui_kit::Div {
@@ -602,8 +602,8 @@ fn dialog_head(title: impl Into<SharedString>, subtitle: Option<SharedString>, c
         .min_w_0()
         .flex()
         .flex_col()
-        .gap(px(4.))
-        .child(div().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.into()))
+        .gap_1()
+        .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.into()))
         .children(subtitle.map(|s| div().text_color(palette::muted(cx)).child(s)));
     div().flex().items_start().gap_3().child(text).child(ui::icon_button("group-dialog-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_group_dialog(cx))))
 }
@@ -622,15 +622,15 @@ fn member_meter(members: usize, picked: usize, cx: &Context<Waffle>) -> gpui_kit
             _ if i < total => pick,
             _ => empty,
         };
-        div().flex_1().h(px(4.)).rounded(px(2.)).bg(fill)
+        div().flex_1().h_1().rounded_xs().bg(fill)
     });
     let ink = if total >= LIMIT { palette::danger_ink(cx) } else { palette::muted(cx) };
     div()
         .flex()
         .items_center()
-        .gap(px(10.))
+        .gap_2p5()
         .child(div().flex_1().flex().gap(px(3.)).children(segments))
-        .child(div().flex_none().text_size(px(12.)).text_color(ink).child(format!("{} of {LIMIT}", total.min(LIMIT))))
+        .child(div().flex_none().text_size(ui::TEXT_XS).text_color(ink).child(format!("{} of {LIMIT}", total.min(LIMIT))))
 }
 
 // A group's name when it has none of its own: its members', as Discord shows it.

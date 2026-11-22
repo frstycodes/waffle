@@ -419,7 +419,7 @@ impl Waffle {
         };
         let page = palette::surface(palette::Level::Page, cx);
         let close = if on_splash_cover { ui::round_button("onboarding-close", Glyph::X, "Close", 40.) } else { ui::icon_button("onboarding-close", Glyph::X, "Close", cx).large() };
-        let close = div().absolute().top(px(16.)).right(px(16.)).child(close.on_click(cx.listener(|this, _, _, cx| this.close_onboarding(cx))));
+        let close = div().absolute().top_4().right_4().child(close.on_click(cx.listener(|this, _, _, cx| this.close_onboarding(cx))));
         let footer = self.onboarding_footer(&prompts, &rules, on_splash_cover, cx);
         // Over a splash the questions are a dialog card that springs to each step's height (as the share
         // picker does), so the server's image shows all around; past its cap the step scrolls, edges fading.
@@ -467,8 +467,8 @@ impl Waffle {
         let prompt = &prompts[index];
         let caption = div()
             .flex()
-            .gap(px(6.))
-            .text_size(px(14.))
+            .gap_1p5()
+            .text_size(ui::TEXT_SM)
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(palette::muted(cx))
             .child(format!("Question {} of {}", index + 1, prompts.len()))
@@ -483,16 +483,16 @@ impl Waffle {
         let column = column()
             .child(caption)
             .child(heading(prompt.title.clone(), cx))
-            .child(div().mb(px(16.)).text_size(px(14.)).text_color(palette::muted(cx)).child(help))
+            .child(div().mb_4().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(help))
             .child(options)
             .child(
                 div()
-                    .mt(px(16.))
-                    .min_h(px(24.))
+                    .mt_4()
+                    .min_h_6()
                     .flex()
                     .flex_wrap()
                     .items_center()
-                    .text_size(px(14.))
+                    .text_size(ui::TEXT_SM)
                     .text_color(palette::muted(cx))
                     .children(gives(sentence.channels, sentence.roles).into_iter().flat_map(|p| piece(p, cx))),
             );
@@ -517,7 +517,7 @@ impl Waffle {
         let back = view.can_go_back().then(|| {
             ui::button("onboarding-back", Tone::Ghost, cx)
                 .large()
-                .child(Icon::new(Glyph::ArrowLeft).size(px(18.)))
+                .child(Icon::new(Glyph::ArrowLeft).size(ui::ICON_LG))
                 .child("Back")
                 .on_click(cx.listener(|this, _, _, cx| this.onboarding_back(cx)))
         });
@@ -525,15 +525,15 @@ impl Waffle {
         let dots = (view.step != Step::Cover).then(|| progress_dots(view.step, prompts.len() + usize::from(has_rules), cx));
         // The hint gets its own line over the buttons, ending under the button it's about, instead of a
         // third of the row.
-        let hint = hint.map(|hint| div().text_right().text_size(px(14.)).text_color(palette::danger_ink(cx)).child(hint));
-        let row = div().flex().items_center().gap(px(12.)).child(div().flex_1().flex().children(back)).children(dots).child(div().flex_1().flex().justify_end().child(next));
+        let hint = hint.map(|hint| div().text_right().text_size(ui::TEXT_SM).text_color(palette::danger_ink(cx)).child(hint));
+        let row = div().flex().items_center().gap_3().child(div().flex_1().flex().children(back)).children(dots).child(div().flex_1().flex().justify_end().child(next));
         div()
             .flex_none()
             .flex()
             .flex_col()
-            .gap(px(10.))
-            .px(px(24.))
-            .py(px(16.))
+            .gap_2p5()
+            .px_6()
+            .py_4()
             .when(!on_splash_cover, |d| d.border_t_1().border_color(palette::line(cx)))
             .children(hint)
             .child(row)
@@ -549,14 +549,14 @@ fn cover(guild: &Guild, on_splash: bool, cx: &App) -> AnyElement {
         .flex_col()
         .items_center()
         .justify_center()
-        .px(px(24.))
+        .px_6()
         .py(px(56.))
         .text_center()
         // The initials' tile is a translucent wash: over the splash it needs the page under it to read.
-        .child(div().mb(px(20.)).squircle(40.).bg(palette::surface(palette::Level::Page, cx)).child(ui::server_tile(guild.icon.as_deref(), &guild.name, 88., cx)))
-        .child(div().mb(px(6.)).text_size(px(28.)).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("Welcome to {}", guild.name)))
-        .child(div().text_size(px(16.)).text_color(soft).child("Let's customize your experience"))
-        .child(div().mt(px(40.)).text_size(px(12.)).text_color(if on_splash { soft } else { palette::faint(cx) }).child("Your responses will be treated in accordance with Discord's Privacy Policy"))
+        .child(div().mb_5().squircle(40.).bg(palette::surface(palette::Level::Page, cx)).child(ui::server_tile(guild.icon.as_deref(), &guild.name, 88., cx)))
+        .child(div().mb_1p5().text_size(ui::TEXT_XL).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("Welcome to {}", guild.name)))
+        .child(div().text_size(ui::TEXT_MD).text_color(soft).child("Let's customize your experience"))
+        .child(div().mt_10().text_size(ui::TEXT_XS).text_color(if on_splash { soft } else { palette::faint(cx) }).child("Your responses will be treated in accordance with Discord's Privacy Policy"))
         .into_any_element()
 }
 
@@ -567,7 +567,7 @@ fn rules_note(view: &OnboardingView, cx: &App) -> Option<Div> {
         _ if view.rules_read => ("By clicking \"Finish\", you have read and agreed to the Server Rules.", false),
         _ => return None,
     };
-    Some(div().mt(px(12.)).mx(px(4.)).text_size(px(14.)).text_color(if alarm { palette::danger_ink(cx) } else { palette::muted(cx) }).child(text))
+    Some(div().mt_3().mx_1().text_size(ui::TEXT_SM).text_color(if alarm { palette::danger_ink(cx) } else { palette::muted(cx) }).child(text))
 }
 
 fn rules_body(rules: &RulesStep, scroll: &ScrollHandle, note: Option<Div>, cx: &App) -> AnyElement {
@@ -577,9 +577,9 @@ fn rules_body(rules: &RulesStep, scroll: &ScrollHandle, note: Option<Div>, cx: &
     };
     centered(
         column()
-            .child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child("One last step!"))
+            .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child("One last step!"))
             .child(heading("Read & Agree to Server Rules".into(), cx))
-            .child(div().mt(px(12.)).child(list))
+            .child(div().mt_3().child(list))
             .children(note),
     )
 }
@@ -592,16 +592,16 @@ fn rules_list(rules: &[String], scroll: &ScrollHandle, cx: &App) -> Div {
             .relative()
             .flex()
             .items_start()
-            .gap(px(12.))
-            .p(px(12.))
+            .gap_3()
+            .p_3()
             .child(
                 div()
-                    .size(px(24.))
+                    .size_6()
                     .flex_none()
                     .rounded_full()
                     .bg(palette::accent_soft(cx))
                     .text_color(palette::accent_ink(cx))
-                    .text_size(px(12.))
+                    .text_size(ui::TEXT_XS)
                     .font_weight(FontWeight::BOLD)
                     .flex()
                     .items_center()
@@ -609,23 +609,23 @@ fn rules_list(rules: &[String], scroll: &ScrollHandle, cx: &App) -> Div {
                     .child((i + 1).to_string()),
             )
             .child(div().flex_1().min_w_0().text_size(px(15.)).line_height(relative(1.45)).text_color(palette::strong(cx)).child(rule.clone()))
-            .when(i < last, |d| d.child(ui::inset_rule(12., cx).left(px(48.))))
+            .when(i < last, |d| d.child(ui::inset_rule(12., cx).left_12()))
     });
     let group = palette::surface(palette::Level::Group, cx);
     let list = div().id("onboarding-rules").max_h(px(RULES_HEIGHT)).flex().flex_col().children(rows);
-    div().squircle(ui::RADIUS_LG).bg(group).p(px(4.)).child(ui::scroll_fade(list, scroll, group))
+    div().squircle(ui::RADIUS_LG).bg(group).p_1().child(ui::scroll_fade(list, scroll, group))
 }
 
 fn column() -> Div {
-    div().w_full().max_w(px(640.)).flex().flex_col().gap(px(6.))
+    div().w_full().max_w(px(640.)).flex().flex_col().gap_1p5()
 }
 
 fn centered(column: Div) -> AnyElement {
-    div().w_full().flex().justify_center().px(px(24.)).pt(px(56.)).pb(px(24.)).child(column).into_any_element()
+    div().w_full().flex().justify_center().px_6().pt(px(56.)).pb_6().child(column).into_any_element()
 }
 
 fn heading(text: String, cx: &App) -> Div {
-    div().mb(px(4.)).text_size(px(28.)).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(text)
+    div().mb_1().text_size(ui::TEXT_XL).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(text)
 }
 
 fn progress_dots(step: Step, total: usize, cx: &App) -> Div {
@@ -633,13 +633,13 @@ fn progress_dots(step: Step, total: usize, cx: &App) -> Div {
         Step::Prompt(i) => i,
         _ => total.saturating_sub(1),
     };
-    div().flex_none().flex().gap(px(6.)).children((0..total).map(|i| {
+    div().flex_none().flex().gap_1p5().children((0..total).map(|i| {
         let fill = match i.cmp(&now) {
             std::cmp::Ordering::Less => palette::accent(),
             std::cmp::Ordering::Equal => palette::strong(cx),
             std::cmp::Ordering::Greater => palette::line_strong(cx),
         };
-        div().size(px(8.)).rounded_full().bg(fill)
+        div().size_2().rounded_full().bg(fill)
     }))
 }
 
@@ -658,10 +658,10 @@ fn option_grid(guild: &Guild, prompt: &Prompt, picked: &HashSet<String>, cx: &mu
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .gap(px(2.))
+                .gap_0p5()
                 .child(div().text_size(px(15.)).line_height(px(TITLE_LINE)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(option.title.clone()))
-                .when_some(option.description.clone(), |d, desc| d.child(div().text_size(px(14.)).text_color(palette::muted(cx)).child(desc)))
-                .when(!gets.is_empty(), |d| d.child(div().mt(px(2.)).flex().flex_wrap().items_center().gap(px(4.)).text_size(px(12.)).text_color(ink).children(gets)));
+                .when_some(option.description.clone(), |d, desc| d.child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(desc)))
+                .when(!gets.is_empty(), |d| d.child(div().mt_0p5().flex().flex_wrap().items_center().gap_1().text_size(ui::TEXT_XS).text_color(ink).children(gets)));
             let edge = if on { palette::accent().opacity(0.7) } else { palette::line(cx) };
             let hover_edge = if on { edge } else { palette::line_strong(cx) };
             let card = div()
@@ -670,9 +670,9 @@ fn option_grid(guild: &Guild, prompt: &Prompt, picked: &HashSet<String>, cx: &mu
                 .flex()
                 // The emoji sits on the title's line, not mid-card, so it stays put as descriptions wrap.
                 .items_start()
-                .gap(px(12.))
-                .px(px(14.))
-                .py(px(10.))
+                .gap_3()
+                .px_3p5()
+                .py_2p5()
                 .squircle(ui::RADIUS_MD)
                 .border_1()
                 .border_color(edge)
@@ -688,7 +688,7 @@ fn option_grid(guild: &Guild, prompt: &Prompt, picked: &HashSet<String>, cx: &mu
             ui::pressable(card.on_click(listener), 0.98).into_any_element()
         })
         .collect();
-    div().grid().grid_cols(2).gap(px(8.)).children(cards).into_any_element()
+    div().grid().grid_cols(2).gap_2().children(cards).into_any_element()
 }
 
 fn dropdown(prompt: &Prompt, picked: &HashSet<String>, window: &mut Window, cx: &mut Context<Waffle>) -> AnyElement {
@@ -713,8 +713,8 @@ fn dropdown(prompt: &Prompt, picked: &HashSet<String>, window: &mut Window, cx: 
     div()
         .flex()
         .flex_col()
-        .gap(px(2.))
-        .p(px(6.))
+        .gap_0p5()
+        .p_1p5()
         .squircle(ui::RADIUS_MD)
         .border_1()
         .border_color(palette::line(cx))
@@ -726,13 +726,13 @@ fn dropdown(prompt: &Prompt, picked: &HashSet<String>, window: &mut Window, cx: 
 // A unicode emoji as text, a custom one as its image.
 // One title line tall, centred on it.
 fn option_emoji(emoji: &OptionEmoji) -> Option<AnyElement> {
-    let slot = div().w(px(28.)).h(px(TITLE_LINE)).flex_none().flex().items_center().justify_center();
+    let slot = div().w_7().h(px(TITLE_LINE)).flex_none().flex().items_center().justify_center();
     if let Some(url) = emoji.url() {
         return Some(slot.child(img(url).size(px(22.)).object_fit(ObjectFit::Contain)).into_any_element());
     }
     let name = emoji.name.clone()?;
     // The emoji font draws above the line box's middle: nudged down to the title's optical centre.
-    Some(slot.child(div().relative().top(px(2.)).text_size(px(20.)).line_height(px(TITLE_LINE)).child(name)).into_any_element())
+    Some(slot.child(div().relative().top_0p5().text_size(ui::TEXT_LG).line_height(px(TITLE_LINE)).child(name)).into_any_element())
 }
 
 fn role_color(color: u32, cx: &App) -> Hsla {
@@ -813,7 +813,7 @@ fn piece(piece: Piece, cx: &App) -> Vec<AnyElement> {
     match piece {
         Piece::Text(text) => text.split_inclusive(' ').map(|word| div().whitespace_nowrap().child(word.to_owned()).into_any_element()).collect(),
         Piece::Channel(name) => vec![div().min_w_0().max_w_full().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(format!("#{name}")).into_any_element()],
-        Piece::Role(name, color) => vec![ui::role_chip(name, role_color(color, cx), cx).mx(px(2.)).into_any_element()],
+        Piece::Role(name, color) => vec![ui::role_chip(name, role_color(color, cx), cx).mx_0p5().into_any_element()],
     }
 }
 

@@ -71,12 +71,12 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Win
         Login::Qr(modules) => Some(arrive("card-qr", qr_card(modules.clone(), cx))),
         Login::Captcha(url) => {
             let url = url.clone();
-            let open = ui::button("open-captcha", Tone::Primary, cx).child(Icon::new(Glyph::Open).size(px(16.))).child("Open captcha again").on_click(move |_, _, cx| cx.open_url(&url));
-            Some(arrive("card-captcha", div().flex().flex_col().items_center().gap(px(12.)).child(waiting("captcha-wait", "Waiting for the captcha\u{2026}", cx)).child(open)))
+            let open = ui::button("open-captcha", Tone::Primary, cx).child(Icon::new(Glyph::Open).size(ui::ICON_MD)).child("Open captcha again").on_click(move |_, _, cx| cx.open_url(&url));
+            Some(arrive("card-captcha", div().flex().flex_col().items_center().gap_3().child(waiting("captcha-wait", "Waiting for the captcha\u{2026}", cx)).child(open)))
         }
         Login::Failed(_) => Some(arrive(
             "card-failed",
-            ui::button("retry", Tone::Primary, cx).child(Icon::new(Glyph::TryAgain).size(px(16.))).child("Try again").on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))),
+            ui::button("retry", Tone::Primary, cx).child(Icon::new(Glyph::TryAgain).size(ui::ICON_MD)).child("Try again").on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))),
         )),
         Login::Scanned(_) => None,
     };
@@ -88,7 +88,7 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Win
                 .flex()
                 .flex_col()
                 .items_center()
-                .gap(px(20.))
+                .gap_5()
                 .child(waiting("scanned-wait", "Check your phone", cx))
                 .child(ui::button("new-code", ui::Tone::Link, cx).child("Not you? Get a new code").on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))))
                 .into_any_element(),
@@ -100,7 +100,7 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Win
         Login::Failed(error) => Some(
             div()
                 .max_w(px(TEXT_WIDTH))
-                .text_size(px(12.))
+                .text_size(ui::TEXT_XS)
                 .text_color(muted)
                 .child(StyledText::new(format!("{REASON}{error}")).with_highlights([(REASON.len()..REASON.len() + error.len(), HighlightStyle { color: Some(palette::text(cx)), font_weight: Some(FontWeight::MEDIUM), ..Default::default() })])),
         ),
@@ -112,19 +112,19 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Win
         .flex()
         .flex_col()
         .items_center()
-        .gap(px(12.))
-        .pt(px(24.))
-        .px(px(24.))
-        .pb(px(16.))
+        .gap_3()
+        .pt_6()
+        .px_6()
+        .pb_4()
         .text_center()
-        .text_size(px(14.))
+        .text_size(ui::TEXT_SM)
         .window_control_area(gpui_kit::WindowControlArea::Drag)
         .child(div().flex_1())
         .children(lead)
-        .child(div().max_w_full().truncate().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
+        .child(div().max_w_full().truncate().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
         .child(div().max_w(px(TEXT_WIDTH)).text_color(muted).child(detail))
         .children(reason)
-        .children(card.map(|card| div().mt(px(4.)).child(card)))
+        .children(card.map(|card| div().mt_1().child(card)))
         .children(after)
         .children(back.map(|account| {
             let label = format!("Back to {}", account.name);
@@ -135,10 +135,10 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Win
             div()
                 .flex()
                 .items_center()
-                .gap(px(6.))
-                .text_size(px(12.))
+                .gap_1p5()
+                .text_size(ui::TEXT_XS)
                 .text_color(muted)
-                .child(Icon::new(Glyph::HashtagLock).size(px(14.)))
+                .child(Icon::new(Glyph::HashtagLock).size(ui::ICON_SM))
                 .child("Waffle never sees your password."),
         )
         .into_any_element()
@@ -243,15 +243,15 @@ fn steps(cx: &App) -> Div {
         div()
             .flex()
             .items_center()
-            .gap(px(8.))
-            .child(div().size(px(20.)).flex_none().squircle(ui::RADIUS_XS).bg(palette::selected(cx)).text_color(strong).text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).flex().items_center().justify_center().child(n))
+            .gap_2()
+            .child(div().size_5().flex_none().squircle(ui::RADIUS_XS).bg(palette::selected(cx)).text_color(strong).text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).flex().items_center().justify_center().child(n))
             .child(StyledText::new(text).with_highlights([(range, HighlightStyle { color: Some(strong), font_weight: Some(FontWeight::MEDIUM), ..Default::default() })]))
     };
     div()
-        .mt(px(4.))
+        .mt_1()
         .flex()
         .flex_col()
-        .gap(px(6.))
+        .gap_1p5()
         .text_color(palette::text(cx))
         .child(step("1", "In Discord, open ", "Settings", ""))
         .child(step("2", "Choose ", "Scan QR Code", " and point it here"))
@@ -261,16 +261,16 @@ fn steps(cx: &App) -> Div {
 
 // The mini wave and what it waits on.
 fn waiting(id: &'static str, text: &'static str, cx: &App) -> Div {
-    div().flex().items_center().gap(px(8.)).font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child(ui::bars(id, palette::accent(), 12.)).child(text)
+    div().flex().items_center().gap_2().font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child(ui::bars(id, palette::accent(), 12.)).child(text)
 }
 
 // The account that scanned springs in from half size, the phone it's approving on badged at its foot.
 fn avatar_pop(user: &User, cx: &App) -> AnyElement {
     let badge = div()
         .absolute()
-        .right(px(-2.))
-        .bottom(px(-2.))
-        .size(px(32.))
+        .right_neg_0p5()
+        .bottom_neg_0p5()
+        .size_8()
         .rounded_full()
         .bg(palette::surface(palette::Level::Page, cx))
         .text_color(palette::strong(cx))
@@ -278,11 +278,11 @@ fn avatar_pop(user: &User, cx: &App) -> AnyElement {
         .flex()
         .items_center()
         .justify_center()
-        .child(Icon::new(Glyph::DeviceMobile).size(px(18.)));
+        .child(Icon::new(Glyph::DeviceMobile).size(ui::ICON_LG));
     let spring = motion::ease_spring();
     div()
         .relative()
-        .size(px(96.))
+        .size_24()
         .child(ui::avatar(user.avatar.clone(), 96.))
         .child(badge)
         .with_animation("avatar-pop", Animation::new(Duration::from_millis(320)).with_easing(move |t| spring.sample(t)), |avatar, t| avatar.scale(0.5 + 0.5 * t).opacity(t.clamp(0., 1.)))

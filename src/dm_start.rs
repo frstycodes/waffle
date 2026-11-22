@@ -3,7 +3,7 @@
 // scrolls away with the history, as Discord's does.
 //
 // GAP: a group gets no actions: Invite to group and Edit group aren't built. Report spam isn't either.
-use gpui_kit::{AnyElement, App, Context, FontWeight, SharedString, WeakEntity, div, prelude::*, px, relative};
+use gpui_kit::{AnyElement, App, Context, FontWeight, SharedString, WeakEntity, div, prelude::*, relative};
 
 use crate::{
     Waffle,
@@ -118,30 +118,30 @@ pub(crate) fn dm_start_header(start: &DmStart, this: WeakEntity<Waffle>, cx: &Ap
     div()
         .w_full()
         .min_w_0()
-        .px(px(16.))
-        .pt(px(8.))
-        .pb(px(16.))
+        .px_4()
+        .pt_2()
+        .pb_4()
         .flex()
         .flex_col()
         .items_start()
-        .gap(px(4.))
-        .child(div().mb(px(8.)).child(face))
-        .child(div().max_w_full().truncate().text_size(px(28.)).line_height(relative(1.2)).font_weight(FontWeight::BOLD).text_color(palette::strong(cx)).child(start.name.clone()))
-        .children(start.subtitle.clone().map(|s| div().max_w_full().truncate().text_size(px(16.)).text_color(palette::muted(cx)).child(s)))
-        .child(div().mt(px(6.)).text_size(px(16.)).text_color(palette::muted(cx)).child(emphasised(&start.line, palette::strong(cx))))
-        .children(start.mutual.clone().map(|m| div().mt(px(2.)).flex().items_center().gap(px(6.)).text_size(px(14.)).text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::Users).size(px(16.))).child(m)))
+        .gap_1()
+        .child(div().mb_2().child(face))
+        .child(div().max_w_full().truncate().text_size(ui::TEXT_XL).line_height(relative(1.2)).font_weight(FontWeight::BOLD).text_color(palette::strong(cx)).child(start.name.clone()))
+        .children(start.subtitle.clone().map(|s| div().max_w_full().truncate().text_size(ui::TEXT_MD).text_color(palette::muted(cx)).child(s)))
+        .child(div().mt_1p5().text_size(ui::TEXT_MD).text_color(palette::muted(cx)).child(emphasised(&start.line, palette::strong(cx))))
+        .children(start.mutual.clone().map(|m| div().mt_0p5().flex().items_center().gap_1p5().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::Users).size(ui::ICON_MD)).child(m)))
         .children(actions(start, this, cx))
         .into_any_element()
 }
 
 fn actions(start: &DmStart, this: WeakEntity<Waffle>, cx: &App) -> Option<AnyElement> {
     let person = start.person.clone()?;
-    let row = div().mt(px(12.)).flex().flex_wrap().items_center().gap(px(8.));
+    let row = div().mt_3().flex().flex_wrap().items_center().gap_2();
     let act = move |id: &'static str, tone: Tone, label: &'static str, glyph: Option<Glyph>, run: fn(&mut Waffle, User, &mut Context<Waffle>)| {
         let (this, person) = (this.clone(), person.clone());
         ui::button(id, tone, cx)
             .small()
-            .children(glyph.map(|g| gpui_kit::component::Icon::new(g).size(px(16.))))
+            .children(glyph.map(|g| gpui_kit::component::Icon::new(g).size(ui::ICON_MD)))
             .child(label)
             .on_click(move |_, _, cx| {
                 let person = person.clone();
@@ -149,7 +149,7 @@ fn actions(start: &DmStart, this: WeakEntity<Waffle>, cx: &App) -> Option<AnyEle
             })
     };
     let state = |glyph: Glyph, label: &'static str| {
-        div().flex().items_center().gap(px(6.)).text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(glyph).size(px(18.)).text_color(palette::positive_ink(cx))).child(label)
+        div().flex().items_center().gap_1p5().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(glyph).size(ui::ICON_LG).text_color(palette::positive_ink(cx))).child(label)
     };
     let block = || act("dm-start-block", Tone::Ghost, "Block", None, |this, user, cx| this.ask_block(user, cx));
     let row = match start.next {

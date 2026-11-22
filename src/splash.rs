@@ -68,16 +68,16 @@ impl Render for Splash {
                 .flex_col()
                 .items_center()
                 .justify_center()
-                .gap(px(10.))
+                .gap_2p5()
                 .child(mascot::loader("splash-loader", MARK, palette::logo_ink(cx), cx))
-                .child(div().mt(px(4.)).text_size(px(20.)).line_height(px(20.)).font_weight(FontWeight::BOLD).text_color(palette::strong(cx)).child("Waffle"))
-                .child(div().max_w_full().truncate().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(self.stage.clone()))
+                .child(div().mt_1().text_size(ui::TEXT_LG).line_height(px(20.)).font_weight(FontWeight::BOLD).text_color(palette::strong(cx)).child("Waffle"))
+                .child(div().max_w_full().truncate().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(self.stage.clone()))
                 .child(progress_bar(self.progress, cx)),
         )
     }
 }
 
 fn progress_bar(progress: f32, cx: &App) -> gpui_kit::Div {
-    div().w(px(TRACK)).h(px(6.)).rounded(px(3.)).bg(palette::track(cx)).child(div().h_full().w(px(TRACK * progress)).rounded(px(3.)).bg(palette::accent()))
+    div().w(px(TRACK)).h_1p5().rounded(px(3.)).bg(palette::track(cx)).child(div().h_full().w(px(TRACK * progress)).rounded(px(3.)).bg(palette::accent()))
 }
 

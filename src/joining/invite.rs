@@ -155,14 +155,14 @@ impl Waffle {
             .w_full()
             .flex()
             .items_center()
-            .gap(px(12.))
-            .px(px(14.))
-            .py(px(12.))
+            .gap_3()
+            .px_3p5()
+            .py_3()
             .squircle(16.)
             .cursor_pointer()
             .hover(move |s| s.bg(hover))
             .text_color(strong)
-            .child(Icon::new(Glyph::Settings).size(px(20.)))
+            .child(Icon::new(Glyph::Settings).size(ui::ICON_XL))
             .child(
                 div()
                     .flex_1()
@@ -172,7 +172,7 @@ impl Waffle {
                     .child(div().font_weight(FontWeight::SEMIBOLD).child("Server Settings"))
                     .child(div().text_size(px(13.)).text_color(muted).child("You can customize these at any time")),
             )
-            .child(Icon::new(Glyph::ChevronRight).size(px(16.)).text_color(muted).rotate(gpui_kit::Radians(angle.to_radians())))
+            .child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD).text_color(muted).rotate(gpui_kit::Radians(angle.to_radians())))
             .on_click(cx.listener(|this, _, _, cx| this.edit_invite(cx, |v| v.settings_open = !v.settings_open)));
         let nickname = view.nickname.as_ref().map(|state| {
             let focus = state.read(cx).focus_handle(cx);
@@ -183,8 +183,8 @@ impl Waffle {
         let activity = self.account_settings.show_current_game.then(|| {
             ui::toggle_row("invite-activity", "Show your activity status", None, view.show_activity, window, cx).on_click(cx.listener(|this, _, _, cx| this.edit_invite(cx, |v| v.show_activity = !v.show_activity)))
         });
-        let body = div().px(px(14.)).pt(px(4.)).pb(px(14.)).flex().flex_col().gap(px(12.)).children(nickname).child(dms).children(activity);
-        div().w_full().mt(px(20.)).squircle(16.).bg(palette::surface(palette::Level::Group, cx)).text_left().child(head).children(unfold("invite-settings-body", open, body, window, cx))
+        let body = div().px_3p5().pt_1().pb_3p5().flex().flex_col().gap_3().children(nickname).child(dms).children(activity);
+        div().w_full().mt_5().squircle(16.).bg(palette::surface(palette::Level::Group, cx)).text_left().child(head).children(unfold("invite-settings-body", open, body, window, cx))
     }
 }
 
@@ -213,7 +213,7 @@ fn shell(splash: Option<(&str, &str)>, wide: bool, left: Div, window: &mut Windo
         .overflow_hidden()
         .bg(palette::surface(palette::Level::Raised, cx))
         .shadow(ui::shadow_pop(cx))
-        .text_size(px(14.))
+        .text_size(ui::TEXT_SM)
         .text_color(palette::text(cx))
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .child(left.when(two_columns, |l| l.w(px(LEFT)).flex_none()).when(!two_columns, |l| l.flex_1()))
@@ -226,22 +226,22 @@ fn shell(splash: Option<(&str, &str)>, wide: bool, left: Div, window: &mut Windo
 }
 
 fn column() -> Div {
-    div().min_w_0().pt(px(40.)).px(px(28.)).pb(px(28.)).flex().flex_col().items_center().text_center().gap(px(6.))
+    div().min_w_0().pt_10().px_7().pb_7().flex().flex_col().items_center().text_center().gap_1p5()
 }
 
 fn actions() -> Div {
-    div().w_full().mt_auto().pt(px(24.)).flex().flex_col().gap(px(8.))
+    div().w_full().mt_auto().pt_6().flex().flex_col().gap_2()
 }
 
 // The server's tile, `label`, its name (with the verified mark) and its counts.
 fn heading(invite: &Invite, label: &'static str, cx: &App) -> Div {
     let verified = invite.features.iter().any(|f| f == features::VERIFIED || f == features::PARTNERED);
-    let count = |n: Option<u64>, label: &'static str, dot| n.map(|n| div().flex().items_center().gap(px(6.)).child(div().size(px(8.)).rounded_full().bg(dot)).child(format!("{} {label}", grouped(n))));
+    let count = |n: Option<u64>, label: &'static str, dot| n.map(|n| div().flex().items_center().gap_1p5().child(div().size_2().rounded_full().bg(dot)).child(format!("{} {label}", grouped(n))));
     let name = div()
         .flex()
         .items_center()
         .justify_center()
-        .gap(px(8.))
+        .gap_2()
         .text_size(px(24.))
         .line_height(px(30.))
         .font_weight(FontWeight::SEMIBOLD)
@@ -249,7 +249,7 @@ fn heading(invite: &Invite, label: &'static str, cx: &App) -> Div {
         .when(verified, |d| d.child(Icon::new(Glyph::CheckCircle).size(px(22.)).flex_none().text_color(palette::positive_ink(cx))))
         .child(div().min_w_0().child(invite.name.clone()));
     column()
-        .child(div().mb(px(10.)).child(ui::server_tile(invite.icon.as_deref(), &invite.name, 72., cx)))
+        .child(div().mb_2p5().child(ui::server_tile(invite.icon.as_deref(), &invite.name, 72., cx)))
         .child(div().text_color(palette::muted(cx)).child(label))
         .child(name)
         .child(
@@ -257,7 +257,7 @@ fn heading(invite: &Invite, label: &'static str, cx: &App) -> Div {
                 .flex()
                 .flex_wrap()
                 .justify_center()
-                .gap_x(px(14.))
+                .gap_x_3p5()
                 .text_color(palette::muted(cx))
                 .children(count(invite.online, "Online", palette::status_in(Status::Online, cx)))
                 .children(count(invite.members, "Members", palette::faint(cx))),
@@ -266,15 +266,15 @@ fn heading(invite: &Invite, label: &'static str, cx: &App) -> Div {
 
 fn loading(cx: &App) -> Div {
     column()
-        .child(ui::skeleton("invite-loading-tile", 22., cx).size(px(72.)).mb(px(10.)))
-        .child(ui::skeleton("invite-loading-label", 7., cx).w(px(180.)).h(px(14.)))
+        .child(ui::skeleton("invite-loading-tile", 22., cx).size(px(72.)).mb_2p5())
+        .child(ui::skeleton("invite-loading-label", 7., cx).w(px(180.)).h_3p5())
         .child(ui::skeleton("invite-loading-name", 10., cx).w(px(220.)).h(px(26.)))
-        .child(ui::skeleton("invite-loading-counts", 7., cx).w(px(160.)).h(px(14.)))
-        .child(actions().child(ui::skeleton("invite-loading-accept", ui::RADIUS_MD, cx).w_full().h(px(44.))))
+        .child(ui::skeleton("invite-loading-counts", 7., cx).w_40().h_3p5())
+        .child(actions().child(ui::skeleton("invite-loading-accept", ui::RADIUS_MD, cx).w_full().h_11()))
 }
 
 fn invalid(cx: &mut Context<Waffle>) -> Div {
-    let tile = div().size(px(72.)).mb(px(10.)).squircle(22.).bg(palette::selected(cx)).flex().items_center().justify_center().text_color(palette::faint(cx)).child(Icon::new(Glyph::Prohibit).size(px(32.)));
+    let tile = div().size(px(72.)).mb_2p5().squircle(22.).bg(palette::selected(cx)).flex().items_center().justify_center().text_color(palette::faint(cx)).child(Icon::new(Glyph::Prohibit).size_8());
     // Not verified: the button label on Discord's invalid-invite screen.
     let okay = ui::button("invite-okay", Tone::Secondary, cx).large().w_full().child("Okay").on_click(cx.listener(|this, _, _, cx| this.close_invite(cx)));
     column()

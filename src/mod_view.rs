@@ -311,8 +311,8 @@ impl Waffle {
         div()
             .flex()
             .flex_col()
-            .gap(px(16.))
-            .child(div().flex().flex_col().gap(px(12.)).child(self.mod_view_who(view, &user, cx)).child(self.mod_view_actions(view, &user, cx)))
+            .gap_4()
+            .child(div().flex().flex_col().gap_3().child(self.mod_view_who(view, &user, cx)).child(self.mod_view_actions(view, &user, cx)))
             .when(!signals.is_empty(), |d| d.child(section("Signals", cx).children(signals.iter().map(|s| signal_row(s, now, cx)))))
             .child(self.mod_view_activity(view, cx))
             .child(self.mod_view_permissions(view, guild, roles, cx))
@@ -328,7 +328,7 @@ impl Waffle {
         div()
             .flex()
             .items_center()
-            .gap(px(12.))
+            .gap_3()
             .px_2()
             .child(decorated_avatar(&user.avatar, None, 48., Some(status), surface))
             .child(
@@ -337,7 +337,7 @@ impl Waffle {
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .child(div().truncate().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(user.name.clone()))
+                    .child(div().truncate().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(user.name.clone()))
                     .child(div().truncate().text_color(palette::muted(cx)).child(username)),
             )
     }
@@ -428,8 +428,8 @@ impl Waffle {
         let more = ui::button("mod-view-all-perms", ui::Tone::Link, cx).small().child(format!("All ({all})")).on_click(cx.listener(|this, _, _, cx| this.set_mod_view_page(Page::Permissions, cx)));
         let head = div().flex().items_center().justify_between().pr_2().child(group_label("Mod permissions", cx)).child(more);
         let body = match held.is_empty() {
-            true => div().px(px(6.)).text_color(palette::positive_ink(cx)).child("No mod permissions"),
-            false => div().px(px(6.)).flex().flex_wrap().gap_1().children(held.into_iter().map(|(p, elevated)| perm_pill(p, elevated, cx))),
+            true => div().px_1p5().text_color(palette::positive_ink(cx)).child("No mod permissions"),
+            false => div().px_1p5().flex().flex_wrap().gap_1().children(held.into_iter().map(|(p, elevated)| perm_pill(p, elevated, cx))),
         };
         div().flex().flex_col().gap_1().child(head).child(body)
     }
@@ -453,7 +453,7 @@ impl Waffle {
             }))
         });
         let empty = (held.is_empty() && !manage).then(|| div().text_color(palette::muted(cx)).child("No roles"));
-        section("Roles", cx).child(div().px(px(6.)).flex().flex_wrap().items_center().gap_1().children(chips).children(add).children(empty))
+        section("Roles", cx).child(div().px_1p5().flex().flex_wrap().items_center().gap_1().children(chips).children(add).children(empty))
     }
 
     fn mod_view_account(&self, view: &ModView, user: &User, cx: &mut Context<Self>) -> Div {
@@ -468,13 +468,13 @@ impl Waffle {
             .children(rules.map(|ok| value_row("Agreed to rules", check_mark(ok, cx), cx)))
             .child(value_row("Discord join date", div().child(snowflake_date(&user.id)), cx))
             .child(value_row("Server join date", div().child(joined.unwrap_or_else(|| "Unknown".into())), cx))
-            .child(value_row("Join method", div().flex().items_center().gap_1().children(glyph.map(|g| Icon::new(g).size(px(14.)))).child(method), cx))
+            .child(value_row("Join method", div().flex().items_center().gap_1().children(glyph.map(|g| Icon::new(g).size(ui::ICON_SM))).child(method), cx))
             .children(footer)
     }
 
     // "Invited by @name", which opens Mod View on the inviter; "Added by bot" for a bot invite.
     fn join_footer(&self, guild_id: &str, join: &JoinSource, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let line = |text: String| div().px(px(6.)).text_size(px(12.)).text_color(palette::muted(cx)).child(text);
+        let line = |text: String| div().px_1p5().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(text);
         if join.kind == 1 {
             return Some(line("Added by bot".into()).into_any_element());
         }
@@ -676,28 +676,28 @@ impl Count {
 // The main page before the member lands: real section labels, rows shaped like the loaded ones. Signals is
 // left out, since whether it shows depends on the member.
 fn info_skeleton(cx: &App) -> Div {
-    let bar = |id: (&'static str, usize), w: f32| ui::skeleton(id, ui::RADIUS_XS, cx).h(px(12.)).w(px(w));
+    let bar = |id: (&'static str, usize), w: f32| ui::skeleton(id, ui::RADIUS_XS, cx).h_3().w(px(w));
     let rows = |key: &'static str, widths: &[(f32, f32)]| {
-        widths.iter().enumerate().fold(div().flex().flex_col().gap(px(2.)), |d, (i, &(label, value))| {
+        widths.iter().enumerate().fold(div().flex().flex_col().gap_0p5(), |d, (i, &(label, value))| {
             d.child(line(cx).child(bar((key, i * 2), label)).child(div().flex_1()).child(bar((key, i * 2 + 1), value)))
         })
     };
     let pills = |key: &'static str, widths: &[f32]| {
-        widths.iter().enumerate().fold(div().px(px(6.)).flex().flex_wrap().gap(px(4.)), |d, (i, &w)| d.child(ui::skeleton((key, i), ui::RADIUS_XS, cx).h(px(22.)).w(px(w))))
+        widths.iter().enumerate().fold(div().px_1p5().flex().flex_wrap().gap_1(), |d, (i, &w)| d.child(ui::skeleton((key, i), ui::RADIUS_XS, cx).h(px(22.)).w(px(w))))
     };
     let who = div()
         .flex()
         .items_center()
-        .gap(px(12.))
+        .gap_3()
         .px_2()
         .child(ui::skeleton_circle("mv-sk-face", 48., cx))
-        .child(div().flex().flex_col().gap(px(8.)).child(bar(("mv-sk-name", 0), 120.).h(px(14.))).child(bar(("mv-sk-name", 1), 80.)));
-    let actions = (0..5usize).fold(div().flex().gap_1().px_1(), |d, i| d.child(ui::skeleton(("mv-sk-act", i), ui::RADIUS_SM, cx).size(px(32.))));
+        .child(div().flex().flex_col().gap_2().child(bar(("mv-sk-name", 0), 120.).h_3p5()).child(bar(("mv-sk-name", 1), 80.)));
+    let actions = (0..5usize).fold(div().flex().gap_1().px_1(), |d, i| d.child(ui::skeleton(("mv-sk-act", i), ui::RADIUS_SM, cx).size_8()));
     div()
         .flex()
         .flex_col()
-        .gap(px(16.))
-        .child(div().flex().flex_col().gap(px(12.)).child(who).child(actions))
+        .gap_4()
+        .child(div().flex().flex_col().gap_3().child(who).child(actions))
         .child(section("Server activity", cx).child(rows("mv-sk-activity", &[(72., 32.), (48., 24.), (56., 28.), (64., 20.)])))
         .child(section("Mod permissions", cx).child(pills("mv-sk-perms", &[112., 96., 128.])))
         .child(section("Roles", cx).child(pills("mv-sk-roles", &[80., 72.])))
@@ -706,24 +706,24 @@ fn info_skeleton(cx: &App) -> Div {
 
 // The action log before it lands: entry-shaped rows, a glyph then a title over its byline.
 fn audit_skeleton(cx: &App) -> Div {
-    [(168., 120.), (140., 96.), (152., 108.)].iter().enumerate().fold(div().flex().flex_col().gap(px(2.)), |d, (i, &(title, meta))| {
+    [(168., 120.), (140., 96.), (152., 108.)].iter().enumerate().fold(div().flex().flex_col().gap_0p5(), |d, (i, &(title, meta))| {
         d.child(
             line(cx)
-                .py(px(6.))
+                .py_1p5()
                 .items_start()
                 .child(ui::skeleton_circle(("mv-sk-audit-glyph", i), 16., cx))
-                .child(div().flex().flex_col().gap(px(6.)).child(ui::skeleton(("mv-sk-audit", i * 2), ui::RADIUS_XS, cx).h(px(12.)).w(px(title))).child(ui::skeleton(("mv-sk-audit", i * 2 + 1), ui::RADIUS_XS, cx).h(px(10.)).w(px(meta)))),
+                .child(div().flex().flex_col().gap_1p5().child(ui::skeleton(("mv-sk-audit", i * 2), ui::RADIUS_XS, cx).h_3().w(px(title))).child(ui::skeleton(("mv-sk-audit", i * 2 + 1), ui::RADIUS_XS, cx).h_2p5().w(px(meta)))),
         )
     })
 }
 
 fn section(title: &'static str, cx: &App) -> Div {
-    div().flex().flex_col().gap(px(2.)).child(group_label(title, cx))
+    div().flex().flex_col().gap_0p5().child(group_label(title, cx))
 }
 
 // A line of a section (.mv-line): an optional glyph, the label, and its value on the right.
 fn line(cx: &App) -> Div {
-    div().min_h(px(32.)).px(px(6.)).flex().items_center().gap(px(8.)).squircle(ui::RADIUS_SM).text_color(palette::text(cx))
+    div().min_h_8().px_1p5().flex().items_center().gap_2().squircle(ui::RADIUS_SM).text_color(palette::text(cx))
 }
 
 fn value_row(label: &'static str, value: impl IntoElement, cx: &App) -> Div {
@@ -736,7 +736,7 @@ fn signal_row(signal: &Signal, now: DateTime<Utc>, cx: &App) -> Div {
         Signal::TimedOut(until) => (Glyph::Timer, "Timed out", countdown(until.signed_duration_since(now)), palette::danger_ink(cx)),
     };
     line(cx)
-        .child(Icon::new(glyph).size(px(16.)).text_color(palette::muted(cx)))
+        .child(Icon::new(glyph).size(ui::ICON_MD).text_color(palette::muted(cx)))
         .child(div().flex_1().min_w_0().truncate().child(label))
         .child(div().flex_none().text_color(ink).font_features(crate::call::tabular()).child(value))
 }
@@ -752,9 +752,9 @@ fn count_row(id: SharedString, glyph: Glyph, label: &'static str, count: Count, 
     let hover = palette::hover(cx);
     line(cx)
         .id(id)
-        .child(Icon::new(glyph).size(px(16.)).text_color(muted))
+        .child(Icon::new(glyph).size(ui::ICON_MD).text_color(muted))
         .child(div().flex_1().min_w_0().truncate().child(label))
-        .child(div().flex_none().flex().items_center().gap_1().text_color(muted).child(value).when(count.navigates(), |v| v.child(Icon::new(Glyph::ChevronRight).size(px(14.)))))
+        .child(div().flex_none().flex().items_center().gap_1().text_color(muted).child(value).when(count.navigates(), |v| v.child(Icon::new(Glyph::ChevronRight).size(ui::ICON_SM))))
         .when(count.navigates(), |r| r.cursor_pointer().hover(move |s| s.bg(hover)))
 }
 
@@ -772,11 +772,11 @@ fn grouped(n: u64) -> String {
 
 fn check_mark(ok: bool, cx: &App) -> Div {
     let (glyph, ink, label) = if ok { (Glyph::Checkmark, palette::positive_ink(cx), "Yes") } else { (Glyph::X, palette::danger_ink(cx), "No") };
-    div().flex().items_center().gap_1().text_color(ink).child(Icon::new(glyph).size(px(16.))).child(label)
+    div().flex().items_center().gap_1().text_color(ink).child(Icon::new(glyph).size(ui::ICON_MD)).child(label)
 }
 
 fn perm_pill(p: &Permission, elevated: bool, cx: &App) -> Div {
-    ui::pill(cx).when(elevated, |d| d.child(Icon::new(Glyph::Shield).size(px(12.)).text_color(palette::warning_ink(cx)))).child(p.name)
+    ui::pill(cx).when(elevated, |d| d.child(Icon::new(Glyph::Shield).size(ui::ICON_XS).text_color(palette::warning_ink(cx)))).child(p.name)
 }
 
 fn permissions_page(view: &ModView, guild: &Guild, roles: &[String], cx: &App) -> AnyElement {
@@ -801,16 +801,16 @@ fn permissions_page(view: &ModView, guild: &Guild, roles: &[String], cx: &App) -
             }
         });
         div()
-            .p(px(12.))
+            .p_3()
             .flex()
             .flex_col()
-            .gap(px(6.))
+            .gap_1p5()
             .squircle(ui::RADIUS_LG)
             .bg(palette::surface(palette::Level::Page, cx))
             .border_1()
             .border_color(palette::line(cx))
             .child(div().flex().items_center().gap_2().child(div().flex_1().min_w_0().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(p.name)).children(tag))
-            .child(div().text_size(px(12.)).text_color(palette::muted(cx)).child(format!("{category} · {count}")))
+            .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(format!("{category} · {count}")))
             .child(div().text_color(palette::text(cx)).child(p.detail))
             .child(div().flex().flex_wrap().gap_1().children(chips))
     });
@@ -837,11 +837,11 @@ fn audit_page(view: &ModView, cx: &App) -> AnyElement {
         let meta = std::iter::once(snowflake_time(&row.last_id)).chain(times).chain(e.reason.clone()).collect::<Vec<_>>().join(" · ");
         line(cx)
             .items_start()
-            .py(px(6.))
-            .child(div().pt(px(2.)).flex_none().text_color(ink).child(Icon::new(glyph).size(px(16.))))
-            .child(div().flex_1().min_w_0().flex().flex_col().gap(px(2.)).child(sentence_spans(&audit::sentence(e, names), cx)).child(div().text_size(px(12.)).text_color(palette::muted(cx)).child(meta)))
+            .py_1p5()
+            .child(div().pt_0p5().flex_none().text_color(ink).child(Icon::new(glyph).size(ui::ICON_MD)))
+            .child(div().flex_1().min_w_0().flex().flex_col().gap_0p5().child(sentence_spans(&audit::sentence(e, names), cx)).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(meta)))
     });
-    div().flex().flex_col().gap(px(2.)).children(rows).into_any_element()
+    div().flex().flex_col().gap_0p5().children(rows).into_any_element()
 }
 
 #[cfg(test)]
