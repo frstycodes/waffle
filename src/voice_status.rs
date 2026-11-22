@@ -247,7 +247,9 @@ impl Waffle {
             .items_center()
             .justify_center()
             .overflow_hidden()
-            .bg(gpui_kit::linear_gradient(160., gpui_kit::linear_color_stop(palette::accent_soft(cx), 0.), gpui_kit::linear_color_stop(gpui_kit::transparent_black(), 0.7)))
+            // Fades to the same tint at zero alpha by the hero's bottom edge: fading to transparent black
+            // greys the middle, and a diagonal leaves the lower corner tinted, both read as a hard edge.
+            .bg(gpui_kit::linear_gradient(180., gpui_kit::linear_color_stop(palette::accent_soft(cx), 0.), gpui_kit::linear_color_stop(palette::accent_soft(cx).opacity(0.), 1.)))
             .child(img(ART).w(px(ART_WIDTH)).h(px(ART_WIDTH * 640. / 1024.)))
             .child(div().absolute().top(px(12.)).right(px(12.)).child(ui::icon_button("voice-status-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_voice_status(cx)))));
         let focus = dialog.input.read(cx).focus_handle(cx);
@@ -269,10 +271,9 @@ impl Waffle {
             .flex()
             .gap(px(8.))
             .mt(px(4.))
-            .child(ui::button("voice-status-cancel", Tone::Secondary, cx).large().flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_voice_status(cx))))
+            .child(ui::button("voice-status-cancel", Tone::Secondary, cx).flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_voice_status(cx))))
             .child(
                 ui::button("voice-status-submit", Tone::Primary, cx)
-                    .large()
                     .flex_1()
                     .disabled(over)
                     .loading(dialog.sending.then_some("Set status"))
