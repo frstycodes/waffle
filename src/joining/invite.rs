@@ -114,7 +114,7 @@ impl Waffle {
             Preview::Ready(invite) if self.guilds.iter().any(|g| g.id == invite.guild_id) => shell(None, wide, member(invite, cx), window, cx),
             Preview::Ready(invite) => {
                 let left = self.invite_column(view, invite, window, cx);
-                shell(invite.splash.as_deref(), wide, left, window, cx)
+                shell(invite.splash.as_deref().map(|url| (url, invite.name.as_str())), wide, left, window, cx)
             }
         };
         let backdrop = div().id("invite-overlay").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_invite(cx)));
@@ -190,14 +190,17 @@ impl Waffle {
 
 // The card over the scrim, popping in from its centre: the column, and the splash beside it when the
 // server has one and the window is wide enough.
-fn shell(splash: Option<&str>, wide: bool, left: Div, window: &mut Window, cx: &App) -> AnyElement {
+fn shell(splash: Option<(&str, &str)>, wide: bool, left: Div, window: &mut Window, cx: &App) -> AnyElement {
     let two_columns = wide && splash.is_some();
     let room = f32::from(window.viewport_size().width) - 32.;
     let width = if two_columns { WIDE } else { NARROW }.min(room);
     let right_corners = Corners { top_left: px(0.), top_right: px(RADIUS_XL), bottom_right: px(RADIUS_XL), bottom_left: px(0.) };
-    let panel = splash.filter(|_| two_columns).map(|url| {
-        // A splash that fails to load leaves the plain panel.
-        ui::edge(div().flex_1().relative().bg(palette::surface(palette::Level::Group, cx)), right_corners)
+    let panel = splash.filter(|_| two_columns).map(|(url, name)| {
+        // Under the image while it loads, and in its place if it fails: the server name's hue, as the
+        // Server Guide banner does, so the column is never a blank hole.
+        let hue = ui::name_hue(name);
+        let fallback = gpui_kit::linear_gradient(135., gpui_kit::linear_color_stop(palette::oklch(0.53, 0.12, hue), 0.), gpui_kit::linear_color_stop(palette::oklch(0.41, 0.13, hue + 35.), 1.));
+        ui::edge(div().flex_1().relative().bg(fallback), right_corners)
             .child(ui::media(url.to_owned(), right_corners).absolute().inset_0().size_full().object_fit(gpui_kit::ObjectFit::Cover))
     });
     div()
@@ -359,8 +362,8 @@ pub fn demo(waffle: &mut Waffle, scene: &str, _window: &mut Window, cx: &mut Con
         online: Some(1204),
         members: Some(8930),
         features: vec![features::VERIFIED.into()],
-        // Not a real splash: it fails to load, which shows the plain panel (the offline look).
-        splash: (!plain).then(|| crate::discord::splash_url("9001", "demo")),
+        // Discord Developers' public invite splash; offline it falls back to the hue gradient.
+        splash: (!plain).then(|| crate::discord::splash_url("613425648685547541", "56394bca8b4f60282ea833e8703b5fcf")),
         nickname_changeable: plain,
     };
     let preview = if scene == "invite-invalid" { Preview::Invalid } else { Preview::Ready(night_owls) };
