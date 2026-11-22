@@ -174,7 +174,7 @@ MAP = [
     ("caret-right", "Chrome", "Disclosure", "chevron-right"),
     ("caret-left", "Chrome", "Back", "chevron-left"),
     ("caret-up", "Chrome", "Collapse up", "chevron-up"),
-    ("arrow-left", "Chrome", "Go back", "arrow-left"),
+    ("arrow-left", "Chrome", "Go back", "CUSTOM:arrow-left-line"),
     ("arrow-right", "Chrome", "Go forward", "arrow-right5"),
     ("arrow-up", "Chrome", "Scroll up", "arrow-up5"),
     ("arrow-down", "Chrome", "Jump to present", "CUSTOM:arrow-down-line"),
@@ -456,6 +456,7 @@ def custom(reicon, name):
         "inbox-tray": lambda: thicken(reicon["inbox"]["body"]) + f'<g fill="currentColor" stroke="none">{re.search(r"<path[^>]*/>", reicon["inbox-filled"]["body"])[0]}</g>',
         # Reicon has no line arrow pointing down; its up arrow turned over.
         "arrow-down-line": lambda: f'<g transform="rotate(180 12 12)">{glyph(reicon, "arrow-up5")}</g>',
+        "arrow-left-line": lambda: f'<g transform="rotate(-90 12 12)">{glyph(reicon, "arrow-up5")}</g>',
         "collapse-all": lambda: '<path d="M8 3.5 12 7.5 16 3.5M8 20.5 12 16.5 16 20.5M4.5 12h15"/>',
         "win-max": lambda: f'<path d="{sq(5, 5, 14, 14, 3)}"/>',
         "win-restore": lambda: (f'<mask id="front" maskUnits="userSpaceOnUse" x="-2" y="-2" width="28" height="28"><rect x="-2" y="-2" width="28" height="28" fill="#fff"/>'

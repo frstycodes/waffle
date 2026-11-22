@@ -17,7 +17,7 @@ use crate::{
     Waffle,
     discord::{Channel, MediaKind, Message, parse_message, parse_thread},
     icons::Glyph,
-    mascot::Mood,
+    illustration::Illustration,
     palette::{self, Level},
     ui::{self, Squircle},
 };
@@ -174,6 +174,7 @@ impl Waffle {
             .on_click(cx.listener(move |this, _, window, cx| this.new_post(forum_id.clone(), window, cx)));
         let cards: Vec<AnyElement> = posts.iter().map(|post| self.post_card(post, state.and_then(|s| s.previews.get(&post.id)), cx)).collect();
         let empty = posts.is_empty() && state.is_some_and(|s| !s.loading);
+        let loading = posts.is_empty() && state.is_none_or(|s| s.loading);
         let more = state.filter(|s| s.has_more && !s.loading).map(|_| {
             let id = forum.id.clone();
             ui::button("forum-more", ui::Tone::Ghost, cx).child("Load more posts").on_click(cx.listener(move |this, _, _, cx| this.load_forum(id.clone(), cx)))
@@ -199,7 +200,8 @@ impl Waffle {
                         .gap(px(12.))
                         .when(!empty, |d| d.child(div().flex().justify_end().child(new_post)))
                         .children(error)
-                        .when(empty, |d| d.child(ui::empty_state("forum-empty", Mood::Idle, "No posts yet", "Start the first one. Each post gets its own thread.", cx)))
+                        .when(empty, |d| d.child(ui::empty_state("forum-empty", Illustration::ForumEmpty, "No posts yet", "Start the first one. Each post gets its own thread.", cx)))
+                        .when(loading, |d| d.children((0..4).map(|i| post_skeleton(i, cx))))
                         .child(div().flex().flex_col().gap(px(8.)).children(cards))
                         .children(more.map(|m| div().flex().justify_center().child(m))),
                 ),
@@ -264,4 +266,21 @@ impl Waffle {
             .on_mouse_down(gpui_kit::MouseButton::Right, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_thread_menu(menu_post.clone(), guild_id.clone(), e.position, cx)))
             .into_any_element()
     }
+}
+
+// A post card still loading: title, two lines of its opening message, and the foot.
+fn post_skeleton(i: usize, cx: &gpui_kit::App) -> AnyElement {
+    let line = |part: &str, width: f32| ui::skeleton(SharedString::from(format!("post-skel-{part}-{i}")), 4., cx).h(px(12.)).w(gpui_kit::relative(width));
+    div()
+        .p(px(16.))
+        .flex()
+        .flex_col()
+        .gap(px(10.))
+        .squircle(ui::RADIUS_MD)
+        .bg(palette::surface(Level::Sidebar, cx))
+        .child(line("title", [0.5, 0.35, 0.6, 0.42][i % 4]).h(px(16.)))
+        .child(line("body", 0.9))
+        .child(line("body2", 0.7))
+        .child(line("foot", 0.25))
+        .into_any_element()
 }

@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Discord Flow Map</title>
+<meta name="description" content="How Discord's client handles the voice stage, activity line, profile popout, message bar, long messages and game detection, read from its web bundle, beside what Waffle does.">
+<link rel="icon" href="/assets/brand/icons/paper.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gabarito:wght@400..800&family=Onest:wght@400..800&family=Figtree:wght@400..800&family=Rubik:wght@400..800&family=Fragment+Mono&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="site.css">
+<link rel="stylesheet" href="css/primitives.css">
+<script>try{const p=JSON.parse(localStorage.getItem("waffle-ds")||"{}"),r=document.documentElement;if(p.theme)r.dataset.theme=p.theme;if(p.font)r.style.setProperty("--font-ui",`"${p.font}", system-ui, sans-serif`)}catch{}</script>
+<style>
+.map { width: 100%; border-collapse: collapse; font-size: var(--text-sm); margin: var(--space-3) 0 var(--space-6); }
+.map th { text-align: left; color: var(--text-faint); font-size: var(--text-xs); font-weight: var(--weight-semibold); padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.map td { vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); color: var(--text); text-wrap: pretty; }
+.map td:first-child { color: var(--text-strong); font-weight: var(--weight-medium); width: 22%; }
+.map td:last-child { width: 30%; color: var(--text-muted); }
+.tag { display: inline-block; padding: 1px 6px; border-radius: var(--radius-xs); font-size: var(--text-xs); font-weight: var(--weight-semibold); background: var(--selected); color: var(--text-muted); }
+.tag.match { background: color-mix(in oklch, var(--online-ink) 16%, transparent); color: var(--online-ink); }
+.tag.partial { background: color-mix(in oklch, var(--warning-ink) 16%, transparent); color: var(--warning-ink); }
+.tag.missing { background: color-mix(in oklch, var(--danger-ink) 16%, transparent); color: var(--danger-ink); }
+.legend { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; color: var(--text-muted); font-size: var(--text-sm); }
+.src { color: var(--text-faint); font-size: var(--text-xs); }
+.wrap { overflow-x: auto; }
+.map td.note { width: 22%; padding: 6px 8px; }
+.map td.note .textarea { min-height: 36px; padding: 6px 10px; font-size: var(--text-sm); resize: none; field-sizing: content; }
+.prompt { display: grid; gap: var(--space-3); }
+.prompt pre { margin: 0; max-height: 420px; overflow: auto; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--bg-page); border: 1px solid var(--line); color: var(--text); font: var(--text-sm)/1.55 var(--font-mono, "Fragment Mono", monospace); white-space: pre-wrap; overflow-wrap: break-word; }
+.prompt pre:empty::before { content: "Add a note to any row and the prompt shows up here."; color: var(--text-faint); font-family: var(--font-ui); }
+.prompt .actions { display: flex; align-items: center; gap: var(--space-3); color: var(--text-muted); font-size: var(--text-sm); }
+@media (max-width: 760px) { .map { min-width: 760px; } }
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div class="layout">
+<nav class="toc" id="toc" aria-label="Design system"></nav>
+<main>
+<section id="first">
+  <h1>Discord flow map</h1>
+  <p class="lede">What Discord's client does, read from its web bundle (2026-11-21), beside Waffle. Labels are hashed in the bundle, so wording is from memory; behaviour, order and timings are from code unless marked <span class="tag">believed</span>.</p>
+  <p class="legend"><span><span class="tag match">Matches</span> same as Discord</span><span><span class="tag partial">Differs</span> built, behaves a little differently</span><span><span class="tag missing">Missing</span> not built</span></p>
+  <p>Write a note on any row; notes stay in this browser. <a href="#prompt">Copy them as a prompt</a> at the end.</p>
+</section>
+
+<section id="stage">
+  <h2>Voice stage: watching streams</h2>
+  <div class="wrap"><table class="map">
+    <thead><tr><th>Trigger</th><th>Discord</th><th>Waffle</th></tr></thead>
+    <tbody>
+      <tr><td>Someone goes live in a server voice channel</td><td>A stream tile appears for every live stream, watched or not. No auto-watch; the grid stays. The tile shows <b>Watch Stream</b> (short "Watch" under 175px).</td><td><span class="tag match">Matches</span></td></tr>
+      <tr><td>Someone goes live in a DM call or Stage</td><td>Auto-watched without stealing focus; in DMs the auto pick focuses it anyway.</td><td><span class="tag partial">Differs</span> Never auto-watches. The DM call window shows a <b>Watch {name}'s screen</b> button instead.</td></tr>
+      <tr><td>Click an unwatched stream tile</td><td><code>STREAM_WATCH</code> and focus it. Watching replaces the stream you watch (your own excepted); with two or more already watched it joins them and focus stays.</td><td><span class="tag match">Matches</span> used to add it alongside.</td></tr>
+      <tr><td>Watch alongside (eye-plus)</td><td>Shown when you already watch another stream: adds this one, no focus change.</td><td><span class="tag match">Matches</span></td></tr>
+      <tr><td>Click the focused tile / grid button</td><td>Back to the grid (<code>selectParticipant(null)</code>).</td><td><span class="tag match">Matches</span></td></tr>
+      <tr><td>Red button while a stream is focused (Stop Watching)</td><td><code>STREAM_CLOSE</code> + <code>STREAM_STOP</code>. The selection becomes invalid, so a server channel goes back to the grid; the tile stays with its Watch overlay.</td><td><span class="tag match">Matches</span> the floating bar didn't occlude, so the click also reached the tile, which re-watched and re-focused it.</td></tr>
+      <tr><td>Header Stop watching / Stop all</td><td>Same as above for every watched stream.</td><td><span class="tag match">Matches</span> left the stage focused on a dead stream.</td></tr>
+      <tr><td>Streamer ends while focused</td><td>Stays in an ENDED state: the focused tile shows "stream ended" with a close button (sized small &lt;550px, medium &lt;1000px).</td><td><span class="tag match">Matches</span></td></tr>
+      <tr><td>Streamer ends while not focused</td><td>Dropped at once. Ended streams also go when focus moves elsewhere.</td><td><span class="tag match">Matches</span> used to keep an ended card.</td></tr>
+      <tr><td>Streamer goes live again while ENDED is showing</td><td>Auto re-watch.</td><td><span class="tag match">Matches</span></td></tr>
+      <tr><td>Streamer's voice state drops the stream mid-watch</td><td>Closed 3 minutes after, unless they're live again. A <code>STREAM_DELETE</code> marked unavailable reconnects instead.</td><td><span class="tag match">Matches</span> closes after 3 minutes unless they're live again; unavailable or a dropped connection reconnects (2 s apart, 3 tries, then fails with 2001).</td></tr>
+      <tr><td>Watch fails to connect</td><td>Not connected in 5 s (12 s on a Stage), or refused as unauthorized: a failed screen with "Error code: 2001" and a Close button that stops watching.</td><td><span class="tag match">Matches</span> same timeouts, same screen and code; Close stops watching.</td></tr>
+      <tr><td>Your own stream</td><td>Same stop button; for yours it also clears the capture source. Can be hidden from your own grid.</td><td><span class="tag match">Matches</span> Hide preview on your stream's tile, kept per channel; opening your stream shows it again. A hidden preview also skips its frames.</td></tr>
+      <tr><td>Click a person in a channel's voice list</td><td>Opens their profile popout beside the list. Streams are watched from the hover preview.</td><td><span class="tag match">Matches</span> click watched the stream; now opens the profile.</td></tr>
+      <tr><td>Toggle Go Live keybind</td><td>Streaming: stop. Else shares the visible game; <b>with no game it does nothing</b> (unless the macOS system picker is on).</td><td><span class="tag partial">Differs</span> shares the game window, else the whole primary screen, as you asked. Launchers never count as the game.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="errors">
+  <h2>Stream errors</h2>
+  <p>Discord's error codes for streams, from its error table and the checks that raise them.</p>
+  <div class="wrap"><table class="map">
+    <thead><tr><th>Code</th><th>Discord</th><th>Waffle</th></tr></thead>
+    <tbody>
+      <tr><td>2001 stream failed to start</td><td>Watch not connected in time, or unauthorized: failed screen with the code.</td><td><span class="tag match">Matches</span> as under Watch fails to connect.</td></tr>
+      <tr><td>2002 low frame rate (viewing)</td><td>The watched stream decodes under 3 / 8 / 15 / 30 fps for streams of up to 5 / 15 / 30 / 60 fps, over a short or long window.</td><td><span class="tag partial">Differs</span> the Choppy chip (under 15 fps) carries the code; Waffle doesn't know a remote stream's own frame rate. Fixed a cause: on a still screen Waffle sent 2 frames a second, which Discord viewers flag as 2002. It now repeats the frame at the stream's full rate.</td></tr>
+      <tr><td>2003 packet loss (viewing)</td><td>Over 10% lost on a watched stream.</td><td><span class="tag match">Matches</span> measured per 5 s after retransmissions; the stream's health label reads Packet loss, with the code in its tooltip.</td></tr>
+      <tr><td>2004 / 2005 / 2006 (streaming)</td><td>Your stream: over 10% loss (2004) or encoding under the frame-rate line (2005), both only while someone watches; the stream connection rated bad, past 500 ms ping or 10% loss (2006).</td><td><span class="tag match">Matches</span> a warning mark beside LIVE on your stream's tile lists each with its code, gated the same way.</td></tr>
+      <tr><td>2007 reconnecting</td><td>A dropped stream reconnects, with the code on the tile.</td><td><span class="tag match">Matches</span> reconnecting overlay with the code.</td></tr>
+      <tr><td>2008 / 2009 decode, encode error</td><td>Reported to Discord's analytics only; nothing is shown.</td><td><span class="tag match">Matches</span> nothing shown; a decode error asks for a keyframe, and an encode error falls back to OpenH264.</td></tr>
+      <tr><td>2010 stream full</td><td>Closes the stream and says it's full, once per stream (10 s before it may say so again).</td><td><span class="tag partial">Differs</span> closes it and says "{name}'s stream is full" every time.</td></tr>
+      <tr><td>2011–2015 ready timeouts</td><td>Your camera or stream sends no picture (2011, 2014), or theirs never arrives (2012, 2015); camera under 10 fps while others could see it (2013).</td><td><span class="tag partial">Differs</span> 2011, 2012 and 2013 are raised: a stream with no picture shows No video yet with Try again, and a camera gets a warning mark. Waffle has no separate case for 2014/2015 (video never announced). Not verified: Discord's timeout; Waffle waits 10 s.</td></tr>
+      <tr><td>1001 / 3004 sound share, OS capture error</td><td>Your stream's audio or screen capture failed.</td><td><span class="tag match">Matches</span> 1001 when your stream's sound stops, as a warning mark on your stream; 3004 when the capture fails to start or the system stops it, said with its code.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="activity">
+  <h2>Activity line and its tooltip</h2>
+  <div class="wrap"><table class="map">
+    <thead><tr><th>Rule</th><th>Discord</th><th>Waffle</th></tr></thead>
+    <tbody>
+      <tr><td>Primary item</td><td>Stream (named after the game being played), else the first activity, else the voice channel.</td><td><span class="tag match">Matches</span></td></tr>
+      <tr><td>Count</td><td>"+N" after it: other activities plus one for the stream or voice (voice only when not streaming).</td><td><span class="tag match">Matches</span></td></tr>
+      <tr><td>Icons</td><td>Voice icon tinted online green; activity icons by kind (game controller, music, TV for watching and streaming), uncoloured.</td><td><span class="tag partial">Differs</span> same, except a stream keeps our share glyph instead of the TV, as you asked.</td></tr>
+      <tr><td>Hover</td><td>After 150ms, a list: stream (with channel), each activity, then voice "In voice (🔊 channel)". Bots get none.</td><td><span class="tag match">Matches</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="member">
+  <h2>Member row</h2>
+  <div class="wrap"><table class="map">
+    <thead><tr><th>Part</th><th>Discord</th><th>Waffle</th></tr></thead>
+    <tbody>
+      <tr><td>Avatar and decoration</td><td>Animate while the row is hovered or its popout is open (window focused, motion allowed); otherwise only with the pointer on the avatar.</td><td><span class="tag match">Matches</span> GIF avatar and APNG decoration on hover and in the popout.</td></tr>
+      <tr><td>Nameplate</td><td>Its video plays on hover (loops only while hovered) or once while the popout is open.</td><td><span class="tag partial">Differs</span> plays the animated image Discord serves where it can't play the WebM (Safari, Linux), while the row is hovered or its profile is open. It loops for as long as either holds; Discord's plays once when only the profile is open. Not verified against a live nameplate.</td></tr>
+      <tr><td>Name extras</td><td>Bot tag, owner crown, boost gem, clan tag.</td><td><span class="tag match">Matches</span> bot tag, owner crown, then the boost gem with "Server boosting since" its date.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="profile">
+  <h2>Profile popout</h2>
+  <div class="wrap"><table class="map">
+    <thead><tr><th>Section</th><th>Discord</th><th>Waffle</th></tr></thead>
+    <tbody>
+      <tr><td>Order</td><td>Banner, avatar with decoration, actions top right, name, username • pronouns, badges (+N), mutuals, bio, one activity card, roles (+), message box. <span class="tag">believed</span></td><td><span class="tag match">Matches</span></td></tr>
+      <tr><td>Activity card</td><td>Only the first of: stream, each activity, voice (voice only without a stream). Others behind "show more".</td><td><span class="tag partial">Differs</span> "Show more" lists the rest in the popout; Discord opens the full profile on its Activity tab, and Waffle has no full profile.</td></tr>
+      <tr><td>Stream card</td><td>"Streaming {game}" + LIVE; preview (click watches, joining the call if needed, and closes the popout); server › channel; Join Voice (not for yourself).</td><td><span class="tag match">Matches</span></td></tr>
+      <tr><td>Voice card</td><td>"In voice", up to four faces, server › channel, Join.</td><td><span class="tag match">Matches</span></td></tr>
+      <tr><td>Loading</td><td>Skeleton while the profile fetches. <span class="tag">believed</span></td><td><span class="tag match">Matches</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="bar">
+  <h2>Message hover bar</h2>
+  <div class="wrap"><table class="map">
+    <thead><tr><th>State</th><th>Discord</th><th>Waffle</th></tr></thead>
+    <tbody>
+      <tr><td>Default</td><td>Three quick reactions | React, Edit (yours), Reply, Forward, Create Thread, More.</td><td><span class="tag match">Matches</span></td></tr>
+      <tr><td>Shift held</td><td>Copy ID, Copy Link, Mark Unread, Save, Pin, Create Thread, Reply, React, Edit, Forward, Delete (no confirm).</td><td><span class="tag match">Matches</span> Save added (Discord's saved-for-later), also in the menu, with an Inbox Saved tab. Not verified: the body Discord's own client sends with the save.</td></tr>
+      <tr><td>Quick reactions</td><td>Top three by reaction frecency: last ten uses weighted 100 (≤3 days), 70, 50, 30, 10, 1 (&gt;80 days). Seed 💯 👍 👎.</td><td><span class="tag match">Matches</span> synced through Discord's settings (frecency type 2, field 13), merged with this device's. Not verified: Discord's names for Unicode emoji, inferred from gemoji.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="long">
+  <h2>Long messages</h2>
+  <div class="wrap"><table class="map">
+    <thead><tr><th>Case</th><th>Discord</th><th>Waffle</th></tr></thead>
+    <tbody>
+      <tr><td>Limit</td><td>2000 characters, 4000 with Nitro.</td><td><span class="tag match">Matches</span></td></tr>
+      <tr><td>Paste over 4000</td><td>Becomes message.txt in the upload prompt.</td><td><span class="tag match">Matches</span> a paste over 4000 characters attaches as message.txt for you to send.</td></tr>
+      <tr><td>Send over the limit</td><td>Blocked: an alert (Nitro) or the upsell modal.</td><td><span class="tag partial">Differs</span> sends the text as message.txt instead of blocking, as you asked.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="games">
+  <h2>Game detection</h2>
+  <div class="wrap"><table class="map">
+    <thead><tr><th>Part</th><th>Discord</th><th>Waffle</th></tr></thead>
+    <tbody>
+      <tr><td>List</td><td>Discord's CDN lists: games, non-games (browsers and the like) and its own watched apps (OBS, XSplit, Streamlabs, Twitch Studio, Spotify). Games sharing an executable with those are dropped.</td><td><span class="tag match">Matches</span> the same three lists.</td></tr>
+      <tr><td>Matching</td><td>Native: executable name or path suffix, OS, command-line arguments. <span class="tag">believed</span></td><td><span class="tag match">Matches</span> Windows now reads command lines, so argument rules (Minecraft Java, Source mods) match.</td></tr>
+      <tr><td>Speed</td><td>Native callback on process change. <span class="tag">believed</span></td><td><span class="tag partial">Differs</span> scans every second, matching only processes new since the last scan.</td></tr>
+      <tr><td>Which game</td><td>First running game not hidden with detection on; launchers never count.</td><td><span class="tag match">Matches</span> first running game you haven't turned off; launchers never count. Registered games lists every game seen with its switch, and Add it! adds a running program.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="prompt">
+  <h2>Prompt</h2>
+  <div class="prompt">
+    <pre id="prompt-text"></pre>
+    <div class="actions"><button class="btn btn--primary" id="prompt-copy" type="button" disabled><i class="ph ph-copy" aria-hidden="true"></i>Copy prompt</button><span id="prompt-status" role="status"></span></div>
+  </div>
+</section>
+</main>
+</div>
+<script src="site.js"></script>
+<script>
+(() => {
+  const KEY = "flows-discord-map-notes";
+  let notes = {};
+  try { notes = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(notes)); } catch {} };
+  const text = (el) => el.textContent.replace(/\s+/g, " ").trim();
+  const rows = [];
+  for (const section of document.querySelectorAll("main section")) {
+    const table = section.querySelector("table.map");
+    if (!table) continue;
+    const head = document.createElement("th");
+    head.textContent = "Note";
+    table.querySelector("thead tr").append(head);
+    table.querySelectorAll("tbody tr").forEach((tr, i) => {
+      const id = `${section.id}-${i}`;
+      const [trigger, discord, waffle] = tr.cells;
+      const cell = tr.insertCell();
+      cell.className = "note";
+      const box = document.createElement("textarea");
+      box.className = "textarea";
+      box.rows = 1;
+      box.placeholder = "Add a note";
+      box.setAttribute("aria-label", `Note on ${text(trigger)}`);
+      box.value = notes[id] || "";
+      box.addEventListener("input", () => {
+        box.value.trim() ? (notes[id] = box.value) : delete notes[id];
+        save();
+        render();
+      });
+      cell.append(box);
+      const tag = waffle.querySelector(".tag");
+      const status = tag ? text(tag) : "";
+      rows.push({ id, section: text(section.querySelector("h2")), trigger: text(trigger), discord: text(discord), status, waffle: text(waffle).slice(status.length).trim() });
+    });
+  }
+  const out = document.getElementById("prompt-text");
+  const copy = document.getElementById("prompt-copy");
+  const status = document.getElementById("prompt-status");
+  function render() {
+    const picked = rows.filter((r) => notes[r.id]?.trim());
+    copy.disabled = !picked.length;
+    status.textContent = "";
+    if (!picked.length) return (out.textContent = "");
+    const lines = ["My notes on the Discord flow map (design/flows-discord-map.html). Each row says what Discord does, what Waffle does now, and my note. Act on every note.", ""];
+    let section;
+    for (const r of picked) {
+      if (r.section !== section) lines.push(`## ${(section = r.section)}`, "");
+      lines.push(`- ${r.trigger}`, `  Discord: ${r.discord}`, `  Waffle (${r.status}): ${r.waffle || "same as Discord"}`, `  Note: ${notes[r.id].trim().replace(/\n/g, "\n        ")}`, "");
+    }
+    out.textContent = lines.join("\n").trim();
+  }
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(out.textContent);
+      status.textContent = "Copied";
+    } catch {
+      status.textContent = "Couldn't copy; select the text above instead";
+    }
+  });
+  render();
+})();
+</script>
+</body>
+</html>
