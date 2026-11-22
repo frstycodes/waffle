@@ -659,7 +659,7 @@ impl Waffle {
                 Entry::Slider { label, key, value, on_set } => self.menu_slider(label.clone(), key.clone(), *value, on_set.clone(), cx).into_any_element(),
                 Entry::Emojis { quick, more } => quick_reactions(quick, more.clone(), cx).into_any_element(),
                 Entry::Label(text) => menu_label(text.clone(), cx).into_any_element(),
-                Entry::Search(input) => div().h(px(SEARCH_ROW)).pb(px(4.)).child(ui::search_field(SharedString::from(format!("menu-search-{path:?}")), input, cx)).into_any_element(),
+                Entry::Search(input) => div().h(px(SEARCH_ROW)).pb_1().child(ui::search_field(SharedString::from(format!("menu-search-{path:?}")), input, cx)).into_any_element(),
                 Entry::Item(item) => {
                     let mut item_path = path.to_vec();
                     item_path.push(i);
@@ -673,18 +673,18 @@ impl Waffle {
     fn menu_slider(&self, label: SharedString, key: SharedString, value: f32, on_set: SetValue, cx: &mut Context<Self>) -> Div {
         div()
             .h(px(SLIDER_ROW))
-            .pt(px(6.))
-            .pb(px(10.))
-            .px(px(10.))
+            .pt_1p5()
+            .pb_2p5()
+            .px_2p5()
             .flex()
             .flex_col()
-            .gap(px(8.))
+            .gap_2()
             .child(
                 div()
                     .flex()
                     .justify_between()
-                    .text_size(px(14.))
-                    .line_height(px(20.))
+                    .text_size(ui::TEXT_SM)
+                    .line_height(ui::LINE_SM)
                     .font_weight(FontWeight::NORMAL)
                     .text_color(palette::text(cx))
                     .child(label)
@@ -773,33 +773,33 @@ impl Waffle {
         let tone = if dialog.danger { ui::Tone::Danger } else { ui::Tone::Primary };
         let preview = dialog.preview.as_deref().map(|m| {
             let ctx = self.row_context(std::slice::from_ref(m), None, false, PREVIEW_COLUMN, cx);
-            div().p(px(12.)).squircle(RADIUS_MD).bg(palette::surface(palette::Level::Page, cx)).child(crate::chat::search_hit(m, &ctx, cx))
+            div().p_3().squircle(RADIUS_MD).bg(palette::surface(palette::Level::Page, cx)).child(crate::chat::search_hit(m, &ctx, cx))
         });
         let body = ui::dialog_body()
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(10.))
-                    .text_size(px(20.))
-                    .line_height(px(24.))
+                    .gap_2p5()
+                    .text_size(ui::TEXT_LG)
+                    .line_height(ui::LINE_LG)
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(palette::strong(cx))
                     .when(dialog.warn, |d| d.child(div().text_color(palette::danger_ink(cx)).child(Icon::new(Glyph::Warning).size(px(22.)))))
                     .child(dialog.title.clone()),
             )
-            .child(div().text_size(px(14.)).line_height(px(20.)).text_color(palette::muted(cx)).child(dialog.body.clone()))
-            .children(dialog.note.clone().map(|note| div().text_size(px(12.)).line_height(px(16.)).text_color(palette::faint(cx)).child(note)))
+            .child(div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(palette::muted(cx)).child(dialog.body.clone()))
+            .children(dialog.note.clone().map(|note| div().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::faint(cx)).child(note)))
             .children(preview)
             .children(dialog.tip.clone().map(|tip| {
-                div().text_size(px(14.)).line_height(px(20.)).text_color(palette::text(cx)).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::positive_ink(cx)).child("Protip:")).child(tip)
+                div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(palette::text(cx)).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::positive_ink(cx)).child("Protip:")).child(tip)
             }))
             .when(dialog.input, |d| d.child(field(cx).child(div().flex_1().min_w_0().child(Input::new(&self.dialog_input).appearance(false)))))
             .child(
                 div()
                     .flex()
                     .justify_end()
-                    .gap(px(8.))
+                    .gap_2()
                     .children(self.dialog_other(cx))
                     .child(ui::button("dialog-confirm", tone, cx).child(dialog.confirm.clone()).when_some(dialog.key, |b, key| b.children(key.split('+').map(|k| ui::kbd_translucent(crate::settings::key_name(k), gpui_kit::white())))).on_click(submit)),
             );
@@ -825,15 +825,15 @@ pub(crate) fn menu_item_row(id: SharedString, item: &Item, sub_open: bool, lead_
         Lead::Glyph(glyph) => div().when_some(plain_icon(item, cx), |d, ink| d.text_color(ink)).child(Icon::new(*glyph).size(px(LEAD))).into_any_element(),
         Lead::Emoji(emoji) => emoji_face(emoji, LEAD).into_any_element(),
         // The 14px presence mark with no ring of its own; its cut-outs take the menu's colour.
-        Lead::Status(status) => ui::status_mark(*status, 14., palette::surface(palette::Level::Overlay, cx), cx).border(px(0.)).into_any_element(),
-        Lead::Dot(color) => div().size(px(12.)).rounded_full().bg(gpui_kit::rgb(*color)).into_any_element(),
+        Lead::Status(status) => ui::status_mark(*status, 14., palette::surface(palette::Level::Overlay, cx), cx).border_0().into_any_element(),
+        Lead::Dot(color) => div().size_3().rounded_full().bg(palette::data_color(*color)).into_any_element(),
         Lead::Server { icon, name } => ui::server_tile(icon.as_deref(), name, 20., cx),
     });
     let lead = lead.or_else(|| lead_slot.then(|| div().size(px(LEAD)).into_any_element()));
     let (hint, hint_hover) = hint_inks(item, cx);
     row.group(id.clone())
         .min_h(px(item.height()))
-        .line_height(px(20.))
+        .line_height(ui::LINE_SM)
         .highlighted(sub_open)
         .disabled(item.disabled)
         .children(lead.map(|lead| div().size(px(LEAD)).flex_none().flex().items_center().justify_center().child(lead)))
@@ -846,8 +846,8 @@ pub(crate) fn menu_item_row(id: SharedString, item: &Item, sub_open: bool, lead_
                 .child(div().truncate().child(item.label.clone()))
                 .children(item.hint.clone().map(|text| {
                     div()
-                        .text_size(px(12.))
-                        .line_height(px(16.))
+                        .text_size(ui::TEXT_XS)
+                        .line_height(ui::LINE_XS)
                         .font_weight(FontWeight::NORMAL)
                         .text_color(if sub_open { hint_hover } else { hint })
                         .group_hover(id.clone(), move |s| s.text_color(hint_hover))
@@ -859,7 +859,7 @@ pub(crate) fn menu_item_row(id: SharedString, item: &Item, sub_open: bool, lead_
             Mark::Check(on) => d.child(ui::check(if on { ui::Check::On } else { ui::Check::Off }, cx).size(px(18.))),
             Mark::Radio(_) => d,
         })
-        .when(has_sub, |d| d.child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(px(14.)))))
+        .when(has_sub, |d| d.child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_SM))))
 }
 
 // A plain row's icon stays muted under the pointer (strong on the chosen radio row, faint when disabled);
@@ -888,11 +888,11 @@ fn hint_inks(item: &Item, cx: &App) -> (Hsla, Hsla) {
 }
 
 pub(crate) fn separator(cx: &App) -> Div {
-    div().h(px(SEPARATOR)).flex_none().py(px(4.)).px(px(8.)).child(div().h(px(1.)).bg(palette::line(cx)))
+    div().h(px(SEPARATOR)).flex_none().py_1().px_2().child(div().h(ui::HAIRLINE).bg(palette::line(cx)))
 }
 
 fn menu_label(text: SharedString, cx: &App) -> Div {
-    div().h(px(LABEL)).flex_none().px(px(10.)).pt(px(8.)).text_size(px(12.)).line_height(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::faint(cx)).child(text)
+    div().h(px(LABEL)).flex_none().px_2p5().pt_2().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::faint(cx)).child(text)
 }
 
 fn menu_header(lead: &HeadLead, title: SharedString, subtitle: Option<SharedString>, cx: &App) -> Div {
@@ -900,17 +900,17 @@ fn menu_header(lead: &HeadLead, title: SharedString, subtitle: Option<SharedStri
     let lead = match lead {
         HeadLead::Avatar { url, status } => crate::layout::avatar_with_status(url, 32., *status, overlay),
         HeadLead::Server { icon, name } => ui::server_tile(icon.as_deref(), name, 32., cx),
-        HeadLead::Tile(glyph) => div().size(px(32.)).squircle(RADIUS_SM).bg(palette::selected(cx)).text_color(palette::strong(cx)).flex().items_center().justify_center().child(Icon::new(*glyph).size(px(18.))).into_any_element(),
+        HeadLead::Tile(glyph) => div().size_8().squircle(RADIUS_SM).bg(palette::selected(cx)).text_color(palette::strong(cx)).flex().items_center().justify_center().child(Icon::new(*glyph).size(ui::ICON_LG)).into_any_element(),
     };
     div()
         .h(px(HEADER))
         .flex_none()
-        .pt(px(8.))
-        .pb(px(10.))
-        .px(px(10.))
+        .pt_2()
+        .pb_2p5()
+        .px_2p5()
         .flex()
         .items_center()
-        .gap(px(10.))
+        .gap_2p5()
         .child(div().flex_none().child(lead))
         .child(
             div()
@@ -918,8 +918,8 @@ fn menu_header(lead: &HeadLead, title: SharedString, subtitle: Option<SharedStri
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .child(div().truncate().text_size(px(14.)).line_height(px(18.)).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title))
-                .children(subtitle.map(|s| div().truncate().text_size(px(12.)).line_height(px(16.)).text_color(palette::muted(cx)).child(s))),
+                .child(div().truncate().text_size(ui::TEXT_SM).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title))
+                .children(subtitle.map(|s| div().truncate().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::muted(cx)).child(s))),
         )
 }
 
@@ -946,12 +946,12 @@ fn quick_reactions(quick: &[(Emoji, Act)], more: Act, cx: &mut Context<Waffle>) 
         }))
     });
     let picker = cell("menu-emoji-more".into(), strong)
-        .child(Icon::new(Glyph::Emoji).size(px(18.)))
+        .child(Icon::new(Glyph::Emoji).size(ui::ICON_LG))
         .on_click(cx.listener(move |this, _, window, cx| {
             this.shut_menu(window, cx);
             more(this, window, cx);
         }));
-    div().h(px(EMOJI_ROW)).flex_none().pt(px(2.)).px(px(2.)).pb(px(4.)).flex().gap(px(4.)).children(faces).child(picker)
+    div().h(px(EMOJI_ROW)).flex_none().pt_0p5().px_0p5().pb_1().flex().gap_1().children(faces).child(picker)
 }
 
 pub(crate) fn emoji_face(emoji: &Emoji, size: f32) -> AnyElement {
@@ -1042,17 +1042,17 @@ impl Waffle {
         // carries only text, so neither shows yet.
         let toast = div()
             .max_w(px(380.))
-            .min_h(px(40.))
-            .py(px(10.))
-            .pl(px(14.))
-            .pr(px(10.))
+            .min_h_10()
+            .py_2p5()
+            .pl_3p5()
+            .pr_2p5()
             .squircle(RADIUS_LG)
             .bg(palette::surface(palette::Level::Overlay, cx))
             .shadow(ui::shadow_pop(cx))
             .flex()
             .items_center()
-            .text_size(px(14.))
-            .line_height(px(20.))
+            .text_size(ui::TEXT_SM)
+            .line_height(ui::LINE_SM)
             .font_weight(FontWeight::NORMAL)
             .text_color(palette::strong(cx))
             .child(text.clone());
@@ -1061,7 +1061,7 @@ impl Waffle {
         let toast = toast.with_animation(SharedString::from(format!("toast-{text}")), Animation::new(Duration::from_millis(240)).with_easing(|t| motion::ease_out().sample(t)), |toast, t| {
             toast.translate_y(px(8. * (1. - t))).scale(0.97 + 0.03 * t).opacity(t)
         });
-        Some(div().absolute().left_0().right_0().bottom(px(24.)).flex().justify_center().child(toast).into_any_element())
+        Some(div().absolute().left_0().right_0().bottom_6().flex().justify_center().child(toast).into_any_element())
     }
 }
 

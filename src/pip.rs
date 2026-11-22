@@ -81,7 +81,7 @@ fn nearest(at: (f32, f32), size: Size, area: (f32, f32)) -> Corner {
     }
 }
 
-fn anchored<E: Styled>(d: E, corner: Corner, insets: Insets) -> E {
+fn pin_to<E: Styled>(d: E, corner: Corner, insets: Insets) -> E {
     let d = match corner {
         Corner::TopLeft | Corner::BottomLeft => d.left(px(MARGIN)),
         Corner::TopRight | Corner::BottomRight => d.right(px(MARGIN)),
@@ -103,21 +103,21 @@ impl Waffle {
         // only the frame is rounded.
         let picture: AnyElement = match &watching.frame {
             Some(frame) => ui::media(gpui_kit::ImageSource::Render(frame.clone()), ui::all(0.)).absolute().inset_0().size_full().object_fit(gpui_kit::ObjectFit::Contain).into_any_element(),
-            None => crate::call::stream_fill(0.).absolute().inset_0().flex().items_center().justify_center().text_size(px(12.)).text_color(white.opacity(0.7)).child(format!("Joining {name}'s stream…")).into_any_element(),
+            None => crate::call::stream_fill(0.).absolute().inset_0().flex().items_center().justify_center().text_size(ui::TEXT_XS).text_color(white.opacity(0.7)).child(format!("Joining {name}'s stream…")).into_any_element(),
         };
         let bar = div()
             .absolute()
             .left_0()
             .right_0()
             .bottom_0()
-            .p(px(8.))
+            .p_2()
             .flex()
             .items_center()
-            .gap(px(8.))
+            .gap_2()
             .bg(gpui_kit::linear_gradient(180., gpui_kit::linear_color_stop(gpui_kit::transparent_black(), 0.), gpui_kit::linear_color_stop(gpui_kit::black().opacity(0.6), 1.)))
             .opacity(0.)
             .group_hover("stream-pip", |s| s.opacity(1.))
-            .child(div().flex_1().min_w_0().truncate().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(white).child(format!("{name}'s screen")))
+            .child(div().flex_1().min_w_0().truncate().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(white).child(format!("{name}'s screen")))
             .child(ui::button("pip-stop", ui::Tone::OnMedia, cx).small().child("Stop watching").on_click(cx.listener(|this, _, _, cx| {
                 cx.stop_propagation();
                 this.stop_watching(cx);
@@ -158,14 +158,14 @@ impl Waffle {
                 player
                     .with_animation(SharedString::from(format!("pip-snap-{n}")), Animation::new(SNAP), move |d, t| {
                         if t >= 1. {
-                            return anchored(d, corner, insets);
+                            return pin_to(d, corner, insets);
                         }
                         let e = crate::motion::back_out(t);
                         d.left(px(from.0 + (to.0 - from.0) * e)).top(px(from.1 + (to.1 - from.1) * e))
                     })
                     .into_any_element()
             }
-            _ => anchored(player, pip.corner, insets).into_any_element(),
+            _ => pin_to(player, pip.corner, insets).into_any_element(),
         };
         placed
     }

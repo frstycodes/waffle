@@ -12,7 +12,7 @@ use gpui_kit::{
     },
     div,
     prelude::FluentBuilder,
-    px, rgb,
+    px,
 };
 use serde_json::Value;
 
@@ -456,8 +456,8 @@ impl Waffle {
             (Some(_), None) if editor.tab == ProfileTab::Main => (self.main_profile_groups(editor, cx), MAIN_GROUP),
             (Some(_), None) => (self.server_profile_groups(editor, cx), SERVER_GROUP),
         };
-        let fields = div().flex_1().min_w_0().flex().flex_col().gap(px(24.)).child(tabs).children(groups);
-        let body = div().flex().items_start().gap(px(32.)).child(fields).children(editor.saved.is_some().then(|| self.profile_preview_column(editor, cx)));
+        let fields = div().flex_1().min_w_0().flex().flex_col().gap_6().child(tabs).children(groups);
+        let body = div().flex().items_start().gap_8().child(fields).children(editor.saved.is_some().then(|| self.profile_preview_column(editor, cx)));
         vec![Section::keyed(group, body)]
     }
 
@@ -476,7 +476,7 @@ impl Waffle {
         }
         let bio_count = editor.bio.read(cx).value().chars().count();
         let bio_focus = editor.bio.read(cx).focus_handle(cx);
-        let bio = ui::text_area("pf-bio-input", Textarea::new(&editor.bio).appearance(false).px_0().text_size(px(14.)), &bio_focus);
+        let bio = ui::text_area("pf-bio-input", Textarea::new(&editor.bio).appearance(false).px_0().text_size(ui::TEXT_SM), &bio_focus);
         let about = ui::settings_card(cx).child(field_row("pf-bio", false, "About me", bio, count_hint("You can use markdown and links if you'd like.", bio_count, draft::BIO_MAX, cx), cx));
         groups.push(ui::settings_group("About me", cx).child(about).into_any_element());
         if !editor.tags.is_empty() || editor.tag_guild.is_some() {
@@ -490,11 +490,11 @@ impl Waffle {
     fn avatar_row(&self, editor: &ProfileEditor, cx: &mut Context<Self>) -> Stateful<Div> {
         let face = match self.preview_avatar(editor) {
             PreviewAvatar::Url(url) => ui::avatar(url, 64.).into_any_element(),
-            PreviewAvatar::File(path) => gpui_kit::img(path).size(px(64.)).flex_none().rounded_full().into_any_element(),
+            PreviewAvatar::File(path) => gpui_kit::img(path).size_16().flex_none().rounded_full().into_any_element(),
         };
         let has_avatar = self.me.as_ref().is_some_and(|m| !m.avatar.contains("/embed/avatars/"));
         let removable = editor.avatar != AvatarChoice::Removed && (has_avatar || editor.avatar != AvatarChoice::Current);
-        let change = ui::button("pf-avatar-change", Tone::Secondary, cx).small().child(Icon::new(Glyph::Upload).size(px(16.))).child("Change avatar").on_click(cx.listener(|this, _, _, cx| {
+        let change = ui::button("pf-avatar-change", Tone::Secondary, cx).small().child(Icon::new(Glyph::Upload).size(ui::ICON_MD)).child("Change avatar").on_click(cx.listener(|this, _, _, cx| {
             this.prompt_profile_image(cx, |this, path, data, cx| this.edit_profile(cx, |e| e.avatar = AvatarChoice::Upload { path, data }));
         }));
         let remove = ui::button("pf-avatar-remove", Tone::Link, cx).small().disabled(!removable).child("Remove avatar").on_click(cx.listener(|this, _, _, cx| this.edit_profile(cx, |e| e.avatar = AvatarChoice::Removed)));
@@ -506,7 +506,7 @@ impl Waffle {
             Some(avatar) => self.recent_slot(i, avatar, editor.avatar == AvatarChoice::Recent(avatar.id.clone()), cx).into_any_element(),
             None => div().size(px(SLOT)).flex_none().rounded_full().border(px(1.5)).border_dashed().border_color(palette::line_strong(cx)).into_any_element(),
         }).collect::<Vec<_>>();
-        let field = ui::field("Recent avatars", cx).flex_1().child(div().flex().flex_wrap().gap(px(12.)).py(px(4.)).children(slots)).child(ui::field_hint("Your last 6 avatars. Pick one to use it again; no new upload.", None, cx));
+        let field = ui::field("Recent avatars", cx).flex_1().child(div().flex().flex_wrap().gap_3().py_1().children(slots)).child(ui::field_hint("Your last 6 avatars. Pick one to use it again; no new upload.", None, cx));
         ui::settings_row("pf-recent", true, cx).child(field)
     }
 
@@ -519,7 +519,7 @@ impl Waffle {
             .absolute()
             .top_0()
             .right_0()
-            .size(px(20.))
+            .size_5()
             .rounded_full()
             .bg(surface)
             .shadow(ui::shadow_pop(cx))
@@ -530,8 +530,8 @@ impl Waffle {
             .text_color(palette::strong(cx))
             .invisible()
             .group_hover(group.clone(), |s| s.visible())
-            .child(Icon::new(Glyph::X).size(px(12.)))
-            .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Remove from recent avatars").build(window, cx))
+            .child(Icon::new(Glyph::X).size(ui::ICON_XS))
+            .tooltip(|window, cx| ui::tip("Remove from recent avatars", window, cx))
             .on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 this.remove_recent_avatar(i, cx);
@@ -558,9 +558,9 @@ impl Waffle {
         }
         let none = ui::chip("pf-accent-default", None, "Default", editor.accent.is_none(), cx).on_click(cx.listener(|this, _, _, cx| this.edit_profile(cx, |e| e.accent = None)));
         let swatches = colours.into_iter().map(|colour| {
-            ui::swatch(SharedString::from(format!("pf-accent-{colour:06x}")), rgb(colour).into(), editor.accent == Some(colour), ring).on_click(cx.listener(move |this, _, _, cx| this.edit_profile(cx, |e| e.accent = Some(colour))))
+            ui::swatch(SharedString::from(format!("pf-accent-{colour:06x}")), palette::data_color(colour), editor.accent == Some(colour), ring).on_click(cx.listener(move |this, _, _, cx| this.edit_profile(cx, |e| e.accent = Some(colour))))
         });
-        ui::settings_row("pf-accent", false, cx).child(div().flex().flex_wrap().items_center().gap(px(8.)).child(none).children(swatches))
+        ui::settings_row("pf-accent", false, cx).child(div().flex().flex_wrap().items_center().gap_2().child(none).children(swatches))
     }
 
     fn server_tag_row(&self, editor: &ProfileEditor, cx: &mut Context<Self>) -> Stateful<Div> {
@@ -607,7 +607,7 @@ impl Waffle {
     }
 
     fn server_profile_groups(&self, editor: &ProfileEditor, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let lede = div().px(px(4.)).text_color(palette::muted(cx)).child("Show who you are with different profiles for each of your servers.");
+        let lede = div().px_1().text_color(palette::muted(cx)).child("Show who you are with different profiles for each of your servers.");
         let Some(guild) = editor.guild_id.as_ref().and_then(|id| self.guilds.iter().find(|g| &g.id == id)) else {
             let none = ui::settings_card(cx).child(ui::settings_row("pf-no-server", false, cx).child(ui::settings_text("Join a server to give it its own profile", None::<&str>, cx)));
             return vec![lede.into_any_element(), none.into_any_element()];
@@ -696,20 +696,20 @@ impl Waffle {
             .occlude()
             .w_full()
             .max_w(px(ui::SETTINGS_WIDTH))
-            .py(px(10.))
-            .pl(px(16.))
-            .pr(px(10.))
+            .py_2p5()
+            .pl_4()
+            .pr_2p5()
             .squircle(ui::RADIUS_LG)
             .bg(palette::surface(Level::Overlay, cx))
             .shadow(ui::shadow_pop(cx))
             .flex()
             .items_center()
-            .gap(px(12.))
+            .gap_3()
             .child(div().flex_1().min_w_0().text_color(ink).child(message))
-            .child(div().flex().flex_none().items_center().gap(px(8.)).child(reset).child(save));
+            .child(div().flex().flex_none().items_center().gap_2().child(reset).child(save));
         let shaken = div().w_full().flex().justify_center().child(bar).with_animation(SharedString::from(format!("pf-shake-{}", editor.shakes)), Animation::new(SHAKE), |el, t| el.translate_x(px(shake_offset(t))));
         let slid = div().w_full().child(shaken).with_animation("pf-savebar-in", Animation::new(ui::DUR_PANEL).with_easing(|t| motion::ease_out().sample(t)), |el, t| el.opacity(t).translate_y(px(16. * (1. - t))));
-        Some(div().absolute().bottom(px(16.)).left(px(40.)).right(px(40.)).child(slid).into_any_element())
+        Some(div().absolute().bottom_4().left_10().right_10().child(slid).into_any_element())
     }
 
     // "Avatar removed" with Undo, over the bar when it shows.
@@ -768,12 +768,12 @@ fn text_input(id: &'static str, state: &Entity<InputState>, cx: &App) -> impl In
 // Help under a field with its count, which turns red only at the limit.
 fn count_hint(text: impl Into<SharedString>, count: usize, max: usize, cx: &App) -> Div {
     let ink = if count >= max { palette::danger_ink(cx) } else { palette::faint(cx) };
-    div().flex().justify_between().gap(px(8.)).text_size(px(12.)).text_color(palette::faint(cx)).child(text.into()).child(div().flex_none().text_color(ink).child(format!("{count}/{max}")))
+    div().flex().justify_between().gap_2().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(text.into()).child(div().flex_none().text_color(ink).child(format!("{count}/{max}")))
 }
 
 fn nitro_row(id: &'static str, title: &'static str, caption: &'static str, cx: &mut Context<Waffle>) -> Stateful<Div> {
-    let open = ui::button(SharedString::from(format!("{id}-open")), Tone::Secondary, cx).small().child(Icon::new(Glyph::Open).size(px(16.))).child("Set on Discord").on_click(|_, _, cx| cx.open_url(DISCORD));
-    ui::settings_row(id, false, cx).child(div().flex_none().text_color(palette::muted(cx)).child(Icon::new(Glyph::Gem).size(px(20.)))).child(ui::settings_text(title, Some(caption), cx)).child(open)
+    let open = ui::button(SharedString::from(format!("{id}-open")), Tone::Secondary, cx).small().child(Icon::new(Glyph::Open).size(ui::ICON_MD)).child("Set on Discord").on_click(|_, _, cx| cx.open_url(DISCORD));
+    ui::settings_row(id, false, cx).child(div().flex_none().text_color(palette::muted(cx)).child(Icon::new(Glyph::Gem).size(ui::ICON_XL))).child(ui::settings_text(title, Some(caption), cx)).child(open)
 }
 
 // A short horizontal shake, settling to rest.

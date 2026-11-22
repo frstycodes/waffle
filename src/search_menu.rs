@@ -360,7 +360,7 @@ impl Waffle {
                 let first_recent = rows.iter().position(|r| matches!(r, Row::Recent(_)));
                 for (i, row) in rows.iter().enumerate() {
                     if Some(i) == first_recent {
-                        out.push(div().h(px(1.)).mx(px(8.)).my(px(4.)).bg(palette::line(cx)).into_any_element());
+                        out.push(div().h(ui::HAIRLINE).mx_2().my_1().bg(palette::line(cx)).into_any_element());
                         let clear = ui::icon_button("search-history-clear", Glyph::Trash, "Clear history", cx).small().on_click(cx.listener(|this, _, _, cx| this.clear_search_history(cx)));
                         out.push(group("History", cx).child(div().ml_auto().child(clear)).into_any_element());
                     }
@@ -388,7 +388,7 @@ impl Waffle {
     fn search_row(&self, index: usize, row: &Row, pick: Option<usize>, avatars: &HashMap<String, String>, cx: &mut Context<Self>) -> AnyElement {
         let (muted, strong) = (palette::muted(cx), palette::strong(cx));
         let base = ui::menu_row(("search-row", index), cx).highlighted(pick == Some(index)).on_click(cx.listener(move |this, _, window, cx| this.accept_search_row(index, window, cx)));
-        let lead = |glyph: Glyph| div().flex_none().text_color(muted).child(Icon::new(glyph).size(px(18.)));
+        let lead = |glyph: Glyph| div().flex_none().text_color(muted).child(Icon::new(glyph).size(ui::ICON_LG));
         match row {
             Row::Filter(key) => base
                 .child(lead(key_glyph(*key)))
@@ -399,13 +399,13 @@ impl Waffle {
                         .flex()
                         .flex_col()
                         .child(div().truncate().text_color(strong).child(key.title()))
-                        .child(div().truncate().text_size(px(12.)).text_color(muted).child(div().flex().gap(px(4.)).child(div().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("{}:", key.word()))).child(key.takes()))),
+                        .child(div().truncate().text_size(ui::TEXT_XS).text_color(muted).child(div().flex().gap_1().child(div().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("{}:", key.word()))).child(key.takes()))),
                 )
                 .into_any_element(),
             Row::More => base
                 .child(lead(Glyph::Filter))
-                .child(div().flex_1().min_w_0().flex().flex_col().child(div().text_color(strong).child("More filters")).child(div().truncate().text_size(px(12.)).text_color(muted).child("dates, author type, and more")))
-                .child(div().text_color(palette::faint(cx)).child(Icon::new(if self.search_more { Glyph::ChevronUp } else { Glyph::ChevronDown }).size(px(16.))))
+                .child(div().flex_1().min_w_0().flex().flex_col().child(div().text_color(strong).child("More filters")).child(div().truncate().text_size(ui::TEXT_XS).text_color(muted).child("dates, author type, and more")))
+                .child(div().text_color(palette::faint(cx)).child(Icon::new(if self.search_more { Glyph::ChevronUp } else { Glyph::ChevronDown }).size(ui::ICON_MD)))
                 .into_any_element(),
             Row::Recent(i) => {
                 let Some(saved) = self.search_history().get(*i) else { return div().into_any_element() };
@@ -416,7 +416,7 @@ impl Waffle {
                     }
                     None => div().min_w_0().truncate().child(text.to_owned()).into_any_element(),
                 });
-                base.child(lead(Glyph::Search)).child(div().flex_1().min_w_0().overflow_hidden().flex().items_center().gap(px(4.)).children(parts)).into_any_element()
+                base.child(lead(Glyph::Search)).child(div().flex_1().min_w_0().overflow_hidden().flex().items_center().gap_1().children(parts)).into_any_element()
             }
             Row::Value(pick) => {
                 let lead_el = match &pick.lead {
@@ -436,8 +436,8 @@ impl Waffle {
         let blanks = first.weekday().num_days_from_monday() as usize;
         let length = (first + Months::new(1) - first).num_days() as u32;
         let (selected, hover, accent_ink, faint, text) = (palette::selected(cx), palette::hover(cx), palette::accent_ink(cx), palette::faint(cx), palette::text(cx));
-        let cell = || div().w(px(CALENDAR_DAY)).h(px(32.)).flex().items_center().justify_center();
-        let weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map(|d| cell().text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(faint).child(d));
+        let cell = || div().w(px(CALENDAR_DAY)).h_8().flex().items_center().justify_center();
+        let weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map(|d| cell().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(faint).child(d));
         let days = (1..=length).map(|n| {
             let day = first.with_day(n).expect("day in month");
             let future = day > now;
@@ -467,7 +467,7 @@ impl Waffle {
                     .child(step("search-month-back", Glyph::ChevronLeft, "Previous month", -1))
                     .child(step("search-month-next", Glyph::ChevronRight, "Next month", 1)),
             )
-            .child(div().w(px(CALENDAR_DAY * 7. + 12.)).mx_auto().pb(px(4.)).flex().flex_wrap().gap(px(2.)).children(weekdays).children((0..blanks).map(|_| cell())).children(days))
+            .child(div().w(px(CALENDAR_DAY * 7. + 12.)).mx_auto().pb_1().flex().flex_wrap().gap_0p5().children(weekdays).children((0..blanks).map(|_| cell())).children(days))
             .into_any_element()
     }
 }
@@ -478,13 +478,13 @@ pub(crate) fn token_chip(key: &str, label: &str, avatar: Option<String>, in_fiel
     div()
         .flex_none()
         .h(px(22.))
-        .px(px(6.))
+        .px_1p5()
         .flex()
         .items_center()
-        .gap(px(4.))
+        .gap_1()
         .squircle(RADIUS_XS)
         .bg(fill)
-        .text_size(px(14.))
+        .text_size(ui::TEXT_SM)
         .text_color(palette::strong(cx))
         .child(div().font_weight(FontWeight::SEMIBOLD).text_color(word).child(format!("{key}:")))
         .children(avatar.map(|url| ui::avatar(url, 16.)))
@@ -511,7 +511,7 @@ fn saved_id(saved: &Saved, label: &str) -> Option<String> {
 }
 
 fn group(label: impl Into<SharedString>, cx: &App) -> gpui_kit::Div {
-    div().flex().items_center().gap(px(4.)).px(px(10.)).pt(px(8.)).pb(px(4.)).text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(label.into())
+    div().flex().items_center().gap_1().px_2p5().pt_2().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(label.into())
 }
 
 pub(crate) fn key_glyph(key: Key) -> Glyph {

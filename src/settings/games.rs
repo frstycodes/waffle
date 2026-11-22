@@ -1,7 +1,7 @@
 // Registered games, as Discord's Activity settings page lays it out: what's playing now (or "No game
 // detected" with Add it!, which lists running programs to add as a game), then every game seen here,
 // each with its detection switch. Added programs can be removed.
-use gpui_kit::{Context, ParentElement, SharedString, StatefulInteractiveElement, Styled, Window, component::Icon, div, prelude::FluentBuilder as _, px};
+use gpui_kit::{Context, ParentElement, SharedString, StatefulInteractiveElement, Styled, Window, component::Icon, div, prelude::FluentBuilder as _};
 
 use super::Section;
 use crate::{
@@ -38,7 +38,7 @@ impl Waffle {
                 let added = Added { path: path.clone(), name: name.clone() };
                 let row = ui::settings_choice(ui::settings_row(SharedString::from(format!("game-add-{i}")), true, cx), cx)
                     .child(ui::settings_text(name, Some(path), cx))
-                    .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::Plus).size(px(16.))))
+                    .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::Plus).size(ui::ICON_MD)))
                     .on_click(cx.listener(move |this, _, _, cx| this.add_game(added.clone(), cx)));
                 card = card.child(row);
             }

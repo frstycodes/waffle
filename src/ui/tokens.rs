@@ -30,6 +30,7 @@ pub const LINE_DETAIL: Pixels = px(18.);
 pub const LINE_SM: Pixels = px(20.);
 pub const LINE_LEAD: Pixels = px(22.);
 pub const LINE_LG: Pixels = px(24.);
+pub const LINE_XL: Pixels = px(28.);
 
 // Radius tiers: tags and tooltips, rows and menu items, controls, cards and tiles, dialogs. Sized for the
 // squircle, whose curve hugs the corner tighter than a circular arc of the same radius. Applied with

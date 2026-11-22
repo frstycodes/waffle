@@ -7,7 +7,6 @@ use gpui_kit::{
     component::{
         Icon,
         input::{Input, InputEvent, InputState as SearchState},
-        tooltip::Tooltip,
     },
     div, img,
     px,
@@ -198,12 +197,12 @@ impl Waffle {
     pub(crate) fn voice_row_status(&self, channel: &Channel, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
         let status = self.voice_status_of(&channel.id).filter(|_| guild_voice(channel));
         let editable = self.can_edit_voice_status(channel);
-        let line = div().id(SharedString::from(format!("voice-status-{}", channel.id))).pl(px(LINE_INDENT)).min_w_0().flex().items_center().gap(px(6.)).text_size(px(12.)).line_height(px(16.));
+        let line = div().id(SharedString::from(format!("voice-status-{}", channel.id))).pl(px(LINE_INDENT)).min_w_0().flex().items_center().gap_1p5().text_size(ui::TEXT_XS).line_height(ui::LINE_XS);
         let line = match status {
             Some(status) => line.text_color(palette::muted(cx)).font_weight(FontWeight::NORMAL).child(div().min_w_0().truncate().child(plain_status(status))),
             None if editable => {
                 let strong = palette::strong(cx);
-                line.text_color(palette::text(cx)).font_weight(FontWeight::MEDIUM).hover(move |s| s.text_color(strong)).child("Set a channel status").child(Icon::new(Glyph::Pen).size(px(14.)))
+                line.text_color(palette::text(cx)).font_weight(FontWeight::MEDIUM).hover(move |s| s.text_color(strong)).child("Set a channel status").child(Icon::new(Glyph::Pen).size(ui::ICON_SM))
             }
             None => return None,
         };
@@ -220,7 +219,7 @@ impl Waffle {
     // Under the call's title: the status while it has one, opening the dialog for those who may change it.
     pub(crate) fn call_status_line(&self, channel: &Channel, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
         let status = self.voice_status_of(&channel.id).filter(|_| guild_voice(channel))?;
-        let line = div().id("call-status").min_w_0().truncate().text_size(px(12.)).line_height(px(14.)).font_weight(FontWeight::NORMAL).text_color(palette::stage::muted()).child(plain_status(status));
+        let line = div().id("call-status").min_w_0().truncate().text_size(ui::TEXT_XS).line_height(px(14.)).font_weight(FontWeight::NORMAL).text_color(palette::stage::muted()).child(plain_status(status));
         if !self.can_edit_voice_status(channel) {
             return Some(line);
         }
@@ -229,7 +228,7 @@ impl Waffle {
             line.occlude()
                 .cursor_pointer()
                 .hover(move |s| s.text_color(strong))
-                .tooltip(|window, cx| Tooltip::new("Set a channel status").build(window, cx))
+                .tooltip(|window, cx| ui::tip("Set a channel status", window, cx))
                 .on_click(cx.listener(move |this, _, window, cx| this.open_voice_status(&open, window, cx))),
         )
     }
@@ -252,7 +251,7 @@ impl Waffle {
             // greys the middle, and a diagonal leaves the lower corner tinted, both read as a hard edge.
             .bg(gpui_kit::linear_gradient(180., gpui_kit::linear_color_stop(palette::accent_soft(cx), 0.), gpui_kit::linear_color_stop(palette::accent_soft(cx).opacity(0.), 1.)))
             .child(img(ART).w(px(ART_WIDTH)).h(px(ART_WIDTH * 640. / 1024.)))
-            .child(div().absolute().top(px(12.)).right(px(12.)).child(ui::icon_button("voice-status-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_voice_status(cx)))));
+            .child(div().absolute().top_3().right_3().child(ui::icon_button("voice-status-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_voice_status(cx)))));
         let focus = dialog.input.read(cx).focus_handle(cx);
         let emoji = ui::icon_button("voice-status-emoji", Glyph::Emoji, "Add emoji", cx).small().on_click(cx.listener(|this, _, window, cx| this.open_emoji_picker(EmojiTarget::VoiceStatus, window, cx)));
         let field = ui::text_field("voice-status-field", Input::new(&dialog.input).appearance(false), &focus).trailing(emoji).error(over || dialog.error.is_some());
@@ -260,18 +259,18 @@ impl Waffle {
             div().flex_none().font_features(crate::call::tabular()).text_color(if over { palette::danger_ink(cx) } else { palette::faint(cx) }).child((MAX_CHARS as i64 - typed as i64).to_string())
         });
         let meta = div()
-            .min_h(px(16.))
+            .min_h_4()
             .flex()
             .items_start()
             .justify_between()
-            .gap(px(8.))
-            .text_size(px(12.))
+            .gap_2()
+            .text_size(ui::TEXT_XS)
             .child(div().min_w_0().children(dialog.error.clone().map(|e| ui::field_error(e, cx))))
             .children(remaining);
         let actions = div()
             .flex()
-            .gap(px(8.))
-            .mt(px(4.))
+            .gap_2()
+            .mt_1()
             .child(ui::button("voice-status-cancel", Tone::Secondary, cx).flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_voice_status(cx))))
             .child(
                 ui::button("voice-status-submit", Tone::Primary, cx)
@@ -282,19 +281,19 @@ impl Waffle {
                     .on_click(cx.listener(|this, _, _, cx| this.submit_voice_status(cx))),
             );
         let body = div()
-            .pt(px(16.))
-            .px(px(24.))
-            .pb(px(24.))
+            .pt_4()
+            .px_6()
+            .pb_6()
             .flex()
             .flex_col()
-            .gap(px(8.))
+            .gap_2()
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
                 if e.keystroke.key == "escape" {
                     this.close_voice_status(cx);
                 }
             }))
-            .child(div().text_center().text_size(px(20.)).line_height(px(26.)).font_weight(FontWeight::BOLD).text_color(strong).child("What are we chatting about?"))
-            .child(div().mb(px(12.)).text_center().text_color(muted).child("Let others know what you're up to in the voice channel!"))
+            .child(div().text_center().text_size(ui::TEXT_LG).line_height(px(26.)).font_weight(FontWeight::BOLD).text_color(strong).child("What are we chatting about?"))
+            .child(div().mb_3().text_center().text_color(muted).child("Let others know what you're up to in the voice channel!"))
             .child(div().font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Status"))
             .child(field)
             .child(meta)

@@ -1,6 +1,6 @@
 // The Inbox (panels.html#inbox): Unreads, the server channels with messages you haven't read, each with
 // Mark read; and Mentions, filtered by visible chips. Shown in the rail's popover and on the Inbox page.
-use gpui_kit::{AnyElement, Context, Div, FontWeight, SharedString, Window, component::Icon, div, prelude::*, px};
+use gpui_kit::{AnyElement, Context, Div, FontWeight, SharedString, Window, component::Icon, div, prelude::*};
 
 use crate::{
     Waffle,
@@ -143,16 +143,16 @@ impl Waffle {
             ui::button("inbox-mark-all", ui::Tone::Ghost, cx)
                 .small()
                 .disabled(unread == 0)
-                .child(Icon::new(Glyph::Checks).size(px(16.)))
+                .child(Icon::new(Glyph::Checks).size(ui::ICON_MD))
                 .child("Mark all read")
                 .on_click(cx.listener(|this, _, _, cx| this.mark_all_unreads(cx)))
         });
         let title = div()
-            .h(px(32.))
+            .h_8()
             .flex()
             .items_center()
             .gap_2()
-            .when(titled, |t| t.child(Icon::new(Glyph::Inbox).size(px(20.)).text_color(palette::faint(cx))).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Inbox")))
+            .when(titled, |t| t.child(Icon::new(Glyph::Inbox).size(ui::ICON_XL).text_color(palette::faint(cx))).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Inbox")))
             .child(div().flex_1())
             .children(mark_all);
         const TABS: [InboxTab; 3] = [InboxTab::Unreads, InboxTab::Mentions, InboxTab::Saved];
@@ -183,7 +183,7 @@ impl Waffle {
         let here = self.guild_id.is_some().then(|| {
             ui::chip("mentions-here", Some(Glyph::Filter), "This server only", filters.this_server, cx).on_click(cx.listener(|this, _, _, cx| this.set_mention_filters(|f| f.this_server = !f.this_server, cx)))
         });
-        div().flex().flex_wrap().gap(px(6.)).child(everyone).child(roles).children(here)
+        div().flex().flex_wrap().gap_1p5().child(everyone).child(roles).children(here)
     }
 
     fn unread_list(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -223,9 +223,9 @@ impl Waffle {
                     .flex()
                     .flex_col()
                     .child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(format!("#{}", unread.channel.name)))
-                    .child(div().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child(format!("{} · {new}", unread.guild_name))),
+                    .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(format!("{} · {new}", unread.guild_name))),
             )
-            .child(ui::button(SharedString::from(format!("unread-read-{}", unread.channel.id)), ui::Tone::Ghost, cx).small().child(Icon::new(Glyph::Checkmark).size(px(16.))).child("Mark read").on_click(cx.listener(move |this, _, _, cx| {
+            .child(ui::button(SharedString::from(format!("unread-read-{}", unread.channel.id)), ui::Tone::Ghost, cx).small().child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD)).child("Mark read").on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 this.mark_channel_read(&channel_id, cx);
             })))
@@ -246,7 +246,7 @@ impl Waffle {
         let text = crate::chat::content(&m, ctx, cx).unwrap_or_else(|| div().text_color(palette::muted(cx)).child("Attachment").into_any_element());
         div()
             .id(SharedString::from(format!("unread-msg-{}", m.id)))
-            .ml(px(32.))
+            .ml_8()
             .px_2()
             .py_1()
             .squircle(RADIUS_SM)
@@ -261,8 +261,8 @@ impl Waffle {
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .child(div().flex().items_baseline().gap_2().child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(m.author.name.clone())).child(div().flex_none().text_size(px(12.)).text_color(palette::faint(cx)).child(crate::chat::format_stamp(&m.timestamp))))
-                    .child(div().text_size(px(14.)).line_clamp(2).text_color(palette::text(cx)).child(text)),
+                    .child(div().flex().items_baseline().gap_2().child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(m.author.name.clone())).child(div().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(crate::chat::format_stamp(&m.timestamp))))
+                    .child(div().text_size(ui::TEXT_SM).line_clamp(2).text_color(palette::text(cx)).child(text)),
             )
             .on_click(cx.listener(move |this, _, window, cx| this.open_message(Some(guild_id.clone()), &channel_id, message_id.clone(), window, cx)))
             .into_any_element()
