@@ -70,9 +70,11 @@ impl Waffle {
             Toggle::DesktopNotifications => self.prefs.desktop_notifications,
             Toggle::DockBadge => self.prefs.dock_badge,
             Toggle::Clock24 => self.prefs.clock_24h,
+            Toggle::ImageDescriptions => self.prefs.show_image_descriptions,
             Toggle::AutoDownloadUpdates => self.prefs.auto_download_updates,
             Toggle::RenderEmbeds => account.render_embeds,
             Toggle::RenderReactions => account.render_reactions,
+            Toggle::TtsCommand => self.prefs.tts_command,
             Toggle::DeveloperMode => account.developer_mode,
             Toggle::ShareActivity => account.show_current_game,
             Toggle::DmsFromServerMembers => !account.default_guilds_restricted,
@@ -93,6 +95,12 @@ impl Waffle {
                 return self.update_badge();
             }
             Toggle::Clock24 => return self.update_prefs(cx, |p| p.clock_24h = on),
+            Toggle::ImageDescriptions => {
+                // Captions under single pictures change row heights.
+                self.list.remeasure();
+                return self.update_prefs(cx, |p| p.show_image_descriptions = on);
+            }
+            Toggle::TtsCommand => return self.update_prefs(cx, |p| p.tts_command = on),
             Toggle::AutoDownloadUpdates => return self.set_auto_download(on, cx),
             Toggle::RenderEmbeds => {
                 account.render_embeds = on;

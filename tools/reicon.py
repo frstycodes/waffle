@@ -315,6 +315,7 @@ MAP = [
     ("Glyph::ScreenOff", "Voice", "Stop watching or streaming", "CUSTOM:monitor-off"),
     ("Glyph::TextLocked", "Channels", "Text channel, private", "CUSTOM:text-locked"),
     ("Glyph::VoiceLocked", "Channels", "Voice channel, private", "CUSTOM:voice-locked"),
+    ("Glyph::Megaphone", "Channels", "Hold Up! before a mass ping", "bullhorn"),
     ("Glyph::AnnouncementLocked", "Channels", "Announcement channel, private", "CUSTOM:announcement-locked"),
     ("Glyph::StageLocked", "Channels", "Stage channel, private", "CUSTOM:stage-locked"),
     ("Glyph::ForumLocked", "Channels", "Forum channel, private", "CUSTOM:forum-locked"),

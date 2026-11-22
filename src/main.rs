@@ -11,9 +11,11 @@ mod components;
 mod interactions;
 mod active_now;
 mod attachments;
+mod send_options;
 mod app_keys;
 mod crash;
 mod create_channel;
+mod modify_attachment;
 mod restart;
 mod feed_keys;
 mod auth;
@@ -43,6 +45,7 @@ mod mascot;
 mod material;
 mod forum;
 mod forward;
+mod report;
 mod group_dm;
 mod reactions;
 mod requests;
@@ -454,6 +457,8 @@ enum SuggestLead {
     Avatar(String),
     Channel,
     Emoji(discord::Emoji),
+    // A built-in command (/tts): its glyph.
+    Command(icons::Glyph),
 }
 
 struct Autocomplete {
@@ -682,6 +687,7 @@ pub struct Waffle {
     command_picker: command_picker::CommandPicker,
     component_state: components::ComponentState,
     app_modal: Option<app_modal::AppModal>,
+    report_dialog: Option<report::ReportDialog>,
     group_dialog: Option<group_dm::GroupDialog>,
     status_flyout: status_menu::Flyout,
     status_input: Entity<SearchState>,
@@ -812,7 +818,10 @@ pub struct Waffle {
     create_channel: Option<create_channel::CreateChannel>,
     notification_settings: Option<notification_settings::NotificationSettings>,
     stage_topic: Option<stage_dialogs::StageTopic>,
+    modify_attachment: Option<modify_attachment::ModifyAttachment>,
     dialog_input: Entity<SearchState>,
+    // Modify Attachment's Description (Alt Text).
+    alt_input: Entity<TextareaState>,
     // A short notice at the bottom, e.g. why a moderation action failed.
     toast: Option<SharedString>,
     // The Friends page's Add friend tab: the username field and how the last request went.
@@ -904,6 +913,8 @@ pub struct Waffle {
     editing: Option<Message>,
     mention_wire: HashMap<String, String>,
     autocomplete: Option<Autocomplete>,
+    // Discord's "Hold Up!" over the composer: Enter on a mass ping waits for Send Now.
+    hold_up: Option<send_options::HoldUp>,
     // The suggestion list's scroll, kept on the highlighted row.
     autocomplete_scroll: gpui_kit::ScrollHandle,
     channels_scroll: gpui_kit::ScrollHandle,
@@ -930,6 +941,10 @@ pub struct Waffle {
     hovered_row: Option<String>,
     // The message under the pointer, which shows its toolbar and, on a continuation, its time.
     hovered_message: Option<String>,
+    // The attachment tile under the pointer (a waiting file, a sent picture), which shows its actions.
+    hovered_tile: Option<String>,
+    // The sent picture whose ALT popout is open, as `{message id}#{index}`.
+    alt_popout: Option<String>,
     // The message with keyboard focus in the feed (feed_keys.rs); kept only while `feed_focus` holds focus.
     focused_message: Option<String>,
     feed_focus: FocusHandle,
@@ -1060,17 +1075,26 @@ impl Waffle {
             if this.stage_topic.is_some() {
                 return this.stage_topic_input(event, window, cx);
             }
+            // Modify Attachment locks its spoiler box while the name starts with SPOILER_.
+            if matches!(event, InputEvent::Change) && this.modify_attachment.is_some() {
+                cx.notify();
+            }
             if !matches!(event, InputEvent::PressEnter { .. }) {
                 return;
             }
             if this.create_channel.is_some() {
                 return this.submit_create_channel(cx);
             }
+            if this.modify_attachment.is_some() {
+                return this.save_modify_attachment(cx);
+            }
             if this.dialog.as_ref().is_some_and(|d| d.input) {
                 this.confirm_dialog(window, cx);
             }
         })
         .detach();
+        let alt_input = cx.new(|cx| TextareaState::new(window, cx).placeholder("Add a description").auto_grow(3, 8));
+        cx.subscribe_in(&alt_input, window, Self::on_alt_input).detach();
         let status_input = cx.new(|cx| SearchState::new(window, cx).placeholder("What's on your mind?"));
         cx.subscribe_in(&status_input, window, Self::on_status_input).detach();
         let add_friend_input = cx.new(|cx| SearchState::new(window, cx).placeholder("username"));
@@ -1103,6 +1127,7 @@ impl Waffle {
             command_picker: command_picker::CommandPicker::load(),
             component_state: Default::default(),
             app_modal: None,
+            report_dialog: None,
             group_dialog: None,
             status_flyout: status_menu::Flyout::default(),
             status_input,
@@ -1193,7 +1218,9 @@ impl Waffle {
             create_channel: None,
             notification_settings: None,
             stage_topic: None,
+            modify_attachment: None,
             dialog_input,
+            alt_input,
             toast: None,
             add_friend_input,
             add_friend_note,
@@ -1247,6 +1274,7 @@ impl Waffle {
             editing: None,
             mention_wire: HashMap::new(),
             autocomplete: None,
+            hold_up: None,
             autocomplete_scroll: gpui_kit::ScrollHandle::new(),
             channels_scroll: gpui_kit::ScrollHandle::new(),
             rail_scroll: gpui_kit::ScrollHandle::new(),
@@ -1266,6 +1294,8 @@ impl Waffle {
             updates: updater::Updates::default(),
             hovered_row: None,
             hovered_message: None,
+            hovered_tile: None,
+            alt_popout: None,
             focused_message: None,
             feed_focus,
             call_focus: None,
@@ -1855,6 +1885,7 @@ impl Waffle {
         if !mine && !is_open && (self.mentions_me(&message) || is_dm) {
             self.read_states.entry(channel_id.clone()).or_default().mentions += 1;
         }
+        self.speak_tts(&message, is_open, mine);
         let kind = self.notify_kind(&message, is_open && self.window_active);
         if kind != notify::Notify::None {
             sounds::play(if is_dm { sounds::Cue::Message } else { sounds::Cue::Mention });
@@ -2281,7 +2312,7 @@ impl Waffle {
             InputEvent::Change => self.on_composer_change(window, cx),
             InputEvent::PressEnter { shift: false, .. } if self.on_command_enter(window, cx) => {}
             InputEvent::PressEnter { shift: false, .. } if self.autocomplete.is_some() => self.accept_suggestion(window, cx),
-            InputEvent::PressEnter { shift: false, .. } => self.submit(window, cx),
+            InputEvent::PressEnter { shift: false, .. } => self.submit(self.hold_up.is_some(), window, cx),
             _ => {}
         }
     }
@@ -2294,6 +2325,8 @@ impl Waffle {
         self.update_command_picker(&text, cx);
         let command = self.on_command_text(window, cx);
         self.autocomplete = (!command && !self.command_picker.is_open()).then(|| self.suggest(&text)).flatten();
+        self.hold_up = None;
+        self.chip_silent(window, cx);
         if !command {
             self.send_typing();
         }
@@ -2310,8 +2343,9 @@ impl Waffle {
         discord::runtime().spawn(async move { client.typing(&id).await });
     }
 
-    /// Enter in the composer: saves the edit in progress, otherwise sends (optimistically).
-    fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// Enter in the composer: saves the edit in progress, otherwise sends (optimistically). A mass ping
+    /// first opens Hold Up!, unless it's `confirmed` there.
+    pub(crate) fn submit(&mut self, confirmed: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.held_unread = None;
         let (Some(client), Some(channel), Some(me)) = (self.client.clone(), self.channel.clone(), self.me.clone()) else { return };
         let typed = wire_text(&self.composer.read(cx).content());
@@ -2319,7 +2353,19 @@ impl Waffle {
         if typed.is_empty() && self.pending_files.is_empty() {
             return;
         }
-        let content = self.to_wire(typed);
+        // An edit keeps its text as typed: Discord reads @silent and /tts only on a new message.
+        let (content, options) = match self.editing {
+            Some(_) => (typed.to_owned(), discord::SendOptions::default()),
+            None => send_options::parse(typed, self.tts_allowed()),
+        };
+        let content = self.to_wire(&content);
+        if !confirmed && self.editing.is_none() {
+            self.hold_up = self.hold_up_for(&content);
+            if self.hold_up.is_some() {
+                return cx.notify();
+            }
+        }
+        self.hold_up = None;
         self.composer.update(cx, |state, cx| state.set_value("", window, cx));
         self.has_draft = false;
         self.send_error = None;
@@ -2335,7 +2381,7 @@ impl Waffle {
             match attachments::save_message_text(&content).ok().and_then(attachments::PendingFile::new) {
                 Some(file) => {
                     self.pending_files.push(file);
-                    return self.send_files(String::new(), cx);
+                    return self.send_files(String::new(), options, cx);
                 }
                 None => {
                     self.send_error = Some("Couldn't turn the long message into a file".into());
@@ -2344,7 +2390,7 @@ impl Waffle {
             }
         }
         if !self.pending_files.is_empty() {
-            return self.send_files(content, cx);
+            return self.send_files(content, options, cx);
         }
         let nonce = nonce();
         let reply = self.replying.take();
@@ -2360,11 +2406,13 @@ impl Waffle {
             reply: reply.clone().map(Box::new),
             nonce: Some(nonce.clone()),
             state: SendState::Sending,
+            flags: options.flags(),
+            tts: options.tts,
             ..Default::default()
         };
         self.push_local(pending, cx);
         cx.spawn(async move |this, cx| {
-            let result = client.send_message(&channel.id, &content, &nonce, reply.as_ref().map(|r| r.id.as_str()), ping).await;
+            let result = client.send_message(&channel.id, &content, &nonce, reply.as_ref().map(|r| r.id.as_str()), ping, options).await;
             this.update(cx, |this, cx| this.settle(&channel.id, &nonce, result, cx)).ok();
         })
         .detach();
@@ -2423,7 +2471,7 @@ impl Waffle {
             let result = match (message.stickers.first(), poll::draft_of(&message)) {
                 (Some(sticker), _) => client.send_sticker(&message.channel_id, &sticker.id, &nonce, message.reply_to.as_deref(), true).await,
                 (None, Some(draft)) => client.send_poll(&message.channel_id, &draft, &nonce).await,
-                (None, None) => client.send_message(&message.channel_id, &message.content, &nonce, message.reply_to.as_deref(), true).await,
+                (None, None) => client.send_message(&message.channel_id, &message.content, &nonce, message.reply_to.as_deref(), true, message.send_options()).await,
             };
             this.update(cx, |this, cx| this.settle(&message.channel_id, &nonce, result, cx)).ok();
         })
@@ -2586,7 +2634,7 @@ impl Waffle {
         true
     }
 
-    fn send_files(&mut self, content: String, cx: &mut Context<Self>) {
+    fn send_files(&mut self, content: String, options: discord::SendOptions, cx: &mut Context<Self>) {
         let (Some(channel), Some(me)) = (self.channel.clone(), self.me.clone()) else { return };
         // Previews stay until the upload settles: the feed's upload cards show them too.
         let files: Vec<discord::Upload> = std::mem::take(&mut self.pending_files).iter().map(attachments::PendingFile::upload).collect();
@@ -2603,9 +2651,11 @@ impl Waffle {
             reply: reply.clone().map(Box::new),
             nonce: Some(nonce.clone()),
             state: SendState::Sending,
+            flags: options.flags(),
+            tts: options.tts,
             ..Default::default()
         };
-        let job = UploadJob { channel_id: channel.id.clone(), files, content, reply_to: reply.map(|r| r.id), ping: self.reply_ping, error: None };
+        let job = UploadJob { channel_id: channel.id.clone(), files, content, reply_to: reply.map(|r| r.id), ping: self.reply_ping, options, error: None };
         self.uploads.insert(nonce.clone(), job);
         self.push_local(pending, cx);
         self.start_upload(nonce, cx);
@@ -2633,7 +2683,7 @@ impl Waffle {
         let task = cx.spawn({
             let nonce = nonce.clone();
             async move |this, cx| {
-                let result = client.upload(&job.channel_id, &job.files, &job.content, &nonce, job.reply_to.as_deref(), job.ping).await;
+                let result = client.upload(&job.channel_id, &job.files, &job.content, &nonce, job.reply_to.as_deref().map(|id| (id, job.ping)), job.options).await;
                 this.update(cx, |this, cx| this.settle(&job.channel_id, &nonce, result, cx)).ok();
             }
         });
@@ -2835,6 +2885,15 @@ impl Waffle {
         let chip = InlineToken::new(pick.wire.clone(), pick.insert.clone());
         self.composer.update(cx, |state, cx| complete_mention(state, &auto.token, chip, window, cx));
         cx.notify();
+    }
+
+    // "@silent " typed at the start becomes a chip, as Discord styles the prefix; its wire form is the text itself.
+    fn chip_silent(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let content = self.composer.read(cx).content();
+        if content.text().as_ref() != "@silent " || !content.tokens().is_empty() {
+            return;
+        }
+        self.composer.update(cx, |state, cx| complete_mention(state, "@silent ", InlineToken::new("@silent", "@silent"), window, cx));
     }
 
     fn move_suggestion(&mut self, delta: isize, cx: &mut Context<Self>) {
@@ -3693,6 +3752,7 @@ struct UploadJob {
     content: String,
     reply_to: Option<String>,
     ping: bool,
+    options: discord::SendOptions,
     // Discord's refusal, verbatim, once it fails.
     error: Option<String>,
 }

@@ -920,12 +920,11 @@ fn gallery(message: &Message, items: &[GalleryItem], path: &str, width: f32, ctx
                 (Some(w), Some(h)) if w > 0 && h > 0 => (w as f32, h as f32),
                 _ => GALLERY_ITEM,
             };
-            Media { url: resolve(message, &i.url), width: w, height: h, kind: MediaKind::Image }
+            Media { url: resolve(message, &i.url), width: w, height: h, kind: MediaKind::Image, id: None, description: i.description.clone(), spoiler: i.spoiler }
         })
         .collect();
-    let spoilers: Vec<bool> = items.iter().map(|i| i.spoiler).collect();
     let grid = Message { id: format!("{}-gallery-{path}", message.id), channel_id: message.channel_id.clone(), media, ..Default::default() };
-    chat::media_layout(&grid, width, Paging::Gallery { spoilers: &spoilers }, ctx, cx).map_or_else(|| div().into_any_element(), IntoElement::into_any_element)
+    chat::media_layout(&grid, width, Paging::Gallery, ctx, cx).map_or_else(|| div().into_any_element(), IntoElement::into_any_element)
 }
 
 // The file card, sized from the attachment it points at, else from the component's own `size`; a
@@ -937,6 +936,8 @@ fn file(message: &Message, url: &str, name: Option<&str>, size: Option<u64>, spo
         name: name.map(str::to_owned).or_else(|| url.rsplit('/').next().map(str::to_owned)).unwrap_or_default(),
         url: url.to_owned(),
         size: size.unwrap_or(0),
+        id: String::new(),
+        spoiler,
     });
     let card = chat::file_card(message, &file, cx);
     if !spoiler {
@@ -1185,7 +1186,7 @@ mod tests {
 
     #[test]
     fn attachment_urls_resolve_to_the_message_files() {
-        let message = Message { files: vec![File { name: "log.txt".into(), url: "https://cdn.discordapp.com/attachments/1/2/log.txt?ex=1".into(), size: 3 }], ..Default::default() };
+        let message = Message { files: vec![File { name: "log.txt".into(), url: "https://cdn.discordapp.com/attachments/1/2/log.txt?ex=1".into(), size: 3, id: String::new(), spoiler: false }], ..Default::default() };
         assert_eq!(resolve(&message, "attachment://log.txt"), message.files[0].url);
         assert_eq!(resolve(&message, "https://x/y.png"), "https://x/y.png");
     }

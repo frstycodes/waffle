@@ -31,6 +31,7 @@ use crate::{
     interactions::InteractionKind,
     palette::{self, Level},
     recent_commands::{self, Ranks, RecentCommands},
+    send_options,
     ui::{self, RADIUS_LG, RADIUS_SM, Squircle},
 };
 
@@ -381,7 +382,9 @@ impl Waffle {
 
     fn command_rows(&self) -> Vec<ListRow> {
         let Some(index) = self.ready_index() else { return Vec::new() };
-        listing(&index, &self.command_picker.query, &self.command_ranks(&index), self.command_picker.filter)
+        let picker = &self.command_picker;
+        let rows = listing(&index, &picker.query, &self.command_ranks(&index), picker.filter);
+        with_built_ins(rows, &picker.query, picker.filter, self.tts_allowed())
     }
 
     // The picker shows unless a query with spaces matches nothing: then it's just text, as in Discord.
@@ -412,9 +415,26 @@ impl Waffle {
     fn pick_selected_command(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let rows = self.command_rows();
         let Some(&row) = pickable(&rows).get(self.command_picker.selected) else { return false };
-        let ListRow::Command { command, .. } = rows[row] else { return false };
-        self.pick_command(command, window, cx);
+        match rows[row] {
+            ListRow::Command { command, .. } => self.pick_command(command, window, cx),
+            ListRow::Tts { .. } => self.pick_tts(window, cx),
+            ListRow::Header(_) => return false,
+        }
         true
+    }
+
+    // /tts goes in as the typed prefix `send_options::parse` reads on send; the picker stays closed over it.
+    fn pick_tts(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let head = format!("{} ", send_options::TTS);
+        let picker = &mut self.command_picker;
+        picker.reset();
+        picker.dismissed = true;
+        self.composer.update(cx, |state, cx| {
+            state.set_value(head.clone(), window, cx);
+            state.set_selected_range(head.len()..head.len(), cx);
+            state.focus(window, cx);
+        });
+        self.on_composer_change(window, cx);
     }
 
     /// Writes command `index` (into the open index) as `/name ` and a box for every required option, as
@@ -1348,7 +1368,7 @@ impl Waffle {
         let body = match self.command_index() {
             None | Some(IndexState::Loading) => loading_rows(3, cx).into_any_element(),
             Some(IndexState::Failed(error)) => self.index_error(error, cx).into_any_element(),
-            Some(IndexState::Ready(index)) if index.commands.is_empty() => picker_note("No apps here have commands", "Apps added to this server show their commands here.", cx).into_any_element(),
+            Some(IndexState::Ready(index)) if index.commands.is_empty() && self.command_rows().is_empty() => picker_note("No apps here have commands", "Apps added to this server show their commands here.", cx).into_any_element(),
             Some(IndexState::Ready(index)) => self.command_picker_body(index, cx),
         };
         let foot = popup_foot(cx)
@@ -1361,7 +1381,7 @@ impl Waffle {
     fn command_picker_body(&self, index: &CommandIndex, cx: &mut Context<Self>) -> AnyElement {
         let query = self.command_picker.query.clone();
         let ranks = self.command_ranks(index);
-        let rows = listing(index, &query, &ranks, self.command_picker.filter);
+        let rows = self.command_rows();
         if rows.is_empty() {
             return picker_note(format!("No commands match /{query}"), "Try another name, or a word from what it does.", cx).into_any_element();
         }
@@ -1372,6 +1392,10 @@ impl Waffle {
             ListRow::Command { command, name, description } => {
                 let pick = picks.iter().position(|&p| p == row).unwrap_or_default();
                 self.command_row(index, *command, name.clone(), description.clone(), chosen == Some(row), pick, cx).into_any_element()
+            }
+            ListRow::Tts { name } => {
+                let pick = picks.iter().position(|&p| p == row).unwrap_or_default();
+                self.tts_row(name.clone(), chosen == Some(row), pick, cx).into_any_element()
             }
         });
         let list = div().id("command-list").flex_1().min_w_0().max_h(px(LIST_HEIGHT)).p(px(6.)).flex().flex_col().gap(px(2.)).overflow_y_scroll().track_scroll(&self.command_picker.scroll).children(list);
@@ -1464,6 +1488,31 @@ impl Waffle {
             .child(app_tile(&app, 32., cx))
             .child(what)
             .child(div().flex_none().text_size(px(12.)).text_color(faint).child(app.name))
+            .on_click(cx.listener(move |this, _, window, cx| {
+                this.command_picker.selected = pick;
+                this.pick_selected_command(window, cx);
+            }))
+    }
+
+    // Discord's built-in /tts, drawn like an app's command.
+    fn tts_row(&self, name: Option<Range<usize>>, on: bool, pick: usize, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let (strong, muted, faint, accent) = (palette::strong(cx), palette::muted(cx), palette::faint(cx), palette::accent_ink(cx));
+        let name = name.map(|r| (r.start + 1..r.end + 1, HighlightStyle { color: Some(accent), ..Default::default() }));
+        let title = div()
+            .flex()
+            .items_baseline()
+            .gap(px(6.))
+            .min_w_0()
+            .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(StyledText::new(send_options::TTS).with_highlights(name)))
+            .child(div().min_w_0().truncate().text_size(px(13.)).text_color(faint).child("message"));
+        let what = div().flex_1().min_w_0().flex().flex_col().child(title).child(div().truncate().text_size(px(13.)).text_color(muted).child(send_options::TTS_DESCRIPTION));
+        ui::menu_row("command-tts", cx)
+            .highlighted(on)
+            .min_h(px(44.))
+            .gap(px(12.))
+            .child(div().size(px(32.)).flex_none().flex().items_center().justify_center().child(crate::chat::suggest_lead(&SuggestLead::Command(Glyph::VolumeHigh), cx)))
+            .child(what)
+            .child(div().flex_none().text_size(px(12.)).text_color(faint).child(BUILT_IN))
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.command_picker.selected = pick;
                 this.pick_selected_command(window, cx);
@@ -1780,6 +1829,7 @@ fn section_header(index: &CommandIndex, section: Section, query: &str, cx: &App)
         Section::App(a) => header.child(app_tile(&index.apps[a], 16., cx)).child(index.apps[a].name.clone()),
         // Discord's "Commands matching **{prefix}**".
         Section::Matching => header.child("Commands matching").child(div().text_color(palette::strong(cx)).child(query.to_owned())),
+        Section::BuiltIn => header.child(BUILT_IN),
     }
 }
 
@@ -1827,13 +1877,37 @@ pub(crate) enum Section {
     App(usize),
     // The typed list's single header.
     Matching,
+    // Discord's own commands, after every app's.
+    BuiltIn,
 }
+
+const BUILT_IN: &str = "Built-In";
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ListRow {
     Header(Section),
     // `command` indexes `CommandIndex::commands`; the ranges are what matched, in the name and description.
     Command { command: usize, name: Option<Range<usize>>, description: Option<Range<usize>> },
+    // The built-in /tts; `name` is what matched in it, past the `/`.
+    Tts { name: Option<Range<usize>> },
+}
+
+/// Discord lists its built-in commands in the same picker, as the last section ("Built-ins last"). Only
+/// /tts is built in here, offered while the query is the start of it and it's allowed; none under an app
+/// filter, since the rail has no Built-In tile.
+/// GAP: Discord ranks built-ins by match tier with everything else; the typed list puts /tts last.
+fn with_built_ins(mut rows: Vec<ListRow>, query: &str, filter: Option<usize>, tts_allowed: bool) -> Vec<ListRow> {
+    if !tts_allowed || filter.is_some() || !send_options::offers_tts(&format!("/{query}")) {
+        return rows;
+    }
+    let name = (!query.is_empty()).then_some(0..query.len());
+    if query.is_empty() {
+        rows.push(ListRow::Header(Section::BuiltIn));
+    } else if rows.is_empty() {
+        rows.push(ListRow::Header(Section::Matching));
+    }
+    rows.push(ListRow::Tts { name });
+    rows
 }
 
 /// The picker's rows. A query gives Discord's inline list: one flat list of up to 20 by match tier, then
@@ -1973,7 +2047,7 @@ pub(crate) fn fuzzy(needle: &str, haystack: &str) -> bool {
 
 // The row index of every command row, in order: what ↑/↓ step through.
 fn pickable(rows: &[ListRow]) -> Vec<usize> {
-    rows.iter().enumerate().filter(|(_, r)| matches!(r, ListRow::Command { .. })).map(|(i, _)| i).collect()
+    rows.iter().enumerate().filter(|(_, r)| !matches!(r, ListRow::Header(_))).map(|(i, _)| i).collect()
 }
 
 fn section_of(rows: &[ListRow], row: usize) -> Section {
@@ -1982,7 +2056,7 @@ fn section_of(rows: &[ListRow], row: usize) -> Section {
         .rev()
         .find_map(|r| match r {
             ListRow::Header(s) => Some(*s),
-            ListRow::Command { .. } => None,
+            ListRow::Command { .. } | ListRow::Tts { .. } => None,
         })
         .unwrap_or(Section::Frecency)
 }
@@ -2042,9 +2116,26 @@ mod tests {
                 ListRow::Header(Section::Frecency) => "#recent".to_owned(),
                 ListRow::Header(Section::Matching) => "#matching".to_owned(),
                 ListRow::Header(Section::App(a)) => format!("#{}", index.apps[*a].name),
+                ListRow::Header(Section::BuiltIn) => "#built-in".to_owned(),
                 ListRow::Command { command, .. } => index.commands[*command].name(),
+                ListRow::Tts { .. } => "tts".to_owned(),
             })
             .collect()
+    }
+
+    #[test]
+    fn lists_tts_as_the_last_section() {
+        let index = index();
+        let ranks = ranks(&index);
+        let rows = |query: &str, filter, allowed| names(&index, &with_built_ins(listing(&index, query, &ranks, filter), query, filter, allowed));
+        assert_eq!(rows("", None, true).last_chunk::<2>().unwrap(), &["#built-in".to_owned(), "tts".to_owned()]);
+        let typed = rows("tt", None, true);
+        assert_eq!((typed.first().unwrap().as_str(), typed.last().unwrap().as_str()), ("#matching", "tts"));
+        assert!(!rows("pl", None, true).contains(&"tts".to_owned()));
+        assert!(!rows("", None, false).contains(&"tts".to_owned()));
+        assert!(!rows("", Some(0), true).contains(&"tts".to_owned()));
+        assert!(!rows("tts ", None, true).contains(&"tts".to_owned()));
+        assert_eq!(with_built_ins(Vec::new(), "tt", None, true)[1], ListRow::Tts { name: Some(0..2) });
     }
 
     #[test]
