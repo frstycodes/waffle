@@ -145,6 +145,11 @@
   .pair figcaption { font-weight: 600; color: var(--text-muted); font-size: 13px; margin: 0 0 6px 4px; }
   .pair .stage { padding: 32px 12px; place-items: start center; }
   @media (max-width: 960px) { .pair { grid-template-columns: 1fr; } }
+  .pair.stack { grid-template-columns: 1fr; }
+  .dialog.wide { width: min(100%, 820px); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+  .scroll.tall { max-height: 360px; }
+  @media (max-width: 720px) { .cols { grid-template-columns: 1fr; } }
   .trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block !important; }
 
   /* Discord's modal, drawn from its client for reference (its dark and light themes). */
@@ -258,14 +263,14 @@
   <div class="pair"><figure><figcaption>Discord</figcaption><div class="stage dcs"><div class="dc" id="srv-d"></div></div></figure><figure><figcaption>Waffle</figcaption><div class="stage"><div class="dialog" id="srv-w" role="dialog" aria-modal="true"></div></div></figure></div>
 
   <h2>Create channel</h2>
-  <p class="note">From a category's + or the channel list's menu. Waffle adds: Private channel opens the member and role picker in place, instead of a second step behind Next.</p>
+  <p class="note">From a category's + or the channel list's menu. Private channel and Stage pick their members, roles or moderators in a second step behind Next, as in Discord.</p>
   <div class="ctl" id="ch-ctl"></div>
   <div class="pair"><figure><figcaption>Discord</figcaption><div class="stage dcs"><div class="dc" id="ch-d"></div></div></figure><figure><figcaption>Waffle</figcaption><div class="stage"><div class="dialog" id="ch-w" role="dialog" aria-modal="true"></div></div></figure></div>
 
   <h2>Invite people</h2>
   <p class="note">From a channel's invite button or the server menu. Waffle adds: link settings open in place, and paused invites say so instead of handing out a link that won't work.</p>
   <div class="ctl" id="inv-ctl"></div>
-  <div class="pair"><figure><figcaption>Discord</figcaption><div class="stage dcs"><div class="dc" id="inv-d"></div></div></figure><figure><figcaption>Waffle</figcaption><div class="stage"><div class="dialog" id="inv-w" role="dialog" aria-modal="true"></div></div></figure></div>
+  <div class="pair stack"><figure><figcaption>Discord</figcaption><div class="stage dcs"><div class="dc" id="inv-d"></div></div></figure><figure><figcaption>Waffle</figcaption><div class="stage"><div class="dialog wide" id="inv-w" role="dialog" aria-modal="true"></div></div></figure></div>
 </main>
 
 <script>
@@ -324,8 +329,7 @@ function serverWaffle(s) {
     <div class="rows"><button class="row card" data-a="own" ${off}><span class="tile" style="background:var(--accent);color:var(--on-accent)">${ic("add")}</span><span class="txt"><span class="name">Create my own</span></span><span class="chev">${ic("chevron-right")}</span></button></div>
     <div class="group"><div class="label">Start from a template</div><div class="rows">${TEMPLATES.map(([n, icon, hue, chans], i) => `
       <div class="row tpl" role="button" tabindex="0" data-a="${off ? "" : "tpl"}" data-i="${i}" ${off ? 'aria-disabled="true" style="opacity:.5"' : ""}><span class="tile" style="background:${hue}">${ic(icon)}</span><span class="txt"><span class="name">${esc(n)}</span>${chanChips(chans, !s.open.has(i))}${s.open.has(i) ? `<button class="more less" data-a="more" data-i="${i}">Show fewer</button>` : `<button class="more" data-a="more" data-i="${i}">Show all ${chans.length} channels</button>`}</span><span class="chev">${ic("chevron-right")}</span></div>`).join("")}</div></div>
-    <div class="divider"></div>
-    <div class="foot"><div class="q">Have an invite already?</div><button class="btn secondary" data-a="join" ${off}>Join a server</button></div>`;
+    <div class="foot" style="padding-top:8px"><div class="q">Have an invite already?</div><button class="btn secondary" data-a="join" ${off}>Join a server</button></div>`;
   if (s.step === "purpose") return whead("Tell us more about your server", "In order to help you with your setup, is your new server for just a few friends or a larger community?") + `
     <div class="rows">
       <button class="row card" data-a="customize"><span class="tile" style="background:#d68a3f">${ic("heart")}</span><span class="txt"><span class="name">For me and my friends</span></span><span class="chev">${ic("chevron-right")}</span></button>
@@ -409,21 +413,22 @@ function channelWaffle(s) {
   const t = TYPES.find(t => t[0] === s.kind);
   const list = chMatches(s);
   const stage = s.kind === 13;
-  const picker = s.priv || stage ? `
-    <div class="group"><div class="label">${stage ? "Stage moderators" : "Who can access this channel"} <small>${s.picked.size ? `${s.picked.size} added` : stage ? "Just you, so far" : "Only you, so far"}</small></div>
+  const picker = s.dStep === "members" ? `
+    <div class="group"><div class="label">${stage ? "Moderators" : "Members and roles"} <small>${s.picked.size ? `${s.picked.size} added` : stage ? "Just you, so far" : "Only you, so far"}</small></div>
       ${stage ? `<div class="hint">Stage moderators are Speakers who can add and remove other Speakers. They can also start the Stage event.</div>` : ""}
       <div class="field">${ic("search")}<input data-f="q" placeholder="Search members and roles" value="${esc(s.q)}"></div>
       ${s.picked.size ? `<div class="picked">${[...s.picked].map(n => `<span class="pill">${esc(n)}<button aria-label="Remove ${esc(n)}" data-a="pick" data-n="${esc(n)}">${ic("xmark")}</button></span>`).join("")}</div>` : ""}
       <div class="scroll"><div class="rows">${list.length ? list.map((p, i) => `
         <button class="row" data-a="pick" data-n="${esc(p[1])}" role="checkbox" aria-checked="${s.picked.has(p[1])}"><span class="check ${s.picked.has(p[1]) ? "on" : ""}">${s.picked.has(p[1]) ? ic("check") : ""}</span>${personMark(p, i)}<span class="txt"><span class="name">${esc(p[1])}</span><span class="sub">${p[0] === "role" ? "Role" : esc(p[2])}</span></span></button>`).join("") : `<div class="empty">No members or roles match “${esc(s.q)}”</div>`}</div></div>
     </div>` : "";
+  if (s.dStep === "members") return whead(stage ? "Add Stage moderators" : "Add members or roles", `${ic(t[1])} ${esc(s.name)}`) + picker + `
+    <div class="actions"><button class="btn secondary" data-a="dskip">Back</button><button class="btn primary" data-a="close">${s.picked.size ? "Create channel" : "Skip"}</button></div>`;
   return whead("Create channel", `in ${esc(s.category)}`) + `
     <div class="group"><div class="label">Channel type</div><div class="rows" role="radiogroup">${chTypes(s).map(([k, g, n, d]) => `
       <button class="row" role="radio" aria-checked="${k === s.kind}" data-a="kind" data-k="${k}"><span class="radio ${k === s.kind ? "on" : ""}"></span><span class="txt"><span class="name">${ic(g)}${n}</span><span class="sub">${d}</span></span></button>`).join("")}</div></div>
     <div class="group"><label class="label">Channel name</label><div class="field">${ic(t[1])}<input data-f="name" maxlength="100" placeholder="${placeholder(s.kind)}" value="${esc(s.name)}"></div></div>
     ${noPrivate(s.kind) ? "" : `<div class="switchrow" data-a="priv" role="switch" aria-checked="${s.priv}" tabindex="0"><div class="txt"><span class="name">${ic("lock2")}Private channel</span><span class="hint">Only selected members and roles will be able to view this channel.</span></div><span class="switch ${s.priv ? "on" : ""}"></span></div>`}
-    ${picker}
-    <div class="actions"><button class="btn secondary" data-a="close">Cancel</button><button class="btn primary" data-a="close" ${s.name.trim() ? "" : "disabled"}>Create channel</button></div>`;
+    <div class="actions"><button class="btn secondary" data-a="close">Cancel</button><button class="btn primary" data-a="${s.priv || stage ? "dnext" : "close"}" ${s.name.trim() ? "" : "disabled"}>${s.priv || stage ? "Next" : "Create channel"}</button></div>`;
 }
 
 function channelDiscord(s) {
@@ -470,22 +475,25 @@ const invLink = s => s.vanity ? "https://discord.gg/waffle-club" : `https://disc
 const opts = (list, v) => list.map(([k, l]) => `<option value="${k}" ${k === v ? "selected" : ""}>${l}</option>`).join("");
 
 function inviteWaffle(s) {
-  const d = s.draft;
+  // Wide layout: the settings show unasked; Cancel only once they differ from the live link.
+  const live = { age: s.age, uses: s.uses, temp: s.temp }, d = s.draft || live;
+  const changed = d.age !== s.age || d.uses !== s.uses || d.temp !== s.temp;
   const list = invList(s);
   return whead("Invite friends to Waffle Club", `${ic("hashtag2")} Recipients will land in <b>general</b>`) +
     (s.paused ? `<div class="callout">${ic("pause")}<div><b>Invites are paused until 4:00 PM tomorrow.</b> <span class="m">Nobody can join with a link until then. Resume them in Server settings.</span></div></div>` : "") + `
+    <div class="cols"><div class="group">
     <div class="field">${ic("search")}<input data-f="q" placeholder="Search for friends" value="${esc(s.q)}"></div>
-    <div class="scroll"><div class="rows">${list.length ? list.map(([n, u], i) => `
-      <div class="row" style="cursor:default">${face(n, i)}<span class="txt"><span class="name trunc" title="${esc(n)}">${esc(n)}</span><span class="sub">${esc(u)}</span></span>${s.sent.has(u) ? `<button class="btn small sent" disabled>${ic("check")} Sent</button>` : `<button class="btn small secondary" data-a="send" data-u="${u}" ${s.paused ? "disabled" : ""}>Invite</button>`}</div>`).join("") : `<div class="empty">No friends match “${esc(s.q)}”</div>`}</div></div>
-    <div class="group"><div class="label">Or, send a server invite link to a friend</div>
+    <div class="scroll tall"><div class="rows">${list.length ? list.map(([n, u], i) => `
+      <div class="row" style="cursor:default">${face(n, i)}<span class="txt"><span class="name trunc" title="${esc(n)}">${esc(n)}</span><span class="sub">${esc(u)}</span></span>${s.sent.has(u) ? `<button class="btn small sent" disabled>${ic("check")} Sent</button>` : `<button class="btn small secondary" data-a="send" data-u="${u}" ${s.paused ? "disabled" : ""}>Invite</button>`}</div>`).join("") : `<div class="empty">No friends match “${esc(s.q)}”</div>`}</div></div></div>
+    <div class="group" style="gap:20px"><div class="group"><div class="label">Or, send a server invite link to a friend</div>
       <div class="field"><input readonly value="${invLink(s)}" aria-label="Invite link" ${s.paused ? "disabled" : ""}><button class="btn small primary" data-a="copy" ${s.paused ? "disabled" : ""}>${s.copied ? "Copied" : "Copy"}</button></div>
-      ${d ? "" : `<div class="hint">${s.vanity ? "Using this server's custom invite link." : expiry(s)} <a data-a="edit">Edit invite link</a></div>`}</div>
-    ${d ? `<div class="settings">
+      <div class="hint">${s.vanity ? "Using this server's custom invite link." : expiry(s)}</div></div>
+    ${!s.vanity ? `<div class="settings">
       <div class="two"><div class="group"><label class="label">Expire after</label><div class="selectwrap"><select class="field" data-f="age">${opts(AGES, d.age)}</select>${ic("chevron-down")}</div></div>
       <div class="group"><label class="label">Max number of uses</label><div class="selectwrap"><select class="field" data-f="uses">${opts(USES, d.uses)}</select>${ic("chevron-down")}</div></div></div>
       <div class="switchrow" data-a="temp" role="switch" aria-checked="${d.temp}" tabindex="0"><div class="txt"><span class="name">Grant temporary membership</span><span class="hint">Temporary members are automatically kicked when they disconnect unless a role has been assigned.</span></div><span class="switch ${d.temp ? "on" : ""}"></span></div>
-      <div class="actions"><button class="btn secondary" data-a="cancel">Cancel</button><button class="btn primary" data-a="gen">Generate a new link</button></div>
-    </div>` : ""}`;
+      <div class="actions">${changed ? `<button class="btn secondary" data-a="cancel">Cancel</button>` : ""}<button class="btn primary" data-a="gen">Generate a new link</button></div>
+    </div>` : ""}</div></div>`;
 }
 
 function inviteDiscord(s) {
@@ -509,11 +517,11 @@ invRender = flow("inv", { q: "", sent: new Set(), age: 604800, uses: 0, temp: fa
   if (a === "send") s.sent.add(t.dataset.u);
   if (a === "copy") { s.copied = true; setTimeout(() => { s.copied = false; invRender(); }, 1000); }
   if (a === "edit") s.draft = { age: s.age, uses: s.uses, temp: s.temp };
-  if (a === "temp") s.draft.temp = !s.draft.temp;
+  if (a === "temp") { s.draft ||= { age: s.age, uses: s.uses, temp: s.temp }; s.draft.temp = !s.draft.temp; }
   if (a === "cancel") s.draft = null;
-  if (a === "gen") { Object.assign(s, s.draft); s.draft = null; s.vanity = false; s.code = Math.random().toString(36).slice(2, 9); }
+  if (a === "gen") { Object.assign(s, s.draft || {}); s.draft = null; s.vanity = false; s.code = Math.random().toString(36).slice(2, 9); }
   if (a === "close") Object.assign(s, { q: "", sent: new Set(), draft: null });
-}, (f, el, s) => { if (f === "q") s.q = el.value; else s.draft[f] = +el.value; }, [["paused", "Invites paused"], ["vanity", "Vanity URL"]]);
+}, (f, el, s) => { if (f === "q") s.q = el.value; else (s.draft ||= { age: s.age, uses: s.uses, temp: s.temp })[f] = +el.value; }, [["paused", "Invites paused"], ["vanity", "Vanity URL"]]);
 
 document.getElementById("theme").onclick = () => {
   const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
