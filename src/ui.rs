@@ -713,6 +713,11 @@ fn callout_text(title: impl Into<SharedString>, body: impl Into<SharedString>, c
 // A toast: one line (and an optional detail) on the floating surface, rising in over 240ms from 8px lower
 // and 0.97. GAP: the design also un-blurs it from 4px (`filter: blur`); gpui has no element blur.
 pub fn toast(id: impl Into<ElementId>, glyph: Glyph, ink: Hsla, title: impl Into<SharedString>, detail: Option<SharedString>, cx: &App) -> AnyElement {
+    toast_with(id, glyph, ink, title, detail, None, cx)
+}
+
+// A toast with its one action (Undo) at the end.
+pub fn toast_with(id: impl Into<ElementId>, glyph: Glyph, ink: Hsla, title: impl Into<SharedString>, detail: Option<SharedString>, action: Option<AnyElement>, cx: &App) -> AnyElement {
     let (strong, muted) = (palette::strong(cx), palette::muted(cx));
     div()
         .relative()
@@ -739,6 +744,7 @@ pub fn toast(id: impl Into<ElementId>, glyph: Glyph, ink: Hsla, title: impl Into
                 .child(title.into())
                 .when_some(detail, |d, detail| d.child(div().text_size(px(12.)).font_weight(FontWeight::NORMAL).text_color(muted).child(detail))),
         )
+        .children(action)
         .with_animation(id, Animation::new(Duration::from_millis(240)).with_easing(|t| motion::ease_out().sample(t)), |toast, t| toast.opacity(t).translate_y(px(8. * (1. - t))).scale(0.97 + 0.03 * t))
         .into_any_element()
 }
