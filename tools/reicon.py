@@ -457,6 +457,8 @@ def custom(reicon, name):
         base = {"text-locked": "hashtag2", "voice-locked": "volume-high", "announcement-locked": "bullhorn", "stage-locked": "podcast", "forum-locked": "messages2", "media-locked": "gallery"}[name]
         return badged(glyph(reicon, base), LOCK)
     return {
+        # A drag handle: two columns of three dots (design/css/server-settings.css .ss-grip).
+        "grip": lambda: '<g fill="currentColor" stroke="none">' + "".join(f'<circle cx="{x}" cy="{y}" r="1.6"/>' for y in (6, 12, 18) for x in (9, 15)) + "</g>",
         "muted": lambda: slashed(glyph(reicon, "microphone2")),
         "deafened": lambda: slashed(glyph(reicon, "headphone")),
         "camera-off": lambda: slashed(glyph(reicon, "video")),
