@@ -363,6 +363,7 @@ pub mod perm {
     pub const MOVE_MEMBERS: u64 = 1 << 24;
     pub const SEND_MESSAGES: u64 = 1 << 11;
     pub const MANAGE_MESSAGES: u64 = 1 << 13;
+    pub const CHANGE_NICKNAME: u64 = 1 << 26;
     pub const MANAGE_NICKNAMES: u64 = 1 << 27;
     pub const MANAGE_ROLES: u64 = 1 << 28;
     pub const MANAGE_WEBHOOKS: u64 = 1 << 29;
@@ -1415,6 +1416,48 @@ impl Client {
     pub async fn modify_me(&self, patch: Value) -> Result<Value, String> {
         let req = self.request(reqwest::Method::PATCH, "/users/@me").json(&patch);
         self.run(req).await
+    }
+
+    /// Your profile as its editor loads it, raw: `GET /users/{id}/profile`, with the server profile when `guild_id` is set.
+    pub async fn my_profile(&self, user_id: &str, guild_id: Option<&str>) -> Result<Value, String> {
+        let guild = guild_id.map(|g| format!("&guild_id={g}")).unwrap_or_default();
+        self.run(self.request(reqwest::Method::GET, &format!("/users/{user_id}/profile?with_mutual_guilds=false{guild}"))).await
+    }
+
+    /// Saves your main profile (PATCH /users/@me/profile): `bio`, `pronouns`, `accent_color`. Returns the profile.
+    pub async fn modify_my_profile(&self, patch: Value) -> Result<Value, String> {
+        self.run(self.request(reqwest::Method::PATCH, "/users/@me/profile").json(&patch)).await
+    }
+
+    /// Saves your profile on one server (PATCH /guilds/{id}/profile/@me): `pronouns`, and for Nitro `bio` and `banner`.
+    pub async fn modify_guild_profile(&self, guild_id: &str, patch: Value) -> Result<Value, String> {
+        self.run(self.request(reqwest::Method::PATCH, &format!("/guilds/{guild_id}/profile/@me")).json(&patch)).await
+    }
+
+    /// Saves your member entry on one server (PATCH /guilds/{id}/members/@me): `nick`, and for Nitro the server avatar.
+    pub async fn modify_my_member(&self, guild_id: &str, patch: Value) -> Result<Value, String> {
+        self.run(self.request(reqwest::Method::PATCH, &format!("/guilds/{guild_id}/members/@me")).json(&patch)).await
+    }
+
+    /// Wears a server's tag next to your name, or none.
+    pub async fn set_server_tag(&self, guild_id: Option<&str>) -> Result<Value, String> {
+        let body = json!({ "identity_guild_id": guild_id, "identity_enabled": guild_id.is_some() });
+        self.run(self.request(reqwest::Method::PUT, "/users/@me/clan").json(&body)).await
+    }
+
+    /// A server's public profile, which carries its tag and badge.
+    // Not verified: `GET /guilds/{id}/profile` and its `tag` / `badge` fields.
+    pub async fn guild_profile(&self, guild_id: &str) -> Result<Value, String> {
+        self.run(self.request(reqwest::Method::GET, &format!("/guilds/{guild_id}/profile"))).await
+    }
+
+    /// Your last avatars: `{avatars: [{id, storage_hash, description}]}`.
+    pub async fn recent_avatars(&self) -> Result<Value, String> {
+        self.run(self.request(reqwest::Method::GET, "/users/@me/avatars")).await
+    }
+
+    pub async fn delete_recent_avatar(&self, avatar_id: &str) -> Result<(), String> {
+        self.run(self.request(reqwest::Method::DELETE, &format!("/users/@me/avatars/{avatar_id}"))).await.map(|_| ())
     }
 
     /// Saves the rail's order and folders. Loose servers are folders without an id.
@@ -2776,7 +2819,7 @@ fn parse_presence(p: &Value) -> Presence {
 }
 
 // Field names from the diself crate's model (src/model/user.rs), not from Discord's docs (the endpoint is undocumented).
-fn parse_profile(user_id: &str, body: &Value) -> Profile {
+pub(crate) fn parse_profile(user_id: &str, body: &Value) -> Profile {
     let user = &body["user"];
     let profile = &body["user_profile"];
     let banner = user["banner"].as_str().map(|hash| {
