@@ -29,8 +29,8 @@ pub(crate) const AVATAR_RING: f32 = 6.;
 const ESTIMATED_HEIGHT: f32 = 560.;
 const MAX_BADGES: usize = 6;
 const MAX_GAMES: usize = 3;
-// Discord's activity peek: the card under the first shows PEEK below it, inset PEEK_INSET each side; on
-// hover the first lifts PEEK_LIFT and the peek grows by as much again.
+// Discord's activity peek: a sliver PEEK tall hangs below the first card, inset PEEK_INSET each side; on
+// hover it grows by twice PEEK_LIFT.
 const PEEK: f32 = 8.;
 const PEEK_INSET: f32 = 8.;
 const PEEK_LIFT: f32 = 2.;
@@ -318,19 +318,20 @@ impl Waffle {
     fn activity_peek(&self, first: AnyElement, lift: f32, ink: Ink, cx: &mut Context<Self>) -> Stateful<Div> {
         // The card's own tile is translucent: an opaque body under it keeps its shadow from showing through.
         let body = ui::mix(ink.top, ink.bottom, 0.5);
-        let first = div().relative().top(px(lift)).squircle(RADIUS_MD).bg(body).shadow(vec![ui::shadow(gpui_kit::black().opacity(0.25), 0., 1., 3., 0., false)]).child(first);
-        let sliver = ui::edge(div().absolute().left(px(PEEK_INSET)).right(px(PEEK_INSET)).bottom(px(lift)).h(px(PEEK - 2. * lift)).bg(ink.tile), ui::bottom(RADIUS_SM))
+        let first = div().squircle(RADIUS_MD).bg(body).shadow(vec![ui::shadow(gpui_kit::black().opacity(0.25), 0., 1., 3., 0., false)]).child(first);
+        // Hangs from the card's foot, flush and never under it; hovering pulls it out by twice the lift.
+        let sliver = ui::edge(div().mx(px(PEEK_INSET)).h(px(PEEK - 2. * lift)).bg(ink.tile), ui::bottom(RADIUS_SM))
             .id("profile-activity-view-more")
             .cursor_pointer()
             .tooltip(|window, cx| Tooltip::new("View More").build(window, cx))
             .on_click(cx.listener(|this, _, _, cx| this.show_all_activity(true, cx)));
         div()
             .id("profile-activity-stack")
-            .relative()
-            .pb(px(PEEK))
+            .flex()
+            .flex_col()
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| this.set_hovered(PEEK_HOVER, *hovered, cx)))
-            .child(sliver)
             .child(first)
+            .child(sliver)
     }
 
     fn show_all_activity(&mut self, all: bool, cx: &mut Context<Self>) {
