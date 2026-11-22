@@ -45,5 +45,27 @@ fn free(cx: &mut App) { cx.notify(); }
     assert counts('impl Waffle {\n  const T: &str = "{\n{";\n}\nfn f() { cx.notify(); }') == {}
 
 
+
+def file_lines():
+    limit = next(r["pattern"] for r in RULES if r["name"] == "file-lines")
+    body = "fn f() {}\n" * limit
+    tests = "#[cfg(test)]\nmod tests {\n    fn g() {\n    }\n}\n"
+    comments = "// a comment\n\n/* block */\n" * 50
+    # At the limit is fine; blank lines, comments and the test module don't count toward it.
+    assert counts(body + comments + tests) == {}
+    hits = ui_lint.scan("src/x.rs", body + tests, RULES)
+    assert hits.code_lines == limit, hits.code_lines
+    # One line over: every line of code counts, so the baseline holds the file at its size.
+    assert counts(body + "fn h() {}\n") == {"file-lines": limit + 1}
+    # Code after the test module counts again.
+    assert counts(body + tests + "fn h() {}\n") == {"file-lines": limit + 1}
+    # A reasoned allow at the top of the file waives it; one further down doesn't.
+    assert counts("// lint-allow(file-lines): generated table\n" + body + "fn h() {}\n") == {}
+    assert counts(body + "// lint-allow(file-lines): too late\nfn h() {}\n") == {"file-lines": limit + 1}
+    # The design system is held to the limit too, though not to the value rules.
+    assert {r for r in ui_lint.scan("src/ui/x.rs", body + "fn h() { px(3.) }\n", RULES)} == {"file-lines"}
+
+
 test()
+file_lines()
 print("test_ui_lint: ok")

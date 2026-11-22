@@ -2,6 +2,7 @@
 src/accounts.rs	global-notify	3
 src/active_now.rs	global-notify	1
 src/active_now.rs	raw-px	25
+src/announcements.rs	file-lines	864
 src/announcements.rs	global-notify	18
 src/announcements.rs	raw-floating	1
 src/announcements.rs	raw-px	48
@@ -9,15 +10,19 @@ src/app_modal.rs	global-notify	6
 src/app_modal.rs	raw-px	28
 src/audio_player.rs	raw-floating	2
 src/audio_player.rs	raw-px	34
+src/call.rs	file-lines	2173
 src/call.rs	global-notify	21
 src/call.rs	kit-tooltip	9
 src/call.rs	raw-color	3
 src/call.rs	raw-px	171
 src/call_previews.rs	global-notify	4
 src/call_previews.rs	raw-px	9
+src/channel_menu.rs	file-lines	916
 src/channel_menu.rs	global-notify	7
+src/channel_settings.rs	file-lines	976
 src/channel_settings.rs	global-notify	22
 src/channel_settings.rs	raw-px	60
+src/chat.rs	file-lines	3438
 src/chat.rs	global-notify	7
 src/chat.rs	kit-tooltip	8
 src/chat.rs	raw-color	5
@@ -25,9 +30,11 @@ src/chat.rs	raw-floating	1
 src/chat.rs	raw-px	386
 src/chat_guard.rs	global-notify	4
 src/chat_guard.rs	raw-px	17
+src/command_picker.rs	file-lines	1744
 src/command_picker.rs	global-notify	24
 src/command_picker.rs	raw-color	1
 src/command_picker.rs	raw-px	93
+src/components.rs	file-lines	851
 src/components.rs	global-notify	4
 src/components.rs	raw-color	1
 src/components.rs	raw-px	26
@@ -35,8 +42,11 @@ src/create_channel.rs	global-notify	9
 src/create_channel.rs	raw-px	44
 src/create_server.rs	global-notify	10
 src/create_server.rs	raw-px	59
+src/demo.rs	file-lines	2950
 src/demo.rs	raw-px	32
+src/design_system.rs	file-lines	889
 src/design_system.rs	raw-px	109
+src/discord.rs	file-lines	3411
 src/dm_call.rs	global-notify	5
 src/dm_call.rs	kit-tooltip	4
 src/dm_call.rs	raw-px	56
@@ -44,11 +54,13 @@ src/dm_start.rs	raw-px	19
 src/drag.rs	global-notify	1
 src/drag.rs	raw-floating	1
 src/drag.rs	raw-px	39
+src/events.rs	file-lines	2019
 src/events.rs	global-notify	14
 src/events.rs	raw-px	122
 src/favorites.rs	global-notify	3
 src/favorites.rs	raw-px	10
 src/feed_keys.rs	global-notify	4
+src/forum.rs	file-lines	1514
 src/forum.rs	global-notify	18
 src/forum.rs	raw-px	105
 src/forward.rs	global-notify	6
@@ -89,8 +101,10 @@ src/link_preview.rs	global-notify	1
 src/link_preview.rs	raw-px	35
 src/login.rs	raw-color	1
 src/login.rs	raw-px	40
+src/main.rs	file-lines	3453
 src/main.rs	global-notify	71
 src/main.rs	raw-px	9
+src/menu.rs	file-lines	895
 src/menu.rs	global-notify	15
 src/menu.rs	raw-color	1
 src/menu.rs	raw-px	66
@@ -101,6 +115,7 @@ src/modify_attachment.rs	global-notify	5
 src/modify_attachment.rs	raw-px	7
 src/notification_settings.rs	global-notify	7
 src/notification_settings.rs	raw-px	36
+src/overlays.rs	file-lines	907
 src/overlays.rs	global-notify	18
 src/overlays.rs	raw-px	72
 src/panel.rs	global-notify	5
@@ -111,6 +126,7 @@ src/pip.rs	raw-px	4
 src/poll.rs	global-notify	10
 src/poll.rs	raw-px	12
 src/presence.rs	raw-px	6
+src/profile.rs	file-lines	881
 src/profile.rs	global-notify	7
 src/profile.rs	kit-tooltip	5
 src/profile.rs	raw-color	8
@@ -132,6 +148,7 @@ src/search_menu.rs	raw-px	23
 src/search_results.rs	global-notify	4
 src/search_results.rs	raw-floating	1
 src/search_results.rs	raw-px	28
+src/server_settings/lists.rs	file-lines	861
 src/server_settings/lists.rs	global-notify	5
 src/server_settings/lists.rs	raw-px	27
 src/server_settings/member_bulk.rs	global-notify	2
@@ -145,6 +162,7 @@ src/server_settings/roles.rs	raw-color	1
 src/server_settings/roles.rs	raw-px	21
 src/server_settings/view.rs	global-notify	17
 src/server_settings/view.rs	raw-px	39
+src/settings.rs	file-lines	2149
 src/settings.rs	global-notify	24
 src/settings.rs	kit-tooltip	2
 src/settings.rs	raw-color	8
@@ -168,6 +186,7 @@ src/settings/view.rs	global-notify	5
 src/settings/view.rs	raw-px	5
 src/shortcuts.rs	global-notify	4
 src/shortcuts.rs	raw-px	20
+src/sidebar.rs	file-lines	1844
 src/sidebar.rs	global-notify	3
 src/sidebar.rs	kit-tooltip	6
 src/sidebar.rs	raw-color	2
@@ -194,6 +213,7 @@ src/video.rs	raw-px	36
 src/viewer.rs	global-notify	5
 src/viewer.rs	raw-px	13
 src/voice/capture_windows.rs	raw-px	12
+src/voice/mod.rs	file-lines	1195
 src/voice_status.rs	global-notify	7
 src/voice_status.rs	kit-tooltip	1
 src/voice_status.rs	raw-px	20
