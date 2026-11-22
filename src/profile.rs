@@ -403,7 +403,15 @@ impl Waffle {
 
     // The server › channel breadcrumb, and who's in it.
     fn voice_place_row(&self, guild: &crate::discord::Guild, channel: &crate::discord::Channel, ink: Ink) -> Div {
-        let faces: Vec<String> = guild.voice_states.iter().filter(|v| v.channel_id.as_ref() == Some(&channel.id)).map(|v| v.user.as_ref().map_or_else(|| crate::discord::avatar_url(&v.user_id, None), |u| u.avatar.clone())).collect();
+        let people: Vec<ui::Entry> = guild
+            .voice_states
+            .iter()
+            .filter(|v| v.channel_id.as_ref() == Some(&channel.id))
+            .map(|v| match &v.user {
+                Some(u) => ui::Entry::person(u.avatar.clone(), u.name.clone()),
+                None => ui::Entry::person(crate::discord::avatar_url(&v.user_id, None), v.user_id.clone()),
+            })
+            .collect();
         let server = match &guild.icon {
             Some(icon) => ui::media(icon.clone(), ui::all(RADIUS_XS)).size(px(20.)).flex_none().into_any_element(),
             None => div().size(px(20.)).flex_none().squircle(RADIUS_XS).bg(ink.top).into_any_element(),
@@ -419,7 +427,7 @@ impl Waffle {
             .child(Icon::new(Glyph::ChevronRight).size(px(14.)).flex_none().text_color(ink.muted))
             .child(crate::sidebar::channel_glyph(channel).size(px(16.)).flex_none().text_color(ink.muted))
             .child(div().flex_1().min_w_0().truncate().child(channel.name.clone()))
-            .child(ui::capped_stack(&faces, 3, 20., ink.tile, ink.top, ink.strong))
+            .child(ui::listed_stack(SharedString::from(format!("profile-voice-{}", channel.id)), "In voice", people, 3, 20., ink.tile, ink.top, ink.strong))
     }
 
     fn join_voice_button(&self, guild: &crate::discord::Guild, channel: &crate::discord::Channel, cx: &mut Context<Self>) -> AnyElement {
@@ -649,6 +657,7 @@ pub(crate) fn badges(badges: &[Badge], ink: Ink) -> Option<Div> {
     });
     let more = badges.len().saturating_sub(MAX_BADGES);
     let pill = div()
+        .id("profile-badges")
         .h(px(30.))
         .px(px(6.))
         .flex()
@@ -658,6 +667,10 @@ pub(crate) fn badges(badges: &[Badge], ink: Ink) -> Option<Div> {
         .bg(ink.tile)
         .children(shown)
         .when(more > 0, |p| p.child(div().pl(px(2.)).text_size(px(14.)).text_color(ink.text).child(format!("+{more}"))));
+    let pill = match more > 0 {
+        true => ui::overflow_list(pill, "Badges", badges.iter().map(|b| ui::Entry::item(b.icon.clone(), b.description.clone())).collect()),
+        false => pill,
+    };
     Some(div().flex().child(pill))
 }
 

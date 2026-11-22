@@ -34,6 +34,7 @@ mod dialog;
 mod feedback;
 mod field;
 mod group;
+mod overflow;
 mod tabs;
 mod tri;
 mod tunnel;
@@ -43,6 +44,7 @@ pub use dialog::{dialog, dialog_body, modal};
 pub use feedback::{meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
 pub use field::{code_cell, drop_zone, dropdown, field, field_error, field_frame, field_hint, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
 pub use group::{settings_caption, settings_card, settings_choice, settings_close, settings_column, settings_group, SettingsHighlight, settings_warning, settings_nav_item, settings_page, SETTINGS_NAV_WIDTH, SETTINGS_WIDTH, settings_row, settings_nav_edge, settings_sidebar, settings_switch, settings_text, settings_title, settings_window};
+pub use overflow::{Entry, overflow_list};
 pub use tabs::{Tab, pill_tabs, segmented_live, tabs};
 pub use tri::{Tri, tri_state};
 pub use tunnel::{TUNNEL_GRACE, Tunnel};
@@ -538,10 +540,10 @@ pub fn stacked(avatars: impl IntoIterator<Item = AnyElement>, size: f32, ring: H
 
 // At most `cap` faces; past that the last slot becomes a "+n" chip in `more_fill`, so the stack stays a
 // glance, not a roster.
-pub fn capped_stack(urls: &[String], cap: usize, size: f32, ring: Hsla, more_fill: Hsla, more_ink: Hsla) -> Div {
-    let shown = if urls.len() > cap { cap - 1 } else { urls.len() };
-    let more = urls.len() - shown;
-    let faces = urls[..shown].iter().map(|url| avatar(url.clone(), size).into_any_element());
+pub fn capped_stack(people: &[Entry], cap: usize, size: f32, ring: Hsla, more_fill: Hsla, more_ink: Hsla) -> Div {
+    let shown = if people.len() > cap { cap - 1 } else { people.len() };
+    let more = people.len() - shown;
+    let faces = people[..shown].iter().map(|p| avatar(p.icon.clone(), size).into_any_element());
     let more_chip = (more > 0).then(|| {
         div()
             .size(px(size))
@@ -557,6 +559,16 @@ pub fn capped_stack(urls: &[String], cap: usize, size: f32, ring: Hsla, more_fil
             .into_any_element()
     });
     stacked(faces.chain(more_chip), size, ring)
+}
+
+// A capped stack whose "+n" isn't a dead end: hovering it lists everyone, under `title`.
+#[allow(clippy::too_many_arguments)]
+pub fn listed_stack(id: impl Into<ElementId>, title: impl Into<SharedString>, people: Vec<Entry>, cap: usize, size: f32, ring: Hsla, more_fill: Hsla, more_ink: Hsla) -> Stateful<Div> {
+    let el = div().id(id).flex_none().child(capped_stack(&people, cap, size, ring, more_fill, more_ink));
+    match people.len() > cap {
+        true => overflow_list(el, title, people),
+        false => el,
+    }
 }
 
 // Paints `el` in the surface colour it stands in for; over the native sidebar, where that colour is

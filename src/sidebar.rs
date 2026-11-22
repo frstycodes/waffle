@@ -257,8 +257,9 @@ impl Waffle {
         let Some(guild) = self.guilds.iter().find(|g| g.id == guild_id) else { return ServerPreview { name, voice: Vec::new(), live: Vec::new(), muted } };
         let members = self.members.get(guild_id);
         // Someone whose member hasn't loaded yet still shows, with Discord's default avatar for their id.
-        let avatar = |state: &crate::discord::VoiceState| {
-            state.user.as_ref().or_else(|| members.and_then(|m| m.get(&state.user_id))).map(|u| u.avatar.clone()).unwrap_or_else(|| crate::discord::avatar_url(&state.user_id, None))
+        let avatar = |state: &crate::discord::VoiceState| match state.user.as_ref().or_else(|| members.and_then(|m| m.get(&state.user_id))) {
+            Some(u) => ui::Entry::person(u.avatar.clone(), u.name.clone()),
+            None => ui::Entry::person(crate::discord::avatar_url(&state.user_id, None), state.user_id.clone()),
         };
         let present = guild.voice_states.iter().filter(|v| v.channel_id.is_some());
         ServerPreview {
@@ -430,7 +431,8 @@ impl Waffle {
                     .top_0()
                     .when(muted, |f| f.opacity(0.55))
                     .child(face)
-                    .tooltip({
+                    // Hoverable, so the pointer can reach a row's "+n" and its full list.
+                    .hoverable_tooltip({
                         let name = name.clone();
                         move |window, cx| match preview.clone().filter(ServerPreview::has_activity) {
                             Some(preview) => cx.new(|_| preview).into(),
@@ -1617,8 +1619,8 @@ const PREVIEW_FACES: usize = 6;
 #[derive(Clone)]
 struct ServerPreview {
     name: SharedString,
-    voice: Vec<String>,
-    live: Vec<String>,
+    voice: Vec<ui::Entry>,
+    live: Vec<ui::Entry>,
     muted: bool,
 }
 
@@ -1634,8 +1636,8 @@ impl Render for ServerPreview {
         let muted = palette::muted(cx);
         let (wash, strong) = (palette::selected(cx), palette::strong(cx));
         // Six slots at most per row, the last a "+n" when they don't all fit; the card stays a glance, not a roster.
-        let row = |glyph: Glyph, avatars: &[String]| {
-            div().flex().items_center().gap(px(8.)).child(Icon::new(glyph).size(px(16.)).text_color(muted)).child(ui::capped_stack(avatars, PREVIEW_FACES, 24., surface, wash, strong))
+        let row = |key: &'static str, title: &'static str, glyph: Glyph, people: &[ui::Entry]| {
+            div().flex().items_center().gap(px(8.)).child(Icon::new(glyph).size(px(16.)).text_color(muted)).child(ui::listed_stack(key, title, people.to_vec(), PREVIEW_FACES, 24., surface, wash, strong))
         };
         // Anchored flush to the tile; plain tooltips get their 12px gap from Tooltip's own margin.
         div().pl(px(12.)).child(ui::surface(cx)
@@ -1643,8 +1645,8 @@ impl Render for ServerPreview {
             .p(px(12.))
             .gap(px(8.))
             .child(div().truncate().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(self.name.clone()))
-            .when(!self.voice.is_empty(), |c| c.child(row(Glyph::VolumeHigh, &self.voice)))
-            .when(!self.live.is_empty(), |c| c.child(row(Glyph::ShareScreen, &self.live)))
+            .when(!self.voice.is_empty(), |c| c.child(row("server-preview-voice", "In voice", Glyph::VolumeHigh, &self.voice)))
+            .when(!self.live.is_empty(), |c| c.child(row("server-preview-live", "Live", Glyph::ShareScreen, &self.live)))
             .when(self.muted, |c| c.child(div().text_size(px(12.)).text_color(muted).child("Muted"))))
     }
 }
