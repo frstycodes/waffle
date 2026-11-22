@@ -1,6 +1,7 @@
 // Discord's message context menu (navId "message"), item-for-item from its menu code
 // (docs/discord-menus-user-message.md §5). Items for features Waffle doesn't have yet (translate,
-// bookmarks, reminders, apps, reports) are left out.
+// bookmarks, reminders, apps, report to mods) are left out. Report is hidden on your own messages and call records;
+// GAP: Discord also hides it on system-user messages and type 67 (friend request accepted), which `Message` doesn't carry.
 use gpui_kit::{Context, Pixels, Point};
 use reqwest::Method;
 
@@ -101,6 +102,10 @@ impl Waffle {
             );
         }
         out.extend(action(MessageAction::Delete));
+        if !facts.mine && message.call.is_none() {
+            let m = message.clone();
+            out.push(item("Report message", move |this, _, cx| this.open_report(crate::report::ReportTarget::Message(Box::new(m.clone())), cx)).danger().icon(Glyph::Flag).entry());
+        }
         out.push(Entry::Separator);
 
         // G9: developer.

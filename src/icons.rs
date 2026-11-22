@@ -12,7 +12,7 @@ pub const NEW_TAG: &str = "shapes/new-tag.svg";
 // Reicon (MIT, github.com/dqev/reicon) in its filled weight, like Discord's chrome, plus Waffle's own glyphs
 // (muted, deafened, camera off, GIF...), all written to assets/icons/reicon/ by tools/reicon.py, which also
 // keeps these paths in step with its map (design/icons.html). Order matches `Glyph`.
-const GLYPHS: [(&str, &[u8]); 155] = [
+const GLYPHS: [(&str, &[u8]); 157] = [
     ("icons/hashtag.svg", include_bytes!("../assets/icons/reicon/hashtag2.svg")),
     ("icons/hashtag-lock.svg", include_bytes!("../assets/icons/reicon/lock2.svg")),
     ("icons/volume-high.svg", include_bytes!("../assets/icons/reicon/volume-high.svg")),
@@ -158,6 +158,7 @@ const GLYPHS: [(&str, &[u8]); 155] = [
     ("icons/media-locked.svg", include_bytes!("../assets/icons/reicon/media-locked.svg")),
     ("icons/calendar.svg", include_bytes!("../assets/icons/reicon/calendar.svg")),
     ("icons/filter.svg", include_bytes!("../assets/icons/reicon/filter.svg")),
+    ("icons/megaphone.svg", include_bytes!("../assets/icons/reicon/bullhorn.svg")),
     // Reicon has no moon; drawn to match its filled weight.
     ("icons/moon.svg", include_bytes!("../assets/icons/moon.svg")),
     // Reicon has no sticker; drawn to match its filled weight.
@@ -173,6 +174,8 @@ const GLYPHS: [(&str, &[u8]); 155] = [
     ("icons/stage.svg", include_bytes!("../assets/icons/reicon/podcast.svg")),
     // Reicon's chart-square, from design/explore-system-messages.html.
     ("icons/poll.svg", include_bytes!("../assets/icons/poll.svg")),
+    // Reicon has no sleeping bell (@silent); its bell, shrunk, with a z drawn to match.
+    ("icons/bell-z.svg", include_bytes!("../assets/icons/bell-z.svg")),
 ];
 
 const BRAND: [(&str, &[u8]); 4] = [
@@ -330,6 +333,7 @@ pub enum Glyph {
     MediaLocked,
     Calendar,
     Filter,
+    Megaphone,
     Moon,
     Sticker,
     Forward,
@@ -340,6 +344,7 @@ pub enum Glyph {
     Hand,
     Stage,
     Poll,
+    BellZ,
 }
 
 impl IconNamed for Glyph {
