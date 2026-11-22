@@ -194,6 +194,10 @@ pub struct Img {
     source: ImageSource,
     style: ImageStyle,
     image_cache: Option<AnyImageCache>,
+    // Waffle: an animation that stops on its last frame instead of looping.
+    play_once: bool,
+    // Waffle: the loading element shows from the first frame, not after `LOADING_DELAY`.
+    loading_at_once: bool,
 }
 
 /// Create a new image element.
@@ -204,6 +208,8 @@ pub fn img(source: impl Into<ImageSource>) -> Img {
         source: source.into(),
         style: ImageStyle::default(),
         image_cache: None,
+        play_once: false,
+        loading_at_once: false,
     }
 }
 
@@ -232,6 +238,20 @@ impl Img {
             image_cache: Some(image_cache.clone().into()),
             ..self
         }
+    }
+
+    /// Waffle: play an animated image through once and hold its last frame, instead of looping.
+    /// Like any animation, it plays only with an element id.
+    pub fn play_once(mut self) -> Self {
+        self.play_once = true;
+        self
+    }
+
+    /// Waffle: show the `with_loading` element from the first frame instead of after a short delay, for
+    /// a still that stands in while its animated version loads. Needs an element id, as loading does.
+    pub fn loading_at_once(mut self) -> Self {
+        self.loading_at_once = true;
+        self
     }
 }
 
@@ -326,7 +346,9 @@ impl Element for Img {
                                             let frame_duration =
                                                 Duration::from(data.delay(state.frame_index));
 
-                                            if elapsed >= frame_duration {
+                                            let finished = self.play_once
+                                                && state.frame_index == max_frame_index;
+                                            if elapsed >= frame_duration && !finished {
                                                 state.frame_index =
                                                     (state.frame_index + 1) % frame_count;
                                                 state.last_frame_time =
@@ -381,6 +403,7 @@ impl Element for Img {
 
                             if global_id.is_some()
                                 && data.frame_count() > 1
+                                && !(self.play_once && frame_index == max_frame_index)
                                 && window.is_window_active()
                                 && !cx.reduce_motion()
                             {
@@ -399,24 +422,30 @@ impl Element for Img {
                         }
                         None => {
                             if let Some(state) = &mut state {
-                                if let Some((started_loading, _)) = state.started_loading {
-                                    if started_loading.elapsed() > LOADING_DELAY
-                                        && let Some(loading) = self.style.loading.as_ref()
-                                    {
-                                        let mut element = loading();
-                                        replacement_id = Some(element.request_layout(window, cx));
-                                        layout_state.replacement = Some(element);
+                                let started_loading = match &state.started_loading {
+                                    Some((started_loading, _)) => *started_loading,
+                                    None => {
+                                        let current_view = window.current_view();
+                                        let task = window.spawn(cx, async move |cx| {
+                                            cx.background_executor().timer(LOADING_DELAY).await;
+                                            cx.update(move |_, cx| {
+                                                cx.notify(current_view);
+                                            })
+                                            .ok();
+                                        });
+                                        let now = Instant::now();
+                                        state.started_loading = Some((now, task));
+                                        now
                                     }
-                                } else {
-                                    let current_view = window.current_view();
-                                    let task = window.spawn(cx, async move |cx| {
-                                        cx.background_executor().timer(LOADING_DELAY).await;
-                                        cx.update(move |_, cx| {
-                                            cx.notify(current_view);
-                                        })
-                                        .ok();
-                                    });
-                                    state.started_loading = Some((Instant::now(), task));
+                                };
+                                // Waffle: `loading_at_once` skips the delay, for a still standing in
+                                // for its animated version.
+                                if (self.loading_at_once || started_loading.elapsed() > LOADING_DELAY)
+                                    && let Some(loading) = self.style.loading.as_ref()
+                                {
+                                    let mut element = loading();
+                                    replacement_id = Some(element.request_layout(window, cx));
+                                    layout_state.replacement = Some(element);
                                 }
                             }
                         }

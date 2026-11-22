@@ -18,7 +18,7 @@ pub(super) enum PreviewAvatar {
 pub(super) fn profile_preview(user: &User, profile: &Profile, avatar: PreviewAvatar, status: Option<Mark>, cx: &App) -> Div {
     let ink = Ink::new(profile.theme, cx);
     let radius = inner_radius(ink);
-    let (banner, _) = banner(profile, ink, radius, cx);
+    let (banner, _) = banner(profile, ink, radius, false, cx);
     let face = match avatar {
         PreviewAvatar::Url(url) => decorated_avatar(&url, user.decoration.as_deref(), AVATAR, status, ink.top),
         PreviewAvatar::File(path) => img(path).size(px(AVATAR)).flex_none().rounded_full().into_any_element(),

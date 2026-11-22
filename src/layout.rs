@@ -390,7 +390,10 @@ impl Waffle {
     // The user area (.me), at the foot of the channel list: who you are, how you look to others, and
     // mute, deafen and settings. Mute and deafen turn coral when off; right-click either for devices.
     // In a call, the voice panel sits on top of it inside the same card.
-    pub(crate) fn user_panel(&mut self, me: discord::User, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn user_panel(&mut self, me: discord::User, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        // Discord animates your avatar, decoration and nameplate while the panel is hovered.
+        let (hovered, on_hover) = ui::hover_state("me-hover", window, cx);
+        let animate = hovered && crate::presence::may_animate();
         let rail = palette::surface(palette::Level::Rail, cx);
         let (card, ring) = (crate::material::card(cx), crate::material::behind_sidebar(rail));
         let sharing = self.call.as_ref().is_some_and(|c| c.sharing.is_some());
@@ -428,7 +431,7 @@ impl Waffle {
         let stacked = self.panel_stack_height() > PANEL_HEIGHT;
         let top = if stacked { 0. } else { ui::RADIUS_MD };
         let corners = [top, top, ui::RADIUS_MD, ui::RADIUS_MD];
-        let nameplate = me.nameplate.as_ref().map(|plate| nameplate(plate, palette::surface(palette::Level::Sidebar, cx), corners, cx.theme().is_dark()));
+        let nameplate = me.nameplate.as_ref().map(|plate| nameplate(plate, palette::surface(palette::Level::Sidebar, cx), corners, cx.theme().is_dark(), animate));
         let hover = palette::hover(cx);
         let who = div()
             .id("me")
@@ -442,8 +445,12 @@ impl Waffle {
             .cursor_pointer()
             .hover(move |s| s.bg(hover))
             .when(self.status_menu, |w| w.bg(hover))
+            .on_hover(on_hover)
             .on_click(cx.listener(|this, _, _, cx| this.toggle_status_menu(cx)))
-            .child(decorated_avatar(&me.avatar, me.decoration.as_deref(), 32., Some(self.my_status.into()), ring))
+            .child(match animate {
+                true => playing_avatar("me", &me.avatar, me.decoration.as_deref(), 32., Some(self.my_status.into()), ring),
+                false => decorated_avatar(&me.avatar, me.decoration.as_deref(), 32., Some(self.my_status.into()), ring),
+            })
             .child(
                 div()
                     .flex_1()
@@ -491,7 +498,7 @@ impl Waffle {
 
     // The rail and the channel list, with the user area floating across the foot of both.
     pub(crate) fn render_nav(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let user_panel = self.me.clone().map(|me| self.user_panel(me, cx));
+        let user_panel = self.me.clone().map(|me| self.user_panel(me, window, cx));
         div()
             .relative()
             .h_full()
@@ -569,12 +576,12 @@ impl Waffle {
 /// so the art's own transparent edge is the fade. `corners` are the radii of the shape it fills (top-left,
 /// top-right, bottom-right, bottom-left); every layer rounds itself, since over the glass nothing behind
 /// can paint the corners off.
-pub fn nameplate(plate: &discord::Nameplate, surface: Hsla, corners: [f32; 4], dark: bool) -> AnyElement {
+pub fn nameplate(plate: &discord::Nameplate, surface: Hsla, corners: [f32; 4], dark: bool, animate: bool) -> AnyElement {
     let tint = nameplate_tint(plate, dark);
     let [tl, tr, br, bl] = corners.map(px);
     let shape = gpui_kit::Corners { top_left: tl, top_right: tr, bottom_right: br, bottom_left: bl };
     let wash = ui::edge(div().absolute().inset_0(), shape).bg(linear_gradient(90., linear_color_stop(tint.opacity(0.1), 0.), linear_color_stop(tint.opacity(0.4), 1.)));
-    ui::edge(div(), shape).absolute().inset_0().overflow_hidden().bg(surface).child(wash).child(nameplate_art(plate, PANEL_HEIGHT, tr, br, false).opacity(0.4)).into_any_element()
+    ui::edge(div(), shape).absolute().inset_0().overflow_hidden().bg(surface).child(wash).child(nameplate_art(plate, PANEL_HEIGHT, tr, br, animate).opacity(0.4)).into_any_element()
 }
 
 pub fn nameplate_tint(plate: &discord::Nameplate, dark: bool) -> Hsla {
@@ -585,17 +592,19 @@ pub fn nameplate_tint(plate: &discord::Nameplate, dark: bool) -> Hsla {
 /// gpui sizes an image's width from its aspect only when the height is absolute, so the row's height
 /// stands in for 100%.
 // `animate` swaps in the moving art while it loads and plays, the still standing in until then.
-pub fn nameplate_art(plate: &discord::Nameplate, height: f32, top_right: gpui_kit::Pixels, bottom_right: gpui_kit::Pixels, animate: bool) -> gpui_kit::Img {
+// It carries an id either way, since gpui animates only an image with one; the still has one frame.
+pub fn nameplate_art(plate: &discord::Nameplate, height: f32, top_right: gpui_kit::Pixels, bottom_right: gpui_kit::Pixels, animate: bool) -> Stateful<gpui_kit::Img> {
     let corners = gpui_kit::Corners { top_left: px(0.), top_right, bottom_right, bottom_left: px(0.) };
     let still = plate.art.clone();
     let Some(animated) = plate.animated.clone().filter(|_| animate) else {
-        return ui::edge(img(still).absolute().top_0().right_0().h(px(height)), corners);
+        return ui::edge(img(still).absolute().top_0().right_0().h(px(height)), corners).id("nameplate-art");
     };
     let fallback = still.clone();
     let moving = img(animated)
+        .loading_at_once()
         .with_loading(move || img(still.clone()).h(px(height)).into_any_element())
         .with_fallback(move || img(fallback.clone()).h(px(height)).into_any_element());
-    ui::edge(moving.absolute().top_0().right_0().h(px(height)), corners)
+    ui::edge(moving.absolute().top_0().right_0().h(px(height)), corners).id("nameplate-art")
 }
 
 /// An avatar with Discord's status shape cut into its bottom-right corner: a dot for online, a moon for
@@ -606,7 +615,23 @@ pub fn avatar_with_status(url: &str, size: f32, status: Option<discord::Mark>, s
 }
 
 /// The same, with the user's avatar decoration framing it (drawn at 1.2× the avatar, as Discord does).
+/// An animated avatar or decoration holds its first frame; `playing_avatar` moves them.
 pub fn decorated_avatar(url: &str, decoration: Option<&str>, size: f32, status: Option<discord::Mark>, surface: Hsla) -> AnyElement {
+    avatar_frame(url, decoration, size, status, surface, None)
+}
+
+/// `decorated_avatar` with its avatar and decoration swapped for their animated versions, playing, keyed
+/// by `key` (gpui animates only an image with an id). `url` and `decoration` are the stills, which stay
+/// up until the animated ones have loaded, so starting to play never flashes.
+pub fn playing_avatar(key: &str, url: &str, decoration: Option<&str>, size: f32, status: Option<discord::Mark>, surface: Hsla) -> AnyElement {
+    avatar_frame(url, decoration, size, status, surface, Some(key))
+}
+
+fn avatar_frame(url: &str, decoration: Option<&str>, size: f32, status: Option<discord::Mark>, surface: Hsla, key: Option<&str>) -> AnyElement {
+    let picture = |still: &str, part: &str, look: fn(gpui_kit::Img) -> gpui_kit::Img| match key {
+        Some(key) => playing_image(still, SharedString::from(format!("{key}-{part}")), look).into_any_element(),
+        None => look(img(still.to_owned())).into_any_element(),
+    };
     // .status: 30% of the avatar (9..16px), ringed 2px in the surface, its corner just past the avatar's.
     let dot = (size * 0.3).clamp(9., 16.).round();
     let inset = size * 0.04 - 2. - STATUS_RING;
@@ -615,8 +640,8 @@ pub fn decorated_avatar(url: &str, decoration: Option<&str>, size: f32, status: 
         .relative()
         .size(px(size))
         .flex_none()
-        .child(img(url.to_owned()).size_full().rounded_full())
-        .children(decoration.map(|d| img(d.to_owned()).absolute().size(px(frame)).left(px((size - frame) / 2.)).top(px((size - frame) / 2.))))
+        .child(picture(url, "avatar", |i| i.size_full().rounded_full()))
+        .children(decoration.map(|d| div().absolute().size(px(frame)).left(px((size - frame) / 2.)).top(px((size - frame) / 2.)).child(picture(d, "decoration", |i| i.size_full()))))
         .children(status.map(|status| {
             // The phone stands taller than the dot, growing upward from the same corner.
             let tall = if status == discord::Mark::Mobile { dot * PHONE_ASPECT } else { dot };
@@ -627,6 +652,21 @@ pub fn decorated_avatar(url: &str, decoration: Option<&str>, size: f32, status: 
                 .child(status_mark(status, dot, surface))
         }))
         .into_any_element()
+}
+
+// The animated version of `still`, playing, with `still` standing in from the first frame until it has
+// loaded (and if it fails). `look` styles both alike.
+fn playing_image(still: &str, key: SharedString, look: fn(gpui_kit::Img) -> gpui_kit::Img) -> Stateful<gpui_kit::Img> {
+    let animated = discord::animated(still);
+    if animated == still {
+        return look(img(animated)).id(key);
+    }
+    let (loading, fallback) = (still.to_owned(), still.to_owned());
+    look(img(animated))
+        .loading_at_once()
+        .with_loading(move || look(img(loading.clone())).into_any_element())
+        .with_fallback(move || look(img(fallback.clone())).into_any_element())
+        .id(key)
 }
 
 const STATUS_RING: f32 = 2.;

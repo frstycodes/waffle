@@ -47,7 +47,7 @@ mod tokens;
 mod layout;
 pub mod prelude;
 
-pub use control::{Control, Pressable, button, chip, chip_lead, hover_fade, icon_button, menu_row, pressable, round_button, swatch, tip};
+pub use control::{Control, Pressable, button, chip, chip_lead, hover_fade, hover_state, icon_button, menu_row, pressable, round_button, swatch, tip};
 pub use date::{date_field, time_field};
 pub use dialog::{dialog, dialog_body, dialog_scroll, modal};
 pub use feedback::{meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};

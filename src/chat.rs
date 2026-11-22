@@ -18,7 +18,7 @@ use gpui_kit::{
 use gpui_motion_kit::core::{Motion, Target};
 
 use crate::{
-    EmojiTarget, Feed, RightPanel, Waffle, components,
+    EmojiTarget, Feed, Waffle, components,
     discord::{Channel, ChannelKind, Embed, Emoji, MediaKind, Message, NameEffect, NameStyle, Poll, PollAnswer, SendState, User},
     hidden::{Hidden, Run},
     icons::Glyph,
@@ -87,6 +87,7 @@ impl Waffle {
             Some(blocker) => blocker,
             None => self.render_composer(window, cx).into_any_element(),
         };
+        let (inline, above) = self.place_header(header);
         let chat = div()
             .relative()
             .flex_1()
@@ -96,14 +97,14 @@ impl Waffle {
             .flex_col()
             .key_context("Chat")
             .on_action(cx.listener(Self::focus_search))
-            // The feed stops under the header, a hard edge.
-            .child(header)
+            // The feed stops under the header, a hard edge. A DM's profile sits under the header instead of beside it.
+            .children(inline)
             // The composer floats over the feed, which scrolls on under its glass.
             .child(div().relative().flex_1().min_h_0().child(body).children(unread_bar).child(composer));
         // The members column beside the feed runs to the window's top with a header of its own on the same line.
         let panel = self.panel_column_width().map(|w| self.part(crate::part::Column::Panel, gpui_kit::StyleRefinement::default().w(px(w)).h_full().flex_none(), cx));
         let drop_zone = self.drop_zone(&channel, cx);
-        main.child(div().flex_1().min_h_0().flex().child(chat.child(drop_zone)).children(panel))
+        main.children(above).child(div().flex_1().min_h_0().flex().child(chat.child(drop_zone)).children(panel))
     }
 
     // Where you are as breadcrumbs, the topic, then the channel's tools (design: navigation.html's chanbar).
@@ -190,16 +191,7 @@ impl Waffle {
             let from = channel.clone();
             ui::icon_button("dm-add-members", Glyph::GroupPlus, tip, cx).occlude().on_click(cx.listener(move |this, _, window, cx| this.open_group_picker(Some(from.clone()), window, cx)))
         });
-        let members_on = matches!(self.right_panel, RightPanel::Members);
-        let members = (self.guild_id.is_some() || channel.raw_type == 3).then(|| {
-            ui::icon_button("members-toggle", Glyph::Users, if members_on { "Hide Member List" } else { "Show Member List" }, cx)
-                .occlude()
-                .when(members_on, |b| b.bg(selected).text_color(strong))
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.right_panel = if matches!(this.right_panel, RightPanel::Members) { RightPanel::Hidden } else { RightPanel::Members };
-                    cx.notify();
-                }))
-        });
+        let members = self.members_toggle(channel, cx);
         let search = Some(self.channel_search(window, cx));
         // Occludes, like the composer: the feed scrolls under the header and must not take its hover or clicks.
         let bar = div()

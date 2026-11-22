@@ -502,7 +502,7 @@ impl Waffle {
             face.children(editor.emoji.as_ref().map(|e| div().flex_none().child(emoji_face(e, 18.)))).when(!text.is_empty(), |f| f.child(div().min_w_0().line_clamp(2).child(text)))
         };
         let radius = profile::inner_radius(ink);
-        let (banner, banner_height) = profile::banner(&profile, ink, radius, cx);
+        let (banner, banner_height) = profile::banner(&profile, ink, radius, false, cx);
         let decoration = me.decoration.clone().or(profile.decoration.clone());
         let avatar = div().p(px(AVATAR_RING)).rounded_full().bg(ink.top).child(crate::layout::decorated_avatar(&me.avatar, decoration.as_deref(), AVATAR, Some(editor.status.into()), ink.top));
         let inset = 16.;

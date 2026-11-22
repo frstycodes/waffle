@@ -14,13 +14,15 @@ use crate::{
     discord::{ActivityKind, Channel, ChannelKind, Folder, Guild, GuildSettings, OnStage, Status as Status_, channel_flag},
     drag::{RowDrag, hole},
     icons::Glyph,
-    layout::{RAIL_WIDTH, avatar_with_status},
+    layout::RAIL_WIDTH,
     motion, palette,
     rail_drag::RailDrag,
     sortable::{Board, Place},
     stage::STAGE,
     ui::{self, Squircle},
 };
+
+mod dm_row;
 
 // Rail geometry: 44px tiles 8px apart (at Default density), centred in the 68px rail, so the state pill
 // sits on its edge.
@@ -1281,72 +1283,6 @@ impl Waffle {
                 ChannelRow { keep: selected || unread, element: row.into_any_element() }
             })
             .collect()
-    }
-
-    // A conversation: the person, then one line on what they're doing.
-    fn dm_row(&self, channel: &Channel, cx: &mut Context<Self>) -> AnyElement {
-        let selected = self.channel.as_ref().is_some_and(|c| c.id == channel.id);
-        let unread = self.unread(&channel.id);
-        let mentions = self.mention_count(&channel.id);
-        let presence = channel.recipient.as_ref().map(|u| self.presences.get(&u.id).cloned().unwrap_or_default());
-        let status = presence.as_ref().map(|p| p.status);
-        let offline = status == Some(Status_::Offline);
-        let ring = crate::material::sidebar_fill(cx);
-        let face = match &channel.recipient {
-            Some(user) => avatar_with_status(&user.avatar, 32., presence.as_ref().map(|p| p.mark()), ring),
-            None => ui::dm_face(&channel.face(), 32., ring),
-        };
-        let typing = self.typing.get(&channel.id).is_some_and(|t| t.iter().any(|t| t.until > std::time::Instant::now()));
-        let faint = palette::faint(cx);
-        let call_line = self.dm_call_line(&channel.id, cx);
-        let line: Option<Div> = match (typing, presence) {
-            (true, _) => Some(div().child(ui::bars(SharedString::from(format!("dm-typing-{}", channel.id)), faint, 10.)).child("Typing…")),
-            (false, Some(p)) => match (p.activity, p.status) {
-                (Some(a), _) => Some(div().children(activity_glyph(a.kind).map(|i| i.size(px(13.)).flex_none())).child(div().truncate().child(a.text))),
-                (None, Status_::Offline) => None,
-                (None, s) => Some(div().child(s.label())),
-            },
-            // A group always counts us and at least one other, so never "1 member".
-            (false, None) => (!channel.recipients.is_empty()).then(|| div().child(format!("{} members", channel.recipients.len() + 1))),
-        };
-        let line = call_line.map(|(glyph, label, ink)| div().child(Icon::new(glyph).size(ui::ICON_SM).flex_none().text_color(ink)).child(div().text_color(ink).child(label))).or(line);
-        let state = RowState { selected, unread, muted: false, strong: false };
-        let (open, close_id) = (channel.clone(), channel.id.clone());
-        let group: SharedString = format!("dm-{}", channel.id).into();
-        let hovered = self.hovered_row.as_deref() == Some(channel.id.as_str());
-        let pinned = self.guild_settings.get("@me").is_some_and(|s| s.pinned(&channel.id));
-        // Hovered, the close button takes the count's and the pin's place.
-        let close = row_action(SharedString::from(format!("dm-close-{}", channel.id)), Nav::Close.icon(), "Close", cx)
-            .flex_none()
-            .on_click(cx.listener(move |this, _, _, cx| {
-                cx.stop_propagation();
-                this.close_dm(&close_id, cx);
-            }));
-        let row = channel_row(SharedString::from(channel.id.clone()), group.clone(), state, cx);
-        self.track_row_hover(row, &channel.id, true, cx)
-            .h_11()
-            .gap_2p5()
-            .font_weight(FontWeight::NORMAL)
-            .child(div().when(offline, |a| a.opacity(0.5)).child(face))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .child(div().truncate().font_weight(if unread { FontWeight::MEDIUM } else { FontWeight::NORMAL }).child(channel.name.clone()))
-                    .children(line.map(|l| l.flex().items_center().gap_1().min_w_0().text_size(ui::TEXT_XS).text_color(faint))),
-            )
-            .when(mentions > 0 && !hovered, |r| r.child(ui::count_badge(mentions)))
-            .when(mentions == 0 && !selected && !hovered && self.drafts.has(&channel.id), |r| r.child(div().flex_none().flex().text_color(faint).child(draft_mark())))
-            .when(pinned && !hovered, |r| r.child(div().flex_none().flex().text_color(faint).child(Icon::new(Glyph::Pin).size(ui::ICON_SM))))
-            .when(hovered, |r| r.child(close))
-            .on_click(cx.listener(move |this, _, window, cx| this.open_channel(open.clone(), window, cx)))
-            .on_mouse_down(gpui_kit::MouseButton::Right, {
-                let channel = channel.clone();
-                cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_dm_menu(channel.clone(), e.position, cx))
-            })
-            .into_any_element()
     }
 }
 

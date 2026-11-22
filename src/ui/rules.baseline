@@ -16,8 +16,8 @@ src/channel_menu.rs	global-notify	7
 src/channel_settings.rs	file-lines	976
 src/channel_settings.rs	global-notify	22
 src/channel_settings.rs	raw-px	10
-src/chat.rs	file-lines	3437
-src/chat.rs	global-notify	7
+src/chat.rs	file-lines	3429
+src/chat.rs	global-notify	6
 src/chat.rs	raw-px	40
 src/chat_guard.rs	global-notify	4
 src/chat_guard.rs	raw-px	2
@@ -97,7 +97,7 @@ src/panel.rs	raw-px	9
 src/pip.rs	global-notify	2
 src/poll.rs	global-notify	10
 src/presence.rs	raw-px	6
-src/profile.rs	file-lines	881
+src/profile.rs	file-lines	864
 src/profile.rs	global-notify	7
 src/profile.rs	raw-px	11
 src/rail_drag.rs	global-notify	2
@@ -137,9 +137,9 @@ src/settings/updates.rs	raw-px	1
 src/settings/view.rs	global-notify	5
 src/shortcuts.rs	global-notify	4
 src/shortcuts.rs	raw-px	1
-src/sidebar.rs	file-lines	1839
+src/sidebar.rs	file-lines	1778
 src/sidebar.rs	global-notify	1
-src/sidebar.rs	raw-px	32
+src/sidebar.rs	raw-px	31
 src/soundboard.rs	global-notify	10
 src/soundboard.rs	raw-px	7
 src/splash.rs	raw-px	4
