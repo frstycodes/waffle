@@ -1126,7 +1126,7 @@ impl Waffle {
             .p(px(12.))
             .text_center();
         if small {
-            return card.child(Icon::new(Glyph::ScreenOff).size(px(24.)).text_color(stage::muted())).child(tile_ring(false, false, radius)).into_any_element();
+            return card.child(Icon::new(Glyph::ScreenOff).size(px(24.)).text_color(stage::muted())).child(tile_ring(false, false, false, radius)).into_any_element();
         }
         let name = self.user_name(streamer);
         let line = match (self.participants().iter().any(|s| s.user_id == streamer), self.activity_name(streamer)) {
@@ -1141,7 +1141,7 @@ impl Waffle {
                 cx.stop_propagation();
                 this.close_ended_stream(&close, cx);
             }))))
-            .when(!fill, |d| d.child(tile_ring(false, false, radius)))
+            .when(!fill, |d| d.child(tile_ring(false, false, false, radius)))
             .with_animation(SharedString::from(format!("ended-in-{streamer}")), Animation::new(ui::DUR_PANEL), |d, t| d.opacity(t.min(1.)))
             .into_any_element()
     }
@@ -1211,6 +1211,7 @@ impl Waffle {
         let local_muted = !me && self.prefs.local_mutes.contains(&state.user_id);
         let is_stream = matches!(tile, Tile::Stream(_));
         let talking = !is_stream && self.speaking(&state.user_id);
+        let sounding = !is_stream && self.soundboard_playing(&state.user_id);
         let camera = (!is_stream).then(|| call.cameras.get(&state.user_id)).flatten();
         let media = is_stream || camera.is_some();
         // A stream card plays the stream once it's watched (our own from the local capture), and shows
@@ -1347,7 +1348,7 @@ impl Waffle {
                 )
             })
             // Every card answers the pointer with a brighter edge; the focused one has no edge at all.
-            .when(!fill || talking, |d| d.child(tile_ring(talking, local_muted, radius).when(!talking, |r| r.group_hover(group.clone(), |s| s.border_color(stage::wash(0.2))))))
+            .when(!fill || talking || sounding, |d| d.child(tile_ring(talking, sounding, local_muted, radius).when(!talking && !sounding, |r| r.group_hover(group.clone(), |s| s.border_color(stage::wash(0.2))))))
             .on_mouse_down(MouseButton::Right, cx.listener(move |this, e: &MouseDownEvent, _, cx| this.voice_user_menu(&menu_user, e.position, cx)))
             .into_any_element()
     }
@@ -2032,13 +2033,19 @@ fn tile_name(content: Div) -> Div {
 
 // The tile's edge, drawn above its media so a stream can't hide it: a faint 1px line, or while
 // speaking a 2px green ring with a dark inner line (neutral when they're muted for you).
-fn tile_ring(speaking: bool, local_muted: bool, radius: f32) -> Div {
+// A soundboard sound gets its own ring, as Discord's, so it never reads as someone talking: honey,
+// the colour the picker marks a playing sound with. It outranks the speaking green while it plays.
+fn tile_ring(speaking: bool, sounding: bool, local_muted: bool, radius: f32) -> Div {
     let ring = div().absolute().inset_0().squircle(radius);
-    if !speaking {
+    if !speaking && !sounding {
         return ring.border_1().border_color(stage::wash(0.06));
     }
     // The stage is always dark, so the dark theme's green.
-    let color = if local_muted { stage::wash(0.42) } else { palette::status(crate::discord::Status::Online) };
+    let color = match (sounding, local_muted) {
+        (true, _) => palette::accent(),
+        (false, true) => stage::wash(0.42),
+        (false, false) => palette::status(crate::discord::Status::Online),
+    };
     ring.border(px(2.)).border_color(color).child(div().absolute().inset_0().squircle((radius - 2.).max(0.)).border(px(2.)).border_color(stage::bg().opacity(0.6)))
 }
 

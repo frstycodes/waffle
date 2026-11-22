@@ -425,6 +425,11 @@ impl Waffle {
         self.soundboard.picker.is_some()
     }
 
+    // Whether a sound of theirs is playing now: their tile takes the soundboard ring.
+    pub(crate) fn soundboard_playing(&self, user_id: &str) -> bool {
+        self.soundboard.effects.iter().any(|e| e.user_id == user_id && e.playing.is_some())
+    }
+
     // What rises on a person's call tile while their sound plays.
     pub(crate) fn soundboard_tile_effect(&self, user_id: &str, cx: &App) -> Option<AnyElement> {
         let effects: Vec<&TileEffect> = self.soundboard.effects.iter().filter(|e| e.user_id == user_id).collect();
