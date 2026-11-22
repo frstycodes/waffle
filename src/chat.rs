@@ -2739,7 +2739,7 @@ fn discord_timestamp(stamp: &str) -> Option<String> {
     }))
 }
 
-fn relative(delta: chrono::TimeDelta) -> String {
+pub(crate) fn relative(delta: chrono::TimeDelta) -> String {
     let (secs, future) = (delta.num_seconds().abs(), delta.num_seconds() < 0);
     let (n, unit) = match secs {
         s if s < 60 => (s, "second"),

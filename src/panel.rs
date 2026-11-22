@@ -26,7 +26,7 @@ impl Waffle {
     // Whether the side panel is on screen: a server's (unless hidden), or search results anywhere.
     pub(crate) fn panel_shown(&self) -> bool {
         match self.right_panel {
-            RightPanel::Search(_) => true,
+            RightPanel::Search(_) | RightPanel::ModView(_) => true,
             RightPanel::Hidden => false,
             _ => self.guild_id.is_some(),
         }
@@ -39,10 +39,12 @@ impl Waffle {
             RightPanel::Hidden => None,
             RightPanel::Members | RightPanel::Activity => Some(self.panel_width),
             RightPanel::Search(_) => Some(crate::search_results::PANEL_WIDTH),
+            RightPanel::ModView(_) => Some(self.panel_width.max(crate::mod_view::PANEL_WIDTH)),
         }
     }
 
     pub fn render_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        self.close_mod_view_if_barred();
         let width = self.panel_column_width()?;
         // Its header sits on the window's top line beside the channel header's: "Members", or the search's
         // query with a way back to the members.
@@ -54,6 +56,7 @@ impl Waffle {
                 let head = self.panel_frame(cx).child(self.search_head(results, self.back_button(cx), cx));
                 (head, self.search_body(results, cx), self.search_pager(results, cx))
             }
+            RightPanel::ModView(view) => (self.panel_frame(cx).child(self.mod_view_head(view, cx)), self.mod_view_body(view, cx), None),
         };
         let line = palette::line(cx);
         let scroll = self.panel_scroll.clone();
@@ -85,7 +88,7 @@ impl Waffle {
         self.panel_frame(cx).child(div().flex_1().min_w_0().truncate().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).child(title)).children(back)
     }
 
-    fn panel_frame(&self, cx: &App) -> Div {
+    pub(crate) fn panel_frame(&self, cx: &App) -> Div {
         div()
             .h(px(crate::layout::HEADER_HEIGHT))
             .pl_4()
@@ -458,12 +461,12 @@ fn member_nameplate(plate: &crate::discord::Nameplate, names: Div, fills: (gpui_
 }
 
 // A group heading (.cat): "Online · 4".
-fn group_label(text: impl Into<SharedString>, cx: &App) -> Div {
+pub(crate) fn group_label(text: impl Into<SharedString>, cx: &App) -> Div {
     div().h(px(28.)).flex_none().px(px(6.)).flex().items_center().whitespace_nowrap().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(text.into())
 }
 
 // A wait names what it waits on, beside the mini wave (.pwait).
-fn wait_line(id: &'static str, text: &'static str, cx: &App) -> Div {
+pub(crate) fn wait_line(id: &'static str, text: &'static str, cx: &App) -> Div {
     div().min_h(px(32.)).px_2().flex().items_center().gap_2().text_color(palette::muted(cx)).font_weight(FontWeight::NORMAL).child(ui::bars(id, palette::muted(cx), 12.)).child(text)
 }
 

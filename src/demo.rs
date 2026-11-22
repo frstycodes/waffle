@@ -531,6 +531,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             waffle.on_event(Event::StreamUpdate { key, viewers: vec!["8388608".into(), "16777216".into(), "20971520".into(), "4194304".into()], paused: false }, cx);
             waffle.stream_card_hover = Some("stream-12582912".into());
         }
+        "mod-view" => demo_mod_view(waffle, cx),
         "user-menu" => {
             demo_call(waffle);
             waffle.call_view = false;
@@ -1737,4 +1738,31 @@ fn reactors(count: usize) -> Vec<Reactor> {
         ("31000010", "mikey", "mickeeeyyyyyy"),
     ];
     people.iter().take(count).map(|&(id, name, username)| Reactor { user: user(id, name), username: username.into() }).collect()
+}
+
+// Mod View on Wren: timed out for 42 minutes, flagged for unusual DMs three days ago, two roles, joined
+// through an invite, with a short action log.
+fn demo_mod_view(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
+    if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
+        for role in &mut guild.roles {
+            role.permissions = match role.id.as_str() {
+                "r1" => crate::discord::perm::MODERATE_MEMBERS | crate::discord::perm::MANAGE_MESSAGES | (1 << 17),
+                "r2" => crate::discord::perm::SEND_MESSAGES,
+                _ => role.permissions,
+            };
+        }
+    }
+    waffle.member_roles.entry("1".into()).or_default().insert("8388608".into(), vec!["r1".into(), "r2".into()]);
+    let members = waffle.members.entry("1".into()).or_default();
+    members.insert("8388608".into(), user("8388608", "Wren"));
+    members.insert("12582912".into(), user("12582912", "moss lantern"));
+    let audit = serde_json::json!({
+        "audit_log_entries": [
+            { "id": "1441000000000000000", "action_type": 24, "user_id": "12582912", "target_id": "8388608", "reason": "spam in #media", "changes": [{ "key": "communication_disabled_until", "new_value": "2026-11-22T21:30:00+00:00" }] },
+            { "id": "1430000000000000000", "action_type": 25, "user_id": "4194304", "target_id": "8388608", "changes": [{ "key": "$add", "new_value": [{ "id": "r2", "name": "Rustacean" }] }] },
+            { "id": "1420000000000000000", "action_type": 24, "user_id": "8388608", "target_id": "8388608", "changes": [{ "key": "nick", "old_value": "wren", "new_value": "Wren" }] },
+        ],
+        "users": [{ "id": "12582912", "username": "moss", "global_name": "moss lantern" }, { "id": "4194304", "username": "kiwi.dev", "global_name": "kiwi" }, { "id": "8388608", "username": "wren.wav", "global_name": "Wren" }],
+    });
+    waffle.demo_mod_view("1".into(), "8388608".into(), audit, cx);
 }

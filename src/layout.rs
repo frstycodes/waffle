@@ -256,6 +256,9 @@ impl Waffle {
         if keystroke.key == "escape" && self.viewer.is_none() && self.dismiss_overlay(cx) {
             return cx.stop_propagation();
         }
+        if keystroke.key == "escape" && self.viewer.is_none() && self.mod_view_escape(cx) {
+            return cx.stop_propagation();
+        }
         // On a DM call's stage, Esc with nothing else to close goes back to the chat.
         if keystroke.key == "escape" && self.call_view && self.call.as_ref().is_some_and(|c| c.guild_id.is_none()) {
             self.back_to_chat(window, cx);

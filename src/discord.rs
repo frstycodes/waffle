@@ -869,6 +869,31 @@ pub struct Member {
     pub presence: Presence,
 }
 
+// What Mod View reads off a member object beyond its user and roles.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MemberFacts {
+    pub user_id: String,
+    pub joined_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub timed_out_until: Option<chrono::DateTime<chrono::Utc>>,
+    pub unusual_dm_until: Option<chrono::DateTime<chrono::Utc>>,
+    pub flags: u64,
+    pub pending: bool,
+}
+
+impl MemberFacts {
+    pub fn parse(m: &Value) -> Option<Self> {
+        let time = |key: &str| m[key].as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).map(|t| t.with_timezone(&chrono::Utc));
+        Some(MemberFacts {
+            user_id: m["user"]["id"].as_str()?.to_owned(),
+            joined_at: time("joined_at"),
+            timed_out_until: time("communication_disabled_until"),
+            unusual_dm_until: time("unusual_dm_activity_until"),
+            flags: m["flags"].as_u64().unwrap_or(0),
+            pending: m["pending"].as_bool().unwrap_or(false),
+        })
+    }
+}
+
 // Lists are almost all members; boxing them would allocate per row to shrink the rare group headers.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
@@ -1052,7 +1077,7 @@ pub enum Event {
     Typing { channel_id: String, user_id: String, name: Option<String> },
     Presence { user_id: String, presence: Presence },
     MemberList { guild_id: String, groups: Vec<(String, u32)>, ops: Vec<ListOp> },
-    MembersChunk { guild_id: String, members: Vec<(User, Vec<String>)> },
+    MembersChunk { guild_id: String, members: Vec<(User, Vec<String>)>, facts: Vec<MemberFacts> },
     Ack { channel_id: String, message_id: u64 },
     // With the session it belongs to: ours, or another client of ours.
     VoiceState(VoiceState, Option<String>),
@@ -2081,6 +2106,7 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
         "GUILD_MEMBERS_CHUNK" => Some(Event::MembersChunk {
             guild_id: s(&d["guild_id"]),
             members: d["members"].as_array().into_iter().flatten().map(|m| (parse_member_user(m, &m["user"], d["guild_id"].as_str()), strings(&m["roles"]))).collect(),
+            facts: d["members"].as_array().into_iter().flatten().filter_map(MemberFacts::parse).collect(),
         }),
         "MESSAGE_ACK" => Some(Event::Ack { channel_id: s(&d["channel_id"]), message_id: snowflake(&d["message_id"]) }),
         "VOICE_STATE_UPDATE" => Some(Event::VoiceState(parse_voice_state(d), d["session_id"].as_str().map(str::to_owned))),

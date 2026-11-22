@@ -51,6 +51,7 @@ mod memory;
 mod name_fonts;
 mod menu;
 mod message_menu;
+mod mod_view;
 mod motion;
 mod palette;
 mod pip;
@@ -411,6 +412,7 @@ enum RightPanel {
     // Every Activity card, from the section's chevron.
     Activity,
     Search(Box<search_results::Results>),
+    ModView(Box<mod_view::ModView>),
     Hidden,
 }
 
@@ -1530,7 +1532,7 @@ impl Waffle {
                 }
                 self.apply_members(&guild_id);
             }
-            Event::MembersChunk { guild_id, members } => {
+            Event::MembersChunk { guild_id, members, facts } => {
                 let roles = self.member_roles.entry(guild_id.clone()).or_default();
                 let known = self.members.entry(guild_id.clone()).or_default();
                 for (user, member_roles) in members {
@@ -1538,6 +1540,7 @@ impl Waffle {
                     known.insert(user.id.clone(), user);
                 }
                 self.apply_members(&guild_id);
+                self.mod_view_members(&guild_id, facts);
             }
             Event::Ack { channel_id, message_id } => {
                 let read = self.read_states.entry(channel_id).or_default();
@@ -1765,6 +1768,9 @@ impl Waffle {
             None => format!("channels/{}", channel.id),
         };
         if matches!(&self.right_panel, RightPanel::Search(results) if !results.searched(&scope)) {
+            self.right_panel = RightPanel::Members;
+        }
+        if matches!(&self.right_panel, RightPanel::ModView(view) if Some(view.guild_id()) != self.guild_id.as_deref()) {
             self.right_panel = RightPanel::Members;
         }
         if let Some(current) = self.channel.clone().filter(|c| c.id != channel.id) {

@@ -180,11 +180,15 @@ impl Waffle {
                 b.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| this.relation_optimistic(&target.id, Some((target.clone(), next)), reqwest::Method::PUT, Some(serde_json::json!({})), cx)))
             })
         });
+        let mod_view = card.guild_id.clone().filter(|g| self.can_mod_view(g)).map(|g| {
+            let id = user.id.clone();
+            banner_button("profile-mod-view", Glyph::Shield, "Open in Mod View").cursor_pointer().on_click(cx.listener(move |this, _, window, cx| this.open_mod_view(g.clone(), id.clone(), window, cx)))
+        });
         let guild_id = card.guild_id.clone();
         let more = banner_button("profile-more", Glyph::More, "More")
             .cursor_pointer()
             .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_user_menu(user.clone(), guild_id.clone(), menu_surface(guild_id.is_some()), event.position(), cx)));
-        div().absolute().top(px(12.)).right(px(12.)).flex().gap_2().children(friend).child(more)
+        div().absolute().top(px(12.)).right(px(12.)).flex().gap_2().children(mod_view).children(friend).child(more)
     }
 
     // Discord's rich presence card: heading and menu, the large image, then name, details, state with

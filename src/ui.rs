@@ -219,6 +219,11 @@ pub fn unread_dot() -> Div {
 
 // A role: its colour as a dot, never as the text's colour.
 pub fn role_chip(name: impl Into<SharedString>, color: Hsla, cx: &App) -> Div {
+    pill(cx).child(div().size(px(10.)).rounded_full().bg(color)).child(name.into())
+}
+
+// The role chip's capsule, for a lead mark other than a colour dot (a permission's shield).
+pub fn pill(cx: &App) -> Div {
     div()
         .h(px(24.))
         .px(px(8.))
@@ -232,8 +237,6 @@ pub fn role_chip(name: impl Into<SharedString>, color: Hsla, cx: &App) -> Div {
         .text_size(px(12.))
         .font_weight(FontWeight::MEDIUM)
         .whitespace_nowrap()
-        .child(div().size(px(10.)).rounded_full().bg(color))
-        .child(name.into())
 }
 
 // A keycap: the raised fill, a hairline ring and a deeper bottom edge, so it reads as a key you could press.
