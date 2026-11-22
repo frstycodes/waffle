@@ -12,9 +12,15 @@ use serde::{Deserialize, Serialize};
 mod advanced;
 mod games;
 mod profile;
+mod profile_draft;
+mod profile_preview;
+mod profiles;
 pub(crate) mod registry;
 mod updates;
 mod view;
+
+#[cfg(debug_assertions)]
+pub(crate) use profiles::ProfileTab;
 
 use crate::{
     Waffle,
@@ -30,6 +36,7 @@ use crate::{
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
     Account,
+    Profiles,
     ContentSocial,
     Appearance,
     VoiceVideo,
@@ -45,6 +52,7 @@ impl Page {
     pub(crate) fn label(self) -> &'static str {
         match self {
             Page::Account => "My account",
+            Page::Profiles => "Profiles",
             Page::ContentSocial => "Content and social",
             Page::Appearance => "Appearance",
             Page::VoiceVideo => "Voice and video",
@@ -60,6 +68,7 @@ impl Page {
     fn glyph(self) -> Glyph {
         match self {
             Page::Account => Glyph::UserCircle,
+            Page::Profiles => Glyph::Id,
             Page::ContentSocial => Glyph::Shield,
             Page::Appearance => Glyph::Palette,
             Page::VoiceVideo => Glyph::Mic,
@@ -83,7 +92,7 @@ impl Page {
 
 // Discord's three headings. My account sits on its own as the identity row at the top of the nav.
 const NAV: [(&str, &[Page]); 3] = [
-    ("User settings", &[Page::ContentSocial]),
+    ("User settings", &[Page::Profiles, Page::ContentSocial]),
     ("App settings", &[Page::Appearance, Page::VoiceVideo, Page::Chat, Page::Notifications, Page::Keybinds, Page::Advanced, Page::Updates]),
     ("Activity settings", &[Page::ActivityPrivacy]),
 ];
@@ -580,6 +589,8 @@ pub struct SettingsView {
     result: usize,
     pending_jump: Option<&'static str>,
     editing: Option<profile::ProfileEdit>,
+    // The Profiles page's drafts, kept while Settings stays open.
+    profiles: Option<profiles::ProfileEditor>,
     // Add it!'s list of running programs, while open.
     adding_game: Option<Vec<(String, String)>>,
 }
@@ -627,6 +638,7 @@ impl SettingsView {
             result: 0,
             pending_jump: None,
             editing: None,
+            profiles: None,
             adding_game: None,
         }
     }
@@ -841,10 +853,14 @@ impl Waffle {
     // Settings take the whole window: the nav on the sidebar tone, one page on the right with a big
     // title, and a close button pinned top right (design/settings.html, .set).
     pub(crate) fn render_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let view = self.settings.as_ref()?;
-        let (page, scroll) = (view.page, view.scroll.clone());
+        let page = self.settings.as_ref()?.page;
+        if page == Page::Profiles {
+            self.ensure_profile_editor(window, cx);
+        }
+        let scroll = self.settings.as_ref()?.scroll.clone();
         let mut sections: Vec<Section> = match page {
             Page::Account => self.account_page(cx),
+            Page::Profiles => self.profiles_page(window, cx),
             Page::Notifications => self.notifications_page(window, cx),
             Page::VoiceVideo => self.voice_page(window, cx),
             Page::Keybinds => self.keybinds_page(cx),
@@ -877,8 +893,12 @@ impl Waffle {
         let anchors: Vec<usize> = page.sections().iter().map(|name| sections.iter().position(|s| s.anchor == Some(*name)).map_or(0, |i| i + 1)).collect();
         let title = (page != Page::Keybinds).then(|| ui::settings_title(page.label(), cx).flex_none());
         let body = ui::settings_page("settings-scroll", &scroll)
-            .children(title.map(ui::settings_column))
-            .children(sections.into_iter().map(|s| ui::settings_column(s.body)));
+            .children(title.map(|t| column(page, t)))
+            .children(sections.into_iter().map(|s| column(page, s.body)));
+        let (bar, undo) = match page {
+            Page::Profiles => (self.profiles_bar(cx), self.profiles_undo(cx)),
+            _ => (None, None),
+        };
         let main = div()
             .relative()
             .flex_1()
@@ -886,6 +906,8 @@ impl Waffle {
             .h_full()
             .bg(palette::surface(Level::Page, cx))
             .child(div().size_full().relative().child(body).child(gpui_kit::component::scroll::Scrollbar::vertical(&scroll)).with_animation(SharedString::from(format!("set-page-{page:?}")), Animation::new(ui::DUR_POP).with_easing(|t| motion::ease_out().sample(t)), |el, t| el.top(px(-4. * (1. - t))).opacity(t)))
+            .children(bar)
+            .children(undo)
             .child(ui::settings_close("settings-close", cx.listener(|this, _, _, cx| this.close_settings(cx)), cx));
         let nav = self.settings_nav(&anchors, cx).into_any_element();
         Some(self.settings_frame("settings", nav, main, cx).capture_key_down(cx.listener(Self::settings_search_key)).into_any_element())
@@ -2040,6 +2062,11 @@ fn sub_items(page: Page, current: usize, anchors: &[usize], cx: &mut Context<Waf
                 cx.notify();
             }))
     }))
+}
+
+// The page's centred column; Profiles runs wider to fit its preview beside the fields.
+fn column(page: Page, child: impl IntoElement) -> Div {
+    ui::settings_column(child).when(page == Page::Profiles, |c| c.max_w(px(profiles::PAGE_WIDTH)))
 }
 
 fn card_pad(cx: &App) -> Div {
