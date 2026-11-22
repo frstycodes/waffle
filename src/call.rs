@@ -2214,8 +2214,8 @@ pub(crate) struct Viewer {
 }
 
 pub(crate) fn viewer_chip(viewers: Vec<Viewer>, streamer_id: &str) -> Stateful<Div> {
-    let avatars: Vec<String> = viewers.iter().map(|v| v.avatar.clone()).collect();
-    div()
+    let people: Vec<ui::Entry> = viewers.iter().map(|v| ui::Entry::person(v.avatar.clone(), v.name.clone())).collect();
+    let chip = div()
         .id(SharedString::from(format!("viewers-{streamer_id}")))
         .absolute()
         .right(px(8.))
@@ -2230,35 +2230,11 @@ pub(crate) fn viewer_chip(viewers: Vec<Viewer>, streamer_id: &str) -> Stateful<D
         .bg(stage::dock())
         .text_color(stage::muted())
         .child(Icon::new(Glyph::EyeBold).size(px(14.)))
-        .child(ui::capped_stack(&avatars, VIEWER_FACES, 20., stage::dock(), stage::overlay(), stage::strong()))
-        .tooltip(move |_, cx| cx.new(|_| ViewerList(viewers.clone())).into())
+        .child(ui::capped_stack(&people, VIEWER_FACES, 20., stage::dock(), stage::overlay(), stage::strong()));
+    ui::overflow_list(chip, "Watching", people)
 }
 
 // The hover list behind the viewer chip: everyone watching, face and name.
-struct ViewerList(Vec<Viewer>);
-
-impl Render for ViewerList {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        let rows = self.0.iter().map(|v| {
-            div().flex().items_center().gap(px(8.)).child(ui::avatar(v.avatar.clone(), 20.)).child(div().truncate().child(v.name.clone()))
-        });
-        div()
-            .max_w(px(240.))
-            .max_h(px(320.))
-            .overflow_hidden()
-            .p(px(10.))
-            .flex()
-            .flex_col()
-            .gap(px(8.))
-            .squircle(RADIUS_MD)
-            .bg(stage::overlay())
-            .text_color(stage::text())
-            .text_size(px(14.))
-            .child(div().text_color(stage::muted()).text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).child(format!("Watching · {}", self.0.len())))
-            .children(rows)
-    }
-}
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum MarkKind {
     // A moderator's lock: solid red.

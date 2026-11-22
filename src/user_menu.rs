@@ -460,7 +460,7 @@ impl Waffle {
             move |this| {
                 this.relationships.retain(|r| r.user.id != a);
                 if let Some((user, kind)) = next {
-                    this.relationships.push(crate::discord::Relationship { user, kind });
+                    this.relationships.push(crate::discord::Relationship { user, kind, since: None });
                 }
             },
             move |this| {

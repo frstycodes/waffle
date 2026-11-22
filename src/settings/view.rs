@@ -124,6 +124,7 @@ impl Waffle {
 
     fn flip(&mut self, toggle: Toggle, cx: &mut Context<Self>) {
         let on = !self.toggle_value(toggle);
+        let before = self.account_settings.clone();
         let account = &mut self.account_settings;
         let patch = match toggle {
             Toggle::DesktopNotifications => return self.update_prefs(cx, |p| p.desktop_notifications = on),
@@ -200,7 +201,7 @@ impl Waffle {
             }
             Toggle::MessageRequests => {
                 account.message_requests = on;
-                return self.save_settings_proto(super::proto::message_requests(on), cx);
+                return self.save_settings_proto(before, super::proto::message_requests(on), cx);
             }
             // Everyone covers the other two, as in Discord: turning it on turns them on.
             Toggle::FriendsAll => {
@@ -220,7 +221,7 @@ impl Waffle {
                 json!({ "friend_source_flags": account.friend_sources() })
             }
         };
-        self.save_account_settings(patch, cx);
+        self.save_account_settings(before, patch, cx);
     }
 
     fn choice_value(&self, choice: Choice) -> u8 {
@@ -238,6 +239,7 @@ impl Waffle {
     }
 
     fn choose_setting(&mut self, choice: Choice, value: u8, cx: &mut Context<Self>) {
+        let before = self.account_settings.clone();
         let patch = match choice {
             Choice::DmFilter => {
                 self.account_settings.explicit_content_filter = value;
@@ -257,22 +259,23 @@ impl Waffle {
             }
             Choice::SpamFilter => {
                 self.account_settings.dm_spam_filter = value;
-                return self.save_settings_proto(super::proto::spam_filter(value), cx);
+                return self.save_settings_proto(before, super::proto::spam_filter(value), cx);
             }
         };
-        self.save_account_settings(patch, cx);
+        self.save_account_settings(before, patch, cx);
     }
 
-    // Shown at once, saved to Discord after; if Discord refuses, the earlier value comes back with a toast.
-    pub(super) fn save_account_settings(&mut self, patch: serde_json::Value, cx: &mut Context<Self>) {
+    // Shown at once, saved to Discord after; if Discord refuses, `before` (the settings ahead of the change)
+    // comes back with a toast.
+    pub(super) fn save_account_settings(&mut self, before: crate::discord::AccountSettings, patch: serde_json::Value, cx: &mut Context<Self>) {
         cx.notify();
         let Some(client) = self.client.clone() else { return };
-        let before = self.account_settings.clone();
         cx.spawn(async move |this, cx| {
             if client.set_account_settings(patch).await.is_err() {
                 let _ = this.update(cx, |this, cx| {
                     this.account_settings = before;
                     this.developer_mode = this.account_settings.developer_mode;
+                    this.publish_presence();
                     this.show_toast("Couldn't save that setting", cx);
                 });
             }
@@ -281,10 +284,9 @@ impl Waffle {
     }
 
     // The same for a setting that lives only in the settings proto: `settings` is the base64 of the change.
-    fn save_settings_proto(&mut self, settings: String, cx: &mut Context<Self>) {
+    pub(super) fn save_settings_proto(&mut self, before: crate::discord::AccountSettings, settings: String, cx: &mut Context<Self>) {
         cx.notify();
         let Some(client) = self.client.clone() else { return };
-        let before = self.account_settings.clone();
         cx.spawn(async move |this, cx| {
             if client.call(reqwest::Method::PATCH, "/users/@me/settings-proto/1".into(), Some(json!({ "settings": settings }))).await.is_err() {
                 let _ = this.update(cx, |this, cx| {

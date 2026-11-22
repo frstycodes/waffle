@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | chat-compact | chat-large-text | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | keyboard-combos | appearance | appearance-scrolled | settings-accessibility | notifications | content-social | chat-settings | settings-contrast | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | notification-settings | notification-settings-muted | inbox-mark-read | mark-unread | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | call-streams-failed | call-streams-reconnecting | call-streams-issues | call-streams-hidden | inbox-saved | games | stage | stage-audience | stage-requests | stage-invited | stage-waiting | stage-start | stage-start-dialog | stage-edit | stage-end | stage-full | requests | requests-spam | requests-empty | request-open | active-now | active-now-empty | group-dm | group-picker | group-edit | group-leave | embed-suppress | system-messages | system-messages-open | chat-media-settings | updating (the launch splash alone). | send-options | tts
+// WAFFLE_DEMO=chat | chat-compact | chat-large-text | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | keyboard-combos | appearance | appearance-scrolled | settings-accessibility | notifications | content-social | chat-settings | settings-contrast | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | notification-settings | notification-settings-muted | inbox-mark-read | mark-unread | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | call-streams-failed | call-streams-reconnecting | call-streams-issues | call-streams-hidden | inbox-saved | games | stage | stage-audience | stage-requests | stage-invited | stage-waiting | stage-start | stage-start-dialog | stage-edit | stage-end | stage-full | requests | requests-spam | requests-empty | request-open | active-now | active-now-empty | group-dm | group-picker | group-edit | group-leave | profile-stranger | profile-editor | profile-editor-server | activity-privacy | embed-suppress | system-messages | system-messages-open | chat-media-settings | updating (the launch splash alone). | send-options | tts
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -9,7 +9,7 @@ use crate::{
     Waffle, Feed, Status,
     drafts::Draft,
     discord::{
-        Activity, ActivityKind, Channel, ChannelKind, Embed, Emoji, Event, Folder, Guild, GuildTag, ListItem, ListOp, Media, MediaKind, Member, Message, Presence, Reaction, Reactor, ReadState, Ready, Relation, Relationship, Role,
+        Activity, ActivityKind, Channel, ChannelKind, Connection, Embed, Emoji, Event, Folder, Guild, GuildTag, ListItem, ListOp, Media, MediaKind, Member, Message, Presence, Reaction, Reactor, ReadState, Ready, Relation, Relationship, Role,
         Status as Presence_, User, VoiceState, avatar_url,
     },
     login::Login,
@@ -169,6 +169,15 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             })
             .detach(),
         "profile" => demo_profile(waffle, cx),
+        // Someone you share nothing with, opened from a DM: the Discord date alone, no Friends Since, no connections.
+        "profile-stranger" => {
+            waffle.guild_id = None;
+            let ferris = user("20971520", "ferris");
+            waffle.open_profile(ferris, gpui_kit::point(gpui_kit::px(520.), gpui_kit::px(120.)), cx);
+            if let Some(card) = waffle.profile_card.as_mut() {
+                card.profile = Some(crate::discord::Profile { username: "ferris.rs".into(), ..Default::default() });
+            }
+        }
         // No theme, banner, badges or games: the plain surface, and the Add role row in view.
         "profile-plain" => {
             demo_profile(waffle, cx);
@@ -338,6 +347,17 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             waffle.inbox_open = true;
         }
         "games" => waffle.open_settings(crate::settings::Page::ActivityPrivacy, window, cx),
+        "profile-editor" => waffle.demo_profile_editor(crate::settings::ProfileTab::Main, window, cx),
+        "profile-editor-server" => waffle.demo_profile_editor(crate::settings::ProfileTab::Server, window, cx),
+        // Where I share activity: one server restricted, one name long enough to truncate.
+        "activity-privacy" => {
+            if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "4") {
+                guild.name = "Garden of the Very Long Server Name That Never Ends".into();
+            }
+            waffle.account_settings.activity_restricted_guilds = vec!["3".into()];
+            waffle.account_settings.default_guilds_activity_restricted = 1;
+            waffle.open_settings(crate::settings::Page::ActivityPrivacy, window, cx);
+        }
         "inbox" | "inbox-unreads" => {
             let all = self::messages();
             waffle.inbox = Some(Some(Ok(all.iter().filter(|m| !m.mentions.is_empty() || m.content.contains("@")).cloned().collect())));
@@ -818,11 +838,12 @@ fn demo_active_now(waffle: &mut Waffle, empty: bool, cx: &mut Context<Waffle>) {
     for (id, name, rich) in [("25165824", "rosa", celeste), ("29360128", "mikey", track)] {
         let activity = Activity { kind: rich.kind, text: rich.name.clone(), rest: Vec::new() };
         waffle.presences.insert(id.into(), Presence { status: Presence_::Online, activity: Some(activity), rich: Some(rich), ..Default::default() });
-        waffle.relationships.push(Relationship { user: user(id, name), kind: Relation::Friend });
+        waffle.relationships.push(Relationship { user: user(id, name), kind: Relation::Friend, since: None });
     }
 }
 
-// Wren's popout with every section filled: theme, decoration, tag, badges, mutuals, an emoji bio, games and a joinable party.
+// Wren's popout with every section filled: theme, decoration, tag, badges, mutuals, an emoji bio, Member Since
+// with the server, Friends Since, connections, games, and a joinable party with her voice channel peeking under it.
 fn demo_profile(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
     let started = chrono::Utc::now().timestamp_millis() - 7 * 60_000 - 2_000;
     let rich = crate::discord::RichPresence {
@@ -839,6 +860,9 @@ fn demo_profile(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
     };
     let playing = Activity { kind: ActivityKind::Playing, text: rich.name.clone(), rest: Vec::new() };
     waffle.presences.insert("8388608".into(), Presence { status: Presence_::Dnd, custom: None, activity: Some(playing), rich: Some(rich), ..Default::default() });
+    if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
+        guild.voice_states.push(VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "8388608".into(), user: Some(user("8388608", "Wren")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false, suppress: false, requested_at: None });
+    }
     let mut zoe = user("8388608", "Wren");
     zoe.tag = Some(GuildTag { text: "wony".into(), badge: Some("brand/icons/sticker.png".into()) });
     zoe.decoration = Some("demo/decoration.png".into());
@@ -856,6 +880,12 @@ fn demo_profile(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
         mutual_friend_count: 5,
         mutual_server_count: 1,
         games: ["peek", "riso", "blueprint", "sticker", "paper"].iter().map(|n| format!("brand/icons/{n}.png")).collect(),
+        joined: Some("2022-06-18T19:30:00+00:00".into()),
+        connections: vec![
+            Connection { kind: "spotify".into(), id: "31wrenlark".into(), name: "wren.lark".into(), verified: true },
+            Connection { kind: "twitch".into(), id: "88".into(), name: "wrenplays_after_dark".into(), verified: false },
+            Connection { kind: "xbox".into(), id: "77".into(), name: "WrenLark".into(), verified: false },
+        ],
         ..Default::default()
     };
     if let Some(card) = waffle.profile_card.as_mut() {
@@ -956,7 +986,7 @@ fn demo_group(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Co
     let members = [user("8388608", "Wren"), rosa.clone(), user("20971520", "ferris"), user("29360128", "Bartholomew Featherstonehaugh-Wright")];
     let friends = members.iter().cloned().chain([user("33554432", "saik"), user("37748736", "Laryke"), user("41943040", "h y p r"), user("46137344", "pouyas"), user("50331648", "valse")]);
     waffle.relationships.retain(|r| r.kind != Relation::Friend);
-    waffle.relationships.extend(friends.map(|user| Relationship { user, kind: Relation::Friend }));
+    waffle.relationships.extend(friends.map(|user| Relationship { user, kind: Relation::Friend, since: None }));
     let mut group = channel("road-trip", "road trip", ChannelKind::Dm, None);
     group.raw_type = 3;
     group.recipients = members.to_vec();
@@ -1307,9 +1337,9 @@ fn ready(me: User) -> Ready {
         ],
         presences: vec![("8388608".into(), Presence { status: Presence_::Online, custom: None, activity: None, rich: None, ..Default::default() })],
         relationships: vec![
-            Relationship { user: user("8388608", "Wren"), kind: Relation::Friend },
-            Relationship { user: user("12582912", "moss lantern"), kind: Relation::Friend },
-            Relationship { user: user("16777216", "toma reed"), kind: Relation::Incoming },
+            Relationship { user: user("8388608", "Wren"), kind: Relation::Friend, since: Some("2023-08-09T18:20:00+00:00".into()) },
+            Relationship { user: user("12582912", "moss lantern"), kind: Relation::Friend, since: Some("2024-02-14T09:00:00+00:00".into()) },
+            Relationship { user: user("16777216", "toma reed"), kind: Relation::Incoming, since: None },
         ],
     }
 }

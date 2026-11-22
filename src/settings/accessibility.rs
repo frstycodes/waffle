@@ -109,8 +109,9 @@ impl Waffle {
         if self.account_settings.message_display_compact == compact {
             return;
         }
+        let before = self.account_settings.clone();
         self.account_settings.message_display_compact = compact;
-        self.save_account_settings(json!({ "message_display_compact": compact }), cx);
+        self.save_account_settings(before, json!({ "message_display_compact": compact }), cx);
     }
 
     fn contrast_group(&self, window: &mut Window, cx: &mut Context<Self>) -> Div {

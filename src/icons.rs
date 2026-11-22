@@ -186,6 +186,37 @@ const BRAND: [(&str, &[u8]); 4] = [
     ("demo/banner.png", include_bytes!("../assets/demo/banner.png")),
 ];
 
+// Services' marks for profile connections, plus Discord's own, from Simple Icons 13.21.0 (CC0,
+// simpleicons.org). One colour, tinted where they're drawn. Xbox has none: Simple Icons dropped Microsoft's marks.
+const BRAND_MARKS: [(&str, &[u8]); 17] = [
+    ("brands/battlenet.svg", include_bytes!("../assets/icons/brands/battlenet.svg")),
+    ("brands/bluesky.svg", include_bytes!("../assets/icons/brands/bluesky.svg")),
+    ("brands/crunchyroll.svg", include_bytes!("../assets/icons/brands/crunchyroll.svg")),
+    ("brands/discord.svg", include_bytes!("../assets/icons/brands/discord.svg")),
+    ("brands/epicgames.svg", include_bytes!("../assets/icons/brands/epicgames.svg")),
+    ("brands/github.svg", include_bytes!("../assets/icons/brands/github.svg")),
+    ("brands/instagram.svg", include_bytes!("../assets/icons/brands/instagram.svg")),
+    ("brands/playstation.svg", include_bytes!("../assets/icons/brands/playstation.svg")),
+    ("brands/reddit.svg", include_bytes!("../assets/icons/brands/reddit.svg")),
+    ("brands/riotgames.svg", include_bytes!("../assets/icons/brands/riotgames.svg")),
+    ("brands/roblox.svg", include_bytes!("../assets/icons/brands/roblox.svg")),
+    ("brands/spotify.svg", include_bytes!("../assets/icons/brands/spotify.svg")),
+    ("brands/steam.svg", include_bytes!("../assets/icons/brands/steam.svg")),
+    ("brands/tiktok.svg", include_bytes!("../assets/icons/brands/tiktok.svg")),
+    ("brands/twitch.svg", include_bytes!("../assets/icons/brands/twitch.svg")),
+    ("brands/x.svg", include_bytes!("../assets/icons/brands/x.svg")),
+    ("brands/youtube.svg", include_bytes!("../assets/icons/brands/youtube.svg")),
+];
+
+// The mark for a Discord connection type ("twitter" draws X's), or None for a service without one.
+pub fn brand_mark(kind: &str) -> Option<&'static str> {
+    let stem = match kind {
+        "twitter" | "twitter_legacy" => "x",
+        other => other,
+    };
+    BRAND_MARKS.iter().map(|(path, _)| *path).find(|path| path.strip_prefix("brands/").and_then(|p| p.strip_suffix(".svg")) == Some(stem))
+}
+
 #[derive(Clone, Copy)]
 pub enum Glyph {
     Hashtag,
@@ -358,7 +389,7 @@ pub struct Assets;
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
-        match GLYPHS.iter().chain(BRAND.iter()).chain(crate::app_icon::BRAND_ICONS.iter()).chain(crate::illustration::ASSETS.iter()).find(|(p, _)| *p == path) {
+        match GLYPHS.iter().chain(BRAND.iter()).chain(BRAND_MARKS.iter()).chain(crate::app_icon::BRAND_ICONS.iter()).chain(crate::illustration::ASSETS.iter()).find(|(p, _)| *p == path) {
             Some((_, bytes)) => Ok(Some(Cow::Borrowed(bytes))),
             None => gpui_kit::assets::Assets.load(path),
         }
@@ -366,7 +397,7 @@ impl AssetSource for Assets {
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
         let mut paths = gpui_kit::assets::Assets.list(path)?;
-        paths.extend(GLYPHS.iter().chain(BRAND.iter()).chain(crate::app_icon::BRAND_ICONS.iter()).chain(crate::illustration::ASSETS.iter()).map(|(p, _)| *p).filter(|p| p.starts_with(path)).map(SharedString::from));
+        paths.extend(GLYPHS.iter().chain(BRAND.iter()).chain(BRAND_MARKS.iter()).chain(crate::app_icon::BRAND_ICONS.iter()).chain(crate::illustration::ASSETS.iter()).map(|(p, _)| *p).filter(|p| p.starts_with(path)).map(SharedString::from));
         Ok(paths)
     }
 }
