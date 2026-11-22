@@ -81,12 +81,15 @@ impl Waffle {
             Toggle::DesktopNotifications => self.prefs.desktop_notifications,
             Toggle::DockBadge => self.prefs.dock_badge,
             Toggle::Clock24 => self.prefs.clock_24h,
+            Toggle::ImageDescriptions => self.prefs.show_image_descriptions,
             Toggle::AutoDownloadUpdates => self.prefs.auto_download_updates,
             Toggle::RenderEmbeds => account.render_embeds,
             Toggle::RenderReactions => account.render_reactions,
+            Toggle::TtsCommand => self.prefs.tts_command,
             Toggle::DeveloperMode => account.developer_mode,
             Toggle::ShareActivity => account.show_current_game,
             Toggle::DmsFromServerMembers => !account.default_guilds_restricted,
+            Toggle::MessageRequests => account.message_requests,
             Toggle::FriendsAll => account.friends_all,
             Toggle::FriendsMutualFriends => account.friends_mutual_friends,
             Toggle::FriendsMutualGuilds => account.friends_mutual_guilds,
@@ -106,7 +109,6 @@ impl Waffle {
             // Reduced motion turns these off without touching what's stored, as Discord does.
             Toggle::GifAutoPlay => account.gif_auto_play && !self.prefs.reduces_motion(),
             Toggle::AnimateEmoji => account.animate_emoji && !self.prefs.reduces_motion(),
-            Toggle::ImageDescriptions => self.prefs.view_image_descriptions,
         }
     }
 
@@ -130,6 +132,12 @@ impl Waffle {
                 return self.update_badge();
             }
             Toggle::Clock24 => return self.update_prefs(cx, |p| p.clock_24h = on),
+            Toggle::ImageDescriptions => {
+                // Captions under single pictures change row heights.
+                self.list.remeasure();
+                return self.update_prefs(cx, |p| p.show_image_descriptions = on);
+            }
+            Toggle::TtsCommand => return self.update_prefs(cx, |p| p.tts_command = on),
             Toggle::AutoDownloadUpdates => return self.set_auto_download(on, cx),
             Toggle::CompactAvatars => return self.update_prefs(cx, |p| p.compact_avatars = on),
             Toggle::SendButton => return self.update_prefs(cx, |p| p.send_button = on),
@@ -148,7 +156,6 @@ impl Waffle {
                     p.reduce_motion_sync = on;
                 });
             }
-            Toggle::ImageDescriptions => return self.update_prefs(cx, |p| p.view_image_descriptions = on),
             Toggle::InlineEmbedMedia => {
                 account.inline_embed_media = on;
                 json!({ "inline_embed_media": on })
@@ -191,6 +198,10 @@ impl Waffle {
                 account.default_guilds_restricted = !on;
                 json!({ "default_guilds_restricted": !on })
             }
+            Toggle::MessageRequests => {
+                account.message_requests = on;
+                return self.save_settings_proto(super::proto::message_requests(on), cx);
+            }
             // Everyone covers the other two, as in Discord: turning it on turns them on.
             Toggle::FriendsAll => {
                 account.friends_all = on;
@@ -218,6 +229,11 @@ impl Waffle {
             Choice::Spoilers => self.prefs.spoilers as u8,
             Choice::RoleStyle => self.prefs.role_style as u8,
             Choice::StickerAnimation => self.account_settings.animate_stickers,
+            // GAP: unset, Discord derives the filter from age and the explicit-content setting; we show its usual result.
+            Choice::SpamFilter => match self.account_settings.dm_spam_filter {
+                0 => super::proto::SPAM_FILTER_NON_FRIENDS,
+                set => set,
+            },
         }
     }
 
@@ -239,6 +255,10 @@ impl Waffle {
                 self.account_settings.animate_stickers = value;
                 json!({ "animate_stickers": value })
             }
+            Choice::SpamFilter => {
+                self.account_settings.dm_spam_filter = value;
+                return self.save_settings_proto(super::proto::spam_filter(value), cx);
+            }
         };
         self.save_account_settings(patch, cx);
     }
@@ -253,6 +273,22 @@ impl Waffle {
                 let _ = this.update(cx, |this, cx| {
                     this.account_settings = before;
                     this.developer_mode = this.account_settings.developer_mode;
+                    this.show_toast("Couldn't save that setting", cx);
+                });
+            }
+        })
+        .detach();
+    }
+
+    // The same for a setting that lives only in the settings proto: `settings` is the base64 of the change.
+    fn save_settings_proto(&mut self, settings: String, cx: &mut Context<Self>) {
+        cx.notify();
+        let Some(client) = self.client.clone() else { return };
+        let before = self.account_settings.clone();
+        cx.spawn(async move |this, cx| {
+            if client.call(reqwest::Method::PATCH, "/users/@me/settings-proto/1".into(), Some(json!({ "settings": settings }))).await.is_err() {
+                let _ = this.update(cx, |this, cx| {
+                    this.account_settings = before;
                     this.show_toast("Couldn't save that setting", cx);
                 });
             }

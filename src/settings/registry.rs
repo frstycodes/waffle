@@ -45,12 +45,15 @@ pub enum Toggle {
     DesktopNotifications,
     DockBadge,
     Clock24,
+    ImageDescriptions,
     AutoDownloadUpdates,
     RenderEmbeds,
     RenderReactions,
+    TtsCommand,
     DeveloperMode,
     ShareActivity,
     DmsFromServerMembers,
+    MessageRequests,
     FriendsAll,
     FriendsMutualFriends,
     FriendsMutualGuilds,
@@ -68,7 +71,6 @@ pub enum Toggle {
     ReduceMotionSync,
     GifAutoPlay,
     AnimateEmoji,
-    ImageDescriptions,
 }
 
 // One of several, drawn as radio rows filling its group.
@@ -78,6 +80,7 @@ pub enum Choice {
     Spoilers,
     RoleStyle,
     StickerAnimation,
+    SpamFilter,
 }
 
 impl Choice {
@@ -96,6 +99,8 @@ impl Choice {
                 (1, "Animate on interaction", Some("Stickers animate when you hover over them")),
                 (2, "Never animate", None),
             ],
+            // DmSpamFilterV2's values (settings::proto).
+            Choice::SpamFilter => &[(3, "Filter all spam", None), (2, "Filter messages from non-friends (Recommended)", None), (1, "Don't filter spam", None)],
         }
     }
 }
@@ -134,6 +139,8 @@ pub static SETTINGS: &[Setting] = &[
     s("delete-account", Account, "On discord.com", "Disable or delete account", None, &["delete", "remove account", "deactivate", "close account"], Link(DISCORD)),
     // Content & social
     s("dm-server-members", ContentSocial, "Direct messages", "Allow DMs from server members", Some("Applies to servers you join from now on"), &["dm", "direct messages", "privacy", "strangers", "message requests"], Switch(Toggle::DmsFromServerMembers)),
+    s("message-requests", ContentSocial, "Direct messages", "Message requests", Some("Filter messages from server members you may not know."), &["message requests", "dm", "strangers", "requests", "inbox"], Switch(Toggle::MessageRequests)),
+    s("dm-spam-filter", ContentSocial, "Automatically filter suspected spam messages", "Automatically filter suspected spam messages", Some("Discord can filter out some messages that contain spam. These messages go to your Spam inbox."), &["dm spam filter", "spam", "messages", "inbox", "message requests"], Control::Choice(Choice::SpamFilter)),
     s("dm-filter", ContentSocial, "Message filtering", "Filter direct messages", Some("Discord blurs explicit images in DMs it scans"), &["spam", "explicit", "nsfw", "safe", "sensitive media", "filter"], Control::Choice(Choice::DmFilter)),
     s("friends-all", ContentSocial, "Who can send you a friend request", "Everyone", None, &["friend request", "who can add me", "add friend"], Switch(Toggle::FriendsAll)),
     s("friends-mutual-friends", ContentSocial, "Who can send you a friend request", "Friends of friends", None, &["friend request", "mutual friends"], Switch(Toggle::FriendsMutualFriends)),
@@ -184,6 +191,7 @@ pub static SETTINGS: &[Setting] = &[
     s("inline-attachment-media", Chat, "Show images, videos, and lolcats", "When uploaded directly to Discord", None, &["images", "videos", "media", "uploads", "attachments", "inline"], Switch(Toggle::InlineAttachmentMedia)),
     s("render-embeds", Chat, "Display", "Show embeds and link previews", None, &["links", "preview", "unfurl", "embeds"], Switch(Toggle::RenderEmbeds)),
     s("render-reactions", Chat, "Display", "Show emoji reactions", None, &["reactions", "emoji"], Switch(Toggle::RenderReactions)),
+    s("tts-command", Chat, "Display", "Allow playback and usage of /tts command", Some("Using the /tts command speaks your message out loud. Turn this off if you prefer to see /tts messages as text only."), &["tts", "text to speech", "speak", "read aloud", "voice"], Switch(Toggle::TtsCommand)),
     s("clock-24", Chat, "Display", "Use a 24-hour clock", Some("For message times"), &["time", "timestamp", "am pm", "clock", "24h"], Switch(Toggle::Clock24)),
     s("compact-avatars", Chat, "Display", "Show user avatars", None, &["avatars", "compact", "pictures"], Switch(Toggle::CompactAvatars)),
     s("spoilers", Chat, "Show spoiler content", "Show spoiler content", None, &["spoiler", "hidden", "blur", "reveal"], Control::Choice(Choice::Spoilers)),
@@ -208,6 +216,7 @@ pub static SETTINGS: &[Setting] = &[
     s("auto-download-updates", Updates, "Automatic updates", "Download updates automatically", Some("Off, Waffle still checks and tells you, then downloads when you ask"), &["update", "upgrade", "auto update", "background", "download", "release"], Switch(Toggle::AutoDownloadUpdates)),
     // Activity privacy
     s("share-activity", ActivityPrivacy, "Activity status", "Share your activity status", Some("What you're playing or listening to, as Discord's apps detect it"), &["game", "playing", "spotify", "rich presence", "status", "activity"], Switch(Toggle::ShareActivity)),
+    s("registered-games", ActivityPrivacy, "Registered games", "Registered games", Some("Games detected here, each with its own switch, and Add it! for one that isn't"), &["game", "detect", "detection", "add it", "registered", "playing"], Custom),
 ];
 
 impl<P: Scope> Setting<P> {

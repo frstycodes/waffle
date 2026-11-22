@@ -132,7 +132,7 @@ impl Waffle {
             for (channel_id, label) in &places {
                 let mut sent = client.forward_message(channel_id, &message, guild_id.as_deref(), &crate::nonce()).await.map(drop);
                 if sent.is_ok() && !note.is_empty() {
-                    sent = client.send_message(channel_id, &note, &crate::nonce(), None, false).await.map(drop);
+                    sent = client.send_message(channel_id, &note, &crate::nonce(), None, false, Default::default()).await.map(drop);
                 }
                 if sent.is_err() {
                     failed.push(label.clone());
@@ -238,7 +238,7 @@ impl Waffle {
     }
 
     // What goes out: the text, two lines at most, or what it carries, with the first picture at the right.
-    fn forward_preview(&self, message: &Message, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(crate) fn forward_preview(&self, message: &Message, cx: &mut Context<Self>) -> Option<AnyElement> {
         let shown = message.forward.as_deref().unwrap_or(message);
         let ctx = self.row_context_everywhere(std::slice::from_ref(shown), DIALOG_WIDTH, cx);
         let text = crate::chat::content(shown, &ctx, cx).map(|t| div().line_clamp(2).child(t).into_any_element());
@@ -324,8 +324,8 @@ mod tests {
 
     #[test]
     fn attachments_read_as_counts() {
-        let image = Media { url: "a.png".into(), width: 1., height: 1., kind: MediaKind::Image, description: None };
-        let file = File { name: "a.zip".into(), url: "a.zip".into(), size: 1 };
+        let image = Media { url: "a.png".into(), width: 1., height: 1., kind: MediaKind::Image, ..Default::default() };
+        let file = File { name: "a.zip".into(), url: "a.zip".into(), size: 1, ..Default::default() };
         let summary = |m: Message| attachment_summary(&m).map(|(_, label)| label);
         assert_eq!(summary(Message { media: vec![image.clone()], ..Default::default() }).as_deref(), Some("1 image"));
         assert_eq!(summary(Message { files: vec![file.clone(), file], ..Default::default() }).as_deref(), Some("2 files"));

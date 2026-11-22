@@ -1,8 +1,10 @@
 // Game detection the way Discord's desktop client does it: Discord's list of detectable games, matched
-// against the executable paths of running processes every `SCAN_EVERY`, and the game found published
-// as your presence (a type-0 "Playing" activity with its `application_id`).
+// against the executable paths of running processes, and the game found published as your presence
+// (a type-0 "Playing" activity with its `application_id`). As Discord's RunningGameStore (web client,
+// 2026-11-21): apps on its non-games list and the streaming tools and Spotify it watches never count as
+// games; games you turned detection off for are skipped; programs you added ("Add it!") count as games.
 //
-// The list is `GET /applications/detectable` (unauthenticated, ~13 MB): each app has `executables`
+// The list is Discord's CDN copy, `/detectables/games.json` (unauthenticated, ~13 MB): each app has `executables`
 // of `{ os: "win32" | "darwin" | "linux", name, is_launcher, arguments? }`. A name is a lowercase path
 // suffix ("win64/cs2.exe", "factorio.app"); one starting with `>` names the process's own file and
 // needs `arguments` in its command line (`>java` + "net.minecraft.client.main.Main"). Launchers never
@@ -10,7 +12,7 @@
 // reimplementation of the client's detection (not verified against Discord's own native module).
 use std::{
     cell::{OnceCell, RefCell},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     rc::Rc,
     sync::Mutex,
     time::{Duration, SystemTime},
@@ -22,7 +24,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Waffle, discord::ActivityKind, query::Query};
 
-const SCAN_EVERY: Duration = Duration::from_secs(15);
+// A game shows within a second of launching. Each scan lists processes (a few milliseconds) and
+// matches only the ones new since the last.
+// GAP: Discord's native module reports through a callback whose cadence isn't visible from its bundle.
+const SCAN_EVERY: Duration = Duration::from_secs(1);
+const CDN: &str = "https://cdn.discordapp.com";
+// Discord's built-in observed apps (RunningGameStore): streaming tools and Spotify, never games.
+const OBSERVED: [&str; 16] = [
+    "obs/obs.exe", "obs32.exe", "obs64.exe", "obs.app", "xsplit.gamecaster.exe", "xsplit.core.exe", "gamecaster.exe", "bebo.exe",
+    "streamlabs obs.exe", "streamlabs desktop.exe", "streamlabs desktop.app", "twitchstudio.exe", "twitch studio.app", "spotify.exe", "spotify.app", "obs",
+];
 // The list changes as Discord adds games; a day old is fresh enough.
 const LIST_FRESH_FOR: Duration = Duration::from_secs(24 * 60 * 60);
 // Offline with no cached list: try again this often.
@@ -44,9 +55,17 @@ impl Game {
         Some(crate::discord::app_icon_url(&self.app_id, self.icon.as_deref()?))
     }
 
+    // An added program has no application: its path stands in for one.
+    pub fn added(&self) -> bool {
+        self.app_id.contains(['/', '\\'])
+    }
+
     // Not verified: the activity's shape, taken from what arRPC sends Discord for a detected game.
     pub fn activity(&self) -> serde_json::Value {
-        serde_json::json!({ "type": 0, "name": self.name, "application_id": self.app_id, "timestamps": { "start": self.started } })
+        match self.added() {
+            true => serde_json::json!({ "type": 0, "name": self.name, "timestamps": { "start": self.started } }),
+            false => serde_json::json!({ "type": 0, "name": self.name, "application_id": self.app_id, "timestamps": { "start": self.started } }),
+        }
     }
 }
 
@@ -70,6 +89,65 @@ impl Playing {
 }
 
 static RUNNING: Mutex<Option<Game>> = Mutex::new(None);
+static RULES: Mutex<Option<Rules>> = Mutex::new(None);
+
+/// What you set under Registered games, for the scan to follow.
+#[derive(Clone, Debug, Default)]
+pub struct Rules {
+    // Application ids (or an added program's path) not to detect.
+    pub off: HashSet<String>,
+    pub added: Vec<Added>,
+}
+
+/// A program you added as a game ("Add it!"), by its executable's full path.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Added {
+    pub path: String,
+    pub name: String,
+}
+
+/// A game seen running here, for Registered games' list.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Seen {
+    // The application id, or an added program's path.
+    pub id: String,
+    pub name: String,
+    // Unix milliseconds.
+    pub last: i64,
+}
+
+pub fn set_rules(rules: Rules) {
+    if let Ok(mut held) = RULES.lock() {
+        *held = Some(rules);
+    }
+}
+
+/// Programs with a window you could add as a game: (path, name), by name.
+pub fn addable() -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = processes().into_iter().filter(|(_, path)| looks_like_an_app(path)).map(|(_, path)| (program_name(&path), path)).map(|(name, path)| (path, name)).collect();
+    out.sort_by_key(|(_, name)| name.to_lowercase());
+    out.dedup_by(|a, b| a.1 == b.1);
+    out
+}
+
+// An app bundle's own binary, or a program outside the system folders.
+fn looks_like_an_app(path: &str) -> bool {
+    let lower = path.to_lowercase().replace('\\', "/");
+    match std::env::consts::OS {
+        "macos" => lower.contains(".app/contents/macos/") && !lower.starts_with("/system/") && !lower.contains("/library/") && !lower.contains("helper"),
+        _ => lower.ends_with(".exe") && !lower.contains("/windows/"),
+    }
+}
+
+// "Factorio" from ".../factorio.app/Contents/MacOS/factorio" or "C:/Games/Factorio.exe".
+pub fn program_name(path: &str) -> String {
+    let path = path.replace('\\', "/");
+    let bundle = path.split('/').find(|p| p.to_lowercase().ends_with(".app")).map(|b| b[..b.len() - 4].to_owned());
+    bundle.unwrap_or_else(|| {
+        let file = path.rsplit('/').next().unwrap_or(&path);
+        file.strip_suffix(".exe").or_else(|| file.strip_suffix(".EXE")).unwrap_or(file).to_owned()
+    })
+}
 
 /// The detected game's process, for Go Live's share bind to prefer over the frontmost app.
 pub fn running_pid() -> Option<u32> {
@@ -107,6 +185,13 @@ impl Waffle {
         cx.spawn(async move |this, cx| {
             while let Some(game) = changes.next().await {
                 let alive = this.update(cx, |this, cx| {
+                    if let Some(game) = &game {
+                        let seen = crate::games::Seen { id: game.app_id.clone(), name: game.name.clone(), last: chrono::Utc::now().timestamp_millis() };
+                        this.update_prefs(cx, |p| match p.games_seen.iter_mut().find(|s| s.id == seen.id) {
+                            Some(s) => *s = seen,
+                            None => p.games_seen.push(seen),
+                        });
+                    }
                     this.games.mine = game;
                     this.publish_presence();
                     cx.notify();
@@ -174,8 +259,10 @@ fn watch() -> mpsc::UnboundedReceiver<Option<Game>> {
                 std::thread::sleep(LIST_RETRY);
             };
             let mut current: Option<Game> = None;
+            let mut known: HashMap<u32, (String, Option<usize>)> = HashMap::new();
             loop {
-                let found = scan(&matcher, current.as_ref());
+                let rules = RULES.lock().ok().and_then(|r| r.clone()).unwrap_or_default();
+                let found = scan(&matcher, &rules, &mut known, current.as_ref(), processes());
                 if found.as_ref().map(|g| (&g.app_id, g.pid)) != current.as_ref().map(|g| (&g.app_id, g.pid)) {
                     current = found;
                     if let Ok(mut running) = RUNNING.lock() {
@@ -193,11 +280,37 @@ fn watch() -> mpsc::UnboundedReceiver<Option<Game>> {
 }
 
 // The game still running keeps its place; otherwise the first match. Its start time carries over.
-fn scan(matcher: &Matcher, current: Option<&Game>) -> Option<Game> {
-    let found: Vec<(u32, &Detectable)> = processes().into_iter().filter_map(|(pid, path)| Some((pid, matcher.find(&path, || command_line(pid))?))).collect();
-    let (pid, app) = found.iter().find(|(_, app)| current.is_some_and(|c| c.app_id == app.id)).or(found.first()).copied()?;
-    let started = current.filter(|c| c.app_id == app.id).map_or_else(|| chrono::Utc::now().timestamp_millis(), |c| c.started);
-    Some(Game { pid, app_id: app.id.clone(), name: app.name.clone(), icon: app.icon_hash.clone(), started })
+// `known` remembers each process's match, so only new processes are matched.
+fn scan(matcher: &Matcher, rules: &Rules, known: &mut HashMap<u32, (String, Option<usize>)>, current: Option<&Game>, running: Vec<(u32, String)>) -> Option<Game> {
+    let alive: HashSet<u32> = running.iter().map(|(pid, _)| *pid).collect();
+    known.retain(|pid, _| alive.contains(pid));
+    let mut found: Vec<Game> = Vec::new();
+    for (pid, path) in running {
+        let entry = known.entry(pid).or_insert_with(|| (path.clone(), None));
+        if entry.0 != path {
+            *entry = (path.clone(), None);
+        }
+        if entry.1.is_none() {
+            entry.1 = Some(matcher.find(&path, || command_line(pid)).unwrap_or(usize::MAX));
+        }
+        let game = match entry.1 {
+            Some(i) if i != usize::MAX => {
+                let app = &matcher.apps[i];
+                Game { pid, app_id: app.id.clone(), name: app.name.clone(), icon: app.icon_hash.clone(), started: 0 }
+            }
+            _ => match rules.added.iter().find(|a| a.path == path) {
+                Some(added) => Game { pid, app_id: added.path.clone(), name: added.name.clone(), icon: None, started: 0 },
+                None => continue,
+            },
+        };
+        if !rules.off.contains(&game.app_id) {
+            found.push(game);
+        }
+    }
+    let pick = found.iter().position(|g| current.is_some_and(|c| c.app_id == g.app_id)).unwrap_or(0);
+    let mut game = (pick < found.len()).then(|| found.swap_remove(pick))?;
+    game.started = current.filter(|c| c.app_id == game.app_id).map_or_else(|| chrono::Utc::now().timestamp_millis(), |c| c.started);
+    Some(game)
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -227,8 +340,41 @@ fn os() -> &'static str {
 }
 
 // This OS's games from the cached copy while it's fresh, else from Discord (falling back to the stale
-// copy offline). Only this OS's entries are kept, on disk and in memory.
+// copy offline). Only this OS's entries are kept, on disk and in memory. Games sharing an executable
+// with a non-game or an observed app lose that executable, as Discord excludes them.
 fn detectable() -> Option<Vec<Detectable>> {
+    let games = detectable_games()?;
+    let mut not_games: HashSet<String> = non_games().into_iter().collect();
+    not_games.extend(OBSERVED.iter().map(|s| (*s).to_owned()));
+    Some(without(games, &not_games))
+}
+
+fn without(games: Vec<Detectable>, not_games: &HashSet<String>) -> Vec<Detectable> {
+    games
+        .into_iter()
+        .filter_map(|mut app| {
+            app.executables.retain(|e| !not_games.contains(&e.name.trim_start_matches('>').to_lowercase()));
+            (!app.executables.is_empty()).then_some(app)
+        })
+        .collect()
+}
+
+// Executable names on Discord's non-games list (browsers and the like), for this OS.
+fn non_games() -> Vec<String> {
+    #[derive(Deserialize)]
+    struct NonGame {
+        executables: Vec<NonGameExe>,
+    }
+    #[derive(Deserialize)]
+    struct NonGameExe {
+        os: String,
+        name: String,
+    }
+    let fetched = crate::discord::runtime().block_on(async { reqwest::get(format!("{CDN}/detectables/non-games-v1.json")).await?.json::<Vec<NonGame>>().await });
+    fetched.into_iter().flatten().flat_map(|g| g.executables).filter(|e| e.os == os()).map(|e| e.name.to_lowercase()).collect()
+}
+
+fn detectable_games() -> Option<Vec<Detectable>> {
     let file = crate::data_dir()?.join("cache").join(format!("detectable-{}.json", os()));
     let age = std::fs::metadata(&file).and_then(|m| m.modified()).ok().and_then(|t| SystemTime::now().duration_since(t).ok());
     let cached = || serde_json::from_slice::<Vec<Detectable>>(&std::fs::read(&file).ok()?).ok();
@@ -237,7 +383,7 @@ fn detectable() -> Option<Vec<Detectable>> {
     {
         return Some(apps);
     }
-    let fetched = crate::discord::runtime().block_on(async { reqwest::get(format!("{}/applications/detectable", crate::discord::API)).await?.json::<Vec<Detectable>>().await });
+    let fetched = crate::discord::runtime().block_on(async { reqwest::get(format!("{CDN}/detectables/games.json")).await?.json::<Vec<Detectable>>().await });
     let Ok(apps) = fetched else { return cached() };
     let apps: Vec<Detectable> = apps.into_iter().filter_map(|app| only_on(app, os())).collect();
     if let Ok(text) = serde_json::to_vec(&apps) {
@@ -279,12 +425,12 @@ impl Matcher {
 
     // The app `path` belongs to. `command_line` is read only when a rule needs arguments; unknown
     // arguments never match.
-    fn find(&self, path: &str, command_line: impl Fn() -> Option<String>) -> Option<&Detectable> {
+    fn find(&self, path: &str, command_line: impl Fn() -> Option<String>) -> Option<usize> {
         let line = OnceCell::new();
         let has = |needle: &str| line.get_or_init(&command_line).as_deref().is_some_and(|l| l.contains(needle));
         candidates(path).into_iter().find_map(|(candidate, own_file)| {
             let rule = self.rules.get(&candidate)?.iter().find(|r| (own_file || !r.own_file) && r.arguments.as_deref().is_none_or(has))?;
-            Some(&self.apps[rule.app])
+            Some(rule.app)
         })
     }
 }
@@ -368,11 +514,48 @@ fn processes() -> Vec<(u32, String)> {
         .collect()
 }
 
-// GAP: another process's command line on Windows means reading its PEB; until then the `>` rules with
-// arguments (Minecraft Java, Source mods) don't match there.
+// Another process's command line, for the `>` rules with arguments (Minecraft Java, Source mods), from
+// NtQueryInformationProcess's ProcessCommandLineInformation (Windows 8.1 and later): a UNICODE_STRING
+// whose buffer follows it in the block it fills.
 #[cfg(target_os = "windows")]
-fn command_line(_pid: u32) -> Option<String> {
-    None
+fn command_line(pid: u32) -> Option<String> {
+    use std::ffi::c_void;
+    use windows::Win32::{
+        Foundation::{CloseHandle, HANDLE},
+        System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
+    };
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtQueryInformationProcess(process: HANDLE, class: u32, info: *mut c_void, length: u32, returned: *mut u32) -> i32;
+    }
+    #[repr(C)]
+    struct UnicodeString {
+        length: u16,
+        maximum_length: u16,
+        buffer: *const u16,
+    }
+    const PROCESS_COMMAND_LINE_INFORMATION: u32 = 60;
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?;
+    let mut needed = 0u32;
+    // Asked with no room first, it answers how much it needs.
+    unsafe { NtQueryInformationProcess(process, PROCESS_COMMAND_LINE_INFORMATION, std::ptr::null_mut(), 0, &mut needed) };
+    let line = (needed as usize >= size_of::<UnicodeString>()).then(|| {
+        // u64 words keep the block aligned for the pointer inside it.
+        let mut block = vec![0u64; (needed as usize).div_ceil(8)];
+        let status = unsafe { NtQueryInformationProcess(process, PROCESS_COMMAND_LINE_INFORMATION, block.as_mut_ptr().cast(), needed, &mut needed) };
+        if status < 0 {
+            return None;
+        }
+        let text = unsafe { &*block.as_ptr().cast::<UnicodeString>() };
+        if text.buffer.is_null() {
+            return None;
+        }
+        // The buffer points into `block`, which lives until this closure returns.
+        let chars = unsafe { std::slice::from_raw_parts(text.buffer, usize::from(text.length) / 2) };
+        Some(String::from_utf16_lossy(chars))
+    });
+    let _ = unsafe { CloseHandle(process) };
+    line.flatten()
 }
 
 // GAP: no process scan on Linux yet.
@@ -407,7 +590,7 @@ mod tests {
     }
 
     fn found(m: &Matcher, path: &str, line: Option<&str>) -> Option<String> {
-        m.find(path, || line.map(Into::into)).map(|a| a.id.clone())
+        m.find(path, || line.map(Into::into)).map(|i| m.apps[i].id.clone())
     }
 
     #[test]
@@ -455,6 +638,29 @@ mod tests {
         assert_eq!(game(None).label(), "Playing Hades II");
         let label = game(Some(chrono::Utc::now().timestamp_millis() - 3_725_000)).label();
         assert!(label.starts_with("Playing Hades II · 1:02:0"), "{label}");
+    }
+
+    #[test]
+    fn non_games_and_observed_apps_never_count() {
+        let apps = vec![app("chrome-game", &[("win32", "chrome.exe", false, None)]), app("both", &[("win32", "obs64.exe", false, None), ("win32", "both.exe", false, None)])];
+        let kept = without(apps, &["chrome.exe".to_owned(), "obs64.exe".to_owned()].into_iter().collect());
+        assert_eq!(kept.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), ["both"]);
+        assert_eq!(kept[0].executables.len(), 1);
+    }
+
+    #[test]
+    fn rules_skip_games_turned_off_and_add_programs() {
+        let m = matcher("win32");
+        let path = r"D:\Factorio\bin\x64\Factorio.exe".to_owned();
+        let running = || vec![(7, path.clone()), (8, r"C:\\Tools\\mygame.exe".to_owned())];
+        let found = |rules: &Rules| scan(&m, rules, &mut HashMap::new(), None, running()).map(|g| (g.pid, g.app_id));
+        let added = Added { path: r"C:\\Tools\\mygame.exe".into(), name: "mygame".into() };
+        let rules = Rules { off: HashSet::from(["factorio".to_owned()]), added: vec![added.clone()] };
+        assert_eq!(found(&rules), Some((8, added.path.clone())));
+        assert_eq!(found(&Rules::default()), Some((7, "factorio".to_owned())));
+        assert_eq!(found(&Rules { off: HashSet::from(["factorio".to_owned()]), added: Vec::new() }), None);
+        assert_eq!(program_name("/Applications/Factorio.app/Contents/MacOS/factorio"), "Factorio");
+        assert_eq!(program_name(r"C:\Games\Celeste.exe"), "Celeste");
     }
 
     #[test]

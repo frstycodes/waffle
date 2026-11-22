@@ -86,7 +86,10 @@ impl Waffle {
             // The feed stops under the header, a hard edge.
             .child(header)
             // The composer floats over the feed, which scrolls on under its glass.
-            .child(div().relative().flex_1().min_h_0().child(body).children(unread_bar).child(self.render_composer(window, cx)));
+            .child(div().relative().flex_1().min_h_0().child(body).children(unread_bar).child(match self.composer_gate(&channel, window, cx) {
+                Some(gate) => gate,
+                None => self.render_composer(window, cx).into_any_element(),
+            }));
         // The members column beside the feed runs to the window's top with a header of its own on the same line.
         let panel = self.panel_column_width().map(|w| self.part(crate::part::Column::Panel, gpui_kit::StyleRefinement::default().w(px(w)).h_full().flex_none(), cx));
         let drop_zone = self.drop_zone(&channel, cx);
@@ -137,14 +140,19 @@ impl Waffle {
                 .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_threads_popout(id.clone(), e.position, cx)))
         });
         // Mute and notification level for this channel, the same entries as its right-click menu; the bell
-        // shows a slash while it's muted.
+        // shows a slash while it's muted. Shift+click mutes or unmutes without the menu, as Discord's does.
         let bell = self.guild_id.clone().filter(|_| matches!(channel.kind, ChannelKind::Text | ChannelKind::Voice)).map(|guild_id| {
             let muted = self.guild_settings.get(&guild_id).is_some_and(|s| s.channel_muted(&channel.id));
             let (label, glyph) = if muted { ("Unmute or change notifications", Glyph::BellSlash) } else { ("Notification Settings", Glyph::Bell) };
             let open = channel.clone();
             ui::icon_button("notify-button", glyph, label, cx)
                 .occlude()
-                .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_notify_menu(open.clone(), guild_id.clone(), e.position, cx)))
+                .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| {
+                    if e.modifiers.shift {
+                        return this.patch_channel_override(guild_id.clone(), &open.id, serde_json::json!({ "muted": !muted }), cx);
+                    }
+                    this.open_notify_menu(open.clone(), guild_id.clone(), e.position, cx)
+                }))
         });
         let pins_x = self.pins_button_x.clone();
         let pins = ui::icon_button("pins-button", Glyph::Pin, "Pinned Messages", cx)
@@ -166,8 +174,13 @@ impl Waffle {
                 ui::icon_button("dm-video-call", Glyph::Video, "Start Video Call", cx).occlude().on_click(cx.listener(move |this, _, _, cx| this.start_dm_call(video.clone(), true, cx))),
             ]
         });
+        let add_members = (channel.kind == ChannelKind::Dm).then(|| {
+            let tip = if channel.raw_type == 3 { "Add Members" } else { "Add Friends to DM" };
+            let from = channel.clone();
+            ui::icon_button("dm-add-members", Glyph::GroupPlus, tip, cx).occlude().on_click(cx.listener(move |this, _, window, cx| this.open_group_picker(Some(from.clone()), window, cx)))
+        });
         let members_on = matches!(self.right_panel, RightPanel::Members);
-        let members = self.guild_id.is_some().then(|| {
+        let members = (self.guild_id.is_some() || channel.raw_type == 3).then(|| {
             ui::icon_button("members-toggle", Glyph::Users, if members_on { "Hide Member List" } else { "Show Member List" }, cx)
                 .occlude()
                 .when(members_on, |b| b.bg(selected).text_color(strong))
@@ -190,7 +203,7 @@ impl Waffle {
             .window_control_area(WindowControlArea::Drag)
             .child(crumbs)
             .children(topic)
-            .child(div().ml_auto().flex_none().flex().items_center().gap(px(2.)).children(join).children(calls.into_iter().flatten()).children(threads).children(bell).child(pins).children(members).children(search))
+            .child(div().ml_auto().flex_none().flex().items_center().gap(px(2.)).children(join).children(calls.into_iter().flatten()).children(threads).children(bell).child(pins).children(add_members).children(members).children(search))
             .child(self.caption_clearance(!self.panel_shown()));
         ui::hard_edge(|| false, cx).child(bar)
     }
@@ -437,7 +450,7 @@ impl Waffle {
             role_style: self.prefs.role_style,
             underline_links: self.prefs.underline_links,
             name_styles: self.prefs.display_name_styles,
-            image_descriptions: self.prefs.view_image_descriptions,
+            manage_messages: channel.is_some_and(|c| self.can_in(&c.id, crate::discord::perm::MANAGE_MESSAGES)),
             media: self.media_prefs(),
             // Later entries win: the server's member cache last, so nicknames beat the account names
             // that history loaded over REST carries (it has no member objects).
@@ -460,6 +473,9 @@ impl Waffle {
             flash: self.flash.clone(),
             editing: self.editing.as_ref().map(|m| m.id.clone()),
             hovered: self.hovered_message.clone(),
+            hovered_tile: self.hovered_tile.clone(),
+            alt_popout: self.alt_popout.clone(),
+            image_descriptions: self.prefs.show_image_descriptions,
             focused: self.focused_message.clone(),
             copied: self.copied.clone(),
             revealed: self.revealed.clone(),
@@ -471,10 +487,18 @@ impl Waffle {
             has_more,
             dm_start: channel.and_then(|c| self.dm_start(c, has_more)),
             column,
-            quick_reactions: self.prefs.frequent_emojis(3, &["💯", "😆", "💖"]),
+            quick_reactions: self.prefs.frequent_emojis(3, &["💯", "👍", "👎"]),
             shift: self.shift_held,
-            manage_messages: channel.is_some_and(|c| self.can_in(&c.id, crate::discord::perm::MANAGE_MESSAGES)),
-            threads: channel.is_some_and(|c| c.kind == ChannelKind::Text && self.can_in(&c.id, crate::discord::perm::CREATE_PUBLIC_THREADS)),
+            facts: crate::message_menu::Facts {
+                mine: false,
+                manage: channel.is_some_and(|c| self.can_in(&c.id, crate::discord::perm::MANAGE_MESSAGES)),
+                pin: channel.is_some_and(|c| self.can_in(&c.id, crate::discord::perm::PIN_MESSAGES)),
+                in_dm: channel.is_some_and(|c| self.dms.iter().any(|d| d.id == c.id)),
+                threads: channel.is_some_and(|c| c.kind == ChannelKind::Text && self.can_in(&c.id, crate::discord::perm::CREATE_PUBLIC_THREADS)),
+                developer: self.developer_mode,
+                saved: false,
+            },
+            saved_ids: self.saved_ids.clone(),
             poll_picks: self.poll_picks.clone(),
             poll_peek: self.poll_peek.clone(),
         })
@@ -508,7 +532,7 @@ impl Waffle {
                 ui::icon_button(id, glyph, label, cx).toggled(open_picker == Some(picker), cx).on_click(cx.listener(move |this, _, window, cx| this.show_composer_picker(picker, window, cx)))
             }))
             // Not verified: the tooltip; Discord's chat box shows its button only when this setting is on.
-            .when(self.prefs.send_button, |r| r.child(ui::icon_button("composer-send", Glyph::PaperPlane, "Send Message", cx).disabled(!self.has_draft).on_click(cx.listener(|this, _, window, cx| this.submit(window, cx)))));
+            .when(self.prefs.send_button, |r| r.child(ui::icon_button("composer-send", Glyph::PaperPlane, "Send Message", cx).disabled(!self.has_draft).on_click(cx.listener(|this, _, window, cx| this.submit(false, window, cx)))));
         let card = div()
             .relative()
             .mx(px(16.))
@@ -526,14 +550,17 @@ impl Waffle {
             .border(px(0.5))
             .border_color(if focused { palette::line_strong(cx) } else { palette::line(cx) })
             .children(self.autocomplete_popup(cx))
+            .children(self.hold_up_popout(cx))
+            .children(self.request_bar(cx))
             .children(self.composer_bar(cx))
             .children(self.attachment_tray(cx))
             .child(row);
+        let guide_bar = self.channel.clone().and_then(|channel| self.guide_action_bar(&channel, cx));
         let typers = self.typers();
         let names: Vec<&str> = typers.iter().map(|t| t.name.as_str()).collect();
         // A glass pill just above the composer, out of the flow, so the box never moves when someone types.
-        // Out of the way while suggestions are open, which rise over the same spot.
-        let typing = (!names.is_empty() && self.autocomplete.is_none()).then(|| {
+        // Out of the way while suggestions or Hold Up! are open, which rise over the same spot.
+        let typing = (!names.is_empty() && self.autocomplete.is_none() && self.hold_up.is_none()).then(|| {
             div().absolute().left(px(28.)).top(px(-28.)).max_w(gpui_kit::relative(0.6)).h(px(24.)).px(px(10.)).flex().items_center().gap(px(8.)).rounded_full()
                 .bg(palette::surface(Level::Raised, cx).opacity(0.72))
                 .backdrop_blur(px(16.))
@@ -580,7 +607,8 @@ impl Waffle {
             .child(measure)
             .children(self.jump_to_present(cx))
             // Occludes: the composer floats over the feed, which must not take the hover or the click under it.
-            .child(div().relative().occlude().child(card).children(typing))
+            // A Server Guide to-do bar rides on top, inside the measured stack so the feed leaves room for it.
+            .child(div().relative().occlude().flex().flex_col().gap(px(8.)).children(guide_bar).child(card).children(typing))
             .children(note)
             // 8px off the window's foot, level with the user card in the left column.
             .child(div().h(px(8.)))
@@ -696,46 +724,88 @@ impl Waffle {
             }))
     }
 
-    // Files waiting to send: borderless wells inside the composer, never cards in a card. Each shows
-    // the OS's own picture of it (a thumbnail, else its type's icon), its name and size, a spoiler toggle
-    // and a remove button.
+    // Files waiting to send, as cards in a borderless well inside the composer (design: direction A): the
+    // picture on top (the OS's thumbnail, else the type's icon), its name and size under it. Discord's
+    // three actions float at the picture's corner while the card is hovered.
     fn attachment_tray(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
         if self.pending_files.is_empty() {
             return None;
         }
-        let (selected, strong, faint) = (palette::selected(cx), palette::strong(cx), palette::faint(cx));
-        let chips = self.pending_files.iter().enumerate().map(|(i, file)| {
-            let preview = file_picture(self.file_previews.get(&file.path).cloned().flatten(), file.kind(), 48., file.spoiler, cx);
-            let (spoiler_glyph, spoiler_tip) = match file.spoiler {
-                true => (Glyph::EyeSlash, "Remove Spoiler"),
-                false => (Glyph::Eye, "Mark as Spoiler"),
-            };
-            div()
-                .w(px(240.))
-                .flex_none()
-                .py(px(6.))
-                .pl(px(6.))
-                .pr(px(4.))
-                .flex()
-                .items_center()
-                .gap(px(10.))
-                .squircle(RADIUS_MD)
-                .bg(selected)
-                .child(preview)
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap(px(2.))
-                        .child(div().truncate().text_size(px(14.)).font_weight(FontWeight::MEDIUM).text_color(strong).child(file.name.clone()))
-                        .child(div().truncate().text_size(px(12.)).text_color(faint).child(format_size(file.size))),
-                )
+        let cards: Vec<AnyElement> = self.pending_files.iter().enumerate().map(|(i, file)| self.tray_card(i, file, cx)).collect();
+        Some(div().id("composer-tray").flex().items_end().gap(px(8.)).p(px(10.)).overflow_x_scroll().border_b_1().border_color(palette::line(cx)).children(cards))
+    }
+
+    fn tray_card(&self, i: usize, file: &crate::attachments::PendingFile, cx: &mut Context<Self>) -> AnyElement {
+        let key = format!("tray-{i}");
+        let hovered = self.hovered_tile.as_deref() == Some(key.as_str());
+        let track = track_tile_hover(cx.weak_entity(), key);
+        let picture = self.file_previews.get(&file.path).cloned().flatten();
+        let veiled = file.spoiler && file.kind() != crate::attachments::FileKind::Other;
+        let has_alt = file.description.as_deref().is_some_and(|d| !d.is_empty());
+        let tags = div()
+            .absolute()
+            .left(px(6.))
+            .bottom(px(6.))
+            .flex()
+            .gap(px(3.))
+            .when(has_alt, |t| t.child(media_label("Alt")))
+            .when(file.spoiler, |t| t.child(media_label("Spoiler")));
+        let well = div()
+            .relative()
+            .h(px(140.))
+            .flex_none()
+            .overflow_hidden()
+            .squircle(RADIUS_MD)
+            .bg(palette::surface(Level::Raised, cx))
+            .text_color(palette::muted(cx))
+            .flex()
+            .items_center()
+            .justify_center()
+            .map(|w| match picture {
+                // Thumbnails fill the well; icons keep their own transparent margins.
+                Some(image) => w.child(ui::media(image, ui::all(RADIUS_MD)).size_full().object_fit(gpui_kit::ObjectFit::Cover)),
+                None => w.child(Icon::new(file.kind().glyph()).size(px(40.))),
+            })
+            .when(veiled, |w| w.child(spoiler_veil()))
+            .child(tags);
+        let meta = div()
+            .px(px(6.))
+            .pb(px(2.))
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap(px(1.))
+            .child(div().truncate().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(file.name.clone()))
+            .child(div().text_size(px(12.)).text_color(palette::faint(cx)).child(format_size(file.size)));
+        let (spoiler_glyph, spoiler_tip) = match file.spoiler {
+            true => (Glyph::EyeSlash, "Remove Spoiler"),
+            false => (Glyph::Eye, "Spoiler Attachment"),
+        };
+        let actions = hovered.then(|| {
+            floating_bar(SharedString::from(format!("tray-actions-{i}")), cx)
+                .top(px(12.))
+                .right(px(12.))
+                .on_hover(track_tile_hover(cx.weak_entity(), format!("tray-{i}")))
                 .child(ui::icon_button(SharedString::from(format!("spoiler-file-{i}")), spoiler_glyph, spoiler_tip, cx).small().on_click(cx.listener(move |this, _, _, cx| this.toggle_spoiler(i, cx))))
+                .child(ui::icon_button(SharedString::from(format!("modify-file-{i}")), Glyph::Pen, "Modify Attachment", cx).small().on_click(cx.listener(move |this, _, window, cx| this.open_modify_pending(i, window, cx))))
                 .child(ui::icon_button(SharedString::from(format!("remove-file-{i}")), Glyph::X, "Remove Attachment", cx).small().on_click(cx.listener(move |this, _, _, cx| this.remove_file(i, cx))))
         });
-        Some(div().id("composer-tray").flex().gap(px(8.)).p(px(10.)).overflow_x_scroll().border_b_1().border_color(palette::line(cx)).children(chips))
+        div()
+            .id(SharedString::from(format!("tray-card-{i}")))
+            .relative()
+            .w(px(184.))
+            .flex_none()
+            .p(px(6.))
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .squircle(RADIUS_LG)
+            .bg(palette::selected(cx))
+            .on_hover(track)
+            .child(well)
+            .child(meta)
+            .children(actions)
+            .into_any_element()
     }
 
     // While files are dragged over the chat: the whole pane says where they'll go, and takes the drop
@@ -781,11 +851,55 @@ impl Waffle {
             return cx.stop_propagation();
         }
         match key {
+            "escape" if self.hold_up.is_some() => self.hold_up = None,
             "escape" if self.replying.is_some() || self.editing.is_some() => self.cancel_compose(window, cx),
             "up" if !self.has_draft && self.edit_last(window, cx) => {}
             _ => return,
         }
         cx.stop_propagation();
+    }
+
+    // Discord's "Hold Up!" before a mass ping, anchored above the composer: Esc edits, Enter sends.
+    fn hold_up_popout(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
+        let hold_up = self.hold_up.as_ref()?;
+        let (strong, muted) = (palette::strong(cx), palette::muted(cx));
+        let body = emphasised(&[("By using ".into(), false), (hold_up.mention.into(), true), (hold_up.after_mention(), false)], strong);
+        let edit = ui::button("hold-up-edit", ui::Tone::Secondary, cx).gap(px(8.)).child("Edit Message").child(ui::kbd("Esc", cx)).on_click(cx.listener(|this, _, window, cx| {
+            this.hold_up = None;
+            this.composer.update(cx, |state, cx| state.focus(window, cx));
+            cx.notify();
+        }));
+        let send = ui::button("hold-up-send", ui::Tone::Primary, cx).gap(px(8.)).child("Send Now").child(ui::kbd("Enter", cx)).on_click(cx.listener(|this, _, window, cx| this.submit(true, window, cx)));
+        Some(
+            div()
+                .id("hold-up")
+                .occlude()
+                .absolute()
+                .left(px(-1.))
+                .right(px(-1.))
+                .bottom(gpui_kit::relative(1.))
+                .mb(px(9.))
+                .py(px(16.))
+                .px(px(18.))
+                .flex()
+                .flex_col()
+                .gap(px(10.))
+                .squircle(RADIUS_LG)
+                .bg(palette::surface(Level::Overlay, cx))
+                .shadow(ui::shadow_pop(cx))
+                .text_size(px(14.))
+                .text_color(palette::text(cx))
+                .child(
+                    div().flex().items_center().gap(px(8.)).text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(strong)
+                        .child(div().text_color(palette::accent_ink(cx)).child(Icon::new(Glyph::Megaphone).size(px(20.))))
+                        .child("Hold Up!"),
+                )
+                .child(div().line_height(px(20.)).child(body))
+                .child(div().flex().items_center().gap(px(6.)).text_size(px(12.)).text_color(muted).child(Icon::new(Glyph::Info).size(px(14.))).child("Maybe try mentioning a role or individual users instead?"))
+                .child(div().flex().flex_wrap().gap(px(8.)).child(edit).child(send))
+                .transform_origin(point(gpui_kit::relative(0.5), gpui_kit::relative(1.)))
+                .with_animation("hold-up", Animation::new(ui::DUR_POP).with_easing(gpui_kit::ease_out_quint()), |el, t| el.opacity(t).scale(0.95 + 0.05 * t)),
+        )
     }
 
     // Suggestions above the composer: its width, 8px above it, rising from it.
@@ -795,6 +909,7 @@ impl Waffle {
         let heading: SharedString = match auto.token.chars().next() {
             Some('#') => "Text Channels".into(),
             Some(':') => format!("Emoji matching {}", auto.token).into(),
+            Some('/') => "Built-in".into(),
             _ => "Members".into(),
         };
         let rows = auto.items.iter().enumerate().map(|(i, item)| {
@@ -802,8 +917,11 @@ impl Waffle {
                 crate::SuggestLead::Avatar(url) => ui::avatar(url.clone(), 28.).into_any_element(),
                 crate::SuggestLead::Channel => div().size(px(28.)).flex_none().rounded_full().bg(selected).text_color(muted).flex().items_center().justify_center().child(Icon::new(Glyph::Hashtag).size(px(16.))).into_any_element(),
                 crate::SuggestLead::Emoji(emoji) => div().size(px(28.)).flex_none().flex().items_center().justify_center().child(crate::menu::emoji_face(emoji, 22.)).into_any_element(),
+                crate::SuggestLead::Command(glyph) => div().size(px(28.)).flex_none().flex().items_center().justify_center().text_color(muted).child(Icon::new(*glyph).size(px(20.))).into_any_element(),
             };
-            let detail = item.detail.clone().map(|d| div().flex_none().max_w(px(180.)).truncate().text_size(px(12.)).text_color(muted).child(d));
+            // A command's description fills the row; a server name keeps to the end.
+            let command = matches!(item.lead, crate::SuggestLead::Command(_));
+            let detail = item.detail.clone().map(|d| div().when(command, |d| d.min_w_0()).when(!command, |d| d.flex_none().max_w(px(180.))).truncate().text_size(px(12.)).text_color(muted).child(d));
             div()
                 .id(SharedString::from(format!("suggest-{i}")))
                 .min_h(px(40.))
@@ -818,7 +936,7 @@ impl Waffle {
                 .when(i == auto.selected, |r| r.bg(selected))
                 .when(i != auto.selected, |r| r.hover(move |s| s.bg(hover)))
                 .child(lead)
-                .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::MEDIUM).text_color(strong).child(item.label.clone()))
+                .child(div().when(command, |l| l.flex_none()).when(!command, |l| l.flex_1().min_w_0().truncate()).font_weight(FontWeight::MEDIUM).text_color(strong).child(item.label.clone()))
                 .children(detail)
                 .on_click(cx.listener(move |this, _, window, cx| {
                     if let Some(auto) = &mut this.autocomplete {
@@ -909,7 +1027,8 @@ pub(crate) struct RowContext {
     role_style: RoleStyle,
     underline_links: bool,
     name_styles: bool,
-    image_descriptions: bool,
+    // Spoilers' "On servers I moderate": you can manage messages here.
+    manage_messages: bool,
     media: MediaPrefs,
     names: HashMap<String, String>,
     // The chat's surface, for drawing authors' display-name styles on; None in a server.
@@ -924,6 +1043,11 @@ pub(crate) struct RowContext {
     flash: Option<String>,
     editing: Option<String>,
     hovered: Option<String>,
+    // The attachment tile under the pointer, and the picture whose ALT popout is open.
+    hovered_tile: Option<String>,
+    alt_popout: Option<String>,
+    // Settings › Chat › Show image descriptions.
+    image_descriptions: bool,
     focused: Option<String>,
     copied: Option<String>,
     revealed: Rc<std::cell::RefCell<std::collections::HashSet<String>>>,
@@ -938,9 +1062,9 @@ pub(crate) struct RowContext {
     // The toolbar's three quick reactions: most used, padded with 💯 😆 💖.
     quick_reactions: Vec<Emoji>,
     shift: bool,
-    manage_messages: bool,
-    // Messages here can start threads.
-    threads: bool,
+    // What the channel lets you do to a message, for the Shift toolbar (`mine` set per message).
+    facts: crate::message_menu::Facts,
+    saved_ids: std::rc::Rc<std::collections::HashSet<String>>,
     // The widest media may run.
     column: f32,
     poll_picks: HashMap<String, Vec<u32>>,
@@ -1001,7 +1125,6 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .children(lead)
         .children(message.forward.as_ref().map(|original| forward_card(original, ctx, cx)))
         .children(media.map(|m| div().when(pending, |d| d.opacity(0.6)).child(m)))
-        .children(image_descriptions(message, ctx, cx))
         .children(message.stickers.iter().map(|s| div().when(pending, |d| d.opacity(0.6)).child(crate::stickers::in_chat(s, ctx.media.stickers.plays(ctx.hovers(message)), cx))))
         .children(message.poll.as_ref().map(|p| poll_card(message, p, ctx, cx)))
         .children(message.embeds.iter().filter(|_| ctx.embeds).enumerate().map(|(i, e)| embed_card(e, message.reply_to.as_deref(), format!("embed-{}-{i}", message.id), ctx, cx)))
@@ -1147,6 +1270,7 @@ fn message_head(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> impl IntoE
         .min_w_0()
         .line_height(px(ctx.name_line()))
         .child(author(message, ctx, cx))
+        .when(message.silent(), |h| h.child(silent_mark(&message.id, cx)))
         .child(div().flex_none().relative().top(px(1.)).whitespace_nowrap().text_size(px(12.)).text_color(palette::faint(cx)).child(format_stamp(&message.timestamp)))
         .when(message.pinned, |h| h.child(div().flex_none().self_center().text_color(palette::muted(cx)).child(Icon::new(Glyph::Pin).size(px(14.)))))
 }
@@ -1217,17 +1341,15 @@ fn compact_line(message: &Message, starts_group: bool, text: Option<AnyElement>,
     )
 }
 
-// Show image descriptions: each attachment's alt text, small under its media.
-// Not verified: where Discord draws it; design/explore-settings.html puts it on the image.
-fn image_descriptions(message: &Message, ctx: &RowContext, cx: &App) -> Option<Div> {
-    if !ctx.image_descriptions {
-        return None;
-    }
-    let descriptions: Vec<String> = message.media.iter().filter_map(|m| m.description.clone()).collect();
-    if descriptions.is_empty() {
-        return None;
-    }
-    Some(div().mt(px(4.)).flex().flex_col().text_size(px(12.)).line_height(px(16.)).text_color(palette::muted(cx)).children(descriptions))
+// @silent's sleeping bell beside the name.
+fn silent_mark(id: &str, cx: &App) -> impl IntoElement + use<> {
+    div()
+        .id(SharedString::from(format!("silent-{id}")))
+        .flex_none()
+        .self_center()
+        .text_color(palette::faint(cx))
+        .tooltip(|window, cx| Tooltip::new("This is a @silent message.").build(window, cx))
+        .child(Icon::new(Glyph::BellZ).size(px(16.)))
 }
 
 // Clicking an avatar or name opens their profile popout at the pointer, as in Discord.
@@ -1275,11 +1397,24 @@ fn set_hovered_message(this: &WeakEntity<Waffle>, id: Option<String>, cx: &mut A
 }
 
 // Right-click opens the message menu; a plain click on the row's own space focuses it. Controls inside
-// stop their clicks, and a drag (selecting text) or a double click isn't a plain click.
+// stop their clicks, and a drag (selecting text) or a double click isn't a plain click. Alt+click anywhere
+// on the row marks it unread, as in Discord: taken in the capture phase, so no link, avatar or image under
+// the pointer also opens.
 fn with_message_menu(row: Stateful<Div>, message: &Message, ctx: &Rc<RowContext>) -> AnyElement {
     let (this, message) = (ctx.this.clone(), message.clone());
     let (focus_this, id) = (this.clone(), message.id.clone());
-    row.on_mouse_down(gpui_kit::MouseButton::Right, move |event, _, cx| {
+    let (unread_this, unread) = (this.clone(), message.clone());
+    row.capture_any_mouse_down(move |event, _, cx| {
+        if event.button != gpui_kit::MouseButton::Left || !event.modifiers.alt {
+            return;
+        }
+        if !crate::message_menu::MessageAction::MarkUnread.allowed(&unread, &Default::default()) {
+            return;
+        }
+        cx.stop_propagation();
+        unread_this.update(cx, |this, cx| this.mark_unread(&unread, cx)).ok();
+    })
+    .on_mouse_down(gpui_kit::MouseButton::Right, move |event, _, cx| {
         let at = event.position;
         this.update(cx, |this, cx| this.open_message_menu(message.clone(), at, cx)).ok();
     })
@@ -2019,7 +2154,9 @@ fn gallery(message: &Message, shown: &[usize], ctx: &Rc<RowContext>, cx: &mut Ap
     if shown.len() == 1 {
         let scale = (MAX_IMAGE.0.min(ctx.column) / first.width).min(MAX_IMAGE.1 / first.height).min(1.);
         let (w, h) = (first.width * scale, first.height * scale);
-        return Some(div().mt(px(8.)).flex_none().w(px(w)).h(px(h)).child(media_tile(message, shown[0], (w, h), ui::all(RADIUS_LG), ctx, cx)).into_any_element());
+        let caption = shown_alt(message, shown[0], ctx).map(|alt| div().mt(px(4.)).max_w(px(w)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(alt));
+        let frame = media_frame(message, shown[0], (w, h), ui::all(RADIUS_LG), ctx, cx).flex_none().w(px(w)).h(px(h));
+        return Some(div().mt(px(8.)).flex().flex_col().child(frame).children(caption).into_any_element());
     }
     // Laid out for the feed's column, then scaled down to fit a narrower one.
     let k = (ctx.column / COLUMN).min(1.);
@@ -2028,17 +2165,24 @@ fn gallery(message: &Message, shown: &[usize], ctx: &Rc<RowContext>, cx: &mut Ap
     let tiles: Vec<Tile> = tiles.into_iter().map(|t| Tile { x: t.x * k, y: t.y * k, w: t.w * k, h: t.h * k }).collect();
     let rest = shown.len() - tiles.len();
     let mut grid = div().mt(px(8.)).relative().flex_none().w(px(width)).h(px(height));
+    let mut popout = None;
     for (i, tile) in tiles.iter().enumerate() {
         let corners = gallery_corners(*tile, width, height, RADIUS_LG);
         let counts_rest = rest > 0 && i + 1 == tiles.len();
+        let item = shown[i];
+        let alt = shown_alt(message, item, ctx).filter(|_| !counts_rest && !matches!(message.media[item].kind, MediaKind::Video { .. }));
+        let key = format!("{}#{item}", message.id);
+        if let Some(text) = alt.clone().filter(|_| ctx.alt_popout.as_deref() == Some(key.as_str())) {
+            // Over the gallery, rising from the tile's ALT button; drawn last so later tiles don't cover it.
+            popout = Some(alt_popout(&key, text, ctx, cx).left(px(tile.x + 6.)).bottom(px(height - tile.y - tile.h + 34.)));
+        }
         grid = grid.child(
-            div()
+            media_frame(message, item, (tile.w, tile.h), corners, ctx, cx)
                 .absolute()
                 .left(px(tile.x))
                 .top(px(tile.y))
                 .w(px(tile.w))
                 .h(px(tile.h))
-                .child(media_tile(message, shown[i], (tile.w, tile.h), corners, ctx, cx))
                 .when(counts_rest, |t| {
                     t.child(
                         ui::edge(div(), corners)
@@ -2053,30 +2197,112 @@ fn gallery(message: &Message, shown: &[usize], ctx: &Rc<RowContext>, cx: &mut Ap
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(format!("+{rest}")),
                     )
-                }),
+                })
+                .when(alt.is_some(), |t| t.child(alt_button(key, ctx))),
         );
     }
-    Some(grid.into_any_element())
+    Some(grid.children(popout).into_any_element())
 }
 
-// One picture, video or GIF, rounded to `corners`. An upload named as a spoiler is veiled until clicked,
-// or until the setting shows it.
-fn media_tile(message: &Message, i: usize, size: (f32, f32), corners: Corners<Pixels>, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
-    let key = format!("{}-spoiler-{i}", message.id);
-    let spoiler = message.media_files.get(i).is_some_and(|f| f.name.starts_with("SPOILER_"));
-    let tile = media_picture(message, i, size, corners, ctx, cx);
-    if !spoiler || ctx.spoilers_revealed(&key) {
-        return tile;
-    }
-    div().relative().size_full().child(tile).child(media_veil(key, "Spoiler", corners, ctx)).into_any_element()
-}
-
-// The tile's picture, video or GIF; a click opens the viewer at it.
-fn media_picture(message: &Message, i: usize, (w, h): (f32, f32), corners: Corners<Pixels>, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+// A gallery tile or lone item with what floats over it: on your own message, Modify Attachment while
+// it's hovered (pictures and videos you uploaded, not GIF embeds).
+fn media_frame(message: &Message, i: usize, size: (f32, f32), corners: Corners<Pixels>, ctx: &Rc<RowContext>, cx: &mut App) -> Stateful<Div> {
     let item = &message.media[i];
+    let key = format!("media-{}-{i}", message.id);
+    let mine = ctx.me.as_ref().is_some_and(|me| me.id == message.author.id) && message.state == SendState::Sent;
+    let editable = mine && item.id.is_some() && !matches!(item.kind, MediaKind::Gif { .. });
+    let hovered = ctx.hovered_tile.as_deref() == Some(key.as_str());
+    let modify = (editable && hovered).then(|| {
+        let (this, msg) = (ctx.this.clone(), message.clone());
+        floating_bar(SharedString::from(format!("media-actions-{}-{i}", message.id)), cx)
+            .top(px(6.))
+            .right(px(6.))
+            .on_hover(track_tile_hover(ctx.this.clone(), key.clone()))
+            .child(ui::icon_button(SharedString::from(format!("modify-media-{}-{i}", message.id)), Glyph::Pen, "Modify Attachment", cx).on_click(move |_, window, cx| {
+                cx.stop_propagation();
+                this.update(cx, |this, cx| this.open_modify_sent(msg.clone(), i, window, cx)).ok();
+            }))
+    });
+    div()
+        .id(SharedString::from(format!("media-frame-{}-{i}", message.id)))
+        .relative()
+        .when(editable, |f| f.on_hover(track_tile_hover(ctx.this.clone(), key)))
+        .child(media_tile(message, i, size, corners, ctx, cx))
+        .children(modify)
+}
+
+// The alt text to show for item `i`: the setting is on, there is some, and it isn't a hidden spoiler.
+fn shown_alt(message: &Message, i: usize, ctx: &RowContext) -> Option<String> {
+    let item = message.media.get(i)?;
+    let hidden = item.spoiler && !ctx.spoilers_revealed(&spoiler_key(message, i));
+    item.description.clone().filter(|alt| ctx.image_descriptions && !alt.is_empty() && !hidden)
+}
+
+fn spoiler_key(message: &Message, i: usize) -> String {
+    format!("{}#media-{i}", message.id)
+}
+
+// Discord's ALT button at a gallery tile's bottom left; it opens and closes the description's popout.
+fn alt_button(key: String, ctx: &RowContext) -> Stateful<Div> {
+    let open = ctx.alt_popout.as_deref() == Some(key.as_str());
+    let this = ctx.this.clone();
+    media_label("ALT")
+        .id(SharedString::from(format!("alt-{key}")))
+        .occlude()
+        .absolute()
+        .left(px(6.))
+        .bottom(px(6.))
+        .cursor_pointer()
+        .tooltip(|window, cx| Tooltip::new("Image Description (Alt Text)").build(window, cx))
+        // On press, judged by the state it was drawn with: the popout's own press-outside close fires too.
+        .on_mouse_down(gpui_kit::MouseButton::Left, move |_, _, cx| {
+            cx.stop_propagation();
+            let next = (!open).then(|| key.clone());
+            this.update(cx, |this, cx| {
+                this.alt_popout = next;
+                cx.notify();
+            })
+            .ok();
+        })
+}
+
+// "Image Description (Alt Text)" over the gallery; a press anywhere else closes it.
+fn alt_popout(key: &str, text: String, ctx: &RowContext, cx: &App) -> Stateful<Div> {
+    let (this, key) = (ctx.this.clone(), key.to_owned());
+    div()
+        .id(SharedString::from(format!("alt-popout-{key}")))
+        .occlude()
+        .absolute()
+        .w(px(260.))
+        .px(px(14.))
+        .py(px(12.))
+        .flex()
+        .flex_col()
+        .gap(px(4.))
+        .squircle(RADIUS_MD)
+        .bg(palette::surface(Level::Overlay, cx))
+        .shadow(ui::shadow_pop(cx))
+        .child(div().text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child("Image Description (Alt Text)"))
+        .child(div().text_size(px(14.)).line_height(gpui_kit::relative(1.45)).text_color(palette::text(cx)).child(text))
+        .on_mouse_down_out(move |_, _, cx| {
+            this.update(cx, |this, cx| {
+                if this.alt_popout.as_deref() == Some(key.as_str()) {
+                    this.alt_popout = None;
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+}
+
+// One picture, video or GIF, rounded to `corners`; a click opens the viewer at it. A spoiler stays
+// veiled until clicked.
+fn media_tile(message: &Message, i: usize, (w, h): (f32, f32), corners: Corners<Pixels>, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+    let item = &message.media[i];
+    let veil = (item.spoiler && !ctx.spoilers_revealed(&spoiler_key(message, i))).then(|| reveal_veil(message, i, corners, ctx));
     // A video plays where it is; clicks on it belong to its player.
     if let MediaKind::Video { poster } = &item.kind {
-        return div().size_full().child(crate::video::tile(format!("{}-{i}", message.id), &item.url, poster, cx)).into_any_element();
+        return div().relative().size_full().child(crate::video::tile(format!("{}-{i}", message.id), &item.url, poster, cx)).children(veil).into_any_element();
     }
     // Not verified: with autoplay off Discord plays a GIF while it's hovered. GAP: Waffle plays it while
     // its message is hovered, the only hover state rows keep.
@@ -2100,6 +2326,7 @@ fn media_picture(message: &Message, i: usize, (w, h): (f32, f32), corners: Corne
     let (this, url) = (ctx.this.clone(), item.url.clone());
     ui::edge(div(), corners)
         .id(SharedString::from(format!("media-{}-{i}", message.id)))
+        .relative()
         .size_full()
         // A cover-fit picture whose real shape differs from the one Discord reported spills past the tile.
         .overflow_hidden()
@@ -2107,6 +2334,7 @@ fn media_picture(message: &Message, i: usize, (w, h): (f32, f32), corners: Corne
         .cursor_pointer()
         .hover(|s| s.opacity(0.92))
         .child(picture)
+        .children(veil)
         .on_click(move |_, window, cx| { cx.stop_propagation();
             this.update(cx, |this, cx| this.open_viewer(&url, window, cx)).ok();
         })
@@ -2155,9 +2383,72 @@ fn media_veil(key: String, label: &'static str, corners: Corners<Pixels>, ctx: &
         .into_any_element()
 }
 
+// A spoiler's cover: blurred and dimmed, labelled, and a click lifts it (and nothing else).
+fn reveal_veil(message: &Message, i: usize, corners: Corners<Pixels>, ctx: &RowContext) -> AnyElement {
+    let (reveal, key, this) = (ctx.revealed.clone(), spoiler_key(message, i), ctx.this.clone());
+    let (channel_id, id) = (message.channel_id.clone(), message.id.clone());
+    ui::edge(spoiler_veil(), corners)
+        .id(SharedString::from(format!("veil-{key}")))
+        .occlude()
+        .cursor_pointer()
+        .child(media_label("SPOILER").px(px(10.)).h(px(28.)).text_size(px(12.)))
+        .on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            reveal.borrow_mut().insert(key.clone());
+            // Its alt caption may appear, which changes the row's height.
+            this.update(cx, |this, cx| {
+                this.message_mut(&channel_id, &id);
+                cx.notify();
+            })
+            .ok();
+        })
+        .into_any_element()
+}
+
+// What covers a spoiler picture: a blur and a dim over it.
+fn spoiler_veil() -> Div {
+    div().absolute().inset_0().flex().items_center().justify_center().bg(on_media(0.3)).backdrop_blur(px(24.))
+}
+
 // A label over media (GIF, a duration): fixed dark values, since it sits on pictures in both themes.
 fn media_tag(text: &'static str) -> Div {
-    div().absolute().h(px(20.)).px(px(6.)).flex().items_center().gap(px(4.)).squircle(RADIUS_XS).bg(on_media(0.72)).text_color(gpui_kit::white()).text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).child(text)
+    media_label(text).absolute()
+}
+
+// The same label placed by its parent (a row of tags).
+fn media_label(text: &'static str) -> Div {
+    div().h(px(20.)).px(px(6.)).flex().items_center().gap(px(4.)).squircle(RADIUS_XS).bg(on_media(0.72)).text_color(gpui_kit::white()).text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).child(text)
+}
+
+// A small bar of icon buttons floating over a picture's corner: it takes the pointer, so its caller
+// keeps the hover with the bar's own `on_hover`.
+fn floating_bar(id: SharedString, cx: &App) -> Stateful<Div> {
+    div().id(id).occlude().absolute().p(px(2.)).flex().gap(px(2.)).squircle(RADIUS_SM).bg(palette::surface(Level::Overlay, cx)).shadow(ui::shadow_pop(cx))
+}
+
+fn track_tile_hover(this: WeakEntity<Waffle>, key: String) -> impl Fn(&bool, &mut Window, &mut App) + 'static {
+    move |hovered, window, cx| {
+        // A tile and its bar both report; as with message rows, leaves apply now and enters after the event.
+        if *hovered {
+            let (this, key) = (this.clone(), key.clone());
+            window.defer(cx, move |_, cx| set_hovered_tile(&this, Some(key), cx));
+            return;
+        }
+        let leaving = this.read_with(cx, |this, _| this.hovered_tile.as_ref() == Some(&key)).unwrap_or(false);
+        if leaving {
+            set_hovered_tile(&this, None, cx);
+        }
+    }
+}
+
+fn set_hovered_tile(this: &WeakEntity<Waffle>, key: Option<String>, cx: &mut App) {
+    this.update(cx, |this, cx| {
+        if this.hovered_tile != key {
+            this.hovered_tile = key;
+            cx.notify();
+        }
+    })
+    .ok();
 }
 
 // The design's media scrim, oklch(0.14 0.004 260), at `alpha`.
@@ -2693,7 +2984,7 @@ fn upload_cards(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Vec<AnyEle
             let sent = file.sent.load(std::sync::atomic::Ordering::Relaxed).min(file.size);
             let fraction = if file.size == 0 { 1. } else { sent as f32 / file.size as f32 };
             let kind = crate::attachments::FileKind::of(&file.path);
-            let picture = file_picture(ctx.previews.get(&file.path).cloned().flatten(), kind, 40., file.name.starts_with("SPOILER_"), cx);
+            let picture = file_picture(ctx.previews.get(&file.path).cloned().flatten(), kind, 40., file.spoiler, cx);
             let status = match job.error.is_some() {
                 true => format_size(file.size),
                 false => format!("{} of {}", format_size(sent), format_size(file.size)),
@@ -2740,11 +3031,7 @@ fn file_picture(picture: Option<std::sync::Arc<gpui_kit::RenderImage>>, kind: cr
     let well = match picture {
         // Thumbnails fill the tile; icons keep their own transparent margins.
         Some(image) => well.child(ui::media(image, ui::all(RADIUS_XS)).size_full().object_fit(gpui_kit::ObjectFit::Cover)),
-        None => well.bg(palette::surface(Level::Raised, cx)).text_color(palette::muted(cx)).flex().items_center().justify_center().child(Icon::new(match kind {
-            crate::attachments::FileKind::Video => Glyph::Video,
-            crate::attachments::FileKind::Image => Glyph::Image,
-            crate::attachments::FileKind::Other => Glyph::File,
-        }).size(px(side * 0.5))),
+        None => well.bg(palette::surface(Level::Raised, cx)).text_color(palette::muted(cx)).flex().items_center().justify_center().child(Icon::new(kind.glyph()).size(px(side * 0.5))),
     };
     well.when(spoiler, |w| {
         w.child(div().absolute().inset_0().bg(palette::surface(Level::Sidebar, cx).opacity(0.85)).backdrop_blur(px(8.)).flex().items_center().justify_center().text_color(palette::strong(cx)).child(Icon::new(Glyph::EyeSlash).size(px(side * 0.4))))
@@ -2787,7 +3074,7 @@ fn file_card(message: &Message, file: &crate::discord::File, cx: &App) -> AnyEle
                         .child(file.name.clone())
                         .on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&open) }),
                 )
-                .child(div().text_size(px(12.)).text_color(faint).child(format_size(file.size))),
+                .child(div().flex().items_center().gap(px(6.)).text_size(px(12.)).text_color(faint).child(format_size(file.size)).when(file.spoiler, |d| d.child(ui::tag("Spoiler", cx)))),
         )
         .child(ui::icon_button(SharedString::from(format!("download-{}-{}", message.id, file.name)), Glyph::Download, "Download", cx).on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&download) }))
         .into_any_element()
@@ -2880,10 +3167,11 @@ fn reaction_pill(id: SharedString, mine: bool, cx: &App) -> ui::Pressable {
 // The hover toolbar: three quick reactions, then react, reply, thread and more. With Shift held, edit
 // and delete take the quick reactions' place behind a Shift keycap; the rest stay put.
 fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
+    use crate::message_menu::MessageAction as A;
     let (hover, line) = (palette::hover(cx), palette::line(cx));
     let sep = || div().w(px(1.)).h(px(20.)).mx(px(2.)).bg(line);
     let sent = message.state == SendState::Sent;
-    let shifted = ctx.shift && (mine || ctx.manage_messages);
+    let facts = crate::message_menu::Facts { mine, saved: ctx.saved_ids.contains(&message.id), ..ctx.facts };
     let mut bar = div()
         .id(SharedString::from(format!("actions-{}", message.id)))
         // Rides 18px into the row above: block the pointer there and keep this row hovered, or the pointer hands
@@ -2902,30 +3190,53 @@ fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> Any
         .bg(palette::surface(Level::Overlay, cx))
         .shadow(ui::shadow_pop(cx))
         .child(crate::gif::above_gifs());
-    if shifted || message.state == SendState::Failed {
-        if shifted {
-            bar = bar.child(ui::kbd("Shift", cx).ml(px(6.)).mr(px(4.)));
-        }
-        if mine && sent {
-            let (this, msg) = (ctx.this.clone(), message.clone());
-            bar = bar.child(ui::icon_button(SharedString::from(format!("edit-{}", message.id)), Glyph::Pen, "Edit", cx).on_click(move |_, window, cx| { cx.stop_propagation();
-                this.update(cx, |this, cx| this.start_edit(msg.clone(), window, cx)).ok();
-            }));
-        }
+    // One button per action, doing what its menu row does; held Shift skips the confirms, as Discord's.
+    let action = |action: A, cx: &App| {
+        let (glyph, tip) = match action {
+            A::Edit => (Glyph::Pen, "Edit"),
+            A::Reply => (Glyph::Reply, "Reply"),
+            A::Forward => (Glyph::Forward, "Forward"),
+            A::Thread => (Glyph::ThreadNew, "Create Thread"),
+            A::React => (Glyph::Emoji, "Add Reaction"),
+            A::CopyText => (Glyph::Copy, "Copy Text"),
+            A::Pin if message.pinned => (Glyph::PinSlash, "Unpin Message"),
+            A::Pin => (Glyph::Pin, "Pin Message"),
+            A::MarkUnread => (Glyph::Envelope, "Mark Unread"),
+            A::Save if facts.saved => (Glyph::Bookmark, "Remove from Saved"),
+            A::Save => (Glyph::Bookmark, "Save Message"),
+            A::Delete => (Glyph::Trash, "Delete"),
+            A::CopyId => (Glyph::Id, "Copy Message ID"),
+        };
         let (this, msg) = (ctx.this.clone(), message.clone());
-        let (danger, danger_ink) = (palette::danger(), palette::danger_ink(cx));
-        bar = bar.child(
-            ui::icon_button(SharedString::from(format!("delete-{}", message.id)), Glyph::Trash, "Delete", cx)
-                .text_color(danger_ink)
-                .hover(move |s| s.bg(danger).text_color(gpui_kit::white()))
-                .on_click(move |_, _, cx| { cx.stop_propagation();
-                    this.update(cx, |this, cx| this.delete(msg.clone(), cx)).ok();
-                }),
-        );
-        if sent {
-            bar = bar.child(sep());
+        let button = ui::icon_button(SharedString::from(format!("{action:?}-{}", message.id)), glyph, tip, cx).on_click(move |_, window, cx| {
+            cx.stop_propagation();
+            let quick = window.modifiers().shift;
+            this.update(cx, |this, cx| this.run_message_action(action, &msg, quick, window, cx)).ok();
+        });
+        match action {
+            A::Delete => {
+                let (danger, danger_ink) = (palette::danger(), palette::danger_ink(cx));
+                button.text_color(danger_ink).hover(move |s| s.bg(danger).text_color(gpui_kit::white()))
+            }
+            _ => button,
         }
-    } else if sent {
+    };
+    let offer = |a: A| a.allowed(message, &facts).then_some(a);
+    if !sent {
+        // A failed send: Delete (and the menu's Resend).
+        bar = bar.children(offer(A::Delete).map(|a| action(a, cx)));
+    } else if ctx.shift {
+        // Shift: the menu's direct actions laid out on the bar, in Discord's order.
+        let (this, msg) = (ctx.this.clone(), message.clone());
+        let link = ui::icon_button(SharedString::from(format!("link-{}", message.id)), Glyph::Link, "Copy Message Link", cx).on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            this.update(cx, |this, cx| this.copy_text(this.message_link(&msg), cx)).ok();
+        });
+        bar = bar
+            .children(offer(A::CopyId).map(|a| action(a, cx)))
+            .child(link)
+            .children([A::MarkUnread, A::Save, A::Pin, A::Thread, A::Reply, A::React, A::Edit, A::Forward, A::Delete].into_iter().filter_map(offer).map(|a| action(a, cx)));
+    } else {
         for quick in ctx.quick_reactions.iter().cloned() {
             let (this, msg, emoji) = (ctx.this.clone(), message.clone(), quick.clone());
             let face = emoji_face(&quick, 20., 18.);
@@ -2945,29 +3256,15 @@ fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> Any
                     }),
             );
         }
-        bar = bar.child(sep());
+        bar = bar.child(sep()).children([A::React, A::Edit, A::Reply, A::Forward, A::Thread].into_iter().filter_map(offer).map(|a| action(a, cx)));
     }
-    if sent {
+    if !ctx.shift || !sent {
         let (this, msg) = (ctx.this.clone(), message.clone());
-        bar = bar.child(ui::icon_button(SharedString::from(format!("react-{}", message.id)), Glyph::Emoji, "Add Reaction", cx).on_click(move |_, window, cx| { cx.stop_propagation();
-            this.update(cx, |this, cx| this.open_emoji_picker(EmojiTarget::Reaction(Box::new(msg.clone())), window, cx)).ok();
+        bar = bar.child(ui::icon_button(SharedString::from(format!("more-{}", message.id)), Glyph::MoreVertical, "More", cx).on_click(move |event, _, cx| { cx.stop_propagation();
+            let at = event.position();
+            this.update(cx, |this, cx| this.open_message_menu(msg.clone(), at, cx)).ok();
         }));
-        let (this, msg) = (ctx.this.clone(), message.clone());
-        bar = bar.child(ui::icon_button(SharedString::from(format!("reply-{}", message.id)), Glyph::Reply, "Reply", cx).on_click(move |_, window, cx| { cx.stop_propagation();
-            this.update(cx, |this, cx| this.start_reply(msg.clone(), window, cx)).ok();
-        }));
-        if ctx.threads && message.thread.is_none() {
-            let (this, msg) = (ctx.this.clone(), message.clone());
-            bar = bar.child(ui::icon_button(SharedString::from(format!("thread-{}", message.id)), Glyph::ThreadNew, "Create Thread", cx).on_click(move |_, window, cx| { cx.stop_propagation();
-                this.update(cx, |this, cx| this.create_thread(msg.clone(), window, cx)).ok();
-            }));
-        }
     }
-    let (this, msg) = (ctx.this.clone(), message.clone());
-    bar = bar.child(ui::icon_button(SharedString::from(format!("more-{}", message.id)), Glyph::MoreVertical, "More", cx).on_click(move |event, _, cx| { cx.stop_propagation();
-        let at = event.position();
-        this.update(cx, |this, cx| this.open_message_menu(msg.clone(), at, cx)).ok();
-    }));
     // GAP: not `deferred`: inside the chat list a deferred bar never painted. It overlaps only the message
     // above, which the list paints first, so it draws on top without it.
     bar.into_any_element()
@@ -3329,8 +3626,8 @@ mod tests {
     #[test]
     fn media_settings_split_uploads_from_link_media() {
         use crate::discord::{File, Media, MediaKind, Message};
-        let media = |url: &str| Media { url: url.into(), width: 1., height: 1., kind: MediaKind::Image, description: None };
-        let message = Message { media: vec![media("a.png"), media("b.png"), media("link.png")], media_files: vec![File { name: "a.png".into(), url: "a.png".into(), size: 1 }, File { name: "b.png".into(), url: "b.png".into(), size: 1 }], ..Default::default() };
+        let media = |url: &str| Media { url: url.into(), width: 1., height: 1., kind: MediaKind::Image, ..Default::default() };
+        let message = Message { media: vec![media("a.png"), media("b.png"), media("link.png")], media_files: vec![File { name: "a.png".into(), url: "a.png".into(), size: 1, ..Default::default() }, File { name: "b.png".into(), url: "b.png".into(), size: 1, ..Default::default() }], ..Default::default() };
         let mut prefs = super::MediaPrefs { attachments: true, links: true, gifs: true, emoji: true, stickers: crate::stickers::StickerMotion::Always, spoilers: crate::settings::Spoilers::OnClick };
         assert_eq!(super::inline_media(&message, &prefs), [0, 1, 2]);
         prefs.attachments = false;
@@ -3389,7 +3686,7 @@ mod tests {
 
     #[test]
     fn bare_media_links_are_hidden() {
-        let gif = crate::discord::Media { url: "https://t/x.mp4".into(), width: 1., height: 1., kind: crate::discord::MediaKind::Image, description: None };
+        let gif = crate::discord::Media { url: "https://t/x.mp4".into(), width: 1., height: 1., kind: crate::discord::MediaKind::Image, ..Default::default() };
         let msg = |content: &str, media: bool| Message { content: content.into(), media: if media { vec![gif.clone()] } else { vec![] }, ..Default::default() };
         assert!(only_media_link(&msg("https://klipy.com/gifs/x", true)));
         assert!(!only_media_link(&msg("look https://klipy.com/gifs/x", true)));

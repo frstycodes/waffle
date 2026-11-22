@@ -22,7 +22,7 @@ use crate::{
 actions!(
     waffle,
     [
-        ServerPrev, ServerNext, UnreadPrev, UnreadNext, MentionPrev, MentionNext, JumpToCall, ToggleLastServer, MarkServerRead, TogglePins, ToggleInbox, MarkTopInboxRead,
+        ServerPrev, ServerNext, UnreadPrev, UnreadNext, MentionPrev, MentionNext, JumpToCall, ToggleLastServer, MarkServerRead, TogglePins,
         ToggleMembers, ToggleEmoji, ToggleGifs, ToggleStickers, ScrollUp, ScrollDown, JumpToUnread, UploadFile, CopyChannelLink, ToggleMute, ToggleDeafen, AnswerCall,
         DeclineCall, StartCall, GetHelp, SearchFresh, ToggleCombos,
     ]
@@ -147,8 +147,8 @@ const SHORTCUTS: &[Shortcut] = &[
     Shortcut { group: Chat, label: "Mark server read", keys: &[on("shift+escape", bind::<MarkServerRead>)] },
     Shortcut { group: Chat, label: "Mark channel as read", keys: &[listed("escape")] },
     Shortcut { group: Chat, label: "Toggle pins popout", keys: &[on("secondary+p", bind::<TogglePins>)] },
-    Shortcut { group: Chat, label: "Toggle inbox popout", keys: &[on("secondary+i", bind::<ToggleInbox>)] },
-    Shortcut { group: Chat, label: "Mark top inbox channel read", keys: &[on("secondary+shift+e", bind::<MarkTopInboxRead>)] },
+    Shortcut { group: Chat, label: "Toggle inbox popout", keys: &[listed("secondary+i")] },
+    Shortcut { group: Chat, label: "Mark top inbox channel read", keys: &[listed("secondary+shift+e")] },
     Shortcut { group: Chat, label: "Toggle channel member list", keys: &[on("secondary+u", bind::<ToggleMembers>)] },
     Shortcut { group: Chat, label: "Toggle emoji picker", keys: &[on("secondary+e", bind::<ToggleEmoji>)] },
     Shortcut { group: Chat, label: "Toggle GIF picker", keys: &[on("secondary+g", bind::<ToggleGifs>)] },
@@ -215,8 +215,6 @@ impl Waffle {
             .on_action(cx.listener(Self::jump_to_server))
             .on_action(cx.listener(Self::mark_server_read))
             .on_action(cx.listener(Self::toggle_pins))
-            .on_action(cx.listener(Self::toggle_inbox))
-            .on_action(cx.listener(Self::mark_top_inbox_read))
             .on_action(cx.listener(Self::toggle_members))
             .on_action(cx.listener(|this, _: &ToggleEmoji, window, cx| this.toggle_picker(ComposerPicker::Emoji, window, cx)))
             .on_action(cx.listener(|this, _: &ToggleGifs, window, cx| this.toggle_picker(ComposerPicker::Gifs, window, cx)))
@@ -335,23 +333,6 @@ impl Waffle {
         }
         self.popover_at = point(px(self.pins_button_x.get()), px(0.));
         self.open_pins(cx);
-    }
-
-    fn toggle_inbox(&mut self, _: &ToggleInbox, _: &mut Window, cx: &mut Context<Self>) {
-        if self.covered() {
-            return;
-        }
-        if std::mem::take(&mut self.inbox_open) {
-            return cx.notify();
-        }
-        self.open_inbox(cx);
-        cx.notify();
-    }
-
-    // Not verified: whether Discord's needs the inbox open; here it reads the top of its Unreads list either way.
-    fn mark_top_inbox_read(&mut self, _: &MarkTopInboxRead, _: &mut Window, cx: &mut Context<Self>) {
-        let Some(channel_id) = self.top_unread_channel().filter(|_| !self.covered()) else { return };
-        self.mark_channel_read(&channel_id, cx);
     }
 
     fn toggle_members(&mut self, _: &ToggleMembers, _: &mut Window, cx: &mut Context<Self>) {

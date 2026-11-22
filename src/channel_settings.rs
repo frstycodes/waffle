@@ -235,6 +235,7 @@ fn parse_webhook(v: &Value) -> Option<Webhook> {
     Some(Webhook { name: v["name"].as_str().unwrap_or("Webhook").to_owned(), by: user["global_name"].as_str().or(user["username"].as_str()).map(str::to_owned), url, id })
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum Load<T> {
     Loading,
     Ready(T),
@@ -1043,10 +1044,6 @@ mod tests {
 
     fn channel(overwrites: Vec<Overwrite>) -> Channel {
         parse_channel(&json!({ "id": "c", "type": 0, "name": "clips", "topic": "Plays", "rate_limit_per_user": 0 }), "g").map(|c| Channel { overwrites, ..c }).unwrap()
-    }
-
-    fn ow(id: &str, allow: u64, deny: u64) -> Overwrite {
-        Overwrite { id: id.into(), allow, deny, member: false }
     }
 
     #[test]

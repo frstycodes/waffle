@@ -305,7 +305,7 @@ impl PreviewLook {
             saturation: prefs.saturation.clamp(0., 1.),
             desaturate_user_colors: prefs.desaturate_user_colors,
             underline_links: prefs.underline_links,
-            descriptions: prefs.view_image_descriptions,
+            descriptions: prefs.show_image_descriptions,
         }
     }
 
