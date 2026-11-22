@@ -300,6 +300,15 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         "games" => waffle.open_settings(crate::settings::Page::ActivityPrivacy, window, cx),
         "profile-editor" => waffle.demo_profile_editor(crate::settings::ProfileTab::Main, window, cx),
         "profile-editor-server" => waffle.demo_profile_editor(crate::settings::ProfileTab::Server, window, cx),
+        // Where I share activity: one server restricted, one name long enough to truncate.
+        "activity-privacy" => {
+            if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "4") {
+                guild.name = "Garden of the Very Long Server Name That Never Ends".into();
+            }
+            waffle.account_settings.activity_restricted_guilds = vec!["3".into()];
+            waffle.account_settings.default_guilds_activity_restricted = 1;
+            waffle.open_settings(crate::settings::Page::ActivityPrivacy, window, cx);
+        }
         "inbox" | "inbox-unreads" => {
             let all = self::messages();
             waffle.inbox = Some(Some(Ok(all.iter().filter(|m| !m.mentions.is_empty() || m.content.contains("@")).cloned().collect())));
