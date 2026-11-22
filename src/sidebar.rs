@@ -699,7 +699,7 @@ impl Waffle {
                 rows.push(div().mt(px(ui::density_pad(16.))).child(category_head("dm-head".into(), div().id("dm-head").child("Direct messages"), true, cx).child(start)).into_any_element());
                 match self.dms.is_empty() {
                     true => rows.push(muted_line("No direct messages yet", cx)),
-                    false => rows.extend(self.dm_order().iter().map(|c| self.dm_row(c, cx))),
+                    false => rows.extend(self.dm_rows(rows.len(), cx)),
                 }
             }
         }
