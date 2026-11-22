@@ -268,6 +268,7 @@ impl Waffle {
         let popover = focused.then(|| self.search_popover(cx)).flatten().map(|card| {
             let bounds = popover_bounds.clone();
             let card = div().absolute().top(px(46.)).right_0().on_children_prepainted(move |children, _, cx| bounds.update(cx, |b, _| *b = children.first().copied())).child(card);
+            // lint-allow(raw-floating): hangs at absolute offsets from the field, not anchored; the card occludes itself.
             gpui_kit::deferred(ui::rise(card.transform_origin(ui::corner(true, false)), "search-popover-in", Duration::ZERO)).with_priority(2)
         });
         if popover.is_none() {

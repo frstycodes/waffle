@@ -134,6 +134,7 @@ impl Waffle {
         let popover = results.filters_open.then(|| {
             // Under the header, inside the panel's right edge.
             let card = div().absolute().top(px(crate::layout::HEADER_HEIGHT - 6.)).right(px(-(crate::window_controls::WIDTH))).child(self.filters_popover(cx));
+            // lint-allow(raw-floating): hangs at absolute offsets under the header, not anchored; the card occludes itself.
             gpui_kit::deferred(ui::rise(card.transform_origin(ui::corner(true, false)), "search-filters-in", std::time::Duration::ZERO)).with_priority(2)
         });
         div()

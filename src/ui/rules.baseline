@@ -14,7 +14,6 @@ src/channel_settings.rs	global-notify	22
 src/channel_settings.rs	raw-px	10
 src/chat.rs	global-notify	7
 src/chat.rs	raw-color	5
-src/chat.rs	raw-floating	1
 src/chat.rs	raw-px	49
 src/chat_guard.rs	global-notify	4
 src/chat_guard.rs	raw-px	2
@@ -103,7 +102,6 @@ src/role_popout.rs	raw-px	4
 src/search_menu.rs	global-notify	7
 src/search_menu.rs	raw-px	2
 src/search_results.rs	global-notify	4
-src/search_results.rs	raw-floating	1
 src/search_results.rs	raw-px	2
 src/server_settings/lists.rs	global-notify	5
 src/server_settings/lists.rs	raw-px	4
