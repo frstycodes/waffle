@@ -316,6 +316,13 @@ pub fn select_options(
         })
         .collect();
     let menu = super::surface(cx).id(id.clone()).squircle(RADIUS_LG).max_h(px(280.)).overflow_y_scroll().gap(px(1.)).occlude().children(rows);
+    dropdown(id, menu, top, on_dismiss)
+}
+
+// A floating panel under its trigger (`top` is the trigger's height), dismissed by a press anywhere else:
+// a select's list, or a picker with its own search. `panel` brings its own id and `occlude`.
+pub fn dropdown(id: impl Into<SharedString>, panel: impl IntoElement, top: f32, on_dismiss: impl Fn(&mut Window, &mut App) + 'static) -> AnyElement {
+    let id: SharedString = id.into();
     // Rises from the trigger: 0.95 scale about its top centre, with the fade.
     // The trigger is outside the list's box, so a press on it would read as outside too and close the list
     // just before the trigger's own toggle reopened it: the list's last bounds place the trigger above it.
@@ -328,7 +335,7 @@ pub fn select_options(
         .right_0()
         .min_w(px(200.))
         .child(gpui_kit::canvas(move |b, _, _| record.set(Some(b)), |_, _, _, _| {}).absolute().size_full())
-        .child(menu)
+        .child(panel)
         .on_mouse_down_out(move |event, window, cx| {
             let on_trigger = bounds.get().is_some_and(|b| gpui_kit::Bounds::new(point(b.left(), b.top() - px(top + 4.)), gpui_kit::size(b.size.width, px(top))).contains(&event.position));
             if !on_trigger {
