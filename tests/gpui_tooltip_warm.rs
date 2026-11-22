@@ -1,5 +1,6 @@
 // Checks the vendored gpui patch that lets a tooltip follow the pointer from one element to the next: once
-// one shows, its neighbour's shows at once instead of after the hover delay. Drop with the vendored gpui
+// one shows, its neighbour's shows at once instead of after the hover delay. Tooltips show at once by
+// default (DEFAULT_TOOLTIP_SHOW_DELAY); these buttons ask for a delay, as an element still can. Drop with the vendored gpui
 // once upstream ships the same behaviour.
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
@@ -23,7 +24,7 @@ impl Render for Tip {
 impl Render for Buttons {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let button = |id: &'static str, shown: Shown| {
-            div().id(id).size(px(100.)).tooltip(move |_: &mut Window, cx: &mut App| -> AnyView {
+            div().id(id).size(px(100.)).tooltip_show_delay(Duration::from_millis(500)).tooltip(move |_: &mut Window, cx: &mut App| -> AnyView {
                 shown.borrow_mut().push(id);
                 cx.new(|_| Tip).into()
             })

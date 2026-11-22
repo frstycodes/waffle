@@ -137,7 +137,7 @@ src/settings/updates.rs	raw-px	1
 src/settings/view.rs	global-notify	5
 src/shortcuts.rs	global-notify	4
 src/shortcuts.rs	raw-px	1
-src/sidebar.rs	file-lines	1841
+src/sidebar.rs	file-lines	1839
 src/sidebar.rs	global-notify	1
 src/sidebar.rs	raw-px	32
 src/soundboard.rs	global-notify	10

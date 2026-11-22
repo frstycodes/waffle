@@ -546,7 +546,6 @@ pub fn tip(text: impl Into<SharedString>, _: &mut Window, cx: &mut App) -> AnyVi
 
 impl Render for Tip {
     fn render(&mut self, _: &mut Window, cx: &mut gpui_kit::Context<Self>) -> impl IntoElement {
-        use gpui_kit::{Animation, AnimationExt};
         div()
             .max_w(px(240.))
             .px(px(10.))
@@ -560,6 +559,5 @@ impl Render for Tip {
             .font_weight(FontWeight::MEDIUM)
             .line_height(relative(1.35))
             .child(self.text.clone())
-            .with_animation("tip-in", Animation::new(DUR_HOVER).with_easing(|t| motion::ease_out().sample(t)), |tip, t| tip.opacity(t).scale(0.95 + 0.05 * t))
     }
 }

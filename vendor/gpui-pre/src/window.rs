@@ -1379,6 +1379,8 @@ pub struct Window {
     pub(crate) next_tooltip_id: TooltipId,
     pub(crate) tooltip_bounds: Option<TooltipBounds>,
     tooltip_entrance: Option<TooltipEntrance>,
+    // Waffle patch: the tooltip showing now and the view that owns it, so the next one to show can dismiss it.
+    pub(crate) shown_tooltip: Option<(std::rc::Weak<RefCell<Option<crate::ActiveTooltip>>>, EntityId)>,
     pub(crate) next_frame_callbacks: Rc<RefCell<Vec<FrameCallback>>>,
     pub(crate) dirty_views: FxHashSet<EntityId>,
     focus_listeners: SubscriberSet<(), AnyWindowFocusListener>,
@@ -2301,6 +2303,7 @@ impl Window {
             next_tooltip_id: TooltipId::default(),
             tooltip_bounds: None,
             tooltip_entrance: None,
+            shown_tooltip: None,
             dirty_views: FxHashSet::default(),
             focus_listeners: SubscriberSet::new(),
             focus_lost_listeners: SubscriberSet::new(),
@@ -2533,6 +2536,22 @@ impl Window {
         if self.invalidator.not_drawing() {
             self.refreshing = true;
             self.invalidator.set_dirty(true);
+        }
+    }
+
+    /// Waffle patch: draws the window again without re-rendering a view: cached views replay. For what the
+    /// window paints by itself, such as a tooltip's entrance and linger.
+    pub(crate) fn redraw(&mut self) {
+        if self.invalidator.not_drawing() {
+            self.invalidator.set_dirty(true);
+        }
+    }
+
+    /// Waffle patch: draws the window again re-rendering only `view` and the views around it, while
+    /// cached views elsewhere replay. For changes that only `view`'s elements paint, such as their tooltip.
+    pub(crate) fn refresh_view(&mut self, view: EntityId, cx: &mut App) {
+        if self.invalidator.not_drawing() {
+            cx.notify(view);
         }
     }
 
@@ -4063,7 +4082,7 @@ impl Window {
             // via the `visible_on_hover` method). Since mouse listeners are not active in this
             // case, instead update the tooltip's visibility here.
             let is_visible =
-                (tooltip_request.tooltip.check_visible_and_update)(tooltip_bounds, self, cx);
+                (tooltip_request.tooltip.check_visible_and_update)(tooltip_bounds, tooltip_request.tooltip.anchor, self, cx);
             if !is_visible {
                 continue;
             }
@@ -4096,7 +4115,7 @@ impl Window {
             return None;
         }
         let (tooltip, bounds) = entrance.last.clone()?;
-        self.on_next_frame(|window, _| window.refresh());
+        self.on_next_frame(|window, _| window.redraw());
         let mut element = self.entering_tooltip(&tooltip, bounds, Some(ended), cx);
         element.layout_as_root(AvailableSpace::min_size(), self, cx);
         self.with_absolute_element_offset(bounds.origin, |window| element.prepaint(window, cx));
@@ -4118,7 +4137,7 @@ impl Window {
             false => ((now - started).as_secs_f32() / TOOLTIP_ENTRANCE.as_secs_f32()).min(1.),
         };
         if t < 1. {
-            self.on_next_frame(|window, _| window.refresh());
+            self.on_next_frame(|window, _| window.redraw());
         }
         let origin = match tooltip.anchor {
             Some(anchor) => point(
@@ -4132,7 +4151,8 @@ impl Window {
         crate::div()
             .child(tooltip.view.clone())
             .transform_origin(origin)
-            .opacity((t / 0.5).min(1.))
+            // Opaque within three frames, so it reads as instant; the pop carries the motion.
+            .opacity((t / 0.15).min(1.))
             .scale(0.8 + 0.2 * pop)
             .rotate(radians(-0.08 * (1. - pop)))
             .into_any_element()

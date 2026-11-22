@@ -3462,7 +3462,8 @@ pub struct AnyTooltip {
     /// Given the bounds of the tooltip, checks whether the tooltip should still be visible and
     /// updates its state accordingly. This is needed atop the hovered element's mouse move handler
     /// to handle the case where the element is not painted (e.g. via use of `visible_on_hover`).
-    pub check_visible_and_update: Rc<dyn Fn(Bounds<Pixels>, &mut Window, &mut App) -> bool>,
+    /// Called with the tooltip's bounds and, for a tooltip anchored to its element, the element's bounds.
+    pub check_visible_and_update: Rc<dyn Fn(Bounds<Pixels>, Option<Bounds<Pixels>>, &mut Window, &mut App) -> bool>,
 }
 
 /// Where an anchored tooltip sits relative to the element it describes.

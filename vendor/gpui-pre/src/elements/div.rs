@@ -51,7 +51,10 @@ type StackSafe<T> = stacksafe::StackSafe<T>;
 type StackSafe<T> = T;
 
 const DRAG_THRESHOLD: f64 = 2.;
-const DEFAULT_TOOLTIP_SHOW_DELAY: Duration = Duration::from_millis(500);
+// Waffle patch: tooltips show 50ms after their element is hovered (upstream waits 500ms): long enough that
+// a pointer passing over doesn't flash one, short enough to read as instant. A neighbour of one already up
+// shows at once (`Window::tooltip_is_warm`), and an element can set its own with `tooltip_show_delay`.
+const DEFAULT_TOOLTIP_SHOW_DELAY: Duration = Duration::from_millis(50);
 const HOVERABLE_TOOLTIP_HIDE_DELAY: Duration = Duration::from_millis(500);
 
 /// The styling information for a given group.
@@ -3744,25 +3747,33 @@ pub(crate) enum ActiveTooltip {
     /// before hiding it.
     WaitingForHide {
         tooltip: AnyTooltip,
+        // Waffle patch: where the pointer may go while it waits (`tooltip_reach`); leaving it hides at once.
+        reach: Option<Bounds<Pixels>>,
         _task: Task<()>,
     },
 }
 
+// Waffle patch: showing or hiding a tooltip re-renders only `owner`, the view that drew the element it
+// belongs to (`Window::refresh_view`). Upstream refreshes the window, which re-renders every cached view.
 pub(crate) fn clear_active_tooltip(
     active_tooltip: &Rc<RefCell<Option<ActiveTooltip>>>,
+    owner: EntityId,
     window: &mut Window,
+    cx: &mut App,
 ) {
     match active_tooltip.borrow_mut().take() {
         None => {}
         Some(ActiveTooltip::WaitingForShow { .. }) => {}
-        Some(ActiveTooltip::Visible { .. }) => window.refresh(),
-        Some(ActiveTooltip::WaitingForHide { .. }) => window.refresh(),
+        Some(ActiveTooltip::Visible { .. }) => window.refresh_view(owner, cx),
+        Some(ActiveTooltip::WaitingForHide { .. }) => window.refresh_view(owner, cx),
     }
 }
 
 pub(crate) fn clear_active_tooltip_if_not_hoverable(
     active_tooltip: &Rc<RefCell<Option<ActiveTooltip>>>,
+    owner: EntityId,
     window: &mut Window,
+    cx: &mut App,
 ) {
     let should_clear = match active_tooltip.borrow().as_ref() {
         None => false,
@@ -3772,7 +3783,7 @@ pub(crate) fn clear_active_tooltip_if_not_hoverable(
     };
     if should_clear {
         active_tooltip.borrow_mut().take();
-        window.refresh();
+        window.refresh_view(owner, cx);
     }
 }
 
@@ -3830,9 +3841,9 @@ pub(crate) fn register_tooltip_mouse_handlers(
 
     window.on_mouse_event({
         let active_tooltip = active_tooltip.clone();
-        move |_: &MouseDownEvent, _phase, window: &mut Window, _cx| {
+        move |_: &MouseDownEvent, _phase, window: &mut Window, cx| {
             if !tooltip_id.is_some_and(|tooltip_id| tooltip_id.is_hovered(window)) {
-                clear_active_tooltip_if_not_hoverable(&active_tooltip, window);
+                clear_active_tooltip_if_not_hoverable(&active_tooltip, current_view, window, cx);
             }
         }
     });
@@ -3853,6 +3864,7 @@ pub(crate) fn register_tooltip_mouse_handlers(
                         &build_tooltip,
                         &check_is_hovered_during_prepaint,
                         Some(long_press_tooltip_active.clone()),
+                        current_view,
                         window,
                         cx,
                     ) {
@@ -3864,7 +3876,7 @@ pub(crate) fn register_tooltip_mouse_handlers(
                 TouchPhase::Ended | TouchPhase::Cancelled
                     if long_press_tooltip_active.replace(false) =>
                 {
-                    clear_active_tooltip(&active_tooltip, window);
+                    clear_active_tooltip(&active_tooltip, current_view, window, cx);
                     cx.stop_propagation();
                 }
                 TouchPhase::Started
@@ -3877,9 +3889,9 @@ pub(crate) fn register_tooltip_mouse_handlers(
 
     window.on_mouse_event({
         let active_tooltip = active_tooltip.clone();
-        move |_: &ScrollWheelEvent, _phase, window: &mut Window, _cx| {
+        move |_: &ScrollWheelEvent, _phase, window: &mut Window, cx| {
             if !tooltip_id.is_some_and(|tooltip_id| tooltip_id.is_hovered(window)) {
-                clear_active_tooltip_if_not_hoverable(&active_tooltip, window);
+                clear_active_tooltip_if_not_hoverable(&active_tooltip, current_view, window, cx);
             }
         }
     });
@@ -3915,6 +3927,7 @@ fn handle_tooltip_mouse_move(
         CancelShow,
         ScheduleShow,
         CheckVisible,
+        Hide,
     }
 
     let action = match active_tooltip.borrow().as_ref() {
@@ -3945,12 +3958,15 @@ fn handle_tooltip_mouse_move(
                 Action::None
             }
         }
-        Some(ActiveTooltip::WaitingForHide { .. }) => {
-            if phase.capture()
-                && (check_is_hovered(window)
-                    || tooltip_id.is_some_and(|tooltip_id| tooltip_id.is_hovered(window)))
+        Some(ActiveTooltip::WaitingForHide { reach, .. }) => {
+            if !phase.capture() {
+                Action::None
+            } else if check_is_hovered(window)
+                || tooltip_id.is_some_and(|tooltip_id| tooltip_id.is_hovered(window))
             {
                 Action::CheckVisible
+            } else if reach.is_some_and(|reach| !reach.contains(&window.mouse_position())) {
+                Action::Hide
             } else {
                 Action::None
             }
@@ -3983,6 +3999,7 @@ fn handle_tooltip_mouse_move(
                             &build_tooltip,
                             &check_is_hovered_during_prepaint,
                             None,
+                            current_view,
                             window,
                             cx,
                         );
@@ -3997,6 +4014,7 @@ fn handle_tooltip_mouse_move(
                 });
         }
         Action::CheckVisible => cx.notify(current_view),
+        Action::Hide => clear_active_tooltip(active_tooltip, current_view, window, cx),
     }
 }
 
@@ -4005,6 +4023,7 @@ fn show_tooltip(
     build_tooltip: &Rc<dyn Fn(&mut Window, &mut App) -> Option<(AnyView, bool)>>,
     check_is_hovered_during_prepaint: &Rc<dyn Fn(&Window) -> bool>,
     long_press_tooltip_active: Option<Rc<Cell<bool>>>,
+    owner: EntityId,
     window: &mut Window,
     cx: &mut App,
 ) -> bool {
@@ -4017,7 +4036,7 @@ fn show_tooltip(
                 mouse_position: window.mouse_position(),
                 anchor: None,
                 placement: TooltipPlacement::Auto,
-                check_visible_and_update: Rc::new(move |tooltip_bounds, window, cx| {
+                check_visible_and_update: Rc::new(move |tooltip_bounds, anchor, window, cx| {
                     if long_press_tooltip_active
                         .as_ref()
                         .is_some_and(|active| active.get())
@@ -4032,6 +4051,8 @@ fn show_tooltip(
                         tooltip_is_hoverable,
                         &check_is_hovered_during_prepaint,
                         tooltip_bounds,
+                        anchor,
+                        owner,
                         window,
                         cx,
                     )
@@ -4042,8 +4063,24 @@ fn show_tooltip(
     });
     let did_show = new_tooltip.is_some();
     *active_tooltip.borrow_mut() = new_tooltip;
-    window.refresh();
+    if did_show {
+        dismiss_other_tooltip(active_tooltip, owner, window, cx);
+    }
+    window.refresh_view(owner, cx);
     did_show
+}
+
+// Waffle patch: one tooltip up at a time. A hoverable tooltip waits before hiding so the pointer can reach
+// it; another showing meanwhile dismisses it. Otherwise the window, which draws the last tooltip request in
+// paint order, kept drawing a tile left below the pointer until its delay ran out.
+fn dismiss_other_tooltip(shown: &Rc<RefCell<Option<ActiveTooltip>>>, owner: EntityId, window: &mut Window, cx: &mut App) {
+    let Some((previous, previous_owner)) = window.shown_tooltip.replace((Rc::downgrade(shown), owner)) else {
+        return;
+    };
+    let Some(previous) = previous.upgrade() else { return };
+    if !Rc::ptr_eq(&previous, shown) {
+        clear_active_tooltip(&previous, previous_owner, window, cx);
+    }
 }
 
 /// Returns a callback which will be called by window prepaint to update tooltip visibility. The
@@ -4054,6 +4091,8 @@ fn handle_tooltip_check_visible_and_update(
     tooltip_is_hoverable: bool,
     check_is_hovered: &Rc<dyn Fn(&Window) -> bool>,
     tooltip_bounds: Bounds<Pixels>,
+    anchor: Option<Bounds<Pixels>>,
+    owner: EntityId,
     window: &mut Window,
     cx: &mut App,
 ) -> bool {
@@ -4062,7 +4101,7 @@ fn handle_tooltip_check_visible_and_update(
     enum Action {
         None,
         Hide,
-        ScheduleHide(AnyTooltip),
+        ScheduleHide(AnyTooltip, Option<Bounds<Pixels>>),
         CancelHide(AnyTooltip),
     }
 
@@ -4073,8 +4112,11 @@ fn handle_tooltip_check_visible_and_update(
             if is_hovered {
                 Action::None
             } else {
-                if tooltip_is_hoverable {
-                    Action::ScheduleHide(tooltip.clone())
+                // Waffle patch: a hoverable tooltip waits for the pointer only while it's on its way in.
+                let reach = tooltip_reach(anchor, tooltip_bounds);
+                let heading_in = reach.is_none_or(|reach| reach.contains(&window.mouse_position()));
+                if tooltip_is_hoverable && heading_in {
+                    Action::ScheduleHide(tooltip.clone(), reach)
                 } else {
                     Action::Hide
                 }
@@ -4092,8 +4134,8 @@ fn handle_tooltip_check_visible_and_update(
 
     match action {
         Action::None => {}
-        Action::Hide => clear_active_tooltip(active_tooltip, window),
-        Action::ScheduleHide(tooltip) => {
+        Action::Hide => clear_active_tooltip(active_tooltip, owner, window, cx),
+        Action::ScheduleHide(tooltip, reach) => {
             let delayed_hide_task = window.spawn(cx, {
                 let weak_active_tooltip = Rc::downgrade(active_tooltip);
                 async move |cx| {
@@ -4104,7 +4146,7 @@ fn handle_tooltip_check_visible_and_update(
                         return;
                     };
                     if active_tooltip.borrow_mut().take().is_some() {
-                        cx.update(|window, _cx| window.refresh()).ok();
+                        cx.update(|window, cx| window.refresh_view(owner, cx)).ok();
                     }
                 }
             });
@@ -4112,6 +4154,7 @@ fn handle_tooltip_check_visible_and_update(
                 .borrow_mut()
                 .replace(ActiveTooltip::WaitingForHide {
                     tooltip,
+                    reach,
                     _task: delayed_hide_task,
                 });
         }
@@ -4125,6 +4168,28 @@ fn handle_tooltip_check_visible_and_update(
     }
 
     active_tooltip.borrow().is_some()
+}
+
+// Waffle patch: where the pointer may be while it travels from an anchored tooltip's element into the
+// tooltip: the gap between their facing edges, as tall (or wide) as both together, and the tooltip itself.
+// `None` for a tooltip placed at the pointer, which keeps the plain hide delay.
+fn tooltip_reach(anchor: Option<Bounds<Pixels>>, tooltip: Bounds<Pixels>) -> Option<Bounds<Pixels>> {
+    // Room for a pointer on the edge it just crossed.
+    const SLACK: Pixels = px(2.);
+    let anchor = anchor?;
+    let both = anchor.union(&tooltip);
+    let (left, top, right, bottom) = if tooltip.left() >= anchor.right() {
+        (anchor.right(), both.top(), tooltip.right(), both.bottom())
+    } else if tooltip.right() <= anchor.left() {
+        (tooltip.left(), both.top(), anchor.left(), both.bottom())
+    } else if tooltip.top() >= anchor.bottom() {
+        (both.left(), anchor.bottom(), both.right(), tooltip.bottom())
+    } else if tooltip.bottom() <= anchor.top() {
+        (both.left(), tooltip.top(), both.right(), anchor.top())
+    } else {
+        return Some(both);
+    };
+    Some(Bounds::from_corners(point(left - SLACK, top - SLACK), point(right + SLACK, bottom + SLACK)))
 }
 
 #[derive(Default)]
