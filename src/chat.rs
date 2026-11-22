@@ -1801,7 +1801,10 @@ pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Opti
     let has_spoiler = message.content.contains("||");
     let text = hide_spoilers(&readable(&message.content, ctx), revealed);
     let mut blocks = text_blocks(&format!("md-{}", message.id), &text, ctx.font_size, ctx, cx);
-    let last = blocks.pop();
+    // Only "(edited)" needs the last block sized to its content, so it can sit beside it. Unedited text stays a
+    // column child at the feed's width: a content-sized block once measured near zero wide and wrapped every
+    // glyph onto its own line.
+    let last = message.edited.then(|| blocks.pop()).flatten();
     let (reveal, id) = (ctx.revealed.clone(), message.id.clone());
     let refresh = ctx.this.clone();
     let faint = palette::faint(cx);
@@ -1819,14 +1822,9 @@ pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Opti
                 })
             })
             .children(blocks)
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_baseline()
-                    .children(last)
-                    .when(message.edited, |c| c.child(div().ml_1().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(faint).child("(edited)"))),
-            )
+            .when(message.edited, |c| {
+                c.child(div().flex().flex_wrap().items_baseline().children(last).child(div().ml_1().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(faint).child("(edited)")))
+            })
             .into_any_element(),
     )
 }
