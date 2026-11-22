@@ -4,7 +4,7 @@ use std::{collections::HashSet, iter, time::Duration};
 use gpui_kit::{
     AnyElement, App, Context, Div, FontWeight, Hsla, ImgResourceLoader, InteractiveElement, IntoElement, ObjectFit, ParentElement, Resource, ScrollHandle, StatefulInteractiveElement, Styled, Window,
     component::Icon,
-    div, img, point, prelude::*, px, relative, rgb,
+    div, img, point, prelude::*, px, relative,
 };
 
 use super::{Form, Onboarding, OptionEmoji, Prompt, PromptKind, PromptOption, api, features, member_flags};
@@ -739,7 +739,7 @@ fn role_color(color: u32, cx: &App) -> Hsla {
     if color == 0 {
         return palette::status_in(Status::Offline, cx);
     }
-    rgb(color).into()
+    palette::data_color(color)
 }
 
 // What options add: channel names we can see, then roles (name, colour), each once.

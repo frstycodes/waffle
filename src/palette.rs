@@ -194,6 +194,17 @@ fn hex(value: u32) -> Hsla {
     desaturate(rgb(value).into(), saturation())
 }
 
+// A colour given as data (a role, an embed, a profile theme, a folder, a nameplate, a theme preview), exactly
+// as given: the saturation setting doesn't reach it.
+pub fn data_color(value: u32) -> Hsla {
+    rgb(value).into()
+}
+
+// The QR code's modules: dark on white in both themes, or phones can't read it: oklch(0.22 0.004 260).
+pub fn qr_ink() -> Hsla {
+    rgb(0x191B1C).into()
+}
+
 pub fn sync(window: &mut Window, cx: &mut App) {
     Theme::sync_system_appearance(Some(window), cx);
     let prefs = crate::settings::Prefs::load();

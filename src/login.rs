@@ -5,7 +5,7 @@ use std::{rc::Rc, time::Duration};
 use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, BoxShadow, Context, Corners, Div, ElementId, FontWeight, HighlightStyle, SharedString, StyledText, Window,
     component::Icon,
-    canvas, div, fill, linear_color_stop, linear_gradient, point, prelude::*, px, relative, rgb, size, svg,
+    canvas, div, fill, linear_color_stop, linear_gradient, point, prelude::*, px, relative, size, svg,
 };
 use qrcode::{EcLevel, QrCode};
 
@@ -21,8 +21,6 @@ use crate::{
 // The code card: 204 square with 14 of white around the modules.
 const QR_SIDE: f32 = 204.;
 const QR_PAD: f32 = 14.;
-// Dark modules on white in both themes, or phones can't read it: oklch(0.22 0.004 260).
-const QR_INK: u32 = 0x191B1C;
 // Finder patterns are 7 modules square.
 const FINDER: usize = 7;
 
@@ -189,7 +187,7 @@ fn qr_card(modules: Rc<Modules>, cx: &App) -> AnyElement {
     let code = canvas(
         |_, _, _| {},
         move |bounds, _, window, _| {
-            let ink = gpui_kit::Hsla::from(rgb(QR_INK));
+            let ink = palette::qr_ink();
             let at = |x: f32, y: f32, side: f32| gpui_kit::Bounds::new(point(bounds.origin.x + px(x * module), bounds.origin.y + px(y * module)), size(px(side * module), px(side * module)));
             let w = modules.width;
             for (i, _) in modules.dark.iter().enumerate().filter(|(_, dark)| **dark) {

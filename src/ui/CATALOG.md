@@ -211,6 +211,8 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 ## src/palette.rs
 
 - `palette::set_look` — Stores the prefs' look; true when it changed, so the caller re-applies the theme (`apply`).
+- `palette::data_color` — A colour given as data (a role, an embed, a profile theme, a folder, a nameplate, a theme preview), exactly as given: the saturation setting
+- `palette::qr_ink` — The QR code's modules: dark on white in both themes, or phones can't read it: oklch(0.22 0.004 260).
 - `palette::sync`
 - `palette::apply`
 - `palette::accent`

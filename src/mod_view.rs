@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use gpui_kit::{AnyElement, App, ClickEvent, Context, Div, FontWeight, SharedString, Window, component::Icon, div, prelude::*, px, rgb};
+use gpui_kit::{AnyElement, App, ClickEvent, Context, Div, FontWeight, SharedString, Window, component::Icon, div, prelude::*, px};
 use reqwest::Method;
 use serde_json::{Value, json};
 
@@ -438,7 +438,7 @@ impl Waffle {
         let held = ordered_roles(guild, roles);
         let manage = self.me.as_ref().is_some_and(|me| guild.can(&me.id, perm::MANAGE_ROLES));
         let chips = held.iter().enumerate().map(|(i, r)| {
-            let color = if r.color == 0 { palette::status_in(Status::Offline, cx) } else { rgb(r.color).into() };
+            let color = if r.color == 0 { palette::status_in(Status::Offline, cx) } else { palette::data_color(r.color) };
             let chip = ui::role_chip(r.name.clone(), color, cx).id(SharedString::from(format!("mod-view-role-{}", r.id)));
             match i {
                 0 => chip.tooltip(|window, cx| ui::tip("Highest role", window, cx)).into_any_element(),
@@ -790,7 +790,7 @@ fn permissions_page(view: &ModView, guild: &Guild, roles: &[String], cx: &App) -
         let kind = if p.bit & ELEVATED != 0 { Some("Elevated") } else if p.bit & MODERATOR != 0 { Some("Moderator") } else { None };
         let count = if owner { "Server owner".to_owned() } else if by.len() == 1 { "1 role".to_owned() } else { format!("{} roles", by.len()) };
         let chips = by.into_iter().map(|r| {
-            let color = if r.color == 0 { palette::status_in(Status::Offline, cx) } else { rgb(r.color).into() };
+            let color = if r.color == 0 { palette::status_in(Status::Offline, cx) } else { palette::data_color(r.color) };
             ui::role_chip(r.name.clone(), color, cx)
         });
         let tag = kind.map(|k| {

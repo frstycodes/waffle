@@ -74,7 +74,6 @@ src/joining/invite.rs	global-notify	4
 src/joining/invite.rs	raw-px	13
 src/joining/mod.rs	global-notify	1
 src/joining/onboarding.rs	global-notify	6
-src/joining/onboarding.rs	raw-color	1
 src/joining/onboarding.rs	raw-px	12
 src/joining/rules.rs	global-notify	5
 src/joining/rules.rs	raw-px	3
@@ -84,7 +83,6 @@ src/layout.rs	raw-color	1
 src/layout.rs	raw-px	42
 src/link_preview.rs	global-notify	1
 src/link_preview.rs	raw-px	35
-src/login.rs	raw-color	1
 src/login.rs	raw-px	13
 src/main.rs	global-notify	71
 src/main.rs	raw-px	9
@@ -92,7 +90,6 @@ src/menu.rs	global-notify	15
 src/menu.rs	raw-color	1
 src/menu.rs	raw-px	66
 src/mod_view.rs	global-notify	8
-src/mod_view.rs	raw-color	2
 src/mod_view.rs	raw-px	3
 src/modify_attachment.rs	global-notify	5
 src/modify_attachment.rs	raw-px	7
