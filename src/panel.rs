@@ -50,13 +50,13 @@ impl Waffle {
         // query with a way back to the members.
         let (head, body, foot): (Div, AnyElement, Option<AnyElement>) = match &self.right_panel {
             RightPanel::Hidden => return None,
-            RightPanel::Members => (self.panel_head("Members".into(), false, cx), self.member_list(window, cx), None),
-            RightPanel::Activity => (self.panel_head("Activity".into(), true, cx), self.activity_cards(usize::MAX, cx), None),
+            RightPanel::Members => (self.panel_head("Members".into(), None, Vec::new(), false, cx), self.member_list(window, cx), None),
+            RightPanel::Activity => (self.panel_head("Activity".into(), None, Vec::new(), true, cx), self.activity_cards(usize::MAX, cx), None),
             RightPanel::Search(results) => {
                 let head = self.panel_frame(cx).child(self.search_head(results, self.back_button(cx), cx));
                 (head, self.search_body(results, cx), self.search_pager(results, cx))
             }
-            RightPanel::ModView(view) => (self.panel_frame(cx).child(self.mod_view_head(view, cx)), self.mod_view_body(view, cx), None),
+            RightPanel::ModView(view) => (self.mod_view_head(view, cx), self.mod_view_body(view, cx), None),
         };
         let line = palette::line(cx);
         let scroll = self.panel_scroll.clone();
@@ -81,11 +81,15 @@ impl Waffle {
         )
     }
 
-    // The column's header row, clear of Windows' caption buttons at the window's top right; `back` adds the
-    // way back to the members.
-    fn panel_head(&self, title: SharedString, back: bool, cx: &mut Context<Self>) -> Div {
-        let back = back.then(|| self.back_button(cx));
-        self.panel_frame(cx).child(div().flex_1().min_w_0().truncate().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).child(title)).children(back)
+    // The column's header row, clear of Windows' caption buttons at the window's top right: an optional
+    // leading control, the title, the panel's own tools, and with `close` the way back to the members.
+    pub(crate) fn panel_head(&self, title: SharedString, lead: Option<ui::Control>, tools: Vec<ui::Control>, close: bool, cx: &mut Context<Self>) -> Div {
+        let close = close.then(|| self.back_button(cx));
+        self.panel_frame(cx)
+            .children(lead)
+            .child(div().flex_1().min_w_0().truncate().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).child(title))
+            .children(tools)
+            .children(close)
     }
 
     pub(crate) fn panel_frame(&self, cx: &App) -> Div {

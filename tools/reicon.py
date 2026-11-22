@@ -417,10 +417,19 @@ def sq(x, y, w, h, r):
             f"V{f(y + e)}C{f(x)} {f(y + c)} {f(x + c)} {f(y)} {f(x + e)} {f(y)}Z")
 
 
+# Line glyphs that run edge to edge read a size up beside the rest; scaled about the centre, stroke kept at 2.
+OPTICAL = {"refresh2": 0.8}
+
+
 def glyph(reicon, name):
     if name not in LINE_ONLY and f"{name}-filled" in reicon:
         return f'<g stroke="none">{reicon[name + "-filled"]["body"]}</g>'
-    return thicken(reicon[name]["body"])
+    body = thicken(reicon[name]["body"])
+    if name in OPTICAL:
+        k = OPTICAL[name]
+        body = body.replace('stroke-width="2"', f'stroke-width="{2 / k:g}"')
+        body = f'<g transform="translate(12 12) scale({k}) translate(-12 -12)">{body}</g>'
+    return body
 
 
 def slashed(base):

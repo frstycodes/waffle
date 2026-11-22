@@ -279,7 +279,7 @@ impl Waffle {
         self.members.get(&view.guild_id).and_then(|m| m.get(&view.user_id)).cloned().or_else(|| self.known_users().into_iter().find(|u| u.id == view.user_id))
     }
 
-    // The panel's header row: the title with Refresh on the main page, Back on a sub-page; Close on both.
+    // The shared panel header: Refresh on the main page, Back on a sub-page, Close on both.
     pub(crate) fn mod_view_head(&self, view: &ModView, cx: &mut Context<Self>) -> Div {
         let title = match view.page {
             Page::Info => "Mod View",
@@ -288,20 +288,7 @@ impl Waffle {
         };
         let back = (view.page != Page::Info).then(|| ui::icon_button("mod-view-back", Glyph::ChevronLeft, "Back", cx).occlude().on_click(cx.listener(|this, _, _, cx| this.set_mod_view_page(Page::Info, cx))));
         let refresh = (view.page == Page::Info).then(|| ui::icon_button("mod-view-refresh", Glyph::Retry, "Refresh", cx).occlude().on_click(cx.listener(|this, _, _, cx| this.refresh_mod_view(cx))));
-        let close = ui::icon_button("mod-view-close", Glyph::X, "Close", cx).occlude().on_click(cx.listener(|this, _, _, cx| {
-            this.right_panel = RightPanel::Members;
-            cx.notify();
-        }));
-        div()
-            .flex_1()
-            .min_w_0()
-            .flex()
-            .items_center()
-            .gap_1()
-            .children(back)
-            .child(div().flex_1().min_w_0().truncate().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).child(title))
-            .children(refresh)
-            .child(close)
+        self.panel_head(title.into(), back, refresh.into_iter().collect(), true, cx)
     }
 
     pub(crate) fn mod_view_body(&self, view: &ModView, cx: &mut Context<Self>) -> AnyElement {
