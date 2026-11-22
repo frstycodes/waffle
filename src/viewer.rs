@@ -49,8 +49,14 @@ impl Waffle {
         let Some(feed) = self.feeds.get(&channel.id) else { return };
         let items = feed_media(&feed.messages);
         let Some(index) = items.iter().position(|m| m.url == url) else { return };
-        self.viewer = Some(Viewer { items, index, from: index, strip: ScrollHandle::new(), reveal: Cell::new(true), loaded: Cell::new(0..0), channel_id: channel.id.clone(), channel_total: None });
+        self.open_viewer_on(items, index, channel.id.clone(), window, cx);
         self.count_channel_media(&channel, cx);
+    }
+
+    // The viewer at `items[index]`, paging through `items` alone. A Components V2 gallery passes no
+    // `channel_id`, so the channel's history never replaces its items.
+    pub(crate) fn open_viewer_on(&mut self, items: Vec<Media>, index: usize, channel_id: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.viewer = Some(Viewer { items, index, from: index, strip: ScrollHandle::new(), reveal: Cell::new(true), loaded: Cell::new(0..0), channel_id, channel_total: None });
         window.focus(&self.focus, cx);
         cx.notify();
     }

@@ -50,6 +50,8 @@ impl Waffle {
         // Before the rows draw, so a row just let go of lands in its new place rather than as a hole.
         self.finish_sorts(cx);
         self.settle_carry(cx);
+        // A message select whose menu closed sends its picks (Discord's send on close).
+        self.settle_select(cx);
         // First, so every fill below knows whether it sits on the native material this frame.
         let sidebar_width = if self.settings_open() { self.settings_width } else { RAIL_WIDTH + self.channels_width };
         crate::material::sync_sidebar_material(window, sidebar_width, cx.theme().is_dark(), self.prefs.native_sidebar);

@@ -23,6 +23,7 @@ const LOGO_ON_LIGHT: u32 = 0xBF7D06;
 const DANGER: u32 = 0xC21F3A;
 const DANGER_HOVER: u32 = 0xA8172F;
 const SUCCESS: u32 = 0x00753E;
+const SUCCESS_HOVER: u32 = 0x00662F;
 const ALERT: u32 = 0xDB2B33;
 const DND: u32 = ALERT;
 const OFFLINE: u32 = 0x83868C;
@@ -491,6 +492,15 @@ pub fn danger() -> Hsla {
 
 pub fn danger_hover() -> Hsla {
     hex(DANGER_HOVER)
+}
+
+// The positive fill (an app's Success button), under white ink.
+pub fn success() -> Hsla {
+    hex(SUCCESS)
+}
+
+pub fn success_hover() -> Hsla {
+    hex(SUCCESS_HOVER)
 }
 
 // LIVE asks for you, so it takes the accent.

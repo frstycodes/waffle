@@ -47,7 +47,7 @@ pub use control::{Control, Pressable, button, chip, chip_lead, hover_fade, icon_
 pub use date::{date_field, time_field};
 pub use dialog::{dialog, dialog_body, dialog_scroll, modal};
 pub use feedback::{meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
-pub use field::{code_cell, drop_zone, dropdown, field, field_error, field_frame, field_hint, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
+pub use field::{code_cell, drop_zone, dropdown, field, field_error, field_marked, field_frame, field_hint, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
 pub use group::{settings_caption, settings_card, settings_choice, settings_close, settings_column, settings_group, SettingsHighlight, settings_warning, settings_nav_item, settings_page, SETTINGS_NAV_WIDTH, SETTINGS_WIDTH, settings_row, settings_nav_edge, settings_sidebar, settings_switch, settings_text, settings_title, settings_window};
 pub use overflow::{Entry, overflow_list};
 pub use tabs::{Tab, pill_tabs, segmented_live, tabs};
@@ -119,6 +119,8 @@ pub enum Tone {
     Ghost,
     // The destructive step itself.
     Danger,
+    // A confirming step (an app's Success button): the positive fill.
+    Positive,
     // Translucent black over video and images.
     OnMedia,
     // Just the accent ink, underlined on hover: "View all members".
@@ -288,8 +290,7 @@ pub fn role_chip(name: impl Into<SharedString>, color: Hsla, cx: &App) -> Div {
 
 // A keycap: the raised fill, a hairline ring and a deeper bottom edge, so it reads as a key you could press.
 pub fn kbd(key: impl Into<SharedString>, cx: &App) -> Div {
-    let line = palette::line_strong(cx);
-    key_cap(key).bg(palette::surface(palette::Level::Raised, cx)).shadow(vec![shadow(line, 0., -1., 0., 0., true), shadow(line, 0., 0., 0., 1., false)]).text_color(palette::strong(cx))
+    raised_cap(key_cap(key), cx)
 }
 
 // A key cap on a coloured fill (a danger button): a wash of `ink` with an inset edge, lettered in `ink`,
@@ -298,7 +299,26 @@ pub fn kbd_translucent(key: impl Into<SharedString>, ink: Hsla) -> Div {
     key_cap(key).bg(ink.opacity(0.16)).shadow(vec![shadow(ink.opacity(0.24), 0., 0., 0., 1., true)]).text_color(ink)
 }
 
+// A keycap lettered with `glyph` (the arrow keys).
+pub fn kbd_glyph(glyph: Glyph, cx: &App) -> Div {
+    raised_cap(key_cap_shell(), cx).child(Icon::new(glyph).size(px(12.)))
+}
+
+fn raised_cap(cap: Div, cx: &App) -> Div {
+    let line = palette::line_strong(cx);
+    cap.bg(palette::surface(palette::Level::Raised, cx)).shadow(vec![shadow(line, 0., -1., 0., 0., true), shadow(line, 0., 0., 0., 1., false)]).text_color(palette::strong(cx))
+}
+
+// What a key does, after its caps: "[Esc] Cancel".
+pub fn key_hint(caps: impl IntoElement, label: impl Into<SharedString>, cx: &App) -> Div {
+    div().flex_none().flex().items_center().gap(px(6.)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(caps).child(label.into())
+}
+
 fn key_cap(key: impl Into<SharedString>) -> Div {
+    key_cap_shell().child(key.into())
+}
+
+fn key_cap_shell() -> Div {
     div()
         .min_w(px(22.))
         .h(px(22.))
@@ -311,7 +331,6 @@ fn key_cap(key: impl Into<SharedString>) -> Div {
         .flex()
         .items_center()
         .justify_center()
-        .child(key.into())
 }
 
 // A shortcut: its keys side by side.
@@ -531,12 +550,14 @@ pub fn dm_face(face: &crate::discord::DmFace, size: f32, ring: Hsla) -> AnyEleme
 // An avatar without a photo: the name's initial on a gradient picked from the name. Below 24px it
 // drops the initial.
 pub fn monogram(name: &str, size: f32) -> Div {
-    let hue = name_hue(name);
-    let initial: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
+    monogram_face(name_hue(name), size).rounded_full().when(size >= 24., |d| d.child(initial(name)))
+}
+
+// The monogram's gradient and type at `size`, on `hue`, with no shape or letter yet.
+fn monogram_face(hue: f32, size: f32) -> Div {
     div()
         .size(px(size))
         .flex_none()
-        .rounded_full()
         .bg(linear_gradient(135., linear_color_stop(palette::picture_oklch(0.53, 0.12, hue), 0.), linear_color_stop(palette::picture_oklch(0.41, 0.13, hue + 35.), 1.)))
         .flex()
         .items_center()
@@ -544,7 +565,10 @@ pub fn monogram(name: &str, size: f32) -> Div {
         .text_color(gpui_kit::white())
         .font_weight(FontWeight::SEMIBOLD)
         .text_size(px(size * 0.38))
-        .when(size >= 24., |d| d.child(initial))
+}
+
+fn initial(name: &str) -> String {
+    name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default()
 }
 
 // The design's avatar hue: a stable hash of the name onto the colour wheel.
@@ -653,6 +677,15 @@ pub fn server_tile(icon: Option<&str>, name: &str, size: f32, cx: &App) -> AnyEl
         .justify_center()
         .child(crate::sidebar::initials(name))
         .into_any_element()
+}
+
+// An app's icon as a server tile, or without one its initial on the monogram gradient, hued by `id` so an
+// app keeps its colour whatever it's called.
+pub fn app_tile(icon: Option<&str>, name: &str, id: &str, size: f32, cx: &App) -> AnyElement {
+    if icon.is_some() {
+        return server_tile(icon, name, size, cx);
+    }
+    monogram_face(name_hue(id), size).squircle(size * SERVER_TILE_ROUNDING).child(initial(name)).into_any_element()
 }
 
 // A server tile with `badge` (a channel's kind) on a round mark at its bottom-right, ringed 2px in

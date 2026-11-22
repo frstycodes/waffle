@@ -25,6 +25,13 @@ pub fn back_out(t: f32) -> f32 {
     1. + c3 * (t - 1.).powi(3) + c1 * (t - 1.).powi(2)
 }
 
+// A refusal's horizontal shake, in px at progress `t` of `SHAKE`: three swings that die out by the end.
+pub const SHAKE: Duration = Duration::from_millis(260);
+
+pub fn shake(t: f32) -> f32 {
+    (t * std::f32::consts::PI * 6.).sin() * (1. - t) * 5.
+}
+
 // The design's curves (design/tokens.css), for `gpui_kit::base::transition`: enter and exit, on-screen
 // movement, and the touch spring.
 pub fn ease_out() -> Curve {

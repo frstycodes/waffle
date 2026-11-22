@@ -2,6 +2,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod accounts;
+mod app_commands;
+mod app_modal;
+mod command_line;
+mod command_picker;
+mod recent_commands;
+mod components;
+mod interactions;
 mod active_now;
 mod attachments;
 mod send_options;
@@ -685,6 +692,11 @@ pub struct Waffle {
     // Folded runs of joins opened to their lines, by the run's first message.
     open_join_runs: HashSet<String>,
     forward_dialog: Option<forward::ForwardDialog>,
+    // Our interactions in flight, by the nonce we sent.
+    interactions: HashMap<String, interactions::PendingInteraction>,
+    command_picker: command_picker::CommandPicker,
+    component_state: components::ComponentState,
+    app_modal: Option<app_modal::AppModal>,
     announcements: announcements::Announcements,
     events: events::Events,
     report_dialog: Option<report::ReportDialog>,
@@ -1056,6 +1068,7 @@ impl Waffle {
             state
         });
         cx.subscribe_in(&composer, window, Self::on_composer).detach();
+        cx.observe(&composer, |this, _, cx| this.on_composer_selection(cx)).detach();
         let search_input = cx.new(|cx| SearchState::new(window, cx).placeholder("Search"));
         cx.subscribe_in(&search_input, window, Self::on_search_input).detach();
         // Typing filters the picker and switcher; the views read the inputs' text on render.
@@ -1127,6 +1140,10 @@ impl Waffle {
             poll_peek: HashSet::new(),
             open_join_runs: HashSet::new(),
             forward_dialog: None,
+            interactions: HashMap::new(),
+            command_picker: command_picker::CommandPicker::load(),
+            component_state: Default::default(),
+            app_modal: None,
             announcements: Default::default(),
             events: Default::default(),
             report_dialog: None,
@@ -1482,6 +1499,7 @@ impl Waffle {
             Event::Ready(ready) => {
                 let ready = *ready;
                 self.channel_info_requested.clear();
+                self.command_picker.mark_indexes_stale();
                 self.auth_retried = false;
                 // Demo scenes set their own place; the last channel a real session saved would override it.
                 if self.me.is_none() && std::env::var_os("WAFFLE_DEMO").is_none() {
@@ -1687,13 +1705,17 @@ impl Waffle {
                 }
             }
             Event::MessageCreate(message) => {
+                self.watch_deferred(&message.id, message.flags, cx);
                 self.offer_publish_bump(&message);
-                self.on_message(*message, cx)
+                self.on_message(*message, cx);
             }
             Event::MessageUpdate(patch) => {
                 let (channel_id, id) = (patch["channel_id"].as_str().unwrap_or_default(), patch["id"].as_str().unwrap_or_default());
                 if let Some(m) = self.message_mut(channel_id, id) {
                     discord::apply_update(m, &patch);
+                }
+                if let Some(flags) = self.message_mut(channel_id, id).map(|m| m.flags) {
+                    self.watch_deferred(id, flags, cx);
                 }
             }
             Event::MessageDelete { channel_id, id } => self.remove_message(&channel_id, &id),
@@ -1840,8 +1862,19 @@ impl Waffle {
                 self.splash_stage(0, "Reconnecting…", cx);
                 self.status = Status::Reconnecting(reason.into());
             }
-            Event::Resumed => self.status = Status::Online,
+            Event::Resumed => {
+                self.status = Status::Online;
+                self.command_picker.mark_indexes_stale();
+            }
             Event::AuthFailed => return self.verify_rejected_token(cx),
+            Event::InteractionCreate { nonce, id } => self.on_interaction_create(nonce, id, cx),
+            Event::InteractionSuccess { nonce } => self.on_interaction_success(nonce, cx),
+            Event::InteractionFailure { nonce, reason_code } => {
+                self.autocomplete_failed(&nonce, cx);
+                self.interaction_failed(&nonce, reason_code, cx);
+            }
+            Event::ModalCreate(modal) => self.open_app_modal(modal, cx),
+            Event::Autocomplete { nonce, choices } => self.on_autocomplete(nonce, choices, cx),
         }
         self.resolve_voice_users();
         self.refresh_stream_previews(cx);
@@ -1919,9 +1952,10 @@ impl Waffle {
             let dm = self.dms.remove(pos);
             self.dms.insert(0, dm);
         }
+        // An app's reply to our command takes its "is thinking…" stand-in's place.
+        let nonce = self.interaction_reply_nonce(&message).or_else(|| message.nonce.clone());
         let Some(feed) = self.feeds.get_mut(&channel_id) else { return };
         // Our own optimistic copy, sent with this nonce: swap in the real one in place.
-        let nonce = message.nonce.clone();
         if let Some(pending) = Arc::make_mut(&mut feed.messages).iter_mut().find(|m| m.state != SendState::Sent && m.nonce.is_some() && m.nonce == nonce) {
             *pending = message;
             return;
@@ -2031,7 +2065,10 @@ impl Waffle {
             self.feeds.insert(id.clone(), Feed { messages: Arc::new(messages), loaded: true, has_more: true, ..Default::default() });
         }
         self.load_dm_profile(&channel, cx);
+        // Before the reset: the draft keeps the command typed into it.
         self.stash_draft(cx);
+        self.command_picker.reset();
+        self.clear_failed_interactions();
         if let Some(previous) = self.channel.as_ref().map(|c| c.id.clone()).filter(|p| *p != id) {
             match self.scroll_anchor() {
                 Some(anchor) => self.scroll_anchors.insert(previous, anchor),
@@ -2326,22 +2363,30 @@ impl Waffle {
         let _ = cx;
     }
 
-    fn on_composer(&mut self, state: &Entity<ComposerState>, event: &InputEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_composer(&mut self, _: &Entity<ComposerState>, event: &InputEvent, window: &mut Window, cx: &mut Context<Self>) {
         match event {
-            InputEvent::Change => {
-                let text = state.read(cx).value();
-                self.has_draft = !text.trim().is_empty() || !self.pending_files.is_empty();
-                self.stash_draft(cx);
-                self.autocomplete = self.suggest(&text);
-                self.hold_up = None;
-                self.chip_silent(window, cx);
-                self.send_typing();
-                cx.notify();
-            }
+            InputEvent::Change => self.on_composer_change(window, cx),
+            InputEvent::PressEnter { shift: false, .. } if self.on_command_enter(window, cx) => {}
             InputEvent::PressEnter { shift: false, .. } if self.autocomplete.is_some() => self.accept_suggestion(window, cx),
             InputEvent::PressEnter { shift: false, .. } => self.submit(self.hold_up.is_some(), window, cx),
             _ => {}
         }
+    }
+
+    // A slash command typed out gets the hint bar instead of mention suggestions, and sends no typing.
+    fn on_composer_change(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let text = self.composer.read(cx).value();
+        self.has_draft = !text.trim().is_empty() || !self.pending_files.is_empty();
+        self.stash_draft(cx);
+        self.update_command_picker(&text, cx);
+        let command = self.on_command_text(window, cx);
+        self.autocomplete = (!command && !self.command_picker.is_open()).then(|| self.suggest(&text)).flatten();
+        self.hold_up = None;
+        self.chip_silent(window, cx);
+        if !command {
+            self.send_typing();
+        }
+        cx.notify();
     }
 
     fn send_typing(&mut self) {
@@ -2803,12 +2848,13 @@ impl Waffle {
 
     // Keeps the open channel's composer as its draft; an edit in progress is not one.
     fn stash_draft(&mut self, cx: &mut Context<Self>) {
-        let Some(channel) = &self.channel else { return };
+        let Some(channel_id) = self.channel.as_ref().map(|c| c.id.clone()) else { return };
         if self.editing.is_some() {
             return;
         }
-        let draft = drafts::Draft::new(&self.composer.read(cx).content(), self.replying.clone());
-        self.drafts.set(&channel.id, draft);
+        let (command, picks) = self.command_draft(cx);
+        let draft = drafts::Draft::new(&self.composer.read(cx).content(), self.replying.clone()).with_command(command, picks);
+        self.drafts.set(&channel_id, draft);
         self.save_drafts_soon(cx);
     }
 
@@ -2822,6 +2868,7 @@ impl Waffle {
             state.set_value(content, window, cx);
             state.set_selected_range(end..end, cx);
         });
+        self.restore_command(draft.command, draft.picks, cx);
         self.replying = draft.reply;
     }
 
@@ -2843,10 +2890,6 @@ impl Waffle {
     }
 
     fn suggest(&self, text: &str) -> Option<Autocomplete> {
-        if send_options::offers_tts(text) && self.tts_allowed() {
-            let tts = Suggestion { label: "/tts".into(), insert: "/tts".into(), wire: "/tts".into(), lead: SuggestLead::Command(icons::Glyph::VolumeHigh), detail: Some(send_options::TTS_DESCRIPTION.into()) };
-            return Some(Autocomplete { token: text.to_owned(), items: vec![tts], selected: 0 });
-        }
         let last = text.rsplit(char::is_whitespace).next()?;
         if let Some(query) = composer_emoji::emoji_query(last) {
             let items: Vec<Suggestion> = self
@@ -2897,10 +2940,6 @@ impl Waffle {
             self.update_prefs(cx, |p| p.record_emoji(&emoji));
             self.composer.update(cx, |state, cx| complete_text(state, &auto.token, &shown, window, cx));
             self.has_draft = true;
-            return cx.notify();
-        }
-        if let SuggestLead::Command(_) = pick.lead {
-            self.composer.update(cx, |state, cx| complete_text(state, &auto.token, &pick.insert, window, cx));
             return cx.notify();
         }
         let chip = InlineToken::new(pick.wire.clone(), pick.insert.clone());
@@ -3778,7 +3817,7 @@ struct UploadJob {
     error: Option<String>,
 }
 
-fn nonce() -> String {
+pub(crate) fn nonce() -> String {
     let millis = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
     // A snowflake-shaped number, as Discord's own clients send.
     ((millis.saturating_sub(1_420_070_400_000) << 22) | u64::from(std::process::id() % 4096)).to_string()
@@ -3822,10 +3861,13 @@ pub(crate) fn complete_text(state: &mut ComposerState, query: &str, text: &str, 
 }
 
 // The draft as Discord takes it: each mention chip becomes its `<@id>` / `<#id>`, kept as the token's id.
+// A slash command's end chip is the space it shows.
 fn wire_text(content: &InputContent) -> String {
     let mut text = content.text().to_string();
     for span in content.tokens().iter().rev() {
-        text.replace_range(span.range(), span.token().id());
+        let token = span.token();
+        let wire = if command_picker::is_end_token(token) { token.text() } else { token.id() };
+        text.replace_range(span.range(), wire);
     }
     text
 }

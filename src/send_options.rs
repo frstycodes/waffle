@@ -10,7 +10,7 @@ use crate::{
 };
 
 const SILENT: &str = "@silent";
-const TTS: &str = "/tts";
+pub const TTS: &str = "/tts";
 // Discord asks only when the mention would reach more people than this.
 const HOLD_UP_OVER: u32 = 30;
 pub const TTS_DESCRIPTION: &str = "Use text-to-speech to read the message to all members currently viewing the channel.";
@@ -34,8 +34,8 @@ pub fn strip_silent(content: &str) -> Option<&str> {
     (rest.is_empty() || rest.starts_with(char::is_whitespace)).then(|| rest.trim())
 }
 
-/// `/tts <text>`: the text. Discord's built-in command takes it as an option; Waffle has no slash commands,
-/// so the typed prefix stands in for it.
+/// `/tts <text>`: the text. Discord's built-in command takes it as an option; here the command picker's
+/// Built-In row writes this typed prefix, which stands in for it.
 pub fn strip_tts(content: &str) -> Option<&str> {
     let text = content.strip_prefix(TTS)?.strip_prefix(char::is_whitespace)?.trim();
     (!text.is_empty()).then_some(text)
