@@ -24,6 +24,9 @@ pub struct User {
     // Avatar decoration frame drawn around the avatar.
     pub decoration: Option<String>,
     pub name_style: Option<NameStyle>,
+    // Boosting the server this user was read from (the member's `premium_since`).
+    #[serde(default)]
+    pub boosting: bool,
 }
 
 // Discord's display-name style: a font, an effect and the effect's colours (0xRRGGBB). Ids are its
@@ -223,6 +226,8 @@ pub struct Role {
     pub permissions: u64,
     // Owned by an integration (a bot's role); nobody can hand these out.
     pub managed: bool,
+    // The role's own icon image. GAP: a `unicode_emoji` icon isn't read.
+    pub icon: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -1115,6 +1120,19 @@ impl Client {
             "op": 14,
             "d": { "guild_id": guild_id, "typing": true, "activities": true, "threads": true, "channels": { channel_id: [[0, 99]] } }
         }));
+    }
+
+    /// Members per role across the server, by role id.
+    pub async fn role_member_counts(&self, guild_id: &str) -> Result<HashMap<String, u32>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, &format!("/guilds/{guild_id}/roles/member-counts"))).await?;
+        Ok(body.as_object().into_iter().flatten().filter_map(|(role, count)| Some((role.clone(), count.as_u64()? as u32))).collect())
+    }
+
+    /// The ids of a role's members, as many as the server sends.
+    // Not verified: the cap on how many ids one response carries (the client sets none).
+    pub async fn role_member_ids(&self, guild_id: &str, role_id: &str) -> Result<Vec<String>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, &format!("/guilds/{guild_id}/roles/{role_id}/member-ids"))).await?;
+        Ok(strings(&body))
     }
 
     pub fn request_members(&self, guild_id: &str, user_ids: Vec<String>) {
@@ -2193,6 +2211,7 @@ fn parse_guild(g: &Value) -> Option<Guild> {
                     position: r["position"].as_i64().unwrap_or(0),
                     permissions: permission(&r["permissions"]),
                     managed: r["managed"].as_bool().unwrap_or(false),
+                    icon: role_icon(r),
                 })
             })
             .collect(),
@@ -2434,7 +2453,13 @@ pub fn parse_member_user(member: &Value, user: &Value, guild_id: Option<&str>) -
     if let Some(style) = parse_name_style(&member["display_name_styles"]) {
         parsed.name_style = Some(style);
     }
+    parsed.boosting = member["premium_since"].is_string();
     parsed
+}
+
+fn role_icon(role: &Value) -> Option<String> {
+    let (id, hash) = (role["id"].as_str()?, role["icon"].as_str()?);
+    Some(format!("{CDN}/role-icons/{id}/{hash}.png?size=32"))
 }
 
 pub fn parse_user(user: &Value) -> User {
@@ -2456,7 +2481,7 @@ pub fn parse_user(user: &Value) -> User {
     });
     let decoration = user["avatar_decoration_data"]["asset"].as_str().map(|asset| format!("{CDN}/avatar-decoration-presets/{asset}.png?size=96&passthrough=false"));
     let name_style = parse_name_style(&user["display_name_styles"]);
-    User { id, name, avatar, bot: user["bot"].as_bool().unwrap_or(false), tag, nameplate, decoration, name_style }
+    User { id, name, avatar, bot: user["bot"].as_bool().unwrap_or(false), tag, nameplate, decoration, name_style, boosting: false }
 }
 
 /// An image as Discord's media proxy scales it: `width` x `height` (logical pixels, drawn at up to 2x
@@ -3046,7 +3071,7 @@ mod tests {
 
     #[test]
     fn hides_channels_we_cannot_view() {
-        let role = |id: &str, permissions: u64| Role { id: id.into(), name: id.into(), color: 0, position: 0, permissions, managed: false };
+        let role = |id: &str, permissions: u64| Role { id: id.into(), name: id.into(), color: 0, position: 0, permissions, managed: false, icon: None };
         let channel = |id: &str, overwrites: Value| parse_channel(&json!({ "id": id, "type": 0, "permission_overwrites": overwrites }), "g").unwrap();
         let deny_everyone = json!({ "id": "g", "type": 0, "deny": "1024", "allow": "0" });
         let guild = Guild {
@@ -3084,7 +3109,7 @@ mod tests {
 
     #[test]
     fn manage_messages_follows_owner_admin_roles_and_overwrites() {
-        let role = |id: &str, permissions: u64| Role { id: id.into(), name: id.into(), color: 0, position: 0, permissions, managed: false };
+        let role = |id: &str, permissions: u64| Role { id: id.into(), name: id.into(), color: 0, position: 0, permissions, managed: false, icon: None };
         let channel = |id: &str, overwrites: Value| parse_channel(&json!({ "id": id, "type": 0, "permission_overwrites": overwrites }), "g").unwrap();
         let thread = parse_channel(&json!({ "id": "t", "type": 11, "parent_id": "locked", "thread_metadata": {} }), "g").unwrap();
         let guild = Guild {
@@ -3121,7 +3146,7 @@ mod tests {
 
     #[test]
     fn voice_moves_and_invites_follow_channel_permissions() {
-        let role = |id: &str, permissions: u64| Role { id: id.into(), name: id.into(), color: 0, position: 0, permissions, managed: false };
+        let role = |id: &str, permissions: u64| Role { id: id.into(), name: id.into(), color: 0, position: 0, permissions, managed: false, icon: None };
         let channel = |id: &str, kind: u8, limit: u32, overwrites: Value| parse_channel(&json!({ "id": id, "type": kind, "user_limit": limit, "permission_overwrites": overwrites }), "g").unwrap();
         let in_voice = |user: &str, channel: &str| VoiceState { user_id: user.into(), channel_id: Some(channel.into()), ..Default::default() };
         let deny = |bits: u64| json!([{ "id": "mods", "type": 0, "allow": "0", "deny": bits.to_string() }]);

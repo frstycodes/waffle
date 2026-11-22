@@ -60,6 +60,7 @@ mod notify;
 mod panel;
 mod part;
 mod rail_drag;
+mod role_popout;
 mod sidebar;
 mod sortable;
 mod search;
@@ -843,6 +844,7 @@ pub struct Waffle {
     call_switched: bool,
     viewer: Option<viewer::Viewer>,
     profile_card: Option<ProfileCard>,
+    role_popout: role_popout::RolePopouts,
     status_menu: bool,
     // The channel or DM row under the pointer, which shows its hover-only controls.
     hovered_row: Option<String>,
@@ -1156,6 +1158,7 @@ impl Waffle {
             call_switched: false,
             viewer: None,
             profile_card: None,
+            role_popout: Default::default(),
             status_menu: false,
             updates: updater::Updates::default(),
             hovered_row: None,
