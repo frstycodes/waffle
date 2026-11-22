@@ -17,6 +17,7 @@ use gpui_kit::{
 use crate::{
     SearchState, Waffle,
     discord::{Emoji, SoundboardSound, VoiceEffect, perm},
+    soundboard_fx::{self, Family},
     icons::Glyph,
     overlays::{anchored_at, backdrop},
     palette,
@@ -28,10 +29,8 @@ const FAVORITES_LIMIT: usize = 250;
 const FREQUENT_COUNT: usize = 6;
 const PICKER_SIZE: (f32, f32) = (452., 420.);
 // The tile burst (design §3): six copies, 90ms apart, each rising 220px over 1.8s.
-const BURST_COPIES: usize = 6;
-const BURST_STAGGER: Duration = Duration::from_millis(90);
-const BURST_RISE: Duration = Duration::from_millis(1800);
-const EFFECT_LIFE: Duration = Duration::from_millis(2400);
+// The playing label and the soundboard ring stay at least this long, past a short effect.
+const LABEL_LIFE: Duration = Duration::from_millis(2400);
 const MAX_EFFECTS: usize = 50;
 // How long a sound counts as playing when its file didn't say.
 const FALLBACK_LENGTH: Duration = Duration::from_secs(3);
@@ -77,6 +76,7 @@ struct TileEffect {
     id: u64,
     user_id: String,
     emoji: Option<Emoji>,
+    family: Family,
     // The sound's name while we hear it play.
     playing: Option<String>,
 }
@@ -300,7 +300,8 @@ impl Waffle {
         let (Some(call), Some(me)) = (&self.call, self.me.as_ref()) else { return };
         let (channel_id, me) = (call.channel.id.clone(), me.id.clone());
         self.play_clip(format!("{me}-{}", sound.id), sound.id.clone(), self.sound_gain(sound.volume), Some(channel_id.clone()), cx);
-        self.add_tile_effect(me, sound.emoji.clone(), Some(sound.name.clone()), cx);
+        // Not verified: which animation Discord's echo of our own play carries; the Basic launch stands in.
+        self.add_tile_effect(me, sound.emoji.clone(), Family::Launch, Some(sound.name.clone()), cx);
         let id = sound.id.clone();
         self.update_prefs(cx, |p| match p.soundboard_uses.iter_mut().find(|(s, _)| *s == id) {
             Some((_, n)) => *n += 1,
@@ -338,7 +339,7 @@ impl Waffle {
         let emoji = effect.emoji.filter(|_| effect.animation_type.is_some() && effect.animation_id.is_some());
         let name = sound.and_then(|id| effect.name.clone().or_else(|| self.soundboard.sound(&id).map(|s| s.name.clone())));
         if emoji.is_some() || name.is_some() {
-            self.add_tile_effect(effect.user_id, emoji, name, cx);
+            self.add_tile_effect(effect.user_id, emoji, Family::of(effect.animation_type, effect.animation_id), name, cx);
         }
     }
 
@@ -383,14 +384,15 @@ impl Waffle {
         cx.notify();
     }
 
-    fn add_tile_effect(&mut self, user_id: String, emoji: Option<Emoji>, playing: Option<String>, cx: &mut Context<Self>) {
+    fn add_tile_effect(&mut self, user_id: String, emoji: Option<Emoji>, family: Family, playing: Option<String>, cx: &mut Context<Self>) {
         let id = self.soundboard.next_id();
+        let life = family.duration().max(LABEL_LIFE);
         let effects = &mut self.soundboard.effects;
-        effects.push(TileEffect { id, user_id, emoji, playing });
+        effects.push(TileEffect { id, user_id, emoji, family, playing });
         let over = effects.len().saturating_sub(MAX_EFFECTS);
         effects.drain(..over);
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(EFFECT_LIFE).await;
+            cx.background_executor().timer(life).await;
             this.update(cx, |this, cx| {
                 this.soundboard.effects.retain(|e| e.id != id);
                 cx.notify();
@@ -431,7 +433,7 @@ impl Waffle {
     }
 
     // What rises on a person's call tile while their sound plays.
-    pub(crate) fn soundboard_tile_effect(&self, user_id: &str, cx: &App) -> Option<AnyElement> {
+    pub(crate) fn soundboard_tile_effect(&self, user_id: &str, tile: (f32, f32), cx: &App) -> Option<AnyElement> {
         let effects: Vec<&TileEffect> = self.soundboard.effects.iter().filter(|e| e.user_id == user_id).collect();
         let latest = effects.iter().rev().find_map(|e| e.playing.clone());
         if effects.is_empty() {
@@ -439,7 +441,7 @@ impl Waffle {
         }
         let bursts: Vec<AnyElement> = match cx.reduce_motion() {
             true => Vec::new(),
-            false => effects.iter().filter_map(|e| Some(burst(e.id, e.emoji.as_ref()?))).collect(),
+            false => effects.iter().filter_map(|e| Some(effect_scene(e.id, e.family, e.emoji.as_ref()?, tile))).collect(),
         };
         let label = latest.map(|name| {
             div()
@@ -598,8 +600,6 @@ impl Waffle {
             .squircle(RADIUS_SM + 4.)
             .bg(palette::surface(palette::Level::Overlay, cx))
             .shadow(ui::shadow_pop(cx))
-            .border_1()
-            .border_color(palette::line(cx))
             .flex()
             .flex_col()
             .gap(px(8.))
@@ -656,7 +656,7 @@ impl Waffle {
             .flex()
             .items_center()
             .gap(px(6.))
-            .text_size(px(14.))
+            .text_size(px(12.))
             .font_weight(FontWeight::MEDIUM)
             .text_color(strong)
             .child(div().flex_none().child(emoji_face(sound.emoji.as_ref(), 16.)))
@@ -802,33 +802,34 @@ fn tool(id: String, glyph: Glyph, tip: &'static str, ink: Option<Hsla>, cx: &App
 }
 
 // Copies of the emoji rising from the tile's foot, staggered, each easing out as it fades (design §3 `.burst`).
-fn burst(effect: u64, emoji: &Emoji) -> AnyElement {
-    let total = BURST_RISE + BURST_STAGGER * (BURST_COPIES as u32 - 1);
-    let copies = (0..BURST_COPIES).map(|i| {
-        let lead = (BURST_STAGGER * i as u32).as_secs_f32() / total.as_secs_f32();
-        let span = BURST_RISE.as_secs_f32() / total.as_secs_f32();
-        let left = 10. + 75. * spread(effect, i);
+// One effect over a tile: every copy of the emoji follows its family's keyframes (`soundboard_fx`),
+// sized and placed against the tile so it reads the same on a small card and a focused one.
+fn effect_scene(effect: u64, family: Family, emoji: &Emoji, (width, height): (f32, f32)) -> AnyElement {
+    let total = family.duration();
+    let copies = (0..family.copies()).map(|i| {
+        let size = height * 0.34;
         div()
             .absolute()
-            .bottom(px(-40.))
-            .left(gpui_kit::relative(left / 100.))
-            .child(emoji_face(Some(emoji), 32.))
-            .with_animation(("soundboard-burst", (effect * BURST_COPIES as u64 + i as u64) as usize), Animation::new(total), move |el, t| {
-                let t = ((t - lead) / span).clamp(0., 1.);
-                let rise = crate::motion::ease_out().sample(t);
-                let fade = if t < 0.15 { t / 0.15 } else { 1. - (t - 0.15) / 0.85 };
-                el.translate_y(px(-220. * rise)).scale(0.95 + 0.1 * rise).opacity(if t <= 0. { 0. } else { fade })
+            .left_0()
+            .top_0()
+            .size(px(size))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(emoji_face(Some(emoji), size * 0.9))
+            .with_animation(("soundboard-fx", (effect as usize) * 64 + i), Animation::new(total), move |el, t| {
+                let Some(p) = soundboard_fx::particle(family, i, t * total.as_secs_f32(), effect) else { return el.opacity(0.) };
+                let scale = p.size / 0.34;
+                let mut el = el
+                    .translate(point(px(p.x * width - size / 2.), px(p.y * height - size / 2.)))
+                    .rotate(gpui_kit::Radians(p.rotate.to_radians()))
+                    .opacity(p.opacity);
+                el.style().scale = gpui_kit::SizeRefinement { width: Some(scale * p.scale_x), height: Some(scale * p.scale_y) };
+                el
             })
             .into_any_element()
     });
     div().absolute().inset_0().children(copies.collect::<Vec<_>>()).into_any_element()
-}
-
-// 0..1, the same for a copy each time its tile paints.
-fn spread(effect: u64, copy: usize) -> f32 {
-    let mut h = effect.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (copy as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    h ^= h >> 31;
-    (h % 1000) as f32 / 1000.
 }
 
 // Made-up soundboard for the demo scenes: Night Owls' sounds, gpui's (locked without Nitro), Discord's own.
@@ -846,8 +847,17 @@ pub fn demo(waffle: &mut Waffle, open: bool, window: &mut Window, cx: &mut Conte
         waffle.soundboard.picker = Some(Picker { from: Some(CALL_CONTROL), at: point(px(640.), px(640.)), volume_open: false, over_limit: false, scroll: ScrollHandle::new() });
         waffle.soundboard.search.update(cx, |state, cx| state.focus(window, cx));
     } else {
-        let id = waffle.soundboard.next_id();
-        waffle.soundboard.effects.push(TileEffect { id, user_id: "8388608".into(), emoji: Some(Emoji::unicode("🦆")), playing: Some("quack".into()) });
+        // Each family in turn, on a loop, so the scene shows them all.
+        cx.spawn(async move |this, cx| {
+            for family in [Family::Launch, Family::Parade, Family::Glide, Family::Pop, Family::Rain].into_iter().cycle() {
+                let alive = this.update(cx, |this, cx| this.add_tile_effect("8388608".into(), Some(Emoji::unicode("🦆")), family, Some("quack".into()), cx)).is_ok();
+                if !alive {
+                    return;
+                }
+                cx.background_executor().timer(family.duration() + Duration::from_millis(500)).await;
+            }
+        })
+        .detach();
     }
 }
 

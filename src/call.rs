@@ -1318,7 +1318,7 @@ impl Waffle {
             })
             .child(name)
             .children(off_chip)
-            .children((!is_stream).then(|| self.soundboard_tile_effect(&state.user_id, cx)).flatten())
+            .children((!is_stream).then(|| self.soundboard_tile_effect(&state.user_id, effect_area(w), cx)).flatten())
             .cursor_pointer()
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_card(&card, cx)))
             .when(is_stream && watching && !me && !small && !fill, |d| {
@@ -2033,6 +2033,13 @@ fn tile_name(content: Div) -> Div {
 
 // The tile's edge, drawn above its media so a stream can't hide it: a faint 1px line, or while
 // speaking a 2px green ring with a dark inner line (neutral when they're muted for you).
+// The tile a soundboard effect plays across: a card is 16:9 at its width.
+// GAP: the focused tile fills the stage, whose size isn't known here; 960 wide stands in.
+fn effect_area(width: f32) -> (f32, f32) {
+    let width = if width.is_finite() { width } else { 960. };
+    (width, width * 9. / 16.)
+}
+
 // A soundboard sound gets its own ring, as Discord's, so it never reads as someone talking: honey,
 // the colour the picker marks a playing sound with. It outranks the speaking green while it plays.
 fn tile_ring(speaking: bool, sounding: bool, local_muted: bool, radius: f32) -> Div {

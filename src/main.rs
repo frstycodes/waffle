@@ -76,6 +76,7 @@ mod hotkeys;
 mod key_hook;
 mod sounds;
 mod soundboard;
+mod soundboard_fx;
 #[cfg(target_os = "windows")]
 mod tray;
 mod text_file;
