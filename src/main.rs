@@ -1444,6 +1444,8 @@ impl Waffle {
                     }
                 }
             }
+            Event::ForumUnreads { forum_id, counts } => self.on_forum_unreads(&forum_id, counts),
+            Event::ForumPostCreated { forum_id, post_id, owner_id } => self.on_forum_post_created(&forum_id, post_id, &owner_id),
             Event::ChannelDelete { guild_id, id } => {
                 if let Some(guild) = self.guilds.iter_mut().find(|g| g.id == guild_id) {
                     guild.channels.retain(|c| c.id != id);

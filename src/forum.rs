@@ -7,7 +7,8 @@ use std::{
     cmp::Reverse,
     collections::{HashMap, HashSet},
     ops::Range,
-    time::Duration,
+    path::PathBuf,
+    time::{Duration, Instant},
 };
 
 use gpui_kit::component::scroll::ScrollableElement as _;
@@ -16,6 +17,7 @@ use gpui_kit::{
     component::{
         Icon,
         input::{Input, InputEvent, InputState, Textarea, TextareaState},
+        text::TextView,
     },
     div,
     prelude::*,
@@ -26,6 +28,7 @@ use serde_json::{Value, json};
 
 use crate::{
     Waffle,
+    attachments::{FileKind, PendingFile},
     discord::{Channel, ChannelKind, Emoji, ForumTag, MediaKind, Message, parse_message, parse_thread, perm},
     icons::Glyph,
     mascot::Mood,
@@ -34,8 +37,13 @@ use crate::{
     ui::{self, Squircle},
 };
 
-// Discord's limits: tags on a post, title length, search debounce.
+// Discord's limits: tags on a post, title length, search debounce, posts per unread-count request, the
+// "(N New)" cap, the guidelines' height before Expand, and pictures in a card's mosaic.
 const MAX_TAGS: usize = 5;
+const MAX_UNREAD_REQUEST: usize = 180;
+const UNREAD_CAP: u32 = 25;
+const GUIDELINES_HEIGHT: f32 = 220.;
+const MOSAIC_MAX: usize = 4;
 const MAX_TITLE: usize = 100;
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(350);
 // default_auto_archive_duration's fallback: 3 days, in minutes.
@@ -59,6 +67,13 @@ pub struct ForumState {
     pending: u64,
     found: Option<Found>,
     composer: Option<Composer>,
+    // FORUM_UNREADS counts, and the ack each post was last asked about.
+    unread_counts: HashMap<String, u32>,
+    unreads_asked: HashMap<String, u64>,
+    // Other people's new posts, kept out of the list until "N New Posts" resorts it.
+    held_back: Vec<String>,
+    guidelines_seen: bool,
+    cooldown_until: Option<Instant>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -92,6 +107,10 @@ pub struct Composer {
     title: Entity<InputState>,
     body: Entity<TextareaState>,
     tags: Vec<String>,
+    files: Vec<PendingFile>,
+    guidelines: bool,
+    guidelines_full: bool,
+    previewing: bool,
     error: Option<SharedString>,
     sending: bool,
 }
@@ -149,6 +168,7 @@ impl Waffle {
     }
 
     pub(crate) fn load_forum(&mut self, forum_id: String, cx: &mut Context<Self>) {
+        self.request_forum_unreads(&forum_id);
         let history = self.can_in(&forum_id, perm::READ_MESSAGE_HISTORY);
         let Some(client) = self.client.clone() else { return };
         let state = self.forums.entry(forum_id.clone()).or_default();
@@ -174,11 +194,57 @@ impl Waffle {
                     Err(error) => state.error = Some(error.into()),
                 }
                 this.load_forum_previews(&forum_id, cx);
+                this.request_forum_unreads(&forum_id);
                 cx.notify();
             })
             .ok();
         })
         .detach();
+    }
+
+    // Unread counts for the posts we've read before that have newer messages, each asked once per ack.
+    // Not verified: which posts Discord's client includes; this sends the ones with a read state behind.
+    fn request_forum_unreads(&mut self, forum_id: &str) {
+        let Some(client) = self.client.clone() else { return };
+        let guild_id = self.guild_id.clone().unwrap_or_default();
+        let behind: Vec<(String, u64)> = self.forum_posts(forum_id).iter().filter_map(|p| Some((p.id.clone(), self.read_behind(p)?))).collect();
+        let state = self.forums.entry(forum_id.to_owned()).or_default();
+        let threads: Vec<(String, u64)> = behind.into_iter().filter(|(id, ack)| state.unreads_asked.get(id) != Some(ack)).take(MAX_UNREAD_REQUEST).collect();
+        if threads.is_empty() {
+            return;
+        }
+        state.unreads_asked.extend(threads.iter().cloned());
+        client.request_forum_unreads(&guild_id, forum_id, &threads);
+    }
+
+    // Our ack in a post whose latest message is past it.
+    fn read_behind(&self, post: &Channel) -> Option<u64> {
+        let ack = self.read_states.get(&post.id)?.last_read;
+        (post.last_message_id.as_deref().map_or(0, snowflake) > ack).then_some(ack)
+    }
+
+    pub(crate) fn on_forum_unreads(&mut self, forum_id: &str, counts: Vec<(String, u32)>) {
+        if let Some(state) = self.forums.get_mut(forum_id) {
+            state.unread_counts.extend(counts);
+        }
+    }
+
+    // Someone else's new post waits behind "N New Posts"; our own go straight in.
+    pub(crate) fn on_forum_post_created(&mut self, forum_id: &str, post_id: String, owner_id: &str) {
+        if owner_id == self.my_id() {
+            return;
+        }
+        let Some(state) = self.forums.get_mut(forum_id) else { return };
+        if !state.held_back.contains(&post_id) {
+            state.held_back.push(post_id);
+        }
+    }
+
+    fn show_held_back(&mut self, forum_id: &str, cx: &mut Context<Self>) {
+        if let Some(state) = self.forums.get_mut(forum_id) {
+            state.held_back.clear();
+        }
+        cx.notify();
     }
 
     // First messages for posts that don't have one yet, ten per request.
@@ -316,7 +382,9 @@ impl Waffle {
         let empty = HashMap::new();
         let previews = state.map_or(&empty, |s| &s.previews);
         let found = state.and_then(|s| s.found.as_ref());
-        let listing = arrange(self.forum_posts(&forum.id), found.map_or(&[][..], |f| f.posts.as_slice()), view, &filter, &query, previews);
+        let held = state.map_or(&[][..], |s| s.held_back.as_slice());
+        let posts = self.forum_posts(&forum.id).into_iter().filter(|p| !held.contains(&p.id)).collect();
+        let listing = arrange(posts, found.map_or(&[][..], |f| f.posts.as_slice()), view, &filter, &query, previews);
         ForumPage {
             view,
             media: forum.raw_type == MEDIA_CHANNEL,
@@ -337,6 +405,21 @@ impl Waffle {
         let Some(forum_read) = self.read_states.get(forum_id) else { return false };
         let mine = post.thread.as_ref().and_then(|t| t.owner_id.as_deref()) == Some(self.my_id());
         !mine && !self.read_states.contains_key(&post.id) && snowflake(&post.id) > forum_read.last_read
+    }
+
+    // "(N New)" for a post with messages past our ack: FORUM_UNREADS' count, or "1+" before it answers.
+    fn post_unread(&self, forum_id: &str, post: &Channel) -> Option<String> {
+        self.read_behind(post)?;
+        let count = self.forums.get(forum_id).and_then(|s| s.unread_counts.get(&post.id)).copied();
+        Some(new_count_label(count))
+    }
+
+    // Discord mutes a card's title once there's nothing unread in it.
+    fn title_ink(&self, forum_id: &str, post: &Channel, cx: &Context<Self>) -> gpui_kit::Hsla {
+        match self.is_new_post(forum_id, post) || self.read_behind(post).is_some() {
+            true => palette::strong(cx),
+            false => palette::muted(cx),
+        }
     }
 
     pub(crate) fn render_forum(&mut self, forum: Channel, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -401,6 +484,10 @@ impl Waffle {
                 this.open_live_menu(window.mouse_position(), move |this| this.sort_view_entries(&id), cx);
             }));
         let new_post = page.can_post.then(|| self.new_post_button("forum-new-post", &forum.id, cx));
+        let guidelines = (page.can_post && guidelines_text(forum).is_some()).then(|| {
+            let id = forum.id.clone();
+            ui::icon_button("forum-guidelines", Glyph::Book, "Post Guidelines", cx).on_click(cx.listener(move |this, _, window, cx| this.open_guidelines(id.clone(), window, cx)))
+        });
         div()
             .flex_none()
             .w_full()
@@ -412,7 +499,7 @@ impl Waffle {
             .flex()
             .flex_col()
             .gap(px(10.))
-            .child(div().flex().items_center().gap(px(8.)).child(div().flex_1().min_w_0().child(ui::search_field("forum-search", search, cx))).child(sort).children(new_post))
+            .child(div().flex().items_center().gap(px(8.)).child(div().flex_1().min_w_0().child(ui::search_field("forum-search", search, cx))).child(sort).children(guidelines).children(new_post))
             .children(self.search_status(forum, page, cx))
             .children((!forum.props.tags.is_empty()).then(|| self.tag_row(forum, &page.filter, cx)))
     }
@@ -540,7 +627,13 @@ impl Waffle {
         let is_empty = page.listing.active.is_empty() && page.listing.older.is_empty() && page.settled && !page.searching;
         let no_history = (!page.history && page.words.is_empty()).then(|| no_history_notice(forum, cx));
         let older = (!page.listing.older.is_empty()).then(|| ui::divider(Some("Older Posts"), cx));
-        let column = div().w_full().max_w(px(880.)).mx_auto().px(px(16.)).pt(px(8.)).pb(px(16.)).flex().flex_col().gap(px(12.)).children(error);
+        let held = state.map_or(0, |s| s.held_back.len());
+        let new_posts = (held > 0).then(|| {
+            let id = forum.id.clone();
+            let button = ui::button("forum-new-posts", ui::Tone::Primary, cx).small().child(Icon::new(Glyph::ArrowUp).size(px(14.))).child(new_posts_label(held));
+            div().flex().justify_center().child(button.on_click(cx.listener(move |this, _, _, cx| this.show_held_back(&id, cx))))
+        });
+        let column = div().w_full().max_w(px(880.)).mx_auto().px(px(16.)).pt(px(8.)).pb(px(16.)).flex().flex_col().gap(px(12.)).children(error).children(new_posts);
         if is_empty {
             return column.child(self.forum_empty(forum, page, cx)).children(no_history);
         }
@@ -587,8 +680,7 @@ impl Waffle {
             div().line_clamp(2).text_size(px(14.)).text_color(muted).child(StyledText::new(format!("{name}{}", m.content)).with_highlights([(0..name.len(), highlight)]))
         });
         let tags = self.card_tags(forum, page, post, cx);
-        // GAP: Discord's "(N New)" after the reply count needs per-post unread counts (gateway op 28,
-        // REQUEST_FORUM_UNREADS), which nothing requests yet.
+        let unread = self.post_unread(&forum.id, post).map(|n| div().font_weight(FontWeight::SEMIBOLD).text_color(palette::accent_ink(cx)).child(format!("({n} New)")));
         let footer = div()
             .flex()
             .flex_wrap()
@@ -598,7 +690,7 @@ impl Waffle {
             .text_size(px(12.))
             .text_color(faint)
             .children(top_reaction(first, forum).map(|(emoji, count)| reaction_chip(emoji, count, cx)))
-            .child(div().flex().items_center().gap(px(4.)).child(Icon::new(Glyph::ChatRound).size(px(14.))).child(meta.message_count.to_string()))
+            .child(div().flex().items_center().gap(px(4.)).child(Icon::new(Glyph::ChatRound).size(px(14.))).child(meta.message_count.to_string()).children(unread))
             .child("\u{2022}")
             .child(post_time(post, page.view.by_creation));
         let open = post.clone();
@@ -622,11 +714,11 @@ impl Waffle {
                     .flex_col()
                     .gap(px(6.))
                     .children(tags)
-                    .child(post_title(post, &page.words, if meta.archived { muted } else { strong }, 16., cx))
+                    .child(post_title(post, &page.words, self.title_ink(&forum.id, post, cx), 16., cx))
                     .children(excerpt)
                     .child(footer),
             )
-            .children(first.and_then(post_thumb).map(|url| ui::media(url, ui::all(ui::RADIUS_MD)).size(px(72.)).flex_none().object_fit(gpui_kit::ObjectFit::Cover)))
+            .children(mosaic_view(&first.map(post_media).unwrap_or_default(), 72., 2., cx).map(|m| m.w(px(72.)).flex_none()))
             .on_click(cx.listener(move |this, _, window, cx| this.open_channel(open.clone(), window, cx)))
             .on_mouse_down(MouseButton::Right, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_thread_menu(menu_post.clone(), guild_id.clone(), e.position, cx)))
             .into_any_element()
@@ -674,11 +766,11 @@ impl Waffle {
         let mut stacks: Vec<Vec<AnyElement>> = (0..columns).map(|_| Vec::new()).collect();
         for post in posts {
             let first = previews.and_then(|p| p.get(&post.id));
-            let thumb = first.and_then(post_thumb);
-            let image_height = thumb.as_ref().map(|_| (column_width - 28.) * media_ratio);
+            let media = first.map(post_media).unwrap_or_default();
+            let image_height = (!media.is_empty()).then_some((column_width - 28.) * media_ratio);
             let shortest = (0..columns).min_by(|a, b| heights[*a].total_cmp(&heights[*b])).unwrap_or(0);
             heights[shortest] += 60. + image_height.unwrap_or(100.) + 24. + 36.;
-            stacks[shortest].push(self.gallery_card(forum, page, post, first, thumb.zip(image_height), cx));
+            stacks[shortest].push(self.gallery_card(forum, page, post, first, image_height.map(|h| (media, h)), cx));
         }
         let measure = measured.clone();
         div()
@@ -699,11 +791,12 @@ impl Waffle {
 
     // A gallery card: who and when, the title, then the post's picture or its text. Media channels
     // lead with the picture.
-    fn gallery_card(&self, forum: &Channel, page: &ForumPage, post: &Channel, first: Option<&Message>, thumb: Option<(String, f32)>, cx: &mut Context<Self>) -> AnyElement {
+    fn gallery_card(&self, forum: &Channel, page: &ForumPage, post: &Channel, first: Option<&Message>, media: Option<(Vec<String>, f32)>, cx: &mut Context<Self>) -> AnyElement {
         let (strong, muted, faint) = (palette::strong(cx), palette::muted(cx), palette::faint(cx));
         let sidebar = palette::surface(Level::Sidebar, cx);
         let (edge, lifted) = (palette::line_strong(cx), ui::mix(sidebar, strong, 0.03));
         let replies = post.thread.as_ref().map_or(0, |t| t.message_count);
+        let unread = self.post_unread(&forum.id, post).map(|n| div().font_weight(FontWeight::SEMIBOLD).text_color(palette::accent_ink(cx)).child(format!("({n} New)")));
         let age = post_age(post);
         let byline = div()
             .flex()
@@ -716,7 +809,7 @@ impl Waffle {
             .children(first.map(|m| div().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::text(cx)).child(m.author.name.clone())))
             .child(div().flex_none().child(if page.media { age } else { format!("posted {age}") }))
             .children(self.is_new_post(&forum.id, post).then(|| ui::badge(palette::accent(), palette::on_accent()).ml_auto().child("New")));
-        let picture = thumb.map(|(url, height)| ui::media(url, ui::all(ui::RADIUS_MD)).w_full().h(px(height)).object_fit(gpui_kit::ObjectFit::Cover));
+        let picture = media.and_then(|(urls, height)| mosaic_view(&urls, height, 4., cx)).map(|m| m.w_full());
         let text = picture.is_none().then(|| first.map(|m| div().line_clamp(5).text_size(px(14.)).text_color(muted).child(m.content.clone()))).flatten();
         let footer = (!page.media).then(|| {
             div()
@@ -726,9 +819,9 @@ impl Waffle {
                 .text_size(px(12.))
                 .text_color(faint)
                 .children(top_reaction(first, forum).map(|(emoji, count)| reaction_chip(emoji, count, cx)))
-                .child(div().flex().items_center().gap(px(4.)).child(Icon::new(Glyph::ChatRound).size(px(14.))).child(replies.to_string()))
+                .child(div().flex().items_center().gap(px(4.)).child(Icon::new(Glyph::ChatRound).size(px(14.))).child(replies.to_string()).children(unread))
         });
-        let title = post_title(post, &page.words, strong, if page.media { 14. } else { 16. }, cx);
+        let title = post_title(post, &page.words, self.title_ink(&forum.id, post, cx), if page.media { 14. } else { 16. }, cx);
         let open = post.clone();
         let (menu_post, guild_id) = (post.clone(), self.guild_id.clone().unwrap_or_default());
         let card = ui::pressable(div().id(SharedString::from(format!("post-{}", post.id))), 0.99)
@@ -751,11 +844,12 @@ impl Waffle {
             .into_any_element()
     }
 
-    // New Post: a title, the opening message and up to five tags.
-    // GAP: no attachments, Post Guidelines, template prefill or slowmode timer yet.
+    // New Post: a title, the opening message (starting as the forum's template), files and up to five
+    // tags. Post Guidelines open by themselves the first time per forum.
     fn open_new_post(&mut self, forum_id: String, window: &mut Window, cx: &mut Context<Self>) {
+        let (template, has_guidelines) = self.forum_channel(&forum_id).map_or((String::new(), false), |f| (f.props.template.trim().to_owned(), guidelines_text(f).is_some()));
         let title = cx.new(|cx| InputState::new(window, cx).placeholder("Title").validate(|text, _| text.chars().count() <= MAX_TITLE));
-        let body = cx.new(|cx| TextareaState::new(window, cx).placeholder("Message"));
+        let body = cx.new(|cx| TextareaState::new(window, cx).placeholder("Message").default_value(template));
         cx.subscribe(&title, |_, _, _: &InputEvent, cx| cx.notify()).detach();
         cx.subscribe(&body, |_, _, _: &InputEvent, cx| cx.notify()).detach();
         title.update(cx, |s, cx| s.focus(window, cx));
@@ -763,8 +857,16 @@ impl Waffle {
         for state in self.forums.values_mut() {
             state.composer = None;
         }
-        self.forums.entry(forum_id).or_default().composer = Some(Composer { title, body, tags: Vec::new(), error: None, sending: false });
+        let state = self.forums.entry(forum_id).or_default();
+        let guidelines = has_guidelines && !state.guidelines_seen;
+        state.guidelines_seen = true;
+        state.composer = Some(Composer { title, body, tags: Vec::new(), files: Vec::new(), guidelines, guidelines_full: false, previewing: false, error: None, sending: false });
         cx.notify();
+    }
+
+    fn open_guidelines(&mut self, forum_id: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_new_post(forum_id, window, cx);
+        self.change_composer(|c| c.guidelines = true, cx);
     }
 
     fn open_composer(&self) -> Option<(&str, &Composer)> {
@@ -773,6 +875,13 @@ impl Waffle {
 
     fn composer_mut(&mut self) -> Option<&mut Composer> {
         self.forums.values_mut().find_map(|s| s.composer.as_mut())
+    }
+
+    fn change_composer(&mut self, change: impl FnOnce(&mut Composer), cx: &mut Context<Self>) {
+        if let Some(composer) = self.composer_mut() {
+            change(composer);
+        }
+        cx.notify();
     }
 
     fn close_new_post(&mut self, cx: &mut Context<Self>) {
@@ -793,45 +902,83 @@ impl Waffle {
         cx.notify();
     }
 
+    fn pick_post_files(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let paths = cx.prompt_for_paths(gpui_kit::PathPromptOptions { files: true, directories: false, multiple: true, prompt: None });
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(paths))) = paths.await else { return };
+            this.update(cx, |this, cx| this.add_post_files(paths, cx)).ok();
+        })
+        .detach();
+    }
+
+    // The chat composer's caps: your upload limit per file and ten files.
+    fn add_post_files(&mut self, paths: Vec<PathBuf>, cx: &mut Context<Self>) {
+        let limit = crate::discord::upload_limit(self.my_account.premium_type, self.guild().map_or(0, |g| g.premium_tier));
+        let files = paths.into_iter().filter_map(PendingFile::new).collect();
+        self.change_composer(|c| c.error = crate::attachments::admit(&mut c.files, files, limit).map(Into::into), cx);
+    }
+
+    fn cooldown_left(&self, forum_id: &str) -> Option<Duration> {
+        let until = self.forums.get(forum_id)?.cooldown_until?;
+        until.checked_duration_since(Instant::now()).filter(|left| !left.is_zero())
+    }
+
+    // Not verified: that Manage Messages or Manage Channel skip a forum's post slowmode, as they do a channel's.
+    fn skips_slowmode(&self, forum_id: &str) -> bool {
+        self.can_in(forum_id, perm::MANAGE_MESSAGES) || self.can_in(forum_id, perm::MANAGE_CHANNELS)
+    }
+
+    // After a post, the forum's slowmode runs down, ticking the composer's clock each second.
+    fn start_post_cooldown(&mut self, forum_id: &str, cx: &mut Context<Self>) {
+        let slowmode = self.forum_channel(forum_id).map_or(0, |f| f.props.slowmode);
+        if slowmode == 0 || self.skips_slowmode(forum_id) {
+            return;
+        }
+        self.forums.entry(forum_id.to_owned()).or_default().cooldown_until = Some(Instant::now() + Duration::from_secs(slowmode.into()));
+        let id = forum_id.to_owned();
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                let ticking = this.update(cx, |this, cx| {
+                    cx.notify();
+                    this.cooldown_left(&id).is_some()
+                });
+                if !ticking.unwrap_or(false) {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
     fn submit_new_post(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some((forum_id, composer)) = self.open_composer().map(|(id, c)| (id.to_owned(), c)) else { return };
-        if composer.sending {
+        if composer.sending || self.cooldown_left(&forum_id).is_some() {
             return;
         }
         let (name, content, tags) = (composer.title.read(cx).value().trim().to_owned(), composer.body.read(cx).value().trim().to_owned(), composer.tags.clone());
+        let files: Vec<crate::discord::Upload> = composer.files.iter().map(PendingFile::upload).collect();
         let (require_tag, archive_after) = self.forum_channel(&forum_id).map_or((false, 0), |f| (f.props.require_tag, f.props.archive_after));
-        if let Some(error) = post_error(&name, &content, require_tag && tags.is_empty()) {
-            if let Some(composer) = self.composer_mut() {
-                composer.error = Some(error.into());
-            }
-            return cx.notify();
+        if let Some(error) = post_error(&name, !content.is_empty() || !files.is_empty(), require_tag && tags.is_empty()) {
+            return self.change_composer(|c| c.error = Some(error.into()), cx);
         }
         let Some(client) = self.client.clone() else { return };
-        if let Some(composer) = self.composer_mut() {
-            composer.sending = true;
-        }
-        cx.notify();
+        self.change_composer(|c| c.sending = true, cx);
         let guild_id = self.guild_id.clone().unwrap_or_default();
-        let body: Value = json!({
-            "name": name,
-            "auto_archive_duration": if archive_after > 0 { archive_after } else { ARCHIVE_AFTER },
-            "applied_tags": tags,
-            "message": { "content": content },
-        });
+        let body = post_body(&name, &content, &tags, &files, if archive_after > 0 { archive_after } else { ARCHIVE_AFTER });
         cx.spawn_in(window, async move |this, cx| {
-            let created = client.call(Method::POST, format!("/channels/{forum_id}/threads?use_nested_fields=true"), Some(body)).await;
+            let path = format!("/channels/{forum_id}/threads?use_nested_fields=true");
+            let created = match files.is_empty() {
+                true => client.call(Method::POST, path, Some(body)).await,
+                false => client.call_files(path, body, files).await,
+            };
             this.update_in(cx, |this, window, cx| {
                 let post = match created {
                     Ok(thread) => parse_thread(&thread, &guild_id),
-                    Err(error) => {
-                        if let Some(composer) = this.composer_mut() {
-                            composer.sending = false;
-                            composer.error = Some(error.into());
-                        }
-                        return cx.notify();
-                    }
+                    Err(error) => return this.change_composer(|c| (c.sending, c.error) = (false, Some(error.into())), cx),
                 };
                 this.close_new_post(cx);
+                this.start_post_cooldown(&forum_id, cx);
                 let Some(post) = post else { return this.show_toast("Couldn't open the new post", cx) };
                 this.on_event(crate::discord::Event::ChannelUpsert { guild_id: guild_id.clone(), channel: post.clone() }, cx);
                 this.open_channel(post, window, cx);
@@ -845,7 +992,69 @@ impl Waffle {
         let (forum_id, composer) = self.open_composer()?;
         let forum = self.forum_channel(forum_id)?;
         let (strong, muted) = (palette::strong(cx), palette::muted(cx));
-        let manage = self.can_in(forum_id, perm::MANAGE_THREADS);
+        let guidelines = composer.guidelines.then(|| self.guidelines_panel(forum, composer.guidelines_full, window, cx)).flatten();
+        let fields = match composer.previewing {
+            true => vec![self.post_preview(forum, composer, cx)],
+            false => self.post_fields(forum, composer, cx),
+        };
+        let error = composer.error.clone().map(|e| ui::field_error(e, cx));
+        let cooling = self.cooldown_left(forum_id);
+        let slowmode = (forum.props.slowmode > 0 && !self.skips_slowmode(forum_id)).then(|| slowmode_clock(cooling.map_or(forum.props.slowmode.into(), |left| left.as_secs() + 1), cx));
+        let preview = ui::button("new-post-preview", ui::Tone::Ghost, cx)
+            .child(Icon::new(if composer.previewing { Glyph::EyeSlash } else { Glyph::Eye }).size(px(16.)))
+            .child(if composer.previewing { "Exit Preview" } else { "Preview" })
+            .on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.previewing = !c.previewing, cx)));
+        let actions = div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .child(preview)
+            .children(slowmode)
+            .child(div().flex_1())
+            .child(ui::button("new-post-cancel", ui::Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_new_post(cx))))
+            .child(
+                ui::button("new-post-submit", ui::Tone::Primary, cx)
+                    .loading(composer.sending.then_some("Posting"))
+                    .disabled(cooling.is_some())
+                    .child("Post")
+                    .on_click(cx.listener(|this, _, window, cx| this.submit_new_post(window, cx))),
+            );
+        let reopen = (!composer.guidelines && guidelines_text(forum).is_some())
+            .then(|| ui::icon_button("new-post-guidelines", Glyph::Book, "Post Guidelines", cx).on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.guidelines = true, cx))));
+        let head = div()
+            .flex()
+            .items_start()
+            .gap(px(4.))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(div().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("New post"))
+                    .child(div().truncate().text_size(px(14.)).text_color(muted).child(format!("in {}", forum.name))),
+            )
+            .children(reopen)
+            .child(ui::icon_button("new-post-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_new_post(cx))));
+        let body = ui::dialog_body()
+            .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
+                if e.keystroke.key == "escape" {
+                    this.close_new_post(cx);
+                }
+            }))
+            .child(head)
+            .children(guidelines)
+            .children(fields)
+            .children(error)
+            .child(actions);
+        let backdrop = div().id("new-post-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_new_post(cx)));
+        Some(ui::modal(backdrop, ui::dialog("new-post", 520., body, window, cx), cx))
+    }
+
+    // Title, tags, message and files, as you write them.
+    fn post_fields(&self, forum: &Channel, composer: &Composer, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let manage = self.can_in(&forum.id, perm::MANAGE_THREADS);
         let full = composer.tags.len() >= MAX_TAGS;
         let title_focus = composer.title.read(cx).focus_handle(cx);
         let title_count = composer.title.read(cx).value().chars().count();
@@ -866,41 +1075,103 @@ impl Waffle {
                 .collect();
             ui::field(format!("Tags \u{b7} pick up to {MAX_TAGS}"), cx).child(div().flex().flex_wrap().gap(px(6.)).children(chips))
         });
-        let error = composer.error.clone().map(|e| ui::field_error(e, cx));
-        let actions = div()
+        let files: Vec<AnyElement> = composer
+            .files
+            .iter()
+            .enumerate()
+            .map(|(i, file)| {
+                let path = file.path.clone();
+                let remove = ui::icon_button(SharedString::from(format!("new-post-file-remove-{i}")), Glyph::X, "Remove", cx)
+                    .on_click(cx.listener(move |this, _, _, cx| this.change_composer(|c| c.files.retain(|f| f.path != path), cx)));
+                file_chip(file, cx).child(remove).into_any_element()
+            })
+            .collect();
+        let add = ui::button("new-post-attach", ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::Upload).size(px(14.))).child("Add files").on_click(cx.listener(|this, _, window, cx| this.pick_post_files(window, cx)));
+        let attachments = ui::field("Files", cx).child(div().flex().flex_wrap().items_center().gap(px(6.)).children(files).child(add));
+        [Some(title.into_any_element()), tags.map(IntoElement::into_any_element), Some(message.into_any_element()), Some(attachments.into_any_element())].into_iter().flatten().collect()
+    }
+
+    // The post as its card will read: tags, title, the message rendered, and its files.
+    fn post_preview(&self, forum: &Channel, composer: &Composer, cx: &mut Context<Self>) -> AnyElement {
+        let (title, content) = (composer.title.read(cx).value().trim().to_owned(), composer.body.read(cx).value().to_string());
+        let tags: Vec<Div> = forum.props.tags.iter().filter(|t| composer.tags.contains(&t.id)).map(|t| post_tag_badge(t.emoji.as_ref(), t.name.clone(), false, cx)).collect();
+        let (heading, ink) = match title.is_empty() {
+            true => ("Untitled post".to_owned(), palette::faint(cx)),
+            false => (title, palette::strong(cx)),
+        };
+        div()
+            .p(px(16.))
             .flex()
-            .justify_end()
+            .flex_col()
             .gap(px(8.))
-            .child(ui::button("new-post-cancel", ui::Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_new_post(cx))))
-            .child(ui::button("new-post-submit", ui::Tone::Primary, cx).loading(composer.sending.then_some("Posting")).child("Post").on_click(cx.listener(|this, _, window, cx| this.submit_new_post(window, cx))));
+            .squircle(ui::RADIUS_LG)
+            .bg(palette::surface(Level::Sidebar, cx))
+            .border_1()
+            .border_color(palette::line(cx))
+            .child(div().flex().flex_wrap().gap(px(6.)).children(tags))
+            .child(div().text_size(px(18.)).font_weight(FontWeight::SEMIBOLD).text_color(ink).child(heading))
+            .child(TextView::markdown("new-post-preview-body", crate::chat::discord_breaks(&content)).selectable(true))
+            .child(div().flex().flex_wrap().gap(px(6.)).children(composer.files.iter().map(|f| file_chip(f, cx).pr(px(10.)))))
+            .into_any_element()
+    }
+
+    // Post Guidelines: the forum's topic as markdown, 220px tall until expanded; its pencil opens the
+    // forum's settings for Manage Channels.
+    fn guidelines_panel(&self, forum: &Channel, full: bool, window: &mut Window, cx: &mut Context<Self>) -> Option<Div> {
+        let topic = guidelines_text(forum)?;
+        let edit = self.can_in(&forum.id, perm::MANAGE_CHANNELS).then(|| {
+            let (channel, guild_id) = (forum.clone(), self.guild_id.clone().unwrap_or_default());
+            ui::icon_button("new-post-guidelines-edit", Glyph::Pen, "Edit Post Guidelines", cx).on_click(cx.listener(move |this, _, window, cx| {
+                this.close_new_post(cx);
+                this.open_channel_settings(channel.clone(), guild_id.clone(), window, cx);
+            }))
+        });
+        let close = ui::icon_button("new-post-guidelines-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.guidelines = false, cx)));
+        let measured = window.use_keyed_state(SharedString::from(format!("new-post-guidelines-{}", forum.id)), cx, |_, _| 0f32);
+        let overflows = *measured.read(cx) > GUIDELINES_HEIGHT;
+        let measure = measured.clone();
+        let text = div()
+            .max_h(px(if full { GUIDELINES_HEIGHT * 2. } else { GUIDELINES_HEIGHT }))
+            .child(div().child(TextView::markdown("new-post-guidelines-markdown", crate::chat::discord_breaks(topic)).selectable(true)))
+            .on_children_prepainted(move |bounds, _, cx| {
+                let Some(content) = bounds.first() else { return };
+                let next = f32::from(content.size.height);
+                measure.update(cx, |h, cx| {
+                    if (*h - next).abs() > 0.5 {
+                        *h = next;
+                        cx.notify();
+                    }
+                });
+            })
+            .id("new-post-guidelines-text")
+            .overflow_y_scrollbar();
+        let expand = overflows.then(|| {
+            ui::button("new-post-guidelines-expand", ui::Tone::Link, cx)
+                .child(if full { "Collapse" } else { "Expand" })
+                .on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.guidelines_full = !c.guidelines_full, cx)))
+        });
         let head = div()
             .flex()
-            .items_start()
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .gap(px(2.))
-                    .child(div().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("New post"))
-                    .child(div().truncate().text_size(px(14.)).text_color(muted).child(format!("in {}", forum.name))),
-            )
-            .child(ui::icon_button("new-post-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_new_post(cx))));
-        let body = ui::dialog_body()
-            .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
-                if e.keystroke.key == "escape" {
-                    this.close_new_post(cx);
-                }
-            }))
-            .child(head)
-            .child(title)
-            .children(tags)
-            .child(message)
-            .children(error)
-            .child(actions);
-        let backdrop = div().id("new-post-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_new_post(cx)));
-        Some(ui::modal(backdrop, ui::dialog("new-post", 520., body, window, cx), cx))
+            .items_center()
+            .gap(px(4.))
+            .child(Icon::new(Glyph::Book).size(px(16.)).text_color(palette::muted(cx)))
+            .child(div().flex_1().ml(px(4.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Post Guidelines"))
+            .children(edit)
+            .child(close);
+        Some(
+            div()
+                .p(px(12.))
+                .flex()
+                .flex_col()
+                .gap(px(8.))
+                .squircle(ui::RADIUS_MD)
+                .bg(palette::surface(Level::Sidebar, cx))
+                .border_1()
+                .border_color(palette::line(cx))
+                .child(head)
+                .child(text)
+                .children(expand),
+        )
     }
 
     // Edit Tags on a post's menu, for its author and Manage Threads: each tick saves at once, and at
@@ -1068,15 +1339,85 @@ fn post_time(post: &Channel, by_creation: bool) -> Stateful<Div> {
     div().id(SharedString::from(format!("post-time-{}", post.id))).child(ago(since)).tooltip(move |window, cx| ui::tip(format!("Posted {posted}"), window, cx))
 }
 
-// The first message's picture: its first image, a video's poster, or an embed's thumbnail.
-fn post_thumb(first: &Message) -> Option<String> {
-    if let Some(media) = first.media.first() {
-        return Some(match &media.kind {
+// The first message's pictures, four at most: its images and videos' posters, else an embed's thumbnail.
+fn post_media(first: &Message) -> Vec<String> {
+    let attached: Vec<String> = first
+        .media
+        .iter()
+        .take(MOSAIC_MAX)
+        .map(|media| match &media.kind {
             MediaKind::Image => media.url.clone(),
             MediaKind::Video { poster } | MediaKind::Gif { poster } => poster.clone(),
-        });
+        })
+        .collect();
+    if !attached.is_empty() {
+        return attached;
     }
-    first.embeds.iter().find_map(|e| e.images.first().or(e.thumbnail.as_ref())).map(|m| m.url.clone())
+    first.embeds.iter().find_map(|e| e.images.first().or(e.thumbnail.as_ref())).map(|m| m.url.clone()).into_iter().collect()
+}
+
+// How a card lays out its pictures: one, two side by side, one beside a stack of two, or two by two.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Mosaic {
+    One,
+    Pair,
+    OneTwo,
+    Grid,
+}
+
+impl Mosaic {
+    fn of(count: usize) -> Option<Self> {
+        match count {
+            0 => None,
+            1 => Some(Self::One),
+            2 => Some(Self::Pair),
+            3 => Some(Self::OneTwo),
+            _ => Some(Self::Grid),
+        }
+    }
+}
+
+fn mosaic_view(urls: &[String], height: f32, gap: f32, cx: &Context<Waffle>) -> Option<Div> {
+    let layout = Mosaic::of(urls.len())?;
+    let radius = if layout == Mosaic::One { ui::RADIUS_MD } else { ui::RADIUS_XS };
+    let fill = palette::selected(cx);
+    let tile = |url: &String| div().flex_1().min_w_0().min_h_0().child(ui::media(url.clone(), ui::all(radius)).size_full().bg(fill).object_fit(gpui_kit::ObjectFit::Cover));
+    let row = |urls: &[String]| div().flex_1().min_h_0().flex().gap(px(gap)).children(urls.iter().map(tile));
+    let frame = div().h(px(height)).flex().gap(px(gap));
+    Some(match layout {
+        Mosaic::One | Mosaic::Pair => frame.children(urls.iter().map(tile)),
+        Mosaic::OneTwo => frame.child(tile(&urls[0])).child(div().flex_1().min_w_0().flex().flex_col().gap(px(gap)).children(urls[1..3].iter().map(tile))),
+        Mosaic::Grid => frame.flex_col().child(row(&urls[0..2])).child(row(&urls[2..4])),
+    })
+}
+
+// Discord's "(N New)" count: capped at 25+, and 1+ while the count is unknown.
+fn new_count_label(count: Option<u32>) -> String {
+    match count {
+        Some(n) if n >= UNREAD_CAP => format!("{UNREAD_CAP}+"),
+        Some(n) if n > 0 => n.to_string(),
+        _ => "1+".to_owned(),
+    }
+}
+
+fn new_posts_label(count: usize) -> String {
+    match count {
+        1 => "1 New Post".to_owned(),
+        n => format!("{n} New Posts"),
+    }
+}
+
+fn guidelines_text(forum: &Channel) -> Option<&str> {
+    forum.topic.as_deref().map(str::trim).filter(|t| !t.is_empty())
+}
+
+// Slowmode's clock: m:ss, or h:mm:ss from an hour.
+fn countdown(secs: u64) -> String {
+    let (h, m, s) = (secs / 3600, secs / 60 % 60, secs % 60);
+    match h {
+        0 => format!("{m}:{s:02}"),
+        _ => format!("{h}:{m:02}:{s:02}"),
+    }
 }
 
 // The most-used reaction on the opening message, else the forum's default reaction with no count.
@@ -1114,13 +1455,59 @@ fn gallery_columns(width: f32) -> usize {
     ((t + (width / 320. - t) / 2.).floor() as usize).max(1)
 }
 
-fn post_error(name: &str, content: &str, missing_tag: bool) -> Option<&'static str> {
+// `has_message`: text or files.
+fn post_error(name: &str, has_message: bool, missing_tag: bool) -> Option<&'static str> {
     match () {
         _ if name.is_empty() => Some("A title is required"),
-        _ if content.is_empty() => Some("A message is required"),
+        _ if !has_message => Some("A message is required"),
         _ if missing_tag => Some("A tag is required to create a post in this channel"),
         _ => None,
     }
+}
+
+// Discord's create-post body; files go alongside as `files[n]`, each named here by its index.
+fn post_body(name: &str, content: &str, tags: &[String], files: &[crate::discord::Upload], archive_after: u32) -> Value {
+    let mut message = json!({ "content": content });
+    if !files.is_empty() {
+        message["attachments"] = files.iter().enumerate().map(|(i, f)| json!({ "id": i.to_string(), "filename": f.name })).collect();
+    }
+    json!({ "name": name, "auto_archive_duration": archive_after, "applied_tags": tags, "message": message })
+}
+
+// A file waiting in the composer: its kind, name and size; callers add the remove button.
+fn file_chip(file: &PendingFile, cx: &Context<Waffle>) -> Div {
+    let glyph = match file.kind() {
+        FileKind::Image => Glyph::Image,
+        FileKind::Video => Glyph::Video,
+        FileKind::Other => Glyph::File,
+    };
+    div()
+        .h(px(32.))
+        .pl(px(10.))
+        .pr(px(2.))
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .squircle(ui::RADIUS_SM)
+        .bg(palette::selected(cx))
+        .text_size(px(13.))
+        .text_color(palette::text(cx))
+        .child(Icon::new(glyph).size(px(14.)).text_color(palette::muted(cx)))
+        .child(div().max_w(px(180.)).truncate().child(file.name.clone()))
+        .child(div().flex_none().text_color(palette::faint(cx)).child(crate::chat::format_size(file.size)))
+}
+
+fn slowmode_clock(secs: u64, cx: &Context<Waffle>) -> Stateful<Div> {
+    div()
+        .id("new-post-slowmode")
+        .flex()
+        .items_center()
+        .gap(px(4.))
+        .text_size(px(12.))
+        .text_color(palette::muted(cx))
+        .child(Icon::new(Glyph::Timer).size(px(14.)))
+        .child(countdown(secs))
+        .tooltip(|window, cx| ui::tip("Slowmode is enabled", window, cx))
 }
 
 fn tag_chip(id: SharedString, tag: &ForumTag, on: bool, cx: &Context<Waffle>) -> ui::Control {
@@ -1163,14 +1550,25 @@ pub(crate) mod demo {
     use gpui_kit::{Context, Window};
     use serde_json::{Value, json};
 
-    use super::{DISCORD_EPOCH, ForumState};
+    use super::{DISCORD_EPOCH, ForumState, PendingFile};
     use crate::{
         Waffle,
         discord::{ReadState, parse_channel, parse_message},
     };
 
-    // (hours ago, title, author id, author, tags, pinned, archived, replies, opening message, picture)
-    type PostFixture = (i64, &'static str, &'static str, &'static str, &'static [&'static str], bool, bool, u32, &'static str, Option<&'static str>);
+    // (hours ago, title, author id, author, tags, pinned, archived, replies, opening message, pictures)
+    type PostFixture = (i64, &'static str, &'static str, &'static str, &'static [&'static str], bool, bool, u32, &'static str, &'static [&'static str]);
+
+    // How far we've read each post: all of it, behind with FORUM_UNREADS' count, or behind before it
+    // answers. Posts without one read as New when they're newer than the forum's read state.
+    #[derive(Clone, Copy)]
+    enum Read {
+        All,
+        Behind(Option<u32>),
+        Never,
+    }
+
+    const READS: [Read; 8] = [Read::All, Read::Behind(Some(31)), Read::Never, Read::Behind(Some(4)), Read::All, Read::Behind(None), Read::All, Read::All];
 
     // A snowflake from `hours` ago, so cards show believable times.
     fn id_ago(hours: i64, salt: u64) -> String {
@@ -1182,12 +1580,15 @@ pub(crate) mod demo {
         json!({ "id": id, "name": name, "emoji_id": null, "emoji_name": emoji, "moderated": moderated })
     }
 
-    // `forum` (list) and `forum-gallery`: a forum with six tags and eight posts, previews filled in;
-    // `forum-search`, `forum-sort` and `forum-new-post` open its search, Sort & View and New post.
+    // `forum` (list) and `forum-gallery`: a forum with six tags, guidelines, a template and eight posts,
+    // previews and unread counts filled in; `forum-search`, `forum-sort` and `forum-new-post` open its
+    // search, Sort & View and New post (with the guidelines and a file).
     pub(crate) fn open(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
         let forum_json = json!({
             "id": "forum", "type": 15, "name": "game-feedback", "parent_id": "c0", "position": 1,
-            "topic": "Ideas and bugs for the next patch. One post per idea, tag it.",
+            "topic": "Ideas and bugs for the next patch. One post per idea, tag it.\n\n## Before you post\n- Search first: add to an existing post instead of starting a new one.\n- **Bugs**: say what you did, what happened and what you expected.\n- **Ideas**: one per post, so they can be ranked by reactions.\n\nPosts without a tag are closed after a day.",
+            "template": "**What happened?**\n\n**What did you expect?**\n",
+            "rate_limit_per_user": 600,
             "flags": 16, "default_forum_layout": (if scene == "forum-gallery" { 2 } else { 1 }),
             "default_reaction_emoji": { "emoji_id": null, "emoji_name": "\u{1f44d}" },
             "available_tags": [
@@ -1201,18 +1602,18 @@ pub(crate) mod demo {
         });
         let Some(forum) = parse_channel(&forum_json, "1") else { return };
         let posts: [PostFixture; 8] = [
-            (72, "Read me: how ideas get triaged before every patch", "4194304", "kiwi", &["t-idea"], true, false, 12, "Every week we pick the top five ideas by reactions. Tag yours or it won't be seen.", None),
-            (2, "Show the healer's ult range on the minimap while it charges, and on the scoreboard after a wipe so people can see who stood outside", "8388608", "Wren", &["t-idea", "t-ranked", "t-maps", "t-balance", "t-bug"], false, false, 48, "Half our wipes are people standing one step outside the ring. A faint circle would fix most of it.", Some("demo/banner.png")),
-            (5, "Tank shield uptime is out of hand", "12582912", "moss lantern", &["t-balance", "t-ranked"], false, false, 9, "Shield uptime went from 40% to 85% and every ranked match is now a staring contest.", None),
-            (20, "Night versions of every map", "16777216", "toma reed", &["t-maps", "t-idea"], false, false, 17, "Fog and torches on the big ones. Mockups attached.", Some("brand/icons/blueprint.png")),
-            (30, "Crash when alt-tabbing during the loading screen", "20971520", "ferris", &["t-bug"], false, false, 4, "Happens every time on the second map load. Logs below.", Some("brand/icons/riso.png")),
-            (50, "Queue times for duo above Diamond", "8388608", "Wren", &[], false, false, 2, "Forty minutes last night. Anyone else?", None),
-            (400, "Ping the minimap when a teammate is downed", "12582912", "moss lantern", &["t-ranked", "t-solved"], false, true, 1, "Archived after 3 days without replies. Reply to bring it back.", None),
-            (900, "Audio cuts out after 2 hours of play", "16777216", "toma reed", &["t-bug"], false, true, 6, "Restarting the game fixes it until the next long session.", Some("brand/icons/paper.png")),
+            (72, "Read me: how ideas get triaged before every patch", "4194304", "kiwi", &["t-idea"], true, false, 12, "Every week we pick the top five ideas by reactions. Tag yours or it won't be seen.", &[]),
+            (2, "Show the healer's ult range on the minimap while it charges, and on the scoreboard after a wipe so people can see who stood outside", "8388608", "Wren", &["t-idea", "t-ranked", "t-maps", "t-balance", "t-bug"], false, false, 48, "Half our wipes are people standing one step outside the ring. A faint circle would fix most of it.", &["demo/banner.png"]),
+            (5, "Tank shield uptime is out of hand", "12582912", "moss lantern", &["t-balance", "t-ranked"], false, false, 9, "Shield uptime went from 40% to 85% and every ranked match is now a staring contest.", &[]),
+            (20, "Night versions of every map", "16777216", "toma reed", &["t-maps", "t-idea"], false, false, 17, "Fog and torches on the big ones. Mockups attached.", &["brand/icons/blueprint.png", "brand/icons/riso.png", "brand/icons/paper.png", "demo/banner.png"]),
+            (30, "Crash when alt-tabbing during the loading screen", "20971520", "ferris", &["t-bug"], false, false, 4, "Happens every time on the second map load. Logs below.", &["brand/icons/riso.png"]),
+            (50, "Queue times for duo above Diamond", "8388608", "Wren", &[], false, false, 2, "Forty minutes last night. Anyone else?", &[]),
+            (400, "Ping the minimap when a teammate is downed", "12582912", "moss lantern", &["t-ranked", "t-solved"], false, true, 1, "Archived after 3 days without replies. Reply to bring it back.", &[]),
+            (900, "Audio cuts out after 2 hours of play", "16777216", "toma reed", &["t-bug"], false, true, 6, "Restarting the game fixes it until the next long session.", &["brand/icons/paper.png"]),
         ];
         let mut state = ForumState::default();
         let mut active = Vec::new();
-        for (i, (hours, title, author_id, author, tags, pinned, archived, replies, content, picture)) in posts.into_iter().enumerate() {
+        for (i, (hours, title, author_id, author, tags, pinned, archived, replies, content, pictures)) in posts.into_iter().enumerate() {
             let id = id_ago(hours, i as u64);
             let last = id_ago(hours / 3, 100 + i as u64);
             let post_json = json!({
@@ -1221,7 +1622,7 @@ pub(crate) mod demo {
                 "thread_metadata": { "archived": archived, "locked": false },
             });
             let Some(post) = parse_channel(&post_json, "1") else { continue };
-            let attachments: Vec<Value> = picture.into_iter().map(|url| json!({ "id": format!("a{i}"), "filename": "shot.png", "url": url, "proxy_url": url, "width": 1200, "height": 800, "content_type": "image/png" })).collect();
+            let attachments: Vec<Value> = pictures.iter().enumerate().map(|(n, url)| json!({ "id": format!("a{i}-{n}"), "filename": "shot.png", "url": url, "proxy_url": url, "width": 1200, "height": 800, "content_type": "image/png" })).collect();
             let face = ["\u{1f525}", "\u{1f44d}", "\u{2764}\u{fe0f}"][i % 3];
             let reactions = if i % 3 == 2 { json!([]) } else { json!([{ "emoji": { "id": null, "name": face }, "count": 3 + i * 7, "me": false }]) };
             let first = json!({
@@ -1231,6 +1632,17 @@ pub(crate) mod demo {
             });
             if let Some(message) = parse_message(&first) {
                 state.previews.insert(post.id.clone(), message);
+            }
+            let read = match READS[i] {
+                Read::All => Some(last.parse().unwrap_or(0)),
+                Read::Behind(_) => Some(id.parse().unwrap_or(0)),
+                Read::Never => None,
+            };
+            if let Some(last_read) = read {
+                waffle.read_states.insert(post.id.clone(), ReadState { last_read, mentions: 0 });
+            }
+            if let Read::Behind(Some(count)) = READS[i] {
+                state.unread_counts.insert(post.id.clone(), count);
             }
             match archived {
                 true => state.archived.push(post),
@@ -1256,7 +1668,7 @@ pub(crate) mod demo {
                 waffle.open_new_post("forum".into(), window, cx);
                 if let Some(composer) = waffle.composer_mut() {
                     composer.tags = vec!["t-idea".into()];
-                    composer.error = Some("A message is required".into());
+                    composer.files = vec![PendingFile { path: "brand/icons/blueprint.png".into(), name: "night-map-mockup.png".into(), size: 184_320, spoiler: false }];
                 }
             }
             _ => {}
@@ -1326,10 +1738,44 @@ mod tests {
 
     #[test]
     fn post_errors_in_discords_order() {
-        assert_eq!(post_error("", "", true), Some("A title is required"));
-        assert_eq!(post_error("t", "", true), Some("A message is required"));
-        assert_eq!(post_error("t", "m", true), Some("A tag is required to create a post in this channel"));
-        assert_eq!(post_error("t", "m", false), None);
+        assert_eq!(post_error("", false, true), Some("A title is required"));
+        assert_eq!(post_error("t", false, true), Some("A message is required"));
+        assert_eq!(post_error("t", true, true), Some("A tag is required to create a post in this channel"));
+        assert_eq!(post_error("t", true, false), None);
+    }
+
+    #[test]
+    fn unread_count_caps_at_25_and_falls_back_to_1() {
+        assert_eq!(new_count_label(Some(3)), "3");
+        assert_eq!(new_count_label(Some(25)), "25+");
+        assert_eq!(new_count_label(Some(140)), "25+");
+        assert_eq!(new_count_label(Some(0)), "1+");
+        assert_eq!(new_count_label(None), "1+");
+    }
+
+    #[test]
+    fn mosaic_layout_by_picture_count() {
+        assert_eq!(Mosaic::of(0), None);
+        assert_eq!(Mosaic::of(1), Some(Mosaic::One));
+        assert_eq!(Mosaic::of(2), Some(Mosaic::Pair));
+        assert_eq!(Mosaic::of(3), Some(Mosaic::OneTwo));
+        assert_eq!(Mosaic::of(4), Some(Mosaic::Grid));
+        let first = Message { media: (0..6).map(|i| crate::discord::Media { url: format!("{i}.png"), width: 1., height: 1., kind: MediaKind::Image }).collect(), ..Default::default() };
+        assert_eq!(post_media(&first).len(), MOSAIC_MAX);
+    }
+
+    #[test]
+    fn slowmode_countdown() {
+        assert_eq!(countdown(5), "0:05");
+        assert_eq!(countdown(21_600), "6:00:00");
+    }
+
+    #[test]
+    fn post_body_names_each_file_by_index() {
+        let file = |name: &str| crate::discord::Upload { path: name.into(), name: name.into(), size: 1, sent: Default::default() };
+        let body = post_body("t", "", &[], &[file("a.png"), file("b.png")], 4320);
+        assert_eq!(body["message"]["attachments"], json!([{ "id": "0", "filename": "a.png" }, { "id": "1", "filename": "b.png" }]));
+        assert!(post_body("t", "m", &[], &[], 4320)["message"].get("attachments").is_none());
     }
 
     #[test]

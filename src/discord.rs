@@ -574,6 +574,9 @@ pub struct ChannelProps {
     // default_tag_setting "match_all" instead of "match_some".
     pub match_all: bool,
     pub default_reaction: Option<Emoji>,
+    // Forum only: what a new post's message starts as.
+    #[serde(default)]
+    pub template: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1155,6 +1158,10 @@ pub enum Event {
     ScheduledEvent(ScheduledEvent),
     ScheduledEventDelete { guild_id: String, id: String },
     ScheduledEventUser { guild_id: String, event_id: String, user_id: String, added: bool },
+    // FORUM_UNREADS: unread message counts for a forum's posts, (post id, count).
+    ForumUnreads { forum_id: String, counts: Vec<(String, u32)> },
+    // A post someone just started in a forum (THREAD_CREATE with `newly_created`).
+    ForumPostCreated { forum_id: String, post_id: String, owner_id: String },
     // A member's roles, nickname or server avatar changed.
     MemberUpdate { guild_id: String, user: User, roles: Vec<String> },
     // A friend, block or request was added, changed or removed (`None` kind = removed).
@@ -1236,6 +1243,12 @@ impl Client {
             "op": 14,
             "d": { "guild_id": guild_id, "typing": true, "activities": true, "threads": true, "channels": { channel_id: [[0, 99]] } }
         }));
+    }
+
+    // Discord's REQUEST_FORUM_UNREADS (op 28): unread counts since each ack, answered by FORUM_UNREADS. Callers send at most 180.
+    pub fn request_forum_unreads(&self, guild_id: &str, forum_id: &str, threads: &[(String, u64)]) {
+        let threads: Vec<Value> = threads.iter().map(|(id, ack)| json!({ "thread_id": id, "ack_message_id": ack.to_string() })).collect();
+        self.gateway(json!({ "op": 28, "d": { "guild_id": guild_id, "channel_id": forum_id, "threads": threads } }));
     }
 
     pub fn request_members(&self, guild_id: &str, user_ids: Vec<String>) {
@@ -1567,6 +1580,20 @@ impl Client {
         let form = fields.into_iter().fold(reqwest::multipart::Form::new(), |form, (key, value)| form.text(key, value));
         let form = form.part("file", reqwest::multipart::Part::bytes(bytes).file_name(file_name));
         self.run(self.request(reqwest::Method::POST, &path).multipart(form)).await
+    }
+
+    // A JSON body with files, as `payload_json` and `files[n]` parts; the body names each by its index.
+    pub async fn call_files(&self, path: String, payload: Value, files: Vec<Upload>) -> Result<Value, String> {
+        let req = self.request(reqwest::Method::POST, &path);
+        let sent = async move {
+            let mut form = reqwest::multipart::Form::new().text("payload_json", payload.to_string());
+            for (i, file) in files.into_iter().enumerate() {
+                let bytes = std::fs::read(&file.path).map_err(|e| format!("{}: {e}", file.name))?;
+                form = form.part(format!("files[{i}]"), reqwest::multipart::Part::bytes(bytes).file_name(file.name));
+            }
+            send(req.multipart(form)).await
+        };
+        runtime().spawn(sent).await.map_err(|e| e.to_string())?
     }
 
     pub async fn ack_bulk(&self, reads: Vec<(String, u64)>) {
@@ -2156,6 +2183,17 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
         "READY" => Some(Event::Ready(Box::new(parse_ready(d)))),
         "USER_SETTINGS_UPDATE" => Some(Event::UserSettings(d.clone())),
         "GUILD_CREATE" => parse_guild(d).map(Event::GuildCreate),
+        "THREAD_CREATE" if d["newly_created"].as_bool() == Some(true) => {
+            let guild_id = d["guild_id"].as_str()?.to_owned();
+            let channel = parse_channel(d, &guild_id)?;
+            let created = Event::ForumPostCreated { forum_id: s(&d["parent_id"]), post_id: channel.id.clone(), owner_id: s(&d["owner_id"]) };
+            Some(Event::Batch(vec![Event::ChannelUpsert { guild_id, channel }, created]))
+        }
+        // Not verified: `threads[].thread_id` and `threads[].count`; only the request's shape was read.
+        "FORUM_UNREADS" => Some(Event::ForumUnreads {
+            forum_id: s(&d["channel_id"]),
+            counts: d["threads"].as_array().into_iter().flatten().filter_map(|t| Some((t["thread_id"].as_str()?.to_owned(), t["count"].as_u64().unwrap_or(0) as u32))).collect(),
+        }),
         "CHANNEL_CREATE" | "CHANNEL_UPDATE" | "THREAD_CREATE" | "THREAD_UPDATE" => {
             let guild_id = d["guild_id"].as_str()?.to_owned();
             parse_channel(d, &guild_id).map(|channel| Event::ChannelUpsert { guild_id, channel })
@@ -2436,6 +2474,7 @@ pub(crate) fn parse_channel(c: &Value, guild_id: &str) -> Option<Channel> {
             gallery: c["type"].as_u64() == Some(16) || c["default_forum_layout"].as_u64() == Some(2),
             match_all: c["default_tag_setting"].as_str() == Some("match_all"),
             default_reaction: parse_forum_emoji(&c["default_reaction_emoji"]["emoji_id"], &c["default_reaction_emoji"]["emoji_name"]),
+            template: c["template"].as_str().unwrap_or_default().to_owned(),
         }),
     })
 }
