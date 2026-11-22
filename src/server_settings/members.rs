@@ -610,7 +610,19 @@ impl Waffle {
             cells.push(roles_cell(member, &guild_roles, cx));
             cells.push(signals_cell(member, now, cx));
             cells.push(self.member_actions(member, powers, cx));
-            rows.push(ui::table_row(SharedString::from(format!("ss-member-{}", member.id)), &cols, cells, cx).when(picked, |r| r.bg(palette::selected(cx))).into_any_element());
+            // Right-click opens the row's More menu, as Discord's members table does.
+            let pop = Pop::Row(member.id.clone());
+            let row = ui::table_row(SharedString::from(format!("ss-member-{}", member.id)), &cols, cells, cx)
+                .when(picked, |r| r.bg(palette::selected(cx)))
+                .when(powers.any(), |r| {
+                    r.on_mouse_down(gpui_kit::MouseButton::Right, cx.listener(move |this, _, _, cx| {
+                        if let Some(m) = this.members() {
+                            m.pop = Some(pop.clone());
+                        }
+                        cx.notify();
+                    }))
+                });
+            rows.push(row.into_any_element());
         }
         ui::table("ss-members-table", ui::table_min_width(&cols), head, rows, cx).into_any_element()
     }
@@ -634,7 +646,7 @@ impl Waffle {
         }
         let open = self.server_settings.as_ref().is_some_and(|v| v.lists.members.pop == Some(Pop::Row(id.clone())));
         let pop = Pop::Row(id.clone());
-        let more = ui::icon_button(SharedString::from(format!("ss-member-more-{id}")), Glyph::More, "More options", cx).small().on_click(cx.listener(move |this, _, _, cx| this.member_pop(Some(pop.clone()), cx)));
+        let more = ui::icon_button(SharedString::from(format!("ss-member-more-{id}")), Glyph::MoreVertical, "More options", cx).small().on_click(cx.listener(move |this, _, _, cx| this.member_pop(Some(pop.clone()), cx)));
         let menu = open.then(|| ui::dropdown(SharedString::from(format!("ss-member-menu-{id}")), 24., Align::End, self.member_menu_rows(member, powers, cx), self.member_dismiss(cx), cx));
         cell = cell.child(div().relative().child(more).children(menu));
         cell.into_any_element()
