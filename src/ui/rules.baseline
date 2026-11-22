@@ -6,7 +6,6 @@ src/announcements.rs	raw-px	3
 src/app_modal.rs	global-notify	6
 src/audio_player.rs	raw-px	7
 src/call.rs	global-notify	21
-src/call.rs	raw-color	3
 src/call.rs	raw-px	16
 src/call_previews.rs	global-notify	4
 src/call_previews.rs	raw-px	1

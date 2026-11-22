@@ -9,7 +9,7 @@ use std::{
 use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, Context, Div, ElementId, FontFeatures, FontWeight, Hsla, ImageSource, MouseButton, MouseDownEvent, Pixels, Point, SharedString, Stateful, Window,
     component::{ActiveTheme, Icon},
-    div, prelude::*, px, relative, rgb,
+    div, prelude::*, px, relative,
 };
 
 use crate::{
@@ -2352,8 +2352,8 @@ fn vmark(glyph: Glyph, words: Option<&'static str>, kind: MarkKind) -> Div {
 
 // .tile.stream: a stream before its first preview arrives.
 pub(crate) fn stream_fill(radius: f32) -> Div {
-    let glow = gpui_kit::linear_gradient(135., gpui_kit::linear_color_stop(Hsla::from(rgb(0x0097A1)).opacity(0.7), 0.), gpui_kit::linear_color_stop(Hsla::from(rgb(0x9D2398)).opacity(0.7), 1.));
-    div().relative().squircle(radius).bg(rgb(0x1D1E39)).child(div().absolute().inset_0().squircle(radius).bg(glow))
+    let glow = gpui_kit::linear_gradient(135., gpui_kit::linear_color_stop(palette::stream_glow().0.opacity(0.7), 0.), gpui_kit::linear_color_stop(palette::stream_glow().1.opacity(0.7), 1.));
+    div().relative().squircle(radius).bg(palette::stream_ground()).child(div().absolute().inset_0().squircle(radius).bg(glow))
 }
 
 // .mlabel
