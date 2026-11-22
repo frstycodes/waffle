@@ -57,9 +57,7 @@ impl Waffle {
     pub(super) fn set_join_activity_default(&mut self, value: u8, cx: &mut Context<Self>) {
         let before = self.account_settings.clone();
         self.account_settings.default_guilds_activity_restricted = value.min(2);
-        // Not verified: the legacy JSON key for PrivacySettings.default_guilds_activity_restricted (proto field 14).
-        let patch = json!({ "default_guilds_activity_restricted": value.min(2) });
-        self.save_account_settings(before, patch, cx);
+        self.save_settings_proto(before, super::proto::guild_activity_default(value), cx);
     }
 }
 
@@ -85,14 +83,5 @@ mod tests {
         assert_eq!(share_in_guild(&mut account, "3", false), json!({ "activity_restricted_guild_ids": ["2", "3"] }), "no duplicate");
         assert_eq!(share_in_guild(&mut account, "9", true), json!({ "activity_restricted_guild_ids": ["2", "3"] }), "absent stays absent");
         assert_eq!(account.activity_restricted_guilds, ["2", "3"]);
-    }
-
-    #[test]
-    fn the_join_default_reads_from_settings() {
-        let mut account = AccountSettings::default();
-        account.apply(&json!({ "default_guilds_activity_restricted": 1 }));
-        assert_eq!(account.default_guilds_activity_restricted, 1);
-        account.apply(&json!({ "default_guilds_activity_restricted": 7 }));
-        assert_eq!(account.default_guilds_activity_restricted, 2);
     }
 }

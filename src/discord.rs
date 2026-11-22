@@ -1207,11 +1207,6 @@ impl AccountSettings {
         if v["activity_restricted_guild_ids"].is_array() {
             self.activity_restricted_guilds = strings(&v["activity_restricted_guild_ids"]);
         }
-        // Not verified: Discord keeps this in the settings proto (PrivacySettings field 14, an enum read as
-        // 0/1/2 here); whether the legacy JSON carries it, and under this key, is a guess.
-        if let Some(level) = v["default_guilds_activity_restricted"].as_u64() {
-            self.default_guilds_activity_restricted = level.min(2) as u8;
-        }
         if let Some(level) = v["explicit_content_filter"].as_u64() {
             self.explicit_content_filter = level.min(2) as u8;
         }
