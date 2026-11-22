@@ -33,6 +33,7 @@ pub struct Parts {
     nav: Option<Entity<Part>>,
     main: Option<Entity<Part>>,
     panel: Option<Entity<Part>>,
+    overlays: Option<Entity<Overlays>>,
 }
 
 #[derive(Clone, Copy)]
@@ -56,9 +57,48 @@ impl Waffle {
                 waffle: waffle.downgrade(),
                 render,
                 images: crate::images::new_cache(cx),
-                _observe: cx.observe(&waffle, |_, _, cx| cx.notify()),
+                _observe: cx.observe(&waffle, |_, _, cx| cx.notify()), // lint-allow(global-notify): notifies this part, following the app
             })
         });
         AnyView::from(part.clone()).cached(style).into_any_element()
+    }
+
+    // Re-renders `column` alone, for state only it draws (a hover): notifying the app re-renders every
+    // column, since each part observes it.
+    pub fn redraw(&mut self, column: Column, cx: &mut Context<Self>) {
+        let part = match column {
+            Column::Nav => &self.parts.nav,
+            Column::Main => &self.parts.main,
+            Column::Panel => &self.parts.panel,
+        };
+        match part.clone() {
+            Some(part) => part.update(cx, |_, cx| cx.notify()), // lint-allow(global-notify): notifies the part alone
+            // Not drawn yet: nothing to keep, so the app's redraw draws it.
+            None => cx.notify(), // lint-allow(global-notify): the part doesn't exist yet
+        }
+    }
+
+    // The popovers (overlays.rs) as a view of their own, so a list scrolling or a hover style in one
+    // notifies this view rather than the app.
+    pub fn overlays(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let waffle = cx.entity().downgrade();
+        self.parts.overlays.get_or_insert_with(|| cx.new(|_| Overlays { waffle })).clone().into_any_element()
+    }
+}
+
+// Not cached: it renders whenever the app does, so it's never staler than the app, and on its own when
+// something inside it notifies.
+pub struct Overlays {
+    waffle: WeakEntity<Waffle>,
+}
+
+impl Render for Overlays {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let overlays = self.waffle.update(cx, |waffle, cx| waffle.render_overlays(window, cx)).unwrap_or_default();
+        // After the app's render set the rest of this layout's covering.
+        if !overlays.is_empty() {
+            crate::gif::set_covered(true);
+        }
+        div().absolute().inset_0().children(overlays)
     }
 }

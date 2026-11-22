@@ -3373,10 +3373,15 @@ impl Waffle {
             }
             voice::VoiceEvent::Stage(stage) => call.stage = stage,
             voice::VoiceEvent::Stats(stats) => call.stats = Some(stats),
+            // ~25 a second: only the gate is drawn in the call, the level only on the settings meter.
             voice::VoiceEvent::InputLevel { db, gate_open } => {
+                let gate_changed = call.level.1 != gate_open;
                 call.level = (db, gate_open);
                 if self.mic_test.is_none() {
                     self.mic_level = db;
+                }
+                if !gate_changed && !self.settings_open() {
+                    return;
                 }
             }
             voice::VoiceEvent::Speaking { user_id, speaking: true } => {
@@ -3808,7 +3813,7 @@ impl Waffle {
         } else if self.hovered.as_deref() == Some(key) {
             self.hovered = None;
         }
-        cx.notify();
+        self.redraw(if key == crate::home::MASCOT { part::Column::Main } else { part::Column::Nav }, cx);
     }
 }
 

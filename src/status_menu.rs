@@ -381,7 +381,7 @@ impl Waffle {
         };
         let chevron = timed.then(|| div().flex_none().text_color(palette::muted(cx)).child(Icon::new(Glyph::ChevronRight).size(px(16.))));
         let flyout = open.then(|| {
-            div().absolute().top(px(-ui::SURFACE_INSET)).left_full().ml(px(ui::SURFACE_INSET + 4.)).child(gpui_kit::deferred(gpui_kit::anchored().snap_to_window_with_margin(px(8.)).child(self.duration_flyout(status, cx))).with_priority(1))
+            div().absolute().top(px(-ui::SURFACE_INSET)).left_full().ml(px(ui::SURFACE_INSET + 4.)).child(ui::floating("status-duration-float", self.duration_flyout(status, cx)).with_priority(1))
         });
         menu::menu_item_row(SharedString::from(format!("status-{label}")), &row, open, true, cx)
             .relative()
