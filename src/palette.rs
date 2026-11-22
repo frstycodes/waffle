@@ -554,6 +554,16 @@ pub fn positive_ink(cx: &App) -> Hsla {
     hex(tokens(cx).online_ink)
 }
 
+// Discord's server-boost pink, for the gem beside a booster's name.
+pub fn boost_ink(cx: &App) -> Hsla {
+    hex(if cx.theme().is_dark() { 0xF07CF5 } else { 0xB21FC4 })
+}
+
+// Green on a tooltip, whose surface is the other theme's (`ui::tip` inverts the page).
+pub fn positive_ink_inverted(cx: &App) -> Hsla {
+    hex(if cx.theme().is_dark() { LIGHT.online_ink } else { DARK.online_ink })
+}
+
 pub fn danger_ink(cx: &App) -> Hsla {
     hex(tokens(cx).danger_ink)
 }

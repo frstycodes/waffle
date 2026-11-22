@@ -376,7 +376,7 @@ impl Waffle {
         let (faint, danger) = (palette::faint(cx), palette::danger_ink(cx));
         let status_line: AnyElement = match (server_muted, sharing) {
             (true, _) => div().truncate().text_color(danger).child("Server muted by a moderator").into_any_element(),
-            (false, true) => div().flex().items_center().gap_1().child(Icon::new(Glyph::Screen).size(px(14.)).text_color(palette::positive_ink(cx))).child(div().truncate().child("Sharing their screen")).into_any_element(),
+            (false, true) => div().flex().items_center().gap_1().child(Icon::new(Glyph::ShareScreen).size(px(14.)).text_color(palette::positive_ink(cx))).child(div().truncate().child("Sharing their screen")).into_any_element(),
             (false, false) => ui::truncating("me-status", self.status_line()).into_any_element(),
         };
         let mic = me_button("mic", if muted { Nav::MicOff } else { Nav::Mic }, muted, if server_muted { "A moderator muted you here. Only they can unmute you." } else if muted { "Unmute" } else { "Mute" }, cx)
@@ -547,7 +547,7 @@ pub fn nameplate(plate: &discord::Nameplate, surface: Hsla, corners: [f32; 4], d
     let [tl, tr, br, bl] = corners.map(px);
     let shape = gpui_kit::Corners { top_left: tl, top_right: tr, bottom_right: br, bottom_left: bl };
     let wash = ui::edge(div().absolute().inset_0(), shape).bg(linear_gradient(90., linear_color_stop(tint.opacity(0.1), 0.), linear_color_stop(tint.opacity(0.4), 1.)));
-    ui::edge(div(), shape).absolute().inset_0().overflow_hidden().bg(surface).child(wash).child(nameplate_art(plate, PANEL_HEIGHT, tr, br).opacity(0.4)).into_any_element()
+    ui::edge(div(), shape).absolute().inset_0().overflow_hidden().bg(surface).child(wash).child(nameplate_art(plate, PANEL_HEIGHT, tr, br, false).opacity(0.4)).into_any_element()
 }
 
 pub fn nameplate_tint(plate: &discord::Nameplate, dark: bool) -> Hsla {
@@ -557,8 +557,18 @@ pub fn nameplate_tint(plate: &discord::Nameplate, dark: bool) -> Hsla {
 /// Discord's `height: 100%; width: auto` art, pinned to the right edge and rounding its own right corners.
 /// gpui sizes an image's width from its aspect only when the height is absolute, so the row's height
 /// stands in for 100%.
-pub fn nameplate_art(plate: &discord::Nameplate, height: f32, top_right: gpui_kit::Pixels, bottom_right: gpui_kit::Pixels) -> gpui_kit::Img {
-    ui::edge(img(plate.art.clone()).absolute().top_0().right_0().h(px(height)), gpui_kit::Corners { top_left: px(0.), top_right, bottom_right, bottom_left: px(0.) })
+// `animate` swaps in the moving art while it loads and plays, the still standing in until then.
+pub fn nameplate_art(plate: &discord::Nameplate, height: f32, top_right: gpui_kit::Pixels, bottom_right: gpui_kit::Pixels, animate: bool) -> gpui_kit::Img {
+    let corners = gpui_kit::Corners { top_left: px(0.), top_right, bottom_right, bottom_left: px(0.) };
+    let still = plate.art.clone();
+    let Some(animated) = plate.animated.clone().filter(|_| animate) else {
+        return ui::edge(img(still).absolute().top_0().right_0().h(px(height)), corners);
+    };
+    let fallback = still.clone();
+    let moving = img(animated)
+        .with_loading(move || img(still.clone()).h(px(height)).into_any_element())
+        .with_fallback(move || img(fallback.clone()).h(px(height)).into_any_element());
+    ui::edge(moving.absolute().top_0().right_0().h(px(height)), corners)
 }
 
 /// An avatar with Discord's status shape cut into its bottom-right corner: a dot for online, a moon for

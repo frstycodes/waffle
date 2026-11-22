@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | app-replies | components | components-users | components-v2 | command-picker | command-picker-search | command-options | command-options-loading | command-options-failed | command-options-empty | command-options-tab | command-options-errors | app-modal | app-modal-error | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | app-replies | components | components-users | components-v2 | command-picker | command-picker-search | command-options | command-options-loading | command-options-failed | command-options-empty | command-options-tab | command-options-errors | app-modal | app-modal-error | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | call-streams-failed | call-streams-reconnecting | call-streams-issues | call-streams-hidden | inbox-saved | games | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -69,7 +69,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             let mut items = members();
             items.extend((0..80).map(|n| {
                 let user = user(&(30_000_000 + n).to_string(), &format!("member {n}"));
-                ListItem::Member(Member { user, roles: Vec::new(), presence: Presence { status: Presence_::Offline, custom: None, activity: None, rich: None, ..Default::default() } })
+                ListItem::Member(Member { user, roles: Vec::new(), presence: Presence { status: Presence_::Offline, custom: None, activity: None, rich: None, ..Default::default() }, boosting_since: None })
             }));
             waffle.on_event(Event::MemberList { guild_id: "1".into(), groups: vec![("r1".into(), 2), ("online".into(), 3), ("offline".into(), 81)], ops: vec![ListOp::Sync { start: 0, items }] }, cx);
         }
@@ -338,6 +338,12 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         "jump" => waffle.jump_to("103".into(), cx),
         // The rail's Inbox on each tab: mentions under their filter chips, and the unread channels with the
         // newest cached messages of one.
+        "inbox-saved" => {
+            waffle.saved = Some(Some(Ok(self::messages().into_iter().rev().take(3).collect())));
+            waffle.inbox_tab = crate::inbox::InboxTab::Saved;
+            waffle.inbox_open = true;
+        }
+        "games" => waffle.open_settings(crate::settings::Page::ActivityPrivacy, window, cx),
         "inbox" | "inbox-unreads" => {
             let all = self::messages();
             waffle.inbox = Some(Some(Ok(all.iter().filter(|m| !m.mentions.is_empty() || m.content.contains("@")).cloned().collect())));
@@ -619,7 +625,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         "dm-empty" | "group-empty" | "group-start" | "group-mention" => demo_dm_start(waffle, scene, window, cx),
         "stream-card" => {
             let key = "guild:1:lounge:12582912".to_owned();
-            let blender = Activity { kind: ActivityKind::Playing, text: "Blender".into(), more: 0 };
+            let blender = Activity { kind: ActivityKind::Playing, text: "Blender".into(), rest: Vec::new() };
             waffle.presences.insert("12582912".into(), Presence { status: Presence_::Online, custom: None, activity: Some(blender), rich: None, ..Default::default() });
             let since = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(24 * 60)).unwrap_or_else(std::time::Instant::now);
             waffle.stream_live_since.insert(key.clone(), since);
@@ -673,7 +679,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // Three streams (one watched at 4:3, so focus letterboxes it; one unopened; our own) and two
         // cameras: the grid's order, chips and Watch, focus and full screen. Ended adds two ended
         // streams' cards: one streamer still in the call, one who left.
-        "call-streams" | "call-streams-ended" | "call-streams-focus" | "call-streams-strip" | "call-streams-full" => {
+        "call-streams" | "call-streams-ended" | "call-streams-focus" | "call-streams-strip" | "call-streams-full" | "call-streams-failed" | "call-streams-reconnecting" | "call-streams-issues" | "call-streams-hidden" => {
             demo_call(waffle);
             waffle.call_pointer_inside = true;
             if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
@@ -686,15 +692,39 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                 }
             }
             if let Some(call) = waffle.call.as_mut() {
-                call.watching.push(crate::Watching { streamer_id: "12582912".into(), frame: Some(demo_frame(1440, 1080, 40)), arrivals: Default::default(), watch: None, rejoins: 0 });
+                call.watching.push(crate::Watching::new("12582912".into(), Some(demo_frame(1440, 1080, 40)), None));
                 call.self_view = Some((demo_frame(1280, 720, 200), std::time::Instant::now()));
                 call.cameras.insert("20971520".into(), demo_frame(640, 480, 120));
                 call.cameras.insert("8388608".into(), demo_frame(640, 360, 230));
                 if scene == "call-streams-ended" {
                     call.ended = vec!["20971520".into(), "99".into()];
                 }
+                // The watched stream's states, and every issue a tile can carry: ours (4194304) and our camera
+                // (shown here on Wren's tile key, as a viewer would see a 2012 on a camera that never arrived).
+                use crate::voice::issues::*;
+                match scene {
+                    "call-streams-failed" => call.watching[0].state = crate::WatchState::Failed(crate::STREAM_FAILED_TO_START),
+                    "call-streams-reconnecting" => {
+                        call.watching[0].state = crate::WatchState::Reconnecting;
+                        call.watching[0].frame = None;
+                    }
+                    "call-streams-issues" => {
+                        call.watching[0].state = crate::WatchState::Active;
+                        let now = std::time::Instant::now();
+                        call.watching[0].arrivals = (0..60).map(|i| now - std::time::Duration::from_millis(i * 33)).rev().collect();
+                        for code in [STREAM_SEND_NETWORK_QUALITY, SOUNDSHARE_FAILED] {
+                            call.issues.insert(("4194304".into(), code));
+                        }
+                        call.issues.insert(("12582912".into(), STREAM_VIEW_HIGH_PACKET_LOSS));
+                        call.issues.insert(("camera:8388608".into(), RECEIVER_READY_TIMEOUT));
+                    }
+                    _ => {}
+                }
             }
-            if !matches!(scene, "call-streams" | "call-streams-ended") {
+            if scene == "call-streams-hidden" {
+                waffle.prefs.hidden_self_streams.push("lounge".into());
+            }
+            if !matches!(scene, "call-streams" | "call-streams-ended" | "call-streams-failed" | "call-streams-reconnecting" | "call-streams-issues" | "call-streams-hidden") {
                 waffle.call_focus = Some("stream:12582912".into());
                 // Holds the chrome up for the first half minute, as if the pointer had just moved.
                 waffle.call_pointer_at = std::time::Instant::now() + std::time::Duration::from_secs(30);
@@ -715,7 +745,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                     if let Some(call) = waffle.call.as_mut() {
                         // The PiP plays a 4:3 picture, to show it letterboxed inside its 16:9 frame.
                         let frame = (scene == "pip").then(|| demo_frame(1440, 1080, 40));
-                        call.watching.push(crate::Watching { streamer_id: "12582912".into(), frame, arrivals: Default::default(), watch: None, rejoins: 0 });
+                        call.watching.push(crate::Watching::new("12582912".into(), frame, None));
                     }
                     // Reading #general meanwhile: the stream floats as a picture-in-picture.
                     waffle.call_view = scene != "pip";
@@ -746,7 +776,7 @@ fn demo_profile(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
         started: Some(started),
         joinable: true,
     };
-    let playing = Activity { kind: ActivityKind::Playing, text: rich.name.clone(), more: 0 };
+    let playing = Activity { kind: ActivityKind::Playing, text: rich.name.clone(), rest: Vec::new() };
     waffle.presences.insert("8388608".into(), Presence { status: Presence_::Dnd, custom: None, activity: Some(playing), rich: Some(rich), ..Default::default() });
     let mut zoe = user("8388608", "Wren");
     zoe.tag = Some(GuildTag { text: "wony".into(), badge: Some("brand/icons/sticker.png".into()) });
@@ -831,7 +861,7 @@ fn demo_games(waffle: &mut Waffle) {
     for (id, (name, app_id)) in [("12582912", APEX), ("8388608", FACTORIO)] {
         let started = Some(chrono::Utc::now().timestamp_millis() - 47 * 60_000);
         let rich = crate::discord::RichPresence { kind: ActivityKind::Playing, name: name.into(), app_id: Some(app_id.into()), started, ..Default::default() };
-        let activity = Activity { kind: ActivityKind::Playing, text: name.into(), more: 0 };
+        let activity = Activity { kind: ActivityKind::Playing, text: name.into(), rest: Vec::new() };
         waffle.presences.insert(id.into(), Presence { status: Presence_::Online, custom: None, activity: Some(activity), rich: Some(rich), ..Default::default() });
     }
 }
@@ -867,7 +897,7 @@ fn demo_call(waffle: &mut Waffle) {
         focus: None,
         ended: Vec::new(),
         sharing: None,
-        share_source: None, live_since: None, self_view: None, share_label: None,
+        share_source: None, live_since: None, self_view: None, issues: Default::default(), share_label: None,
         joined: std::time::Instant::now().checked_sub(std::time::Duration::from_secs(5047)).unwrap_or_else(std::time::Instant::now),
         _events: gpui_kit::Task::ready(()),
     });
@@ -932,7 +962,7 @@ fn demo_dm_call(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut 
             focus: None,
             ended: Vec::new(),
             sharing: None,
-            share_source: None, live_since: None, self_view: None, share_label: None,
+            share_source: None, live_since: None, self_view: None, issues: Default::default(), share_label: None,
             joined: std::time::Instant::now().checked_sub(std::time::Duration::from_secs(724)).unwrap_or_else(std::time::Instant::now),
             _events: gpui_kit::Task::ready(()),
         });
@@ -1135,8 +1165,8 @@ fn load_members() -> (Vec<(String, u32)>, Vec<ListItem>) {
         items.push(ListItem::Group { id: group.into(), count });
         for n in 0..count {
             let id = format!("{}", 30_000_000 + items.len());
-            let activity = (n % 3 == 0).then(|| Activity { kind: ActivityKind::Playing, text: format!("Game number {n}"), more: 0 });
-            items.push(ListItem::Member(Member { user: user(&id, &format!("{group} member {n}")), roles: vec!["r2".into()], presence: Presence { status, custom: None, activity, rich: None, ..Default::default() } }));
+            let activity = (n % 3 == 0).then(|| Activity { kind: ActivityKind::Playing, text: format!("Game number {n}"), rest: Vec::new() });
+            items.push(ListItem::Member(Member { user: user(&id, &format!("{group} member {n}")), roles: vec!["r2".into()], presence: Presence { status, custom: None, activity, rich: None, ..Default::default() }, boosting_since: (n % 7 == 0).then(|| "2025-03-14T10:00:00+00:00".into()) }));
         }
     }
     (groups.iter().map(|(g, _, c)| ((*g).into(), *c)).collect(), items)
@@ -1163,17 +1193,17 @@ fn members() -> Vec<ListItem> {
         user.bot = bot;
         // A nameplate, with bundled art standing in for Discord's (the demo stays offline).
         if id == "4194304" {
-            user.nameplate = Some(crate::discord::Nameplate { art: "brand/icons/paper.png".into(), tint: (0x2D6A4F, 0x95D5B2) });
+            user.nameplate = Some(Box::new(crate::discord::Nameplate { art: "brand/icons/paper.png".into(), animated: None, tint: (0x2D6A4F, 0x95D5B2) }));
         }
         ListItem::Member(Member { user, roles: roles.iter().map(|r| r.to_string()).collect(), presence: Presence {
             status,
             custom: activity.filter(|(kind, _)| *kind == ActivityKind::Custom).map(|(_, text)| text.into()),
-            activity: activity.filter(|(kind, _)| *kind != ActivityKind::Custom).map(|(kind, text)| Activity { kind, text: text.into(), more: 0 }),
+            activity: activity.filter(|(kind, _)| *kind != ActivityKind::Custom).map(|(kind, text)| Activity { kind, text: text.into(), rest: Vec::new() }),
             rich: None,
             // Wren is only on their phone, so the panel shows the mobile mark.
             mobile_only: id == "8388608",
             streaming: activity.is_some_and(|(kind, _)| kind == ActivityKind::Streaming),
-        } })
+        }, boosting_since: (id == "4194304").then(|| "2025-03-14T10:00:00+00:00".into()) })
     };
     vec![
         ListItem::Group { id: "r1".into(), count: 2 },
