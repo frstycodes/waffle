@@ -531,7 +531,7 @@ impl Waffle {
             .invisible()
             .group_hover(group.clone(), |s| s.visible())
             .child(Icon::new(Glyph::X).size(ui::ICON_XS))
-            .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Remove from recent avatars").build(window, cx))
+            .tooltip(|window, cx| ui::tip("Remove from recent avatars", window, cx))
             .on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 this.remove_recent_avatar(i, cx);

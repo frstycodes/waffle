@@ -1696,7 +1696,7 @@ impl Waffle {
             .hover(move |s| s.bg(hover).text_color(danger))
             .active(move |s| s.bg(press))
             .child(Icon::new(Glyph::Trash).size(ui::ICON_XL))
-            .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Remove keybind").build(window, cx))
+            .tooltip(|window, cx| ui::tip("Remove keybind", window, cx))
             .on_click(cx.listener(move |this, _, _, cx| {
                 if let Some(s) = &mut this.settings {
                     s.recording = None;
@@ -1902,7 +1902,7 @@ impl Waffle {
             .cursor_pointer()
             .hover(move |s| s.bg(press))
             .child(Icon::new(Glyph::Play).size(ui::ICON_MD))
-            .tooltip(move |window, cx| gpui_kit::component::tooltip::Tooltip::new(format!("Preview {title}")).build(window, cx))
+            .tooltip(move |window, cx| ui::tip(format!("Preview {title}"), window, cx))
             .on_click(move |_, _, cx| {
                 cx.stop_propagation();
                 sounds::preview(cue);

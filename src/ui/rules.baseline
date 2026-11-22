@@ -125,7 +125,6 @@ src/server_settings/roles.rs	raw-px	3
 src/server_settings/view.rs	global-notify	17
 src/server_settings/view.rs	raw-px	8
 src/settings.rs	global-notify	24
-src/settings.rs	kit-tooltip	2
 src/settings.rs	raw-color	8
 src/settings.rs	raw-floating	5
 src/settings.rs	raw-px	35
@@ -136,7 +135,6 @@ src/settings/games.rs	global-notify	1
 src/settings/profile.rs	global-notify	4
 src/settings/profile_preview.rs	raw-px	1
 src/settings/profiles.rs	global-notify	16
-src/settings/profiles.rs	kit-tooltip	1
 src/settings/profiles.rs	raw-color	1
 src/settings/profiles.rs	raw-px	3
 src/settings/updates.rs	raw-px	1
