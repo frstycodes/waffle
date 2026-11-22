@@ -280,11 +280,11 @@ pub fn cards(owner: &str, content: &str, ctx: &CardContext, cx: &mut App) -> Vec
 fn card(id: String, width: f32, cx: &App) -> Stateful<gpui_kit::Div> {
     div()
         .id(SharedString::from(id))
-        .mt(px(8.))
+        .mt_2()
         .w_full()
         .max_w(px(width))
-        .py(px(12.))
-        .px(px(14.))
+        .py_3()
+        .px_3p5()
         .flex()
         .squircle(RADIUS_LG)
         .bg(palette::surface(Level::Sidebar, cx))
@@ -295,7 +295,7 @@ fn card(id: String, width: f32, cx: &App) -> Stateful<gpui_kit::Div> {
 fn message_card(id: String, guild: &str, channel: &str, message: &Message, ctx: &CardContext, cx: &App) -> AnyElement {
     let (strong, muted, faint) = (palette::strong(cx), palette::muted(cx), palette::faint(cx));
     let place = match ctx.channel_names.get(channel) {
-        Some(name) => div().flex().items_center().gap(px(4.)).min_w_0().child(Icon::new(Glyph::Hashtag).size(px(14.)).flex_none()).child(div().min_w_0().truncate().child(name.clone())),
+        Some(name) => div().flex().items_center().gap_1().min_w_0().child(Icon::new(Glyph::Hashtag).size(ui::ICON_SM).flex_none()).child(div().min_w_0().truncate().child(name.clone())),
         None => div().child(if guild == "@me" { "Direct message" } else { "Message" }),
     };
     let quote = (ctx.quote)(&message.content);
@@ -309,28 +309,28 @@ fn message_card(id: String, guild: &str, channel: &str, message: &Message, ctx: 
         .min_w_0()
         .flex()
         .flex_col()
-        .gap(px(4.))
-        .text_size(px(14.))
+        .gap_1()
+        .text_size(ui::TEXT_SM)
         .child(
             div()
                 .flex()
                 .items_center()
-                .gap(px(8.))
+                .gap_2()
                 .min_w_0()
                 .child(ui::avatar(message.author.avatar.clone(), 20.).flex_none())
                 .child(div().min_w_0().truncate().font_weight(FontWeight::MEDIUM).text_color(strong).child(message.author.name.clone()))
-                .child(div().flex_none().text_size(px(12.)).text_color(faint).child((ctx.stamp)(&message.timestamp))),
+                .child(div().flex_none().text_size(ui::TEXT_XS).text_color(faint).child((ctx.stamp)(&message.timestamp))),
         )
         .when(has_quote, |t| t.child(div().text_color(muted).line_clamp(3).text_ellipsis().child(quote)))
         .when(bare, |t| t.child(div().text_color(faint).child("Attachment")))
         .child(
             div()
-                .mt(px(4.))
+                .mt_1()
                 .flex()
                 .items_center()
                 .justify_between()
-                .gap(px(12.))
-                .text_size(px(12.))
+                .gap_3()
+                .text_size(ui::TEXT_XS)
                 .text_color(faint)
                 .child(place)
                 .child(div().flex_none().font_weight(FontWeight::MEDIUM).text_color(palette::accent_ink(cx)).child("Jump")),
@@ -339,7 +339,7 @@ fn message_card(id: String, guild: &str, channel: &str, message: &Message, ctx: 
     let hover = palette::hover(cx);
     card(id, MESSAGE_WIDTH, cx)
         .items_start()
-        .gap(px(14.))
+        .gap_3p5()
         .cursor_pointer()
         .hover(move |s| s.bg(hover))
         .child(text)
@@ -354,13 +354,13 @@ fn message_card(id: String, guild: &str, channel: &str, message: &Message, ctx: 
 fn invite_card(id: String, code: &str, invite: &Invite, ctx: &CardContext, cx: &App) -> AnyElement {
     let joined = ctx.joined.contains(&invite.guild_id);
     let count = |n: Option<u64>, label: &'static str, dot: gpui_kit::Hsla| {
-        n.map(|n| div().flex().items_center().gap(px(6.)).child(div().size(px(8.)).rounded_full().bg(dot)).child(format!("{} {label}", grouped(n))))
+        n.map(|n| div().flex().items_center().gap_1p5().child(div().size_2().rounded_full().bg(dot)).child(format!("{} {label}", grouped(n))))
     };
     let counts = div()
         .flex()
         .flex_wrap()
-        .gap_x(px(12.))
-        .text_size(px(12.))
+        .gap_x_3()
+        .text_size(ui::TEXT_XS)
         .text_color(palette::muted(cx))
         .children(count(invite.online, "Online", palette::status_in(Status::Online, cx)))
         .children(count(invite.members, "Members", palette::faint(cx)));
@@ -379,8 +379,8 @@ fn invite_card(id: String, code: &str, invite: &Invite, ctx: &CardContext, cx: &
             this.update(cx, |this, cx| this.join_invite(code, cx)).ok();
         }),
     };
-    let name = div().min_w_0().truncate().text_size(px(16.)).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(invite.name.clone());
-    let row = div().child(icon).child(div().flex_1().min_w_0().flex().flex_col().gap(px(2.)).child(name).child(counts)).child(div().flex_none().child(action));
+    let name = div().min_w_0().truncate().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(invite.name.clone());
+    let row = div().child(icon).child(div().flex_1().min_w_0().flex().flex_col().gap_0p5().child(name).child(counts)).child(div().flex_none().child(action));
     invite_frame(id, row, cx)
 }
 
@@ -392,9 +392,9 @@ fn invalid_invite(id: String, cx: &App) -> AnyElement {
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .gap(px(2.))
-                .child(div().text_size(px(16.)).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Invalid invite"))
-                .child(div().text_size(px(12.)).text_color(palette::muted(cx)).child("It expired or was revoked. Ask for a new one.")),
+                .gap_0p5()
+                .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Invalid invite"))
+                .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("It expired or was revoked. Ask for a new one.")),
     );
     invite_frame(id, row, cx)
 }
@@ -403,15 +403,15 @@ fn invalid_invite(id: String, cx: &App) -> AnyElement {
 fn invite_frame(id: String, row: gpui_kit::Div, cx: &App) -> AnyElement {
     card(id, INVITE_WIDTH, cx)
         .flex_col()
-        .gap(px(10.))
-        .child(div().text_size(px(12.)).text_color(palette::faint(cx)).child("Invite to join a server"))
-        .child(row.flex().items_center().gap(px(12.)))
+        .gap_2p5()
+        .child(div().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child("Invite to join a server"))
+        .child(row.flex().items_center().gap_3())
         .into_any_element()
 }
 
 fn initials_tile(name: &str, cx: &App) -> AnyElement {
     let initials: String = name.split_whitespace().filter_map(|w| w.chars().next()).take(3).collect();
-    div().size(px(INVITE_ICON)).flex_none().squircle(RADIUS_MD).bg(palette::selected(cx)).flex().items_center().justify_center().text_size(px(16.)).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(initials).into_any_element()
+    div().size(px(INVITE_ICON)).flex_none().squircle(RADIUS_MD).bg(palette::selected(cx)).flex().items_center().justify_center().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(initials).into_any_element()
 }
 
 // The card's real layout in bars, pulsing like the feed's skeleton.
@@ -419,16 +419,16 @@ fn skeleton(id: String, invite: bool, cx: &App) -> AnyElement {
     let bar = palette::selected(cx);
     let line = |w: f32, h: f32| div().w(px(w)).max_w_full().h(px(h)).rounded_full().bg(bar);
     let body = match invite {
-        true => card(id.clone(), INVITE_WIDTH, cx).flex_col().gap(px(10.)).child(line(140., 10.)).child(
+        true => card(id.clone(), INVITE_WIDTH, cx).flex_col().gap_2p5().child(line(140., 10.)).child(
             div()
                 .flex()
                 .items_center()
-                .gap(px(12.))
+                .gap_3()
                 .child(div().size(px(INVITE_ICON)).flex_none().squircle(RADIUS_MD).bg(bar))
-                .child(div().flex_1().flex().flex_col().gap(px(8.)).child(line(160., 14.)).child(line(180., 10.)))
-                .child(div().w(px(64.)).h(px(36.)).flex_none().squircle(RADIUS_SM).bg(bar)),
+                .child(div().flex_1().flex().flex_col().gap_2().child(line(160., 14.)).child(line(180., 10.)))
+                .child(div().w_16().h_9().flex_none().squircle(RADIUS_SM).bg(bar)),
         ),
-        false => card(id.clone(), MESSAGE_WIDTH, cx).flex_col().gap(px(8.)).child(div().flex().items_center().gap(px(8.)).child(div().size(px(20.)).rounded_full().bg(bar)).child(line(96., 12.)).child(line(72., 10.))).child(line(320., 12.)).child(line(220., 12.)).child(line(80., 10.)),
+        false => card(id.clone(), MESSAGE_WIDTH, cx).flex_col().gap_2().child(div().flex().items_center().gap_2().child(div().size_5().rounded_full().bg(bar)).child(line(96., 12.)).child(line(72., 10.))).child(line(320., 12.)).child(line(220., 12.)).child(line(80., 10.)),
     };
     body.with_animation(SharedString::from(format!("{id}-pulse")), Animation::new(Duration::from_millis(1100)).repeat(), |el, t| el.opacity(0.6 + 0.4 * (t * TAU).cos().abs())).into_any_element()
 }

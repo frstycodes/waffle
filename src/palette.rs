@@ -209,6 +209,11 @@ pub fn stream_glow() -> (Hsla, Hsla) {
     (rgb(0x0097A1).into(), rgb(0x9D2398).into())
 }
 
+// The design's media scrim, oklch(0.14 0.004 260): what dims the edges of images and video.
+pub fn media_scrim() -> Hsla {
+    rgb(0x08090B).into()
+}
+
 // Strong ink on a fill that's light whatever the theme (a light profile theme, a pale brand tile).
 pub fn ink_on_light() -> Hsla {
     rgb(0x1A1A1E).into()
