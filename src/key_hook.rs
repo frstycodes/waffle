@@ -170,17 +170,36 @@ mod platform {
     use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
-    use windows::Win32::UI::WindowsAndMessaging::{CallNextHookEx, GetMessageW, HC_ACTION, KBDLLHOOKSTRUCT, MSG, SetWindowsHookExW, WH_KEYBOARD_LL, WM_KEYDOWN, WM_SYSKEYDOWN};
+    use windows::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_TIME_CRITICAL};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CallNextHookEx, GetMessageW, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, MSG, SetTimer, SetWindowsHookExW, UnhookWindowsHookEx, WH_KEYBOARD_LL, WM_KEYDOWN, WM_SYSKEYDOWN, WM_TIMER,
+    };
+
+    // Windows removes a low-level hook, silently and for good, the first time it answers later than
+    // LowLevelHooksTimeout; a game pinning the CPU can starve this thread that long. So the thread runs
+    // at top priority, and the hook is put back in every so often in case it was dropped anyway.
+    const REHOOK_MS: u32 = 30_000;
 
     // The hook runs on this thread, so it pumps messages for as long as the app runs.
     pub fn listen() {
-        let module = unsafe { GetModuleHandleW(None) }.ok().map(Into::into);
-        if unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(on_key), module, 0) }.is_err() {
-            return;
-        }
+        let _ = unsafe { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL) };
+        let Some(mut hook) = install() else { return };
         super::listening();
+        unsafe { SetTimer(None, 0, REHOOK_MS, None) };
         let mut msg = MSG::default();
-        while unsafe { GetMessageW(&mut msg, None, 0, 0) }.as_bool() {}
+        while unsafe { GetMessageW(&mut msg, None, 0, 0) }.as_bool() {
+            if msg.message == WM_TIMER
+                && let Some(fresh) = install()
+            {
+                let _ = unsafe { UnhookWindowsHookEx(hook) };
+                hook = fresh;
+            }
+        }
+    }
+
+    fn install() -> Option<HHOOK> {
+        let module = unsafe { GetModuleHandleW(None) }.ok().map(Into::into);
+        unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(on_key), module, 0) }.ok()
     }
 
     pub fn is_down(code: u16) -> bool {

@@ -43,7 +43,7 @@ struct Videos {
     players: HashMap<String, Entity<VideoPlayer>>,
     playing: Option<WeakEntity<VideoPlayer>>,
     fullscreen: Option<Entity<VideoPlayer>>,
-    // Discord keeps one volume for every video.
+    // Discord keeps one volume for every video, audio file and voice message.
     level: Level,
 }
 
@@ -76,6 +76,15 @@ pub fn tile(key: String, url: &str, poster: &str, cx: &mut App) -> AnyElement {
     let player = cx.new(|cx| VideoPlayer::new(url, poster, cx));
     cx.default_global::<Videos>().players.insert(key, player.clone());
     player.into_any_element()
+}
+
+// The shared volume and mute, for the audio players.
+pub fn volume(cx: &App) -> (f32, bool) {
+    cx.try_global::<Videos>().map_or((1., false), |v| (v.level.volume, v.level.muted))
+}
+
+pub fn set_volume(volume: f32, muted: bool, cx: &mut App) {
+    cx.default_global::<Videos>().level = Level { volume, muted };
 }
 
 // Drives the player kept under `key` from outside it (the media viewer's keys).

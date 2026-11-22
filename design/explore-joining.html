@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Joining a Server</title>
+<meta name="description" content="Rules screening, onboarding questions, Channels & Roles and the Server Guide, as Discord runs them, in Waffle's look.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&display=swap" rel="stylesheet">
+<script>const REICON = {"book-open":"<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"m11.527 21.082l-1.207-.965a3.96 3.96 0 0 0-2.47-.867h-.47a7.1 7.1 0 0 0-3.946 1.195a1.405 1.405 0 0 1-2.185-1.17V6.153c0-.658.33-1.273.877-1.638l.297-.198A9.3 9.3 0 0 1 7.596 2.75c1.701 0 3.313.753 4.404 2.052a5.75 5.75 0 0 1 4.404-2.052c1.84 0 3.64.545 5.172 1.566l.297.198c.548.365.877.98.877 1.638v13.124a1.405 1.405 0 0 1-2.185 1.169a7.1 7.1 0 0 0-3.946-1.195h-.468c-.899 0-1.77.306-2.471.867l-1.207.965a1 1 0 0 1-.1.069l-.048.025M3.256 5.564a7.8 7.8 0 0 1 4.34-1.314a4.25 4.25 0 0 1 3.32 1.596l.334.417V18.94a5.46 5.46 0 0 0-3.4-1.189h-.47c-1.642 0-3.249.47-4.631 1.35V6.153a.47.47 0 0 1 .209-.39zM12.75 18.94a5.46 5.46 0 0 1 3.4-1.189h.469c1.642 0 3.249.47 4.631 1.35V6.153a.47.47 0 0 0-.209-.39l-.297-.198a7.8 7.8 0 0 0-4.34-1.314a4.25 4.25 0 0 0-3.32 1.596l-.334.417z\" clip-rule=\"evenodd\"/></g>","xmark":"<path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M18.667 5.333L5.333 18.667m0-13.334l13.334 13.334\"/>","check":"<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path d=\"M21.5303 5.46967C21.8232 5.76256 21.8232 6.23744 21.5303 6.53033L9.53033 18.5303C9.23744 18.8232 8.76256 18.8232 8.46967 18.5303L2.46967 12.5303C2.17678 12.2374 2.17678 11.7626 2.46967 11.4697C2.76256 11.1768 3.23744 11.1768 3.53033 11.4697L9 16.9393L20.4697 5.46967C20.7626 5.17678 21.2374 5.17678 21.5303 5.46967Z\" fill=\"currentColor\"/></g>","alert-circle":"<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><g fill=\"currentColor\"><path d=\"M12 6.25a.75.75 0 0 1 .75.75v6a.75.75 0 0 1-1.5 0V7a.75.75 0 0 1 .75-.75M12 17a1 1 0 1 0 0-2a1 1 0 0 0 0 2\"/><path fill-rule=\"evenodd\" d=\"M1.25 12C1.25 6.063 6.063 1.25 12 1.25S22.75 6.063 22.75 12S17.937 22.75 12 22.75S1.25 17.937 1.25 12M12 2.75a9.25 9.25 0 1 0 0 18.5a9.25 9.25 0 0 0 0-18.5\" clip-rule=\"evenodd\"/></g></g>","signpost":"<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M12.75 2a.75.75 0 0 0-1.5 0v.75H6.606c-.562 0-1.005 0-1.422.135a3 3 0 0 0-.526.235c-.38.22-.676.55-1.051.968l-.09.1c-.404.45-.744.828-.99 1.164c-.26.352-.463.715-.543 1.148a2.8 2.8 0 0 0 0 1c.08.433.282.796.542 1.148c.247.336.587.714.992 1.165l.089.1c.375.418.671.748 1.05.967q.252.145.527.235c.417.136.86.136 1.422.135h4.644v.5H6.462c-.67 0-1.229 0-1.681.046c-.473.048-.913.153-1.309.418c-.3.2-.558.458-.759.758c-.264.396-.369.835-.417 1.309c-.046.452-.046 1.011-.046 1.68v.077c0 .67 0 1.229.046 1.681c.048.473.153.913.417 1.309c.201.3.459.558.76.759c.395.264.835.369 1.308.417c.452.046 1.011.046 1.68.046h4.789v1H10a.75.75 0 0 0 0 1.5h4a.75.75 0 0 0 0-1.5h-1.25v-1h4.644c.562 0 1.005 0 1.422-.135q.276-.09.526-.235c.38-.22.676-.55 1.051-.968l.09-.1c.404-.45.744-.828.99-1.164c.26-.352.463-.715.543-1.148c.061-.33.061-.67 0-1c-.08-.433-.282-.796-.542-1.148c-.247-.336-.587-.714-.992-1.165l-.089-.1c-.375-.418-.671-.748-1.05-.967a3 3 0 0 0-.527-.235c-.417-.136-.86-.136-1.422-.135H12.75v-.5h4.788c.67 0 1.229 0 1.681-.046c.473-.048.913-.153 1.309-.418c.3-.2.558-.458.759-.758c.264-.396.369-.836.417-1.309c.046-.452.046-1.011.046-1.68v-.077c0-.67 0-1.229-.046-1.681c-.048-.473-.153-.913-.418-1.309a2.8 2.8 0 0 0-.758-.759c-.396-.264-.836-.369-1.309-.417c-.452-.046-1.011-.046-1.68-.046H12.75zM5.648 4.311c.162-.052.35-.061 1.056-.061H17.5c.718 0 1.2 0 1.567.038c.355.036.519.1.628.173c.136.09.253.208.344.345c.073.108.137.272.173.627c.037.367.038.85.038 1.567c0 .718 0 1.2-.038 1.567c-.036.355-.1.519-.173.627a1.3 1.3 0 0 1-.344.345c-.109.073-.273.137-.628.173c-.367.037-.85.038-1.567.038H6.704c-.706 0-.894-.009-1.056-.061a1.3 1.3 0 0 1-.239-.107c-.148-.085-.28-.22-.751-.745c-.435-.484-.725-.808-.924-1.078c-.191-.26-.253-.41-.275-.532a1.3 1.3 0 0 1 0-.454c.022-.121.084-.272.275-.532c.199-.27.489-.594.924-1.078c.472-.526.603-.66.751-.745a1.3 1.3 0 0 1 .239-.107m12.704 9c-.162-.052-.35-.061-1.056-.061H6.5c-.718 0-1.2 0-1.567.038c-.355.036-.519.1-.627.173a1.3 1.3 0 0 0-.345.345c-.073.108-.137.272-.173.627c-.037.367-.038.85-.038 1.567c0 .718 0 1.2.038 1.567c.036.355.1.519.173.628c.09.136.208.253.345.344c.108.073.272.137.627.173c.367.037.85.038 1.567.038h10.796c.706 0 .894-.009 1.056-.061q.125-.04.239-.107c.148-.085.28-.22.751-.745c.435-.484.725-.808.924-1.078c.191-.26.253-.41.275-.532c.028-.15.028-.304 0-.454c-.022-.121-.084-.272-.275-.532c-.199-.27-.489-.594-.924-1.078c-.472-.526-.603-.66-.751-.745a1.3 1.3 0 0 0-.24-.107\" clip-rule=\"evenodd\"/></g>","search":"<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M11.5 2.75a8.75 8.75 0 1 0 0 17.5a8.75 8.75 0 0 0 0-17.5M1.25 11.5c0-5.66 4.59-10.25 10.25-10.25S21.75 5.84 21.75 11.5c0 2.56-.939 4.902-2.491 6.698l3.271 3.272a.75.75 0 1 1-1.06 1.06l-3.272-3.271A10.2 10.2 0 0 1 11.5 21.75c-5.66 0-10.25-4.59-10.25-10.25\" clip-rule=\"evenodd\"/></g>","list-check":"<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M2.25 6A.75.75 0 0 1 3 5.25h18a.75.75 0 0 1 0 1.5H3A.75.75 0 0 1 2.25 6m0 4A.75.75 0 0 1 3 9.25h18a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1-.75-.75m18.211 2.909a.75.75 0 0 1 .13 1.052l-3.9 5a.75.75 0 0 1-1.165.021l-2.1-2.5a.75.75 0 1 1 1.148-.964l1.504 1.79l3.33-4.27a.75.75 0 0 1 1.053-.13M2.25 14a.75.75 0 0 1 .75-.75h7a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1-.75-.75m0 4a.75.75 0 0 1 .75-.75h7a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1-.75-.75\" clip-rule=\"evenodd\"/></g>","chevron-down":"<path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M20.333 8.667L12 17L3.667 8.667\"/>","sparkle":"<g fill=\"none\"><path fill=\"currentColor\" d=\"M7.544 3.987L5.86 3.425l-.561-1.684c-.183-.544-1.083-.544-1.266 0l-.56 1.684l-1.685.562a.667.667 0 0 0 0 1.264l1.684.561l.561 1.684a.668.668 0 0 0 1.267 0l.561-1.684l1.684-.561a.667.667 0 0 0 0-1.264Z\"/><path stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"m12.667 3.667l2.549 6.449l6.451 2.551l-6.451 2.55l-2.549 6.45l-2.551-6.45l-6.449-2.55l6.449-2.551z\"/></g>","arrow-left":"<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M10.53 5.47a.75.75 0 0 1 0 1.06l-4.72 4.72H20a.75.75 0 0 1 0 1.5H5.81l4.72 4.72a.75.75 0 1 1-1.06 1.06l-6-6a.75.75 0 0 1 0-1.06l6-6a.75.75 0 0 1 1.06 0\" clip-rule=\"evenodd\"/></g>","minus":"<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" d=\"M20.75 12a.75.75 0 0 1-.75.75H4a.75.75 0 0 1 0-1.5h16a.75.75 0 0 1 .75.75\"/></g>","volume-high":"<g fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M2 10v4q0 3 3 3h1.43c.37 0 .74.11 1.06.3l2.92 1.83c2.52 1.58 4.59.43 4.59-2.54V7.41c0-2.98-2.07-4.12-4.59-2.54L7.49 6.7c-.32.19-.69.3-1.06.3H5q-3 0-3 3Z\"/><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M18 8a6.66 6.66 0 0 1 0 8m1.83-10.5a10.83 10.83 0 0 1 0 13\"/></g>","chat-round":"<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M22.75 12c0-5.937-4.813-10.75-10.75-10.75S1.25 6.063 1.25 12c0 1.718.404 3.345 1.122 4.787c.107.215.13.435.08.62l-.595 2.226c-.408 1.524.986 2.918 2.51 2.51l2.226-.596a.9.9 0 0 1 .62.08A10.7 10.7 0 0 0 12 22.75c5.937 0 10.75-4.813 10.75-10.75M12 2.75a9.25 9.25 0 0 1 0 18.5a9.2 9.2 0 0 1-4.118-.965a2.38 2.38 0 0 0-1.676-.187l-2.227.596a.55.55 0 0 1-.673-.674l.596-2.226a2.38 2.38 0 0 0-.187-1.676A9.2 9.2 0 0 1 2.75 12A9.25 9.25 0 0 1 12 2.75\" clip-rule=\"evenodd\"/></g>","check-circle":"<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><g fill=\"currentColor\"><path d=\"M16.03 10.03a.75.75 0 1 0-1.06-1.06l-4.47 4.47l-1.47-1.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0z\"/><path fill-rule=\"evenodd\" d=\"M12 1.25C6.063 1.25 1.25 6.063 1.25 12S6.063 22.75 12 22.75S22.75 17.937 22.75 12S17.937 1.25 12 1.25M2.75 12a9.25 9.25 0 1 1 18.5 0a9.25 9.25 0 0 1-18.5 0\" clip-rule=\"evenodd\"/></g></g>","verified":"<g stroke=\"currentColor\" stroke-width=\"0.5\" stroke-linejoin=\"round\" paint-order=\"stroke fill\"><path fill=\"currentColor\" fill-rule=\"evenodd\" d=\"M10.594 2.319a3.26 3.26 0 0 1 2.812 0c.387.185.74.487 1.231.905l.078.066c.238.203.313.265.389.316c.193.13.41.219.637.264c.09.018.187.027.499.051l.101.008c.642.051 1.106.088 1.51.23a3.27 3.27 0 0 1 1.99 1.99c.142.404.178.868.23 1.51l.008.101c.024.312.033.41.051.499c.045.228.135.445.264.638c.051.075.113.15.316.388l.066.078c.419.49.72.844.905 1.23c.425.89.425 1.924 0 2.813c-.184.387-.486.74-.905 1.231l-.066.078a5 5 0 0 0-.316.389c-.13.193-.219.41-.264.637c-.018.09-.026.187-.051.499l-.009.101c-.05.642-.087 1.106-.23 1.51a3.26 3.26 0 0 1-1.989 1.99c-.404.142-.868.178-1.51.23l-.101.008a5 5 0 0 0-.499.051a1.8 1.8 0 0 0-.637.264a5 5 0 0 0-.39.316l-.077.066c-.49.419-.844.72-1.23.905a3.26 3.26 0 0 1-2.813 0c-.387-.184-.74-.486-1.231-.905l-.078-.066a5 5 0 0 0-.388-.316a1.8 1.8 0 0 0-.638-.264a5 5 0 0 0-.499-.051l-.101-.009c-.642-.05-1.106-.087-1.51-.23a3.26 3.26 0 0 1-1.99-1.989c-.142-.404-.179-.868-.23-1.51l-.008-.101a5 5 0 0 0-.051-.499a1.8 1.8 0 0 0-.264-.637a5 5 0 0 0-.316-.39l-.066-.077c-.418-.49-.72-.844-.905-1.23a3.26 3.26 0 0 1 0-2.813c.185-.387.487-.74.905-1.231l.066-.078a5 5 0 0 0 .316-.388c.13-.193.219-.41.264-.638c.018-.09.027-.187.051-.499l.008-.101c.051-.642.088-1.106.23-1.51a3.26 3.26 0 0 1 1.99-1.99c.404-.142.868-.179 1.51-.23l.101-.008a5 5 0 0 0 .499-.051c.228-.045.445-.135.638-.264c.075-.051.15-.113.388-.316l.078-.066c.49-.418.844-.72 1.23-.905m2.163 1.358a1.76 1.76 0 0 0-1.514 0c-.185.088-.38.247-.981.758l-.03.025c-.197.168-.34.291-.497.396c-.359.24-.761.407-1.185.49c-.185.037-.373.052-.632.073l-.038.003c-.787.063-1.036.089-1.23.157c-.5.177-.894.57-1.07 1.071c-.07.194-.095.443-.158 1.23l-.003.038c-.02.259-.036.447-.072.632c-.084.424-.25.826-.49 1.185c-.106.157-.229.3-.397.498l-.025.029c-.511.6-.67.796-.758.98a1.76 1.76 0 0 0 0 1.515c.088.185.247.38.758.981l.025.03c.168.197.291.34.396.497c.24.359.407.761.49 1.185c.037.185.052.373.073.632l.003.038c.063.787.089 1.036.157 1.23c.177.5.57.894 1.071 1.07c.194.07.443.095 1.23.158l.038.003c.259.02.447.036.632.072c.424.084.826.25 1.185.49c.157.106.3.229.498.397l.029.025c.6.511.796.67.98.758a1.76 1.76 0 0 0 1.515 0c.185-.088.38-.247.981-.758l.03-.025c.197-.168.34-.291.497-.396c.359-.24.761-.407 1.185-.49a6 6 0 0 1 .632-.073l.038-.003c.787-.063 1.036-.089 1.23-.157c.5-.177.894-.57 1.07-1.071c.07-.194.095-.444.158-1.23l.003-.038a6 6 0 0 1 .072-.633c.084-.423.25-.825.49-1.184c.106-.157.229-.3.397-.498l.025-.029c.511-.6.67-.796.758-.98a1.76 1.76 0 0 0 0-1.515c-.088-.185-.247-.38-.758-.981l-.025-.03c-.168-.197-.291-.34-.396-.497a3.3 3.3 0 0 1-.49-1.185a6 6 0 0 1-.073-.632l-.003-.038c-.063-.787-.089-1.036-.157-1.23c-.177-.5-.57-.894-1.071-1.07c-.194-.07-.444-.095-1.23-.158l-.038-.003a6 6 0 0 1-.633-.072a3.3 3.3 0 0 1-1.184-.49c-.157-.106-.3-.229-.498-.397l-.029-.025c-.6-.511-.796-.67-.98-.758m3.287 5.282a.75.75 0 0 1 0 1.065l-5.017 5.017a.753.753 0 0 1-1.064 0l-2.007-2.007A.753.753 0 1 1 9.02 11.97l1.475 1.474L14.98 8.96a.753.753 0 0 1 1.064 0\" clip-rule=\"evenodd\"/></g>","chevron-right":"<path fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8.667 3.667L17 12l-8.333 8.333\"/>","settings":"<g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"><path d=\"M8.333 5.649L12 12m-3.667 6.352L12 12m7.333 0H12\"/><circle cx=\"12\" cy=\"12\" r=\"7.333\"/><path d=\"M12 2.333v2.334m-8.372 2.5l2.021 1.166M2.333 12h2.334m17 0h-2.334M3.628 16.833l2.021-1.166m6.351 6v-2.334m4.833 1.039l-1.166-2.021m-8.5 2.021l1.166-2.021m12.039-1.518l-2.021-1.166m2.021-8.5l-2.021 1.166m-1.518-4.705l-1.166 2.021m-8.5-2.021l1.166 2.021\"/></g>"};</script>
+<style>
+  /* Waffle's tokens (tokens.css), inlined so the page stands alone. */
+  :root, :root[data-theme="light"] { color-scheme: light; --bg-sidebar: oklch(0.948 0.003 80); --bg-page: oklch(0.982 0.002 80); --bg-raised: oklch(0.995 0.001 80); --bg-group: oklch(0.960 0.003 80); --bg-overlay: oklch(0.998 0.001 80); --hover: oklch(0.3 0.008 80 / 0.06); --selected: oklch(0.3 0.008 80 / 0.09); --line: oklch(0.3 0.008 80 / 0.1); --line-strong: oklch(0.3 0.008 80 / 0.18); --text-strong: oklch(0.20 0.009 80); --text: oklch(0.30 0.009 80); --text-muted: oklch(0.46 0.009 80); --text-faint: oklch(0.58 0.009 80); --accent: #efa831; --on-accent: #2a1c00; --accent-soft: color-mix(in oklch, #efa831 18%, transparent); --accent-ink: #8a5601; --danger: #c21f3a; --danger-ink: #a8172f; --success: oklch(0.49 0.13 155); --scrim: oklch(0.2 0.01 80 / 0.3); --shadow: 0 1px 2px oklch(0 0 0 / 0.08), 0 12px 32px oklch(0 0 0 / 0.14); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; --bg-sidebar: oklch(0.180 0.004 80); --bg-page: oklch(0.210 0.004 80); --bg-raised: oklch(0.250 0.005 80); --bg-group: oklch(0.250 0.005 80); --bg-overlay: oklch(0.275 0.005 80); --hover: oklch(1 0 0 / 0.05); --selected: oklch(1 0 0 / 0.08); --line: oklch(1 0 0 / 0.08); --line-strong: oklch(1 0 0 / 0.14); --text-strong: oklch(0.97 0.004 80); --text: oklch(0.88 0.008 80); --text-muted: oklch(0.72 0.012 80); --text-faint: oklch(0.65 0.012 80); --accent-soft: oklch(0.78 0.15 75 / 0.16); --accent-ink: #f6b84d; --danger-ink: #ff7a8c; --success: oklch(0.72 0.14 155); --scrim: oklch(0 0 0 / 0.45); --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 16px 40px oklch(0 0 0 / 0.4); } }
+  :root[data-theme="dark"] { color-scheme: dark; --bg-sidebar: oklch(0.180 0.004 80); --bg-page: oklch(0.210 0.004 80); --bg-raised: oklch(0.250 0.005 80); --bg-group: oklch(0.250 0.005 80); --bg-overlay: oklch(0.275 0.005 80); --hover: oklch(1 0 0 / 0.05); --selected: oklch(1 0 0 / 0.08); --line: oklch(1 0 0 / 0.08); --line-strong: oklch(1 0 0 / 0.14); --text-strong: oklch(0.97 0.004 80); --text: oklch(0.88 0.008 80); --text-muted: oklch(0.72 0.012 80); --text-faint: oklch(0.65 0.012 80); --accent-soft: oklch(0.78 0.15 75 / 0.16); --accent-ink: #f6b84d; --danger-ink: #ff7a8c; --success: oklch(0.72 0.14 155); --scrim: oklch(0 0 0 / 0.45); --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 16px 40px oklch(0 0 0 / 0.4); }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg-page); color: var(--text); font-family: "Figtree", system-ui, sans-serif; font-size: 16px; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1120px; margin: 0 auto; padding: 32px 16px 96px; }
+  header.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 28px; margin: 0; color: var(--text-strong); flex: 1; }
+  h2 { font-size: 20px; color: var(--text-strong); margin: 48px 0 4px; }
+  p.lede, p.note { color: var(--text-muted); margin: 4px 0 16px; max-width: 72ch; line-height: 1.5; font-size: 14px; text-wrap: pretty; }
+  p.note b { color: var(--text); font-weight: 600; }
+  svg.i { width: 1.15em; height: 1.15em; flex: none; vertical-align: -0.2em; }
+  button { font: inherit; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; font-size: 14px; font-weight: 600; color: var(--text-strong); background: var(--selected); border: 0; border-radius: 11px; padding: 0 14px; cursor: pointer; white-space: nowrap; transition: transform 120ms cubic-bezier(.23,1,.32,1); }
+  .btn:hover { background: var(--line-strong); }
+  .btn:active { transform: scale(0.97); }
+  .btn.primary { background: var(--accent); color: var(--on-accent); }
+  .btn.primary:hover { background: #e29a1d; }
+  .btn.ghost { background: transparent; color: var(--text-muted); }
+  .btn.ghost:hover { background: var(--hover); color: var(--text-strong); }
+  .btn.lg { height: 40px; padding: 0 18px; font-size: 15px; border-radius: 14px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .board { background: var(--bg-page); border: 1px solid var(--line); border-radius: 20px; overflow: hidden; }
+  .board.pad { padding: 24px 16px; }
+  .scrim { background: var(--scrim); display: grid; place-items: center; padding: 32px 16px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+
+  /* Checkbox (ui::check). */
+  .check { width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid var(--line-strong); display: grid; place-items: center; flex: none; color: var(--on-accent); background: transparent; transition: background 120ms; }
+  .check svg { width: 14px; height: 14px; opacity: 0; }
+  [aria-checked="true"] > .check, .check[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+  [aria-checked="true"] > .check svg, .check[aria-checked="true"] svg { opacity: 1; }
+  [aria-checked="mixed"] > .check, .check[aria-checked="mixed"] { background: var(--accent); border-color: var(--accent); }
+  .err > .check { border-color: var(--danger); }
+  [hidden] { display: none !important; }
+  .errline { display: flex; align-items: center; gap: 6px; color: var(--danger-ink); font-size: 14px; margin-top: 8px; }
+
+  /* The server's invite splash, standing in for a real image. */
+  .splash, .ob.splash { background: radial-gradient(60% 50% at 30% 30%, oklch(0.62 0.16 330 / 0.7), transparent 70%), radial-gradient(50% 60% at 75% 70%, oklch(0.6 0.15 250 / 0.8), transparent 70%), linear-gradient(160deg, oklch(0.32 0.1 280), oklch(0.22 0.08 260)); }
+
+  /* 0. Invite accept screen. */
+  .invite-stage { padding: 32px 16px; background: var(--scrim); display: grid; place-items: center; }
+  .invite { width: min(100%, 880px); display: grid; grid-template-columns: minmax(0, 420px) 1fr; background: var(--bg-raised); border-radius: 28px; overflow: hidden; box-shadow: var(--shadow); min-height: 420px; }
+  .invite .left { padding: 40px 28px 28px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; }
+  .invite .tile { width: 72px; height: 72px; border-radius: 22px; background: oklch(0.62 0.12 300); display: grid; place-items: center; color: white; font-size: 30px; font-weight: 700; margin-bottom: 10px; }
+  .invite .lbl { color: var(--text-muted); font-size: 14px; }
+  .invite h3 { margin: 0; font-size: 24px; color: var(--text-strong); display: flex; gap: 8px; align-items: center; }
+  .invite h3 svg { color: var(--success); }
+  .counts { display: flex; gap: 14px; font-size: 14px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .counts span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); margin-right: 6px; }
+  .counts .on::before { background: var(--success); }
+  .joinset { width: 100%; margin-top: 20px; background: var(--bg-group); border-radius: 16px; text-align: left; }
+  .joinset > button { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 0; background: transparent; color: var(--text-strong); cursor: pointer; border-radius: 16px; text-align: left; }
+  .joinset > button:hover { background: var(--hover); }
+  .joinset > button .txt { flex: 1; display: flex; flex-direction: column; }
+  .joinset > button .txt b { font-size: 14px; font-weight: 600; }
+  .joinset > button .txt span { font-size: 13px; color: var(--text-muted); }
+  .joinset > button > svg:last-child { transition: transform 200ms cubic-bezier(.23,1,.32,1); color: var(--text-muted); }
+  .joinset[data-open="true"] > button > svg:last-child { transform: rotate(90deg); }
+  .joinset .body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 220ms cubic-bezier(.23,1,.32,1); }
+  .joinset[data-open="true"] .body { grid-template-rows: 1fr; }
+  .joinset .body > div { overflow: hidden; }
+  .joinset .inner { padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+  .joinset label.f { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-muted); font-weight: 600; }
+  .joinset input { height: 36px; border-radius: 11px; border: 1px solid var(--line); background: var(--bg-raised); padding: 0 12px; font: inherit; font-size: 14px; color: var(--text-strong); }
+  .toggle { display: flex; align-items: center; justify-content: space-between; font-size: 14px; color: var(--text-strong); }
+  .sw { width: 36px; height: 22px; border-radius: 999px; background: var(--line-strong); position: relative; border: 0; cursor: pointer; flex: none; }
+  .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: white; transition: transform 160ms cubic-bezier(.23,1,.32,1); }
+  .sw[aria-checked="true"] { background: var(--accent); }
+  .sw[aria-checked="true"]::after { transform: translateX(14px); }
+  .invite .acts { width: 100%; margin-top: auto; padding-top: 24px; display: flex; flex-direction: column; gap: 8px; }
+  .invite .acts .btn { width: 100%; }
+  .invite .right { position: relative; }
+  .invite .right.none { background: var(--bg-group); }
+  @media (max-width: 700px) { .invite { grid-template-columns: 1fr; } .invite .right { display: none; } }
+
+  /* 1. Composer bar + rules dialog. */
+  .chat { display: grid; grid-template-rows: 1fr auto; height: 300px; background: var(--bg-page); }
+  .msgs { padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; gap: 12px; }
+  .msg { display: grid; grid-template-columns: 40px 1fr; gap: 0 12px; }
+  .av { width: 40px; height: 40px; border-radius: 50%; }
+  .msg b { color: var(--text-strong); font-weight: 600; }
+  .msg .t { color: var(--text-faint); font-size: 12px; margin-left: 6px; }
+  .composer { margin: 0 16px 16px; min-height: 52px; border-radius: 20px; background: var(--bg-raised); box-shadow: 0 0 0 1px var(--line); display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; font-size: 14px; color: var(--text-muted); }
+  .composer > svg { color: var(--text-muted); }
+  .composer span { flex: 1; }
+  .dialog { width: min(100%, 480px); background: var(--bg-raised); border-radius: 28px; box-shadow: var(--shadow); padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+  .dhead { display: flex; gap: 12px; align-items: flex-start; }
+  .dhead > div { flex: 1; }
+  .dhead h3 { margin: 0 0 4px; font-size: 20px; color: var(--text-strong); }
+  .dhead p { margin: 0; font-size: 14px; color: var(--text-muted); }
+  .iconbtn { width: 32px; height: 32px; border: 0; border-radius: 10px; background: transparent; color: var(--text-muted); display: grid; place-items: center; cursor: pointer; flex: none; }
+  .iconbtn:hover { background: var(--hover); color: var(--text-strong); }
+  /* Rules: one group of numbered rows; the agree row shares their left edge. */
+  .rules-dialog { width: min(100%, 520px); gap: 20px; }
+  .rules-dialog .dhead { align-items: center; }
+  .srvtile { width: 48px; height: 48px; border-radius: 16px; background: oklch(0.62 0.12 300); color: white; display: grid; place-items: center; font-weight: 700; font-size: 20px; flex: none; }
+  .rules-dialog .dhead p { margin-top: 2px; }
+  .rules-head { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 8px; font-size: 14px; font-weight: 600; color: var(--text-strong); }
+  .rules-head span { font-size: 12px; font-weight: 500; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .well { background: var(--bg-group); border-radius: 20px; padding: 4px; }
+  ol.rules { margin: 0; padding: 0; list-style: none; counter-reset: r; display: flex; flex-direction: column; max-height: 260px; overflow: auto; }
+  ol.rules li { counter-increment: r; position: relative; display: grid; grid-template-columns: 24px 1fr; gap: 12px; align-items: start; padding: 12px 12px; font-size: 15px; line-height: 1.45; color: var(--text-strong); text-wrap: pretty; }
+  ol.rules li::before { content: counter(r); width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); font-size: 12px; font-weight: 700; display: grid; place-items: center; font-variant-numeric: tabular-nums; margin-top: -1px; }
+  ol.rules li + li::after { content: ""; position: absolute; top: 0; left: 48px; right: 12px; height: 1px; background: var(--line); }
+  .agree { width: 100%; display: grid; grid-template-columns: 24px 1fr; gap: 12px; align-items: center; padding: 14px 16px; border-radius: 20px; border: 0; background: var(--bg-group); color: var(--text-strong); font-size: 15px; font-weight: 600; cursor: pointer; text-align: left; box-shadow: inset 0 0 0 1px transparent; transition: background 120ms, box-shadow 120ms; }
+  .agree .check { justify-self: center; }
+  .agree:hover { background: color-mix(in oklch, var(--bg-group), var(--text-strong) 4%); }
+  .agree[aria-checked="true"] { background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 55%, transparent); }
+  .agree.err { box-shadow: inset 0 0 0 1px var(--danger); }
+  .rules-dialog .errline { margin: 8px 4px 0; }
+  .dfoot { display: flex; justify-content: flex-end; gap: 8px; }
+
+  /* 2. Onboarding, full screen. */
+  .ob { position: relative; height: 620px; background: var(--bg-page); display: grid; grid-template-rows: 1fr auto; isolation: isolate; }
+  /* With a splash, the image fills the screen and the questions sit on a solid sheet over it. */
+  .ob.has-splash { padding: 32px; gap: 0; }
+  .ob.has-splash::before { content: ""; position: absolute; inset: 0; z-index: -1; }
+  .ob.has-splash .ob-body { background: var(--bg-page); border-radius: 28px 28px 0 0; }
+  .ob.has-splash .ob-foot { background: var(--bg-page); border-radius: 0 0 28px 28px; }
+  .ob.has-splash .x { top: 44px; right: 44px; }
+  .ob.has-splash .cover-wrap { background: transparent; color: white; }
+  .ob.has-splash .cover-wrap h3 { color: white; text-shadow: 0 1px 12px oklch(0 0 0 / 0.4); }
+  .ob.has-splash .cover-wrap p, .ob.has-splash .cover-wrap small { color: oklch(1 0 0 / 0.85); }
+  .ob.has-splash.on-cover .ob-foot { background: transparent; border-color: transparent; }
+  .ob .x { position: absolute; top: 16px; right: 16px; }
+  .ob-body { overflow: auto; padding: 56px 24px 24px; display: flex; justify-content: center; }
+  .ob-col { width: min(100%, 640px); display: flex; flex-direction: column; gap: 6px; }
+  .ob-cap { font-size: 14px; color: var(--text-muted); font-weight: 600; display: flex; gap: 6px; align-items: center; }
+  .ob-cap .req { color: var(--accent-ink); }
+  .ob-col h3 { font-size: 28px; line-height: 1.2; color: var(--text-strong); margin: 0 0 4px; text-wrap: balance; }
+  .ob-help { font-size: 14px; color: var(--text-muted); margin: 0 0 16px; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  .opt { display: flex; align-items: center; gap: 12px; text-align: left; min-height: 56px; padding: 10px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg-raised); color: var(--text-strong); cursor: pointer; transition: transform 120ms cubic-bezier(.23,1,.32,1), border-color 120ms, background 120ms; }
+  .opt:hover { border-color: var(--line-strong); }
+  .opt:active { transform: scale(0.98); }
+  .opt[aria-pressed="true"] { border-color: color-mix(in oklch, var(--accent) 70%, transparent); background: var(--accent-soft); }
+  .opt .emo { font-size: 22px; width: 28px; text-align: center; flex: none; }
+  .opt .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .opt .txt b { font-weight: 600; font-size: 15px; }
+  .opt .txt span { font-size: 13px; color: var(--text-muted); }
+  .opt .gets { font-size: 12px; color: var(--text-muted); display: flex; gap: 4px; flex-wrap: wrap; }
+  .opt[aria-pressed="true"] .gets { color: var(--accent-ink); }
+  .ob-adds { margin-top: 16px; font-size: 14px; color: var(--text-muted); display: flex; gap: 8px; align-items: center; min-height: 20px; }
+  .ob-adds b { color: var(--text-strong); font-weight: 600; }
+  /* Role chip (ui::role_chip): the role's colour as a dot, the name in ink so it reads in both themes. */
+  .role { display: inline-flex; align-items: center; gap: 5px; height: 1.5em; padding: 0 0.5em; border-radius: 0.5em; background: var(--selected); color: var(--text-strong); font-weight: 600; font-size: 0.92em; vertical-align: 0.05em; white-space: nowrap; }
+  .role i { width: 0.6em; height: 0.6em; border-radius: 50%; flex: none; }
+  .opt .gets .role { font-size: 12px; }
+  .ob-foot { display: flex; align-items: center; gap: 12px; padding: 16px 24px; border-top: 1px solid var(--line); }
+  .ob-foot .grow { flex: 1; }
+  .dots { display: flex; gap: 6px; }
+  .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
+  .dots i.done { background: var(--accent); }
+  .dots i.now { background: var(--text-strong); }
+  .ob-hint { font-size: 13px; color: var(--text-muted); }
+  .ob-hint.err { color: var(--danger-ink); }
+  .cover { display: grid; place-items: center; text-align: center; gap: 0; }
+  .cover .tile { width: 88px; height: 88px; border-radius: 28px; background: oklch(0.62 0.12 300); display: grid; place-items: center; color: white; font-size: 36px; font-weight: 700; margin: 0 auto 20px; }
+  .cover h3 { font-size: 28px; margin: 0 0 6px; color: var(--text-strong); }
+  .cover p { margin: 0; color: var(--text-muted); }
+  .cover small { display: block; margin-top: 40px; font-size: 12px; color: var(--text-faint); }
+  .dropdown { border: 1px solid var(--line); border-radius: 14px; background: var(--bg-raised); padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+  .ddrow { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 10px; border-radius: 10px; border: 0; background: transparent; color: var(--text-strong); font-size: 14px; cursor: pointer; text-align: left; }
+  .ddrow:hover { background: var(--hover); }
+  .ddrow .meta { margin-left: auto; color: var(--text-muted); font-size: 12px; }
+
+  /* 3. Sidebar rows. */
+  .sides { display: flex; gap: 16px; flex-wrap: wrap; padding: 16px; }
+  .side { width: 248px; flex: none; background: var(--bg-sidebar); border-radius: 20px; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+  .srvhead { height: 44px; display: flex; align-items: center; padding: 0 10px; font-weight: 600; color: var(--text-strong); font-size: 15px; }
+  .ch { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border-radius: 11px; color: var(--text); font-size: 14px; cursor: pointer; border: 0; background: transparent; text-align: left; width: 100%; }
+  .ch:hover { background: var(--hover); color: var(--text-strong); }
+  .ch.sel { background: var(--selected); color: var(--text-strong); }
+  .ch.dim { color: var(--text-muted); }
+  .ch .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ch .meta { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .ch .badge { background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 6px; }
+  .cat { font-size: 12px; font-weight: 600; color: var(--text-muted); padding: 14px 10px 4px; display: flex; gap: 4px; align-items: center; }
+  .progress { margin: 2px 0 6px; padding: 10px 12px; border-radius: 14px; background: var(--bg-raised); box-shadow: 0 0 0 1px var(--line); cursor: pointer; }
+  .progress .row { justify-content: space-between; font-size: 14px; font-weight: 600; color: var(--text-strong); }
+  .progress .row span { font-size: 12px; color: var(--text-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .bar { height: 6px; border-radius: 999px; background: var(--selected); margin-top: 8px; overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: inherit; background: var(--success); }
+  .sep { height: 1px; background: var(--line); margin: 6px 10px; }
+
+  /* 4/5. Pages in the main view. */
+  .page { background: var(--bg-page); height: 640px; display: grid; grid-template-rows: auto 1fr; }
+  .phead { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 16px; color: var(--text-strong); font-weight: 600; }
+  .phead .tabs { margin-left: 12px; display: flex; gap: 2px; }
+  .tab { height: 30px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; color: var(--text-muted); font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .tab:hover { background: var(--hover); color: var(--text-strong); }
+  .tab[aria-selected="true"] { background: var(--selected); color: var(--text-strong); }
+  .tab .new { background: var(--accent); color: var(--on-accent); font-size: 11px; border-radius: 999px; padding: 0 6px; }
+  .pbody { overflow: auto; padding: 8px 24px 32px; }
+  .pcol { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+  .sec h4 { margin: 0 0 4px; font-size: 16px; color: var(--text-strong); }
+  .sec > p { margin: 0 0 12px; font-size: 14px; color: var(--text-muted); }
+  .group { background: var(--bg-group); border-radius: 20px; padding: 6px; }
+  .grouphead { display: flex; align-items: center; gap: 10px; padding: 10px 12px 6px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+  .grouphead .grow { flex: 1; }
+  .grouphead label { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text); font-weight: 600; }
+  .chrow { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 12px; border-radius: 14px; border: 0; background: transparent; width: 100%; text-align: left; color: var(--text-strong); cursor: pointer; }
+  .chrow:hover { background: var(--hover); }
+  .chrow > svg { color: var(--text-muted); }
+  .chrow .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .chrow .txt b { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chrow .txt span { font-size: 13px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chrow.locked { cursor: default; }
+  .chrow.locked .check { opacity: 0.5; }
+  .chrow.under .check { opacity: 0.5; }
+  .chrow .lockwhy { font-size: 12px; color: var(--text-muted); }
+  .search { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 11px; background: var(--bg-group); color: var(--text-muted); font-size: 14px; flex: 1; }
+  .search input { border: 0; background: transparent; font: inherit; color: var(--text-strong); flex: 1; outline: none; min-width: 0; }
+  .tally { font-size: 14px; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tally b { color: var(--text-strong); }
+  .qcard { background: var(--bg-group); border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .qcard h5 { margin: 0; font-size: 15px; color: var(--text-strong); display: flex; gap: 8px; align-items: baseline; }
+  .qcard h5 small { font-weight: 500; font-size: 12px; color: var(--text-muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--bg-raised); color: var(--text-strong); font-size: 14px; cursor: pointer; }
+  .chip[aria-pressed="true"] { border-color: color-mix(in oklch, var(--accent) 70%, transparent); background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+  .saved { font-size: 12px; color: var(--text-muted); display: flex; gap: 4px; align-items: center; }
+
+  /* Server Guide. */
+  .banner { height: 140px; border-radius: 20px; background: linear-gradient(135deg, oklch(0.55 0.12 300), oklch(0.62 0.11 250)); display: flex; align-items: flex-end; padding: 16px 20px; color: white; }
+  .banner h3 { margin: 0; font-size: 24px; text-shadow: 0 1px 8px oklch(0 0 0 / 0.3); }
+  .welcome { display: grid; grid-template-columns: 40px 1fr; gap: 0 12px; background: var(--bg-group); border-radius: 20px; padding: 16px; }
+  .welcome b { color: var(--text-strong); }
+  .welcome p { margin: 4px 0 0; color: var(--text); line-height: 1.5; font-size: 15px; }
+  .todo { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 12px; border-radius: 14px; cursor: pointer; }
+  .todo:hover { background: var(--hover); }
+  .todo .emo { width: 36px; height: 36px; border-radius: 11px; background: var(--bg-raised); display: grid; place-items: center; font-size: 18px; flex: none; }
+  .todo .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .todo .txt b { font-size: 14px; color: var(--text-strong); font-weight: 600; }
+  .todo .txt span { font-size: 13px; color: var(--text-muted); }
+  .todo .state { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line-strong); display: grid; place-items: center; flex: none; }
+  .todo.done .state { background: var(--success); border-color: var(--success); color: white; }
+  .todo.done .txt b { color: var(--text-muted); text-decoration: line-through; text-decoration-color: var(--line-strong); }
+  .res { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+  .rescard { background: var(--bg-group); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; }
+  .rescard:hover { background: color-mix(in oklch, var(--bg-group), var(--text-strong) 4%); }
+  .rescard b { font-size: 14px; color: var(--text-strong); }
+  .rescard span { font-size: 13px; color: var(--text-muted); line-height: 1.4; }
+  .actionbar { margin: 0 16px 8px; padding: 10px 14px; border-radius: 16px; background: var(--accent-soft); display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-strong); }
+  .actionbar span { flex: 1; }
+</style>
+<script>try{const t=localStorage.getItem("joining-theme");if(t)document.documentElement.dataset.theme=t}catch{}</script>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>Joining a server</h1>
+    <button class="btn" id="theme">Light / dark</button>
+  </header>
+  <p class="lede">Discord's four post-join gates, in the order Discord runs them: onboarding questions (rules as their last step), the rules gate in the composer for servers without onboarding, Channels &amp; Roles, and the Server Guide. Labels and order are Discord's (<b>docs/discord-joining-re.md</b>); the look and the "do better" items are Waffle's.</p>
+
+  <!-- 0 -->
+  <h2>0 · Accepting an invite</h2>
+  <p class="note">Opening an invite link shows this before anything joins. On the right is the server's invite splash, the image the server set for its invites; servers without one get a plain panel and the card narrows to one column. <b>Server Settings</b> opens in place: <b>Server Nickname</b> (only when the invite allows it, 32 characters), <b>Allow direct messages</b> and <b>Show your activity status</b>. They apply once you've joined. <b>No Thanks</b> closes it.</p>
+  <div class="row" style="margin-bottom:8px"><button class="btn" id="splash-toggle">Server without a splash</button></div>
+  <div class="board">
+    <div class="invite-stage">
+      <div class="invite" id="invite">
+        <div class="left">
+          <div class="tile">N</div>
+          <span class="lbl">You've been invited to join</span>
+          <h3><svg class="i" data-i="verified"></svg>Night owls</h3>
+          <div class="counts"><span class="on">1,204 Online</span><span>8,930 Members</span></div>
+          <div class="joinset" id="joinset" data-open="false">
+            <button aria-expanded="false"><svg class="i" data-i="settings"></svg><span class="txt"><b>Server Settings</b><span>You can customize these at any time</span></span><svg class="i" data-i="chevron-right"></svg></button>
+            <div class="body"><div><div class="inner">
+              <label class="f">Server Nickname<input maxlength="32" placeholder="What should everyone call you?"></label>
+              <div class="toggle">Allow direct messages<button class="sw" role="switch" aria-checked="true" aria-label="Allow direct messages"></button></div>
+              <div class="toggle">Show your activity status<button class="sw" role="switch" aria-checked="true" aria-label="Show your activity status"></button></div>
+            </div></div></div>
+          </div>
+          <div class="acts"><button class="btn primary lg"><span class="av" style="width:20px;height:20px;background:oklch(0.65 0.12 70)"></span>Accept as kiwi</button><button class="btn ghost lg">No Thanks</button></div>
+        </div>
+        <div class="right splash"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1 -->
+  <h2>1 · Rules in the composer</h2>
+  <p class="note">A pending member (rules gate on, no onboarding) can read every channel. The composer is the bar until they agree. <b>Complete</b> opens the dialog; <b>Submit</b> sends <code>PUT /guilds/{id}/requests/@me</code>. Do better: Submit never greys out; pressing it unticked says what's missing.</p>
+  <div class="board">
+    <div class="chat">
+      <div class="msgs">
+        <div class="msg"><span class="av" style="background:oklch(0.62 0.1 200)"></span><div><b>Mira</b><span class="t">9:40 PM</span><div>anyone for a 3-stack tonight?</div></div></div>
+      </div>
+      <div class="composer"><svg class="i" data-i="book-open"></svg><span>You must complete a few more steps before you can talk.</span><button class="btn primary" id="open-rules">Complete</button></div>
+    </div>
+    <div class="scrim" id="rules-scrim">
+      <div class="dialog rules-dialog" role="dialog" aria-labelledby="rules-h">
+        <div class="dhead"><span class="srvtile">N</span><div><h3 id="rules-h">Before you can talk here...</h3><p>You’ll need to complete the required steps below.</p></div><button class="iconbtn" aria-label="Close"><svg class="i" data-i="xmark"></svg></button></div>
+        <div>
+          <div class="rules-head">Agree to rules<span>4 rules</span></div>
+          <div class="well">
+            <ol class="rules">
+              <li>Be kind. No harassment, slurs or dogpiling.</li>
+              <li>Keep it in the right channel: clips in #clips, groups in #looking-for-group.</li>
+              <li>No spoilers outside #spoilers for two weeks after a release.</li>
+              <li>No self-promotion without asking a moderator.</li>
+            </ol>
+          </div>
+        </div>
+        <div>
+          <button class="agree" role="checkbox" aria-checked="false" id="agree"><span class="check"><svg class="i" data-i="check"></svg></span>I have read and agree to the rules</button>
+          <div class="errline" id="agree-err" hidden><svg class="i" data-i="alert-circle"></svg>Tick the box to agree to the rules first.</div>
+        </div>
+        <div class="dfoot"><button class="btn primary lg" id="submit-rules">Submit</button></div>
+      </div>
+    </div>
+  </div>
+  <p class="note">After Submit the bar disappears and the composer is live. Errors keep Discord's words: 429 "WOAH THERE. WAY TOO SPICY", 403 "You don't have permission to join this server", a changed form "This server's requirements have changed. Please close this and try again." Apply-to-join (manual approval) shows "Your application to join the server is awaiting review." in the same bar; its form is a follow-up.</p>
+
+  <!-- 2 -->
+  <h2>2 · Onboarding</h2>
+  <div class="row" style="margin-bottom:8px"><button class="btn" id="ob-splash">Server without a splash</button></div>
+  <p class="note">The server's invite splash fills the screen behind it when it has one (Discord's onboarding reads the same image); without one it's the plain page. Full screen over the app, right after joining a server with onboarding on. Cover (moves on after 3 s), each question, then <b>Read &amp; Agree to Server Rules</b> when the rules gate is on. Buttons are Discord's: <b>Skip</b> with nothing picked, <b>Next</b> once something is, <b>Finish 🎉</b> on the last step, <b>Back</b> after the first. Finishing sends <code>POST /guilds/{id}/onboarding-responses</code>. Do better: each answer lists the channels and role it adds; required questions and unread rules never grey the button, pressing it says why.</p>
+  <div class="board">
+    <div class="ob" id="ob"></div>
+  </div>
+
+  <!-- 3 -->
+  <h2>3 · Channel list entries</h2>
+  <p class="note">Rows at the top of the channel list, in Discord's order: <b>Get Started</b> progress (new members, 7 days), <b>Server Guide</b>, then <b>Channels &amp; Roles</b> (<b>Browse Channels</b> when the server has no questions). Do better: closing onboarding halfway leaves <b>Finish joining</b> first, with progress dots, resuming at the first unanswered question.</p>
+  <div class="board">
+    <div class="sides">
+      <div class="side">
+        <div class="srvhead">Night owls</div>
+        <div class="progress"><div class="row">Get Started<span>2 of 4</span></div><div class="bar"><i style="width:50%"></i></div></div>
+        <button class="ch sel"><svg class="i" data-i="signpost"></svg><span class="nm">Server Guide</span></button>
+        <button class="ch"><svg class="i" data-i="search"></svg><span class="nm">Channels &amp; Roles</span><span class="badge">NEW</span></button>
+        <div class="sep"></div>
+        <div class="cat"><svg class="i" data-i="chevron-down"></svg>Information</div>
+        <button class="ch"><span data-hash></span><span class="nm">rules</span></button>
+        <button class="ch"><span data-hash></span><span class="nm">announcements</span></button>
+        <div class="cat"><svg class="i" data-i="chevron-down"></svg>Games</div>
+        <button class="ch"><span data-hash></span><span class="nm">hades</span></button>
+        <button class="ch"><span data-hash></span><span class="nm">rift</span></button>
+      </div>
+      <div class="side">
+        <div class="srvhead">Night owls</div>
+        <button class="ch"><svg class="i" data-i="list-check"></svg><span class="nm">Finish joining</span><span class="dots" title="2 of 4 questions answered" aria-label="2 of 4 questions answered"><i class="done"></i><i class="done"></i><i></i><i></i></span></button>
+        <button class="ch"><svg class="i" data-i="search"></svg><span class="nm">Channels &amp; Roles</span></button>
+        <div class="sep"></div>
+        <div class="cat"><svg class="i" data-i="chevron-down"></svg>Information</div>
+        <button class="ch sel"><span data-hash></span><span class="nm">general</span></button>
+        <button class="ch"><span data-hash></span><span class="nm">rift</span></button>
+      </div>
+      <div class="side">
+        <div class="srvhead">Pixel Garden</div>
+        <button class="ch"><svg class="i" data-i="search"></svg><span class="nm">Browse Channels</span></button>
+        <div class="sep"></div>
+        <div class="cat"><svg class="i" data-i="chevron-down"></svg>Text</div>
+        <button class="ch sel"><span data-hash></span><span class="nm">general</span></button>
+        <button class="ch"><span data-hash></span><span class="nm">showcase</span></button>
+      </div>
+    </div>
+  </div>
+  <p class="note">The server menu gains <b>Show All Channels</b> (checked when channel picking is off). With it off, the list shows only followed channels, plus any channel that mentions you.</p>
+
+  <!-- 4 -->
+  <h2>4 · Channels &amp; Roles</h2>
+  <p class="note">Opens in the main view like a channel. <b>Customize</b> lists every question, answers saving a second after you stop clicking (<code>PUT …/onboarding-responses</code>). <b>Browse Channels</b> lists every channel you can see with a checkbox; the category's box is Discord's <b>Follow Category</b>. Saves via <code>PATCH /users/@me/guilds/settings</code>. Do better: a live "You see 6 of 10" count, and locked rows say why.</p>
+  <div class="board">
+    <div class="page">
+      <div class="phead"><svg class="i" data-i="search"></svg>Channels &amp; Roles
+        <div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="true" data-tab="customize">Customize</button><button class="tab" role="tab" aria-selected="false" data-tab="browse">Browse Channels<span class="new">NEW</span></button></div>
+      </div>
+      <div class="pbody" id="cr"></div>
+    </div>
+  </div>
+
+  <!-- 5 -->
+  <h2>5 · Server Guide</h2>
+  <p class="note">The <b>Server Guide</b> row opens this page: banner, the welcome message from the people the server named, <b>Get Started</b> to-dos (each opens its channel; viewing or sending there ticks it), and <b>Resources</b> (read-only channels). A to-do's channel shows a bar under the header until done: its title, then <b>Next: …</b>.</p>
+  <div class="board">
+    <div class="page" style="height:auto">
+      <div class="phead"><svg class="i" data-i="signpost"></svg>Night owls Server Guide</div>
+      <div class="pbody" style="padding-top:0">
+        <div class="pcol">
+          <div class="banner"><h3>Welcome to Night owls</h3></div>
+          <div class="welcome"><span class="av" style="background:oklch(0.62 0.1 30)"></span><div><b>Theo</b><p>Hey night owl! We play ranked most nights after 9. Grab your games below so you see the right channels, and say hi in #introductions.</p></div></div>
+          <div class="sec"><h4>Get Started</h4>
+            <div class="group" id="todos"></div>
+          </div>
+          <div class="sec"><h4>Resources</h4>
+            <div class="res">
+              <div class="rescard"><b>FAQ</b><span>Ranks, roles, and how scrims work.</span></div>
+              <div class="rescard"><b>Patch notes digest</b><span>The week's changes, in one post.</span></div>
+              <div class="rescard"><b>Event calendar</b><span>Tournaments and watch parties.</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note">In the to-do's channel:</p>
+  <div class="board" style="padding-top:12px">
+    <div class="actionbar"><svg class="i" data-i="chat-round"></svg><span><b>Introduce yourself</b></span><button class="btn primary">Send a message</button></div>
+    <div class="actionbar"><svg class="i" data-i="check-circle"></svg><span>Done. Next: <b>Pick your games</b></span><button class="btn">Go</button></div>
+  </div>
+</main>
+<script>
+const ic = n => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${REICON[n] || ""}</svg>`;
+const HASH = `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 4L7 20M17 4l-2 16M4 9h16M3 15h16"/></svg>`;
+const paint = (root = document) => {
+  root.querySelectorAll("svg[data-i]").forEach(s => { s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("aria-hidden", "true"); s.innerHTML = REICON[s.dataset.i] || ""; });
+  root.querySelectorAll("[data-hash]").forEach(s => { s.outerHTML = HASH; });
+};
+paint();
+
+// 1. Rules dialog.
+const agree = document.getElementById("agree"), agreeErr = document.getElementById("agree-err");
+agree.onclick = () => { const on = agree.getAttribute("aria-checked") !== "true"; agree.setAttribute("aria-checked", on); agree.classList.remove("err"); agreeErr.hidden = true; };
+document.getElementById("submit-rules").onclick = () => { if (agree.getAttribute("aria-checked") === "true") return; agree.classList.add("err"); agreeErr.hidden = false; };
+
+// 2. Onboarding.
+const Q = [
+  { title: "What brings you to Night owls?", required: true, single: true, help: "Pick one.", opts: [
+    { e: "🏆", t: "Ranked", d: "Climbing together", adds: ["#ranked-lfg", "@Ranked"] },
+    { e: "🎬", t: "Making clips", d: "Edits and highlights", adds: ["#clips"] },
+    { e: "💬", t: "Hanging out", d: "Just here to chat", adds: ["#off-topic"] },
+    { e: "👥", t: "Finding a group", d: "Squads for tonight", adds: ["#looking-for-group"] } ] },
+  { title: "Which games do you play?", required: false, single: false, help: "Choose all that apply.", opts: [
+    { e: "🔥", t: "Hades II", adds: ["#hades"] }, { e: "⚔️", t: "Rift", adds: ["#rift", "@Rift"] },
+    { e: "🏔️", t: "Ashen Peaks", adds: ["#ashen-peaks"] }, { e: "🏜️", t: "Glass Desert", adds: ["#glass-desert"] },
+    { e: "⚓", t: "Drowned Harbor", adds: ["#drowned-harbor"] } ] },
+  { title: "What region are you in?", required: false, single: true, dropdown: true, help: "Pick one.", opts: [
+    { t: "Europe", m: "+412 people in common", adds: ["@EU"] }, { t: "North America", m: "+388 people in common", adds: ["@NA"] }, { t: "Asia Pacific", m: "+96 people in common", adds: ["@APAC"] } ] },
+];
+const RULES = ["Be kind. No harassment, slurs or dogpiling.", "Keep it in the right channel.", "No spoilers outside #spoilers for two weeks after a release.", "No self-promotion without asking a moderator.", "Use English in the main channels.", "Voice: push-to-talk in Lounge after midnight."];
+let step = -1, picks = Q.map(() => new Set()), readRules = false, warn = "";
+const total = Q.length + 1;
+function ob() {
+  const el = document.getElementById("ob");
+  el.classList.toggle("has-splash", obSplash); el.classList.toggle("splash", obSplash); el.classList.toggle("on-cover", step === -1);
+  if (step === -1) {
+    el.innerHTML = `<div class="ob-body cover cover-wrap"><div><div class="tile">N</div><h3>Welcome to Night owls</h3><p>Let's customize your experience</p><small>Your responses will be treated in accordance with Discord's Privacy Policy</small></div></div><div class="ob-foot"><span class="grow"></span><button class="btn primary lg" data-go="next">Next</button></div>`;
+  } else if (step < Q.length) {
+    const q = Q[step], set = picks[step];
+    const adds = gives([...set].flatMap(i => q.opts[i].adds));
+    const body = q.dropdown
+      ? `<div class="dropdown">${q.opts.map((o, i) => `<button class="ddrow" role="checkbox" aria-checked="${set.has(i)}" data-o="${i}"><span class="check">${ic("check")}</span>${o.t}<span class="meta">${o.m}</span></button>`).join("")}</div>`
+      : `<div class="opts">${q.opts.map((o, i) => `<button class="opt" aria-pressed="${set.has(i)}" data-o="${i}"><span class="emo">${o.e}</span><span class="txt"><b>${o.t}</b>${o.d ? `<span>${o.d}</span>` : ""}<span class="gets">${o.adds.map(a => a.startsWith("@") ? role(a) : a).join(" · ")}</span></span></button>`).join("")}</div>`;
+    el.innerHTML = `<div class="ob-body"><div class="ob-col"><div class="ob-cap">Question ${step + 1} of ${Q.length}${q.required ? `<span class="req">· Required</span>` : ""}</div><h3>${q.title}</h3><p class="ob-help">${q.help}</p>${body}<div class="ob-adds">${adds ? `${ic("sparkle")}<span>${adds}</span>` : ""}</div></div></div>
+      <div class="ob-foot"><button class="btn ghost lg" data-go="back">${ic("arrow-left")}Back</button><span class="grow"></span>${dots()}<span class="grow"></span><span class="ob-hint ${warn ? "err" : ""}">${warn}</span><button class="btn ${set.size ? "primary" : ""} lg" data-go="next">${set.size ? "Next" : "Skip"}</button></div>`;
+  } else {
+    el.innerHTML = `<div class="ob-body"><div class="ob-col"><div class="ob-cap">One last step!</div><h3>Read &amp; Agree to Server Rules</h3><div class="well" style="margin-top:16px"><ol class="rules" id="ob-rules" style="max-height:240px">${RULES.map(r => `<li>${r}</li>`).join("")}</ol></div></div></div>
+      <div class="ob-foot"><button class="btn ghost lg" data-go="back">${ic("arrow-left")}Back</button><span class="grow"></span>${dots()}<span class="grow"></span><span class="ob-hint ${warn ? "err" : ""}">${warn || (readRules ? 'By clicking "Finish", you have read and agreed to the Server Rules.' : "")}</span><button class="btn primary lg" data-go="next">Finish 🎉</button></div>`;
+    const list = el.querySelector("#ob-rules");
+    list.onscroll = () => { if (!readRules && list.scrollTop + list.clientHeight >= list.scrollHeight - 4) { readRules = true; warn = ""; ob(); } };
+  }
+  el.insertAdjacentHTML("afterbegin", `<button class="iconbtn x" aria-label="Close" data-go="close">${ic("xmark")}</button>`);
+  el.querySelectorAll("[data-o]").forEach(b => b.onclick = () => {
+    const q = Q[step], set = picks[step], i = +b.dataset.o;
+    if (q.single) { const had = set.has(i); set.clear(); if (!had) set.add(i); } else set.has(i) ? set.delete(i) : set.add(i);
+    warn = ""; ob();
+  });
+  el.querySelectorAll("[data-go]").forEach(b => b.onclick = () => {
+    const go = b.dataset.go;
+    if (go === "close") { step = -1; picks = Q.map(() => new Set()); readRules = false; warn = ""; return ob(); }
+    if (go === "back") { warn = ""; step = Math.max(-1, step - 1); return ob(); }
+    if (step >= 0 && step < Q.length && Q[step].required && !picks[step].size) { warn = "This is a required question."; return ob(); }
+    if (step === Q.length && !readRules) { warn = "You must finish reading the rules to join."; return ob(); }
+    if (step === Q.length) { step = -1; picks = Q.map(() => new Set()); readRules = false; return ob(); }
+    warn = ""; step++; ob();
+  });
+}
+const ROLE_COLORS = { Ranked: "#e8a33d", Rift: "#d9475b", EU: "#4f8fe0", NA: "#3fae7a", APAC: "#a46ad8" };
+const role = r => { const n = r.replace(/^@/, ""), c = ROLE_COLORS[n]; return `<span class="role">${c ? `<i style="background:${c}"></i>` : ""}${n}</span>`; };
+// What the picks open up, said the way a person would.
+const list = xs => xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`;
+function gives(adds) {
+  const chans = [...new Set(adds.filter(a => a.startsWith("#")))].map(c => `<b>${c}</b>`);
+  const roles = [...new Set(adds.filter(a => a.startsWith("@")))].map(role);
+  const wear = roles.length && `the ${list(roles)} ${roles.length > 1 ? "roles" : "role"}`;
+  if (chans.length && wear) return `Nice, that opens up ${list(chans)} for you, and you'll wear ${wear}.`;
+  if (chans.length) return `Nice, that opens up ${list(chans)} for you.`;
+  if (wear) return `Nice, you'll wear ${wear}.`;
+  return "";
+}
+let obSplash = true;
+document.getElementById("ob-splash").onclick = e => { obSplash = !obSplash; e.target.textContent = obSplash ? "Server without a splash" : "Server with a splash"; ob(); };
+const joinset = document.getElementById("joinset");
+joinset.querySelector("button").onclick = () => { const open = joinset.dataset.open !== "true"; joinset.dataset.open = open; joinset.querySelector("button").setAttribute("aria-expanded", open); };
+joinset.querySelectorAll(".sw").forEach(s => s.onclick = () => s.setAttribute("aria-checked", s.getAttribute("aria-checked") !== "true"));
+document.getElementById("splash-toggle").onclick = e => { const r = document.querySelector(".invite .right"), has = r.classList.toggle("splash"); r.classList.toggle("none", !has); document.getElementById("invite").style.gridTemplateColumns = has ? "" : "1fr"; document.getElementById("invite").style.width = has ? "" : "min(100%, 440px)"; r.style.display = has ? "" : "none"; e.target.textContent = has ? "Server without a splash" : "Server with a splash"; };
+const dots = () => `<span class="dots" aria-hidden="true">${Array.from({ length: total }, (_, i) => `<i class="${i < step ? "done" : i === step ? "now" : ""}"></i>`).join("")}</span>`;
+ob();
+let coverTimer = setInterval(() => { if (step === -1) { step = 0; ob(); } }, 3000);
+
+// 4. Channels & Roles.
+const CATS = [
+  { name: "Information", rows: [ { n: "rules", d: "Read these first", locked: true, on: true }, { n: "announcements", d: "Patch notes and server news", on: true } ] },
+  { name: "Games", rows: [ { n: "hades", d: "Builds, boons and bad luck", on: true }, { n: "rift", d: "Ranked talk, tier lists, patch takes", on: true }, { n: "ashen-peaks", d: "Routes and speedruns", on: false }, { n: "glass-desert-sandstorm-survivors-support-group", d: "For the ones who stayed for the sandstorms that last forever", on: false }, { n: "drowned-harbor", d: "Boats, mostly", on: false } ] },
+  { name: "Voice", voice: true, rows: [ { n: "Lounge", d: "Drop in, hang out", on: true }, { n: "Friday stage", d: "Talks and patch reviews", on: true }, { n: "Duo queue", on: false } ] },
+];
+let tab = "customize";
+function cr() {
+  document.querySelectorAll("[data-tab]").forEach(t => t.setAttribute("aria-selected", t.dataset.tab === tab));
+  const el = document.getElementById("cr");
+  if (tab === "customize") {
+    el.innerHTML = `<div class="pcol"><div class="sec"><h4>${Q.length} Customization Questions</h4><p>Answer questions to get access to more channels and roles.</p>
+      <div style="display:flex;flex-direction:column;gap:8px">${Q.map((q, qi) => `<div class="qcard"><h5>${q.title}<small>${q.single ? "Pick one" : "Choose all that apply."}</small></h5><div class="chips">${q.opts.map((o, i) => `<button class="chip" aria-pressed="${picks[qi].has(i)}" data-q="${qi}" data-o="${i}">${o.e ? `<span>${o.e}</span>` : ""}${o.t}</button>`).join("")}</div></div>`).join("")}</div>
+      <p class="saved" style="margin-top:12px">${ic("check")}Saved</p></div></div>`;
+    el.querySelectorAll("[data-q]").forEach(b => b.onclick = () => { const q = Q[+b.dataset.q], set = picks[+b.dataset.q], i = +b.dataset.o; if (q.single) { const had = set.has(i); set.clear(); if (!had) set.add(i); } else set.has(i) ? set.delete(i) : set.add(i); cr(); });
+    return;
+  }
+  const all = CATS.flatMap(c => c.rows), shown = all.filter(r => r.on).length;
+  el.innerHTML = `<div class="pcol"><div class="row" style="gap:12px"><label class="search">${ic("search")}<input placeholder="Search Channels" aria-label="Search Channels"></label><span class="tally">You see <b>${shown}</b> of ${all.length}</span></div>
+    ${CATS.map((c, ci) => { const free = c.rows.filter(r => !r.locked), on = free.filter(r => r.on).length, st = on === free.length ? "true" : on ? "mixed" : "false";
+      return `<div class="group"><div class="grouphead"><span class="grow">${c.name}</span><label role="checkbox" aria-checked="${st}" data-cat="${ci}" tabindex="0"><span class="check">${ic(st === "mixed" ? "minus" : "check")}</span>Follow Category</label></div>
+      ${c.rows.map((r, ri) => `<button class="chrow ${r.locked ? "locked" : ""}" role="checkbox" aria-checked="${r.on}" data-c="${ci}" data-r="${ri}" ${r.locked ? 'aria-disabled="true" title="Everyone sees this channel"' : ""}>${c.voice ? ic("volume-high") : HASH}<span class="txt"><b>${r.n}</b>${r.d ? `<span>${r.d}</span>` : ""}</span>${r.locked ? `<span class="lockwhy">Everyone sees this</span>` : ""}<span class="check">${ic("check")}</span></button>`).join("")}</div>`; }).join("")}
+    <p class="note" style="margin:0">Tip: Channels with mentions will always appear on your channel list, even if you hide them.</p></div>`;
+  el.querySelectorAll("[data-cat]").forEach(b => b.onclick = () => { const c = CATS[+b.dataset.cat], free = c.rows.filter(r => !r.locked), all = free.every(r => r.on); free.forEach(r => r.on = !all); cr(); });
+  el.querySelectorAll("[data-c]").forEach(b => b.onclick = () => { const r = CATS[+b.dataset.c].rows[+b.dataset.r]; if (r.locked) return; r.on = !r.on; cr(); });
+}
+document.querySelectorAll("[data-tab]").forEach(t => t.onclick = () => { tab = t.dataset.tab; cr(); });
+cr();
+
+// 5. Server Guide.
+const TODOS = [
+  { e: "👋", t: "Introduce yourself", c: "#introductions", done: true },
+  { e: "🎮", t: "Pick your games", c: "#roles", done: true },
+  { e: "📣", t: "Check the latest news", c: "#announcements", done: false },
+  { e: "📖", t: "Read the rules", c: "#rules", done: false },
+];
+function todos() {
+  const el = document.getElementById("todos");
+  el.innerHTML = TODOS.map((t, i) => `<div class="todo ${t.done ? "done" : ""}" data-t="${i}" aria-label="${t.t}, ${t.done ? "completed" : "not completed"}"><span class="emo">${t.e}</span><span class="txt"><b>${t.t}</b><span>${t.c}</span></span><span class="state">${t.done ? ic("check") : ""}</span></div>`).join("");
+  el.querySelectorAll("[data-t]").forEach(r => r.onclick = () => { TODOS[+r.dataset.t].done = true; todos(); });
+}
+todos();
+
+document.getElementById("theme").onclick = () => {
+  const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("joining-theme", root.dataset.theme); } catch {}
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report Flow</title>
+<meta name="description" content="Reporting a message or a person: where Report sits, and the server-driven dialog it opens.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&display=swap" rel="stylesheet">
+<script src="icons-data.js"></script>
+<style>
+  /* Waffle's tokens (tokens.css), inlined so the page stands alone. */
+  :root, :root[data-theme="light"] { color-scheme: light; --bg-page: oklch(0.982 0.002 80); --bg-raised: oklch(0.995 0.001 80); --bg-overlay: oklch(0.995 0.001 80); --well: oklch(0.955 0.002 80); --hover: oklch(0.3 0.008 80 / 0.06); --selected: oklch(0.3 0.008 80 / 0.09); --line: oklch(0.3 0.008 80 / 0.1); --line-strong: oklch(0.3 0.008 80 / 0.18); --text-strong: oklch(0.20 0.009 80); --text: oklch(0.30 0.009 80); --text-muted: oklch(0.46 0.009 80); --text-faint: oklch(0.58 0.009 80); --accent: #efa831; --on-accent: #2a1c00; --accent-ink: #8a5601; --danger: #c21f3a; --danger-hover: #a8172f; --danger-ink: #b0182f; --danger-soft: oklch(0.55 0.2 20 / 0.1); --scrim: oklch(0.2 0.01 80 / 0.3); --shadow: 0 1px 2px oklch(0 0 0 / 0.08), 0 12px 32px oklch(0 0 0 / 0.14); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; --bg-page: oklch(0.210 0.004 80); --bg-raised: oklch(0.250 0.005 80); --bg-overlay: oklch(0.265 0.005 80); --well: oklch(0.225 0.004 80); --hover: oklch(1 0 0 / 0.05); --selected: oklch(1 0 0 / 0.08); --line: oklch(1 0 0 / 0.08); --line-strong: oklch(1 0 0 / 0.14); --text-strong: oklch(0.97 0.004 80); --text: oklch(0.88 0.008 80); --text-muted: oklch(0.72 0.012 80); --text-faint: oklch(0.6 0.01 80); --accent-ink: #f6b84d; --danger-ink: #ff7a8c; --danger-soft: oklch(0.65 0.2 20 / 0.14); --scrim: oklch(0 0 0 / 0.45); --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 16px 40px oklch(0 0 0 / 0.4); } }
+  :root[data-theme="dark"] { color-scheme: dark; --bg-page: oklch(0.210 0.004 80); --bg-raised: oklch(0.250 0.005 80); --bg-overlay: oklch(0.265 0.005 80); --well: oklch(0.225 0.004 80); --hover: oklch(1 0 0 / 0.05); --selected: oklch(1 0 0 / 0.08); --line: oklch(1 0 0 / 0.08); --line-strong: oklch(1 0 0 / 0.14); --text-strong: oklch(0.97 0.004 80); --text: oklch(0.88 0.008 80); --text-muted: oklch(0.72 0.012 80); --text-faint: oklch(0.6 0.01 80); --accent-ink: #f6b84d; --danger-ink: #ff7a8c; --danger-soft: oklch(0.65 0.2 20 / 0.14); --scrim: oklch(0 0 0 / 0.45); --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 16px 40px oklch(0 0 0 / 0.4); }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg-page); color: var(--text); font-family: "Figtree", system-ui, sans-serif; font-size: 16px; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 16px 64px; }
+  header.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  h1 { font-size: 24px; margin: 0; color: var(--text-strong); flex: 1; }
+  h2 { font-size: 16px; color: var(--text-strong); margin: 40px 0 4px; }
+  p.lede, p.note { color: var(--text-muted); margin: 0 0 16px; max-width: 72ch; line-height: 1.5; font-size: 14px; }
+  svg.i { width: 18px; height: 18px; flex: none; }
+  .btn { font: inherit; font-size: 14px; font-weight: 600; color: var(--text-strong); background: var(--selected); border: 0; border-radius: 12px; height: 36px; padding: 0 16px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: transform 120ms cubic-bezier(.23,1,.32,1); }
+  .btn:hover { background: var(--line-strong); }
+  .btn:active { transform: scale(0.97); }
+  .btn:focus-visible, .row:focus-visible, .mi:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn.danger { background: var(--danger); color: oklch(0.99 0 0); }
+  .btn.danger:hover { background: var(--danger-hover); }
+  .btn.primary { background: var(--accent); color: var(--on-accent); }
+  .btn[disabled] { opacity: .5; pointer-events: none; }
+  .seg { display: inline-flex; background: var(--selected); border-radius: 12px; padding: 2px; }
+  .seg button { font: inherit; font-size: 14px; border: 0; background: transparent; color: var(--text-muted); padding: 6px 12px; border-radius: 10px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--bg-raised); color: var(--text-strong); box-shadow: 0 1px 2px oklch(0 0 0 / .12); }
+
+  /* Entry points: the two menus, as menus.css draws them. */
+  .entries { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+  .menu { width: 232px; background: var(--bg-overlay); border-radius: 16px; box-shadow: var(--shadow); padding: 6px; font-size: 14px; }
+  .mi { display: flex; align-items: center; gap: 10px; height: 33px; padding: 0 10px; border-radius: 10px; color: var(--text); cursor: pointer; }
+  .mi span { flex: 1; }
+  .mi:hover { background: var(--hover); color: var(--text-strong); }
+  .mi.danger { color: var(--danger-ink); }
+  .mi.danger:hover { background: var(--danger); color: oklch(0.99 0 0); }
+  .mi.dim { opacity: .45; pointer-events: none; }
+  .sep { height: 1px; background: var(--line); margin: 4px 10px; }
+  .caption { font-size: 12px; color: var(--text-muted); margin-top: 8px; max-width: 232px; line-height: 1.4; }
+
+  /* The dialog. */
+  .stage { position: relative; border-radius: 20px; background: var(--scrim); padding: 40px 16px; display: grid; place-items: center; min-height: 640px; }
+  .dialog { width: min(100%, 480px); background: var(--bg-raised); border-radius: 24px; box-shadow: var(--shadow); overflow: hidden; display: grid; }
+  .slides { display: grid; }
+  .slide { grid-area: 1 / 1; padding: 20px 24px 0; display: flex; flex-direction: column; gap: 16px; transition: transform 220ms cubic-bezier(0.77, 0, 0.175, 1), opacity 220ms cubic-bezier(0.23, 1, 0.32, 1); }
+  .slide.from-right { transform: translateX(24px); opacity: 0; }
+  .slide.from-left { transform: translateX(-24px); opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { .slide { transition: opacity 160ms; transform: none !important; } }
+  .dhead { display: flex; align-items: flex-start; gap: 12px; }
+  .dhead .t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .dhead h3 { margin: 0; font-size: 20px; line-height: 24px; color: var(--text-strong); text-wrap: balance; }
+  .dhead p { margin: 0; font-size: 14px; color: var(--text-muted); line-height: 1.45; text-wrap: pretty; }
+  .dhead p a, .legal a { color: var(--accent-ink); text-decoration: none; font-weight: 600; }
+  .iconbtn { width: 32px; height: 32px; border: 0; border-radius: 10px; background: transparent; color: var(--text-muted); cursor: pointer; display: grid; place-items: center; margin: -4px -8px 0 0; }
+  .iconbtn:hover { background: var(--hover); color: var(--text-strong); }
+  .label { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+
+  .preview { display: grid; grid-template-columns: 32px 1fr; gap: 2px 10px; padding: 12px; background: var(--well); border-radius: 14px; font-size: 14px; }
+  .preview .av { width: 32px; height: 32px; border-radius: 50%; grid-row: span 2; background: oklch(0.7 0.12 160); }
+  .preview .who { color: var(--text-strong); font-weight: 600; }
+  .preview .who small { color: var(--text-faint); font-weight: 400; font-size: 12px; margin-left: 6px; }
+  .preview .txt { color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.45; }
+  .preview.user { grid-template-columns: 40px 1fr; align-items: center; }
+  .preview.user .av { width: 40px; height: 40px; }
+
+  .rows { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; }
+  .row { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 10px 12px; border: 0; border-radius: 12px; background: transparent; font: inherit; font-size: 15px; color: var(--text-strong); text-align: left; cursor: pointer; }
+  .row:hover { background: var(--hover); }
+  .row span { flex: 1; }
+  .row .i { color: var(--text-faint); }
+
+  .crumbs { display: flex; flex-direction: column; gap: 6px; padding: 12px; background: var(--well); border-radius: 14px; font-size: 14px; color: var(--text-strong); }
+  .crumbs div { display: flex; align-items: center; gap: 8px; }
+  .crumbs .i { width: 16px; height: 16px; color: var(--text-faint); }
+  .notice { display: flex; gap: 10px; padding: 12px; border-radius: 14px; background: var(--selected); font-size: 14px; color: var(--text); line-height: 1.45; }
+  .notice .i { color: var(--text-muted); margin-top: 1px; }
+  .legal { font-size: 12px; color: var(--text-muted); line-height: 1.45; margin: 0; }
+
+  .art { display: grid; place-items: center; padding-top: 8px; }
+  .art img { width: 88px; height: 88px; animation: hop 600ms cubic-bezier(0.23, 1, 0.32, 1) both; }
+  @keyframes hop { 0% { transform: translateY(8px) scale(.95); opacity: 0; } 60% { transform: translateY(-4px); opacity: 1; } 100% { transform: none; } }
+  .success { position: relative; }
+  .success h3, .success p { text-align: center; }
+  .success .iconbtn { position: absolute; top: 16px; right: 20px; margin: 0; }
+  .more { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; }
+  .act { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 12px; }
+  .act .ico { width: 36px; height: 36px; border-radius: 10px; background: var(--selected); display: grid; place-items: center; color: var(--text-strong); flex: none; }
+  .act .tx { flex: 1; min-width: 0; font-size: 14px; color: var(--text-strong); }
+  .act .tx small { display: block; color: var(--text-muted); font-size: 12px; }
+  .act .btn { height: 32px; padding: 0 12px; }
+  .act .btn.done { background: transparent; color: var(--text-muted); pointer-events: none; }
+
+  .foot { display: flex; align-items: center; gap: 8px; padding: 20px 24px 24px; }
+  .foot .grow { flex: 1; }
+  .also { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); cursor: pointer; user-select: none; }
+  .box { width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid var(--line-strong); display: grid; place-items: center; flex: none; }
+  .box svg { width: 14px; height: 14px; opacity: 0; color: var(--on-accent); }
+  .also[aria-checked="true"] .box { background: var(--accent); border-color: var(--accent); }
+  .also[aria-checked="true"] .box svg { opacity: 1; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>Report</h1>
+    <div class="seg" role="group" aria-label="Theme"><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
+  </header>
+  <p class="lede">Discord's report flow is a menu the server sends, one screen per node: pick a reason, narrow it down, Submit Report, then a thank-you screen offering Block and Mute. Waffle draws Discord's nodes in its own look. The reasons below are placeholders: the real ones come from <code>GET /reporting/menu/message</code> and aren't in the client.</p>
+
+  <h2>Where it is</h2>
+  <p class="note">Last in the message menu's destructive group, under Delete Message, and in the person menu. It's hidden on your own messages, system messages and "friend request accepted" notices, and for yourself and for bots that aren't users.</p>
+  <div class="entries">
+    <div>
+      <div class="menu" role="menu" aria-label="Message menu">
+        <div class="mi"><span>Copy Message Link</span><svg class="i" data-i="link"></svg></div>
+        <div class="sep"></div>
+        <div class="mi danger dim"><span>Delete Message</span><svg class="i" data-i="trash4"></svg></div>
+        <div class="mi danger" tabindex="0" data-open="message"><span>Report Message</span><svg class="i" data-i="flag"></svg></div>
+        <div class="sep"></div>
+        <div class="mi"><span>Copy Message ID</span><svg class="i" data-i="copy"></svg></div>
+      </div>
+      <div class="caption">Someone else's message. Delete only shows with Manage Messages.</div>
+    </div>
+    <div>
+      <div class="menu" role="menu" aria-label="Person menu">
+        <div class="mi"><span>Add Note</span></div>
+        <div class="sep"></div>
+        <div class="mi"><span>Ignore</span></div>
+        <div class="mi danger"><span>Block</span></div>
+        <div class="mi danger" tabindex="0" data-open="user"><span>Report User Profile</span><svg class="i" data-i="flag"></svg></div>
+        <div class="sep"></div>
+        <div class="mi"><span>Copy User ID</span><svg class="i" data-i="copy"></svg></div>
+      </div>
+      <div class="caption">Right-clicking a name or avatar.</div>
+    </div>
+  </div>
+
+  <h2>The dialog</h2>
+  <p class="note">Reasons advance in one click, as Discord's do. Back pops one screen and keeps what you picked. On the submit screen, Waffle adds <b>Also block</b> beside Submit Report (better.html), so you don't need a second step on the thank-you screen. When it's ticked, the thank-you screen shows Block as already done.</p>
+  <div class="stage">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="node-title">
+      <div class="slides" id="slides"></div>
+      <div class="foot" id="foot"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const ico = (name, cls = "i") => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${REICON[name] || ""}</svg>`;
+document.querySelectorAll("svg[data-i]").forEach(s => { s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("aria-hidden", "true"); s.innerHTML = REICON[s.dataset.i] || REICON["info-circle"]; });
+
+// A sample menu in Discord's shape (docs/discord-report-re.md §2). Placeholder copy.
+const MENUS = {
+  message: { root: 1, success: 90, nodes: {
+    1: { header: "What's wrong with this message?", subheader: "Pick the closest match. Reports are anonymous.", preview: "message",
+         children: [["Spam", 2], ["Abuse or harassment", 3], ["Harmful content", 4], ["Something else", 5]] },
+    2: { header: "What kind of spam?", children: [["Unsolicited ads or links", 10], ["Scam or phishing", 10], ["Flooding the chat", 10]] },
+    3: { header: "Who is it aimed at?", children: [["Me", 10], ["Someone else", 10], ["A group of people", 10]] },
+    4: { header: "What does it show?", children: [["Violence or gore", 10], ["Sexual content", 10], ["Self-harm", 11]] },
+    5: { header: "Tell us more", children: [["Impersonation", 10], ["Private information", 10], ["Something not listed", 10]] },
+    10: { header: "Submit your report", subheader: "We'll look at this message and what it's in reply to.", preview: "message", crumbs: true, button: "submit" },
+    11: { header: "You're not alone", subheader: "If someone is in danger, contact local emergency services.", info: "Crisis lines are listed at <a href='#'>discord.com/safety</a>.", button: "next", target: 10 },
+    90: { success: true, header: "Thanks for letting us know", subheader: "We'll review it against the Community Guidelines.", crumbs: true, actions: ["block", "mute"], button: "done" },
+  } },
+  user: { root: 1, success: 90, nodes: {
+    1: { header: "What's wrong with this profile?", preview: "user", children: [["Their name or avatar", 10], ["Their bio or banner", 10], ["They're impersonating someone", 10], ["Something else", 10]] },
+    10: { header: "Submit your report", preview: "user", crumbs: true, button: "submit" },
+    90: { success: true, header: "Thanks for letting us know", crumbs: true, actions: ["block", "ignore"], button: "done" },
+  } },
+};
+const ACTIONS = {
+  block: ["forbidden", "Block Rosa", "Stop seeing their messages", "Block", "Blocked"],
+  mute: ["volume-slash", "Mute Rosa", "Hide their messages, they won't know", "Mute", "Muted"],
+  ignore: ["eye-slash", "Ignore Rosa", "Get space without letting them know", "Ignore", "Ignored"],
+};
+
+let kind = "message", menu, node, history, alsoBlock, done;
+function open(k) { kind = k; menu = MENUS[k]; history = []; alsoBlock = false; done = new Set(); go(menu.root, "none"); }
+
+function go(id, dir) {
+  node = id;
+  const n = menu.nodes[id];
+  const slides = document.getElementById("slides");
+  const s = document.createElement("div");
+  s.className = "slide" + (n.success ? " success" : "") + (dir === "none" ? "" : dir === "back" ? " from-left" : " from-right");
+  s.innerHTML = body(n);
+  slides.replaceChildren(s);
+  requestAnimationFrame(() => requestAnimationFrame(() => s.classList.remove("from-right", "from-left")));
+  s.querySelectorAll("[data-child]").forEach(b => b.onclick = () => { history.push({ id, label: b.dataset.label }); go(+b.dataset.child, "fwd"); });
+  s.querySelectorAll("[data-act]").forEach(b => b.onclick = () => { done.add(b.dataset.act); go(node, "none"); });
+  s.querySelector(".iconbtn").onclick = () => open(kind);
+  foot(n);
+}
+
+function body(n) {
+  const head = n.success
+    ? `<div class="art"><img src="../assets/brand/waffle-mark.svg" alt=""></div><div class="dhead"><div class="t"><h3 id="node-title">${n.header}</h3>${n.subheader ? `<p>${n.subheader}</p>` : ""}</div><button class="iconbtn" aria-label="Close">${ico("xmark")}</button></div>`
+    : `<div class="dhead"><div class="t"><h3 id="node-title">${n.header}</h3>${n.subheader ? `<p>${n.subheader}</p>` : ""}</div><button class="iconbtn" aria-label="Close">${ico("xmark")}</button></div>`;
+  const preview = n.preview === "message"
+    ? `<div><div class="label">Selected message</div><div class="preview"><div class="av"></div><div class="who">Rosa<small>Today at 14:02</small></div><div class="txt">free nitro for everyone who joins in the next 10 min!! claim here before it runs out, limited spots, link in my profile</div></div></div>`
+    : n.preview === "user" ? `<div><div class="label">Selected user</div><div class="preview user"><div class="av"></div><div><div class="who">Rosa</div><div class="txt" style="color:var(--text-muted)">rosa.wav</div></div></div></div>` : "";
+  const rows = n.children ? `<div class="rows">${n.children.map(([l, t]) => `<button class="row" data-child="${t}" data-label="${l}"><span>${l}</span>${ico("chevron-right")}</button>`).join("")}</div>` : "";
+  const crumbs = n.crumbs && history.length ? `<div><div class="label">Report category</div><div class="crumbs">${history.filter(h => h.label).map(h => `<div>${ico("check")}${h.label}</div>`).join("")}</div></div>` : "";
+  const info = n.info ? `<div class="notice">${ico("info-circle")}<div>${n.info}</div></div>` : "";
+  const acts = n.actions ? `<div><div class="label">More you can do</div><div class="more">${n.actions.map(a => {
+      const [g, t, d, verb, past] = ACTIONS[a];
+      const isDone = done.has(a) || (a === "block" && alsoBlock);
+      return `<div class="act"><div class="ico">${ico(g)}</div><div class="tx">${t}<small>${d}</small></div><button class="btn ${isDone ? "done" : ""}" data-act="${a}">${isDone ? past : verb}</button></div>`;
+    }).join("")}</div></div>` : "";
+  const legal = n.button === "submit" ? `<p class="legal">By submitting this report you confirm it's truthful and made in good faith. Read the <a href="#">Community Guidelines</a>.</p>` : "";
+  return head + preview + info + crumbs + rows + acts + legal;
+}
+
+function foot(n) {
+  const f = document.getElementById("foot");
+  const back = history.length && n.button !== "done" ? `<button class="btn" id="back">${ico("arrow-left")}Back</button>` : "";
+  let right = "";
+  if (n.button === "submit") right = (kind === "message" || kind === "user" ? `<div class="also" role="checkbox" tabindex="0" aria-checked="${alsoBlock}" id="also"><div class="box">${ico("check")}</div>Also block</div>` : "") + `<button class="btn danger" id="primary">Submit Report</button>`;
+  else if (n.button === "next") right = `<button class="btn primary" id="primary">Next</button>`;
+  else if (n.button === "done") right = `<button class="btn primary" id="primary">Done</button>`;
+  f.innerHTML = back + `<div class="grow"></div>` + right;
+  f.classList.toggle("hidden", !back && !right);
+  const $ = id => document.getElementById(id);
+  if ($("back")) $("back").onclick = () => { const h = history.pop(); go(h.id, "back"); };
+  if ($("also")) $("also").onclick = $("also").onkeydown = e => { if (e.type === "keydown" && e.key !== " ") return; e.preventDefault(); alsoBlock = !alsoBlock; $("also").setAttribute("aria-checked", alsoBlock); };
+  if ($("primary")) $("primary").onclick = () => {
+    if (n.button === "submit") { history.push({ id: node }); go(menu.success, "fwd"); }
+    else if (n.button === "next") { history.push({ id: node }); go(n.target, "fwd"); }
+    else open(kind);
+  };
+}
+
+document.querySelectorAll("[data-open]").forEach(m => m.onclick = () => { open(m.dataset.open); document.querySelector(".stage").scrollIntoView({ behavior: "smooth" }); });
+const setTheme = t => { document.documentElement.dataset.theme = t; document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.theme === t)); };
+document.querySelectorAll(".seg button").forEach(b => b.onclick = () => setTheme(b.dataset.theme));
+setTheme(matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+open("message");
+</script>
+</body>
+</html>

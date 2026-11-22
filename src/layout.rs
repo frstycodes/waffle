@@ -50,6 +50,8 @@ impl Waffle {
         // Before the rows draw, so a row just let go of lands in its new place rather than as a hole.
         self.finish_sorts(cx);
         self.settle_carry(cx);
+        // A message select whose menu closed sends its picks (Discord's send on close).
+        self.settle_select(cx);
         // First, so every fill below knows whether it sits on the native material this frame.
         let sidebar_width = if self.settings_open() { self.settings_width } else { RAIL_WIDTH + self.channels_width };
         crate::material::sync_sidebar_material(window, sidebar_width, cx.theme().is_dark(), self.prefs.native_sidebar);
@@ -65,6 +67,7 @@ impl Waffle {
             .text_size(px(16.))
             .on_key_down(cx.listener(Self::on_root_key))
             .on_action(cx.listener(|this, _: &crate::app_keys::AddServer, window, cx| this.add_server_shortcut(window, cx)))
+            .on_action(cx.listener(Self::toggle_soundboard_key))
             .on_modifiers_changed(cx.listener(|this, e: &gpui_kit::ModifiersChangedEvent, _, cx| {
                 if this.shift_held != e.modifiers.shift {
                     this.shift_held = e.modifiers.shift;
@@ -75,10 +78,13 @@ impl Waffle {
             .on_mouse_down(MouseButton::Navigate(NavigationDirection::Forward), cx.listener(|this, _, window, cx| this.navigate(true, window, cx)))
             .on_mouse_move(cx.listener(Self::on_drag_move))
             .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
-                if this.drag.take().is_some() {
-                    cx.notify();
+                let Some(drag) = this.drag.take() else { return };
+                if drag.edge == Edge::CallChat {
+                    this.prefs.save();
                 }
+                cx.notify();
             }));
+        let root = self.listen_shortcuts(root, cx);
         self.restore_last_channel(window, cx);
         if let Status::SignedOut(login) = &self.status {
             let login = login.clone();
@@ -97,8 +103,9 @@ impl Waffle {
             && let Some(call) = self.render_call_with_chat(window, cx)
         {
             let (overlays, call_overlays) = (self.render_overlays(window, cx), self.render_call_overlays(window, cx));
-            let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_create_server(window, cx)).or_else(|| self.render_invite(window, cx)));
-            crate::gif::set_covered(!overlays.is_empty() || !call_overlays.is_empty() || menu.is_some() || dialog.is_some());
+            let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_create_server(window, cx)).or_else(|| self.render_invite(window, cx)).or_else(|| self.render_stage_topic(window, cx)).or_else(|| self.render_modify_attachment(window, cx)).or_else(|| self.render_notification_settings(window, cx)).or_else(|| self.render_new_post(window, cx)));
+            let combos = self.render_keyboard_combos(window, cx);
+            crate::gif::set_covered(!overlays.is_empty() || !call_overlays.is_empty() || menu.is_some() || dialog.is_some() || combos.is_some());
             return root
                 .child(call)
                 .children(self.call_window(cx))
@@ -107,6 +114,7 @@ impl Waffle {
                 .children(self.render_toast(cx))
                 .children(menu)
                 .children(dialog)
+                .children(combos)
                 .into_any_element();
         }
         // A settings view covers the whole window and its nav takes the sidebar's place, so the app under it
@@ -121,11 +129,12 @@ impl Waffle {
         };
         // Anything drawn over the chat pauses its GIFs (the GIF layer paints above the whole app).
         let (overlays, call_overlays) = (self.render_overlays(window, cx), self.render_call_overlays(window, cx));
-        let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_create_server(window, cx)).or_else(|| self.render_invite(window, cx)));
+        let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_create_server(window, cx)).or_else(|| self.render_invite(window, cx)).or_else(|| self.render_stage_topic(window, cx)).or_else(|| self.render_modify_attachment(window, cx)).or_else(|| self.render_notification_settings(window, cx)).or_else(|| self.render_new_post(window, cx)));
         let (viewer, settings) = (self.viewer_overlay(window, cx), self.render_settings(window, cx));
         let channel_settings = self.render_channel_settings(window, cx);
         let server_settings = self.render_server_settings(window, cx);
-        crate::gif::set_covered(!overlays.is_empty() || !call_overlays.is_empty() || menu.is_some() || dialog.is_some() || viewer.is_some() || settings.is_some() || channel_settings.is_some() || server_settings.is_some());
+        let combos = self.render_keyboard_combos(window, cx);
+        crate::gif::set_covered(combos.is_some() || !overlays.is_empty() || !call_overlays.is_empty() || menu.is_some() || dialog.is_some() || viewer.is_some() || settings.is_some() || channel_settings.is_some() || server_settings.is_some());
         // Over everything but popups: a DM call's window, or, away from a server call, the stream we watch.
         let pip = self.call_window(cx).or_else(|| (!self.call_view).then(|| self.stream_pip(cx)).flatten());
         self.pip_drop_zone(root, cx)
@@ -140,6 +149,7 @@ impl Waffle {
             .children(settings)
             .children(channel_settings)
             .children(server_settings)
+            .children(combos)
             .children(crate::window_controls::render(window, cx))
             .children(self.render_landing(window, cx))
             .into_any_element()
@@ -161,10 +171,12 @@ impl Waffle {
         match self.call_view.then(|| self.render_call_with_chat(window, cx)).flatten() {
             Some(call) => div().flex_1().min_w_0().h_full().child(call).into_any_element(),
             None if self.inbox_page => self.render_inbox_page(window, cx),
+            None if self.requests_page.is_some() && self.guild_id.is_none() && self.channel.is_none() => self.render_requests_page(window, cx),
+            None if self.guild_page.is_some() => self.render_guild_page(window, cx),
             None if self.guild_id.is_none() && self.channel.is_none() => self.render_home(window, cx),
             None if self.channel.as_ref().is_some_and(|c| c.kind == discord::ChannelKind::Forum) => {
                 let forum = self.channel.clone().expect("checked above");
-                self.render_forum(forum, cx)
+                self.render_forum(forum, window, cx)
             }
             None => self.render_chat(window, cx).into_any_element(),
         }
@@ -254,6 +266,9 @@ impl Waffle {
             self.open_switcher(window, cx);
             return cx.stop_propagation();
         }
+        if keystroke.key == "escape" && self.dismiss_notification_settings(cx) {
+            return cx.stop_propagation();
+        }
         if keystroke.key == "escape" && self.viewer.is_none() && self.dismiss_overlay(cx) {
             return cx.stop_propagation();
         }
@@ -268,6 +283,12 @@ impl Waffle {
         }
         if keystroke.modifiers.alt && (keystroke.key == "up" || keystroke.key == "down") {
             self.step_channel(if keystroke.key == "up" { -1 } else { 1 }, window, cx);
+            return cx.stop_propagation();
+        }
+        // Esc closes the voice channel's chat once its messages are scrolled to the bottom, as Discord's.
+        if keystroke.key == "escape" && self.call_view && self.call_chat_shown() && !self.scrolled_up {
+            self.call_chat = false;
+            cx.notify();
             return cx.stop_propagation();
         }
         // Esc with nothing else to close marks the channel read and returns to the newest message, as Discord does.
@@ -306,7 +327,7 @@ impl Waffle {
         )
     }
 
-    fn on_drag_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_drag_move(&mut self, event: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
         let Some(drag) = &self.drag else { return };
         let dx = f32::from(event.position.x) - drag.start_x;
         match drag.edge {
@@ -314,6 +335,7 @@ impl Waffle {
             // The member list grows leftward.
             Edge::Panel => self.panel_width = (drag.start_width - dx).clamp(PANEL_RANGE.0, PANEL_RANGE.1),
             Edge::Settings => self.settings_width = (drag.start_width + dx).clamp(SETTINGS_RANGE.0, SETTINGS_RANGE.1),
+            Edge::CallChat => self.prefs.call_chat_width = crate::call::chat_width(drag.start_width - dx, f32::from(window.viewport_size().width)),
         }
         cx.notify();
     }
@@ -322,29 +344,32 @@ impl Waffle {
     /// dragging (.panel-grip). Dragging it resizes the column.
     pub(crate) fn resize_handle(&self, edge: Edge, cx: &mut Context<Self>) -> impl IntoElement {
         let active = self.drag.as_ref().is_some_and(|d| d.edge == edge);
+        let grows_left = matches!(edge, Edge::Panel | Edge::CallChat);
         let accent = palette::accent();
         div()
             .id(match edge {
                 Edge::Channels => "resize-channels",
                 Edge::Panel => "resize-panel",
                 Edge::Settings => "resize-settings",
+                Edge::CallChat => "resize-call-chat",
             })
             .absolute()
             .top_0()
             .bottom_0()
             .w(px(8.))
-            .when(edge != Edge::Panel, |h| h.right(px(-4.)))
-            .when(edge == Edge::Panel, |h| h.left(px(-4.)))
+            .when(!grows_left, |h| h.right(px(-4.)))
+            .when(grows_left, |h| h.left(px(-4.)))
             .group("resize-grip")
             .cursor_col_resize()
             .child(div().ml(px(3.)).w(px(2.)).h_full().rounded(px(2.)).when(active, |l| l.bg(accent)).when(!active, |l| l.group_hover("resize-grip", |l| l.bg(accent.opacity(0.6)))))
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                     let start_width = match edge {
                         Edge::Channels => this.channels_width,
                         Edge::Panel => this.panel_width,
                         Edge::Settings => this.settings_width,
+                        Edge::CallChat => this.call_chat_width(window),
                     };
                     this.drag = Some(Drag { edge, start_x: f32::from(event.position.x), start_width });
                     cx.stop_propagation();
@@ -374,7 +399,7 @@ impl Waffle {
         let (faint, danger) = (palette::faint(cx), palette::danger_ink(cx));
         let status_line: AnyElement = match (server_muted, sharing) {
             (true, _) => div().truncate().text_color(danger).child("Server muted by a moderator").into_any_element(),
-            (false, true) => div().flex().items_center().gap_1().child(Icon::new(Glyph::Screen).size(px(14.)).text_color(palette::positive_ink(cx))).child(div().truncate().child("Sharing their screen")).into_any_element(),
+            (false, true) => div().flex().items_center().gap_1().child(Icon::new(Glyph::ShareScreen).size(px(14.)).text_color(palette::positive_ink(cx))).child(div().truncate().child("Sharing their screen")).into_any_element(),
             (false, false) => ui::truncating("me-status", self.status_line()).into_any_element(),
         };
         let mic = me_button("mic", if muted { Nav::MicOff } else { Nav::Mic }, muted, if server_muted { "A moderator muted you here. Only they can unmute you." } else if muted { "Unmute" } else { "Mute" }, cx)
@@ -545,7 +570,7 @@ pub fn nameplate(plate: &discord::Nameplate, surface: Hsla, corners: [f32; 4], d
     let [tl, tr, br, bl] = corners.map(px);
     let shape = gpui_kit::Corners { top_left: tl, top_right: tr, bottom_right: br, bottom_left: bl };
     let wash = ui::edge(div().absolute().inset_0(), shape).bg(linear_gradient(90., linear_color_stop(tint.opacity(0.1), 0.), linear_color_stop(tint.opacity(0.4), 1.)));
-    ui::edge(div(), shape).absolute().inset_0().overflow_hidden().bg(surface).child(wash).child(nameplate_art(plate, PANEL_HEIGHT, tr, br).opacity(0.4)).into_any_element()
+    ui::edge(div(), shape).absolute().inset_0().overflow_hidden().bg(surface).child(wash).child(nameplate_art(plate, PANEL_HEIGHT, tr, br, false).opacity(0.4)).into_any_element()
 }
 
 pub fn nameplate_tint(plate: &discord::Nameplate, dark: bool) -> Hsla {
@@ -555,8 +580,18 @@ pub fn nameplate_tint(plate: &discord::Nameplate, dark: bool) -> Hsla {
 /// Discord's `height: 100%; width: auto` art, pinned to the right edge and rounding its own right corners.
 /// gpui sizes an image's width from its aspect only when the height is absolute, so the row's height
 /// stands in for 100%.
-pub fn nameplate_art(plate: &discord::Nameplate, height: f32, top_right: gpui_kit::Pixels, bottom_right: gpui_kit::Pixels) -> gpui_kit::Img {
-    ui::edge(img(plate.art.clone()).absolute().top_0().right_0().h(px(height)), gpui_kit::Corners { top_left: px(0.), top_right, bottom_right, bottom_left: px(0.) })
+// `animate` swaps in the moving art while it loads and plays, the still standing in until then.
+pub fn nameplate_art(plate: &discord::Nameplate, height: f32, top_right: gpui_kit::Pixels, bottom_right: gpui_kit::Pixels, animate: bool) -> gpui_kit::Img {
+    let corners = gpui_kit::Corners { top_left: px(0.), top_right, bottom_right, bottom_left: px(0.) };
+    let still = plate.art.clone();
+    let Some(animated) = plate.animated.clone().filter(|_| animate) else {
+        return ui::edge(img(still).absolute().top_0().right_0().h(px(height)), corners);
+    };
+    let fallback = still.clone();
+    let moving = img(animated)
+        .with_loading(move || img(still.clone()).h(px(height)).into_any_element())
+        .with_fallback(move || img(fallback.clone()).h(px(height)).into_any_element());
+    ui::edge(moving.absolute().top_0().right_0().h(px(height)), corners)
 }
 
 /// An avatar with Discord's status shape cut into its bottom-right corner: a dot for online, a moon for

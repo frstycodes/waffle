@@ -6,8 +6,11 @@
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use gpui_kit::{
-    Animation, AnimationExt, AnyElement, App, Bounds, BoxShadow, Context, Div, FocusHandle, FontWeight, Hsla, KeyDownEvent, MouseButton, Pixels, Point, SharedString, Stateful, Window,
-    component::{Icon, input::Input},
+    Animation, AnimationExt, AnyElement, App, Bounds, BoxShadow, Context, Div, Entity, FocusHandle, Focusable, FontWeight, Hsla, KeyDownEvent, MouseButton, Pixels, Point, SharedString, Stateful, Window,
+    component::{
+        Icon,
+        input::{Input, InputState},
+    },
     div, img, point, prelude::*, px, size,
 };
 
@@ -38,6 +41,9 @@ const SEPARATOR: f32 = 9.;
 const SLIDER_ROW: f32 = 68.;
 const EMOJI_ROW: f32 = 44.;
 const HEADER: f32 = 52.;
+// The search field's 40px and the 4px under it.
+const SEARCH_ROW: f32 = 44.;
+const LABEL: f32 = 26.;
 // Rows sit 1px apart.
 const GAP: f32 = 1.;
 const LEAD: f32 = 18.;
@@ -53,6 +59,10 @@ pub enum Entry {
     // Quick reactions on top of the message menu: recent emoji, one click each, then the full picker.
     Emojis { quick: Vec<(Emoji, Act)>, more: Act },
     Slider { label: SharedString, key: SharedString, value: f32, on_set: SetValue },
+    // A field atop the rows that filters them as you type; it holds the keyboard while the menu is open.
+    Search(Entity<InputState>),
+    // A group's name over its rows (Sort & View's "Sort by").
+    Label(SharedString),
 }
 
 #[derive(Clone)]
@@ -111,6 +121,10 @@ pub fn submenu(label: impl Into<SharedString>, entries: Vec<Entry>) -> Item {
 
 pub fn slider(label: impl Into<SharedString>, key: impl Into<SharedString>, value: f32, on_set: impl Fn(&mut Waffle, f32, &mut Context<Waffle>) + 'static) -> Entry {
     Entry::Slider { label: label.into(), key: key.into(), value, on_set: Rc::new(on_set) }
+}
+
+pub fn label(text: impl Into<SharedString>) -> Entry {
+    Entry::Label(text.into())
 }
 
 pub fn header(lead: HeadLead, title: impl Into<SharedString>, subtitle: Option<SharedString>) -> Entry {
@@ -204,6 +218,15 @@ impl Entry {
             Entry::Header { .. } => HEADER,
             Entry::Slider { .. } => SLIDER_ROW,
             Entry::Emojis { .. } => EMOJI_ROW,
+            Entry::Label(_) => LABEL,
+            Entry::Search(_) => SEARCH_ROW,
+        }
+    }
+
+    fn search(&self) -> Option<&Entity<InputState>> {
+        match self {
+            Entry::Search(input) => Some(input),
+            _ => None,
         }
     }
 
@@ -293,6 +316,8 @@ pub struct OpenMenu {
     // A sibling's submenu path, held back while the pointer tunnels toward the open submenu's card
     // (an index into `cards`).
     pending: Option<(usize, Vec<usize>)>,
+    // The top card's width when it isn't the standard one (a select's menu spans its field).
+    width: Option<f32>,
 }
 
 // A dialog's 420px less its padding, the well's and the hit's avatar column.
@@ -313,7 +338,19 @@ pub struct Dialog {
     preview: Option<Box<crate::discord::Message>>,
     // Discord's "Protip:" under the preview.
     tip: Option<SharedString>,
+    // A muted line under the body.
+    note: Option<SharedString>,
+    other: Other,
     on_confirm: OnConfirm,
+}
+
+// The button beside the confirm: Cancel, none (a notice the confirm only closes), or a second way through
+// (Discord's "No, just disconnect quietly").
+enum Other {
+    Cancel,
+    CancelAs(SharedString),
+    None,
+    Instead(SharedString, OnConfirm),
 }
 
 impl Waffle {
@@ -323,8 +360,15 @@ impl Waffle {
 
     // A menu built from state each time it's drawn, e.g. one whose checkboxes change.
     pub(crate) fn open_live_menu(&mut self, at: Point<Pixels>, build: impl Fn(&Waffle) -> Vec<Entry> + 'static, cx: &mut Context<Self>) {
-        self.menu = Some(OpenMenu { at, build: Rc::new(move |this| tidy(build(this))), sub: Vec::new(), cursor: None, focus: cx.focus_handle(), restore: RefCell::new(None), cards: RefCell::default(), tunnel: ui::Tunnel::default(), pending: None });
+        self.menu = Some(OpenMenu { at, build: Rc::new(move |this| tidy(build(this))), sub: Vec::new(), cursor: None, focus: cx.focus_handle(), restore: RefCell::new(None), cards: RefCell::default(), tunnel: ui::Tunnel::default(), pending: None, width: None });
         cx.notify();
+    }
+
+    // The open menu's top card at `width` instead of the standard 248px.
+    pub(crate) fn set_menu_width(&mut self, width: f32) {
+        if let Some(menu) = &mut self.menu {
+            menu.width = Some(width);
+        }
     }
 
     // Demo scenes open a submenu chain without hovering.
@@ -410,7 +454,7 @@ impl Waffle {
             state.set_value(value.to_owned(), window, cx);
             state.focus(window, cx);
         });
-        self.dialog = Some(Dialog { title: title.into(), body: body.into(), confirm: confirm.into(), danger: false, warn: false, input: true, key: None, preview: None, tip: None, on_confirm: Rc::new(on_confirm) });
+        self.dialog = Some(Dialog { title: title.into(), body: body.into(), confirm: confirm.into(), danger: false, warn: false, input: true, key: None, preview: None, tip: None, note: None, other: Other::Cancel, on_confirm: Rc::new(on_confirm) });
         cx.notify();
     }
 
@@ -434,6 +478,8 @@ impl Waffle {
             key: None,
             preview: None,
             tip: None,
+            note: None,
+            other: Other::Cancel,
             on_confirm: Rc::new(move |this, _, window, cx| on_confirm(this, window, cx)),
         });
         cx.notify();
@@ -451,6 +497,22 @@ impl Waffle {
         self.confirm(title, body, confirm, on_confirm, cx);
         if let Some(dialog) = &mut self.dialog {
             dialog.warn = true;
+        }
+    }
+
+    // A confirm whose other button acts too, in place of Cancel.
+    pub(crate) fn set_dialog_instead(&mut self, label: impl Into<SharedString>, action: impl Fn(&mut Waffle, &mut Window, &mut Context<Waffle>) + 'static) {
+        if let Some(dialog) = &mut self.dialog {
+            dialog.other = Other::Instead(label.into(), Rc::new(move |this, _, window, cx| action(this, window, cx)));
+        }
+    }
+
+    // A notice: one button, which only closes it.
+    pub(crate) fn notice(&mut self, title: impl Into<SharedString>, body: impl Into<SharedString>, button: impl Into<SharedString>, cx: &mut Context<Self>) {
+        self.confirm(title, body, button, |_, _, _| {}, cx);
+        if let Some(dialog) = &mut self.dialog {
+            dialog.danger = false;
+            dialog.other = Other::None;
         }
     }
 
@@ -483,7 +545,10 @@ impl Waffle {
         let (mut sub, cursor) = (menu.sub.clone(), menu.cursor);
         let level = level_at(&top, &sub);
         let has_sub = |i: usize| matches!(level.get(i), Some(Entry::Item(item)) if !item.sub.is_empty() && !item.disabled);
+        // A space typed into the search field is text, not a pick.
+        let typing = top.iter().any(|e| e.search().is_some());
         let next_cursor = match (event.keystroke.key.as_str(), cursor) {
+            ("space", _) if typing => return,
             ("down", _) => step(level, cursor, true),
             ("up", _) => step(level, cursor, false),
             ("right" | "enter" | "space", Some(i)) if has_sub(i) => {
@@ -512,17 +577,20 @@ impl Waffle {
 
     pub(crate) fn render_menu(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let menu = self.menu.as_ref()?;
-        // The menu takes the keyboard while it's open.
-        if !menu.focus.is_focused(window) {
-            *menu.restore.borrow_mut() = window.focused(cx);
-            window.focus(&menu.focus, cx);
-        }
         let entries = (menu.build)(self);
+        // The menu takes the keyboard while it's open, into its search field when it has one.
+        let target = entries.iter().find_map(Entry::search).map_or_else(|| menu.focus.clone(), |input| input.read(cx).focus_handle(cx));
+        if !target.is_focused(window) {
+            if !menu.focus.contains_focused(window, cx) {
+                *menu.restore.borrow_mut() = window.focused(cx);
+            }
+            window.focus(&target, cx);
+        }
         let viewport = window.viewport_size();
         let (vw, vh) = (f32::from(viewport.width), f32::from(viewport.height));
         // Opens toward the side with room, rising from the corner at the pointer (overlays.html's live menu).
         let (at_x, at_y, height) = (f32::from(menu.at.x), f32::from(menu.at.y), card_height(&entries));
-        let width = if entries.iter().any(Entry::has_shortcut) { WIDTH_WITH_KEYS } else { WIDTH };
+        let width = menu.width.unwrap_or(if entries.iter().any(Entry::has_shortcut) { WIDTH_WITH_KEYS } else { WIDTH });
         let (flip_x, flip_y) = (at_x + width > vw - 8., at_y + height > vh - 8.);
         let x = if flip_x { (at_x - width).max(8.) } else { at_x };
         let y = if flip_y { (at_y - height).max(8.) } else { at_y };
@@ -560,6 +628,9 @@ impl Waffle {
                 .occlude()
                 .track_focus(&menu.focus)
                 .on_key_down(cx.listener(Self::on_menu_key))
+                // Before a focused search field's own Escape, which may keep the key for itself.
+                .capture_action(cx.listener(|this, _: &gpui_kit::component::input::Escape, window, cx| this.shut_menu(window, cx)))
+
                 .on_mouse_move(cx.listener(|this, e: &gpui_kit::MouseMoveEvent, _, cx| this.track_menu_pointer(e.position, cx)))
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.shut_menu(window, cx)))
                 .on_mouse_down(MouseButton::Right, cx.listener(|this, _, window, cx| this.shut_menu(window, cx)))
@@ -579,6 +650,8 @@ impl Waffle {
                 Entry::Header { lead, title, subtitle } => menu_header(lead, title.clone(), subtitle.clone(), cx).into_any_element(),
                 Entry::Slider { label, key, value, on_set } => self.menu_slider(label.clone(), key.clone(), *value, on_set.clone(), cx).into_any_element(),
                 Entry::Emojis { quick, more } => quick_reactions(quick, more.clone(), cx).into_any_element(),
+                Entry::Label(text) => menu_label(text.clone(), cx).into_any_element(),
+                Entry::Search(input) => div().h(px(SEARCH_ROW)).pb(px(4.)).child(ui::search_field(SharedString::from(format!("menu-search-{path:?}")), input, cx)).into_any_element(),
                 Entry::Item(item) => {
                     let mut item_path = path.to_vec();
                     item_path.push(i);
@@ -649,8 +722,41 @@ impl Waffle {
         }
     }
 
+    // The dismiss button's label when it isn't "Cancel" (Discord's "Never Mind").
+    pub(crate) fn set_dialog_cancel(&mut self, label: impl Into<SharedString>) {
+        if let Some(dialog) = &mut self.dialog {
+            dialog.other = Other::CancelAs(label.into());
+        }
+    }
+
+    pub(crate) fn set_dialog_note(&mut self, note: impl Into<SharedString>) {
+        if let Some(dialog) = &mut self.dialog {
+            dialog.note = Some(note.into());
+        }
+    }
+
     pub(crate) fn dialog_key(&self) -> Option<&'static str> {
         self.dialog.as_ref().and_then(|d| d.key)
+    }
+
+    fn dialog_other(&self, cx: &mut Context<Self>) -> Option<ui::Control> {
+        let button = |label: SharedString| ui::button("dialog-cancel", ui::Tone::Secondary, cx).child(label);
+        let dismiss = |label: SharedString| {
+            button(label).on_click(cx.listener(|this, _, _, cx| {
+                this.dialog = None;
+                cx.notify();
+            }))
+        };
+        match &self.dialog.as_ref()?.other {
+            Other::None => None,
+            Other::Cancel => Some(dismiss("Cancel".into())),
+            Other::CancelAs(label) => Some(dismiss(label.clone())),
+            Other::Instead(label, _) => Some(button(label.clone()).on_click(cx.listener(|this, _, window, cx| {
+                let Some(Dialog { other: Other::Instead(_, action), .. }) = this.dialog.take() else { return };
+                action(this, String::new(), window, cx);
+                cx.notify();
+            }))),
+        }
     }
 
     pub(crate) fn render_dialog(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -675,6 +781,7 @@ impl Waffle {
                     .child(dialog.title.clone()),
             )
             .child(div().text_size(px(14.)).line_height(px(20.)).text_color(palette::muted(cx)).child(dialog.body.clone()))
+            .children(dialog.note.clone().map(|note| div().text_size(px(12.)).line_height(px(16.)).text_color(palette::faint(cx)).child(note)))
             .children(preview)
             .children(dialog.tip.clone().map(|tip| {
                 div().text_size(px(14.)).line_height(px(20.)).text_color(palette::text(cx)).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::positive_ink(cx)).child("Protip:")).child(tip)
@@ -685,10 +792,7 @@ impl Waffle {
                     .flex()
                     .justify_end()
                     .gap(px(8.))
-                    .child(ui::button("dialog-cancel", ui::Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| {
-                        this.dialog = None;
-                        cx.notify();
-                    })))
+                    .children(self.dialog_other(cx))
                     .child(ui::button("dialog-confirm", tone, cx).child(dialog.confirm.clone()).when_some(dialog.key, |b, key| b.children(key.split('+').map(|k| ui::kbd_translucent(crate::settings::key_name(k), gpui_kit::white())))).on_click(submit)),
             );
         let backdrop = div().id("dialog-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
@@ -777,6 +881,10 @@ fn hint_inks(item: &Item, cx: &App) -> (Hsla, Hsla) {
 
 pub(crate) fn separator(cx: &App) -> Div {
     div().h(px(SEPARATOR)).flex_none().py(px(4.)).px(px(8.)).child(div().h(px(1.)).bg(palette::line(cx)))
+}
+
+fn menu_label(text: SharedString, cx: &App) -> Div {
+    div().h(px(LABEL)).flex_none().px(px(10.)).pt(px(8.)).text_size(px(12.)).line_height(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::faint(cx)).child(text)
 }
 
 fn menu_header(lead: &HeadLead, title: SharedString, subtitle: Option<SharedString>, cx: &App) -> Div {
@@ -904,8 +1012,10 @@ impl Waffle {
     pub(crate) fn show_toast(&mut self, text: impl Into<SharedString>, cx: &mut Context<Self>) {
         let text = text.into();
         self.toast = Some(text.clone());
+        // Settings › Accessibility's minimum lengthens a toast, never shortens it.
+        let shown = std::time::Duration::from_secs(u64::from(self.prefs.min_toast_secs.max(4)));
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(std::time::Duration::from_secs(4)).await;
+            cx.background_executor().timer(shown).await;
             this.update(cx, |this, cx| {
                 if this.toast.as_ref() == Some(&text) {
                     this.toast = None;

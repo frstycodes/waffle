@@ -45,21 +45,42 @@ pub enum Toggle {
     DesktopNotifications,
     DockBadge,
     Clock24,
+    ImageDescriptions,
     AutoDownloadUpdates,
     RenderEmbeds,
     RenderReactions,
+    TtsCommand,
     DeveloperMode,
     ShareActivity,
     DmsFromServerMembers,
+    MessageRequests,
     FriendsAll,
     FriendsMutualFriends,
     FriendsMutualGuilds,
+    InlineEmbedMedia,
+    InlineAttachmentMedia,
+    CompactAvatars,
+    ConvertEmoticons,
+    SendButton,
+    UnderlineLinks,
+    DisplayNameStyles,
+    DesaturateUserColors,
+    HighContrast,
+    SwitchIcons,
+    ReduceMotion,
+    ReduceMotionSync,
+    GifAutoPlay,
+    AnimateEmoji,
 }
 
 // One of several, drawn as radio rows filling its group.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Choice {
     DmFilter,
+    Spoilers,
+    RoleStyle,
+    StickerAnimation,
+    SpamFilter,
 }
 
 impl Choice {
@@ -71,6 +92,15 @@ impl Choice {
                 (1, "Filter DMs from non-friends", Some("Messages from friends aren't scanned")),
                 (0, "Don't filter direct messages", None),
             ],
+            Choice::Spoilers => &[(0, "On click", None), (1, "On servers I moderate", None), (2, "Always", None)],
+            Choice::RoleStyle => &[(0, "In names", None), (1, "Next to names", None), (2, "Don't show role colors", None)],
+            Choice::StickerAnimation => &[
+                (0, "Always animate", None),
+                (1, "Animate on interaction", Some("Stickers animate when you hover over them")),
+                (2, "Never animate", None),
+            ],
+            // DmSpamFilterV2's values (settings::proto).
+            Choice::SpamFilter => &[(3, "Filter all spam", None), (2, "Filter messages from non-friends (Recommended)", None), (1, "Don't filter spam", None)],
         }
     }
 }
@@ -96,7 +126,7 @@ pub static SETTINGS: &[Setting] = &[
     on_row(s("avatar", Account, "Account info", "Avatar", None, &["profile picture", "pfp", "photo", "image"], Custom), "change-avatar"),
     on_row(s("banner", Account, "Account info", "Banner", Some("Needs Nitro; without it, Discord sets it"), &["cover", "header image", "background"], Custom), "change-banner"),
     on_row(s("user-id", Account, "Account info", "User ID", Some("Copy it to share or report"), &["id", "copy id", "snowflake"], Custom), "acct-id"),
-    s("profile", Account, "On discord.com", "Bio, pronouns and profile effects", Some("Decorations, effects, nameplates and name styles"), &["bio", "about me", "pronouns", "decoration", "effect", "nameplate", "nitro"], Link(DISCORD)),
+    s("profile", Account, "On discord.com", "Profile effects and decorations", Some("Decorations, effects, nameplates and name styles"), &["decoration", "effect", "nameplate", "nitro"], Link(DISCORD)),
     s("password", Account, "On discord.com", "Password", None, &["change password", "security", "login"], Link(DISCORD)),
     s("two-factor", Account, "On discord.com", "Two-factor authentication", Some("Authenticator app, security keys and backup codes"), &["2fa", "mfa", "authenticator", "security key", "passkey", "backup codes"], Link(DISCORD)),
     s("email-phone", Account, "On discord.com", "Email and phone", None, &["email", "phone", "contact", "verify"], Link(DISCORD)),
@@ -107,8 +137,22 @@ pub static SETTINGS: &[Setting] = &[
     s("billing", Account, "On discord.com", "Nitro and billing", Some("Subscriptions, boosts, gifts and payment methods"), &["nitro", "subscription", "payment", "gift", "boost", "billing", "card"], Link(DISCORD)),
     s("data", Account, "On discord.com", "Request your data", Some("A copy of what Discord stores about you"), &["privacy", "export", "download data", "gdpr", "data and privacy"], Link(DISCORD)),
     s("delete-account", Account, "On discord.com", "Disable or delete account", None, &["delete", "remove account", "deactivate", "close account"], Link(DISCORD)),
+    // Profiles: one group per tab, so a jump opens the right one.
+    on_row(s("profile-display-name", Profiles, "Main Profile", "Display name", Some("Shown instead of your username"), &["name", "global name", "rename"], Custom), "pf-name"),
+    on_row(s("pronouns", Profiles, "Main Profile", "Pronouns", None, &["she", "he", "they", "pronoun"], Custom), "pf-pronouns"),
+    on_row(s("profile-avatar", Profiles, "Main Profile", "Avatar", None, &["profile picture", "pfp", "photo", "image"], Custom), "pf-avatar"),
+    on_row(s("recent-avatars", Profiles, "Main Profile", "Recent avatars", Some("Your last 6 avatars, to use one again"), &["avatar history", "previous avatar", "old pfp"], Custom), "pf-recent"),
+    on_row(s("banner-colour", Profiles, "Main Profile", "Banner colour", Some("Without Nitro, a colour where a banner would be"), &["banner color", "accent", "colour", "color"], Custom), "pf-accent"),
+    on_row(s("about-me", Profiles, "Main Profile", "About me", None, &["bio", "description", "markdown"], Custom), "pf-bio"),
+    on_row(s("server-tag", Profiles, "Main Profile", "Server tag", Some("A server's tag next to your name across Discord"), &["clan", "guild tag", "tag", "badge"], Custom), "pf-tag"),
+    on_row(s("profile-nitro", Profiles, "Main Profile", "Decoration, nameplate, effect, frame and theme", Some("Nitro only; set on Discord"), &["decoration", "nameplate", "effect", "frame", "theme", "nitro"], Custom), "pf-nitro"),
+    on_row(s("server-nickname", Profiles, "Per-server Profiles", "Server nickname", Some("Empty uses your display name"), &["nick", "nickname", "per server", "guild"], Custom), "pf-nick"),
+    on_row(s("server-pronouns", Profiles, "Per-server Profiles", "Server pronouns", None, &["pronouns", "per server"], Custom), "pf-server-pronouns"),
+    on_row(s("server-profile-nitro", Profiles, "Per-server Profiles", "Server avatar, banner, bio and nameplate", Some("Nitro only; set on Discord"), &["server avatar", "server banner", "server bio", "nitro"], Custom), "pf-server-nitro"),
     // Content & social
     s("dm-server-members", ContentSocial, "Direct messages", "Allow DMs from server members", Some("Applies to servers you join from now on"), &["dm", "direct messages", "privacy", "strangers", "message requests"], Switch(Toggle::DmsFromServerMembers)),
+    s("message-requests", ContentSocial, "Direct messages", "Message requests", Some("Filter messages from server members you may not know."), &["message requests", "dm", "strangers", "requests", "inbox"], Switch(Toggle::MessageRequests)),
+    s("dm-spam-filter", ContentSocial, "Automatically filter suspected spam messages", "Automatically filter suspected spam messages", Some("Discord can filter out some messages that contain spam. These messages go to your Spam inbox."), &["dm spam filter", "spam", "messages", "inbox", "message requests"], Control::Choice(Choice::SpamFilter)),
     s("dm-filter", ContentSocial, "Message filtering", "Filter direct messages", Some("Discord blurs explicit images in DMs it scans"), &["spam", "explicit", "nsfw", "safe", "sensitive media", "filter"], Control::Choice(Choice::DmFilter)),
     s("friends-all", ContentSocial, "Who can send you a friend request", "Everyone", None, &["friend request", "who can add me", "add friend"], Switch(Toggle::FriendsAll)),
     s("friends-mutual-friends", ContentSocial, "Who can send you a friend request", "Friends of friends", None, &["friend request", "mutual friends"], Switch(Toggle::FriendsMutualFriends)),
@@ -118,13 +162,13 @@ pub static SETTINGS: &[Setting] = &[
     s("native-sidebar", Appearance, "Sidebar", "Sidebar material", Some("Liquid Glass behind the sidebar"), &["liquid glass", "glass", "translucent", "transparent", "vibrancy", "blur", "wallpaper"], Custom),
     s("ui-font", Appearance, "Text", "Interface font", Some("Menus, messages and everything else"), &["font", "typeface", "text", "figtree", "type"], Custom),
     s("mono-font", Appearance, "Text", "Code font", Some("Code blocks and inline code"), &["font", "monospace", "mono", "code", "roboto mono", "typeface"], Custom),
-    s("reduce-motion", Appearance, "Motion", "Reduce motion", Some("Fades instead of springs and slides"), &["animation", "motion", "accessibility", "springs"], Custom),
     s("app-icon", Appearance, "App icon", "App icon", Some("How Waffle looks in your Dock"), &["dock icon", "logo", "icon"], Custom),
     // Voice and video
     s("input-device", VoiceVideo, "Voice", "Input device", None, &["mic", "microphone", "input"], Custom),
     s("output-device", VoiceVideo, "Voice", "Output device", None, &["speaker", "headphones", "audio", "output"], Custom),
     s("input-volume", VoiceVideo, "Voice", "Input volume", None, &["mic volume", "gain", "loudness"], Custom),
     s("output-volume", VoiceVideo, "Voice", "Output volume", None, &["speaker volume", "volume", "loudness"], Custom),
+    s("soundboard-volume", VoiceVideo, "Voice", "Soundboard Volume", None, &["soundboard", "sounds", "volume"], Custom),
     s("mic-test", VoiceVideo, "Voice", "Mic test", Some("Hear yourself back"), &["test", "loopback", "hear myself"], Custom),
     s("input-profile", VoiceVideo, "Input profile", "Input profile", Some("Voice isolation, studio or custom"), &["voice isolation", "studio", "custom", "preset"], Custom),
     s("input-mode", VoiceVideo, "Input mode", "Input mode", Some("Voice activity or push to talk"), &["push to talk", "ptt", "voice activity", "vad", "open mic"], Custom),
@@ -134,10 +178,38 @@ pub static SETTINGS: &[Setting] = &[
     s("camera", VoiceVideo, "Camera", "Camera", None, &["webcam", "video", "preview"], Custom),
     s("voice-sounds", VoiceVideo, "Sounds", "Voice sounds", Some("Join, leave, mute and deafen cues"), &["join sound", "leave sound", "cues", "sound effects"], Custom),
     on_row(s("reset-voice", VoiceVideo, "Advanced", "Reset voice and video settings", None, &["defaults", "reset"], Custom), "reset"),
-    // Chat
+    // Accessibility: Discord's sections and rows, in its order (docs/discord-settings-re.md §2).
+    s("chat-font-size", Accessibility, "Text readability", "Text size in chat", Some("Adjust the size of the chat font."), &["font size", "font scaling", "text size", "bigger text", "smaller text"], Custom),
+    s("underline-links", Accessibility, "Text readability", "Always underline links", Some("Make links stand out more."), &["links", "underline"], Switch(Toggle::UnderlineLinks)),
+    s("display-name-styles", Accessibility, "Text readability", "Display name styles", Some("Show the fonts, colours and effects people give their names."), &["name font", "name style", "nameplate", "gradient"], Switch(Toggle::DisplayNameStyles)),
+    s("ui-density", Accessibility, "Visual density", "UI density", Some("Adjust the space between server, channel, and member lists."), &["list spacing", "density", "compact", "spacious"], Custom),
+    s("message-display", Accessibility, "Visual density", "Chat message display", Some("Change the appearance of chat messages."), &["compact", "cozy", "message display", "irc"], Custom),
+    s("group-spacing", Accessibility, "Visual density", "Space between message groups", Some("Adjust the spacing between message groups."), &["spacing", "gap", "padding"], Custom),
+    s("zoom", Accessibility, "Visual density", "Zoom level", Some("Adjust the size of the interface."), &["zoom", "scale", "size", "bigger", "smaller"], Custom),
+    s("saturation", Accessibility, "Colour and contrast", "Saturation", Some("Reduce the saturation of colors within the app"), &["color", "colour", "saturation", "grayscale", "greyscale"], Custom),
+    s("desaturate-user-colors", Accessibility, "Colour and contrast", "Apply saturation setting to custom colors", Some("Apply the above setting to custom color choices, like role colors."), &["role colors", "saturation"], Switch(Toggle::DesaturateUserColors)),
+    s("high-contrast", Accessibility, "Colour and contrast", "Enable high contrast mode", Some("Enhance visibility with bold colors and sharp contrast."), &["contrast", "high contrast"], Switch(Toggle::HighContrast)),
+    s("switch-icons", Accessibility, "Colour and contrast", "Show on/off indicators", Some("On forms, menus and settings, on/off toggles will have icons."), &["toggle", "switch", "indicator", "icons"], Switch(Toggle::SwitchIcons)),
+    s("role-style", Accessibility, "Role colors", "Role colors", Some("Choose how you would like role colors to be displayed."), &["role color", "role colour", "name color", "dot"], Control::Choice(Choice::RoleStyle)),
+    s("reduce-motion", Accessibility, "Reduced motion", "Enable reduced motion", Some("Reduce the amount and intensity of animations, hover effects, and other moving effects."), &["animation", "motion", "springs", "reduce motion"], Custom),
+    s("reduce-motion-sync", Accessibility, "Reduced motion", "Sync with computer setting", None, &["animation", "motion", "system"], Custom),
+    s("min-toast", Accessibility, "Reduced motion", "Minimum notification duration", Some("Keep pop-up notifications on screen for at least this long."), &["toast", "notification", "duration", "popup"], Custom),
+    s("gif-autoplay", Accessibility, "Reduced motion", "Play GIFs when Waffle is focused", None, &["gif", "autoplay", "animation"], Custom),
+    s("animate-emoji", Accessibility, "Reduced motion", "Play animated emoji", None, &["emoji", "animated", "animation"], Custom),
+    s("sticker-animation", Accessibility, "Play sticker animations", "Play sticker animations", None, &["sticker", "animation", "animate"], Control::Choice(Choice::StickerAnimation)),
+    s("tts-rate", Accessibility, "Audio and screen reader", "Text-to-speech rate", Some("Control the speed at which text is read aloud"), &["tts", "speech", "speak", "voice", "rate", "read aloud"], Custom),
+    s("image-descriptions", Accessibility, "Audio and screen reader", "Show image descriptions", Some("Image descriptions are used to describe images for screen readers."), &["alt text", "description", "screen reader"], Custom),
+    // Chat: Discord's Messages and Chat Box rows (Appearance there).
+    s("inline-embed-media", Chat, "Show images, videos, and lolcats", "When posted as links to chat", None, &["images", "videos", "media", "links", "inline"], Switch(Toggle::InlineEmbedMedia)),
+    s("inline-attachment-media", Chat, "Show images, videos, and lolcats", "When uploaded directly to Discord", None, &["images", "videos", "media", "uploads", "attachments", "inline"], Switch(Toggle::InlineAttachmentMedia)),
     s("render-embeds", Chat, "Display", "Show embeds and link previews", None, &["links", "preview", "unfurl", "embeds"], Switch(Toggle::RenderEmbeds)),
     s("render-reactions", Chat, "Display", "Show emoji reactions", None, &["reactions", "emoji"], Switch(Toggle::RenderReactions)),
+    s("tts-command", Chat, "Display", "Allow playback and usage of /tts command", Some("Using the /tts command speaks your message out loud. Turn this off if you prefer to see /tts messages as text only."), &["tts", "text to speech", "speak", "read aloud", "voice"], Switch(Toggle::TtsCommand)),
     s("clock-24", Chat, "Display", "Use a 24-hour clock", Some("For message times"), &["time", "timestamp", "am pm", "clock", "24h"], Switch(Toggle::Clock24)),
+    s("compact-avatars", Chat, "Display", "Show user avatars", None, &["avatars", "compact", "pictures"], Switch(Toggle::CompactAvatars)),
+    s("spoilers", Chat, "Show spoiler content", "Show spoiler content", None, &["spoiler", "hidden", "blur", "reveal"], Control::Choice(Choice::Spoilers)),
+    s("convert-emoticons", Chat, "Chat box", "Automatically convert emoticons in your messages to emoji", Some("For example, when you type :) Waffle will convert it to \u{1f642}"), &["emoticon", "smiley", ":)", "emoji"], Switch(Toggle::ConvertEmoticons)),
+    s("send-button", Chat, "Chat box", "Show send message button", None, &["send", "button", "enter"], Switch(Toggle::SendButton)),
     // Notifications
     s("desktop-notifications", Notifications, "Desktop", "Desktop notifications", Some("For DMs, mentions and what your server settings ask for"), &["alerts", "banner", "popup", "toast", "notify"], Switch(Toggle::DesktopNotifications)),
     s("dock-badge", Notifications, "Desktop", "Unread badge on the Dock icon", Some("Counts unread mentions and DMs"), &["badge", "count", "dock", "mentions", "unread"], Switch(Toggle::DockBadge)),
@@ -157,6 +229,8 @@ pub static SETTINGS: &[Setting] = &[
     s("auto-download-updates", Updates, "Automatic updates", "Download updates automatically", Some("Off, Waffle still checks and tells you, then downloads when you ask"), &["update", "upgrade", "auto update", "background", "download", "release"], Switch(Toggle::AutoDownloadUpdates)),
     // Activity privacy
     s("share-activity", ActivityPrivacy, "Activity status", "Share your activity status", Some("What you're playing or listening to, as Discord's apps detect it"), &["game", "playing", "spotify", "rich presence", "status", "activity"], Switch(Toggle::ShareActivity)),
+    s("activity-join-default", ActivityPrivacy, "Where I share activity", "When joining a server", Some("Whether new servers see your activity, then a switch for each server you're in"), &["server", "guild", "per server", "activity", "privacy", "hide", "200 members"], Custom),
+    s("registered-games", ActivityPrivacy, "Registered games", "Registered games", Some("Games detected here, each with its own switch, and Add it! for one that isn't"), &["game", "detect", "detection", "add it", "registered", "playing"], Custom),
 ];
 
 impl<P: Scope> Setting<P> {
@@ -224,7 +298,7 @@ fn word_score<P: Scope>(setting: &Setting<P>, word: &str) -> Option<u32> {
 mod tests {
     use super::*;
 
-    const ALL: [Page; 10] = [Account, ContentSocial, Appearance, VoiceVideo, Chat, Notifications, Keybinds, Advanced, Updates, ActivityPrivacy];
+    const ALL: [Page; 12] = [Account, Profiles, ContentSocial, Appearance, Accessibility, VoiceVideo, Chat, Notifications, Keybinds, Advanced, Updates, ActivityPrivacy];
 
     #[test]
     fn ids_and_rows_are_unique() {

@@ -16,6 +16,7 @@ use crate::{
     Channel, ChannelKind, Waffle, EmojiTarget, SearchState,
     discord::{Emoji, Message, User},
     icons::Glyph,
+    illustration::Illustration,
     layout::avatar_with_status,
     palette,
     ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, RADIUS_XS, Squircle},
@@ -129,12 +130,42 @@ impl Waffle {
         cx.notify();
     }
 
-    /// Moves the read line to just before this message, as Discord's "Mark Unread".
+    /// Moves the read line to just before this message, as Discord's "Mark Unread", and tells Discord, so the
+    /// channel stays unread on your other devices.
     pub(crate) fn mark_unread(&mut self, message: &Message, cx: &mut Context<Self>) {
         let Ok(id) = message.id.parse::<u64>() else { return };
-        self.read_states.entry(message.channel_id.clone()).or_default().last_read = id - 1;
+        let loaded = self.feeds.get(&message.channel_id).map(|f| f.messages.clone()).unwrap_or_default();
+        let (ack_id, mentions) = manual_ack(&loaded, id, |m| self.counts_as_mention(m));
+        let read = self.read_states.entry(message.channel_id.clone()).or_default();
+        read.last_read = id - 1;
+        read.mentions = mentions;
         self.unread_marker = Some(id - 1);
+        self.held_unread = Some(message.channel_id.clone());
+        if let Some(client) = self.client.clone() {
+            let channel_id = message.channel_id.clone();
+            crate::discord::runtime().spawn(async move { client.ack_manual(&channel_id, ack_id, mentions).await });
+        }
         cx.notify();
+    }
+
+    /// Clears a mention from the Inbox for good, without reading its channel; it comes back if Discord refuses.
+    pub(crate) fn mark_mention_read(&mut self, message_id: String, cx: &mut Context<Self>) {
+        let Some(Some(Ok(list))) = &mut self.inbox else { return };
+        let Some(at) = list.iter().position(|m| m.id == message_id) else { return };
+        let removed = list.remove(at);
+        cx.notify();
+        let Some(client) = self.client.clone() else { return };
+        cx.spawn(async move |this, cx| {
+            let Err(error) = client.delete_mention(&message_id).await else { return };
+            this.update(cx, |this, cx| {
+                if let Some(Some(Ok(list))) = &mut this.inbox {
+                    list.insert(at.min(list.len()), removed);
+                }
+                this.show_toast(format!("Couldn't mark that mention read: {error}"), cx);
+            })
+            .ok();
+        })
+        .detach();
     }
 
     pub(crate) fn message_link(&self, message: &Message) -> String {
@@ -162,6 +193,10 @@ impl Waffle {
                     editor.emoji = Some(emoji);
                 }
                 cx.notify();
+            }
+            EmojiTarget::VoiceStatus => {
+                let shown = self.shown_emoji(&emoji);
+                self.insert_voice_status_emoji(shown, window, cx);
             }
             EmojiTarget::ForwardNote => {
                 let shown = self.shown_emoji(&emoji);
@@ -254,8 +289,14 @@ impl Waffle {
     /// Closes whichever floating surface is open; true if one was.
     pub(crate) fn dismiss_overlay(&mut self, cx: &mut Context<Self>) -> bool {
         // The note's picker sits over the forward dialog: closing it leaves the dialog and its picks.
-        if matches!(self.emoji_picker, Some(EmojiTarget::ForwardNote)) {
+        if matches!(self.emoji_picker, Some(EmojiTarget::ForwardNote | EmojiTarget::VoiceStatus)) {
             self.emoji_picker = None;
+            cx.notify();
+            return true;
+        }
+        // The full-size avatar closes alone, back to the popout it opened from.
+        if let Some(card) = self.profile_card.as_mut().filter(|c| c.avatar_full) {
+            card.avatar_full = false;
             cx.notify();
             return true;
         }
@@ -265,7 +306,13 @@ impl Waffle {
             | std::mem::take(&mut self.status_menu)
             | self.status_editor.take().is_some()
             | self.poll_creator.take().is_some()
+            | self.take_app_modal()
+            | self.close_events()
             | self.forward_dialog.take().is_some()
+            | self.voice_status_dialog.take().is_some()
+            | self.dismiss_announcement_dialog()
+            | self.report_dialog.take().is_some()
+            | self.group_dialog.take().is_some()
             | self.reactions_dialog.take().is_some()
             | self.emoji_picker.take().is_some()
             | self.switcher.take().is_some()
@@ -273,6 +320,8 @@ impl Waffle {
             | self.pins.take().is_some()
             | std::mem::take(&mut self.inbox_open)
             | self.gif_picker.take().is_some()
+            | self.soundboard.close_picker()
+            | self.dismiss_join_overlay()
             | self.dismiss_call_menus()
             | self.close_menu();
         if open {
@@ -288,7 +337,13 @@ impl Waffle {
         out.extend(self.status_menu_overlay(cx));
         out.extend(self.status_editor_overlay(window, cx));
         out.extend(self.poll_creator_overlay(window, cx));
+        out.extend(self.app_modal_overlay(window, cx));
+        out.extend(self.events_overlay(window, cx));
         out.extend(self.forward_overlay(window, cx));
+        out.extend(self.voice_status_overlay(window, cx));
+        out.extend(self.announcement_overlay(window, cx));
+        out.extend(self.report_overlay(window, cx));
+        out.extend(self.group_overlay(window, cx));
         out.extend(self.reactions_overlay(window, cx));
         out.extend(self.emoji_overlay(window, cx));
         out.extend(self.switcher_overlay(window, cx));
@@ -296,6 +351,8 @@ impl Waffle {
         out.extend(self.pins_overlay(cx));
         out.extend(self.inbox_overlay(window, cx));
         out.extend(self.composer_picker_overlay(window, cx));
+        out.extend(self.soundboard_overlay(window, cx));
+        out.extend(self.join_overlays(window, cx));
         out
     }
 
@@ -331,44 +388,66 @@ impl Waffle {
     }
 
     /// Your recent mentions as cards (at most `limit`), each jumping to its message on click.
-    pub(crate) fn mention_list(&self, limit: Option<usize>, cx: &mut Context<Self>) -> AnyElement {
+    // A fetched list of messages as cards (mentions, saved), each opening its message.
+    pub(crate) fn message_cards(&self, list: &Option<Option<Result<Vec<Message>, SharedString>>>, limit: Option<usize>, empty: (&'static str, &'static str), cx: &mut Context<Self>) -> AnyElement {
         let theme = cx.theme().clone();
-        match &self.inbox {
+        match list {
             None | Some(None) => mention_skeletons(cx),
             Some(Some(Err(error))) => div().p_4().text_color(theme.danger).child(error.clone()).into_any_element(),
-            Some(Some(Ok(list))) if list.is_empty() => div().p_6().text_color(theme.muted_foreground).child("You're all caught up!").into_any_element(),
             Some(Some(Ok(list))) => {
-                let shown: Vec<Message> = list.iter().take(limit.unwrap_or(usize::MAX)).cloned().collect();
+                let shown: Vec<Message> = list.iter().filter(|m| self.hidden_author(&m.author.id).is_none()).take(limit.unwrap_or(usize::MAX)).cloned().collect();
+                if shown.is_empty() {
+                    return crate::ui::empty_state("messages-empty", Illustration::InboxEmpty, empty.0, empty.1, cx).into_any_element();
+                }
                 let ctx = self.row_context_everywhere(&shown, 380., cx);
-                div()
-                .flex()
-                .flex_col()
-                .gap_2()
-                .children(shown.iter().map(|m| {
-                    let place = match self.place_of(m.guild_id.as_deref(), &m.channel_id) {
-                        Some((Some(guild_id), channel)) => self.guilds.iter().find(|g| g.id == guild_id).map(|g| format!("#{} · {}", channel.name, g.name)).unwrap_or_default(),
-                        Some((None, channel)) => channel.name.clone(),
-                        None => String::new(),
-                    };
-                    let (guild_id, channel_id, message_id) = (m.guild_id.clone(), m.channel_id.clone(), m.id.clone());
-                    div()
-                        .id(SharedString::from(format!("inbox-{}", m.id)))
-                        .p_3()
-                        .squircle(RADIUS_XS)
-                        .bg(palette::surface(palette::Level::Raised, cx))
-                        .cursor_pointer()
-                        .hover(|s| s.bg(palette::hover(cx)))
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .child(div().text_size(px(12.)).text_color(theme.muted_foreground).child(place))
-                        .child(div().flex().items_center().gap_2().child(crate::ui::avatar(m.author.avatar.clone(), 24.)).child(div().font_weight(FontWeight::NORMAL).child(m.author.name.clone())))
-                        .child(div().text_size(px(14.)).line_clamp(3).children(crate::chat::content(m, &ctx, cx)))
-                        .on_click(cx.listener(move |this, _, window, cx| this.open_message(guild_id.clone(), &channel_id, message_id.clone(), window, cx)))
-                }))
-                .into_any_element()
+                // The demo shows the first card as hovered, its actions up.
+                let demo = cfg!(debug_assertions) && std::env::var("WAFFLE_DEMO").as_deref() == Ok("inbox-mark-read");
+                div().flex().flex_col().gap_2().children(shown.iter().enumerate().map(|(i, m)| self.mention_card(m, &ctx, demo && i == 0, cx))).into_any_element()
             }
         }
+    }
+
+    // A mention, opening its message on click; on hover Jump and Discord's checkmark, Mark As Read, sit in a
+    // slot of their own beside the author.
+    fn mention_card(&self, m: &Message, ctx: &std::rc::Rc<crate::chat::RowContext>, revealed: bool, cx: &mut Context<Self>) -> gpui_kit::Stateful<gpui_kit::Div> {
+        let place = match self.place_of(m.guild_id.as_deref(), &m.channel_id) {
+            Some((Some(guild_id), channel)) => self.guilds.iter().find(|g| g.id == guild_id).map(|g| format!("#{} · {}", channel.name, g.name)).unwrap_or_default(),
+            Some((None, channel)) => channel.name.clone(),
+            None => String::new(),
+        };
+        let group = SharedString::from(format!("inbox-{}", m.id));
+        let open = {
+            let (guild_id, channel_id, message_id) = (m.guild_id.clone(), m.channel_id.clone(), m.id.clone());
+            move |this: &mut Self, window: &mut Window, cx: &mut Context<Self>| this.open_message(guild_id.clone(), &channel_id, message_id.clone(), window, cx)
+        };
+        let jump_open = open.clone();
+        let jump = ui::button(SharedString::from(format!("inbox-jump-{}", m.id)), ui::Tone::Secondary, cx).small().child("Jump").on_click(cx.listener(move |this, _, window, cx| {
+            cx.stop_propagation();
+            jump_open(this, window, cx);
+        }));
+        let message_id = m.id.clone();
+        let read = ui::icon_button(SharedString::from(format!("inbox-read-{}", m.id)), Glyph::Checkmark, "Mark As Read", cx).small().on_click(cx.listener(move |this, _, _, cx| {
+            cx.stop_propagation();
+            this.mark_mention_read(message_id.clone(), cx);
+        }));
+        let actions = div().flex_none().my(px(-3.)).flex().items_center().gap(px(2.)).child(jump).child(read);
+        let actions = if revealed { actions } else { actions.opacity(0.).group_hover(group.clone(), |s| s.opacity(1.)) };
+        let author = div().flex().items_center().gap_2().child(ui::avatar(m.author.avatar.clone(), 24.)).child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::NORMAL).child(m.author.name.clone())).child(actions);
+        div()
+            .id(group.clone())
+            .group(group)
+            .p_3()
+            .squircle(RADIUS_XS)
+            .bg(palette::surface(palette::Level::Raised, cx))
+            .cursor_pointer()
+            .hover(|s| s.bg(palette::hover(cx)))
+            .flex()
+            .flex_col()
+            .gap_1()
+            .child(div().text_size(px(12.)).text_color(cx.theme().muted_foreground).child(place))
+            .child(author)
+            .child(div().text_size(px(14.)).line_clamp(3).children(crate::chat::content(m, ctx, cx)))
+            .on_click(cx.listener(move |this, _, window, cx| open(this, window, cx)))
     }
 
     /// Where a composer popover's right edge sits from the window's: the composer's own right edge, which
@@ -485,7 +564,7 @@ impl Waffle {
         let body: AnyElement = match pins {
             None => div().p_4().text_color(theme.muted_foreground).child("Loading pins…").into_any_element(),
             Some(Err(error)) => div().p_4().text_color(theme.danger).child(error.clone()).into_any_element(),
-            Some(Ok(list)) if list.is_empty() => div().p_6().flex().flex_col().items_center().gap_2().text_color(theme.muted_foreground).child("This channel doesn't have any pinned messages… yet.").into_any_element(),
+            Some(Ok(list)) if list.is_empty() => crate::ui::empty_state("pins-empty", Illustration::PinsEmpty, "This channel doesn't have any pinned messages… yet.", "Pin a message from its menu to keep it here.", cx).into_any_element(),
             // A list, as the feed: it lays out only the cards in view, so scrolling doesn't redraw every pin.
             Some(Ok(list)) => {
                 // Pins change from the fetch, an unpin and the demo; the list follows here, where they're drawn.
@@ -932,4 +1011,43 @@ fn pin_card(m: &Message, ctx: &std::rc::Rc<crate::chat::RowContext>, cx: &mut Ap
         .child(crate::chat::search_hit(m, ctx, cx).flex_1().min_w_0())
         .child(div().flex_none().mt(px(-4.)).mr(px(-4.)).flex().gap(px(4.)).opacity(0.).group_hover(group, |s| s.opacity(1.)).child(jump).child(unpin))
         .into_any_element()
+}
+
+// Discord's Mark Unread: it acks the newest loaded message before the one marked (or the millisecond
+// before it) and counts the loaded messages after that ack which `counts` as mentions.
+fn manual_ack(loaded: &[Message], marked: u64, counts: impl Fn(&Message) -> bool) -> (u64, u32) {
+    let ack = loaded.iter().map(|m| crate::order(&m.id)).filter(|id| *id < marked).max().unwrap_or_else(|| previous_millisecond(marked));
+    let mentions = loaded.iter().filter(|m| crate::order(&m.id) > ack && counts(m)).count();
+    (ack, mentions as u32)
+}
+
+// The lowest snowflake one millisecond before `id`: the timestamp sits above bit 22.
+fn previous_millisecond(id: u64) -> u64 {
+    ((id >> 22).saturating_sub(1)) << 22
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn message(id: u64, mentions_me: bool) -> Message {
+        Message { id: id.to_string(), content: if mentions_me { "@me".into() } else { String::new() }, ..Default::default() }
+    }
+
+    #[test]
+    fn previous_millisecond_drops_a_millisecond_and_the_low_bits() {
+        let id = (1_000 << 22) | 0x3F_FFFF;
+        assert_eq!(previous_millisecond(id), 999 << 22);
+        assert_eq!(previous_millisecond(5), 0, "an id in the epoch's first millisecond can't go lower");
+    }
+
+    #[test]
+    fn mark_unread_acks_the_message_before_and_counts_mentions_after_it() {
+        let mentions = |m: &Message| !m.content.is_empty();
+        let loaded = [message(10 << 22, true), message(20 << 22, false), message(30 << 22, true), message(40 << 22, true)];
+        assert_eq!(manual_ack(&loaded, 30 << 22, mentions), (20 << 22, 2), "the newest older message, and the marked one counts");
+        assert_eq!(manual_ack(&loaded, 20 << 22, mentions), (10 << 22, 2));
+        assert_eq!(manual_ack(&loaded, 10 << 22, mentions), (9 << 22, 3), "nothing older loaded: the millisecond before");
+        assert_eq!(manual_ack(&[], 10 << 22, mentions), (9 << 22, 0));
+    }
 }

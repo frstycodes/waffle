@@ -1349,6 +1349,60 @@
         ],
         "createdAt": "2026-11-20T10:40:10.846Z",
         "reason": "agent: no marquee element, class or animation exists in embeds.html, embeds.js or css/*.css (grep -i marquee finds nothing)"
+      },
+      {
+        "rule": "clipped-overflow-container",
+        "value": "*",
+        "files": [
+          "design/explore-voice-extras.html"
+        ],
+        "createdAt": "2026-11-21T19:22:54.688Z",
+        "reason": "agent: soundboard emoji burst is meant to clip at the tile edge"
+      },
+      {
+        "rule": "clipped-overflow-container",
+        "value": "*",
+        "files": [
+          "design/explore-stage.html"
+        ],
+        "createdAt": "2026-11-21T19:49:57.500Z",
+        "reason": "Claude: popovers are positioned inside the stage pane on purpose; the window frame clips like the app window"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "design/explore-voice-extras.html"
+        ],
+        "createdAt": "2026-11-21T19:23:10.422Z",
+        "reason": "agent: count badges, kbd and tile name chips copy the shipped design-system chip sizes"
+      },
+      {
+        "rule": "repeated-container-text",
+        "value": "*",
+        "files": [
+          "design/explore-voice-extras.html"
+        ],
+        "createdAt": "2026-11-21T19:23:10.478Z",
+        "reason": "agent: channel name repeats across call header, chat header and composer as in the shipped call view"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "design/explore-stage.html"
+        ],
+        "createdAt": "2026-11-21T19:50:33.468Z",
+        "reason": "Claude: compact badges (LIVE pill, request count, tile name chip) follow the shipped voice.css sizes"
+      },
+      {
+        "rule": "marquee",
+        "value": "*",
+        "files": [
+          "design/flows-discord-map.html"
+        ],
+        "createdAt": "2026-11-21T17:15:09.401Z",
+        "reason": "Claude: page has no marquee, animation or auto-scroll (grep for marquee/animation/scroll finds nothing); only static tables"
       }
     ]
   }

@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upload and Send</title>
+<meta name="description" content="Alt text and spoiler on uploads, the @everyone check, @silent and /tts.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<style>
+  /* Waffle's tokens (tokens.css), inlined so the page stands alone. */
+  :root, :root[data-theme="light"] { color-scheme: light; --bg-sidebar: oklch(0.948 0.002 80); --bg-page: oklch(0.982 0.002 80); --bg-raised: oklch(0.995 0.001 80); --bg-overlay: oklch(0.998 0.001 80); --hover: oklch(0.3 0.008 80 / 0.06); --selected: oklch(0.3 0.008 80 / 0.09); --line: oklch(0.3 0.008 80 / 0.1); --line-strong: oklch(0.3 0.008 80 / 0.18); --text-strong: oklch(0.20 0.009 80); --text: oklch(0.30 0.009 80); --text-muted: oklch(0.46 0.009 80); --text-faint: oklch(0.49 0.009 80); --accent: #efa831; --accent-hover: #e29a1d; --on-accent: #2a1c00; --accent-soft: oklch(0.7 0.15 75 / 0.14); --accent-ink: #8a5601; --danger-ink: #b0182f; --scrim: oklch(0.2 0.01 80 / 0.3); --shadow: 0 1px 2px oklch(0 0 0 / 0.08), 0 12px 32px oklch(0 0 0 / 0.14); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; --bg-sidebar: oklch(0.180 0.004 80); --bg-page: oklch(0.210 0.004 80); --bg-raised: oklch(0.250 0.005 80); --bg-overlay: oklch(0.275 0.005 80); --hover: oklch(1 0 0 / 0.05); --selected: oklch(1 0 0 / 0.08); --line: oklch(1 0 0 / 0.08); --line-strong: oklch(1 0 0 / 0.14); --text-strong: oklch(0.97 0.004 80); --text: oklch(0.88 0.008 80); --text-muted: oklch(0.72 0.012 80); --text-faint: oklch(0.65 0.012 80); --accent-soft: oklch(0.78 0.15 75 / 0.16); --accent-ink: #f6b84d; --danger-ink: #ff7a8c; --scrim: oklch(0 0 0 / 0.45); --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 16px 40px oklch(0 0 0 / 0.4); } }
+  :root[data-theme="dark"] { color-scheme: dark; --bg-sidebar: oklch(0.180 0.004 80); --bg-page: oklch(0.210 0.004 80); --bg-raised: oklch(0.250 0.005 80); --bg-overlay: oklch(0.275 0.005 80); --hover: oklch(1 0 0 / 0.05); --selected: oklch(1 0 0 / 0.08); --line: oklch(1 0 0 / 0.08); --line-strong: oklch(1 0 0 / 0.14); --text-strong: oklch(0.97 0.004 80); --text: oklch(0.88 0.008 80); --text-muted: oklch(0.72 0.012 80); --text-faint: oklch(0.65 0.012 80); --accent-soft: oklch(0.78 0.15 75 / 0.16); --accent-ink: #f6b84d; --danger-ink: #ff7a8c; --scrim: oklch(0 0 0 / 0.45); --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 16px 40px oklch(0 0 0 / 0.4); }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg-page); color: var(--text); font-family: "Figtree", system-ui, sans-serif; font-size: 16px; }
+  main { max-width: 1000px; margin: 0 auto; padding: 32px 16px 64px; }
+  header.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  h1 { font-size: 24px; margin: 0; color: var(--text-strong); flex: 1; }
+  h2 { font-size: 16px; color: var(--text-strong); margin: 40px 0 4px; }
+  p.lede, p.note { color: var(--text-muted); margin: 0 0 16px; max-width: 72ch; line-height: 1.5; font-size: 14px; }
+  p.note b { color: var(--text-strong); font-weight: 600; }
+  .btn { font: inherit; font-size: 14px; font-weight: 600; color: var(--text-strong); background: var(--selected); border: 0; border-radius: 14px; height: 32px; padding: 0 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .btn:hover { background: var(--line-strong); }
+  .btn.primary { background: var(--accent); color: var(--on-accent); }
+  .btn.primary:hover { background: var(--accent-hover); }
+  .btn:focus-visible, .iconbtn:focus-visible, .field:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .kc { display: inline-grid; place-items: center; min-width: 20px; height: 18px; padding: 0 4px; border-radius: 5px; font-size: 11px; font-weight: 600; background: oklch(from currentColor l c h / 0.14); }
+  .iconbtn { width: 28px; height: 28px; border: 0; border-radius: 9px; background: transparent; color: var(--text-muted); font-size: 18px; cursor: pointer; display: grid; place-items: center; position: relative; }
+  .iconbtn:hover { background: var(--hover); color: var(--text-strong); }
+  .iconbtn[data-tip]:hover::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); left: 50%; translate: -50% 0; white-space: nowrap; font-size: 13px; font-weight: 600; padding: 5px 9px; border-radius: 9px; background: var(--bg-overlay); color: var(--text-strong); box-shadow: var(--shadow); z-index: 9; pointer-events: none; }
+
+  .board { position: relative; background: var(--bg-page); border: 1px solid var(--line); border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { display: grid; grid-template-columns: 40px 1fr; gap: 0 12px; }
+  .av { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #e9a84b, #b96a2a); }
+  .av.b { background: linear-gradient(135deg, #6aa6c9, #3b6a8f); }
+  .head { display: flex; align-items: center; gap: 6px; }
+  .name { color: var(--text-strong); font-weight: 600; }
+  .time { color: var(--text-faint); font-size: 12px; margin-left: 2px; }
+  .body { color: var(--text-strong); margin-top: 2px; line-height: 1.45; }
+  .silent { color: var(--text-faint); font-size: 16px; position: relative; display: inline-grid; }
+  .silent:hover::after { content: "This is a @silent message."; position: absolute; bottom: calc(100% + 6px); left: 50%; translate: -50% 0; white-space: nowrap; font-size: 13px; font-weight: 600; padding: 5px 9px; border-radius: 9px; background: var(--bg-overlay); color: var(--text-strong); box-shadow: var(--shadow); z-index: 9; }
+
+  /* "Photos": flat stand-ins so the page needs no images. */
+  .pic { background: radial-gradient(circle at 30% 70%, #f0c27a 0 18%, transparent 19%), linear-gradient(160deg, #7fb3d5, #2f5e7d 70%, #23455c); }
+  .pic.b { background: radial-gradient(circle at 70% 40%, #fff3 0 12%, transparent 13%), linear-gradient(200deg, #e7a86b, #9b4f39 70%); }
+  .pic.c { background: linear-gradient(120deg, #8fbf8a, #3f6b45); }
+
+  /* Composer and its tray (chat.rs attachment_tray): borderless wells inside the composer. */
+  .composer { background: var(--bg-raised); border: 1px solid var(--line); border-radius: 20px; overflow: visible; position: relative; }
+  .tray { display: flex; align-items: flex-end; gap: 8px; padding: 10px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.02em; padding: 1px 5px; border-radius: 6px; background: oklch(0.15 0.005 80 / 0.72); color: oklch(0.97 0.004 80); }
+  .tags { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 3px; z-index: 2; }
+  .well { position: relative; overflow: hidden; display: grid; place-items: center; color: var(--text-muted); background-color: var(--selected); }
+  .well > i { font-size: 40px; }
+  .well.veiled::before { content: ""; position: absolute; inset: 0; backdrop-filter: blur(14px); background: oklch(0 0 0 / 0.18); z-index: 1; }
+  .well .ext { position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.04em; }
+  .acts { position: absolute; top: 6px; right: 6px; z-index: 3; display: flex; gap: 2px; padding: 2px; border-radius: 11px; background: var(--bg-overlay); box-shadow: var(--shadow); opacity: 0; transition: opacity 120ms; }
+  .up:hover .acts, .up:focus-within .acts { opacity: 1; }
+  .meta { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .meta b { font-size: 14px; font-weight: 600; color: var(--text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta small { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .up { position: relative; flex: none; }
+  .acts .iconbtn[data-tip]:hover::after { bottom: auto; top: calc(100% + 6px); }
+
+  /* A: cards. Square picture, name and size under it, actions float on hover. */
+  .tray.a .up { width: 184px; padding: 6px; border-radius: 20px; background: var(--selected); display: flex; flex-direction: column; gap: 6px; }
+  .tray.a .well { height: 140px; border-radius: 14px; background-color: var(--bg-raised); }
+  .tray.a .meta { padding: 0 6px 2px; }
+  .tray.a .acts { top: 12px; right: 12px; }
+
+  /* B: pictures at their own shape, 168px tall; name on a scrim. Files stay square cards. */
+  .tray.b .up { height: 168px; border-radius: 20px; overflow: hidden; }
+  .tray.b .well { position: absolute; inset: 0; }
+  .tray.b .up.file { width: 168px; }
+  .tray.b .up.file .well { inset: 0 0 52px; background-color: var(--selected); border-radius: 0; }
+  .tray.b .meta { position: absolute; left: 0; right: 0; bottom: 0; padding: 28px 10px 8px; background: linear-gradient(transparent, oklch(0.12 0.005 80 / 0.72)); z-index: 2; }
+  .tray.b .meta b { color: oklch(0.97 0.004 80); }
+  .tray.b .meta small { color: oklch(0.86 0.006 80); }
+  .tray.b .up.file .meta { background: var(--selected); padding: 8px 10px; height: 52px; }
+  .tray.b .up.file .meta b { color: var(--text-strong); } .tray.b .up.file .meta small { color: var(--text-faint); }
+  .tray.b .tags { bottom: auto; top: 8px; left: 8px; }
+  .tray.b .up.file .tags { top: auto; bottom: 60px; }
+
+  /* C: today's row, scaled up: a 96px picture beside name and size, actions always shown. */
+  .tray.c { align-items: stretch; }
+  .tray.c .up { width: 300px; display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 6px; border-radius: 20px; background: var(--selected); }
+  .tray.c .well { width: 96px; height: 96px; border-radius: 14px; flex: none; background-color: var(--bg-raised); }
+  .tray.c .meta { flex: 1; align-self: flex-start; padding-top: 8px; }
+  .tray.c .acts { position: static; opacity: 1; box-shadow: none; background: none; flex-direction: column; align-self: flex-start; }
+
+  /* D: picture only; tags at rest, name and size rise on a scrim on hover or focus. */
+  .tray.d .up { width: 172px; height: 172px; border-radius: 20px; overflow: hidden; }
+  .tray.d .well { position: absolute; inset: 0; }
+  .tray.d .well > .tags { display: none; }
+  .tray.d .meta { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 8px; gap: 0; }
+  .tray.d .meta::before { content: ""; position: absolute; inset: -24px 0 0; background: linear-gradient(transparent, oklch(0.12 0.005 80 / 0.75)); opacity: 0; transition: opacity 150ms cubic-bezier(.23,1,.32,1); z-index: -1; }
+  .tray.d .meta .tags { position: static; }
+  .tray.d .meta .nm { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 150ms cubic-bezier(.23,1,.32,1), opacity 150ms; }
+  .tray.d .meta .nm > div { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 1px; }
+  .tray.d .meta .nm b { margin-top: 4px; }
+  .tray.d .meta b { color: oklch(0.97 0.004 80); }
+  .tray.d .meta small { color: oklch(0.86 0.006 80); }
+  .tray.d .up:is(:hover, :focus-within) .meta::before { opacity: 1; }
+  .tray.d .up:is(:hover, :focus-within) .nm { grid-template-rows: 1fr; opacity: 1; }
+  .meta .tags { display: none; }
+  .tray.d .meta .tags { display: flex; }
+  .tray.d .meta .tags:empty { display: none; }
+  .meta .nm { display: none; }
+  .tray.d .meta .plain { display: none; }
+  .tray.d .meta .nm { display: grid; }
+  .seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 14px; background: var(--selected); margin-bottom: 12px; }
+  .seg button { font: inherit; font-size: 14px; font-weight: 600; height: 28px; padding: 0 12px; border: 0; border-radius: 11px; background: none; color: var(--text-muted); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--bg-raised); color: var(--text-strong); box-shadow: 0 1px 2px oklch(0 0 0 / 0.12); }
+  .input { display: flex; align-items: center; gap: 4px; padding: 8px 8px; min-height: 48px; }
+  .input .text { flex: 1; min-width: 0; padding: 4px 6px; color: var(--text-strong); line-height: 24px; }
+  .input .text .ph { color: var(--text-faint); }
+  .tok { color: var(--accent-ink); background: var(--accent-soft); border-radius: 6px; padding: 0 3px; font-weight: 600; }
+
+  /* Modify Attachment dialog (ui::dialog). */
+  .scrim { position: relative; border-radius: 20px; background: var(--scrim); padding: 32px 16px; display: grid; place-items: center; }
+  .dialog { width: min(100%, 440px); background: var(--bg-raised); border-radius: 28px; box-shadow: var(--shadow); padding: 20px 24px 20px; display: flex; flex-direction: column; gap: 16px; }
+  .dialog h3 { margin: 0; font-size: 20px; color: var(--text-strong); display: flex; align-items: center; }
+  .dialog h3 span { flex: 1; }
+  .preview { height: 160px; border-radius: 20px; display: grid; place-items: center; color: var(--text-muted); font-size: 48px; background-color: var(--selected); }
+  label.lbl { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: var(--text-strong); }
+  .field { font: inherit; font-size: 14px; font-weight: 400; color: var(--text-strong); background: var(--selected); border: 1px solid transparent; border-radius: 14px; padding: 7px 12px; outline: 0; resize: none; }
+  .field:focus { border-color: var(--line-strong); }
+  .field:disabled { color: var(--text-muted); cursor: not-allowed; }
+  textarea.field { min-height: 76px; field-sizing: content; line-height: 1.45; }
+  .check { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-strong); cursor: pointer; }
+  .check input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+  .check:has(input:disabled) { color: var(--text-muted); cursor: not-allowed; }
+  .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+  /* Sent media: hover bar with Modify for the author; ALT for descriptions. */
+  .mosaic { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; max-width: 420px; margin-top: 6px; }
+  .tile { position: relative; aspect-ratio: 4 / 3; border-radius: 14px; }
+  .single { position: relative; width: 320px; aspect-ratio: 4 / 3; border-radius: 14px; margin-top: 6px; }
+  .hoverbar { position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; padding: 2px; border-radius: 11px; background: var(--bg-overlay); box-shadow: var(--shadow); opacity: 0; transition: opacity 120ms; }
+  .tile:hover .hoverbar, .single:hover .hoverbar, .hoverbar.show { opacity: 1; }
+  .alt { position: absolute; left: 6px; bottom: 6px; font: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 6px; border: 0; border-radius: 7px; background: oklch(0.15 0.005 80 / 0.72); color: oklch(0.97 0.004 80); cursor: pointer; }
+  .altpop { position: absolute; left: 6px; bottom: 34px; width: 260px; padding: 12px 14px; border-radius: 14px; background: var(--bg-overlay); box-shadow: var(--shadow); font-size: 14px; color: var(--text); line-height: 1.45; z-index: 5; }
+  .altpop b { display: block; font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; }
+  .caption { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-top: 4px; max-width: 320px; }
+
+  /* Hold Up! popout over the composer. */
+  .holdup { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); padding: 16px 18px; border-radius: 20px; background: var(--bg-overlay); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px; }
+  .holdup h3 { margin: 0; font-size: 16px; color: var(--text-strong); display: flex; align-items: center; gap: 8px; }
+  .holdup h3 i { color: var(--accent-ink); font-size: 20px; }
+  .holdup p { margin: 0; font-size: 14px; line-height: 1.45; }
+  .holdup p b { color: var(--text-strong); }
+  .holdup .hint { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 12px; }
+  .holdup .foot { justify-content: flex-start; flex-wrap: wrap; }
+
+  /* Built-in command row (autocomplete card over the composer). */
+  .ac { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); padding: 6px; border-radius: 20px; background: var(--bg-overlay); box-shadow: var(--shadow); }
+  .ac .h { font-size: 12px; font-weight: 600; color: var(--text-muted); padding: 6px 10px 4px; }
+  .ac .row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 14px; background: var(--selected); }
+  .ac .row i { font-size: 20px; color: var(--text-muted); }
+  .ac .row b { color: var(--text-strong); font-weight: 600; font-size: 14px; }
+  .ac .row small { color: var(--text-muted); font-size: 13px; }
+
+  /* Settings rows. */
+  .group { background: var(--bg-raised); border-radius: 20px; padding: 4px 0; max-width: 620px; }
+  .srow { display: flex; align-items: center; gap: 16px; padding: 12px 16px; }
+  .srow + .srow { border-top: 1px solid var(--line); margin: 0 16px; padding-inline: 0; }
+  .srow div { flex: 1; }
+  .srow b { display: block; font-size: 14px; color: var(--text-strong); font-weight: 600; }
+  .srow small { display: block; font-size: 13px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
+  .sw { width: 40px; height: 24px; border-radius: 12px; background: var(--line-strong); position: relative; flex: none; cursor: pointer; border: 0; }
+  .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 18px; border-radius: 9px; background: white; transition: translate 200ms cubic-bezier(.23,1,.32,1); }
+  .sw[aria-checked="true"] { background: var(--accent); }
+  .sw[aria-checked="true"]::after { translate: 10px 0; }
+
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  @media (max-width: 560px) { .single { width: 100%; } }
+</style>
+<script>try{const t=localStorage.getItem("upload-send-theme");if(t)document.documentElement.dataset.theme=t}catch{}</script>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>Upload and send options</h1>
+    <button class="btn" id="theme"><i class="ph-bold ph-circle-half"></i>Light / dark</button>
+  </header>
+  <p class="lede">Parity gaps 1.18 and 1.16. Behaviour, limits and copy are Discord's, from <code>docs/discord-upload-alt-spoiler-re.md</code> and <code>docs/discord-send-options-re.md</code>; the look is Waffle's. Everything here is clickable.</p>
+
+  <h2>1. Files waiting to send</h2>
+  <p class="note">Three directions; pick one. Each tile keeps Discord's three buttons in its order: <b>Spoiler Attachment</b> (eye), <b>Modify Attachment</b> (pencil), <b>Remove Attachment</b>, shown on hover and keyboard focus. <b>Alt</b> and <b>Spoiler</b> tags sit on the picture; spoiler pictures stay veiled.</p>
+  <div class="seg" role="group" aria-label="Tray direction"><button aria-pressed="false" data-dir="a">A · Cards</button><button aria-pressed="false" data-dir="b">B · Own shape</button><button aria-pressed="false" data-dir="c">C · Bigger rows</button><button aria-pressed="true" data-dir="d">D · Name on hover</button></div>
+  <div class="board">
+    <div class="composer">
+      <div class="tray d" id="tray"></div>
+      <div class="input"><button class="iconbtn" aria-label="Upload a file"><i class="ph-fill ph-plus-circle"></i></button><div class="text"><span class="ph">Message #photos</span></div><button class="iconbtn" aria-label="Emoji"><i class="ph-fill ph-smiley"></i></button></div>
+    </div>
+  </div>
+
+  <h2>2. Modify Attachment</h2>
+  <p class="note">Filename, then <b>Description (Alt Text)</b> (images and videos only, 1,024 characters, placeholder "Add a description"), then <b>Mark as spoiler</b>. A filename starting <code>SPOILER_</code> ticks and locks the box. Enter in the filename saves. After sending, the same dialog opens with the filename locked.</p>
+  <div class="scrim" id="scrim">
+    <div class="dialog" role="dialog" aria-labelledby="mtitle">
+      <h3><span id="mtitle">Modify Attachment</span><button class="iconbtn" aria-label="Close" data-close><i class="ph-bold ph-x"></i></button></h3>
+      <div class="preview" id="mprev"></div>
+      <label class="lbl">Filename<input class="field" id="mname"></label>
+      <label class="lbl" id="mdescwrap">Description (Alt Text)<textarea class="field" id="mdesc" maxlength="1024" placeholder="Add a description"></textarea></label>
+      <label class="check"><input type="checkbox" id="mspoil">Mark as spoiler</label>
+      <div class="foot"><button class="btn" data-close>Cancel</button><button class="btn primary" id="msave">Save</button></div>
+    </div>
+  </div>
+
+  <h2>3. Sent images</h2>
+  <p class="note">Your own message: hovering an attachment shows <b>Modify Attachment</b> beside Delete; only the author gets it. Descriptions show only with <b>Show image descriptions</b> on (off by default, see 6): an <b>ALT</b> button on each tile of a mosaic, opening <b>Image Description (Alt Text)</b>; a single image gets a muted caption instead.</p>
+  <div class="board">
+    <div class="msg">
+      <div class="av"></div>
+      <div>
+        <div class="head"><span class="name">You</span><span class="time">9:41 PM</span></div>
+        <div class="body">pier at dusk</div>
+        <div class="mosaic">
+          <div class="tile pic"><div class="hoverbar show"><button class="iconbtn" data-tip="Modify Attachment" data-edit="0"><i class="ph-fill ph-pencil-simple"></i></button><button class="iconbtn" data-tip="Delete"><i class="ph-fill ph-trash"></i></button></div><button class="alt" data-alt="0" aria-label="Image Description (Alt Text)">ALT</button></div>
+          <div class="tile pic b"><div class="hoverbar"><button class="iconbtn" data-tip="Modify Attachment" data-edit="1"><i class="ph-fill ph-pencil-simple"></i></button><button class="iconbtn" data-tip="Delete"><i class="ph-fill ph-trash"></i></button></div><button class="alt" data-alt="1" aria-label="Image Description (Alt Text)">ALT</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="msg">
+      <div class="av b"></div>
+      <div>
+        <div class="head"><span class="name">Mira</span><span class="time">9:43 PM</span></div>
+        <div class="single pic c"></div>
+        <div class="caption">A green hillside under a flat grey sky, a single bench at the top.</div>
+      </div>
+    </div>
+  </div>
+
+  <h2>4. @everyone and @here</h2>
+  <p class="note">Enter on a message that pings <b>@everyone</b> or <b>@here</b> (outside code) in a channel of more than 30 people, when you can ping them, opens <b>Hold Up!</b> over the composer instead of sending. The count is cut to its leading digit with a "+"; @here leaves out offline members. Esc goes back to editing, Enter sends. Role mentions never ask. Threads and forum posts say "in this thread" / "in this post".</p>
+  <div class="board" style="padding-top: 220px">
+    <div class="composer">
+      <div class="holdup" role="alertdialog" aria-labelledby="hu">
+        <h3 id="hu"><i class="ph-fill ph-megaphone"></i>Hold Up!</h3>
+        <p>By using <b>@everyone</b>, you are about to mention 1,000+ people. Are you sure?</p>
+        <div class="hint"><i class="ph-fill ph-info"></i>Maybe try mentioning a role or individual users instead?</div>
+        <div class="foot"><button class="btn">Edit Message <span class="kc">Esc</span></button><button class="btn primary" autofocus>Send Now <span class="kc">↵</span></button></div>
+      </div>
+      <div class="input"><button class="iconbtn" aria-label="Upload a file"><i class="ph-fill ph-plus-circle"></i></button><div class="text"><span class="tok">@everyone</span> brackets are up</div><button class="iconbtn" aria-label="Emoji"><i class="ph-fill ph-smiley"></i></button></div>
+    </div>
+  </div>
+
+  <h2>5. @silent and /tts</h2>
+  <div class="cols">
+    <div>
+      <p class="note">Starting a message with <b>@silent</b> styles the prefix as a token; it is stripped before sending and the message goes out with no push or desktop notification. Everyone sees a sleeping bell beside the name: "This is a @silent message."</p>
+      <div class="board">
+        <div class="composer"><div class="input"><button class="iconbtn" aria-label="Upload a file"><i class="ph-fill ph-plus-circle"></i></button><div class="text"><span class="tok">@silent</span> late-night patch is out</div></div></div>
+        <div class="msg">
+          <div class="av"></div>
+          <div><div class="head"><span class="name">You</span><span class="silent" tabindex="0" aria-label="This is a @silent message."><i class="ph-fill ph-bell-z"></i></span><span class="time">11:58 PM</span></div><div class="body">late-night patch is out</div></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="note">Typing <b>/tts</b> offers Discord's built-in command. Servers only, with Send Text-to-Speech Messages and the setting on. People with the channel open hear "Mira said …"; the message itself looks normal.</p>
+      <div class="board" style="padding-top: 112px">
+        <div class="composer">
+          <div class="ac" role="listbox" aria-label="Commands"><div class="h">Built-in</div><div class="row" role="option" aria-selected="true"><i class="ph-fill ph-speaker-high"></i><div><b>/tts</b> <small>Use text-to-speech to read the message to all members currently viewing the channel.</small></div></div></div>
+          <div class="input"><button class="iconbtn" aria-label="Upload a file"><i class="ph-fill ph-plus-circle"></i></button><div class="text"><span class="tok">/tts</span> dinner's ready</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>6. Settings › Chat</h2>
+  <p class="note">Two new rows, Discord's copy and defaults.</p>
+  <div class="group">
+    <div class="srow"><div><b>Show image descriptions</b><small>Image descriptions are used to describe images for screen readers.</small></div><button class="sw" role="switch" aria-checked="false"></button></div>
+    <div class="srow"><div><b>Allow playback and usage of /tts command</b><small>Using the /tts command speaks your message out loud. Turn this off if you prefer to see /tts messages as text only.</small></div><button class="sw" role="switch" aria-checked="true"></button></div>
+  </div>
+</main>
+<script>
+const files = [
+  { name: "pier.jpg", size: "2.4 MB", kind: "img", cls: "pic", desc: "", spoiler: false, w: 224 },
+  { name: "spoiler-ending.png", size: "880 KB", kind: "img", cls: "pic b", desc: "The final boss, mid-fall.", spoiler: true, w: 126 },
+  { name: "notes.pdf", size: "120 KB", kind: "file", cls: "", desc: "", spoiler: false },
+];
+const sent = [
+  { name: "pier.jpg", kind: "img", cls: "pic", desc: "A wooden pier running into calm water at dusk, the sun low on the left.", spoiler: false },
+  { name: "boat.jpg", kind: "img", cls: "pic b", desc: "", spoiler: false },
+];
+const tray = document.getElementById("tray");
+function renderTray() {
+  tray.innerHTML = files.map((f, i) => {
+    const img = f.kind === "img";
+    const tags = `${f.desc ? '<span class="tag">Alt</span>' : ""}${f.spoiler ? '<span class="tag">Spoiler</span>' : ""}`;
+    const well = `<div class="well ${img ? f.cls : ""} ${f.spoiler && img ? "veiled" : ""}">${img ? "" : '<i class="ph-fill ph-file-pdf"></i>'}<div class="tags">${tags}</div></div>`;
+    return `<div class="up ${img ? "" : "file"}" style="${img ? `width: ${f.w}px` : ""}">
+      ${well}
+      <div class="meta"><div class="tags">${tags}</div><b class="plain">${f.name}</b><small class="plain">${f.size}</small><div class="nm"><div><b>${f.name}</b><small>${f.size}</small></div></div></div>
+      <div class="acts">
+        <button class="iconbtn" data-tip="${f.spoiler ? "Remove Spoiler" : "Spoiler Attachment"}" data-spoil="${i}"><i class="ph-fill ${f.spoiler ? "ph-eye-slash" : "ph-eye"}"></i></button>
+        <button class="iconbtn" data-tip="Modify Attachment" data-modify="${i}"><i class="ph-fill ph-pencil-simple"></i></button>
+        <button class="iconbtn" data-tip="Remove Attachment"><i class="ph-bold ph-x"></i></button>
+      </div>
+    </div>`;
+  }).join("");
+  tray.querySelectorAll(".up").forEach(u => { if (!tray.classList.contains("b")) u.style.width = ""; });
+}
+renderTray();
+
+let editing = { list: files, i: 0, sent: false };
+const $ = id => document.getElementById(id);
+function openModify(list, i, isSent) {
+  editing = { list, i, sent: isSent };
+  const f = list[i];
+  $("mprev").className = "preview " + (f.kind === "img" ? f.cls : "");
+  $("mprev").innerHTML = f.kind === "img" ? "" : '<i class="ph-fill ph-file-pdf"></i>';
+  $("mname").value = f.name; $("mname").disabled = isSent;
+  $("mdesc").value = f.desc;
+  $("mdescwrap").hidden = f.kind !== "img";
+  $("mspoil").checked = f.spoiler;
+  syncSpoilerLock();
+  $("scrim").scrollIntoView({ behavior: "smooth", block: "center" });
+  (isSent ? $("mdesc") : $("mname")).focus({ preventScroll: true });
+}
+function syncSpoilerLock() {
+  const forced = $("mname").value.startsWith("SPOILER_");
+  $("mspoil").disabled = forced;
+  if (forced) $("mspoil").checked = true;
+}
+$("mname").addEventListener("input", syncSpoilerLock);
+$("mname").addEventListener("keydown", e => { if (e.key === "Enter") save(); });
+function save() {
+  const f = editing.list[editing.i];
+  if (!editing.sent) f.name = $("mname").value || f.name;
+  f.desc = $("mdesc").value; f.spoiler = $("mspoil").checked;
+  renderTray();
+}
+$("msave").onclick = save;
+openModify(files, 1, false);
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.dir) { tray.className = "tray " + b.dataset.dir; document.querySelectorAll("[data-dir]").forEach(x => x.setAttribute("aria-pressed", x === b)); renderTray(); return; }
+  if (b.dataset.spoil) { const f = files[+b.dataset.spoil]; f.spoiler = !f.spoiler; renderTray(); }
+  if (b.dataset.modify) openModify(files, +b.dataset.modify, false);
+  if (b.dataset.edit) openModify(sent, +b.dataset.edit, true);
+  if (b.dataset.alt) {
+    document.querySelectorAll(".altpop").forEach(p => p.remove());
+    const d = sent[+b.dataset.alt].desc || "No description.";
+    b.insertAdjacentHTML("afterend", `<div class="altpop" role="dialog" aria-label="Image Description (Alt Text)"><b>Image Description (Alt Text)</b>${d}</div>`);
+    return;
+  }
+  if (b.classList.contains("sw")) b.setAttribute("aria-checked", b.getAttribute("aria-checked") !== "true");
+  if (!e.target.closest(".altpop")) document.querySelectorAll(".altpop").forEach(p => p.remove());
+});
+document.getElementById("theme").onclick = () => {
+  const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("upload-send-theme", root.dataset.theme); } catch {}
+};
+</script>
+</body>
+</html>

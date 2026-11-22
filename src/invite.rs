@@ -112,7 +112,7 @@ struct Row {
 }
 
 impl Waffle {
-    pub(crate) fn open_invite(&mut self, guild_id: String, channel_id: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn open_invite_dialog(&mut self, guild_id: String, channel_id: String, window: &mut Window, cx: &mut Context<Self>) {
         self.menu = None;
         let me = self.my_id().to_owned();
         let Some(guild) = self.guilds.iter().find(|g| g.id == guild_id) else { return };
@@ -162,7 +162,7 @@ impl Waffle {
         }
     }
 
-    fn close_invite(&mut self, cx: &mut Context<Self>) {
+    fn close_invite_dialog(&mut self, cx: &mut Context<Self>) {
         self.invite = None;
         cx.notify();
     }
@@ -218,7 +218,7 @@ impl Waffle {
                     }
                     (None, Target::Channel(id)) => (id.clone(), None),
                 };
-                client.send_message(&dm, &url, &crate::nonce(), None, false).await?;
+                client.send_message(&dm, &url, &crate::nonce(), None, false, Default::default()).await?;
                 Ok::<_, String>(opened)
             }
             .await;
@@ -262,7 +262,7 @@ impl Waffle {
         cx.notify();
     }
 
-    fn edit_invite(&mut self, edit: impl FnOnce(&mut Invite), cx: &mut Context<Self>) {
+    fn edit_invite_dialog(&mut self, edit: impl FnOnce(&mut Invite), cx: &mut Context<Self>) {
         if let Some(invite) = self.invite.as_mut() {
             edit(invite);
         }
@@ -305,14 +305,14 @@ impl Waffle {
             .track_focus(&invite.focus)
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
                 if e.keystroke.key == "escape" {
-                    this.close_invite(cx);
+                    this.close_invite_dialog(cx);
                 }
             }))
             .child(invite_head(guild, channel, cx))
             .when(channel.private, |d| d.child(private_warning(cx)))
             .when(paused, |d| d.child(ui::callout(Notice::Accent, Glyph::Pause, "Invites are paused for this server.", "Nobody can join with a link until they're resumed in Server settings.", cx)))
             .child(columns);
-        let backdrop = div().id("invite-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_invite(cx)));
+        let backdrop = div().id("invite-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_invite_dialog(cx)));
         Some(ui::modal(backdrop, ui::dialog("invite", width, body, window, cx), cx))
     }
 
@@ -439,7 +439,7 @@ fn invite_head(guild: &Guild, channel: &Channel, cx: &mut Context<Waffle>) -> An
                 .child(div().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("Invite friends to {}", guild.name)))
                 .child(land),
         )
-        .child(ui::icon_button("invite-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_invite(cx))))
+        .child(ui::icon_button("invite-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_invite_dialog(cx))))
         .into_any_element()
 }
 
@@ -493,7 +493,7 @@ fn link_section(invite: &Invite, paused: bool, editable: bool, cx: &mut Context<
         .text_color(palette::accent_ink(cx))
         .hover(|s| s.underline())
         .child("Edit invite link")
-        .on_click(cx.listener(|this, _, _, cx| this.edit_invite(|i| (i.draft, i.select) = (Some(i.settings), None), cx)));
+        .on_click(cx.listener(|this, _, _, cx| this.edit_invite_dialog(|i| (i.draft, i.select) = (Some(i.settings), None), cx)));
     let hint = div().flex().flex_wrap().gap_x(px(4.)).text_size(px(13.)).line_height(px(18.)).text_color(palette::muted(cx)).child(line).when(url.is_some() && editable, |d| d.child(edit));
     div()
         .flex()
@@ -521,7 +521,7 @@ fn settings_panel(invite: &Invite, draft: LinkSettings, always: bool, window: &m
         cx,
     )
     .on_click(cx.listener(|this, _, _, cx| {
-        this.edit_invite(
+        this.edit_invite_dialog(
             |i| {
                 let d = i.draft.get_or_insert(i.settings);
                 d.temporary = !d.temporary;
@@ -533,7 +533,7 @@ fn settings_panel(invite: &Invite, draft: LinkSettings, always: bool, window: &m
         .flex()
         .justify_end()
         .gap(px(8.))
-        .when(cancellable, |d| d.child(ui::button("invite-settings-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.edit_invite(|i| (i.draft, i.select) = (None, None), cx)))))
+        .when(cancellable, |d| d.child(ui::button("invite-settings-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.edit_invite_dialog(|i| (i.draft, i.select) = (None, None), cx)))))
         .child(
             ui::button("invite-generate", Tone::Primary, cx)
                 .loading(invite.creating.then_some("Generating"))
@@ -562,15 +562,15 @@ fn settings_select(select: Select, options: &[(u32, &str)], chosen: u32, open: O
     let open = open == Some(select);
     let label = options.iter().find(|(v, _)| *v == chosen).map_or("", |(_, l)| l);
     let trigger = ui::select(SharedString::from(format!("invite-select-{select:?}")), None, label.to_owned(), open, cx)
-        .on_click(cx.listener(move |this, _, _, cx| this.edit_invite(|i| i.select = if i.select == Some(select) { None } else { Some(select) }, cx)));
+        .on_click(cx.listener(move |this, _, _, cx| this.edit_invite_dialog(|i| i.select = if i.select == Some(select) { None } else { Some(select) }, cx)));
     let list = open.then(|| {
         let options: Vec<(String, String)> = options.iter().map(|(v, l)| (v.to_string(), (*l).to_owned())).collect();
         let (pick, close) = (cx.entity(), cx.entity());
-        let dismiss = move |_: &mut Window, cx: &mut App| close.update(cx, |this, cx| this.edit_invite(|i| i.select = None, cx));
+        let dismiss = move |_: &mut Window, cx: &mut App| close.update(cx, |this, cx| this.edit_invite_dialog(|i| i.select = None, cx));
         let on_choose = move |value: String, _: &mut Window, cx: &mut App| {
             let value = value.parse().unwrap_or(0);
             pick.update(cx, |this, cx| {
-                this.edit_invite(
+                this.edit_invite_dialog(
                     |i| {
                         let d = i.draft.get_or_insert(i.settings);
                         match select {
@@ -642,7 +642,7 @@ pub(crate) fn demo(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &m
             _ => {}
         }
     }
-    waffle.open_invite("1".into(), "general".into(), window, cx);
+    waffle.open_invite_dialog("1".into(), "general".into(), window, cx);
     let keys: Vec<String> = waffle.invite_rows("").into_iter().take(2).map(|r| r.key).collect();
     let Some(invite) = waffle.invite.as_mut() else { return };
     if invite.vanity.is_none() {
@@ -690,7 +690,7 @@ fn demo_friends(waffle: &mut Waffle) {
         ("67108864", "Lark"),
     ];
     for (id, name) in friends {
-        waffle.relationships.push(Relationship { user: person(id, name), kind: Relation::Friend });
+        waffle.relationships.push(Relationship { user: person(id, name), kind: Relation::Friend, since: None });
     }
     if let Some(wren) = waffle.dms.iter_mut().find(|d| d.id == "dm") {
         wren.last_message_id = Some("950".into());
@@ -751,7 +751,7 @@ mod tests {
             props: Default::default(),
         };
         let dms = [dm("d-old", Some("a"), Some("5")), dm("d-new", Some("b"), Some("9")), dm("d-quiet", Some("c"), None), dm("g", None, Some("1"))];
-        let rel = |id: &str, kind| Relationship { user: user(id), kind };
+        let rel = |id: &str, kind| Relationship { user: user(id), kind, since: None };
         let relationships = [rel("a", Relation::Friend), rel("c", Relation::Friend), rel("d", Relation::Friend), rel("e", Relation::Blocked)];
         let keys: Vec<String> = invite_rows(&dms, &relationships).into_iter().map(|r| r.key).collect();
         assert_eq!(keys, ["b", "a", "g", "c", "d"]);

@@ -242,7 +242,7 @@ impl Waffle {
         let captcha = captcha_opener(cx);
         cx.spawn(async move |this, cx| {
             let created = client.call_with_captcha(Method::POST, "/guilds".into(), Some(body), captcha).await;
-            let created = created.and_then(|guild| guild["id"].as_str().map(str::to_owned).ok_or_else(|| "Discord didn't send the new server back".to_owned()));
+            let created = created.map_err(String::from).and_then(|guild| guild["id"].as_str().map(str::to_owned).ok_or_else(|| "Discord didn't send the new server back".to_owned()));
             this.update(cx, |this, cx| this.finish_create_server(created, cx)).ok();
         })
         .detach();
