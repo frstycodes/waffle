@@ -38,7 +38,7 @@ mod tabs;
 mod tri;
 mod tunnel;
 
-pub use control::{Control, Pressable, button, chip, hover_fade, icon_button, menu_row, pressable, round_button, swatch, tip};
+pub use control::{Control, Pressable, button, chip, chip_lead, hover_fade, icon_button, menu_row, pressable, round_button, swatch, tip};
 pub use dialog::{dialog, dialog_body, modal};
 pub use feedback::{meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
 pub use field::{code_cell, drop_zone, field, field_error, field_frame, field_hint, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};

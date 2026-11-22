@@ -112,6 +112,11 @@ pub fn chip(id: impl Into<ElementId>, glyph: Option<Glyph>, label: impl Into<Sha
     chip_look(id, on, cx).when_some(glyph, |c, glyph| c.child(Icon::new(glyph).size(px(16.)))).child(label.into())
 }
 
+// A chip led by something other than a glyph (a forum tag's emoji).
+pub fn chip_lead(id: impl Into<ElementId>, lead: Option<AnyElement>, label: impl Into<SharedString>, on: bool, cx: &App) -> Control {
+    chip_look(id, on, cx).children(lead).child(label.into())
+}
+
 fn chip_look(id: impl Into<ElementId>, on: bool, cx: &App) -> Control {
     let look = if on {
         let soft = palette::accent_soft(cx);

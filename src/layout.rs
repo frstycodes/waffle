@@ -96,7 +96,7 @@ impl Waffle {
             && let Some(call) = self.render_call_with_chat(window, cx)
         {
             let (overlays, call_overlays) = (self.render_overlays(window, cx), self.render_call_overlays(window, cx));
-            let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)));
+            let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_new_post(window, cx)));
             crate::gif::set_covered(!overlays.is_empty() || !call_overlays.is_empty() || menu.is_some() || dialog.is_some());
             return root
                 .child(call)
@@ -120,7 +120,7 @@ impl Waffle {
         };
         // Anything drawn over the chat pauses its GIFs (the GIF layer paints above the whole app).
         let (overlays, call_overlays) = (self.render_overlays(window, cx), self.render_call_overlays(window, cx));
-        let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)));
+        let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_new_post(window, cx)));
         let (viewer, settings) = (self.viewer_overlay(window, cx), self.render_settings(window, cx));
         let channel_settings = self.render_channel_settings(window, cx);
         let server_settings = self.render_server_settings(window, cx);
@@ -163,7 +163,7 @@ impl Waffle {
             None if self.guild_id.is_none() && self.channel.is_none() => self.render_home(window, cx),
             None if self.channel.as_ref().is_some_and(|c| c.kind == discord::ChannelKind::Forum) => {
                 let forum = self.channel.clone().expect("checked above");
-                self.render_forum(forum, cx)
+                self.render_forum(forum, window, cx)
             }
             None => self.render_chat(window, cx).into_any_element(),
         }
