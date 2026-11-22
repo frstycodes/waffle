@@ -128,6 +128,8 @@ fn main() -> Result<(), String> {
                         s.ping_ms, s.median_ping_ms, s.outbound_loss_pct, s.endpoint, s.server_ip, s.encryption, s.dave
                     ),
                     Some(voice::VoiceEvent::InputLevel { .. }) => {}
+                    Some(voice::VoiceEvent::Issue { user_id, code, active }) => println!("{user_id} issue {code} active={active}"),
+                    Some(voice::VoiceEvent::StreamConnected { user_id }) => println!("{user_id} stream connected"),
                     Some(voice::VoiceEvent::Connected) => {
                         println!("connected");
                         if auto_go_live {
