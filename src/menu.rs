@@ -38,6 +38,7 @@ const SEPARATOR: f32 = 9.;
 const SLIDER_ROW: f32 = 68.;
 const EMOJI_ROW: f32 = 44.;
 const HEADER: f32 = 52.;
+const LABEL: f32 = 26.;
 // Rows sit 1px apart.
 const GAP: f32 = 1.;
 const LEAD: f32 = 18.;
@@ -53,6 +54,8 @@ pub enum Entry {
     // Quick reactions on top of the message menu: recent emoji, one click each, then the full picker.
     Emojis { quick: Vec<(Emoji, Act)>, more: Act },
     Slider { label: SharedString, key: SharedString, value: f32, on_set: SetValue },
+    // A group's name over its rows (Sort & View's "Sort by").
+    Label(SharedString),
 }
 
 #[derive(Clone)]
@@ -111,6 +114,10 @@ pub fn submenu(label: impl Into<SharedString>, entries: Vec<Entry>) -> Item {
 
 pub fn slider(label: impl Into<SharedString>, key: impl Into<SharedString>, value: f32, on_set: impl Fn(&mut Waffle, f32, &mut Context<Waffle>) + 'static) -> Entry {
     Entry::Slider { label: label.into(), key: key.into(), value, on_set: Rc::new(on_set) }
+}
+
+pub fn label(text: impl Into<SharedString>) -> Entry {
+    Entry::Label(text.into())
 }
 
 pub fn header(lead: HeadLead, title: impl Into<SharedString>, subtitle: Option<SharedString>) -> Entry {
@@ -204,6 +211,7 @@ impl Entry {
             Entry::Header { .. } => HEADER,
             Entry::Slider { .. } => SLIDER_ROW,
             Entry::Emojis { .. } => EMOJI_ROW,
+            Entry::Label(_) => LABEL,
         }
     }
 
@@ -579,6 +587,7 @@ impl Waffle {
                 Entry::Header { lead, title, subtitle } => menu_header(lead, title.clone(), subtitle.clone(), cx).into_any_element(),
                 Entry::Slider { label, key, value, on_set } => self.menu_slider(label.clone(), key.clone(), *value, on_set.clone(), cx).into_any_element(),
                 Entry::Emojis { quick, more } => quick_reactions(quick, more.clone(), cx).into_any_element(),
+                Entry::Label(text) => menu_label(text.clone(), cx).into_any_element(),
                 Entry::Item(item) => {
                     let mut item_path = path.to_vec();
                     item_path.push(i);
@@ -777,6 +786,10 @@ fn hint_inks(item: &Item, cx: &App) -> (Hsla, Hsla) {
 
 pub(crate) fn separator(cx: &App) -> Div {
     div().h(px(SEPARATOR)).flex_none().py(px(4.)).px(px(8.)).child(div().h(px(1.)).bg(palette::line(cx)))
+}
+
+fn menu_label(text: SharedString, cx: &App) -> Div {
+    div().h(px(LABEL)).flex_none().px(px(10.)).pt(px(8.)).text_size(px(12.)).line_height(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::faint(cx)).child(text)
 }
 
 fn menu_header(lead: &HeadLead, title: SharedString, subtitle: Option<SharedString>, cx: &App) -> Div {
