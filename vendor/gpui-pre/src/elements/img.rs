@@ -31,6 +31,9 @@ use super::{Stateful, StatefulInteractiveElement};
 /// The delay before showing the loading state.
 pub const LOADING_DELAY: Duration = Duration::from_millis(200);
 
+// Waffle: the shortest wait between frames; a zero-delay frame would otherwise wake its view nonstop.
+const MIN_FRAME_DELAY: Duration = Duration::from_millis(16);
+
 /// A type alias to the resource loader that the `img()` element uses.
 ///
 /// Note: that this is only for Resources, like URLs or file paths.
@@ -274,6 +277,8 @@ struct ImgState {
     frame_index: usize,
     last_frame_time: Option<Instant>,
     started_loading: Option<(Instant, Task<()>)>,
+    // Waffle: the wake-up for the next frame (when it's due, and the timer).
+    next_frame: Option<(Instant, Task<()>)>,
 }
 
 /// The image layout state between frames
@@ -312,6 +317,7 @@ impl Element for Img {
                     frame_index: 0,
                     last_frame_time: None,
                     started_loading: None,
+                    next_frame: None,
                 })
             });
 
@@ -401,13 +407,27 @@ impl Element for Img {
                                 };
                             }
 
-                            if global_id.is_some()
+                            // Waffle: wake the view when the next frame is due, not on every display
+                            // refresh. Redrawing at the screen's rate made a view holding one animated
+                            // image (a cached sidebar column) re-render 60-120 times a second for a GIF
+                            // that changes 10-25 times.
+                            if let Some(state) = &mut state
                                 && data.frame_count() > 1
                                 && !(self.play_once && frame_index == max_frame_index)
                                 && window.is_window_active()
                                 && !cx.reduce_motion()
                             {
-                                window.request_animation_frame();
+                                let delay = Duration::from(data.delay(frame_index)).max(MIN_FRAME_DELAY);
+                                let due = state.last_frame_time.map_or_else(Instant::now, |at| at + delay);
+                                if state.next_frame.as_ref().is_none_or(|(at, _)| *at != due) {
+                                    let view = window.current_view();
+                                    let wait = due.saturating_duration_since(Instant::now());
+                                    let task = window.spawn(cx, async move |cx| {
+                                        cx.background_executor().timer(wait).await;
+                                        cx.update(move |_, cx| cx.notify(view)).ok();
+                                    });
+                                    state.next_frame = Some((due, task));
+                                }
                             }
                         }
                         Some(_err) => {
