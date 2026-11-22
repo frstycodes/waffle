@@ -892,6 +892,31 @@ pub struct Profile {
     pub mutual_server_count: usize,
     // GAP: the API field behind Discord's Game Collection is unknown, so only the demo fills this (icon URLs).
     pub games: Vec<String>,
+    // When they joined the server the profile was fetched for (`guild_member.joined_at`, ISO 8601).
+    pub joined: Option<String>,
+    pub connections: Vec<Connection>,
+    // The profile effect they wear: its collectible's sku, resolved through `/collectibles-products/{sku}`.
+    pub effect_sku: Option<String>,
+}
+
+// An account linked on their profile (`connected_accounts[]`); `kind` is Discord's platform type ("spotify").
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct Connection {
+    pub kind: String,
+    pub id: String,
+    pub name: String,
+    pub verified: bool,
+}
+
+// One image of a profile effect, placed in the effect's own pixels (`effects[]` of its config).
+#[derive(Clone, Debug, PartialEq)]
+pub struct EffectLayer {
+    pub src: String,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub z: i64,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -943,6 +968,8 @@ pub enum Relation {
 pub struct Relationship {
     pub user: User,
     pub kind: Relation,
+    // When it became this relationship (ISO 8601): Friends Since for a friend.
+    pub since: Option<String>,
 }
 
 // One result from Discord's GIF search (its Tenor proxy). `preview` is an animated GIF gpui can draw.
@@ -1374,6 +1401,12 @@ impl Client {
         }
         let body = self.run(self.request(reqwest::Method::GET, &path)).await?;
         Ok(parse_profile(user_id, &body))
+    }
+
+    // A profile effect's layers, from the collectibles product its sku names.
+    pub async fn profile_effect(&self, sku: &str) -> Result<Vec<EffectLayer>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, &format!("/collectibles-products/{sku}"))).await?;
+        Ok(parse_profile_effect(&body))
     }
 
     /// Opens (or finds) the DM channel with a user.
@@ -2134,7 +2167,7 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
                 _ => return None,
             };
             let user = if d["user"].is_object() { parse_user(&d["user"]) } else { User { id: d["id"].as_str()?.to_owned(), ..Default::default() } };
-            Some(Event::RelationshipChange { user_id: d["id"].as_str()?.to_owned(), relationship: Some(Relationship { user, kind }) })
+            Some(Event::RelationshipChange { user_id: d["id"].as_str()?.to_owned(), relationship: Some(Relationship { user, kind, since: d["since"].as_str().map(str::to_owned) }) })
         }
         "RELATIONSHIP_REMOVE" => Some(Event::RelationshipChange { user_id: d["id"].as_str()?.to_owned(), relationship: None }),
         "THREAD_MEMBER_UPDATE" => Some(Event::ThreadJoined { id: d["id"].as_str()?.to_owned(), joined: true }),
@@ -2246,7 +2279,7 @@ fn parse_ready(d: &Value) -> Ready {
                 };
                 // Legacy READY embeds the user; newer shapes reference READY.users by id.
                 let user = if r["user"].is_object() { parse_user(&r["user"]) } else { d["users"].as_array()?.iter().find(|u| u["id"] == r["id"]).map(parse_user)? };
-                Some(Relationship { user, kind })
+                Some(Relationship { user, kind, since: r["since"].as_str().map(str::to_owned) })
             })
             .collect(),
         folders: d["user_settings"]["guild_folders"]
@@ -2809,7 +2842,49 @@ fn parse_profile(user_id: &str, body: &Value) -> Profile {
         mutual_friend_count,
         mutual_server_count: body["mutual_guilds"].as_array().map_or(0, Vec::len),
         games: Vec::new(),
+        joined: body["guild_member"]["joined_at"].as_str().map(str::to_owned),
+        connections: body["connected_accounts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|c| {
+                Some(Connection { kind: c["type"].as_str()?.to_owned(), id: c["id"].as_str()?.to_owned(), name: c["name"].as_str().unwrap_or_default().to_owned(), verified: c["verified"].as_bool() == Some(true) })
+            })
+            .collect(),
+        effect_sku: effect_sku(&body["guild_member_profile"]["collectibles"]).or_else(|| effect_sku(&profile["collectibles"])),
     }
+}
+
+// The unexpired profile effect in a `collectibles[]` list, `{sku_id, type, expires_at}`.
+// Not verified: that the profile effect's collectible type is 1 (Discord's enum value wasn't read).
+fn effect_sku(collectibles: &Value) -> Option<String> {
+    const PROFILE_EFFECT: u64 = 1;
+    let now = chrono::Utc::now();
+    collectibles
+        .as_array()?
+        .iter()
+        .filter(|c| c["type"].as_u64() == Some(PROFILE_EFFECT))
+        .filter(|c| c["expires_at"].as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).is_none_or(|t| t > now))
+        .find_map(|c| c["sku_id"].as_str().map(str::to_owned))
+}
+
+// Not verified: that the product carries the effect's config (`effects[]` of `{src, width, height, position,
+// zIndex, randomizedSources}`) on one of its `items`; a body without it gives no layers and the card draws none.
+// GAP: Discord picks one random `randomizedSources` entry per open; this takes the first.
+fn parse_profile_effect(body: &Value) -> Vec<EffectLayer> {
+    let item = body["items"].as_array().into_iter().flatten().find(|i| i["effects"].is_array());
+    let Some(effects) = item.and_then(|i| i["effects"].as_array()) else { return Vec::new() };
+    let mut layers: Vec<EffectLayer> = effects
+        .iter()
+        .filter_map(|e| {
+            let src = e["randomizedSources"][0]["src"].as_str().or(e["src"].as_str())?.to_owned();
+            let num = |v: &Value| v.as_f64().unwrap_or(0.) as f32;
+            Some(EffectLayer { src, x: num(&e["position"]["x"]), y: num(&e["position"]["y"]), width: num(&e["width"]), height: num(&e["height"]), z: e["zIndex"].as_i64().unwrap_or(0) })
+        })
+        .filter(|l| l.width > 0. && l.height > 0.)
+        .collect();
+    layers.sort_by_key(|l| l.z);
+    layers
 }
 
 pub fn app_icon_url(app_id: &str, icon: &str) -> String {
@@ -3452,7 +3527,9 @@ mod tests {
             "mutual_friends": [{ "id": "1", "username": "a" }, { "id": "2", "username": "b" }],
             "mutual_friend_count": 5,
             "mutual_guilds": [{ "id": "g", "nick": null }],
-            "guild_member": { "roles": ["r"] },
+            "guild_member": { "roles": ["r"], "joined_at": "2022-06-18T10:00:00+00:00" },
+            "connected_accounts": [{ "type": "spotify", "id": "s1", "name": "wren", "verified": true }, { "type": "steam", "id": "7656" }, { "name": "no type" }],
+            "guild_member_profile": { "collectibles": [{ "sku_id": "old", "type": 1, "expires_at": "2001-01-01T00:00:00+00:00" }] },
         });
         let p = parse_profile("9", &body);
         assert_eq!(p.username, "aayurene");
@@ -3464,8 +3541,35 @@ mod tests {
         assert_eq!((p.mutual_friends.len(), p.mutual_friend_count, p.mutual_server_count), (2, 5, 1));
         assert!(p.decoration.unwrap().contains("/avatar-decoration-presets/deco.png"));
         assert_eq!(p.roles, ["r"]);
+        assert_eq!(p.joined.as_deref(), Some("2022-06-18T10:00:00+00:00"));
+        assert_eq!(p.connections.iter().map(|c| (c.kind.as_str(), c.name.as_str(), c.verified)).collect::<Vec<_>>(), [("spotify", "wren", true), ("steam", "", false)]);
+        assert_eq!(p.effect_sku, None);
+        let worn = parse_profile("9", &json!({ "user_profile": { "collectibles": [{ "sku_id": "frame", "type": 2 }, { "sku_id": "fx", "type": 1, "expires_at": null }] } }));
+        assert_eq!(worn.effect_sku.as_deref(), Some("fx"));
         let bare = parse_profile("9", &json!({ "user": { "id": "9" }, "user_profile": { "theme_colors": [1] } }));
         assert_eq!((bare.theme, bare.mutual_friend_count, bare.badges.len()), (None, 0, 0));
+    }
+
+    #[test]
+    fn relationships_carry_since() {
+        let since = "2023-08-09T12:00:00+00:00";
+        let Some(Event::RelationshipChange { relationship: Some(r), .. }) = dispatch("RELATIONSHIP_ADD", &json!({ "id": "5", "type": 1, "since": since })) else { panic!("no relationship") };
+        assert_eq!((r.kind, r.since.as_deref()), (Relation::Friend, Some(since)));
+        let ready = parse_ready(&json!({ "user": { "id": "1" }, "relationships": [{ "id": "5", "type": 1, "since": since, "user": { "id": "5" } }] }));
+        assert_eq!(ready.relationships[0].since.as_deref(), Some(since));
+    }
+
+    #[test]
+    fn parses_profile_effect() {
+        let body = json!({ "items": [{ "type": 1, "effects": [
+            { "src": "https://x/top.png", "width": 450, "height": 880, "position": { "x": 0, "y": 0 }, "zIndex": 2 },
+            { "src": "https://x/base.png", "randomizedSources": [{ "src": "https://x/a.png" }], "width": 450, "height": 200, "position": { "x": 0, "y": 40 }, "zIndex": 1 },
+            { "src": "https://x/empty.png" },
+        ]}]});
+        let layers = parse_profile_effect(&body);
+        assert_eq!(layers.iter().map(|l| l.src.as_str()).collect::<Vec<_>>(), ["https://x/a.png", "https://x/top.png"]);
+        assert_eq!((layers[0].y, layers[0].height), (40., 200.));
+        assert!(parse_profile_effect(&json!({ "items": [] })).is_empty());
     }
 
     #[test]
