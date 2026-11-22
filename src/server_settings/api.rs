@@ -474,6 +474,16 @@ pub fn kick(guild_id: &str, user_id: &str) -> Call {
     delete(format!("/guilds/{guild_id}/members/{user_id}"))
 }
 
+// Discord bans at most 200 users per call.
+pub const BULK_BAN_MAX: usize = 200;
+
+// Not verified: the answer `{banned_users, failed_users}` (public API docs, not run). Discord's own client
+// calls `/bulk-ban/v2` instead and learns the outcome over the gateway.
+pub fn bulk_ban(guild_id: &str, user_ids: &[String], delete_seconds: u32) -> Call {
+    let user_ids = &user_ids[..user_ids.len().min(BULK_BAN_MAX)];
+    Call::new(Method::POST, format!("/guilds/{guild_id}/bulk-ban"), Some(json!({ "user_ids": user_ids, "delete_message_seconds": delete_seconds.min(604_800) })))
+}
+
 // `until`: an ISO 8601 time at most 28 days away; None lifts the timeout.
 pub fn timeout(guild_id: &str, user_id: &str, until: Option<&str>) -> Call {
     Call::new(Method::PATCH, format!("/guilds/{guild_id}/members/{user_id}"), Some(json!({ "communication_disabled_until": until })))
@@ -523,7 +533,38 @@ pub struct MemberSearch {
     pub user_ids: Vec<String>,
     pub signals: Vec<Signal>,
     pub sort: MemberSort,
+    // Member since: when they joined the server.
+    pub joined: Option<DateRange>,
+    // Joined Discord: when their account was made, sent as snowflake bounds.
+    pub account: Option<DateRange>,
 }
+
+// Epoch milliseconds, either end open.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DateRange {
+    pub after_ms: Option<i64>,
+    pub before_ms: Option<i64>,
+}
+
+impl DateRange {
+    fn range(self, bound: impl Fn(i64) -> Value) -> Value {
+        let mut range = Map::new();
+        if let Some(after) = self.after_ms {
+            range.insert("gte".into(), bound(after));
+        }
+        if let Some(before) = self.before_ms {
+            range.insert("lte".into(), bound(before));
+        }
+        Value::Object(range)
+    }
+}
+
+// The smallest snowflake made at `ms`, as Discord's `fromTimestamp` builds it.
+pub fn snowflake_at(ms: i64) -> String {
+    (((ms - DISCORD_EPOCH_MS).max(0) as u64) << 22).to_string()
+}
+
+const DISCORD_EPOCH_MS: i64 = 1_420_070_400_000;
 
 // Where the next chunk starts: the last member already loaded.
 #[derive(Clone, Debug, PartialEq)]
@@ -539,8 +580,18 @@ pub fn members_search(guild_id: &str, search: &MemberSearch, limit: usize, after
     if !search.usernames.is_empty() {
         and_query.insert("usernames".into(), json!({ "or_query": search.usernames }));
     }
+    let mut user_id = Map::new();
     if !search.user_ids.is_empty() {
-        and_query.insert("user_id".into(), json!({ "or_query": search.user_ids }));
+        user_id.insert("or_query".into(), json!(search.user_ids));
+    }
+    if let Some(account) = search.account {
+        user_id.insert("range".into(), account.range(|ms| json!(snowflake_at(ms))));
+    }
+    if !user_id.is_empty() {
+        and_query.insert("user_id".into(), Value::Object(user_id));
+    }
+    if let Some(joined) = search.joined {
+        and_query.insert("guild_joined_at".into(), json!({ "range": joined.range(|ms| json!(ms)) }));
     }
     let or_query = if safety.is_empty() { json!({}) } else { json!({ "safety_signals": safety }) };
     let mut body = json!({ "or_query": or_query, "and_query": and_query, "sort": search.sort as u8, "limit": limit });
@@ -682,7 +733,7 @@ mod tests {
         let recent = members_search("1", &MemberSearch::default(), 250, None, 0);
         assert_eq!((recent.method, recent.path.as_str()), (Method::POST, "/guilds/1/members-search"));
         assert_eq!(recent.body.unwrap(), json!({ "or_query": {}, "and_query": {}, "sort": 1, "limit": 250 }));
-        let search = MemberSearch { usernames: vec!["wren".into()], user_ids: vec!["123456789012345678".into()], signals: vec![Signal::TimedOut, Signal::Quarantined], sort: MemberSort::AccountOldest };
+        let search = MemberSearch { usernames: vec!["wren".into()], user_ids: vec!["123456789012345678".into()], signals: vec![Signal::TimedOut, Signal::Quarantined], sort: MemberSort::AccountOldest, ..Default::default() };
         let after = MemberCursor { joined_at_ms: 5, user_id: "9".into() };
         let body = members_search("1", &search, 60, Some(&after), 1_000).body.unwrap();
         assert_eq!(body["or_query"], json!({ "safety_signals": { "communication_disabled_until": { "range": { "gte": 1_000 } }, "automod_quarantined_username": true } }));
@@ -691,6 +742,31 @@ mod tests {
         let dm = members_search("1", &MemberSearch { signals: vec![Signal::UnusualDmActivity], ..Default::default() }, 1, None, UNUSUAL_DM_WINDOW_MS).body.unwrap();
         assert_eq!(dm["or_query"]["safety_signals"]["unusual_dm_activity_until"], json!({ "range": { "gte": 0 } }));
         assert_eq!(members_supplemental("1", &["2".into()]).body.unwrap(), json!({ "user_ids": ["2"] }));
+    }
+
+    #[test]
+    fn members_search_date_ranges() {
+        let day = 86_400_000;
+        let search = MemberSearch {
+            user_ids: vec!["123456789012345678".into()],
+            joined: Some(DateRange { after_ms: Some(DISCORD_EPOCH_MS + day), before_ms: None }),
+            account: Some(DateRange { after_ms: Some(DISCORD_EPOCH_MS + day), before_ms: Some(DISCORD_EPOCH_MS + 2 * day) }),
+            ..Default::default()
+        };
+        let body = members_search("1", &search, 1, None, 0).body.unwrap();
+        assert_eq!(body["and_query"]["guild_joined_at"], json!({ "range": { "gte": DISCORD_EPOCH_MS + day } }));
+        let (from, to) = ((day as u64) << 22, (2 * day as u64) << 22);
+        assert_eq!(body["and_query"]["user_id"], json!({ "or_query": ["123456789012345678"], "range": { "gte": from.to_string(), "lte": to.to_string() } }));
+        assert_eq!(snowflake_at(0), "0");
+    }
+
+    #[test]
+    fn bulk_ban_caps_at_200() {
+        let ids: Vec<String> = (0..250).map(|i| i.to_string()).collect();
+        let call = bulk_ban("1", &ids, 3600);
+        assert_eq!((call.method, call.path.as_str()), (Method::POST, "/guilds/1/bulk-ban"));
+        let body = call.body.unwrap();
+        assert_eq!((body["user_ids"].as_array().unwrap().len(), body["delete_message_seconds"].as_u64()), (200, Some(3600)));
     }
 
     #[test]

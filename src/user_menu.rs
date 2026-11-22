@@ -26,7 +26,7 @@ pub enum Surface {
 }
 
 // Discord's timeout lengths, in seconds.
-const TIMEOUTS: [(&str, i64); 6] = [("60 seconds", 60), ("5 minutes", 300), ("10 minutes", 600), ("1 hour", 3600), ("1 day", 86_400), ("1 week", 604_800)];
+pub(crate) const TIMEOUTS: [(&str, i64); 6] = [("60 seconds", 60), ("5 minutes", 300), ("10 minutes", 600), ("1 hour", 3600), ("1 day", 86_400), ("1 week", 604_800)];
 
 impl Waffle {
     pub(crate) fn open_user_menu(&mut self, user: User, guild_id: Option<String>, surface: Surface, at: Point<Pixels>, cx: &mut Context<Self>) {
@@ -371,9 +371,7 @@ impl Waffle {
         let theirs = self.member_roles.get(&guild.id).and_then(|r| r.get(target)).cloned().unwrap_or_default();
         let manage = guild.can(&me.id, perm::MANAGE_ROLES);
         let top = guild.top_position(&me.id);
-        let mut roles: Vec<_> = guild.roles.iter().filter(|r| r.id != guild.id && !r.managed).collect();
-        roles.sort_by_key(|r| std::cmp::Reverse(r.position));
-        roles
+        role_choices(guild)
             .into_iter()
             .filter(|r| theirs.contains(&r.id) || (manage && r.position < top))
             .map(|role| {
@@ -590,6 +588,13 @@ impl Waffle {
         })
         .detach();
     }
+}
+
+// The roles a member can be given or lose, highest first: neither @everyone nor an integration's own.
+pub(crate) fn role_choices(guild: &crate::discord::Guild) -> Vec<&crate::discord::Role> {
+    let mut roles: Vec<_> = guild.roles.iter().filter(|r| r.id != guild.id && !r.managed).collect();
+    roles.sort_by_key(|r| std::cmp::Reverse(r.position));
+    roles
 }
 
 fn toggle(list: &mut Vec<String>, id: &str) {

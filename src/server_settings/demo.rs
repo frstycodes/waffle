@@ -8,6 +8,7 @@ use super::{
     api::{AuditQuery, Overview},
     audit,
     lists::{self, AuditView},
+    member_dates::{DateColumn, DateFilter, Preset},
     members,
     roles::{self, RoleEdit, RoleTab},
     view::Info,
@@ -23,7 +24,7 @@ pub fn open(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         "server-settings-engagement" => Page::Engagement,
         "server-settings-automod" => Page::AutoMod,
         "server-settings-invites" => Page::Invites,
-        "server-settings-members" => Page::Members,
+        "server-settings-members" | "server-settings-members-bulk" | "server-settings-members-filter" => Page::Members,
         _ => Page::Profile,
     };
     let Some(view) = waffle.server_settings.as_mut() else { return };
@@ -46,6 +47,17 @@ pub fn open(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         let tab = if scene == "server-settings-role-perms" { RoleTab::Permissions } else { RoleTab::Display };
         view.roles.name.update(cx, |s, cx| s.set_value(row.role.name.clone(), window, cx));
         view.roles.open = Some(RoleEdit { id: row.id.clone(), tab, saved: row.role.clone(), draft: row.role.clone(), members: Load::Ready(vec!["8388608".into(), "12582912".into()]), asking_delete: false });
+    }
+    if scene == "server-settings-members-filter"
+        && let Some(m) = waffle.server_settings.as_mut().map(|v| &mut v.lists.members)
+    {
+        filter_members_demo(m, Preset::FourWeeks);
+    }
+    if scene == "server-settings-members-bulk"
+        && let Some(m) = waffle.server_settings.as_mut().map(|v| &mut v.lists.members)
+        && let Load::Ready(rows) = &m.rows
+    {
+        m.selected = rows.iter().take(2).map(|r| r.id.clone()).collect();
     }
     if scene == "server-settings-dirty" {
         let Some(view) = waffle.server_settings.as_mut() else { return };
@@ -124,6 +136,18 @@ fn member_results() -> Vec<Value> {
         entry(made(5 * 365 * DAY), "kiwi", Some("kiwi"), 300 * DAY, json!({}), json!({ "join_source_type": 2, "integration_type": "twitch" })),
         entry(made(7 * 365 * DAY + 40 * DAY), "wren", Some("Wren"), 2 * 365 * DAY, json!({ "nick": "Wren (mod)", "roles": ["r1", "r2"] }), json!({ "join_source_type": 5, "source_invite_code": "7Kq2xQ" })),
     ]
+}
+
+// The table as Discord would answer a Member since filter: only the rows that joined inside it, with the
+// menu open on the preset.
+fn filter_members_demo(m: &mut members::Members, preset: Preset) {
+    let range = preset.range(chrono::Utc::now());
+    let after = range.and_then(|r| r.after_ms).unwrap_or(i64::MIN);
+    (m.joined_menu.filter, m.filter.joined, m.pop) = (DateFilter::Preset(preset), range, Some(members::Pop::Date(DateColumn::Joined)));
+    if let Load::Ready(rows) = &mut m.rows {
+        rows.retain(|r| r.joined_at.is_some_and(|t| t.timestamp_millis() >= after));
+        m.total = rows.len() as u64;
+    }
 }
 
 // Copies `extra`'s keys onto `into`, object by object.

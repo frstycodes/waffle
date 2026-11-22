@@ -19,6 +19,8 @@ use serde_json::Value;
 use super::{
     access::Page,
     api::{self, MemberCursor, MemberSearch, MemberSort, Signal},
+    member_bulk::{self, BulkPowers},
+    member_dates::{DateColumn, DateMenu},
     perms,
     view::{failed, loading_line, plural, snowflake_ms},
 };
@@ -29,7 +31,7 @@ use crate::{
     icons::Glyph,
     link_preview::grouped,
     palette,
-    ui::{self, Align, Col},
+    ui::{self, Align, Check, Col},
 };
 
 pub const PAGE_SIZES: [usize; 4] = [12, 25, 50, 100];
@@ -71,6 +73,7 @@ pub enum Pop {
     Sort,
     PageSize,
     Row(String),
+    Date(DateColumn),
 }
 
 pub struct Members {
@@ -86,6 +89,12 @@ pub struct Members {
     // A further chunk is on its way.
     pub more: bool,
     pub pop: Option<Pop>,
+    pub joined_menu: DateMenu,
+    pub account_menu: DateMenu,
+    // Picked rows by user id, kept across pages and searches as Discord keeps them.
+    pub selected: Vec<String>,
+    // A bulk action is on its way.
+    pub bulk_busy: bool,
     // Bumped by every new search, so an answer to an older one is dropped.
     pub generation: u64,
     typed: u64,
@@ -100,7 +109,8 @@ impl Members {
             _ => {}
         })
         .detach();
-        Members { search, filter: MemberSearch::default(), rows: Load::Loading, total: 0, page: 0, page_size: PAGE_SIZES[0], indexing: false, more: false, pop: None, generation: 0, typed: 0 }
+        let (joined_menu, account_menu) = (DateMenu::new(window, cx), DateMenu::new(window, cx));
+        Members { search, filter: MemberSearch::default(), rows: Load::Loading, total: 0, page: 0, page_size: PAGE_SIZES[0], indexing: false, more: false, pop: None, joined_menu, account_menu, selected: Vec::new(), bulk_busy: false, generation: 0, typed: 0 }
     }
 }
 
@@ -283,6 +293,17 @@ impl Powers {
     }
 }
 
+// Everything the table checks before drawing: row menus, bulk actions, and Manage server for the join
+// method column and the date filters.
+#[derive(Clone, Copy)]
+struct Gates {
+    powers: Powers,
+    bulk: BulkPowers,
+    manage_guild: bool,
+}
+
+const CHECK_COL: Col = Col::Fixed(20.);
+
 impl Waffle {
     fn members(&mut self) -> Option<&mut Members> {
         self.server_settings.as_mut().map(|v| &mut v.lists.members)
@@ -427,7 +448,7 @@ impl Waffle {
         self.show_members_page(0, cx);
     }
 
-    fn member_pop(&mut self, pop: Option<Pop>, cx: &mut Context<Self>) {
+    pub(super) fn member_pop(&mut self, pop: Option<Pop>, cx: &mut Context<Self>) {
         if let Some(m) = self.members() {
             m.pop = if pop.is_some() && m.pop == pop { None } else { pop };
         }
@@ -485,8 +506,8 @@ impl Waffle {
     pub(super) fn members_group(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let Some(view) = self.server_settings.as_ref() else { return div().into_any_element() };
         let guild_id = view.guild_id.clone();
-        let (powers, manage_guild) = self
-            .with_access(&guild_id, |me| (Powers { kick: me.has(perm::KICK_MEMBERS), ban: me.has(perm::BAN_MEMBERS), timeout: me.has(perm::MODERATE_MEMBERS) }, me.has(perms::MANAGE_GUILD)))
+        let (powers, bulk, manage_guild) = self
+            .with_access(&guild_id, |me| (Powers { kick: me.has(perm::KICK_MEMBERS), ban: me.has(perm::BAN_MEMBERS), timeout: me.has(perm::MODERATE_MEMBERS) }, BulkPowers::new(|bits| me.has(bits)), me.has(perms::MANAGE_GUILD)))
             .unwrap_or_default();
         let m = &view.lists.members;
         let title = if m.filter == MemberSearch::default() { "Recent members" } else { "Search results" };
@@ -494,7 +515,7 @@ impl Waffle {
             Load::Loading if m.indexing => loading_line("Before searching, we need to index this server. Give us a bit.", cx),
             Load::Loading => loading_line("Loading members…", cx),
             Load::Failed(error) => failed("Couldn't load members", error, cx),
-            Load::Ready(_) => self.members_table(&guild_id, powers, manage_guild, cx),
+            Load::Ready(_) => self.members_table(&guild_id, Gates { powers, bulk, manage_guild }, cx),
         };
         let footer = matches!(m.rows, Load::Ready(_)).then(|| self.members_footer(cx));
         ui::settings_group(title, cx).gap(px(12.)).child(self.members_toolbar(cx)).child(body).children(footer).into_any_element()
@@ -535,50 +556,67 @@ impl Waffle {
             .into_any_element()
     }
 
-    fn member_dismiss(&self, cx: &mut Context<Self>) -> impl Fn(&mut Window, &mut App) + 'static {
+    pub(super) fn member_dismiss(&self, cx: &mut Context<Self>) -> impl Fn(&mut Window, &mut App) + 'static {
         let this = cx.entity();
         move |_, cx| this.update(cx, |this, cx| this.member_pop(None, cx))
     }
 
-    fn members_table(&self, guild_id: &str, powers: Powers, manage_guild: bool, cx: &mut Context<Self>) -> AnyElement {
+    fn members_table(&self, guild_id: &str, Gates { powers, bulk, manage_guild }: Gates, cx: &mut Context<Self>) -> AnyElement {
         let Some(m) = self.server_settings.as_ref().map(|v| &v.lists.members) else { return div().into_any_element() };
         let Load::Ready(rows) = &m.rows else { return div().into_any_element() };
-        // Discord hides how members joined from anyone without Manage server.
-        let columns: Vec<(Col, &str)> = [
-            Some((Col::Grow { weight: 2., min: 120. }, "Name")),
-            Some((Col::Grow { weight: 1., min: 72. }, "Member since")),
-            Some((Col::Grow { weight: 1., min: 72. }, "Joined Discord")),
-            manage_guild.then_some((Col::Grow { weight: 1., min: 72. }, "Join method")),
-            Some((Col::Grow { weight: 1., min: 72. }, "Roles")),
-            Some((Col::Fixed(70.), "Signals")),
-            Some((Col::Fixed(52.), "")),
+        let shown: Vec<&Member> = rows.iter().skip(m.page * m.page_size).take(m.page_size).collect();
+        let selecting = bulk.any();
+        let page_ids: Vec<&str> = shown.iter().map(|r| r.id.as_str()).collect();
+        let check_all = selecting.then(|| self.select_box("ss-member-check-all".into(), member_bulk::page_check(&m.selected, &page_ids), |this, cx| this.toggle_page_selected(cx), cx));
+        let label = |text: &'static str| div().truncate().child(text).into_any_element();
+        // Discord hides how members joined from anyone without Manage server, and only they can filter by date.
+        let columns: Vec<(Col, AnyElement)> = [
+            check_all.map(|b| (CHECK_COL, b)),
+            Some((Col::Grow { weight: 2., min: 120. }, label("Name"))),
+            Some((Col::Grow { weight: 1., min: 72. }, self.date_header(DateColumn::Joined, manage_guild, cx))),
+            Some((Col::Grow { weight: 1., min: 72. }, self.date_header(DateColumn::Account, manage_guild, cx))),
+            manage_guild.then(|| (Col::Grow { weight: 1., min: 72. }, label("Join method"))),
+            Some((Col::Grow { weight: 1., min: 72. }, label("Roles"))),
+            Some((Col::Fixed(70.), label("Signals"))),
+            Some((Col::Fixed(52.), label(""))),
         ]
         .into_iter()
         .flatten()
         .collect();
         let cols: Vec<Col> = columns.iter().map(|(c, _)| *c).collect();
-        let head = ui::table_head(&cols, columns.iter().map(|(_, label)| div().truncate().child(*label).into_any_element()), cx);
+        let head = match selecting && !m.selected.is_empty() {
+            false => ui::table_head(&cols, columns.into_iter().map(|(_, cell)| cell), cx),
+            true => {
+                let check_all = columns.into_iter().next().map(|(_, cell)| cell);
+                ui::table_head(&[CHECK_COL, Col::Grow { weight: 1., min: 0. }], check_all.into_iter().chain([self.bulk_bar(bulk, cx)]), cx)
+            }
+        };
         let guild_roles = self.guilds.iter().find(|g| g.id == guild_id).map(|g| g.roles.clone()).unwrap_or_default();
         let now = Utc::now();
-        let shown: Vec<&Member> = rows.iter().skip(m.page * m.page_size).take(m.page_size).collect();
         let mut table = ui::table("ss-members-table", cx).child(head);
         if shown.is_empty() {
             let note = if m.more { "Loading members…" } else { "No members match this search." };
             table = table.child(ui::table_row("ss-members-none", &[Col::Grow { weight: 1., min: 0. }], [div().text_color(palette::muted(cx)).child(note).into_any_element()], cx));
         }
         for member in shown {
-            let mut cells = vec![
+            let picked = m.selected.contains(&member.id);
+            let mut cells: Vec<AnyElement> = Vec::new();
+            if selecting {
+                let id = member.id.clone();
+                cells.push(self.select_box(SharedString::from(format!("ss-member-check-{id}")), if picked { Check::On } else { Check::Off }, move |this, cx| this.toggle_member_selected(id.clone(), cx), cx));
+            }
+            cells.extend([
                 name_cell(member, cx),
                 date_cell(format!("ss-ms-{}", member.id), member.joined_at.map_or_else(|| "Unknown".into(), |t| ago(t, now))),
                 date_cell(format!("ss-jd-{}", member.id), DateTime::from_timestamp_millis(snowflake_ms(&member.id)).map_or_else(|| "Unknown".into(), |t| ago(t, now))),
-            ];
+            ]);
             if manage_guild {
                 cells.push(date_cell(format!("ss-jm-{}", member.id), join_label(member.join.as_ref())));
             }
             cells.push(roles_cell(member, &guild_roles, cx));
             cells.push(signals_cell(member, now, cx));
             cells.push(self.member_actions(member, powers, cx));
-            table = table.child(ui::table_row(SharedString::from(format!("ss-member-{}", member.id)), &cols, cells, cx));
+            table = table.child(ui::table_row(SharedString::from(format!("ss-member-{}", member.id)), &cols, cells, cx).when(picked, |r| r.bg(palette::selected(cx))));
         }
         table.into_any_element()
     }
