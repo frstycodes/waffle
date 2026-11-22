@@ -94,7 +94,8 @@ pub(crate) struct ModView {
     join: Option<JoinSource>,
     rules_gate: bool,
     counts: Option<Result<Counts, String>>,
-    audit: Option<Result<(Vec<audit::Entry>, audit::Directory), String>>,
+    // Merged as Discord merges them, so the Audit log count is rows, not raw entries.
+    audit: Option<Result<(Vec<audit::Merged>, audit::Directory), String>>,
 }
 
 impl ModView {
@@ -555,7 +556,7 @@ fn apply_audit(view: &mut ModView, result: Result<Value, String>, guild: Option<
             page.names.roles.extend(guild.roles.iter().map(|r| (r.id.clone(), r.name.clone())));
             page.names.channels.extend(guild.channels.iter().map(|c| (c.id.clone(), c.name.clone())));
         }
-        (page.entries, page.names)
+        (audit::merge(&page.entries), page.names)
     }));
 }
 
@@ -788,13 +789,15 @@ fn audit_page(view: &ModView, cx: &App) -> AnyElement {
     if entries.is_empty() {
         return div().px_2().text_color(palette::muted(cx)).child("No moderator actions on this member.").into_any_element();
     }
-    let rows = entries.iter().map(|e| {
+    let rows = entries.iter().map(|row| {
+        let e = &row.entry;
         let (glyph, ink) = match audit::tone(e.action) {
             audit::Tone::Create => (Glyph::PlusCircle, palette::status_in(Status::Online, cx)),
             audit::Tone::Update => (Glyph::Pen, palette::muted(cx)),
             audit::Tone::Delete => (Glyph::MinusBold, palette::danger_ink(cx)),
         };
-        let meta = std::iter::once(snowflake_time(&e.id)).chain(e.reason.clone()).collect::<Vec<_>>().join(" · ");
+        let times = (row.count > 1).then(|| format!("{} actions", row.count));
+        let meta = std::iter::once(snowflake_time(&row.last_id)).chain(times).chain(e.reason.clone()).collect::<Vec<_>>().join(" · ");
         line(cx)
             .items_start()
             .py(px(6.))
