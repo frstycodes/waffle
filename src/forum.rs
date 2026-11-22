@@ -785,7 +785,7 @@ impl Waffle {
                 measure.update(cx, |w, cx| {
                     if (*w - next).abs() > 0.5 {
                         *w = next;
-                        cx.notify();
+                        cx.notify(); // lint-allow(global-notify): notifies the measured width's own entity, not Waffle
                     }
                 });
             })
@@ -1140,7 +1140,7 @@ impl Waffle {
                 measure.update(cx, |h, cx| {
                     if (*h - next).abs() > 0.5 {
                         *h = next;
-                        cx.notify();
+                        cx.notify(); // lint-allow(global-notify): notifies the measured height's own entity, not Waffle
                     }
                 });
             })

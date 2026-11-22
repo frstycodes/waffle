@@ -35,7 +35,7 @@ src/events.rs	raw-px	9
 src/favorites.rs	global-notify	3
 src/favorites.rs	raw-px	1
 src/feed_keys.rs	global-notify	4
-src/forum.rs	global-notify	18
+src/forum.rs	global-notify	16
 src/forum.rs	raw-px	9
 src/forward.rs	global-notify	6
 src/games.rs	global-notify	2
