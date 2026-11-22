@@ -45,6 +45,20 @@ pub struct ChannelDrag {
     pub guild_id: String,
 }
 
+// A pinned channel, which refuses to move: picking it up asks to unpin it instead, and nothing
+// accepts it as a drop.
+#[derive(Clone)]
+pub struct PinnedDrag;
+
+// What a refused drag carries: nothing.
+pub struct NoGhost;
+
+impl Render for NoGhost {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        gpui_kit::Empty
+    }
+}
+
 // CARRY
 
 // The ghost's physics: position, tilt and lift, each a damped spring stepped once a frame.

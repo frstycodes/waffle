@@ -7,7 +7,7 @@ use serde_json::json;
 
 use crate::{
     Waffle,
-    discord::{ChannelKind, Relation, User, perm},
+    discord::{ChannelKind, Relation, User, channel_flag, perm},
     icons::Glyph,
     menu::{Entry, HeadLead, header, item, slider, submenu},
 };
@@ -45,6 +45,7 @@ impl Waffle {
         let read = item("Mark as read", move |this, _, cx| this.mark_channel_read(&id, cx)).icon(Glyph::Checks);
         entries.push(if unread { read } else { read.disabled() }.entry());
         entries.push(Entry::Separator);
+        entries.push(self.pin_dm_entry(&channel.id));
         entries.extend(self.favorite_add_entry(channel));
         entries.push(Entry::Separator);
         if let Some(user) = channel.recipient.clone() {
@@ -64,6 +65,15 @@ impl Waffle {
             entries.push(item("Copy channel ID", move |this, _, cx| this.copy_text(cid.clone(), cx)).icon(Glyph::Id).entry());
         }
         entries
+    }
+
+    // Discord's pin-dm, for DMs and group DMs: the DM override's FAVORITED bit under "@me".
+    fn pin_dm_entry(&self, channel_id: &str) -> Entry {
+        let flags = self.guild_settings.get("@me").map_or(0, |s| s.channel_flags(channel_id));
+        let pinned = flags & channel_flag::FAVORITED != 0;
+        let id = channel_id.to_owned();
+        let next = flags ^ channel_flag::FAVORITED;
+        item(if pinned { "Unpin" } else { "Pin" }, move |this, _, cx| this.set_channel_flags("@me".into(), &id, next, cx)).icon(if pinned { Glyph::PinSlash } else { Glyph::Pin }).entry()
     }
 
     // Closes a DM (Discord's DELETE on the channel only hides it from the list for us).

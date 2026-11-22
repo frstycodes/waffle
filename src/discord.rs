@@ -251,6 +251,8 @@ pub struct Guild {
     pub premium_tier: u8,
     // People idling here don't count as voice activity (Discord's server icon badge skips it).
     pub afk_channel_id: Option<String>,
+    // The COMMUNITY feature, which gates Show all channels.
+    pub community: bool,
 }
 
 // Your notification settings for one server, or for DMs under the key "@me" (Discord's
@@ -264,6 +266,8 @@ pub struct GuildSettings {
     pub suppress_everyone: bool,
     pub suppress_roles: bool,
     pub hide_muted: bool,
+    // guild_flag bits.
+    pub flags: u64,
     pub channels: HashMap<String, ChannelSettings>,
 }
 
@@ -272,6 +276,22 @@ pub struct ChannelSettings {
     pub muted: bool,
     pub mute_end: Option<String>,
     pub notifications: u8,
+    // channel_flag bits.
+    pub flags: u64,
+}
+
+// Bits of a channel override's `flags` (docs/discord-navigation-re.md §2, §3, §5).
+pub mod channel_flag {
+    // Pinned: a pinned DM, or a channel pinned to the top of its server.
+    pub const FAVORITED: u64 = 2048;
+    // In our channel list while the server has opt-in on.
+    pub const OPT_IN_ENABLED: u64 = 4096;
+}
+
+// Bits of a server's user-settings `flags`. Opt-in on is Show all channels unticked.
+pub mod guild_flag {
+    pub const OPT_IN_CHANNELS_OFF: u64 = 8192;
+    pub const OPT_IN_CHANNELS_ON: u64 = 16384;
 }
 
 impl GuildSettings {
@@ -282,6 +302,22 @@ impl GuildSettings {
 
     pub fn channel_muted(&self, channel_id: &str) -> bool {
         self.channels.get(channel_id).is_some_and(|c| c.muted && still_muted(c.mute_end.as_deref()))
+    }
+
+    pub fn channel_flags(&self, channel_id: &str) -> u64 {
+        self.channels.get(channel_id).map_or(0, |c| c.flags)
+    }
+
+    pub fn pinned(&self, channel_id: &str) -> bool {
+        self.channel_flags(channel_id) & channel_flag::FAVORITED != 0
+    }
+
+    pub fn opted_in(&self, channel_id: &str) -> bool {
+        self.channel_flags(channel_id) & channel_flag::OPT_IN_ENABLED != 0
+    }
+
+    pub fn opt_in(&self) -> bool {
+        self.flags & guild_flag::OPT_IN_CHANNELS_ON != 0
     }
 }
 
@@ -302,6 +338,7 @@ pub fn parse_guild_settings(g: &Value) -> (String, GuildSettings) {
                     muted: c["muted"].as_bool().unwrap_or(false),
                     mute_end: c["mute_config"]["end_time"].as_str().map(str::to_owned),
                     notifications: c["message_notifications"].as_u64().unwrap_or(3) as u8,
+                    flags: c["flags"].as_u64().unwrap_or(0),
                 },
             ))
         })
@@ -313,6 +350,7 @@ pub fn parse_guild_settings(g: &Value) -> (String, GuildSettings) {
         suppress_everyone: g["suppress_everyone"].as_bool().unwrap_or(false),
         suppress_roles: g["suppress_roles"].as_bool().unwrap_or(false),
         hide_muted: g["hide_muted_channels"].as_bool().unwrap_or(false),
+        flags: g["flags"].as_u64().unwrap_or(0),
         channels,
     };
     (key, settings)
@@ -2258,6 +2296,7 @@ fn parse_guild(g: &Value) -> Option<Guild> {
         my_roles: Vec::new(),
         premium_tier: props["premium_tier"].as_u64().or(g["premium_tier"].as_u64()).unwrap_or(0) as u8,
         afk_channel_id: props["afk_channel_id"].as_str().or(g["afk_channel_id"].as_str()).map(str::to_owned),
+        community: props["features"].as_array().or(g["features"].as_array()).into_iter().flatten().any(|f| f == "COMMUNITY"),
     })
 }
 
@@ -3124,6 +3163,7 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            community: false,
             threads: Vec::new(),
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -3161,6 +3201,7 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            community: false,
             threads: vec![thread],
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -3202,6 +3243,7 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            community: false,
             threads: Vec::new(),
             my_roles: vec!["mods".into()],
             default_notifications: Default::default(),
@@ -3336,6 +3378,25 @@ mod tests {
         assert!(!m.stickers[0].animated() && m.stickers[1].animated());
         let tagged = Sticker { name: "Wumpus wave".into(), tags: "👋, hello".into(), ..Sticker::default() };
         assert!(tagged.matches("wave") && tagged.matches("HELLO") && !tagged.matches("bye"));
+    }
+
+    #[test]
+    fn guild_settings_read_pin_and_opt_in_flags() {
+        let (key, settings) = parse_guild_settings(&json!({
+            "guild_id": "g",
+            "flags": guild_flag::OPT_IN_CHANNELS_ON,
+            "channel_overrides": [
+                { "channel_id": "pinned", "flags": channel_flag::FAVORITED | channel_flag::OPT_IN_ENABLED },
+                { "channel_id": "plain", "muted": true },
+            ],
+        }));
+        assert_eq!(key, "g");
+        assert!(settings.opt_in());
+        assert!(settings.pinned("pinned") && settings.opted_in("pinned"));
+        assert!(!settings.pinned("plain") && !settings.opted_in("plain") && !settings.pinned("missing"));
+        let (key, dms) = parse_guild_settings(&json!({ "guild_id": null, "channel_overrides": [{ "channel_id": "dm", "flags": 2048 }] }));
+        assert_eq!(key, "@me");
+        assert!(dms.pinned("dm") && !dms.opt_in());
     }
 
     #[test]

@@ -890,8 +890,7 @@ pub struct Waffle {
     settings_nav_scroll: gpui_kit::ScrollHandle,
     panel_width: f32,
     drag: Option<Drag>,
-    back: Vec<(Option<String>, Channel)>,
-    forward: Vec<(Option<String>, Channel)>,
+    history: home::History<home::Stop>,
     folded: HashSet<String>,
     favorites: favorites::Favorites,
     // Set while the channel list shows Favorites: the channel opened from it, "" before one is.
@@ -1195,8 +1194,7 @@ impl Waffle {
             settings_nav_scroll: gpui_kit::ScrollHandle::new(),
             panel_width: layout::PANEL_WIDTH,
             drag: None,
-            back: Vec::new(),
-            forward: Vec::new(),
+            history: home::History::default(),
             folded: HashSet::new(),
             favorites: Default::default(),
             favorites_open: None,
@@ -1757,8 +1755,8 @@ impl Waffle {
         let remembered = self.last_channel.get(&guild_id).cloned();
         // In sidebar order, and only channels we can open (Discord also lists hidden ones).
         let channels: Vec<Channel> = match &guild_id {
-            Some(_) => self.guild().map(|g| sidebar::channel_sections(g, self.my_id()).into_iter().flat_map(|(_, c)| c).collect()).unwrap_or_default(),
-            None => self.dms.clone(),
+            Some(_) => self.guild().map(|g| self.sidebar_sections(g).into_iter().flat_map(|(_, c)| c).collect()).unwrap_or_default(),
+            None => self.dm_order(),
         };
         let target = remembered
             .and_then(|id| channels.iter().find(|c| c.id == id).cloned())
@@ -1785,22 +1783,22 @@ impl Waffle {
         if matches!(&self.right_panel, RightPanel::ModView(view) if Some(view.guild_id()) != self.guild_id.as_deref()) {
             self.right_panel = RightPanel::Members;
         }
-        if let Some(current) = self.channel.clone().filter(|c| c.id != channel.id) {
-            self.back.push((self.guild_id.clone(), current));
-            self.forward.clear();
+        if self.channel.as_ref().is_none_or(|c| c.id != channel.id) {
+            self.history.visit(self.here());
         }
         self.show_channel(channel, window, cx);
     }
 
-    /// Back/forward in the title bar, like a browser's history of channels.
+    /// Back/forward, like a browser's history of channels and Friends.
     fn navigate(&mut self, forward: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let (from, to) = if forward { (&mut self.forward, &mut self.back) } else { (&mut self.back, &mut self.forward) };
-        let Some((guild_id, channel)) = from.pop() else { return };
-        if let Some(current) = self.channel.clone() {
-            to.push((self.guild_id.clone(), current));
+        let Some(stop) = self.history.step(forward, self.here()) else { return };
+        match stop.channel {
+            Some(channel) => {
+                self.guild_id = stop.guild_id;
+                self.show_channel(channel, window, cx);
+            }
+            None => self.show_no_channel(stop.guild_id, cx),
         }
-        self.guild_id = guild_id;
-        self.show_channel(channel, window, cx);
     }
 
     fn show_channel(&mut self, channel: Channel, window: &mut Window, cx: &mut Context<Self>) {
@@ -2451,8 +2449,8 @@ impl Waffle {
     /// Alt+↑/↓: the previous or next text channel in the sidebar's order, as in Discord.
     fn step_channel(&mut self, delta: isize, window: &mut Window, cx: &mut Context<Self>) {
         let order: Vec<Channel> = match self.guild() {
-            Some(guild) => sidebar::channel_sections(guild, self.my_id()).into_iter().flat_map(|(_, c)| c).filter(|c| c.kind == ChannelKind::Text).collect(),
-            None => self.dms.clone(),
+            Some(guild) => self.sidebar_sections(guild).into_iter().flat_map(|(_, c)| c).filter(|c| c.kind == ChannelKind::Text).collect(),
+            None => self.dm_order(),
         };
         let current = self.channel.as_ref().and_then(|c| order.iter().position(|o| o.id == c.id)).unwrap_or(0) as isize;
         let next = (current + delta).clamp(0, order.len() as isize - 1);
