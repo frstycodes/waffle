@@ -193,14 +193,14 @@ impl Waffle {
             }
         };
         let row = div()
-            .min_h(px(48.))
-            .pl(px(14.))
-            .pr(px(8.))
+            .min_h_12()
+            .pl_3p5()
+            .pr_2()
             .flex()
             .items_center()
-            .gap(px(10.))
+            .gap_2p5()
             .text_color(muted)
-            .child(div().flex_none().child(Icon::new(glyph).size(px(20.))))
+            .child(div().flex_none().child(Icon::new(glyph).size(ui::ICON_XL)))
             .child(
                 div()
                     .flex_1()
@@ -208,9 +208,9 @@ impl Waffle {
                     .py(px(9.))
                     .flex()
                     .flex_col()
-                    .gap(px(2.))
-                    .child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(title))
-                    .child(div().text_size(px(12.)).line_height(px(17.)).child(detail)),
+                    .gap_0p5()
+                    .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(title))
+                    .child(div().text_size(ui::TEXT_XS).line_height(px(17.)).child(detail)),
             )
             .children(action);
         Some(row.into_any_element())
@@ -228,23 +228,23 @@ impl Waffle {
         let chip = div()
             .id("slowmode")
             .flex_none()
-            .h(px(32.))
-            .px(px(6.))
+            .h_8()
+            .px_1p5()
             .flex()
             .items_center()
-            .gap(px(4.))
+            .gap_1()
             .whitespace_nowrap()
-            .text_size(px(12.))
+            .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::SEMIBOLD)
             .font_features(crate::call::tabular())
             .text_color(ink)
-            .child(Icon::new(Glyph::Timer).size(px(16.)))
+            .child(Icon::new(Glyph::Timer).size(ui::ICON_MD))
             .child(label)
             .tooltip(move |window, cx| {
                 Tooltip::element(move |_, cx| {
                     let left = ready_at.map(|at| at.saturating_duration_since(Instant::now()));
                     let (title, detail) = slowmode_tip(state, left);
-                    div().flex().flex_col().child(title).child(div().text_size(px(12.)).text_color(palette::muted(cx)).child(detail))
+                    div().flex().flex_col().child(title).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail))
                 })
                 .build(window, cx)
             });
@@ -265,7 +265,7 @@ impl Waffle {
             HighlightStyle { color: Some(palette::strong(cx)), font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() },
         )]);
         let bar = crate::chat::bar_row(cx)
-            .child(div().flex_none().text_color(accent).child(Icon::new(Glyph::Clock).size(px(16.))))
+            .child(div().flex_none().text_color(accent).child(Icon::new(Glyph::Clock).size(ui::ICON_MD)))
             .child(div().flex_1().min_w_0().truncate().font_features(crate::call::tabular()).child(label))
             .child(ui::icon_button("cancel-queued", Glyph::X, "Cancel", cx).small().on_click(cx.listener(|this, _, _, cx| this.cancel_queued(cx))));
         Some(bar)

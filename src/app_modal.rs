@@ -10,7 +10,6 @@ use gpui_kit::{
     component::input::{Input, InputEvent, InputState, Textarea, TextareaState},
     div,
     prelude::*,
-    px,
 };
 
 use crate::{
@@ -307,7 +306,7 @@ impl Waffle {
         let mut blocks: Vec<AnyElement> = Vec::new();
         for block in m.modal.blocks() {
             match block {
-                Block::Text(text) => blocks.push(div().text_size(px(14.)).text_color(palette::text(cx)).child(text.to_owned()).into_any_element()),
+                Block::Text(text) => blocks.push(div().text_size(ui::TEXT_SM).text_color(palette::text(cx)).child(text.to_owned()).into_any_element()),
                 Block::Field(field) => {
                     let ix = field_ix;
                     field_ix += 1;
@@ -335,7 +334,7 @@ impl Waffle {
             );
         let body = ui::dialog_body()
             .child(head(app, &m.modal.title, cx))
-            .children(refused.then(|| ui::field_error(crate::interactions::MODAL_FAILED, cx).text_size(px(14.))))
+            .children(refused.then(|| ui::field_error(crate::interactions::MODAL_FAILED, cx).text_size(ui::TEXT_SM)))
             .child(notice(&app.name, cx))
             .children(blocks)
             .child(footer);
@@ -432,7 +431,7 @@ fn head(app: &app_commands::App, title: &str, cx: &mut Context<Waffle>) -> impl 
         .items_center()
         .gap_3()
         .child(ui::server_tile(app.icon.as_deref(), &app.name, 24., cx))
-        .child(div().flex_1().min_w_0().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.to_owned()))
+        .child(div().flex_1().min_w_0().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.to_owned()))
         .child(ui::icon_button("app-modal-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_app_modal(cx))))
 }
 
@@ -444,13 +443,13 @@ fn notice(app: &str, cx: &gpui_kit::App) -> impl IntoElement {
     div()
         .flex()
         .items_start()
-        .gap(px(8.))
-        .p(px(12.))
-        .rounded(px(8.))
+        .gap_2()
+        .p_3()
+        .rounded_lg()
         .bg(palette::hover(cx))
-        .text_size(px(14.))
+        .text_size(ui::TEXT_SM)
         .text_color(palette::text(cx))
-        .child(div().flex_none().mt(px(2.)).text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::Warning).size(px(16.))))
+        .child(div().flex_none().mt_0p5().text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::Warning).size(ui::ICON_MD)))
         .child(div().min_w_0().child(StyledText::new(text).with_highlights(vec![(lead.len()..lead.len() + app.len(), bold)])))
 }
 
@@ -465,7 +464,7 @@ fn field_row(ix: usize, field: &Field, editor: Option<&Editor>, control: Option<
         _ => div().into_any_element(),
     };
     ui::field_marked(field.label.to_owned(), field.required(), cx)
-        .children(field.description.map(|d| div().text_size(px(12.)).text_color(palette::muted(cx)).child(d.to_owned())))
+        .children(field.description.map(|d| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(d.to_owned())))
         .child(control)
         .children(problem.map(|p| ui::field_error(p, cx)))
         .into_any_element()
@@ -476,7 +475,7 @@ fn text_frame(ix: usize, editor: &Editor, error: bool, cx: &gpui_kit::App) -> An
     let focus = editor.focus_handle(cx);
     match editor {
         Editor::Line(s) => ui::text_field(id, Input::new(s).appearance(false), &focus).error(error).into_any_element(),
-        Editor::Paragraph(s) => ui::text_area(id, Textarea::new(s).appearance(false).px_0().text_size(px(16.)), &focus).error(error).into_any_element(),
+        Editor::Paragraph(s) => ui::text_area(id, Textarea::new(s).appearance(false).px_0().text_size(ui::TEXT_MD), &focus).error(error).into_any_element(),
     }
 }
 
@@ -513,10 +512,10 @@ impl Waffle {
             let browse = ui::button(SharedString::from(format!("app-modal-browse-{ix}")), Tone::Link, cx)
                 .child("browse")
                 .on_click(cx.listener(move |this, _, window, cx| this.browse_app_modal_files(ix, max, window, cx)));
-            let lead = div().flex().flex_wrap().items_center().gap(px(4.)).child(drop_lead(max)).child(browse);
+            let lead = div().flex().flex_wrap().items_center().gap_1().child(drop_lead(max)).child(browse);
             drop_zone(Glyph::Upload, lead, upload_hint(field.min.unwrap_or(1), max as u32, &size), cx)
         };
-        div().flex().flex_col().gap(px(8.)).child(zone).children(rows).into_any_element()
+        div().flex().flex_col().gap_2().child(zone).children(rows).into_any_element()
     }
 }
 
@@ -541,17 +540,17 @@ fn drop_zone(glyph: Glyph, lead: gpui_kit::Div, hint: String, cx: &gpui_kit::App
         .flex()
         .flex_col()
         .items_center()
-        .gap(px(4.))
-        .p(px(16.))
-        .rounded(px(8.))
+        .gap_1()
+        .p_4()
+        .rounded_lg()
         .border_1()
         .border_dashed()
         .border_color(palette::line(cx))
-        .text_size(px(14.))
+        .text_size(ui::TEXT_SM)
         .text_color(palette::muted(cx))
-        .child(div().text_color(palette::strong(cx)).child(gpui_kit::component::Icon::new(glyph).size(px(20.))))
+        .child(div().text_color(palette::strong(cx)).child(gpui_kit::component::Icon::new(glyph).size(ui::ICON_XL)))
         .child(lead)
-        .child(div().text_size(px(12.)).child(hint))
+        .child(div().text_size(ui::TEXT_XS).child(hint))
         .into_any_element()
 }
 
@@ -560,10 +559,10 @@ fn file_row(ix: usize, i: usize, file: &PendingFile, cx: &mut Context<Waffle>) -
     div()
         .flex()
         .items_center()
-        .gap(px(8.))
-        .py(px(4.))
-        .child(div().flex_none().text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::File).size(px(18.))))
-        .child(div().flex_1().min_w_0().truncate().text_size(px(14.)).text_color(palette::strong(cx)).child(file.name.clone()))
+        .gap_2()
+        .py_1()
+        .child(div().flex_none().text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::File).size(ui::ICON_LG)))
+        .child(div().flex_1().min_w_0().truncate().text_size(ui::TEXT_SM).text_color(palette::strong(cx)).child(file.name.clone()))
         .child(ui::icon_button(SharedString::from(format!("app-modal-file-{ix}-{i}")), Glyph::Trash, "Remove", cx).small().on_click(cx.listener(move |this, _, _, cx| this.remove_app_modal_file(ix, i, cx))))
         .into_any_element()
 }
@@ -582,8 +581,8 @@ fn choices(ix: usize, options: &[SelectOption], several: bool, value: &FieldValu
             .id(SharedString::from(format!("app-modal-choice-{ix}-{i}")))
             .flex()
             .items_start()
-            .gap(px(10.))
-            .py(px(6.))
+            .gap_2p5()
+            .py_1p5()
             .cursor_pointer()
             .child(mark)
             .child(
@@ -591,8 +590,8 @@ fn choices(ix: usize, options: &[SelectOption], several: bool, value: &FieldValu
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .child(div().text_size(px(14.)).text_color(palette::strong(cx)).child(o.label.clone()))
-                    .children(o.description.clone().map(|d| div().text_size(px(12.)).text_color(palette::muted(cx)).child(d))),
+                    .child(div().text_size(ui::TEXT_SM).text_color(palette::strong(cx)).child(o.label.clone()))
+                    .children(o.description.clone().map(|d| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(d))),
             )
             .on_click(cx.listener(move |this, _, _, cx| this.pick_app_modal(ix, Some(pick.clone()), cx)))
     });

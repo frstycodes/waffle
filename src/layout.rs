@@ -3,7 +3,7 @@
 use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, Context, Div, FontWeight, Hsla, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, NavigationDirection,
     Render, SharedString, Stateful, StyleRefinement, Window,
-    component::{ActiveTheme, Icon, tooltip::Tooltip},
+    component::{ActiveTheme, Icon},
     div, img, linear_color_stop, linear_gradient, prelude::*, px,
 };
 
@@ -64,7 +64,7 @@ impl Waffle {
             .flex_col()
             .when(!crate::material::active(), |d| d.bg(theme.title_bar))
             .text_color(theme.foreground)
-            .text_size(px(16.))
+            .text_size(ui::TEXT_MD)
             .on_key_down(cx.listener(Self::on_root_key))
             .on_action(cx.listener(|this, _: &crate::app_keys::AddServer, window, cx| this.add_server_shortcut(window, cx)))
             .on_action(cx.listener(Self::toggle_soundboard_key))
@@ -194,8 +194,8 @@ impl Waffle {
         };
         let reconnect = div()
             .id("voice-notice-reconnect")
-            .h(px(24.))
-            .px(px(10.))
+            .h_6()
+            .px_2p5()
             .flex()
             .items_center()
             .squircle(crate::ui::RADIUS_XS)
@@ -208,15 +208,15 @@ impl Waffle {
             .on_click(cx.listener(|this, _, _, cx| this.reconnect_voice(cx)));
         let close = div()
             .id("voice-notice-close")
-            .size(px(24.))
+            .size_6()
             .flex()
             .items_center()
             .justify_center()
             .squircle(crate::ui::RADIUS_XS)
             .cursor_pointer()
             .hover(move |s| s.bg(ink.opacity(0.12)))
-            .child(gpui_kit::component::Icon::new(crate::icons::Glyph::X).size(px(16.)))
-            .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Dismiss").build(window, cx))
+            .child(gpui_kit::component::Icon::new(crate::icons::Glyph::X).size(ui::ICON_MD))
+            .tooltip(|window, cx| ui::tip("Dismiss", window, cx))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.voice_notice = None;
                 cx.notify();
@@ -224,16 +224,16 @@ impl Waffle {
         Some(
             div()
                 .flex_none()
-                .h(px(36.))
-                .pl(px(16.))
-                .pr(px(8.))
+                .h_9()
+                .pl_4()
+                .pr_2()
                 .flex()
                 .items_center()
-                .gap(px(12.))
+                .gap_3()
                 .bg(fill)
                 .text_color(ink)
-                .text_size(px(14.))
-                .child(div().flex_1().min_w_0().flex().items_center().justify_center().gap(px(12.)).child(div().truncate().child(text)).child(reconnect))
+                .text_size(ui::TEXT_SM)
+                .child(div().flex_1().min_w_0().flex().items_center().justify_center().gap_3().child(div().truncate().child(text)).child(reconnect))
                 .child(close)
                 .child(self.caption_clearance(cfg!(target_os = "windows"))),
         )
@@ -360,12 +360,12 @@ impl Waffle {
             .absolute()
             .top_0()
             .bottom_0()
-            .w(px(8.))
-            .when(!grows_left, |h| h.right(px(-4.)))
-            .when(grows_left, |h| h.left(px(-4.)))
+            .w_2()
+            .when(!grows_left, |h| h.right_neg_1())
+            .when(grows_left, |h| h.left_neg_1())
             .group("resize-grip")
             .cursor_col_resize()
-            .child(div().ml(px(3.)).w(px(2.)).h_full().rounded(px(2.)).when(active, |l| l.bg(accent)).when(!active, |l| l.group_hover("resize-grip", |l| l.bg(accent.opacity(0.6)))))
+            .child(div().ml(px(3.)).w_0p5().h_full().rounded_xs().when(active, |l| l.bg(accent)).when(!active, |l| l.group_hover("resize-grip", |l| l.bg(accent.opacity(0.6)))))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, event: &MouseDownEvent, window, cx| {
@@ -403,7 +403,7 @@ impl Waffle {
         let (faint, danger) = (palette::faint(cx), palette::danger_ink(cx));
         let status_line: AnyElement = match (server_muted, sharing) {
             (true, _) => div().truncate().text_color(danger).child("Server muted by a moderator").into_any_element(),
-            (false, true) => div().flex().items_center().gap_1().child(Icon::new(Glyph::ShareScreen).size(px(14.)).text_color(palette::positive_ink(cx))).child(div().truncate().child("Sharing their screen")).into_any_element(),
+            (false, true) => div().flex().items_center().gap_1().child(Icon::new(Glyph::ShareScreen).size(ui::ICON_SM).text_color(palette::positive_ink(cx))).child(div().truncate().child("Sharing their screen")).into_any_element(),
             (false, false) => ui::truncating("me-status", self.status_line()).into_any_element(),
         };
         let mic = me_button("mic", if muted { Nav::MicOff } else { Nav::Mic }, muted, if server_muted { "A moderator muted you here. Only they can unmute you." } else if muted { "Unmute" } else { "Mute" }, cx)
@@ -450,8 +450,8 @@ impl Waffle {
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .child(ui::truncating("me-name", me.name.clone()).line_height(px(18.)).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
-                    .child(div().line_height(px(16.)).text_size(px(12.)).text_color(faint).child(status_line)),
+                    .child(ui::truncating("me-name", me.name.clone()).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
+                    .child(div().line_height(ui::LINE_XS).text_size(ui::TEXT_XS).text_color(faint).child(status_line)),
             );
         let voice = self.voice_panel(cx);
         div()
@@ -464,7 +464,7 @@ impl Waffle {
             .bg(card)
             .flex()
             .flex_col()
-            .text_size(px(14.))
+            .text_size(ui::TEXT_SM)
             .children(self.update_row(cx))
             .children(voice)
             .child(
@@ -478,7 +478,7 @@ impl Waffle {
                             .relative()
                             .size_full()
                             // 6px on every side, so a hover fill never meets the card's edge.
-                            .p(px(6.))
+                            .p_1p5()
                             .flex()
                             .items_center()
                             .gap_1()
@@ -529,14 +529,14 @@ impl Waffle {
         let row = div()
             .h(px(UPDATE_HEIGHT))
             .flex_none()
-            .pl(px(12.))
-            .pr(px(6.))
+            .pl_3()
+            .pr_1p5()
             .flex()
             .items_center()
             .gap_2()
             .relative()
             .child(ui::inset_rule(crate::call::PANEL_PAD, cx))
-            .child(Icon::new(Glyph::Download).size(px(16.)).flex_none().text_color(palette::accent_ink(cx)))
+            .child(Icon::new(Glyph::Download).size(ui::ICON_MD).flex_none().text_color(palette::accent_ink(cx)))
             .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(format!("Waffle {} is ready", staged.version)))
             .child(restart);
         Some(row.into_any_element())
@@ -578,7 +578,7 @@ pub fn nameplate(plate: &discord::Nameplate, surface: Hsla, corners: [f32; 4], d
 }
 
 pub fn nameplate_tint(plate: &discord::Nameplate, dark: bool) -> Hsla {
-    gpui_kit::rgb(if dark { plate.tint.0 } else { plate.tint.1 }).into()
+    palette::data_color(if dark { plate.tint.0 } else { plate.tint.1 })
 }
 
 /// Discord's `height: 100%; width: auto` art, pinned to the right edge and rounding its own right corners.
@@ -717,9 +717,9 @@ fn split_control(button: Stateful<Div>, chevron: Stateful<Div>) -> Div {
     div()
         .flex()
         .items_center()
-        .gap(px(1.))
-        .child(button.rounded_tr(px(0.)).rounded_br(px(0.)))
-        .child(chevron.rounded_tl(px(0.)).rounded_bl(px(0.)))
+        .gap_px()
+        .child(button.rounded_tr_none().rounded_br_none())
+        .child(chevron.rounded_tl_none().rounded_bl_none())
 }
 
 // The narrow chevron beside a user-area control that opens its device popover; it reads as part of the
@@ -728,7 +728,7 @@ fn me_chevron(id: &'static str, label: &'static str, open: bool, cx: &App) -> St
     let (hover, strong, selected) = (palette::hover(cx), palette::strong(cx), palette::selected(cx));
     div()
         .id(id)
-        .w(px(16.))
+        .w_4()
         .h(px(30.))
         .flex_none()
         .squircle(ui::RADIUS_XS)
@@ -739,13 +739,13 @@ fn me_chevron(id: &'static str, label: &'static str, open: bool, cx: &App) -> St
         .text_color(if open { strong } else { palette::faint(cx) })
         .when(open, |b| b.bg(selected))
         .hover(move |s| s.bg(hover).text_color(strong))
-        .child(Icon::new(Glyph::ChevronDown).size(px(12.)))
-        .tooltip(move |window, cx| Tooltip::new(label).build(window, cx))
+        .child(Icon::new(Glyph::ChevronDown).size(ui::ICON_XS))
+        .tooltip(move |window, cx| ui::tip(label, window, cx))
 }
 
 fn me_button(id: &'static str, glyph: Nav, on: bool, label: &'static str, cx: &App) -> Stateful<Div> {
     let (hover, strong) = (palette::hover(cx), palette::strong(cx));
-    let icon = glyph.icon().size(px(20.)).with_animation(SharedString::from(format!("{id}-{on}")), Animation::new(ui::DUR_POP).with_easing(crate::motion::back_out), |icon, t| icon.size(px(20. * (0.7 + 0.3 * t))));
+    let icon = glyph.icon().size_5().with_animation(SharedString::from(format!("{id}-{on}")), Animation::new(ui::DUR_POP).with_easing(crate::motion::back_out), |icon, t| icon.size(px(20. * (0.7 + 0.3 * t))));
     div()
         .id(id)
         .size(px(30.))
@@ -758,5 +758,5 @@ fn me_button(id: &'static str, glyph: Nav, on: bool, label: &'static str, cx: &A
         .text_color(if on { palette::danger_ink(cx) } else { strong })
         .hover(move |s| s.bg(hover))
         .child(icon)
-        .tooltip(move |window, cx| Tooltip::new(label).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(label, window, cx))
 }

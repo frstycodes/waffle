@@ -12,7 +12,11 @@ use gpui_kit::{CornerShape, Pixels, px};
 // Type sizes. Xxs is the uppercase tag and badge size; the rest are tokens.css `--text-*`.
 pub const TEXT_XXS: Pixels = px(11.);
 pub const TEXT_XS: Pixels = px(12.);
+// A row's second line: descriptions, hints, topics.
+pub const TEXT_DETAIL: Pixels = px(13.);
 pub const TEXT_SM: Pixels = px(14.);
+// Discord's reading size in the composer, server rules and onboarding prompts.
+pub const TEXT_LEAD: Pixels = px(15.);
 pub const TEXT_MD: Pixels = px(16.);
 pub const TEXT_LG: Pixels = px(20.);
 pub const TEXT_XL: Pixels = px(28.);
@@ -20,6 +24,13 @@ pub const TEXT_XL: Pixels = px(28.);
 // Line heights, for `line_height(relative(..))`: titles, then running text.
 pub const LEADING_TIGHT: f32 = 1.2;
 pub const LEADING_BODY: f32 = 1.45;
+// Fixed line heights, for `line_height(..)`, each named for the type size it usually sets.
+pub const LINE_XS: Pixels = px(16.);
+pub const LINE_DETAIL: Pixels = px(18.);
+pub const LINE_SM: Pixels = px(20.);
+pub const LINE_LEAD: Pixels = px(22.);
+pub const LINE_LG: Pixels = px(24.);
+pub const LINE_XL: Pixels = px(28.);
 
 // Radius tiers: tags and tooltips, rows and menu items, controls, cards and tiles, dialogs. Sized for the
 // squircle, whose curve hugs the corner tighter than a circular arc of the same radius. Applied with

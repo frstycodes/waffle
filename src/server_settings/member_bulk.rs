@@ -2,7 +2,7 @@
 // their checkboxes, then add a role, time out, kick or ban them all from the bar that takes the header's
 // place. Each action is gated on its own permission, and one toast reports how many went through.
 use chrono::Utc;
-use gpui_kit::{AnyElement, ClickEvent, Context, FontWeight, InteractiveElement, IntoElement, ParentElement, SharedString, StatefulInteractiveElement, Styled, div, px};
+use gpui_kit::{AnyElement, ClickEvent, Context, FontWeight, InteractiveElement, IntoElement, ParentElement, SharedString, StatefulInteractiveElement, Styled, div};
 use serde_json::Value;
 
 use super::{
@@ -237,7 +237,7 @@ impl Waffle {
         }
         let powers = self.with_access(&view.guild_id, |me| BulkPowers::new(|bits| me.has(bits))).unwrap_or_default();
         let (count, busy) = (m.selected.len(), m.bulk_busy);
-        let button = |id: &'static str, glyph: Glyph, label: &'static str, cx: &mut Context<Self>| ui::button(id, Tone::Secondary, cx).disabled(busy).child(gpui_kit::component::Icon::new(glyph).size(px(16.))).child(label);
+        let button = |id: &'static str, glyph: Glyph, label: &'static str, cx: &mut Context<Self>| ui::button(id, Tone::Secondary, cx).disabled(busy).child(gpui_kit::component::Icon::new(glyph).size(ui::ICON_MD)).child(label);
         let role = powers.role.then(|| button("ss-bulk-role", Glyph::Plus, "Add role", cx).on_click(cx.listener(|this, event: &ClickEvent, _, cx| this.open_bulk_roles(event, cx))));
         let timeout = powers.timeout.then(|| button("ss-bulk-timeout", Glyph::Timer, "Time out", cx).on_click(cx.listener(|this, event: &ClickEvent, _, cx| this.open_bulk_timeout(event, cx))));
         let kick = powers.kick.then(|| button("ss-bulk-kick", Glyph::DoorExit, "Kick", cx).danger(cx).on_click(cx.listener(|this, _, _, cx| this.ask_bulk_kick(cx))));
@@ -250,7 +250,7 @@ impl Waffle {
         let clear = ui::icon_button("ss-bulk-clear", Glyph::X, "Clear selection", cx).on_click(cx.listener(|this, _, _, cx| this.clear_member_selection(cx)));
         let bar = ui::floating_bar("ss-bulk", cx)
             .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).text_color(crate::palette::strong(cx)).child(format!("{count} selected")))
-            .child(div().flex().flex_none().gap(px(8.)).children(role).children(timeout).children(kick).children(ban).child(clear));
+            .child(div().flex().flex_none().gap_2().children(role).children(timeout).children(kick).children(ban).child(clear));
         Some(ui::foot_dock(bar, "ss-bulk-in").into_any_element())
     }
 

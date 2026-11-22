@@ -194,6 +194,51 @@ fn hex(value: u32) -> Hsla {
     desaturate(rgb(value).into(), saturation())
 }
 
+// A colour given as data (a role, an embed, a profile theme, a folder, a nameplate, a theme preview), exactly
+// as given: the saturation setting doesn't reach it.
+pub fn data_color(value: u32) -> Hsla {
+    rgb(value).into()
+}
+
+// A stream's tile before its first frame: a deep ground under a teal-to-magenta glow, in both themes.
+pub fn stream_ground() -> Hsla {
+    rgb(0x1D1E39).into()
+}
+
+pub fn stream_glow() -> (Hsla, Hsla) {
+    (rgb(0x0097A1).into(), rgb(0x9D2398).into())
+}
+
+// The design's media scrim, oklch(0.14 0.004 260): what dims the edges of images and video.
+pub fn media_scrim() -> Hsla {
+    rgb(0x08090B).into()
+}
+
+// Strong ink on a fill that's light whatever the theme (a light profile theme, a pale brand tile).
+pub fn ink_on_light() -> Hsla {
+    rgb(0x1A1A1E).into()
+}
+
+// Status green deepened to stay readable on a light profile card (the status green is ~2:1 there).
+pub fn online_on_light() -> Hsla {
+    rgb(0x1E7A46).into()
+}
+
+// The QR code's modules: dark on white in both themes, or phones can't read it: oklch(0.22 0.004 260).
+pub fn qr_ink() -> Hsla {
+    rgb(0x191B1C).into()
+}
+
+// A call's media badge on the rail while not connected: dark under white ink in both themes, as Discord draws it.
+pub fn media_badge() -> Hsla {
+    gpui_kit::hsla(0., 0., 0.08, 1.)
+}
+
+// Windows 11's caption red, not the app's danger tone: Close should look like every other window's.
+pub fn window_close_hover() -> Hsla {
+    rgb(0xC42B1C).into()
+}
+
 pub fn sync(window: &mut Window, cx: &mut App) {
     Theme::sync_system_appearance(Some(window), cx);
     let prefs = crate::settings::Prefs::load();

@@ -8,7 +8,6 @@ use gpui_kit::{
     component::{
         Icon,
         input::{Input, InputEvent, Textarea},
-        tooltip::Tooltip,
     },
     div, prelude::*, px,
 };
@@ -342,9 +341,9 @@ impl Waffle {
         let pending = self.relationships.iter().filter(|r| r.kind == Relation::Incoming).count() as u32;
         let state = RowState { selected, unread: false, muted: false, strong: false };
         channel_row("friends-row".into(), "friends-row".into(), state, cx)
-            .h(px(40.))
+            .h_10()
             .gap_3()
-            .child(Icon::new(Glyph::Users).size(px(20.)).flex_none())
+            .child(Icon::new(Glyph::Users).size(ui::ICON_XL).flex_none())
             .child(div().flex_1().min_w_0().truncate().child("Friends"))
             .when(pending > 0, |r| r.child(ui::count_badge(pending)))
             .on_click(cx.listener(|this, _, _, cx| this.open_home(cx)))
@@ -364,10 +363,10 @@ impl Waffle {
             .items_center()
             .gap_2()
             .window_control_area(WindowControlArea::Drag)
-            .text_size(px(16.))
+            .text_size(ui::TEXT_MD)
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(palette::strong(cx))
-            .child(Icon::new(Glyph::Inbox).size(px(20.)).text_color(palette::faint(cx)))
+            .child(Icon::new(Glyph::Inbox).size(ui::ICON_XL).text_color(palette::faint(cx)))
             .child("Inbox")
             .child(div().ml_auto().child(self.caption_clearance(true)));
         div()
@@ -379,11 +378,11 @@ impl Waffle {
             .flex_col()
             .bg(page)
             .text_color(palette::text(cx))
-            .text_size(px(14.))
+            .text_size(ui::TEXT_SM)
             // The main view's header: a hard edge, never a hairline.
             .child(ui::hard_edge(|| false, cx).child(header))
             .child(
-                div().id("inbox-page").flex_1().min_h_0().overflow_y_scrollbar().pt(px(16.)).px_4().pb_6().child(
+                div().id("inbox-page").flex_1().min_h_0().overflow_y_scrollbar().pt_4().px_4().pb_6().child(
                     div().w_full().max_w(px(760.)).mx_auto().flex().flex_col().gap_3().child(self.inbox_head(false, window, cx)).child(self.inbox_body(None, cx)),
                 ),
             )
@@ -437,10 +436,10 @@ impl Waffle {
                     .border_r_1()
                     .border_color(palette::line_strong(cx))
                     .whitespace_nowrap()
-                    .text_size(px(16.))
+                    .text_size(ui::TEXT_MD)
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(palette::strong(cx))
-                    .child(Icon::new(Glyph::Users).size(px(20.)).text_color(palette::faint(cx)))
+                    .child(Icon::new(Glyph::Users).size(ui::ICON_XL).text_color(palette::faint(cx)))
                     .child("Friends"),
             )
             .child(div().min_w_0().overflow_hidden().occlude().child(tabs))
@@ -469,9 +468,9 @@ impl Waffle {
             (true, FriendsTab::Pending) => ui::empty_state("friends-empty", Illustration::FriendsPending, "There are no pending friend requests. Here's Waffle for now.", "Requests you send and receive show up here.", cx).into_any_element(),
             (true, FriendsTab::Blocked) => ui::empty_state("friends-empty", Illustration::FriendsBlocked, "You can't unblock Waffle.", "People you block show up here.", cx).into_any_element(),
             (false, _) => {
-                let label = div().pt_2().px_2().pb_1().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(format!("{heading} · {}", people.len()));
+                let label = div().pt_2().px_2().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(format!("{heading} · {}", people.len()));
                 let rows: Vec<AnyElement> = people.iter().map(|r| self.friend_row(r, cx)).collect();
-                div().flex().flex_col().gap(px(2.)).child(label).children(rows).into_any_element()
+                div().flex().flex_col().gap_0p5().child(label).children(rows).into_any_element()
             }
         };
         // The list stops under the header, a hard edge (the main view's never takes a hairline).
@@ -485,14 +484,14 @@ impl Waffle {
             .flex_col()
             .bg(page)
             .text_color(palette::text(cx))
-            .text_size(px(14.))
+            .text_size(ui::TEXT_SM)
             .child(ui::hard_edge(|| false, cx).child(header))
             .child(
                 div()
                     .flex_1()
                     .min_h_0()
                     .flex()
-                    .child(div().id("friends-list").flex_1().min_w_0().h_full().overflow_y_scrollbar().pt(px(16.)).px_4().pb_6().child(body))
+                    .child(div().id("friends-list").flex_1().min_w_0().h_full().overflow_y_scrollbar().pt_4().px_4().pb_6().child(body))
                     .children(self.active_now_column(window, cx)),
             )
             .into_any_element()
@@ -524,55 +523,55 @@ impl Waffle {
             .flex()
             .items_center()
             .gap_2()
-            .child(div().flex_1().min_w_0().child(ui::text_field("add-friend-name", Input::new(&self.add_friend_input).appearance(false), &username_focus).leading(Icon::new(Glyph::At).size(px(16.)))))
+            .child(div().flex_1().min_w_0().child(ui::text_field("add-friend-name", Input::new(&self.add_friend_input).appearance(false), &username_focus).leading(Icon::new(Glyph::At).size(ui::ICON_MD))))
             .child(send);
-        let note = ui::text_area("add-friend-note", Textarea::new(&self.add_friend_note).appearance(false).px_0().text_size(px(14.)), &note_focus).error(note_len > NOTE_MAX);
+        let note = ui::text_area("add-friend-note", Textarea::new(&self.add_friend_note).appearance(false).px_0().text_size(ui::TEXT_SM), &note_focus).error(note_len > NOTE_MAX);
         let hint = ui::field_hint("Optional. If they accept, it opens your DM.", Some(format!("{note_len} / {NOTE_MAX}").into()), cx);
         let result = self.add_friend_result.clone().map(|result| {
             let (ink, text) = match result {
                 Ok(text) => (palette::positive_ink(cx), text),
                 Err(text) => (palette::danger_ink(cx), text),
             };
-            div().text_size(px(14.)).text_color(ink).child(text)
+            div().text_size(ui::TEXT_SM).text_color(ink).child(text)
         });
         let sent: Vec<AnyElement> = self.relationships.iter().filter(|r| r.kind == Relation::Outgoing).map(|r| self.friend_row(r, cx)).collect();
         let sent = (!sent.is_empty()).then(|| {
-            let label = div().px_2().pb_1().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(format!("Sent requests · {}", sent.len()));
-            div().flex().flex_col().gap(px(2.)).child(label).children(sent)
+            let label = div().px_2().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(format!("Sent requests · {}", sent.len()));
+            div().flex().flex_col().gap_0p5().child(label).children(sent)
         });
         let explore = div()
             .id("add-friend-explore")
             .flex()
             .items_center()
             .gap_3()
-            .p(px(10.))
+            .p_2p5()
             .squircle(ui::RADIUS_LG)
             .cursor_pointer()
             .hover(|s| s.bg(palette::hover(cx)))
-            .child(div().size(px(36.)).flex_none().squircle(ui::RADIUS_MD).bg(palette::positive_ink(cx)).text_color(gpui_kit::white()).flex().items_center().justify_center().child(Nav::Compass.icon().size(px(20.))))
+            .child(div().size_9().flex_none().squircle(ui::RADIUS_MD).bg(palette::positive_ink(cx)).text_color(gpui_kit::white()).flex().items_center().justify_center().child(Nav::Compass.icon().size_5()))
             .child(ui::settings_text("Explore public servers", Some("No username handy? Meet people around gaming, music, anime and more."), cx))
-            .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(px(16.))))
+            .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)))
             .on_click(|_, _, cx| cx.open_url("https://discord.com/servers"));
         let column = div()
             .w_full()
             .max_w(px(560.))
             .flex()
             .flex_col()
-            .gap(px(24.))
+            .gap_6()
             .child(
                 div()
                     .flex()
                     .flex_col()
                     .items_center()
-                    .gap(px(8.))
+                    .gap_2()
                     .child(mascot)
-                    .child(div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Add a friend"))
+                    .child(div().text_size(ui::TEXT_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Add a friend"))
                     .child(div().text_color(muted).child("Send a request with their Discord username.")),
             )
-            .child(div().flex().flex_col().gap(px(8.)).child(ui::settings_card(cx).p(px(16.)).gap(px(12.)).child(username).child(note).child(hint)).children(result))
+            .child(div().flex().flex_col().gap_2().child(ui::settings_card(cx).p_4().gap_3().child(username).child(note).child(hint)).children(result))
             .children(sent)
             .child(explore);
-        div().w_full().flex().justify_center().pt(px(24.)).child(column).into_any_element()
+        div().w_full().flex().justify_center().pt_6().child(column).into_any_element()
     }
 
     pub(crate) fn on_add_friend_input(&mut self, _: &Entity<SearchState>, event: &InputEvent, _: &mut Window, cx: &mut Context<Self>) {
@@ -681,7 +680,7 @@ impl Waffle {
                     .flex()
                     .flex_col()
                     .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(user.name.clone()))
-                    .child(div().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child(subtitle)),
+                    .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(subtitle)),
             )
             // The buttons keep their press to themselves, so the row's own click (open the DM) never fires with them.
             .child(div().flex_none().flex().gap_2().on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| cx.stop_propagation()).children(acts))
@@ -718,7 +717,7 @@ fn friend_action(id: (&'static str, &str), icon: Icon, tooltip: &'static str, to
     let ink = tone.unwrap_or(palette::strong(cx));
     div()
         .id(SharedString::from(format!("{}-{}", id.0, id.1)))
-        .size(px(36.))
+        .size_9()
         .flex_none()
         .squircle(ui::RADIUS_MD)
         .border_1()
@@ -730,8 +729,8 @@ fn friend_action(id: (&'static str, &str), icon: Icon, tooltip: &'static str, to
         .cursor_pointer()
         .text_color(palette::muted(cx))
         .hover(move |s| s.text_color(ink))
-        .child(icon.size(px(20.)))
-        .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
+        .child(icon.size(ui::ICON_XL))
+        .tooltip(move |window, cx| ui::tip(tooltip, window, cx))
 }
 
 #[cfg(test)]

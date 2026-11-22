@@ -2,7 +2,7 @@
 // the nav while you type, and the jump from a result to its row.
 use std::time::Duration;
 
-use gpui_kit::{AnyElement, App, Context, InteractiveElement, IntoElement, KeyDownEvent, ParentElement, SharedString, StatefulInteractiveElement, Styled, Window, component::Icon, div, px};
+use gpui_kit::{AnyElement, App, Context, InteractiveElement, IntoElement, KeyDownEvent, ParentElement, SharedString, StatefulInteractiveElement, Styled, Window, component::Icon, div};
 use serde_json::json;
 
 use super::{
@@ -47,7 +47,7 @@ impl Waffle {
         let row = ui::settings_row(setting.id, line, cx).child(ui::settings_text(setting.title, setting.caption, cx));
         match setting.control {
             Control::Link(url) => ui::settings_choice(row, cx)
-                .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(px(16.))))
+                .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)))
                 .on_click(move |_, _, cx: &mut App| cx.open_url(url))
                 .into_any_element(),
             Control::Switch(_) | Control::Choice(_) | Control::Custom => row.into_any_element(),
@@ -303,7 +303,7 @@ impl Waffle {
         let hits = registry::search(registry::SETTINGS, query);
         let selected = self.settings.as_ref().map_or(0, |s| s.result).min(hits.len().saturating_sub(1));
         if hits.is_empty() {
-            return vec![div().px(px(10.)).py(px(8.)).text_color(palette::muted(cx)).child("No settings match").into_any_element()];
+            return vec![div().px_2p5().py_2().text_color(palette::muted(cx)).child("No settings match").into_any_element()];
         }
         hits.into_iter()
             .enumerate()
@@ -312,7 +312,7 @@ impl Waffle {
                 ui::menu_row(SharedString::from(format!("result-{}", setting.id)), cx)
                     .highlighted(i == selected)
                     .h_auto()
-                    .py(px(6.))
+                    .py_1p5()
                     .child(
                         div()
                             .flex_1()
@@ -320,7 +320,7 @@ impl Waffle {
                             .flex()
                             .flex_col()
                             .child(div().truncate().text_color(palette::strong(cx)).child(setting.title))
-                            .child(div().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child(place)),
+                            .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(place)),
                     )
                     .on_click(cx.listener(move |this, _, window, cx| this.jump_to_setting(setting, window, cx)))
                     .into_any_element()

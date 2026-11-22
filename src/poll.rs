@@ -9,7 +9,6 @@ use gpui_kit::{
     },
     div,
     prelude::*,
-    px,
 };
 use reqwest::Method;
 use serde_json::json;
@@ -410,9 +409,9 @@ impl Waffle {
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .gap(px(4.))
-                    .child(div().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Create a poll"))
-                    .child(div().text_size(px(14.)).text_color(palette::muted(cx)).child(subtitle)),
+                    .gap_1()
+                    .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Create a poll"))
+                    .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(subtitle)),
             )
             .child(ui::icon_button("poll-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_poll_creator(cx))));
         let length = creator.question.read(cx).value().chars().count();
@@ -424,19 +423,19 @@ impl Waffle {
         let add = div()
             .flex()
             .items_center()
-            .gap(px(8.))
+            .gap_2()
             .child(
                 ui::button("poll-add", Tone::Ghost, cx)
                     .small()
                     .disabled(full)
-                    .child(Icon::new(Glyph::Plus).size(px(16.)))
+                    .child(Icon::new(Glyph::Plus).size(ui::ICON_MD))
                     .child("Add answer")
                     .on_click(cx.listener(|this, _, window, cx| {
                         let next = this.poll_creator.as_ref().map_or(0, |c| c.answers.len());
                         this.focus_poll_answer(next, window, cx);
                     })),
             )
-            .child(div().text_size(px(12.)).text_color(palette::faint(cx)).child(answer_count(creator.answers.len())));
+            .child(div().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(answer_count(creator.answers.len())));
         let rows: Vec<AnyElement> = creator.answers.iter().enumerate().map(|(i, row)| answer_row(i, row, creator.answers.len() > ANSWERS_MIN, cx).into_any_element()).collect();
         let answers = ui::field("Answers", cx).children(rows).children(creator.problems.answers.map(|p| ui::field_error(p, cx))).child(add);
         let duration = ui::field("Runs for", cx).child(
@@ -465,7 +464,7 @@ impl Waffle {
 fn answer_row(i: usize, row: &AnswerRow, removable: bool, cx: &mut Context<Waffle>) -> impl IntoElement {
     let emoji = div()
         .id(SharedString::from(format!("poll-emoji-{i}")))
-        .size(px(24.))
+        .size_6()
         .flex_none()
         .flex()
         .items_center()
@@ -474,7 +473,7 @@ fn answer_row(i: usize, row: &AnswerRow, removable: bool, cx: &mut Context<Waffl
         .text_color(palette::muted(cx))
         .child(match &row.emoji {
             Some(emoji) => emoji_face(emoji, 20.),
-            None => Icon::new(Glyph::Emoji).size(px(20.)).into_any_element(),
+            None => Icon::new(Glyph::Emoji).size(ui::ICON_XL).into_any_element(),
         })
         .on_click(cx.listener(move |this, _, window, cx| this.open_emoji_picker(EmojiTarget::PollAnswer(i), window, cx)));
     let focus = row.input.read(cx).focus_handle(cx);
@@ -483,7 +482,7 @@ fn answer_row(i: usize, row: &AnswerRow, removable: bool, cx: &mut Context<Waffl
     div()
         .flex()
         .items_center()
-        .gap(px(4.))
+        .gap_1()
         .child(div().flex_1().min_w_0().child(field.error(length > ANSWER_MAX)))
         .child(ui::icon_button(SharedString::from(format!("poll-remove-{i}")), Glyph::Trash, "Remove answer", cx).disabled(!removable).on_click(cx.listener(move |this, _, _, cx| this.remove_poll_answer(i, cx))))
 }
@@ -493,8 +492,8 @@ fn under_field(problem: Option<&'static str>, count: Option<String>, over: bool,
     div()
         .flex()
         .items_center()
-        .gap(px(8.))
-        .text_size(px(12.))
+        .gap_2()
+        .text_size(ui::TEXT_XS)
         .child(div().flex_1().min_w_0().children(problem.map(|p| ui::field_error(p, cx))))
         .children(count.map(|c| div().flex_none().text_color(if over { palette::danger_ink(cx) } else { palette::faint(cx) }).child(c)))
 }

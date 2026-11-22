@@ -123,18 +123,18 @@ impl Waffle {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
-            .px(px(24.))
-            .pt(px(4.))
-            .pb(px(16.))
+            .px_6()
+            .pt_1()
+            .pb_4()
             .flex()
             .flex_col()
-            .gap(px(20.))
+            .gap_5()
             .child(self.ns_mute_card(view, guild, &settings, window, cx))
             .child(ns_levels(&settings, window, cx))
             .child(ns_switches(&settings, window, cx))
             .child(ns_push_card(&settings, window, cx))
             .child(self.ns_overrides(view, guild, &settings, window, cx));
-        let done = div().flex().justify_end().px(px(24.)).pt(px(12.)).pb(px(20.)).child(ui::button("ns-done", Tone::Primary, cx).child("Done").on_click(cx.listener(|this, _, _, cx| this.close_notification_settings(cx))));
+        let done = div().flex().justify_end().px_6().pt_3().pb_5().child(ui::button("ns-done", Tone::Primary, cx).child("Done").on_click(cx.listener(|this, _, _, cx| this.close_notification_settings(cx))));
         let height = (f32::from(window.viewport_size().height) * 0.85).min(MAX_HEIGHT);
         let body = div().h(px(height)).flex().flex_col().child(ns_head(guild, cx)).child(scroller).child(done);
         let card = div().id("ns-card").occlude().child(ui::dialog("notification-settings", WIDTH, body, window, cx));
@@ -205,21 +205,21 @@ impl Waffle {
         let query = view.search.read(cx).value().trim().to_lowercase();
         let sections = override_choices(guild, taken, &query);
         let muted = palette::muted(cx);
-        let mut list = div().id("ns-pick-list").max_h(px(260.)).overflow_y_scroll().flex().flex_col().gap(px(1.));
+        let mut list = div().id("ns-pick-list").max_h(px(260.)).overflow_y_scroll().flex().flex_col().gap_px();
         if sections.is_empty() {
-            list = list.child(div().px(px(10.)).py(px(8.)).text_color(muted).child("No channels found"));
+            list = list.child(div().px_2p5().py_2().text_color(muted).child("No channels found"));
         }
         for (header, channels) in sections {
-            list = list.when_some(header, |l, h| l.child(div().px(px(10.)).pt(px(8.)).pb(px(4.)).text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(muted).child(h)));
+            list = list.when_some(header, |l, h| l.child(div().px_2p5().pt_2().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(muted).child(h)));
             list = list.children(channels.into_iter().map(|c| {
                 let id = c.id.clone();
                 ui::menu_row(SharedString::from(format!("ns-pick-{}", c.id)), cx)
-                    .child(div().flex_none().text_color(muted).child(channel_icon(&c).size(px(16.))))
+                    .child(div().flex_none().text_color(muted).child(channel_icon(&c).size_4()))
                     .child(div().flex_1().min_w_0().truncate().child(c.name.clone()))
                     .on_click(cx.listener(move |this, _, _, cx| this.add_override(&id, cx)))
             }));
         }
-        let panel = ui::surface(cx).id("ns-pick-panel").occlude().gap(px(4.)).child(ui::search_field("ns-pick-search", &view.search, cx)).child(list);
+        let panel = ui::surface(cx).id("ns-pick-panel").occlude().gap_1().child(ui::search_field("ns-pick-search", &view.search, cx)).child(list);
         let this = cx.entity();
         ui::dropdown("ns-pick-dropdown", panel, SELECT_HEIGHT, move |_, cx| this.update(cx, |this, cx| this.close_popover(cx)))
     }
@@ -246,11 +246,11 @@ fn ns_head(guild: &Guild, cx: &mut Context<Waffle>) -> Div {
     div()
         .flex()
         .items_center()
-        .gap(px(12.))
-        .pl(px(24.))
-        .pr(px(16.))
-        .pt(px(20.))
-        .pb(px(12.))
+        .gap_3()
+        .pl_6()
+        .pr_4()
+        .pt_5()
+        .pb_3()
         .child(ui::server_tile(guild.icon.as_deref(), &guild.name, 40., cx))
         .child(
             div()
@@ -258,9 +258,9 @@ fn ns_head(guild: &Guild, cx: &mut Context<Waffle>) -> Div {
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .gap(px(2.))
-                .child(div().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Notification Settings"))
-                .child(div().text_size(px(12.)).text_color(palette::muted(cx)).truncate().child(guild.name.clone())),
+                .gap_0p5()
+                .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Notification Settings"))
+                .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).truncate().child(guild.name.clone())),
         )
         .child(ui::icon_button("ns-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_notification_settings(cx))))
 }
@@ -269,7 +269,7 @@ fn ns_levels(settings: &GuildSettings, window: &mut Window, cx: &mut Context<Waf
     let locked = settings.is_muted();
     let rows = LEVELS.iter().enumerate().map(|(i, &(title, level))| {
         let on = settings.notifications == level;
-        let row = ui::settings_row(SharedString::from(format!("ns-level-{level}")), i > 0, cx).min_h(px(48.)).child(ui::radio_live(SharedString::from(format!("ns-level-radio-{level}")), on, window, cx)).child(ui::settings_text(title, None::<&str>, cx));
+        let row = ui::settings_row(SharedString::from(format!("ns-level-{level}")), i > 0, cx).min_h_12().child(ui::radio_live(SharedString::from(format!("ns-level-radio-{level}")), on, window, cx)).child(ui::settings_text(title, None::<&str>, cx));
         if locked {
             return row.opacity(0.45);
         }
@@ -329,9 +329,9 @@ fn ns_override_row(row: &OverrideRow, line: bool, guild_muted: bool, window: &mu
         .min_w_0()
         .flex()
         .flex_col()
-        .gap(px(1.))
+        .gap_px()
         .child(div().truncate().text_color(strong).child(name.clone()))
-        .child(div().truncate().text_size(px(12.)).text_color(muted).child(row.subtitle.clone()));
+        .child(div().truncate().text_size(ui::TEXT_XS).text_color(muted).child(row.subtitle.clone()));
     let this = cx.entity();
     let level_id = id.clone();
     let selected = if guild_muted { SEGMENTS.len() } else { usize::from(row.level) };
@@ -353,11 +353,11 @@ fn ns_override_row(row: &OverrideRow, line: bool, guild_muted: bool, window: &mu
         .on_click(cx.listener(move |this, _, _, cx| this.remove_override(&id, cx)));
     ui::settings_row(SharedString::from(format!("ns-override-{}", row.channel.id)), line, cx)
         .min_h(px(56.))
-        .gap(px(12.))
-        .child(div().flex_none().text_color(muted).child(channel_icon(&row.channel).size(px(18.))))
+        .gap_3()
+        .child(div().flex_none().text_color(muted).child(channel_icon(&row.channel).size(ui::ICON_LG)))
         .child(place)
         .child(div().flex_none().when(guild_muted, |d| d.opacity(0.45)).child(levels))
-        .child(div().flex_none().flex().gap(px(2.)).child(mute).child(remove))
+        .child(div().flex_none().flex().gap_0p5().child(mute).child(remove))
         .into_any_element()
 }
 

@@ -1,6 +1,6 @@
 // The Advanced page's own rows: with Developer mode on, the crash logs Waffle kept (crash.rs), each one
 // saved anywhere through the system save panel, and the folder one click away.
-use gpui_kit::{App, Context, ParentElement, StatefulInteractiveElement, Styled, div, prelude::FluentBuilder as _, px};
+use gpui_kit::{App, Context, ParentElement, StatefulInteractiveElement, Styled, div, prelude::FluentBuilder as _};
 
 use super::Section;
 use crate::{
@@ -31,7 +31,7 @@ impl Waffle {
         let folder = crate::crash::dir();
         let show = (!logs.is_empty()).then(|| {
             ui::settings_choice(ui::settings_row("crash-folder", true, cx).child(ui::settings_text("Show in folder", Some(format!("{} saved", logs.len())), cx)), cx)
-                .child(div().text_color(palette::faint(cx)).child(gpui_kit::component::Icon::new(crate::icons::Glyph::ChevronRight).size(px(16.))))
+                .child(div().text_color(palette::faint(cx)).child(gpui_kit::component::Icon::new(crate::icons::Glyph::ChevronRight).size(ui::ICON_MD)))
                 .when_some(folder, |row, dir| row.on_click(move |_, _, cx: &mut App| cx.reveal_path(&dir)))
         });
         let caption = "Waffle keeps its last 20 crashes. Attach one when you report a bug; it holds no messages or tokens.";
