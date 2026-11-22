@@ -572,11 +572,11 @@ impl Waffle {
         // Discord hides how members joined from anyone without Manage server, and only they can filter by date.
         let columns: Vec<(Col, AnyElement)> = [
             check_all.map(|b| (CHECK_COL, b)),
-            Some((Col::Grow { weight: 2., min: 120. }, label("Name"))),
-            Some((Col::Grow { weight: 1., min: 72. }, self.date_header(DateColumn::Joined, manage_guild, cx))),
-            Some((Col::Grow { weight: 1., min: 72. }, self.date_header(DateColumn::Account, manage_guild, cx))),
-            manage_guild.then(|| (Col::Grow { weight: 1., min: 72. }, label("Join method"))),
-            Some((Col::Grow { weight: 1., min: 72. }, label("Roles"))),
+            Some((Col::Grow { weight: 2., min: 220. }, label("Name"))),
+            Some((Col::Grow { weight: 1., min: 120. }, self.date_header(DateColumn::Joined, manage_guild, cx))),
+            Some((Col::Grow { weight: 1., min: 120. }, self.date_header(DateColumn::Account, manage_guild, cx))),
+            manage_guild.then(|| (Col::Grow { weight: 1., min: 140. }, label("Join method"))),
+            Some((Col::Grow { weight: 1., min: 150. }, label("Roles"))),
             Some((Col::Fixed(70.), label("Signals"))),
             Some((Col::Fixed(52.), label(""))),
         ]
@@ -593,7 +593,8 @@ impl Waffle {
         };
         let guild_roles = self.guilds.iter().find(|g| g.id == guild_id).map(|g| g.roles.clone()).unwrap_or_default();
         let now = Utc::now();
-        let mut table = ui::table("ss-members-table", cx).child(head);
+        let min_width = ui::table_min_width(&cols);
+        let mut table = ui::table("ss-members-table", cx).min_w(px(min_width)).child(head);
         if shown.is_empty() {
             let note = if m.more { "Loading members…" } else { "No members match this search." };
             table = table.child(ui::table_row("ss-members-none", &[Col::Grow { weight: 1., min: 0. }], [div().text_color(palette::muted(cx)).child(note).into_any_element()], cx));
@@ -618,7 +619,7 @@ impl Waffle {
             cells.push(self.member_actions(member, powers, cx));
             table = table.child(ui::table_row(SharedString::from(format!("ss-member-{}", member.id)), &cols, cells, cx).when(picked, |r| r.bg(palette::selected(cx))));
         }
-        table.into_any_element()
+        div().id("ss-members-scroll").w_full().overflow_x_scroll().child(table).into_any_element()
     }
 
     // Open Mod View, then the row's moderation menu.

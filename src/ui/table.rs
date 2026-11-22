@@ -13,6 +13,19 @@ pub enum Col {
     Grow { weight: f32, min: f32 },
 }
 
+// The narrowest the table can be with every column at its minimum: below it, the caller scrolls sideways
+// (`overflow_x_scroll` on a wrapper) instead of squeezing the columns.
+pub fn table_min_width(cols: &[Col]) -> f32 {
+    let widths: f32 = cols.iter().map(|c| match c {
+        Col::Fixed(w) => *w,
+        Col::Grow { min, .. } => *min,
+    }).sum();
+    widths + GAP * cols.len().saturating_sub(1) as f32 + PAD * 2. + 2.
+}
+
+const GAP: f32 = 16.;
+const PAD: f32 = 16.;
+
 pub fn table(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
     div().id(id.into()).min_w_0().flex().flex_col().squircle(RADIUS_MD).border_1().border_color(palette::line_strong(cx))
 }
@@ -28,7 +41,7 @@ pub fn table_row(id: impl Into<ElementId>, cols: &[Col], cells: impl IntoIterato
 }
 
 fn cells_row(cols: &[Col], cells: impl IntoIterator<Item = AnyElement>) -> Div {
-    div().flex().items_center().gap(px(16.)).px(px(16.)).py(px(6.)).children(cols.iter().zip(cells).map(|(col, cell)| cell_box(*col).child(cell)))
+    div().flex().items_center().gap(px(GAP)).px(px(PAD)).py(px(6.)).children(cols.iter().zip(cells).map(|(col, cell)| cell_box(*col).child(cell)))
 }
 
 fn cell_box(col: Col) -> Div {
@@ -36,5 +49,17 @@ fn cell_box(col: Col) -> Div {
     match col {
         Col::Fixed(width) => cell.w(px(width)).flex_none(),
         Col::Grow { weight, min } => cell.flex_basis(px(min)).min_w(px(min)).flex_shrink_0().flex_grow(weight),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn min_width_sums_minimums_gaps_padding_and_border() {
+        let cols = [Col::Fixed(20.), Col::Grow { weight: 2., min: 220. }, Col::Grow { weight: 1., min: 120. }];
+        assert_eq!(table_min_width(&cols), 20. + 220. + 120. + 2. * GAP + 2. * PAD + 2.);
+        assert_eq!(table_min_width(&[]), 2. * PAD + 2.);
     }
 }
