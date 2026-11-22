@@ -8,7 +8,6 @@ use gpui_kit::{
     component::{
         Icon,
         input::{Input, InputEvent, Textarea},
-        tooltip::Tooltip,
     },
     div, prelude::*, px,
 };
@@ -731,7 +730,7 @@ fn friend_action(id: (&'static str, &str), icon: Icon, tooltip: &'static str, to
         .text_color(palette::muted(cx))
         .hover(move |s| s.text_color(ink))
         .child(icon.size(ui::ICON_XL))
-        .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(tooltip, window, cx))
 }
 
 #[cfg(test)]

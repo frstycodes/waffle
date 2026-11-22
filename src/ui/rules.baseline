@@ -59,7 +59,6 @@ src/group_dm.rs	global-notify	13
 src/group_dm.rs	raw-px	1
 src/hidden.rs	global-notify	1
 src/home.rs	global-notify	14
-src/home.rs	kit-tooltip	1
 src/home.rs	raw-px	3
 src/inbox.rs	global-notify	2
 src/interactions.rs	global-notify	6
@@ -77,7 +76,6 @@ src/joining/onboarding.rs	raw-px	12
 src/joining/rules.rs	global-notify	5
 src/joining/rules.rs	raw-px	3
 src/layout.rs	global-notify	8
-src/layout.rs	kit-tooltip	3
 src/layout.rs	raw-color	1
 src/layout.rs	raw-px	11
 src/link_preview.rs	global-notify	1
@@ -105,7 +103,6 @@ src/poll.rs	global-notify	10
 src/poll.rs	raw-px	12
 src/presence.rs	raw-px	6
 src/profile.rs	global-notify	7
-src/profile.rs	kit-tooltip	5
 src/profile.rs	raw-color	8
 src/profile.rs	raw-floating	1
 src/profile.rs	raw-px	12
@@ -161,7 +158,6 @@ src/settings/view.rs	raw-px	5
 src/shortcuts.rs	global-notify	4
 src/shortcuts.rs	raw-px	1
 src/sidebar.rs	global-notify	3
-src/sidebar.rs	kit-tooltip	6
 src/sidebar.rs	raw-color	2
 src/sidebar.rs	raw-px	34
 src/soundboard.rs	global-notify	10

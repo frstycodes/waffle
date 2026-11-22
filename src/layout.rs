@@ -3,7 +3,7 @@
 use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, Context, Div, FontWeight, Hsla, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, NavigationDirection,
     Render, SharedString, Stateful, StyleRefinement, Window,
-    component::{ActiveTheme, Icon, tooltip::Tooltip},
+    component::{ActiveTheme, Icon},
     div, img, linear_color_stop, linear_gradient, prelude::*, px,
 };
 
@@ -216,7 +216,7 @@ impl Waffle {
             .cursor_pointer()
             .hover(move |s| s.bg(ink.opacity(0.12)))
             .child(gpui_kit::component::Icon::new(crate::icons::Glyph::X).size(ui::ICON_MD))
-            .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Dismiss").build(window, cx))
+            .tooltip(|window, cx| ui::tip("Dismiss", window, cx))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.voice_notice = None;
                 cx.notify();
@@ -740,7 +740,7 @@ fn me_chevron(id: &'static str, label: &'static str, open: bool, cx: &App) -> St
         .when(open, |b| b.bg(selected))
         .hover(move |s| s.bg(hover).text_color(strong))
         .child(Icon::new(Glyph::ChevronDown).size(ui::ICON_XS))
-        .tooltip(move |window, cx| Tooltip::new(label).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(label, window, cx))
 }
 
 fn me_button(id: &'static str, glyph: Nav, on: bool, label: &'static str, cx: &App) -> Stateful<Div> {
@@ -758,5 +758,5 @@ fn me_button(id: &'static str, glyph: Nav, on: bool, label: &'static str, cx: &A
         .text_color(if on { palette::danger_ink(cx) } else { strong })
         .hover(move |s| s.bg(hover))
         .child(icon)
-        .tooltip(move |window, cx| Tooltip::new(label).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(label, window, cx))
 }

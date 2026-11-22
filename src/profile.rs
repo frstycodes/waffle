@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use gpui_kit::{
     AnimationExt, AnyElement, App, Context, Div, FontWeight, Hsla, MouseButton, Pixels, Point, SharedString, Stateful, StyledText, Window,
-    component::{ActiveTheme, Icon, text::TextView, tooltip::Tooltip},
+    component::{ActiveTheme, Icon, text::TextView},
     div, img, linear_color_stop, linear_gradient, prelude::*, px, relative, rgb, svg,
 };
 
@@ -614,7 +614,7 @@ fn banner_button(id: &'static str, glyph: Glyph, label: &'static str) -> Statefu
         .justify_center()
         .text_color(gpui_kit::white())
         .child(Icon::new(glyph).size(ui::ICON_MD))
-        .tooltip(move |window, cx| Tooltip::new(label).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(label, window, cx))
 }
 
 fn menu_surface(in_guild: bool) -> Surface {
@@ -657,7 +657,7 @@ pub(crate) fn badges(badges: &[Badge], ink: Ink) -> Option<Div> {
     }
     let shown = badges.iter().take(MAX_BADGES).enumerate().map(|(i, badge)| {
         let label = SharedString::from(badge.description.clone());
-        div().id(("profile-badge", i)).size(px(22.)).child(img(badge.icon.clone()).size_full()).tooltip(move |window, cx| Tooltip::new(label.clone()).build(window, cx))
+        div().id(("profile-badge", i)).size(px(22.)).child(img(badge.icon.clone()).size_full()).tooltip(move |window, cx| ui::tip(label.clone(), window, cx))
     });
     let more = badges.len().saturating_sub(MAX_BADGES);
     let pill = div()
@@ -748,7 +748,7 @@ fn ask_to_join(ink: Ink) -> Stateful<Div> {
         .opacity(0.7)
         .child(Icon::new(Glyph::Game).size(ui::ICON_MD))
         .child("Ask to Join")
-        .tooltip(|window, cx| Tooltip::new("Joining from Waffle isn't supported yet").build(window, cx))
+        .tooltip(|window, cx| ui::tip("Joining from Waffle isn't supported yet", window, cx))
 }
 
 fn message_field(user: &User, ink: Ink, cx: &mut Context<Waffle>) -> Div {
@@ -844,7 +844,7 @@ fn since_date(id: &'static str, mark: impl IntoElement, tip: SharedString, at: &
         .text_color(ink.text)
         .child(mark)
         .child(short_date(at))
-        .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
 }
 
 // When a snowflake was minted: its top 42 bits are milliseconds since Discord's epoch (2015).
@@ -900,7 +900,7 @@ fn connection_chip(i: usize, c: &Connection, ink: Ink, cx: &App) -> Stateful<Div
         .child(brand_tile(&c.kind, platform, color))
         .child(div().min_w_0().truncate().child(name))
         .when(c.verified, |d| d.child(Icon::new(Glyph::CheckCircle).size(ui::ICON_SM).flex_none().text_color(seal)))
-        .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
         .when_some(url, |d, url| d.cursor_pointer().hover(move |s| s.bg(hover)).on_click(move |_, _, cx| cx.open_url(&url)))
 }
 

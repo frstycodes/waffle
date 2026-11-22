@@ -4,7 +4,7 @@ use std::time::Duration;
 use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, Context, Div, FontWeight, Hsla, Radians, SharedString, Stateful, TooltipPlacement, Window,
     base::{Transition as Tween, transition},
-    component::{ActiveTheme, Icon, tooltip::Tooltip},
+    component::{ActiveTheme, Icon},
     div, img, point, prelude::*, px, relative, rgb, svg,
 };
 use gpui_motion_kit::core::{Bezier, Easing, Motion, Target, Transition};
@@ -479,7 +479,7 @@ impl Waffle {
                         let name = name.clone();
                         move |window, cx| match preview.clone().filter(ServerPreview::has_activity) {
                             Some(preview) => cx.new(|_| preview).into(),
-                            None => Tooltip::new(name.clone()).build(window, cx),
+                            None => ui::tip(name.clone(), window, cx),
                         }
                     })
                     .tooltip_show_delay(Duration::ZERO)
@@ -611,7 +611,7 @@ impl Waffle {
                     .child(div().truncate().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(app.unwrap_or(streamer.name).to_owned()))
                     .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(detail.join(" · "))),
             )
-            .when_some(who, |d, who| d.tooltip(move |window, cx| Tooltip::new(who.clone()).build(window, cx)));
+            .when_some(who, |d, who| d.tooltip(move |window, cx| ui::tip(who.clone(), window, cx)));
         let record = self.stream_card_bounds.clone();
         div()
             .id(SharedString::from(format!("stream-card-{}", streamer.id)))
@@ -1108,7 +1108,7 @@ impl Waffle {
                     .id(SharedString::from(format!("voice-game-{}", state.user_id)))
                     .flex_none()
                     .child(img(game.icon.clone()).size_4().squircle(4.))
-                    .tooltip(move |window, cx| Tooltip::new(game.label()).build(window, cx))
+                    .tooltip(move |window, cx| ui::tip(game.label(), window, cx))
             });
             let key = SharedString::from(format!("voice-{}", state.user_id));
             let carried = self.drag_motion.row(&key);
@@ -1446,7 +1446,7 @@ pub(crate) fn category_action(id: impl Into<gpui_kit::ElementId>, icon: Icon, re
         .hover(move |s| s.text_color(strong))
         .when_some(reveal_on, |add, group| add.opacity(0.).group_hover(group, |s| s.opacity(1.)))
         .child(icon.size(ui::ICON_SM))
-        .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(tooltip, window, cx))
 }
 
 // A 24px action inside a row (.ch .acts button).
@@ -1462,7 +1462,7 @@ fn row_action(id: SharedString, icon: Icon, tooltip: &'static str, cx: &App) -> 
         .text_color(palette::muted(cx))
         .hover(move |s| s.text_color(strong))
         .child(icon.size(ui::ICON_MD))
-        .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(tooltip, window, cx))
 }
 
 // The pencil on a row whose channel holds an unsent draft.
@@ -1868,7 +1868,7 @@ fn rail_action(id: &'static str, icon: Icon, tooltip: &'static str, cx: &App) ->
         .text_color(palette::muted(cx))
         .hover(move |s| s.bg(raised).text_color(strong))
         .child(icon.size(ui::ICON_XL))
-        .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(tooltip, window, cx))
         .tooltip_show_delay(Duration::ZERO)
         .tooltip_placement(TooltipPlacement::Side)
 }
