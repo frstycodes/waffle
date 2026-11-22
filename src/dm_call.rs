@@ -311,7 +311,7 @@ impl Waffle {
                     .flex()
                     .flex_col()
                     .gap_0p5()
-                    .child(div().truncate().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(self.dm_caller(channel_id)))
+                    .child(div().truncate().text_size(ui::TEXT_LEAD).font_weight(FontWeight::SEMIBOLD).child(self.dm_caller(channel_id)))
                     .child(div().truncate().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::accent()).child(line)),
             )
             .child(
@@ -515,7 +515,7 @@ impl Waffle {
                 .gap_2()
                 .squircle(RADIUS_MD)
                 .bg(palette::hover(cx))
-                .text_size(px(13.))
+                .text_size(ui::TEXT_DETAIL)
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(palette::strong(cx))
                 .child(ui::avatar_stack(faces, 22., palette::surface(Level::Page, cx)))
@@ -594,7 +594,7 @@ fn stage_wash_button(id: &'static str, glyph: Glyph, label: SharedString) -> Sta
         .cursor_pointer()
         .bg(stage::wash(0.1))
         .hover(|s| s.bg(stage::wash(0.16)))
-        .text_size(px(13.))
+        .text_size(ui::TEXT_DETAIL)
         .font_weight(FontWeight::SEMIBOLD)
         .child(Icon::new(glyph).size(ui::ICON_SM))
         .child(label)

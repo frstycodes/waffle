@@ -197,7 +197,7 @@ impl Waffle {
     pub(crate) fn voice_row_status(&self, channel: &Channel, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
         let status = self.voice_status_of(&channel.id).filter(|_| guild_voice(channel));
         let editable = self.can_edit_voice_status(channel);
-        let line = div().id(SharedString::from(format!("voice-status-{}", channel.id))).pl(px(LINE_INDENT)).min_w_0().flex().items_center().gap_1p5().text_size(ui::TEXT_XS).line_height(px(16.));
+        let line = div().id(SharedString::from(format!("voice-status-{}", channel.id))).pl(px(LINE_INDENT)).min_w_0().flex().items_center().gap_1p5().text_size(ui::TEXT_XS).line_height(ui::LINE_XS);
         let line = match status {
             Some(status) => line.text_color(palette::muted(cx)).font_weight(FontWeight::NORMAL).child(div().min_w_0().truncate().child(plain_status(status))),
             None if editable => {

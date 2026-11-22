@@ -151,7 +151,7 @@ impl Waffle {
                 div()
                     .flex_1()
                     .min_w_0()
-                    .child(div().truncate().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(title))
+                    .child(div().truncate().text_size(ui::TEXT_LEAD).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(title))
                     .child(div().truncate().text_size(ui::TEXT_XS).text_color(stage::muted()).font_features(tabular()).child(line)),
             )
             .when(live, |d| d.child(ui::live_badge()))
@@ -228,7 +228,7 @@ impl Waffle {
             .gap_2()
             .child(ui::icon_tile(Glyph::Stage, stage::wash(0.08), stage::strong()).size(px(56.)).mb_1())
             .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(title))
-            .child(div().text_size(px(13.)).text_color(stage::muted()).child(body))
+            .child(div().text_size(ui::TEXT_DETAIL).text_color(stage::muted()).child(body))
             .when(room.moderator, |d| {
                 d.child(ui::button("stage-start", ui::Tone::Primary, cx).mt_2().child("Start Stage").on_click(cx.listener(move |this, _, window, cx| this.open_stage_topic(guild_id.clone(), channel_id.clone(), window, cx))))
             })
@@ -406,7 +406,7 @@ impl Waffle {
             .items_center()
             .gap_2p5()
             .hover(|s| s.bg(stage::wash(0.05)))
-            .child(div().w_4().flex_none().flex().justify_center().text_size(px(13.)).font_weight(FontWeight::BOLD).text_color(palette::accent()).font_features(tabular()).children(place.map(|n| n.to_string())))
+            .child(div().w_4().flex_none().flex().justify_center().text_size(ui::TEXT_DETAIL).font_weight(FontWeight::BOLD).text_color(palette::accent()).font_features(tabular()).children(place.map(|n| n.to_string())))
             .child(ui::avatar(avatar, 32.))
             .child(
                 div()
@@ -555,7 +555,7 @@ fn requests_empty() -> Div {
         .flex_col()
         .items_center()
         .gap_0p5()
-        .text_size(px(13.))
+        .text_size(ui::TEXT_DETAIL)
         .text_color(stage::muted())
         .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child("No Requests"))
         .child("Requests to speak will show up here.")

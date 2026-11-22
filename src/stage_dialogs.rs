@@ -6,7 +6,6 @@ use gpui_kit::{
     AnyElement, Context, InteractiveElement, KeyDownEvent, MouseButton, ParentElement, SharedString, StatefulInteractiveElement, Styled, Window,
     component::input::{Input, InputEvent},
     div,
-    px,
 };
 
 use crate::{
@@ -137,8 +136,8 @@ impl Waffle {
                     .flex()
                     .flex_col()
                     .gap_1()
-                    .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(strong).child(title))
-                    .child(div().text_size(ui::TEXT_SM).line_height(px(20.)).text_color(muted).child(subtitle)),
+                    .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(strong).child(title))
+                    .child(div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(muted).child(subtitle)),
             )
             .child(ui::icon_button("stage-topic-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_stage_topic(cx))));
         let notify = (!form.editing).then(|| {

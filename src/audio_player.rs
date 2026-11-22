@@ -657,7 +657,7 @@ impl AudioPlayer {
             )
             .when(self.volume_open, |d| {
                 // lint-allow(raw-floating): rises from its bottom-left at the parent's position, which floating/floating_at can't express; the card occludes itself.
-                d.child(div().absolute().top_neg_2().left(px(14. - 68.)).child(gpui_kit::deferred(gpui_kit::anchored().anchor(Anchor::BottomLeft).snap_to_window_with_margin(px(8.)).child(card)).with_priority(1)))
+                d.child(div().absolute().top_neg_2().left(px(14. - 68.)).child(gpui_kit::deferred(gpui_kit::anchored().anchor(Anchor::BottomLeft).snap_to_window_with_margin(ui::WINDOW_MARGIN).child(card)).with_priority(1)))
             })
     }
 }

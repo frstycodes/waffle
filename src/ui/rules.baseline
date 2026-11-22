@@ -4,10 +4,10 @@ src/active_now.rs	global-notify	1
 src/announcements.rs	global-notify	18
 src/announcements.rs	raw-px	3
 src/app_modal.rs	global-notify	6
-src/audio_player.rs	raw-px	8
+src/audio_player.rs	raw-px	7
 src/call.rs	global-notify	21
 src/call.rs	raw-color	3
-src/call.rs	raw-px	17
+src/call.rs	raw-px	16
 src/call_previews.rs	global-notify	4
 src/call_previews.rs	raw-px	1
 src/channel_menu.rs	global-notify	7
@@ -33,7 +33,7 @@ src/create_server.rs	raw-px	4
 src/demo.rs	raw-px	32
 src/design_system.rs	raw-px	20
 src/dm_call.rs	global-notify	5
-src/dm_call.rs	raw-px	9
+src/dm_call.rs	raw-px	6
 src/drag.rs	global-notify	1
 src/drag.rs	raw-px	23
 src/events.rs	global-notify	14
@@ -48,7 +48,6 @@ src/forward.rs	raw-px	14
 src/games.rs	global-notify	2
 src/gif.rs	raw-px	6
 src/go_live.rs	global-notify	8
-src/go_live.rs	raw-px	1
 src/group_dm.rs	global-notify	13
 src/group_dm.rs	raw-px	1
 src/hidden.rs	global-notify	1
@@ -136,9 +135,8 @@ src/soundboard.rs	global-notify	10
 src/soundboard.rs	raw-px	7
 src/splash.rs	raw-px	4
 src/stage_dialogs.rs	global-notify	4
-src/stage_dialogs.rs	raw-px	2
 src/stage_view.rs	global-notify	1
-src/stage_view.rs	raw-px	12
+src/stage_view.rs	raw-px	8
 src/status_menu.rs	global-notify	10
 src/status_menu.rs	raw-px	1
 src/stickers.rs	global-notify	4
@@ -153,4 +151,4 @@ src/viewer.rs	global-notify	5
 src/viewer.rs	raw-px	13
 src/voice/capture_windows.rs	raw-px	12
 src/voice_status.rs	global-notify	7
-src/voice_status.rs	raw-px	3
+src/voice_status.rs	raw-px	2

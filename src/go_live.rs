@@ -291,7 +291,7 @@ impl Waffle {
             .flex()
             .flex_col()
             .gap_0p5()
-            .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(format!("Go live in {channel}")))
+            .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(format!("Go live in {channel}")))
             .child(div().text_color(palette::muted(cx)).child("Choose a screen, a window or a capture device."));
         let body = ui::dialog_body()
             .child(head)
