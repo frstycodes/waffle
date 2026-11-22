@@ -27,10 +27,12 @@ use crate::{
 };
 
 const WIDTH: f32 = 480.;
+// Friends on the left, the link and its settings on the right.
+const WIDE: f32 = 820.;
 // Rows listed at most, as Discord caps its suggestions.
 const ROW_CAP: usize = 100;
 // Four and a half rows; past that the list scrolls.
-const LIST_HEIGHT: f32 = 216.;
+const LIST_HEIGHT: f32 = 360.;
 const FACE: f32 = 32.;
 const COPIED_FOR: Duration = Duration::from_secs(1);
 
@@ -60,6 +62,7 @@ pub(crate) struct Invite {
     copied: Option<u32>,
     copies: u32,
     search: Entity<SearchState>,
+    friends_scroll: gpui_kit::ScrollHandle,
     focus: FocusHandle,
     _subscription: Subscription,
 }
@@ -141,6 +144,7 @@ impl Waffle {
             copied: None,
             copies: 0,
             search,
+            friends_scroll: gpui_kit::ScrollHandle::new(),
             focus,
             _subscription: subscription,
         });
@@ -287,6 +291,15 @@ impl Waffle {
         let guild = self.guilds.iter().find(|g| g.id == invite.guild_id)?;
         let channel = guild.channel(&invite.channel_id)?;
         let paused = guild.has_feature("INVITES_DISABLED");
+        let friends = self.friends_section(invite, paused, cx);
+        // The wide layout has room for the link's settings, so they show without Edit invite link.
+        let always = friends.is_some() && invite.url().is_some();
+        let draft = invite.draft.or(always.then_some(invite.settings));
+        let link = div().flex().flex_col().gap(px(20.)).child(link_section(invite, paused, !always, cx)).children(draft.map(|draft| settings_panel(invite, draft, always, window, cx)));
+        let (columns, width) = match friends {
+            Some(friends) => (div().flex().items_start().gap(px(32.)).child(div().flex_1().min_w_0().child(friends)).child(link.flex_1().min_w_0()), WIDE),
+            None => (link, WIDTH),
+        };
         let body = ui::dialog_body()
             .gap(px(20.))
             .track_focus(&invite.focus)
@@ -298,11 +311,9 @@ impl Waffle {
             .child(invite_head(guild, channel, cx))
             .when(channel.private, |d| d.child(private_warning(cx)))
             .when(paused, |d| d.child(ui::callout(Notice::Accent, Glyph::Pause, "Invites are paused for this server.", "Nobody can join with a link until they're resumed in Server settings.", cx)))
-            .children(self.friends_section(invite, paused, cx))
-            .child(link_section(invite, paused, cx))
-            .children(invite.draft.map(|draft| settings_panel(invite, draft, window, cx)));
+            .child(columns);
         let backdrop = div().id("invite-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_invite(cx)));
-        Some(ui::modal(backdrop, ui::dialog("invite", WIDTH, body, window, cx), cx))
+        Some(ui::modal(backdrop, ui::dialog("invite", width, body, window, cx), cx))
     }
 
     // The search and the rows; nothing at all when there's nobody to invite.
@@ -317,7 +328,8 @@ impl Waffle {
             true => div().py(px(16.)).text_center().text_color(palette::muted(cx)).child("No results found").into_any_element(),
             false => {
                 let items: Vec<AnyElement> = rows.into_iter().map(|row| self.invite_friend_row(row, invite, can_send, cx)).collect();
-                div().id("invite-friends").flex().flex_col().gap(px(2.)).max_h(px(LIST_HEIGHT)).overflow_y_scroll().children(items).into_any_element()
+                let list = div().id("invite-friends").flex().flex_col().gap(px(2.)).max_h(px(LIST_HEIGHT)).overflow_y_scroll().track_scroll(&invite.friends_scroll).children(items);
+                div().relative().child(list).child(ui::more_below(&invite.friends_scroll, palette::surface(palette::Level::Raised, cx))).into_any_element()
             }
         };
         Some(div().flex().flex_col().gap(px(8.)).child(ui::search_field("invite-search", &invite.search, cx)).child(list).into_any_element())
@@ -455,7 +467,7 @@ fn invite_button(row: Row, send: Option<Delivery>, can_send: bool, cx: &mut Cont
 }
 
 // The link to copy, the line saying how long it lasts with Edit invite link, and what went wrong.
-fn link_section(invite: &Invite, paused: bool, cx: &mut Context<Waffle>) -> AnyElement {
+fn link_section(invite: &Invite, paused: bool, editable: bool, cx: &mut Context<Waffle>) -> AnyElement {
     let url = invite.url();
     let (strong, faint) = (palette::strong(cx), palette::faint(cx));
     let value: AnyElement = match &url {
@@ -482,20 +494,22 @@ fn link_section(invite: &Invite, paused: bool, cx: &mut Context<Waffle>) -> AnyE
         .hover(|s| s.underline())
         .child("Edit invite link")
         .on_click(cx.listener(|this, _, _, cx| this.edit_invite(|i| (i.draft, i.select) = (Some(i.settings), None), cx)));
-    let hint = div().flex().flex_wrap().gap_x(px(4.)).text_size(px(13.)).line_height(px(18.)).text_color(palette::muted(cx)).child(line).when(url.is_some(), |d| d.child(edit));
+    let hint = div().flex().flex_wrap().gap_x(px(4.)).text_size(px(13.)).line_height(px(18.)).text_color(palette::muted(cx)).child(line).when(url.is_some() && editable, |d| d.child(edit));
     div()
         .flex()
         .flex_col()
         .gap(px(8.))
         .child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Or, send a server invite link to a friend"))
         .child(field)
-        .when(invite.draft.is_none(), |d| d.child(hint))
+        .when(invite.draft.is_none() || !editable, |d| d.child(hint))
         .children(invite.error.clone().map(|e| ui::field_error(e, cx)))
         .into_any_element()
 }
 
-// The link's settings, opened in place under it: a draft until Generate a new link.
-fn settings_panel(invite: &Invite, draft: LinkSettings, window: &mut Window, cx: &mut Context<Waffle>) -> AnyElement {
+// The link's settings under it: a draft until Generate a new link. Opened by Edit invite link, or `always`
+// shown in the wide layout, where Cancel appears only once the draft differs from the live link.
+fn settings_panel(invite: &Invite, draft: LinkSettings, always: bool, window: &mut Window, cx: &mut Context<Waffle>) -> AnyElement {
+    let cancellable = !always || draft != invite.settings;
     let age = settings_select(Select::Age, &AGES, draft.max_age, invite.select, cx);
     let uses = settings_select(Select::Uses, &USES, draft.max_uses, invite.select, cx);
     let temporary = ui::toggle_row(
@@ -509,9 +523,8 @@ fn settings_panel(invite: &Invite, draft: LinkSettings, window: &mut Window, cx:
     .on_click(cx.listener(|this, _, _, cx| {
         this.edit_invite(
             |i| {
-                if let Some(d) = &mut i.draft {
-                    d.temporary = !d.temporary;
-                }
+                let d = i.draft.get_or_insert(i.settings);
+                d.temporary = !d.temporary;
             },
             cx,
         )
@@ -520,7 +533,7 @@ fn settings_panel(invite: &Invite, draft: LinkSettings, window: &mut Window, cx:
         .flex()
         .justify_end()
         .gap(px(8.))
-        .child(ui::button("invite-settings-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.edit_invite(|i| (i.draft, i.select) = (None, None), cx))))
+        .when(cancellable, |d| d.child(ui::button("invite-settings-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.edit_invite(|i| (i.draft, i.select) = (None, None), cx)))))
         .child(
             ui::button("invite-generate", Tone::Primary, cx)
                 .loading(invite.creating.then_some("Generating"))
@@ -559,11 +572,10 @@ fn settings_select(select: Select, options: &[(u32, &str)], chosen: u32, open: O
             pick.update(cx, |this, cx| {
                 this.edit_invite(
                     |i| {
-                        if let Some(d) = &mut i.draft {
-                            match select {
-                                Select::Age => d.max_age = value,
-                                Select::Uses => d.max_uses = value,
-                            }
+                        let d = i.draft.get_or_insert(i.settings);
+                        match select {
+                            Select::Age => d.max_age = value,
+                            Select::Uses => d.max_uses = value,
                         }
                         i.select = None;
                     },
@@ -670,6 +682,12 @@ fn demo_friends(waffle: &mut Waffle) {
         ("33554432", "Bartholomew Featherstonehaugh-Montgomery the Third of Lower Wensleydale"),
         ("37748736", "pixel"),
         ("41943040", "Rosa"),
+        ("46137344", "Tsubasa"),
+        ("50331648", "Ines"),
+        ("54525952", "Mochi"),
+        ("58720256", "Odette"),
+        ("62914560", "Kofi"),
+        ("67108864", "Lark"),
     ];
     for (id, name) in friends {
         waffle.relationships.push(Relationship { user: person(id, name), kind: Relation::Friend });
