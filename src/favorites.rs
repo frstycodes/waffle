@@ -3,17 +3,19 @@
 use std::collections::{BTreeMap, HashSet};
 
 use base64::Engine;
-use gpui_kit::{AnyElement, Context, FontWeight, MouseButton, MouseDownEvent, Pixels, Point, Radians, SharedString, Window, component::Icon, div, prelude::*, px};
+use gpui_kit::{AnyElement, Context, FontWeight, MouseButton, MouseDownEvent, Pixels, Point, Radians, SharedString, Window, component::Icon, div, point, prelude::*, px};
 use reqwest::Method;
 use serde_json::json;
 
 use crate::{
     Waffle,
     discord::{Channel, ChannelKind, Guild},
+    drag::{Look, RowDrag, hole, pick_up},
     icons::Glyph,
     menu::{Entry, HeadLead, header, item, submenu},
     palette,
-    sidebar::{Nav, RowState, category_head, channel_glyph, channel_row},
+    sidebar::{Nav, ROW_GAP, ROW_HEIGHT, RowState, category_head, channel_glyph, channel_row},
+    sortable::{Board, Finished, Place},
     ui,
 };
 
@@ -34,6 +36,17 @@ const VOICE_TYPES: [u64; 2] = [2, 13];
 const VOICE_AFTER: u64 = 10_000;
 const DISCORD_EPOCH_MS: u64 = 1_420_070_400_000;
 const SETTINGS_PATH: &str = "/users/@me/settings-proto/1";
+// The sortable list of categories; each group of channels is `group_list(parent)`.
+const CATEGORY_LIST: &str = "fav-categories";
+const CATEGORY_HEAD_HEIGHT: f32 = 28.;
+
+// A favourite channel carried in the Favorites list; a category is a `FavoriteCategoryDrag`, so each only
+// aims at its own kind's rows.
+#[derive(Clone)]
+pub struct FavoriteDrag;
+
+#[derive(Clone)]
+pub struct FavoriteCategoryDrag;
 
 // settings-proto `Favorites`. Fields Waffle doesn't use (thread settings) ride along in `unknown`, so a save
 // sends them back unchanged.
@@ -58,6 +71,14 @@ pub struct FavoriteChannel {
     pub channel_type: Option<u64>,
     pub collapsed: bool,
     unknown: Vec<u8>,
+}
+
+// Where a dragged favourite goes: beside another entry of its own kind, or first in a group (0, the root,
+// or a category).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Slot {
+    Beside { target: u64, after: bool },
+    First { parent: u64 },
 }
 
 // Whether a favourite's channel can still be opened, as the save-time prune asks.
@@ -182,26 +203,71 @@ impl Favorites {
 
     // Uncategorised channels first, then each category by position; inside each, position order with voice last.
     pub fn sections(&self) -> Vec<(Option<u64>, Vec<u64>)> {
-        let is_category = |id: u64| self.channels.get(&id).is_some_and(FavoriteChannel::is_category);
-        let ordered = |parent: Option<u64>| {
-            let mut ids: Vec<u64> = self
-                .channels
-                .iter()
-                .filter(|(_, e)| !e.is_category())
-                .filter(|(_, e)| match parent {
-                    Some(parent) => e.parent_id == parent,
-                    None => !is_category(e.parent_id),
-                })
-                .map(|(id, _)| *id)
-                .collect();
-            ids.sort_by_key(|id| (self.channels[id].sort_key(), *id));
-            ids
-        };
-        let mut categories: Vec<u64> = self.channels.iter().filter(|(_, e)| e.is_category()).map(|(id, _)| *id).collect();
-        categories.sort_by_key(|id| (self.channels[id].position, *id));
-        let mut out = vec![(None, ordered(None))];
-        out.extend(categories.into_iter().map(|c| (Some(c), ordered(Some(c)))));
+        let mut out = vec![(None, self.members(0))];
+        out.extend(self.ordered_categories().into_iter().map(|c| (Some(c), self.members(c))));
         out
+    }
+
+    fn ordered_categories(&self) -> Vec<u64> {
+        let mut ids: Vec<u64> = self.channels.iter().filter(|(_, e)| e.is_category()).map(|(id, _)| *id).collect();
+        ids.sort_by_key(|id| (self.channels[id].position, *id));
+        ids
+    }
+
+    // The channels shown under `parent` (0, the root, also takes those whose parent isn't a category), in order.
+    fn members(&self, parent: u64) -> Vec<u64> {
+        let mut ids: Vec<u64> = self.channels.iter().filter(|(_, e)| !e.is_category() && self.group_of(e) == parent).map(|(id, _)| *id).collect();
+        ids.sort_by_key(|id| (self.channels[id].sort_key(), *id));
+        ids
+    }
+
+    fn group_of(&self, entry: &FavoriteChannel) -> u64 {
+        match self.channels.get(&entry.parent_id) {
+            Some(parent) if parent.is_category() => entry.parent_id,
+            _ => 0,
+        }
+    }
+
+    // A drag let go of: `moved` goes into `slot`, and every group it left or joined is renumbered from 0 in
+    // its new order. Categories only reorder among themselves (none goes inside another); a channel lands in
+    // the group of the channel it's dropped beside. False when refused or nothing changed.
+    pub fn arrange(&mut self, moved: u64, slot: Slot) -> bool {
+        let Some(entry) = self.channels.get(&moved) else { return false };
+        let is_category = entry.is_category();
+        let from = self.group_of(entry);
+        let (to, anchor) = match slot {
+            Slot::First { parent } => (parent, None),
+            Slot::Beside { target, after } => match self.channels.get(&target) {
+                Some(t) if target != moved && t.is_category() == is_category => (self.group_of(t), Some((target, after))),
+                _ => return false,
+            },
+        };
+        let valid_parent = to == 0 || (!is_category && self.channels.get(&to).is_some_and(FavoriteChannel::is_category));
+        if !valid_parent {
+            return false;
+        }
+        let before = self.channels.clone();
+        let mut order = if is_category { self.ordered_categories() } else { self.members(to) };
+        order.retain(|&id| id != moved);
+        let at = anchor.and_then(|(target, after)| Some(order.iter().position(|&id| id == target)? + usize::from(after))).unwrap_or(0);
+        order.insert(at, moved);
+        if !is_category {
+            self.channels.get_mut(&moved).expect("checked above").parent_id = to;
+        }
+        self.renumber(&order);
+        if !is_category && from != to {
+            let left = self.members(from);
+            self.renumber(&left);
+        }
+        self.channels != before
+    }
+
+    fn renumber(&mut self, order: &[u64]) {
+        for (position, id) in order.iter().enumerate() {
+            if let Some(entry) = self.channels.get_mut(id) {
+                entry.position = position as u32;
+            }
+        }
     }
 
     pub fn categories(&self) -> Vec<(u64, String)> {
@@ -406,6 +472,37 @@ impl Waffle {
         self.save_favorites(cx);
     }
 
+    // A favourite let go of over the list: beside a row, or first in a category from its header.
+    pub(crate) fn finish_favorite_sort(&mut self, done: Finished, cx: &mut Context<Self>) {
+        let (Some(hint), Ok(moved)) = (done.hint, done.dragged.parse::<u64>()) else { return };
+        let slot = match hint.target.map(|t| t.parse::<u64>()) {
+            Some(Ok(target)) => Slot::Beside { target, after: hint.place == Place::After },
+            Some(Err(_)) => return,
+            None => match hint.list.strip_prefix("fav-group-").and_then(|p| p.parse().ok()) {
+                Some(parent) => Slot::First { parent },
+                None => return,
+            },
+        };
+        if self.favorites.arrange(moved, slot) {
+            self.save_favorites(cx);
+        }
+    }
+
+    // Beside the carried channel: "Move to Work" while it's aimed beside a channel in another category.
+    fn favorite_move_tag(&self) -> Option<SharedString> {
+        let moved = self.favorites.channels.get(&self.favorite_board.dragged()?.parse().ok()?)?;
+        let over = self.favorites.channels.get(&self.favorite_board.hint()?.target.as_deref()?.parse().ok()?)?;
+        let to = self.favorites.group_of(over);
+        if moved.is_category() || to == 0 || to == self.favorites.group_of(moved) {
+            return None;
+        }
+        Some(format!("Move to {}", self.favorites.channels[&to].nickname).into())
+    }
+
+    fn carrying_favorite_channel(&self) -> bool {
+        self.favorite_board.dragged().and_then(|d| self.favorites.channels.get(&d.parse().ok()?)).is_some_and(|e| !e.is_category())
+    }
+
     // MENUS
 
     /// "Add to favorites" in a channel, thread or DM menu: a submenu of your categories once you have some.
@@ -539,37 +636,70 @@ impl Waffle {
 
     // THE CHANNEL LIST
 
-    pub(crate) fn favorite_rows(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    // Uncategorised channels, then each category with its channels as one sortable item, so a carried
+    // category takes its channels along.
+    pub(crate) fn favorite_rows(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         if self.favorites.channels.is_empty() {
             return vec![favorites_empty(cx)];
         }
+        self.drag_motion.set_tag(self.favorite_move_tag());
+        let sections = self.favorites.sections();
+        let category_order = sections.iter().filter_map(|(c, _)| c.map(|c| c.to_string())).collect();
+        let categories = self.favorite_board.list(CATEGORY_LIST, category_order, window, cx);
         let mut rows = Vec::new();
-        for (category, ids) in self.favorites.sections() {
+        for (category, ids) in sections {
+            let parent = category.unwrap_or(0);
             let collapsed = category.and_then(|c| self.favorites.channels.get(&c)).is_some_and(|e| e.collapsed);
-            if let Some(category) = category {
-                let spaced = !rows.is_empty();
-                rows.push(self.favorite_category_head(category, collapsed, spaced, cx));
-            }
-            rows.extend(ids.into_iter().filter_map(|id| self.favorite_row(id, collapsed, cx)));
+            let shown: Vec<(String, AnyElement)> = ids.into_iter().filter_map(|id| Some((id.to_string(), self.favorite_row(id, parent, collapsed, cx)?))).collect();
+            let list = self.favorite_board.list(group_list(parent), shown.iter().map(|(key, _)| key.clone()).collect(), window, cx);
+            let channel_rows: Vec<AnyElement> = shown.into_iter().map(|(key, row)| list.item(&key, row)).collect();
+            let Some(category) = category else {
+                // With no uncategorised channels, a carried channel still needs somewhere to land at the top.
+                let landing = channel_rows.is_empty() && self.carrying_favorite_channel();
+                rows.extend(landing.then(|| Board::head::<_, FavoriteDrag, _>(div().h(px(ROW_HEIGHT)), favorite_board, group_list(0), cx).into_any_element()));
+                rows.extend(channel_rows);
+                continue;
+            };
+            let key = category.to_string();
+            let section = div().flex().flex_col().gap(px(ROW_GAP)).child(self.favorite_category_head(category, collapsed, cx)).children(channel_rows);
+            let section = Board::target(section, favorite_board, CATEGORY_LIST, key.clone(), |_: &FavoriteCategoryDrag| false, cx);
+            let spaced = !rows.is_empty();
+            rows.push(div().when(spaced, |d| d.mt(px(14.))).child(categories.item(&key, section)).into_any_element());
         }
         rows
     }
 
-    fn favorite_category_head(&self, id: u64, collapsed: bool, spaced: bool, cx: &mut Context<Self>) -> AnyElement {
+    // A category's header folds it on click and carries it (and its channels) when dragged; a channel
+    // dropped on it goes first inside.
+    fn favorite_category_head(&self, id: u64, collapsed: bool, cx: &mut Context<Self>) -> AnyElement {
         let name = self.favorites.channels.get(&id).map(|e| e.nickname.clone()).unwrap_or_default();
-        let degrees: f32 = if collapsed { -90. } else { 0. };
-        let label = div()
-            .id(SharedString::from(format!("fav-cat-{id}")))
-            .child(Nav::Caret.icon().size(px(11.)).rotate(Radians(degrees.to_radians())))
-            .child(ui::truncating(format!("fav-cat-name-{id}"), name))
-            .on_click(cx.listener(move |this, _, _, cx| this.edit_favorite(id, |e| e.collapsed = !e.collapsed, cx)))
-            .on_mouse_down(MouseButton::Right, cx.listener(move |this, e: &MouseDownEvent, _, cx| this.open_favorite_category_menu(id, e.position, cx)));
-        div().when(spaced, |d| d.mt(px(14.))).child(category_head(format!("fav-cathead-{id}").into(), label, false, cx)).into_any_element()
+        let carry_key = format!("fav-cathead-{id}");
+        let carried = self.drag_motion.row(&carry_key);
+        let label = div().id(SharedString::from(format!("fav-cat-{id}"))).relative().children(self.drag_motion.spot(&carry_key));
+        let label = match carried {
+            RowDrag::Hole => hole(label, cx),
+            _ => {
+                let degrees: f32 = if collapsed { -90. } else { 0. };
+                let target_ink = palette::accent_ink(cx);
+                label
+                    .when(carried == RowDrag::Hidden, |l| l.invisible())
+                    .child(Nav::Caret.icon().size(px(11.)).rotate(Radians(degrees.to_radians())))
+                    .child(ui::truncating(format!("fav-cat-name-{id}"), name.clone()))
+                    .on_click(cx.listener(move |this, _, _, cx| this.edit_favorite(id, |e| e.collapsed = !e.collapsed, cx)))
+                    .drag_over::<FavoriteDrag>(move |s, _, _, _| s.text_color(target_ink))
+                    .on_mouse_down(MouseButton::Right, cx.listener(move |this, e: &MouseDownEvent, _, cx| this.open_favorite_category_menu(id, e.position, cx)))
+            }
+        };
+        let size = point(px(self.channels_width - 16.), px(CATEGORY_HEAD_HEIGHT));
+        let ghost = pick_up(cx.weak_entity(), carry_key.into(), Look::Category(name.into()), size, 1.05, 0., true);
+        let label = label.on_drag(FavoriteCategoryDrag, Board::lift(cx.weak_entity(), favorite_board, id.to_string(), ghost));
+        let label = Board::head::<_, FavoriteDrag, _>(label, favorite_board, group_list(id), cx);
+        category_head(format!("fav-cathead-{id}").into(), label, false, cx).into_any_element()
     }
 
     // A favourite: its nickname or name, then its server's name muted at the end, or its mention count. Folded
     // away with its category unless it's open or has news.
-    fn favorite_row(&self, id: u64, collapsed: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
+    fn favorite_row(&self, id: u64, parent: u64, collapsed: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
         let (channel, guild) = self.favorite_channel(id)?;
         let entry = self.favorites.channels.get(&id)?;
         let selected = self.in_favorites() && self.channel.as_ref().is_some_and(|c| c.id == channel.id);
@@ -582,11 +712,24 @@ impl Waffle {
         }
         let origin = guild.map(|g| g.name.clone()).filter(|_| mentions == 0);
         let faint = palette::faint(cx);
-        let row = channel_row(format!("fav-{}", channel.id).into(), format!("fav-row-{}", channel.id).into(), RowState { selected, unread, muted, strong: false }, cx)
-            .child(favorite_glyph(&channel).size(px(18.)).flex_none().text_color(if selected { palette::muted(cx) } else { faint }))
-            .child(ui::truncating(format!("fav-name-{}", channel.id), favorite_name(&channel, entry)).flex_1())
-            .children(origin.map(|o| div().flex_none().max_w(px(96.)).truncate().text_size(px(12.)).font_weight(FontWeight::NORMAL).text_color(faint).child(o)))
-            .when(mentions > 0, |r| r.child(ui::count_badge(mentions)));
+        let name = favorite_name(&channel, entry);
+        let carry_key = format!("fav-{}", channel.id);
+        let carried = self.drag_motion.row(&carry_key);
+        let row = channel_row(carry_key.clone().into(), format!("fav-row-{}", channel.id).into(), RowState { selected, unread, muted, strong: false }, cx).children(self.drag_motion.spot(&carry_key));
+        let row = match carried {
+            RowDrag::Hole => hole(row.bg(gpui_kit::transparent_black()), cx),
+            _ => row
+                .when(carried == RowDrag::Hidden, |r| r.invisible())
+                .child(favorite_glyph(&channel).size(px(18.)).flex_none().text_color(if selected { palette::muted(cx) } else { faint }))
+                .child(ui::truncating(format!("fav-name-{}", channel.id), name.clone()).flex_1())
+                .children(origin.map(|o| div().flex_none().max_w(px(96.)).truncate().text_size(px(12.)).font_weight(FontWeight::NORMAL).text_color(faint).child(o)))
+                .when(mentions > 0, |r| r.child(ui::count_badge(mentions))),
+        };
+        let size = point(px(self.channels_width - 16.), px(ROW_HEIGHT));
+        let look = Look::Channel { channel: Box::new(Channel { name, ..channel.clone() }), people: Vec::new() };
+        let ghost = pick_up(cx.weak_entity(), carry_key.into(), look, size, 1.05, 0., true);
+        let row = row.on_drag(FavoriteDrag, Board::lift(cx.weak_entity(), favorite_board, id.to_string(), ghost));
+        let row = Board::target(row, favorite_board, group_list(parent), id.to_string(), |_: &FavoriteDrag| false, cx);
         let row = row.on_mouse_down(MouseButton::Right, cx.listener(move |this, e: &MouseDownEvent, _, cx| this.open_favorite_menu(id, e.position, cx)));
         let row = match channel.kind {
             ChannelKind::Voice => row.on_click(cx.listener(move |this, _, _, cx| this.join_voice_in(guild_id.clone(), channel.clone(), cx))),
@@ -594,6 +737,14 @@ impl Waffle {
         };
         Some(row.into_any_element())
     }
+}
+
+fn favorite_board(waffle: &mut Waffle) -> &mut Board {
+    &mut waffle.favorite_board
+}
+
+fn group_list(parent: u64) -> SharedString {
+    format!("fav-group-{parent}").into()
 }
 
 fn favorite_name(channel: &Channel, entry: &FavoriteChannel) -> String {
@@ -816,6 +967,65 @@ mod tests {
         assert_eq!(favorites.channels[&4].parent_id, 0);
         favorites.prune(|_| Reach::Gone);
         assert_eq!(favorites.channels.keys().copied().collect::<Vec<_>>(), [3]);
+    }
+
+    // Root 1, 2, 3; Work (50) holding 4, 5; Play (60) empty.
+    fn arranged() -> Favorites {
+        let mut favorites = Favorites::default();
+        for id in 1..=3 {
+            favorites.add_channel(id, 0, 0);
+        }
+        let work = favorites.add_category("Work", 50);
+        favorites.add_category("Play", 60);
+        favorites.add_channel(4, 0, work);
+        favorites.add_channel(5, 0, work);
+        favorites
+    }
+
+    fn positions(favorites: &Favorites, ids: &[u64]) -> Vec<u32> {
+        ids.iter().map(|id| favorites.channels[id].position).collect()
+    }
+
+    #[test]
+    fn arrange_moves_within_a_group_and_renumbers_it() {
+        let mut favorites = arranged();
+        assert!(favorites.arrange(3, Slot::Beside { target: 1, after: false }));
+        assert_eq!(favorites.sections()[0], (None, vec![3, 1, 2]));
+        assert_eq!(positions(&favorites, &[3, 1, 2]), [0, 1, 2]);
+        assert!(favorites.arrange(3, Slot::Beside { target: 2, after: true }));
+        assert_eq!(favorites.sections()[0], (None, vec![1, 2, 3]));
+        assert!(!favorites.arrange(3, Slot::Beside { target: 2, after: true }), "already there");
+        assert!(!favorites.arrange(3, Slot::Beside { target: 3, after: false }), "onto itself");
+    }
+
+    #[test]
+    fn arrange_moves_across_groups_and_renumbers_both() {
+        let mut favorites = arranged();
+        assert!(favorites.arrange(1, Slot::Beside { target: 4, after: true }));
+        assert_eq!(favorites.sections(), vec![(None, vec![2, 3]), (Some(50), vec![4, 1, 5]), (Some(60), vec![])]);
+        assert_eq!(favorites.channels[&1].parent_id, 50);
+        assert_eq!(positions(&favorites, &[2, 3]), [0, 1]);
+        assert_eq!(positions(&favorites, &[4, 1, 5]), [0, 1, 2]);
+        assert!(favorites.arrange(5, Slot::First { parent: 60 }));
+        assert_eq!(favorites.sections()[2], (Some(60), vec![5]));
+        assert_eq!(positions(&favorites, &[4, 1]), [0, 1]);
+        assert!(favorites.arrange(4, Slot::First { parent: 0 }));
+        assert_eq!(favorites.sections()[0], (None, vec![4, 2, 3]));
+        assert_eq!(favorites.channels[&4].parent_id, 0);
+    }
+
+    #[test]
+    fn arrange_reorders_categories_but_never_nests_them() {
+        let mut favorites = arranged();
+        assert!(favorites.arrange(60, Slot::Beside { target: 50, after: false }));
+        assert_eq!(favorites.categories().iter().map(|(id, _)| *id).collect::<Vec<_>>(), [60, 50]);
+        assert_eq!(positions(&favorites, &[60, 50]), [0, 1]);
+        let before = favorites.clone();
+        assert!(!favorites.arrange(60, Slot::First { parent: 50 }), "a category into a category");
+        assert!(!favorites.arrange(60, Slot::Beside { target: 4, after: false }), "a category among channels");
+        assert!(!favorites.arrange(1, Slot::Beside { target: 50, after: false }), "a channel among categories");
+        assert!(!favorites.arrange(1, Slot::First { parent: 2 }), "a channel into a channel");
+        assert_eq!(favorites, before);
     }
 
     #[test]

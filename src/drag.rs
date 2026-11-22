@@ -172,6 +172,8 @@ pub enum Look {
     Tile(Face),
     // A settings row: a colour dot and a name (a role).
     Label { dot: gpui_kit::Hsla, text: SharedString },
+    // A Favorites category header: its caret and name.
+    Category(SharedString),
 }
 
 // One carried row, shared by the drag's ghost and the app, which lands it.
@@ -319,6 +321,15 @@ fn ghost(held: &Held, origin: Point<Pixels>, settle: f32, cx: &App) -> Div {
             .text_size(px(14.))
             .child(div().size(px(12.)).flex_none().rounded_full().bg(*dot))
             .child(div().flex_1().min_w_0().truncate().child(text.clone())),
+        Look::Category(name) => row_card(ui::RADIUS_SM, lifted, cx)
+            .h(held.size.y)
+            .px(px(6.))
+            .items_center()
+            .gap_1()
+            .text_size(px(12.))
+            .font_weight(FontWeight::MEDIUM)
+            .child(crate::sidebar::Nav::Caret.icon().size(px(11.)))
+            .child(div().flex_1().min_w_0().truncate().child(name.clone())),
     };
     let (sx, sy) = held.carry.scale();
     let grab = point(relative(f32::from(held.offset.x) / f32::from(held.size.x)), relative(f32::from(held.offset.y) / f32::from(held.size.y)));
@@ -481,6 +492,9 @@ impl Waffle {
         }
         if let Some(done) = self.role_board.finish(cx) {
             self.finish_role_sort(done, cx);
+        }
+        if let Some(done) = self.favorite_board.finish(cx) {
+            self.finish_favorite_sort(done, cx);
         }
     }
 

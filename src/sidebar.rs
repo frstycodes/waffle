@@ -34,8 +34,8 @@ const MINI_INSET: f32 = (TILE - 2. * MINI - MINI_GAP) / 2.;
 // pill splits into theirs and its count hands over to theirs on the way. Closing runs it backwards.
 const TRIP: Duration = Duration::from_millis(260);
 
-const ROW_HEIGHT: f32 = 32.;
-const ROW_GAP: f32 = 2.;
+pub(crate) const ROW_HEIGHT: f32 = 32.;
+pub(crate) const ROW_GAP: f32 = 2.;
 
 #[derive(Clone)]
 pub(crate) enum Face {
@@ -627,7 +627,7 @@ impl Waffle {
         let mut rows: Vec<AnyElement> = Vec::new();
         match (&self.status, self.guild().cloned()) {
             (Status::Connecting, _) => rows.push(muted_line("Connecting to Discord…", cx)),
-            _ if self.in_favorites() => rows.extend(self.favorite_rows(cx)),
+            _ if self.in_favorites() => rows.extend(self.favorite_rows(window, cx)),
             (_, Some(guild)) => {
                 // Beside the carried channel: "Move to Archive" while it's aimed into another category.
                 let tag = self.channel_board.dragged().zip(self.channel_board.hint()).and_then(|(moved, hint)| self.category_move(moved, hint.target.as_deref()?));

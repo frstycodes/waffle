@@ -643,6 +643,7 @@ pub struct Waffle {
     rail_board: sortable::Board,
     channel_board: sortable::Board,
     role_board: sortable::Board,
+    favorite_board: sortable::Board,
     // Where a dragged channel would land: the row's id and above/below it.
     // What a drag in the rail or channel list carries, and what it is landing.
     drag_motion: drag::DragMotion,
@@ -1028,6 +1029,7 @@ impl Waffle {
             rail_board: Default::default(),
             channel_board: Default::default(),
             role_board: Default::default(),
+            favorite_board: Default::default(),
             drag_motion: Default::default(),
             members: HashMap::new(),
             dms: Vec::new(),
