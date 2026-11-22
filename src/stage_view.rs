@@ -173,13 +173,13 @@ impl Waffle {
             .min_h_0()
             .overflow_y_scroll()
             .px(px(STAGE_PAD))
-            .pt(px(4.))
+            .pt(px(16.))
             .pb(px(STAGE_PAD))
             .flex()
             .flex_col()
-            .gap(px(20.))
+            .gap(px(40.))
             .when(room.speakers > 0, |d| d.child(section(Glyph::Mic, format!("Speakers · {}", room.speakers)).child(self.speaker_grid(width, cx))))
-            .when(!faces.is_empty(), |d| d.child(section(Glyph::Headphones, format!("Audience · {}{hands}", room.audience.len())).child(div().flex().flex_wrap().gap_x(px(8.)).gap_y(px(12.)).children(faces))))
+            .when(!faces.is_empty(), |d| d.child(section(Glyph::Headphones, format!("Audience · {}{hands}", room.audience.len())).child(div().flex().flex_wrap().gap_x(px(8.)).gap_y(px(20.)).children(faces))))
             .into_any_element()
     }
 
@@ -479,7 +479,7 @@ pub(crate) fn moderator_mark(user_id: &str) -> Stateful<Div> {
 
 // A section's label over its people, sentence case, counts in tabular figures.
 fn section(glyph: Glyph, label: String) -> Div {
-    div().flex().flex_col().gap(px(10.)).child(
+    div().flex().flex_col().gap(px(14.)).child(
         div().flex().items_center().gap(px(6.)).text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(stage::muted()).font_features(tabular()).child(Icon::new(glyph).size(px(14.))).child(label),
     )
 }
