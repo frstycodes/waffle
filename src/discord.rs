@@ -257,6 +257,8 @@ pub struct Guild {
     pub premium_tier: u8,
     // People idling here don't count as voice activity (Discord's server icon badge skips it).
     pub afk_channel_id: Option<String>,
+    // Which join, boost and reminder notices the server hides or keeps quiet (Discord's SystemChannelFlags).
+    pub system_channel_flags: u64,
     // Discord's feature flags (COMMUNITY, GUILD_ONBOARDING, MEMBER_VERIFICATION_GATE_ENABLED, ...).
     pub features: Vec<String>,
     // The invite splash: the image a server shows behind its invites and onboarding.
@@ -412,6 +414,13 @@ pub mod perm {
     pub const SEND_POLLS: u64 = 1 << 49;
     pub const PIN_MESSAGES: u64 = 1 << 51;
     pub const CONNECT: u64 = 1 << 20;
+    pub const SEND_TTS_MESSAGES: u64 = 1 << 12;
+    pub const MENTION_EVERYONE: u64 = 1 << 17;
+}
+
+pub mod message_flag {
+    pub const SUPPRESS_EMBEDS: u64 = 1 << 2;
+    pub const EPHEMERAL: u64 = 1 << 6;
 }
 
 impl Guild {
@@ -671,16 +680,25 @@ pub struct ThreadMeta {
     pub flags: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Media {
     pub url: String,
     pub width: f32,
     pub height: f32,
     pub kind: MediaKind,
+    // The attachment's id; None for media from an embed.
+    #[serde(default)]
+    pub id: Option<String>,
+    // Alt text.
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub spoiler: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum MediaKind {
+    #[default]
     Image,
     // `poster` is a still frame to show until the inline player starts.
     Video { poster: String },
@@ -719,6 +737,19 @@ pub struct Embed {
     // A closed poll's result (type poll_result); the other fields stay empty.
     #[serde(default)]
     pub poll: Option<PollResult>,
+    // An AutoMod safety alert (type auto_moderation_notification): a raid or mention-raid card.
+    #[serde(default)]
+    pub safety_alert: bool,
+    // Discord's type `rich` (a bot's or webhook's own embed), not an unfurled link.
+    #[serde(default)]
+    pub rich: bool,
+}
+
+impl Embed {
+    // Discord's inline predicate: media shown bare, without the card (and without the card's ✕).
+    pub fn inline(&self) -> bool {
+        (!self.images.is_empty() || self.video) && !self.rich && self.author.is_none() && self.title.is_none()
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -738,11 +769,15 @@ pub struct Folder {
     pub guild_ids: Vec<String>,
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct File {
     pub name: String,
     pub url: String,
     pub size: u64,
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub spoiler: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -860,6 +895,9 @@ pub struct Message {
     // Rich link cards (articles, YouTube, bots).
     pub embeds: Vec<Embed>,
     pub files: Vec<File>,
+    // The uploads among `media`, as files: `media_files[i]` is `media[i]`, since attachments lead `media`.
+    #[serde(default)]
+    pub media_files: Vec<File>,
     pub reactions: Vec<Reaction>,
     pub reply_to: Option<String>,
     pub reply: Option<Box<Message>>,
@@ -885,6 +923,68 @@ pub struct Message {
     // Discord's "X pinned a message" notice (type 6): never drawn, it names who pinned `reply_to`.
     #[serde(default)]
     pub pin_notice: bool,
+    // Discord's message type (0 default, 7 join, 18 thread created…); anything outside the user-message
+    // types is a system notice.
+    #[serde(default)]
+    pub kind: u8,
+    // Discord's message flags (SUPPRESS_EMBEDS is 1 << 2).
+    #[serde(default)]
+    pub flags: u64,
+    // The referenced message's channel: a thread-created notice's thread, a thread starter's parent.
+    #[serde(default)]
+    pub reference_channel: Option<String>,
+    // Discord sends `referenced_message: null` when the referenced message was deleted, and leaves the
+    // field out when it couldn't load it; a thread starter words the two differently.
+    #[serde(default)]
+    pub reference_deleted: bool,
+    // Who added a bot, on the bot's join notice.
+    #[serde(default)]
+    pub actor: Option<User>,
+    // How many of `media`'s last entries came from embeds (images, GIFs), so an update can replace them.
+    #[serde(default)]
+    pub embed_media: usize,
+    // Sent with /tts: read aloud to whoever has the channel open.
+    #[serde(default)]
+    pub tts: bool,
+}
+
+// Message flag SUPPRESS_NOTIFICATIONS: sent with @silent, so nobody gets a push or desktop notification.
+pub const SUPPRESS_NOTIFICATIONS: u64 = 1 << 12;
+
+impl Message {
+    pub fn embeds_suppressed(&self) -> bool {
+        self.flags & message_flag::SUPPRESS_EMBEDS != 0
+    }
+
+    pub fn silent(&self) -> bool {
+        self.flags & SUPPRESS_NOTIFICATIONS != 0
+    }
+
+    pub fn send_options(&self) -> SendOptions {
+        SendOptions { silent: self.silent(), tts: self.tts }
+    }
+}
+
+/// Per-send options Create Message carries beside the content: @silent's flag and /tts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SendOptions {
+    pub silent: bool,
+    pub tts: bool,
+}
+
+impl SendOptions {
+    pub fn flags(self) -> u64 {
+        if self.silent { SUPPRESS_NOTIFICATIONS } else { 0 }
+    }
+
+    fn apply(self, body: &mut Value) {
+        if self.silent {
+            body["flags"] = json!(self.flags());
+        }
+        if self.tts {
+            body["tts"] = json!(true);
+        }
+    }
 }
 
 /// A live poll as a message carries it, its counts folded into the answers.
@@ -1156,6 +1256,16 @@ pub struct AccountSettings {
     pub friends_all: bool,
     pub friends_mutual_friends: bool,
     pub friends_mutual_guilds: bool,
+    // Chat and accessibility rows Discord syncs (docs/discord-settings-re.md). Believed, not checked against a
+    // live READY: the legacy object carries these keys under the same names as the protobuf fields.
+    pub message_display_compact: bool,
+    pub inline_attachment_media: bool,
+    pub inline_embed_media: bool,
+    pub gif_auto_play: bool,
+    pub animate_emoji: bool,
+    // 0 always, 1 on interaction, 2 never.
+    pub animate_stickers: u8,
+    pub convert_emoticons: bool,
     // From the settings proto (settings::proto): DmSpamFilterV2, 0 while unset.
     pub dm_spam_filter: u8,
     // Message Requests on: `default_message_request_restricted` off.
@@ -1179,6 +1289,13 @@ impl Default for AccountSettings {
             friends_all: true,
             friends_mutual_friends: true,
             friends_mutual_guilds: true,
+            message_display_compact: false,
+            inline_attachment_media: true,
+            inline_embed_media: true,
+            gif_auto_play: true,
+            animate_emoji: true,
+            animate_stickers: 0,
+            convert_emoticons: true,
             dm_spam_filter: 0,
             message_requests: true,
             restricted_guilds: Vec::new(),
@@ -1201,6 +1318,15 @@ impl AccountSettings {
         flag("render_reactions", &mut self.render_reactions);
         flag("show_current_game", &mut self.show_current_game);
         flag("default_guilds_restricted", &mut self.default_guilds_restricted);
+        flag("message_display_compact", &mut self.message_display_compact);
+        flag("inline_attachment_media", &mut self.inline_attachment_media);
+        flag("inline_embed_media", &mut self.inline_embed_media);
+        flag("gif_auto_play", &mut self.gif_auto_play);
+        flag("animate_emoji", &mut self.animate_emoji);
+        flag("convert_emoticons", &mut self.convert_emoticons);
+        if let Some(when) = v["animate_stickers"].as_u64() {
+            self.animate_stickers = when.min(2) as u8;
+        }
         if v["restricted_guilds"].is_array() {
             self.restricted_guilds = strings(&v["restricted_guilds"]);
         }
@@ -1346,8 +1472,9 @@ impl Client {
     }
 
     /// `ping_author`: whether a reply mentions the person replied to (Discord's "@ ON / OFF").
-    pub async fn send_message(&self, channel_id: &str, content: &str, nonce: &str, reply_to: Option<&str>, ping_author: bool) -> Result<Message, String> {
-        let body = message_body(content, nonce, reply_to, ping_author, &[]);
+    pub async fn send_message(&self, channel_id: &str, content: &str, nonce: &str, reply_to: Option<&str>, ping_author: bool, options: SendOptions) -> Result<Message, String> {
+        let mut body = message_body(content, nonce, reply_to, ping_author, &[]);
+        options.apply(&mut body);
         let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
     }
@@ -1365,6 +1492,13 @@ impl Client {
         let mut body = message_body("", nonce, reply_to, ping_author, &[]);
         body["sticker_ids"] = json!([sticker_id]);
         let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
+        self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
+    }
+
+    /// Discord's "Wave to say hi!": a sticker sent as a reply to a join notice, pinging the joiner.
+    pub async fn greet(&self, channel_id: &str, guild_id: &str, message_id: &str, sticker_id: &str) -> Result<Message, String> {
+        let body = json!({ "sticker_ids": [sticker_id], "message_reference": { "guild_id": guild_id, "channel_id": channel_id, "message_id": message_id } });
+        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/greet")).json(&body);
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
     }
 
@@ -1401,7 +1535,8 @@ impl Client {
     /// One message carrying all the files, as Discord's own client sends it (docs.discord.food, Cloud
     /// Uploads): upload URLs for every file, a PUT of each to its URL, then the message naming them.
     /// Each file's `sent` counts its bytes as they go out.
-    pub async fn upload(&self, channel_id: &str, files: &[Upload], content: &str, nonce: &str, reply_to: Option<&str>, ping_author: bool) -> Result<Message, String> {
+    /// `reply`: the message replied to, and whether the reply pings its author.
+    pub async fn upload(&self, channel_id: &str, files: &[Upload], content: &str, nonce: &str, reply: Option<(&str, bool)>, options: SendOptions) -> Result<Message, String> {
         let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/attachments")).json(&attachments_request(files));
         let slots = self.run(req).await?;
         let slots = parse_upload_slots(&slots, files.len())?;
@@ -1410,8 +1545,13 @@ impl Client {
             let mut put = AbortOnDrop(runtime().spawn(put_file(self.http.clone(), url.clone(), file.path.clone(), file.sent.clone())));
             (&mut put.0).await.map_err(|e| e.to_string())??;
         }
-        let uploaded: Vec<(String, String)> = files.iter().zip(slots).map(|(f, (_, name))| (f.name.clone(), name)).collect();
-        let body = message_body(content, nonce, reply_to, ping_author, &uploaded);
+        let uploaded: Vec<SentAttachment> = files
+            .iter()
+            .zip(slots)
+            .map(|(f, (_, uploaded_filename))| SentAttachment { filename: f.name.clone(), uploaded_filename, description: f.description.clone(), spoiler: f.spoiler })
+            .collect();
+        let mut body = message_body(content, nonce, reply.map(|(id, _)| id), reply.is_some_and(|(_, ping)| ping), &uploaded);
+        options.apply(&mut body);
         let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
     }
@@ -1934,12 +2074,15 @@ fn error_text(status: u16, body: &Value) -> String {
     }
 }
 
-// A file on its way to Discord. `name` is what the message shows, `SPOILER_` included.
+// A file on its way to Discord. `name` is what the message shows; `description` and `spoiler` ride on the
+// message's attachment entry.
 #[derive(Clone, Debug)]
 pub struct Upload {
     pub path: PathBuf,
     pub name: String,
     pub size: u64,
+    pub description: Option<String>,
+    pub spoiler: bool,
     pub sent: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
@@ -1994,18 +2137,56 @@ fn parse_upload_slots(body: &Value, count: usize) -> Result<Vec<(String, String)
     Ok(slots.into_iter().map(|(_, url, name)| (url, name)).collect())
 }
 
-// Create Message's body; `attachments` are (filename, uploaded_filename) of files already uploaded.
-fn message_body(content: &str, nonce: &str, reply_to: Option<&str>, ping_author: bool, attachments: &[(String, String)]) -> Value {
+// Create Message's body; `attachments` are files already uploaded.
+fn message_body(content: &str, nonce: &str, reply_to: Option<&str>, ping_author: bool, attachments: &[SentAttachment]) -> Value {
     let mut body = json!({ "content": content, "nonce": nonce });
     if let Some(id) = reply_to {
         body["message_reference"] = json!({ "message_id": id });
         body["allowed_mentions"] = json!({ "parse": ["users", "roles", "everyone"], "replied_user": ping_author });
     }
     if !attachments.is_empty() {
-        let list: Vec<Value> = attachments.iter().enumerate().map(|(i, (name, uploaded))| json!({ "id": i.to_string(), "filename": name, "uploaded_filename": uploaded })).collect();
+        let list: Vec<Value> = attachments.iter().enumerate().map(|(i, a)| a.entry(i)).collect();
         body["attachments"] = json!(list);
     }
     body
+}
+
+// An uploaded file as Create Message names it.
+pub struct SentAttachment {
+    pub filename: String,
+    // The upload slot's `upload_filename`.
+    pub uploaded_filename: String,
+    pub description: Option<String>,
+    pub spoiler: bool,
+}
+
+impl SentAttachment {
+    // Discord's own serializer: the index as the id, `description` only when set (an empty one goes as
+    // is), `is_spoiler` only when true.
+    fn entry(&self, index: usize) -> Value {
+        let mut entry = json!({ "id": index.to_string(), "filename": self.filename, "uploaded_filename": self.uploaded_filename });
+        if let Some(description) = &self.description {
+            entry["description"] = json!(description);
+        }
+        if self.spoiler {
+            entry["is_spoiler"] = json!(true);
+        }
+        entry
+    }
+}
+
+// Edit Message's body for Modify Attachment after sending: every attachment the message keeps, by id,
+// with the edited one carrying its alt text and spoiler (sent true or false).
+// Not verified: that leaving an attachment out deletes it, which is why all of them go.
+pub fn attachments_patch(ids: &[String], edited: &str, description: &str, spoiler: bool) -> Value {
+    let list: Vec<Value> = ids
+        .iter()
+        .map(|id| match id == edited {
+            true => json!({ "id": id, "description": description, "is_spoiler": spoiler }),
+            false => json!({ "id": id }),
+        })
+        .collect();
+    json!({ "attachments": list })
 }
 
 // Not verified: this is the body as the API reference describes a forward (a type-1 reference and no
@@ -2561,6 +2742,7 @@ fn parse_guild(g: &Value) -> Option<Guild> {
         my_roles: Vec::new(),
         premium_tier: props["premium_tier"].as_u64().or(g["premium_tier"].as_u64()).unwrap_or(0) as u8,
         afk_channel_id: props["afk_channel_id"].as_str().or(g["afk_channel_id"].as_str()).map(str::to_owned),
+        system_channel_flags: props["system_channel_flags"].as_u64().or(g["system_channel_flags"].as_u64()).unwrap_or(0),
         features: strings(if props["features"].is_array() { &props["features"] } else { &g["features"] }),
         splash: props["splash"].as_str().or(g["splash"].as_str()).map(|hash| splash_url(id, hash)),
         rules_channel_id: props["rules_channel_id"].as_str().or(g["rules_channel_id"].as_str()).map(str::to_owned),
@@ -2678,46 +2860,39 @@ fn parse_pins(body: &Value) -> Vec<Message> {
     }
 }
 
+// An attachment's `flags` bit for a spoiler (Discord's IS_SPOILER).
+const ATTACHMENT_SPOILER: u64 = 8;
+
 pub fn parse_message(m: &Value) -> Option<Message> {
     let mut media = Vec::new();
     let mut files = Vec::new();
+    let mut media_files = Vec::new();
     for a in m["attachments"].as_array().into_iter().flatten() {
         let url = a["url"].as_str().unwrap_or_default().to_owned();
         let kind = a["content_type"].as_str().unwrap_or_default();
-        match (a["width"].as_f64(), a["height"].as_f64()) {
-            (Some(w), Some(h)) if kind.starts_with("video/") => {
-                // Discord's media proxy returns a still frame for a video when asked for an image format.
+        let id = a["id"].as_str().unwrap_or_default().to_owned();
+        let description = a["description"].as_str().filter(|d| !d.is_empty()).map(str::to_owned);
+        let spoiler = a["flags"].as_u64().unwrap_or(0) & ATTACHMENT_SPOILER != 0;
+        let file = File { name: a["filename"].as_str().unwrap_or("file").to_owned(), url: url.clone(), size: a["size"].as_u64().unwrap_or(0), id: id.clone(), spoiler };
+        let (Some(w), Some(h)) = (a["width"].as_f64(), a["height"].as_f64()) else {
+            files.push(file);
+            continue;
+        };
+        media_files.push(file);
+        let kind = match kind.starts_with("video/") {
+            // Discord's media proxy returns a still frame for a video when asked for an image format.
+            true => {
                 let proxy = a["proxy_url"].as_str().unwrap_or(&url);
-                let poster = format!("{proxy}{}format=jpeg", if proxy.contains('?') { "&" } else { "?" });
-                media.push(Media { url, width: w as f32, height: h as f32, kind: MediaKind::Video { poster } })
+                MediaKind::Video { poster: format!("{proxy}{}format=jpeg", if proxy.contains('?') { "&" } else { "?" }) }
             }
-            (Some(w), Some(h)) => media.push(Media { url, width: w as f32, height: h as f32, kind: MediaKind::Image }),
-            _ => files.push(File { name: a["filename"].as_str().unwrap_or("file").to_owned(), url, size: a["size"].as_u64().unwrap_or(0) }),
-        }
+            false => MediaKind::Image,
+        };
+        media.push(Media { url, width: w as f32, height: h as f32, kind, id: Some(id), description, spoiler });
     }
-    let mut embeds = Vec::new();
-    for e in m["embeds"].as_array().into_iter().flatten() {
-        match e["type"].as_str().unwrap_or("rich") {
-            "image" => media.extend(embed_media(&e["thumbnail"]).or_else(|| embed_media(&e["image"]))),
-            // GIF pickers (Tenor, Giphy) send a looping mp4 with a still thumbnail.
-            "gifv" => {
-                let poster = embed_media(&e["thumbnail"]);
-                let video = e["video"]["url"].as_str();
-                if let (Some(poster), Some(video)) = (poster, video) {
-                    media.push(Media { url: video.to_owned(), width: poster.width, height: poster.height, kind: MediaKind::Gif { poster: poster.url } });
-                }
-            }
-            _ => {
-                let embed = parse_embed(e);
-                // Discord folds embeds that share a url into the first one's gallery.
-                let first = embed.url.as_ref().and_then(|url| embeds.iter_mut().find(|f: &&mut Embed| f.url.as_ref() == Some(url)));
-                match first {
-                    Some(first) => first.images.extend(embed.images.into_iter().take(4usize.saturating_sub(first.images.len()))),
-                    None => embeds.push(embed),
-                }
-            }
-        }
-    }
+    let flags = m["flags"].as_u64().unwrap_or(0);
+    let attachment_media = media.len();
+    let embeds = if flags & message_flag::SUPPRESS_EMBEDS == 0 { parse_embeds(&m["embeds"], &mut media) } else { Vec::new() };
+    let embed_media = media.len() - attachment_media;
     // Reference type 1 is a forward; only 0 (or none, on older messages) is a reply.
     let is_reply = matches!(m["message_reference"]["type"].as_u64(), None | Some(0));
     let reply = (is_reply && m["referenced_message"].is_object()).then(|| parse_message(&m["referenced_message"])).flatten().map(Box::new);
@@ -2733,6 +2908,7 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         media,
         embeds,
         files,
+        media_files,
         reactions: m["reactions"]
             .as_array()
             .into_iter()
@@ -2744,6 +2920,7 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         mentions: m["mentions"].as_array().into_iter().flatten().map(parse_user).collect(),
         mention_roles: strings(&m["mention_roles"]),
         mention_everyone: m["mention_everyone"].as_bool().unwrap_or(false),
+        tts: m["tts"].as_bool().unwrap_or(false),
         nonce: m["nonce"].as_str().map(str::to_owned),
         state: SendState::Sent,
         pinned: m["pinned"].as_bool().unwrap_or(false),
@@ -2753,7 +2930,42 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         poll: m["poll"].is_object().then(|| parse_poll(&m["poll"])),
         forward: parse_forward(m),
         pin_notice: m["type"] == 6,
+        kind: m["type"].as_u64().unwrap_or(0) as u8,
+        flags,
+        reference_channel: m["message_reference"]["channel_id"].as_str().map(str::to_owned),
+        reference_deleted: m["message_reference"].is_object() && m.get("referenced_message").is_some_and(Value::is_null),
+        // Not verified: the wire key. Discord's web client reads `message.actor`.
+        actor: m["actor"].is_object().then(|| parse_user(&m["actor"])),
+        embed_media,
     })
+}
+
+// Image and GIF embeds join `media` (what the gallery pages through); the rest come back as cards.
+fn parse_embeds(list: &Value, media: &mut Vec<Media>) -> Vec<Embed> {
+    let mut embeds = Vec::new();
+    for e in list.as_array().into_iter().flatten() {
+        match e["type"].as_str().unwrap_or("rich") {
+            "image" => media.extend(embed_media(&e["thumbnail"]).or_else(|| embed_media(&e["image"]))),
+            // GIF pickers (Tenor, Giphy) send a looping mp4 with a still thumbnail.
+            "gifv" => {
+                let poster = embed_media(&e["thumbnail"]);
+                let video = e["video"]["url"].as_str();
+                if let (Some(poster), Some(video)) = (poster, video) {
+                    media.push(Media { url: video.to_owned(), width: poster.width, height: poster.height, kind: MediaKind::Gif { poster: poster.url }, ..Default::default() });
+                }
+            }
+            _ => {
+                let embed = parse_embed(e);
+                // Discord folds embeds that share a url into the first one's gallery.
+                let first = embed.url.as_ref().and_then(|url| embeds.iter_mut().find(|f: &&mut Embed| f.url.as_ref() == Some(url)));
+                match first {
+                    Some(first) => first.images.extend(embed.images.into_iter().take(4usize.saturating_sub(first.images.len()))),
+                    None => embeds.push(embed),
+                }
+            }
+        }
+    }
+    embeds
 }
 
 // A forward's snapshot carries the original's content, media and time but no id, author or channel;
@@ -2783,6 +2995,15 @@ pub fn apply_update(message: &mut Message, d: &Value) {
     if let Some(content) = d["content"].as_str() {
         message.content = content.to_owned();
         message.edited = true;
+    }
+    if let Some(flags) = d["flags"].as_u64() {
+        message.flags = flags;
+    }
+    if d["embeds"].is_array() || message.embeds_suppressed() {
+        message.media.truncate(message.media.len().saturating_sub(message.embed_media));
+        let before = message.media.len();
+        message.embeds = if message.embeds_suppressed() { Vec::new() } else { parse_embeds(&d["embeds"], &mut message.media) };
+        message.embed_media = message.media.len() - before;
     }
 }
 
@@ -2925,7 +3146,7 @@ impl Channel {
 
 fn embed_media(v: &Value) -> Option<Media> {
     let url = v["proxy_url"].as_str().or(v["url"].as_str())?;
-    Some(Media { url: url.to_owned(), width: v["width"].as_f64()? as f32, height: v["height"].as_f64()? as f32, kind: MediaKind::Image })
+    Some(Media { url: url.to_owned(), width: v["width"].as_f64()? as f32, height: v["height"].as_f64()? as f32, kind: MediaKind::Image, ..Default::default() })
 }
 
 // Embed flags: CONTAINS_EXPLICIT_CONTENT, CONTAINS_GORE_CONTENT, CONTAINS_SELF_HARM_CONTENT.
@@ -2963,6 +3184,8 @@ fn parse_embed(e: &Value) -> Embed {
         footer_icon: text(&e["footer"]["proxy_icon_url"]).or_else(|| text(&e["footer"]["icon_url"])),
         timestamp: text(&e["timestamp"]),
         poll: None,
+        safety_alert: e["type"] == "auto_moderation_notification",
+        rich: e["type"].as_str().unwrap_or("rich") == "rich",
     }
 }
 
@@ -3278,8 +3501,20 @@ mod tests {
         assert!(!parse_message(&json!({ "id": "3", "channel_id": "1", "type": 0, "author": { "id": "5" } })).expect("parses").pin_notice);
     }
 
+    #[test]
+    fn send_options_ride_on_the_body_and_come_back_parsed() {
+        let mut body = message_body("hi", "n", None, false, &[]);
+        SendOptions { silent: true, tts: true }.apply(&mut body);
+        assert_eq!((body["flags"].as_u64(), body["tts"].as_bool()), (Some(4096), Some(true)));
+        let mut plain = message_body("hi", "n", None, false, &[]);
+        SendOptions::default().apply(&mut plain);
+        assert!(plain.get("flags").is_none() && plain.get("tts").is_none());
+        let sent = parse_message(&json!({ "id": "1", "channel_id": "c", "author": { "id": "u" }, "flags": 4096, "tts": true })).expect("parses");
+        assert_eq!(sent.send_options(), SendOptions { silent: true, tts: true });
+    }
+
     fn upload(name: &str, size: u64) -> Upload {
-        Upload { path: PathBuf::from(format!("/tmp/{name}")), name: name.into(), size, sent: Default::default() }
+        Upload { path: PathBuf::from(format!("/tmp/{name}")), name: name.into(), size, description: None, spoiler: false, sent: Default::default() }
     }
 
     #[test]
@@ -3351,11 +3586,43 @@ mod tests {
 
     #[test]
     fn the_message_names_each_uploaded_file() {
-        let body = message_body("look", "n1", Some("42"), false, &[("cat.png".into(), "u/cat.png".into())]);
-        assert_eq!(body["attachments"], json!([{ "id": "0", "filename": "cat.png", "uploaded_filename": "u/cat.png" }]));
+        let sent = |filename: &str, description: Option<&str>, spoiler| SentAttachment { filename: filename.into(), uploaded_filename: format!("u/{filename}"), description: description.map(Into::into), spoiler };
+        let body = message_body("look", "n1", Some("42"), false, &[sent("cat.png", None, false), sent("end.png", Some("The boss falls"), true), sent("blank.png", Some(""), false)]);
+        assert_eq!(
+            body["attachments"],
+            json!([
+                { "id": "0", "filename": "cat.png", "uploaded_filename": "u/cat.png" },
+                { "id": "1", "filename": "end.png", "uploaded_filename": "u/end.png", "description": "The boss falls", "is_spoiler": true },
+                { "id": "2", "filename": "blank.png", "uploaded_filename": "u/blank.png", "description": "" },
+            ]),
+            "description only when set, is_spoiler only when true, never a SPOILER_ name"
+        );
         assert_eq!(body["message_reference"], json!({ "message_id": "42" }));
         assert_eq!(body["allowed_mentions"]["replied_user"], json!(false));
         assert!(message_body("hi", "n2", None, true, &[]).get("attachments").is_none(), "plain text carries no attachments key");
+    }
+
+    #[test]
+    fn modifying_a_sent_attachment_lists_every_one() {
+        let ids = ["10".to_owned(), "11".to_owned(), "12".to_owned()];
+        assert_eq!(
+            attachments_patch(&ids, "11", "A pier at dusk", false),
+            json!({ "attachments": [{ "id": "10" }, { "id": "11", "description": "A pier at dusk", "is_spoiler": false }, { "id": "12" }] })
+        );
+        assert_eq!(attachments_patch(&ids[..1], "10", "", true), json!({ "attachments": [{ "id": "10", "description": "", "is_spoiler": true }] }));
+    }
+
+    #[test]
+    fn reads_alt_text_and_spoiler_flags() {
+        let m = parse_message(&json!({ "id": "1", "channel_id": "c", "author": { "id": "u" }, "attachments": [
+            { "id": "a1", "url": "a.png", "width": 10, "height": 20, "content_type": "image/png", "description": "A cat", "flags": 8 },
+            { "id": "a2", "url": "b.png", "width": 10, "height": 20, "content_type": "image/png", "description": "" },
+            { "id": "a3", "url": "c.zip", "filename": "c.zip", "size": 5, "flags": 8 },
+        ] }))
+        .unwrap();
+        assert_eq!((m.media[0].id.as_deref(), m.media[0].description.as_deref(), m.media[0].spoiler), (Some("a1"), Some("A cat"), true));
+        assert_eq!((m.media[1].description.as_deref(), m.media[1].spoiler), (None, false));
+        assert_eq!((m.files[0].id.as_str(), m.files[0].spoiler), ("a3", true));
     }
 
     #[test]
@@ -3449,13 +3716,13 @@ mod tests {
 
     #[test]
     fn thumbnails_cover_a_square_through_the_proxy() {
-        let photo = Media { url: "https://cdn.discordapp.com/attachments/1/2/a.png?ex=a&is=b&hm=c&".into(), width: 4000., height: 3000., kind: MediaKind::Image };
+        let photo = Media { url: "https://cdn.discordapp.com/attachments/1/2/a.png?ex=a&is=b&hm=c&".into(), width: 4000., height: 3000., kind: MediaKind::Image, ..Default::default() };
         assert_eq!(thumb_url(&photo, 112.), "https://media.discordapp.net/attachments/1/2/a.png?ex=a&is=b&hm=c&&width=149&height=112&format=webp", "shorter edge fills the square");
         let tall = Media { width: 300., height: 1200., ..photo.clone() };
         assert!(thumb_url(&tall, 112.).ends_with("width=112&height=448&format=webp"));
         let small = Media { width: 64., height: 64., ..photo.clone() };
         assert_eq!(thumb_url(&small, 112.), "https://media.discordapp.net/attachments/1/2/a.png?ex=a&is=b&hm=c&&format=webp", "never upscaled");
-        let clip = Media { url: "https://cdn.discordapp.com/attachments/1/2/v.mp4".into(), width: 1920., height: 1080., kind: MediaKind::Video { poster: "https://media.discordapp.net/attachments/1/2/v.mp4?format=jpeg".into() } };
+        let clip = Media { url: "https://cdn.discordapp.com/attachments/1/2/v.mp4".into(), width: 1920., height: 1080., kind: MediaKind::Video { poster: "https://media.discordapp.net/attachments/1/2/v.mp4?format=jpeg".into() }, ..Default::default() };
         assert_eq!(thumb_url(&clip, 96.), "https://media.discordapp.net/attachments/1/2/v.mp4?format=jpeg&width=171&height=96", "video keeps its proxy still, sized");
         let elsewhere = Media { url: "https://example.com/a.png".into(), ..photo };
         assert_eq!(thumb_url(&elsewhere, 96.), "https://example.com/a.png");
@@ -3508,6 +3775,7 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            system_channel_flags: 0,
             threads: Vec::new(),
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -3547,6 +3815,7 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            system_channel_flags: 0,
             threads: vec![thread],
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -3589,6 +3858,7 @@ mod tests {
             owner_id: Some("owner".into()),
             premium_tier: 0,
             afk_channel_id: None,
+            system_channel_flags: 0,
             threads: Vec::new(),
             my_roles: vec!["mods".into()],
             default_notifications: Default::default(),
@@ -3615,12 +3885,13 @@ mod tests {
     #[test]
     fn sorts_attachments_into_images_and_files() {
         let m = parse_message(&json!({ "id": "1", "channel_id": "c", "author": { "id": "u" }, "attachments": [
-            { "url": "a.png", "width": 10, "height": 20, "content_type": "image/png" },
+            { "url": "a.png", "width": 10, "height": 20, "content_type": "image/png", "description": "a red door" },
             { "url": "b.zip", "filename": "b.zip", "size": 5 },
         ], "referenced_message": { "id": "0", "channel_id": "c", "author": { "id": "v", "username": "zoe" }, "content": "hi" },
            "message_reference": { "message_id": "0" } }))
         .unwrap();
         assert_eq!(m.media.len(), 1);
+        assert_eq!(m.media[0].description.as_deref(), Some("a red door"));
         assert_eq!(m.files[0].name, "b.zip");
         assert_eq!(m.reply.unwrap().author.name, "zoe");
         assert_eq!(m.reply_to.as_deref(), Some("0"));
@@ -3675,8 +3946,59 @@ mod tests {
         assert_eq!(m.media[0].kind, MediaKind::Video { poster: "https://media/v.mp4?format=jpeg".into() });
         assert_eq!(m.media[1].url, "g.mp4");
         assert_eq!(m.media[1].kind, MediaKind::Gif { poster: "t.png".into() });
+        assert_eq!(m.media_files.iter().map(|f| f.url.as_str()).collect::<Vec<_>>(), ["v.mp4"], "only uploads have files");
         assert_eq!(m.embeds.len(), 1);
         assert_eq!(m.embeds[0].provider.as_deref(), Some("YouTube"));
+    }
+
+    fn embedded() -> Value {
+        json!({ "id": "1", "channel_id": "c", "author": { "id": "u" }, "content": "look",
+            "attachments": [{ "url": "a.png", "width": 10, "height": 10, "content_type": "image/png" }],
+            "embeds": [
+                { "type": "image", "thumbnail": { "url": "i.png", "width": 50, "height": 50 } },
+                { "type": "article", "url": "https://a", "title": "A" },
+            ] })
+    }
+
+    #[test]
+    fn suppressed_embeds_parse_to_none_and_keep_attachments() {
+        let mut m = embedded();
+        m["flags"] = json!(4);
+        let m = parse_message(&m).unwrap();
+        assert!(m.embeds_suppressed());
+        assert!(m.embeds.is_empty());
+        assert_eq!(m.media.iter().map(|m| m.url.as_str()).collect::<Vec<_>>(), ["a.png"]);
+    }
+
+    #[test]
+    fn update_with_suppress_flag_clears_embeds_and_their_media() {
+        let mut m = parse_message(&embedded()).unwrap();
+        assert_eq!((m.embeds.len(), m.media.len(), m.embed_media), (1, 2, 1));
+        apply_update(&mut m, &json!({ "id": "1", "channel_id": "c", "flags": 4 }));
+        assert!(m.embeds.is_empty());
+        assert_eq!(m.media.iter().map(|m| m.url.as_str()).collect::<Vec<_>>(), ["a.png"]);
+        assert_eq!((m.flags, m.content.as_str(), m.edited), (4, "look", false));
+    }
+
+    #[test]
+    fn late_embeds_update_replaces_the_old_ones() {
+        let mut m = parse_message(&embedded()).unwrap();
+        apply_update(&mut m, &json!({ "id": "1", "channel_id": "c", "embeds": [{ "type": "article", "url": "https://b", "title": "B" }] }));
+        assert_eq!(m.embeds.iter().map(|e| e.title.as_deref()).collect::<Vec<_>>(), [Some("B")]);
+        assert_eq!(m.media.iter().map(|m| m.url.as_str()).collect::<Vec<_>>(), ["a.png"]);
+    }
+
+    #[test]
+    fn inline_embeds_are_bare_media_without_a_title_or_author() {
+        let pic = || json!({ "url": "p", "width": 100, "height": 50 });
+        let inline = |e: Value| parse_embed(&e).inline();
+        assert!(inline(json!({ "type": "video", "thumbnail": pic(), "video": { "url": "v.mp4" } })));
+        assert!(inline(json!({ "type": "article", "image": pic() })));
+        assert!(!inline(json!({ "type": "video", "title": "Clip", "thumbnail": pic(), "video": { "url": "v" } })), "titled: a card");
+        assert!(!inline(json!({ "type": "rich", "image": pic() })), "a bot's embed is always a card");
+        assert!(!inline(json!({ "image": pic() })), "no type means rich");
+        assert!(!inline(json!({ "type": "article", "author": { "name": "x" }, "image": pic() })));
+        assert!(!inline(json!({ "type": "link", "description": "text only" })), "no media");
     }
 
     #[test]

@@ -313,6 +313,8 @@ pub struct Dialog {
     preview: Option<Box<crate::discord::Message>>,
     // Discord's "Protip:" under the preview.
     tip: Option<SharedString>,
+    // A muted line under the body.
+    note: Option<SharedString>,
     other: Other,
     on_confirm: OnConfirm,
 }
@@ -419,7 +421,7 @@ impl Waffle {
             state.set_value(value.to_owned(), window, cx);
             state.focus(window, cx);
         });
-        self.dialog = Some(Dialog { title: title.into(), body: body.into(), confirm: confirm.into(), danger: false, warn: false, input: true, key: None, preview: None, tip: None, other: Other::Cancel, on_confirm: Rc::new(on_confirm) });
+        self.dialog = Some(Dialog { title: title.into(), body: body.into(), confirm: confirm.into(), danger: false, warn: false, input: true, key: None, preview: None, tip: None, note: None, other: Other::Cancel, on_confirm: Rc::new(on_confirm) });
         cx.notify();
     }
 
@@ -443,6 +445,7 @@ impl Waffle {
             key: None,
             preview: None,
             tip: None,
+            note: None,
             other: Other::Cancel,
             on_confirm: Rc::new(move |this, _, window, cx| on_confirm(this, window, cx)),
         });
@@ -675,6 +678,12 @@ impl Waffle {
         }
     }
 
+    pub(crate) fn set_dialog_note(&mut self, note: impl Into<SharedString>) {
+        if let Some(dialog) = &mut self.dialog {
+            dialog.note = Some(note.into());
+        }
+    }
+
     pub(crate) fn dialog_key(&self) -> Option<&'static str> {
         self.dialog.as_ref().and_then(|d| d.key)
     }
@@ -717,6 +726,7 @@ impl Waffle {
                     .child(dialog.title.clone()),
             )
             .child(div().text_size(px(14.)).line_height(px(20.)).text_color(palette::muted(cx)).child(dialog.body.clone()))
+            .children(dialog.note.clone().map(|note| div().text_size(px(12.)).line_height(px(16.)).text_color(palette::faint(cx)).child(note)))
             .children(preview)
             .children(dialog.tip.clone().map(|tip| {
                 div().text_size(px(14.)).line_height(px(20.)).text_color(palette::text(cx)).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::positive_ink(cx)).child("Protip:")).child(tip)
@@ -943,8 +953,10 @@ impl Waffle {
     pub(crate) fn show_toast(&mut self, text: impl Into<SharedString>, cx: &mut Context<Self>) {
         let text = text.into();
         self.toast = Some(text.clone());
+        // Settings › Accessibility's minimum lengthens a toast, never shortens it.
+        let shown = std::time::Duration::from_secs(u64::from(self.prefs.min_toast_secs.max(4)));
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(std::time::Duration::from_secs(4)).await;
+            cx.background_executor().timer(shown).await;
             this.update(cx, |this, cx| {
                 if this.toast.as_ref() == Some(&text) {
                     this.toast = None;

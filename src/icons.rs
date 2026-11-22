@@ -12,7 +12,7 @@ pub const NEW_TAG: &str = "shapes/new-tag.svg";
 // Reicon (MIT, github.com/dqev/reicon) in its filled weight, like Discord's chrome, plus Waffle's own glyphs
 // (muted, deafened, camera off, GIF...), all written to assets/icons/reicon/ by tools/reicon.py, which also
 // keeps these paths in step with its map (design/icons.html). Order matches `Glyph`.
-const GLYPHS: [(&str, &[u8]); 154] = [
+const GLYPHS: [(&str, &[u8]); 157] = [
     ("icons/hashtag.svg", include_bytes!("../assets/icons/reicon/hashtag2.svg")),
     ("icons/hashtag-lock.svg", include_bytes!("../assets/icons/reicon/lock2.svg")),
     ("icons/volume-high.svg", include_bytes!("../assets/icons/reicon/volume-high.svg")),
@@ -101,7 +101,7 @@ const GLYPHS: [(&str, &[u8]); 154] = [
     ("icons/copy-simple.svg", include_bytes!("../assets/icons/reicon/copy3.svg")),
     ("icons/minus.svg", include_bytes!("../assets/icons/reicon/minus.svg")),
     ("icons/arrow-line-up.svg", include_bytes!("../assets/icons/reicon/arrow-up5.svg")),
-    ("icons/arrow-line-down.svg", include_bytes!("../assets/icons/reicon/arrow-down5.svg")),
+    ("icons/arrow-line-down.svg", include_bytes!("../assets/icons/reicon/arrow-down-line.svg")),
     ("icons/info.svg", include_bytes!("../assets/icons/reicon/info-circle.svg")),
     ("icons/device-mobile-bold.svg", include_bytes!("../assets/icons/reicon/mobile.svg")),
     ("icons/clock-counter-clockwise.svg", include_bytes!("../assets/icons/reicon/history.svg")),
@@ -137,8 +137,8 @@ const GLYPHS: [(&str, &[u8]); 154] = [
     ("icons/app-window.svg", include_bytes!("../assets/icons/reicon/window.svg")),
     ("icons/usb.svg", include_bytes!("../assets/icons/reicon/usb.svg")),
     ("icons/plus-circle.svg", include_bytes!("../assets/icons/reicon/add-circle.svg")),
-    ("icons/arrow-up.svg", include_bytes!("../assets/icons/reicon/arrow-up.svg")),
-    ("icons/arrow-down.svg", include_bytes!("../assets/icons/reicon/arrow-down.svg")),
+    ("icons/arrow-up.svg", include_bytes!("../assets/icons/reicon/arrow-up5.svg")),
+    ("icons/arrow-down.svg", include_bytes!("../assets/icons/reicon/arrow-down-line.svg")),
     ("icons/at-bold.svg", include_bytes!("../assets/icons/reicon/at-sign.svg")),
     ("icons/eye-bold.svg", include_bytes!("../assets/icons/reicon/eye.svg")),
     ("icons/chevron-up-bold.svg", include_bytes!("../assets/icons/reicon/chevron-up.svg")),
@@ -149,7 +149,7 @@ const GLYPHS: [(&str, &[u8]); 154] = [
     ("icons/video-off-fill.svg", include_bytes!("../assets/icons/reicon/camera-off.svg")),
     ("icons/share-screen-fill.svg", include_bytes!("../assets/icons/reicon/screencast.svg")),
     ("icons/activities-fill.svg", include_bytes!("../assets/icons/reicon/rocket.svg")),
-    ("icons/arrow-right-bold.svg", include_bytes!("../assets/icons/reicon/arrow-right.svg")),
+    ("icons/arrow-right.svg", include_bytes!("../assets/icons/reicon/arrow-right5.svg")),
     ("icons/text-locked.svg", include_bytes!("../assets/icons/reicon/text-locked.svg")),
     ("icons/voice-locked.svg", include_bytes!("../assets/icons/reicon/voice-locked.svg")),
     ("icons/announcement-locked.svg", include_bytes!("../assets/icons/reicon/announcement-locked.svg")),
@@ -158,6 +158,7 @@ const GLYPHS: [(&str, &[u8]); 154] = [
     ("icons/media-locked.svg", include_bytes!("../assets/icons/reicon/media-locked.svg")),
     ("icons/calendar.svg", include_bytes!("../assets/icons/reicon/calendar.svg")),
     ("icons/filter.svg", include_bytes!("../assets/icons/reicon/filter.svg")),
+    ("icons/megaphone.svg", include_bytes!("../assets/icons/reicon/bullhorn.svg")),
     // Reicon has no moon; drawn to match its filled weight.
     ("icons/moon.svg", include_bytes!("../assets/icons/moon.svg")),
     // Reicon has no sticker; drawn to match its filled weight.
@@ -167,10 +168,14 @@ const GLYPHS: [(&str, &[u8]); 154] = [
     ("icons/gem.svg", include_bytes!("../assets/icons/gem.svg")),
     ("icons/bookmark.svg", include_bytes!("../assets/icons/bookmark.svg")),
     ("icons/book-open.svg", include_bytes!("../assets/icons/reicon/book-open.svg")),
-    ("icons/arrow-left.svg", include_bytes!("../assets/icons/reicon/arrow-left.svg")),
+    ("icons/arrow-left.svg", include_bytes!("../assets/icons/reicon/arrow-left-line.svg")),
     // Raise hand on a stage: the same hand as HandWaving, named for its own concept.
     ("icons/hand.svg", include_bytes!("../assets/icons/reicon/hand.svg")),
     ("icons/stage.svg", include_bytes!("../assets/icons/reicon/podcast.svg")),
+    // Reicon's chart-square, from design/explore-system-messages.html.
+    ("icons/poll.svg", include_bytes!("../assets/icons/poll.svg")),
+    // Reicon has no sleeping bell (@silent); its bell, shrunk, with a z drawn to match.
+    ("icons/bell-z.svg", include_bytes!("../assets/icons/bell-z.svg")),
 ];
 
 const BRAND: [(&str, &[u8]); 4] = [
@@ -350,7 +355,7 @@ pub enum Glyph {
     VideoOffFill,
     ShareScreenFill,
     ActivitiesFill,
-    ArrowRightBold,
+    ArrowRight,
     TextLocked,
     VoiceLocked,
     AnnouncementLocked,
@@ -359,6 +364,7 @@ pub enum Glyph {
     MediaLocked,
     Calendar,
     Filter,
+    Megaphone,
     Moon,
     Sticker,
     Forward,
@@ -368,6 +374,8 @@ pub enum Glyph {
     ArrowLeft,
     Hand,
     Stage,
+    Poll,
+    BellZ,
 }
 
 impl IconNamed for Glyph {

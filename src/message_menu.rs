@@ -1,12 +1,13 @@
 // Discord's message context menu (navId "message"), item-for-item from its menu code
 // (docs/discord-menus-user-message.md §5). Items for features Waffle doesn't have yet (translate,
-// bookmarks, reminders, apps, reports) are left out.
+// bookmarks, reminders, apps, report to mods) are left out. Report is hidden on your own messages and call records;
+// GAP: Discord also hides it on system-user messages and type 67 (friend request accepted), which `Message` doesn't carry.
 use gpui_kit::{Context, Pixels, Point};
 use reqwest::Method;
 
 use crate::{
     EmojiTarget, Waffle,
-    discord::{Emoji, Message, SendState, perm},
+    discord::{Emoji, Message, SendState, message_flag, perm},
     icons::Glyph,
     menu::{Entry, item, submenu},
 };
@@ -67,7 +68,7 @@ impl Waffle {
         }).icon(Glyph::Link).entry());
         if cfg!(target_os = "macos") && !message.content.is_empty() {
             let text = message.content.clone();
-            out.push(item("Speak message", move |_, _, _| speak(&text)).icon(Glyph::Soundboard).entry());
+            out.push(item("Speak message", move |this, _, _| speak(&text, this.prefs.tts_rate)).icon(Glyph::Soundboard).entry());
         }
         out.push(Entry::Separator);
 
@@ -101,6 +102,10 @@ impl Waffle {
             );
         }
         out.extend(action(MessageAction::Delete));
+        if !facts.mine && message.call.is_none() {
+            let m = message.clone();
+            out.push(item("Report message", move |this, _, cx| this.open_report(crate::report::ReportTarget::Message(Box::new(m.clone())), cx)).danger().icon(Glyph::Flag).entry());
+        }
         out.push(Entry::Separator);
 
         // G9: developer.
@@ -180,6 +185,22 @@ impl MessageAction {
         }
     }
 
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Edit => "Edit message",
+            Self::Reply => "Reply",
+            Self::Forward => "Forward",
+            Self::Thread => "Create thread",
+            Self::React => "Add reaction",
+            Self::CopyText => "Copy text",
+            Self::Pin => "Pin message",
+            Self::MarkUnread => "Mark unread",
+            Self::Save => "Save message",
+            Self::Delete => "Delete message",
+            Self::CopyId => "Copy message ID",
+        }
+    }
+
     pub fn for_combo(combo: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|a| a.keys().contains(&combo))
     }
@@ -201,20 +222,24 @@ impl Waffle {
     }
 
     fn action_item(&self, action: MessageAction, message: &Message) -> crate::menu::Item {
-        let (label, glyph) = match action {
-            MessageAction::Edit => ("Edit message", Glyph::Pen),
-            MessageAction::Reply => ("Reply", Glyph::Reply),
-            MessageAction::Forward => ("Forward", Glyph::Forward),
-            MessageAction::Thread => ("Create thread", Glyph::Thread),
-            MessageAction::React => ("Add reaction", Glyph::Emoji),
-            MessageAction::CopyText => ("Copy text", Glyph::Copy),
-            MessageAction::Pin if message.pinned => ("Unpin message", Glyph::PinSlash),
-            MessageAction::Pin => ("Pin message", Glyph::Pin),
-            MessageAction::MarkUnread => ("Mark unread", Glyph::Envelope),
-            MessageAction::Save if self.saved_ids.contains(&message.id) => ("Remove from saved", Glyph::Bookmark),
-            MessageAction::Save => ("Save message", Glyph::Bookmark),
-            MessageAction::Delete => ("Delete message", Glyph::Trash),
-            MessageAction::CopyId => ("Copy message ID", Glyph::Id),
+        let glyph = match action {
+            MessageAction::Edit => Glyph::Pen,
+            MessageAction::Reply => Glyph::Reply,
+            MessageAction::Forward => Glyph::Forward,
+            MessageAction::Thread => Glyph::Thread,
+            MessageAction::React => Glyph::Emoji,
+            MessageAction::CopyText => Glyph::Copy,
+            MessageAction::Pin if message.pinned => Glyph::PinSlash,
+            MessageAction::Pin => Glyph::Pin,
+            MessageAction::MarkUnread => Glyph::Envelope,
+            MessageAction::Save => Glyph::Bookmark,
+            MessageAction::Delete => Glyph::Trash,
+            MessageAction::CopyId => Glyph::Id,
+        };
+        let label = match action {
+            MessageAction::Pin if message.pinned => "Unpin message",
+            MessageAction::Save if self.saved_ids.contains(&message.id) => "Remove from saved",
+            _ => action.label(),
         };
         let m = message.clone();
         let row = item(label, move |this, window, cx| this.run_message_action(action, &m, false, window, cx)).icon(glyph).shortcut(action.keys()[0]);
@@ -319,6 +344,19 @@ impl Waffle {
 }
 
 impl Waffle {
+    // Discord's ✕ on an embed card: asks first unless Shift is held. Not optimistic, as in Discord: the
+    // embeds go when Discord's MESSAGE_UPDATE carries the flag.
+    // GAP: Discord unarchives an archived thread before the PATCH; Waffle sends it as is.
+    pub(crate) fn remove_embeds(&mut self, message: &Message, quick: bool, cx: &mut Context<Self>) {
+        let (path, flags) = (format!("/channels/{}/messages/{}", message.channel_id, message.id), message.flags | message_flag::SUPPRESS_EMBEDS);
+        let send = move |this: &mut Waffle, cx: &mut Context<Waffle>| this.rest(Method::PATCH, path.clone(), Some(serde_json::json!({ "flags": flags })), |_, _| {}, cx);
+        if quick {
+            return send(self, cx);
+        }
+        self.confirm("Are you sure?", "This will remove all embeds on this message for everyone.", "Remove All Embeds", move |this, _, cx| send(this, cx), cx);
+        self.set_dialog_note("Hold shift when clearing embeds to skip this modal.");
+    }
+
     // Removing reactions shows at once (`keep` decides which stay); they come back if refused.
     fn reactions_optimistic(&mut self, message: &Message, path: String, keep: impl Fn(&crate::discord::Reaction) -> bool + 'static, cx: &mut Context<Self>) {
         let before = self.message_mut(&message.channel_id, &message.id).map(|m| m.reactions.clone()).unwrap_or_default();
@@ -349,13 +387,16 @@ pub(crate) fn shortcode(emoji: &Emoji) -> String {
     format!(":{name}:")
 }
 
-// Discord's "Speak message", through the system voice.
-fn speak(text: &str) {
+// Discord's "Speak message", through the system voice. `rate` is Discord's text-to-speech rate, 1 normal.
+pub(crate) fn speak(text: &str, rate: f32) {
     let text = text.to_owned();
+    // `say` reads 175 words a minute as normal. It takes 0 as its default speed, so the slowest end of
+    // Discord's range speaks at 1, its slowest.
+    let wpm = ((175. * rate).round() as u32).max(1);
     // Through stdin, so text starting with "-" can't be read as `say` options.
     std::thread::spawn(move || {
         use std::io::Write;
-        let Ok(mut child) = std::process::Command::new("say").stdin(std::process::Stdio::piped()).spawn() else { return };
+        let Ok(mut child) = std::process::Command::new("say").arg("-r").arg(wpm.to_string()).stdin(std::process::Stdio::piped()).spawn() else { return };
         if let Some(mut stdin) = child.stdin.take() {
             let _ = stdin.write_all(text.as_bytes());
         }

@@ -268,6 +268,11 @@ impl Waffle {
                 .entry(),
             });
         }
+        // Discord's sits behind an experiment (2023-09_iar_user_reporting), taken here as rolled out.
+        if !is_me && !user.bot {
+            let (reported, guild_id) = (user.clone(), guild_id.map(str::to_owned));
+            out.push(item("Report user profile", move |this, _, cx| this.open_report(crate::report::ReportTarget::User { user: Box::new(reported.clone()), guild_id: guild_id.clone() }, cx)).danger().icon(Glyph::Flag).entry());
+        }
         out.push(Entry::Separator);
 
         // G6: roles and voice moves.
@@ -550,7 +555,7 @@ impl Waffle {
         }, window, cx);
     }
 
-    fn set_ignored(&mut self, user_id: String, ignore: bool, cx: &mut Context<Self>) {
+    pub(crate) fn set_ignored(&mut self, user_id: String, ignore: bool, cx: &mut Context<Self>) {
         let method = if ignore { Method::PUT } else { Method::DELETE };
         let (a, b) = (user_id.clone(), user_id.clone());
         let flip = |this: &mut Waffle, id: String, on: bool| {

@@ -91,10 +91,10 @@ pub(crate) fn combo(keystroke: &Keystroke) -> String {
     mods.into_iter().filter(|(on, _)| *on).map(|(_, name)| name).chain([key]).collect::<Vec<_>>().join("+")
 }
 
-// A combo as this platform writes it: ⌃⌥⇧⌘ order on macOS, Ctrl+Alt+Shift elsewhere.
+// A combo as this platform writes it: ⌃⌥⇧⌘ order on macOS, Ctrl+Alt+Shift elsewhere (a literal `ctrl` reads as Ctrl too).
 pub(crate) fn platform_combo(combo: &str) -> String {
     let parts: Vec<&str> = combo.split('+').collect();
-    let order: &[&str] = if cfg!(target_os = "macos") { &["ctrl", "alt", "shift", "secondary"] } else { &["secondary", "alt", "shift"] };
+    let order: &[&str] = if cfg!(target_os = "macos") { &["ctrl", "alt", "shift", "secondary"] } else { &["ctrl", "secondary", "alt", "shift"] };
     let key = parts.last().copied().unwrap_or_default();
     order.iter().copied().filter(|m| parts[..parts.len() - 1].contains(m)).chain([key]).map(|p| if p == "secondary" { SECONDARY } else { p }).collect::<Vec<_>>().join("+")
 }
