@@ -743,21 +743,46 @@ impl Waffle {
             .overflow_hidden()
             .bg(stage::bg())
             .text_color(stage::text())
-            .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
-                this.call_pointer_inside = *hovered;
-                if !*hovered {
-                    this.call_pointer_at = Instant::now().checked_sub(CONTROLS_IDLE * 2).unwrap_or_else(Instant::now);
-                }
-                cx.notify();
-            }))
-            .on_mouse_move(cx.listener(|this, _: &gpui_kit::MouseMoveEvent, _, cx| {
-                let was_idle = this.call_idle() || !this.call_pointer_inside;
-                this.call_pointer_at = Instant::now();
-                this.call_pointer_inside = true;
-                if was_idle {
-                    cx.notify();
-                }
-            }))
+            .child(self.stage_pointer(cx))
+    }
+
+    // Tracks the pointer against the stage's bounds. The stage's own hover can't: gpui stops counting
+    // it as hovered over any control that occludes (the header's chat button), which hid the chrome.
+    fn stage_pointer(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let view = cx.entity().downgrade();
+        gpui_kit::canvas(
+            |_, _, _| {},
+            move |bounds, _, window, _| {
+                let (moved, left) = (view.clone(), view.clone());
+                window.on_mouse_event(move |event: &gpui_kit::MouseMoveEvent, phase, _, cx| {
+                    if phase != gpui_kit::DispatchPhase::Bubble {
+                        return;
+                    }
+                    let inside = bounds.contains(&event.position);
+                    let _ = moved.update(cx, |this, cx| this.set_call_pointer(inside, cx));
+                });
+                window.on_mouse_event(move |_: &gpui_kit::MouseExitEvent, phase, _, cx| {
+                    if phase == gpui_kit::DispatchPhase::Bubble {
+                        let _ = left.update(cx, |this, cx| this.set_call_pointer(false, cx));
+                    }
+                });
+            },
+        )
+        .absolute()
+        .inset_0()
+    }
+
+    fn set_call_pointer(&mut self, inside: bool, cx: &mut Context<Self>) {
+        let was_idle = self.call_idle() || !self.call_pointer_inside;
+        match inside {
+            true => self.call_pointer_at = Instant::now(),
+            false if self.call_pointer_inside => self.call_pointer_at = Instant::now().checked_sub(CONTROLS_IDLE * 2).unwrap_or_else(Instant::now),
+            false => return,
+        }
+        self.call_pointer_inside = inside;
+        if was_idle != (self.call_idle() || !inside) {
+            cx.notify();
+        }
     }
 
     // .call.focused: the header as a 48px band (over the stream in full screen), the focused card
@@ -1001,7 +1026,7 @@ impl Waffle {
         let (mentions, unread) = self.call_chat_counts()?;
         let badge = match (mentions, unread) {
             (0, 0) => return None,
-            (0, unread) => ui::count_pill(unread, stage::faint(), stage::bg()),
+            (0, unread) => ui::count_badge(unread),
             (mentions, _) => ui::count_badge(mentions),
         };
         Some(div().absolute().right(px(-4.)).bottom(px(-4.)).rounded_full().border_2().border_color(stage::bg()).child(badge))

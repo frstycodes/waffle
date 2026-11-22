@@ -194,11 +194,6 @@ pub fn tag_with(glyph: Glyph, text: impl Into<SharedString>, cx: &App) -> Div {
 
 // A count asks for you, so it takes the alert red. A capsule that grows with the number.
 pub fn count_badge(count: u32) -> Div {
-    count_pill(count, palette::alert(), gpui_kit::white())
-}
-
-// A count in other colours: grey for unread that isn't a mention.
-pub fn count_pill(count: u32, fill: Hsla, ink: Hsla) -> Div {
     let text = if count > 99 { "99+".to_owned() } else { count.to_string() };
     div()
         .min_w(px(18.))
@@ -206,8 +201,8 @@ pub fn count_pill(count: u32, fill: Hsla, ink: Hsla) -> Div {
         .px(px(5.))
         .flex_none()
         .rounded_full()
-        .bg(fill)
-        .text_color(ink)
+        .bg(palette::alert())
+        .text_color(gpui_kit::white())
         .text_size(px(12.))
         .font_weight(FontWeight::SEMIBOLD)
         .line_height(px(18.))

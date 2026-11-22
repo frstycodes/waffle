@@ -213,7 +213,7 @@ impl Waffle {
             let (channel, id) = (p.message.channel_id.clone(), p.message.id.clone());
             preview_card(p, &ctx)
                 .cursor_pointer()
-                .hover(|s| s.bg(palette::oklch(0.28, 0.005, 260.).opacity(0.96)))
+                .hover(|s| s.bg(palette::oklch(0.30, 0.005, 260.)))
                 .on_click(cx.listener(move |this, _, window, cx| this.open_preview(&channel, id.clone(), window, cx)))
                 .with_animation(SharedString::from(format!("call-preview-in-{}", p.message.id)), Animation::new(ui::DUR_PANEL), |card, t| card.opacity(t).left(px(12. * (1. - crate::motion::back_out(t)))))
                 .into_any_element()
@@ -272,7 +272,7 @@ fn preview_card(preview: &Preview, ctx: &std::rc::Rc<crate::chat::RowContext>) -
         .py(px(8.))
         .px(px(10.))
         .squircle(RADIUS_MD)
-        .bg(palette::oklch(0.25, 0.005, 260.).opacity(0.92))
+        .bg(stage::overlay())
         .shadow(shadows)
         .flex()
         .gap(px(8.))
