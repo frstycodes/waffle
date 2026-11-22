@@ -2536,6 +2536,14 @@ impl Window {
         }
     }
 
+    /// Waffle patch: draws the window again re-rendering only `view` and the views around it, while
+    /// cached views elsewhere replay. For changes that only `view`'s elements paint, such as their tooltip.
+    pub(crate) fn refresh_view(&mut self, view: EntityId, cx: &mut App) {
+        if self.invalidator.not_drawing() {
+            cx.notify(view);
+        }
+    }
+
     /// Close this window.
     pub fn remove_window(&mut self) {
         self.removed = true;

@@ -3748,21 +3748,27 @@ pub(crate) enum ActiveTooltip {
     },
 }
 
+// Waffle patch: showing or hiding a tooltip re-renders only `owner`, the view that drew the element it
+// belongs to (`Window::refresh_view`). Upstream refreshes the window, which re-renders every cached view.
 pub(crate) fn clear_active_tooltip(
     active_tooltip: &Rc<RefCell<Option<ActiveTooltip>>>,
+    owner: EntityId,
     window: &mut Window,
+    cx: &mut App,
 ) {
     match active_tooltip.borrow_mut().take() {
         None => {}
         Some(ActiveTooltip::WaitingForShow { .. }) => {}
-        Some(ActiveTooltip::Visible { .. }) => window.refresh(),
-        Some(ActiveTooltip::WaitingForHide { .. }) => window.refresh(),
+        Some(ActiveTooltip::Visible { .. }) => window.refresh_view(owner, cx),
+        Some(ActiveTooltip::WaitingForHide { .. }) => window.refresh_view(owner, cx),
     }
 }
 
 pub(crate) fn clear_active_tooltip_if_not_hoverable(
     active_tooltip: &Rc<RefCell<Option<ActiveTooltip>>>,
+    owner: EntityId,
     window: &mut Window,
+    cx: &mut App,
 ) {
     let should_clear = match active_tooltip.borrow().as_ref() {
         None => false,
@@ -3772,7 +3778,7 @@ pub(crate) fn clear_active_tooltip_if_not_hoverable(
     };
     if should_clear {
         active_tooltip.borrow_mut().take();
-        window.refresh();
+        window.refresh_view(owner, cx);
     }
 }
 
@@ -3830,9 +3836,9 @@ pub(crate) fn register_tooltip_mouse_handlers(
 
     window.on_mouse_event({
         let active_tooltip = active_tooltip.clone();
-        move |_: &MouseDownEvent, _phase, window: &mut Window, _cx| {
+        move |_: &MouseDownEvent, _phase, window: &mut Window, cx| {
             if !tooltip_id.is_some_and(|tooltip_id| tooltip_id.is_hovered(window)) {
-                clear_active_tooltip_if_not_hoverable(&active_tooltip, window);
+                clear_active_tooltip_if_not_hoverable(&active_tooltip, current_view, window, cx);
             }
         }
     });
@@ -3853,6 +3859,7 @@ pub(crate) fn register_tooltip_mouse_handlers(
                         &build_tooltip,
                         &check_is_hovered_during_prepaint,
                         Some(long_press_tooltip_active.clone()),
+                        current_view,
                         window,
                         cx,
                     ) {
@@ -3864,7 +3871,7 @@ pub(crate) fn register_tooltip_mouse_handlers(
                 TouchPhase::Ended | TouchPhase::Cancelled
                     if long_press_tooltip_active.replace(false) =>
                 {
-                    clear_active_tooltip(&active_tooltip, window);
+                    clear_active_tooltip(&active_tooltip, current_view, window, cx);
                     cx.stop_propagation();
                 }
                 TouchPhase::Started
@@ -3877,9 +3884,9 @@ pub(crate) fn register_tooltip_mouse_handlers(
 
     window.on_mouse_event({
         let active_tooltip = active_tooltip.clone();
-        move |_: &ScrollWheelEvent, _phase, window: &mut Window, _cx| {
+        move |_: &ScrollWheelEvent, _phase, window: &mut Window, cx| {
             if !tooltip_id.is_some_and(|tooltip_id| tooltip_id.is_hovered(window)) {
-                clear_active_tooltip_if_not_hoverable(&active_tooltip, window);
+                clear_active_tooltip_if_not_hoverable(&active_tooltip, current_view, window, cx);
             }
         }
     });
@@ -3983,6 +3990,7 @@ fn handle_tooltip_mouse_move(
                             &build_tooltip,
                             &check_is_hovered_during_prepaint,
                             None,
+                            current_view,
                             window,
                             cx,
                         );
@@ -4005,6 +4013,7 @@ fn show_tooltip(
     build_tooltip: &Rc<dyn Fn(&mut Window, &mut App) -> Option<(AnyView, bool)>>,
     check_is_hovered_during_prepaint: &Rc<dyn Fn(&Window) -> bool>,
     long_press_tooltip_active: Option<Rc<Cell<bool>>>,
+    owner: EntityId,
     window: &mut Window,
     cx: &mut App,
 ) -> bool {
@@ -4032,6 +4041,7 @@ fn show_tooltip(
                         tooltip_is_hoverable,
                         &check_is_hovered_during_prepaint,
                         tooltip_bounds,
+                        owner,
                         window,
                         cx,
                     )
@@ -4042,7 +4052,7 @@ fn show_tooltip(
     });
     let did_show = new_tooltip.is_some();
     *active_tooltip.borrow_mut() = new_tooltip;
-    window.refresh();
+    window.refresh_view(owner, cx);
     did_show
 }
 
@@ -4054,6 +4064,7 @@ fn handle_tooltip_check_visible_and_update(
     tooltip_is_hoverable: bool,
     check_is_hovered: &Rc<dyn Fn(&Window) -> bool>,
     tooltip_bounds: Bounds<Pixels>,
+    owner: EntityId,
     window: &mut Window,
     cx: &mut App,
 ) -> bool {
@@ -4092,7 +4103,7 @@ fn handle_tooltip_check_visible_and_update(
 
     match action {
         Action::None => {}
-        Action::Hide => clear_active_tooltip(active_tooltip, window),
+        Action::Hide => clear_active_tooltip(active_tooltip, owner, window, cx),
         Action::ScheduleHide(tooltip) => {
             let delayed_hide_task = window.spawn(cx, {
                 let weak_active_tooltip = Rc::downgrade(active_tooltip);
@@ -4104,7 +4115,7 @@ fn handle_tooltip_check_visible_and_update(
                         return;
                     };
                     if active_tooltip.borrow_mut().take().is_some() {
-                        cx.update(|window, _cx| window.refresh()).ok();
+                        cx.update(|window, cx| window.refresh_view(owner, cx)).ok();
                     }
                 }
             });
