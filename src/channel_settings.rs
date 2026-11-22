@@ -753,11 +753,10 @@ impl Waffle {
         out
     }
 
-    // Discord's Announcement Channel switch and its profile notice, for text and announcement channels in a
-    // NEWS server. GAP: Discord also leaves out the rules and community-updates channels; Waffle doesn't know them.
+    // Discord's Announcement Channel switch and its profile notice.
     fn announcement_toggle(&self, channel: &Channel, on: bool, window: &mut Window, cx: &mut Context<Self>) -> (Option<AnyElement>, Option<AnyElement>) {
-        let news = self.guilds.iter().find(|g| g.channel(&channel.id).is_some()).is_some_and(|g| g.features.iter().any(|f| f == "NEWS"));
-        if !news || !matches!(channel.raw_type, 0 | ANNOUNCEMENT) {
+        let shown = self.guilds.iter().find(|g| g.channel(&channel.id).is_some()).is_some_and(|g| crate::announcements::offers_announcement_switch(g, channel));
+        if !shown {
             return (None, None);
         }
         let row = ui::settings_switch("cs-announcement", "Announcement Channel", "Users can Follow this channel in their own servers. Posts you \"Publish\" from this channel will appear in those servers.", on, true, window, cx)
