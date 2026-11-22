@@ -5,7 +5,7 @@ set -u
 cd "$(dirname "$0")/.."
 scenes=("$@")
 [ ${#scenes[@]} -eq 0 ] && scenes=(nav-pins favorites role-popout mod-view-loading mod-view server-settings-members server-settings-members-filter server-settings-members-bulk)
-cargo build -q || exit 1
+cargo build -q 2>/dev/null || { cargo build; exit 1; }
 bin="${CARGO_TARGET_DIR:-target}/debug/waffle"
 
 pid=""
