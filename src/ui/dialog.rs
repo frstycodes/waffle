@@ -3,9 +3,9 @@
 use std::time::Duration;
 
 use gpui_kit::{
-    AnimationElement, AnimationExt, AnyElement, App, Div, ElementId, InteractiveElement, IntoElement, MouseButton, ParentElement, Stateful, Styled, Window,
+    AnimationElement, AnimationExt, AnyElement, App, Bounds, Div, ElementId, InteractiveElement, IntoElement, MouseButton, ParentElement, ScrollHandle, Stateful, StatefulInteractiveElement, Styled, Window,
     base::{Spring, spring},
-    div, prelude::FluentBuilder, px,
+    canvas, div, fill, linear_color_stop, linear_gradient, prelude::FluentBuilder, px, size,
 };
 
 use super::{DUR_PANEL, DUR_POP, RADIUS_XL, Squircle, control::part, shadow_pop};
@@ -55,6 +55,43 @@ pub fn dialog(id: impl Into<ElementId>, width: f32, body: Div, window: &mut Wind
             let t = motion::ease_out().sample(t);
             card.opacity(t).scale(0.95 + 0.05 * t)
         })
+}
+
+// How far a scrolling dialog's edge fades into the card, and how far its fields reach past the body's
+// inset so their focus rings aren't cut.
+const FADE: f32 = 32.;
+const RING_ROOM: f32 = 4.;
+
+/// The part of a dialog between its fixed header and footer that scrolls when the window is too short,
+/// fading out at whichever edge has more beyond it. Children stack 16px apart, as in `dialog_body`.
+pub fn dialog_scroll(id: impl Into<ElementId>, children: impl IntoIterator<Item = AnyElement>, window: &mut Window, cx: &mut App) -> Div {
+    let id = id.into();
+    let handle = window.use_keyed_state(part(&id, "scroll"), cx, |_, _| ScrollHandle::new()).read(cx).clone();
+    let card = palette::surface(palette::Level::Raised, cx);
+    let edges = handle.clone();
+    let fades = canvas(|_, _, _| {}, move |bounds, _, window, _| {
+        let (offset, max) = (-edges.offset().y, edges.max_offset().y);
+        let fade = px(FADE).min(bounds.size.height / 2.);
+        if offset > px(0.5) {
+            window.paint_quad(fill(Bounds::new(bounds.origin, size(bounds.size.width, fade)), linear_gradient(180., linear_color_stop(card, 0.), linear_color_stop(card.opacity(0.), 1.))));
+        }
+        if offset < max - px(0.5) {
+            let top = bounds.bottom() - fade;
+            window.paint_quad(fill(Bounds::new(gpui_kit::point(bounds.left(), top), size(bounds.size.width, fade)), linear_gradient(180., linear_color_stop(card.opacity(0.), 0.), linear_color_stop(card, 1.))));
+        }
+    })
+    .absolute()
+    .inset_0();
+    let list = div()
+        .id(id)
+        .flex_1()
+        .min_h_0()
+        .mx(px(-RING_ROOM))
+        .px(px(RING_ROOM))
+        .overflow_y_scroll()
+        .track_scroll(&handle)
+        .child(div().py(px(RING_ROOM)).flex().flex_col().gap(px(16.)).children(children));
+    div().relative().flex_1().min_h_0().flex().flex_col().my(px(-RING_ROOM)).child(list).child(fades)
 }
 
 /// A dialog's usual body: 24px in, sections 16px apart.

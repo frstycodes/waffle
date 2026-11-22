@@ -30,6 +30,7 @@ use gpui_kit::{
 use crate::{discord::Status, icons::Glyph, mascot, motion, palette};
 
 mod control;
+mod date;
 mod dialog;
 mod feedback;
 mod field;
@@ -39,7 +40,8 @@ mod tri;
 mod tunnel;
 
 pub use control::{Control, Pressable, button, chip, chip_lead, hover_fade, icon_button, menu_row, pressable, round_button, swatch, tip};
-pub use dialog::{dialog, dialog_body, modal};
+pub use date::{date_field, time_field};
+pub use dialog::{dialog, dialog_body, dialog_scroll, modal};
 pub use feedback::{meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
 pub use field::{code_cell, drop_zone, field, field_error, field_frame, field_hint, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
 pub use group::{settings_caption, settings_card, settings_choice, settings_close, settings_column, settings_group, SettingsHighlight, settings_nav_item, settings_page, SETTINGS_NAV_WIDTH, SETTINGS_WIDTH, settings_row, settings_nav_edge, settings_sidebar, settings_switch, settings_text, settings_title, settings_window};

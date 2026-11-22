@@ -240,6 +240,15 @@ impl Control {
         self
     }
 
+    // A field trigger whose value failed validation: the danger edge, hovered or not.
+    pub fn invalid(mut self, invalid: bool, cx: &App) -> Self {
+        if invalid {
+            let ink = palette::danger_ink(cx);
+            self.look.edge = Some((ink, ink));
+        }
+        self
+    }
+
     // The menu's one accent row (Invite people): accent ink, and the accent tint on hover.
     pub fn accent(mut self, cx: &App) -> Self {
         let ink = palette::accent_ink(cx);

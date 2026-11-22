@@ -10,14 +10,13 @@ use std::{
 
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, NaiveTime, TimeZone, Timelike, Utc};
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Entity, Focusable, FontWeight, Hsla, ImageSource, InteractiveElement, IntoElement, MouseButton, ParentElement, SharedString, StatefulInteractiveElement, Styled, Window,
+    AnyElement, App,
+    base::{CalendarEvent, CalendarState, Matcher}, AppContext as _, Context, Entity, Focusable, FontWeight, Hsla, ImageSource, InteractiveElement, IntoElement, MouseButton, ParentElement, SharedString, StatefulInteractiveElement, Styled, Window,
     component::{
         Icon,
-        calendar::Matcher,
-        date_picker::{DatePicker, DatePickerEvent, DatePickerState},
         input::{Input, InputEvent, InputState, Textarea, TextareaState},
         text::TextView,
-        time_field::{HourCycle, TimeField, TimeFieldEvent, TimeFieldState, TimePrecision},
+        time_field::{HourCycle, TimeFieldEvent, TimeFieldState, TimePrecision},
     },
     div,
     prelude::FluentBuilder as _,
@@ -100,9 +99,9 @@ struct Wizard {
     frequency: Frequency,
     location: Entity<InputState>,
     topic: Entity<InputState>,
-    start_date: Entity<DatePickerState>,
+    start_date: Entity<CalendarState>,
     start_time: Entity<TimeFieldState>,
-    end_date: Entity<DatePickerState>,
+    end_date: Entity<CalendarState>,
     end_time: Entity<TimeFieldState>,
     description: Entity<TextareaState>,
     cover: Cover,
@@ -667,20 +666,20 @@ fn local_instant(day: NaiveDate, at: NaiveTime) -> Option<DateTime<Utc>> {
     Local.from_local_datetime(&day.and_time(at)).earliest().map(|t| t.with_timezone(&Utc))
 }
 
-fn picked_instant(date: &Entity<DatePickerState>, time: &Entity<TimeFieldState>, cx: &App) -> Option<DateTime<Utc>> {
-    let day = date.read(cx).date_time().start()?.date();
+fn picked_instant(date: &Entity<CalendarState>, time: &Entity<TimeFieldState>, cx: &App) -> Option<DateTime<Utc>> {
+    let day = date.read(cx).date().start()?;
     local_instant(day, time.read(cx).time())
 }
 
 // A date field's calendar, past days off; the date reads as the cards write it.
-fn date_state(at: DateTime<Local>, window: &mut Window, cx: &mut Context<Waffle>) -> Entity<DatePickerState> {
+fn date_state(at: DateTime<Local>, window: &mut Window, cx: &mut Context<Waffle>) -> Entity<CalendarState> {
     let today = Local::now().date_naive();
     let state = cx.new(|cx| {
-        let mut state = DatePickerState::new(window, cx).date_format("%a, %b %-d, %Y").disabled_matcher(Matcher::custom(move |d| *d < today));
+        let mut state = CalendarState::new(window, cx).disabled_matcher(Matcher::custom(move |d| *d < today));
         state.set_date(at.date_naive(), window, cx);
         state
     });
-    cx.subscribe(&state, |_, _, _: &DatePickerEvent, cx| cx.notify()).detach();
+    cx.subscribe(&state, |_, _, _: &CalendarEvent, cx| cx.notify()).detach();
     state
 }
 
@@ -2017,7 +2016,7 @@ impl Waffle {
         let body = ui::dialog_body()
             .child(head)
             .when(w.step != Step::Success && w.occurrence.is_none(), |d| d.child(stepper(w.step, cx)))
-            .child(step)
+            .child(ui::dialog_scroll("event-wizard-fields", [step], window, cx))
             .when(w.step != Step::Success, |d| d.child(wizard_foot(w, ok, cx)));
         let backdrop = div().id("event-wizard-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_event_layer(cx)));
         Some(ui::modal(backdrop, ui::dialog("event-wizard", WIZARD_WIDTH, body, window, cx), cx))
@@ -2103,13 +2102,13 @@ impl Waffle {
     fn wizard_times_fields(&self, w: &Wizard, problems: &Problems, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let pair = |a: AnyElement, b: AnyElement| div().flex().gap(px(12.)).child(div().flex_1().min_w_0().child(a)).child(div().flex_1().min_w_0().child(b));
         let start = pair(
-            ui::field("Start Date", cx).child(date_field(&w.start_date, problems.start.is_some(), window, cx)).into_any_element(),
-            ui::field("Start Time", cx).child(time_field(&w.start_time, problems.start.is_some(), window, cx)).into_any_element(),
+            ui::field("Start Date", cx).child(ui::date_field("event-start-date", &w.start_date, problems.start.is_some(), window, cx)).into_any_element(),
+            ui::field("Start Time", cx).child(ui::time_field("event-start-time", &w.start_time, problems.start.is_some(), window, cx)).into_any_element(),
         );
         let end = (w.entity_type == ScheduledEvent::EXTERNAL).then(|| {
             pair(
-                ui::field("End Date", cx).child(date_field(&w.end_date, problems.end.is_some(), window, cx)).into_any_element(),
-                ui::field("End Time", cx).child(time_field(&w.end_time, problems.end.is_some(), window, cx)).into_any_element(),
+                ui::field("End Date", cx).child(ui::date_field("event-end-date", &w.end_date, problems.end.is_some(), window, cx)).into_any_element(),
+                ui::field("End Time", cx).child(ui::time_field("event-end-time", &w.end_time, problems.end.is_some(), window, cx)).into_any_element(),
             )
         });
         div()
@@ -2176,28 +2175,6 @@ impl Waffle {
 fn description_view(id: &str, text: &str, cx: &App) -> gpui_kit::Div {
     let view = TextView::markdown(SharedString::from(id.to_owned()), crate::chat::inline_emoji(&crate::chat::discord_breaks(text)));
     div().min_w_0().text_size(px(14.)).line_height(px(20.)).text_color(palette::text(cx)).child(view)
-}
-
-// gpui-kit's pickers in Waffle's field frame: the frame's edge takes the accent while the picker has focus
-// (or its calendar is open) and the danger ink on an error. The calendar is deferred, so the dialog can't clip it.
-fn picker_frame(focused: bool, error: bool, cx: &App) -> gpui_kit::Div {
-    let edge = match (error, focused) {
-        (true, _) => palette::danger_ink(cx),
-        (false, true) => palette::accent(),
-        (false, false) => palette::line_strong(cx),
-    };
-    ui::field_frame(cx).w_full().border_color(edge)
-}
-
-fn date_field(state: &Entity<DatePickerState>, error: bool, window: &mut Window, cx: &App) -> gpui_kit::Div {
-    let focused = state.read(cx).focus_handle(cx).contains_focused(window, cx);
-    picker_frame(focused, error, cx).px_0().child(DatePicker::new(state).appearance(false))
-}
-
-fn time_field(state: &Entity<TimeFieldState>, error: bool, window: &mut Window, cx: &App) -> gpui_kit::Div {
-    let focused = state.read(cx).focus_handle(cx).contains_focused(window, cx);
-    let field = TimeField::new(state).border_0().px_0().h_full().bg(gpui_kit::transparent_black());
-    picker_frame(focused, error, cx).child(div().flex_none().text_color(palette::faint(cx)).child(Icon::new(Glyph::Clock).size(px(16.)))).child(field)
 }
 
 // The status line's column: the coloured lead and the rest on one line, the repeat under it.
