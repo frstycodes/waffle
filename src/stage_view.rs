@@ -17,7 +17,7 @@ use crate::{
     menu::item,
     palette::{self, stage},
     stage::{STAGE, hand_queue, ordinal, requests_allowed},
-    ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, Squircle},
+    ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, Squircle, Tone},
 };
 
 // The foot bar: 12px over its 48px controls, 16px under.
@@ -280,38 +280,20 @@ impl Waffle {
     fn disconnect_control(&self, room: &Room, cx: &mut Context<Self>) -> AnyElement {
         let (guild_id, channel_id) = (room.guild.id.clone(), room.channel.id.clone());
         let can_end = room.moderator && room.topic.is_some();
-        let leave = ui::pressable(div().id("stage-disconnect"), 0.92)
-            .w(px(if can_end { 48. } else { 56. }))
+        let leave = ui::button("stage-disconnect", Tone::Danger, cx)
             .h(px(CONTROLS_HEIGHT))
-            .flex_none()
-            .flex()
-            .items_center()
-            .justify_center()
-            .bg(palette::danger())
-            .text_color(gpui_kit::white())
-            .cursor_pointer()
-            .hover(|s| s.bg(palette::danger_hover()))
+            .px(px(14.))
             .child(Icon::new(Glyph::CallEnd).size(px(20.)))
-            .tooltip(|window, cx| Tooltip::new("Disconnect Quietly").build(window, cx))
+            .tooltip(|window, cx| ui::tip("Disconnect Quietly", window, cx))
             .on_click(cx.listener(move |this, _, _, cx| this.disconnect_from_stage(guild_id.clone(), channel_id.clone(), cx)));
-        let shell = div().h(px(CONTROLS_HEIGHT)).flex_none().flex().squircle(10. + DOCK_PAD).overflow_hidden();
         if !can_end {
-            return shell.child(leave).into_any_element();
+            return leave.into_any_element();
         }
         let channel_id = room.channel.id.clone();
-        let more = ui::pressable(div().id("stage-disconnect-more"), 0.92)
-            .w(px(22.))
+        let more = ui::button("stage-disconnect-more", Tone::Danger, cx)
             .h(px(CONTROLS_HEIGHT))
-            .flex_none()
-            .flex()
-            .items_center()
-            .justify_center()
-            .bg(palette::danger())
-            .text_color(gpui_kit::white())
-            .cursor_pointer()
-            .hover(|s| s.bg(palette::danger_hover()))
             .child(Icon::new(Glyph::ChevronUpBold).size(px(12.)))
-            .tooltip(|window, cx| Tooltip::new("More ways to leave").build(window, cx))
+            .tooltip(|window, cx| ui::tip("More ways to leave", window, cx))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, e: &MouseDownEvent, _, cx| {
@@ -321,7 +303,7 @@ impl Waffle {
                     this.open_menu(e.position, vec![end], cx);
                 }),
             );
-        shell.gap(px(1.)).child(leave).child(more).into_any_element()
+        ui::split(leave, more).into_any_element()
     }
 
     // Requests to Speak: whether @everyone may ask, then each raised hand in line, then anyone invited and
