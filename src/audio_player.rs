@@ -438,11 +438,31 @@ impl AudioPlayer {
             .child(self.waveform(duration, cx))
             .child(div().flex_none().min_w(px(32.)).text_right().text_size(px(14.)).font_features(tabular()).text_color(palette::muted(cx)).child(time))
             .child(
-                ui::chip(SharedString::from(format!("voice-rate-{}", self.key)), None, rate_label, false, cx)
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.next_rate(cx);
-                    })),
+                ui::pressable(
+                    div()
+                        .id(SharedString::from(format!("voice-rate-{}", self.key)))
+                        .h(px(24.))
+                        .min_w(px(36.))
+                        .px(px(6.))
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .squircle(RADIUS_XS)
+                        .cursor_pointer()
+                        .bg(palette::hover(cx))
+                        .hover(|s| s.bg(palette::press(cx)).text_color(palette::strong(cx)))
+                        .text_size(px(12.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .font_features(tabular())
+                        .text_color(palette::muted(cx))
+                        .child(rate_label)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            cx.stop_propagation();
+                            this.next_rate(cx);
+                        })),
+                    0.94,
+                ),
             )
             .child(self.volume(window, cx))
     }
