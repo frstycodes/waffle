@@ -1056,6 +1056,8 @@ pub enum Event {
     Ready(Box<Ready>),
     // Account settings changed here or in another client: only the changed fields.
     UserSettings(Value),
+    // PreloadedUserSettings (settings-proto type 1) as base64; `partial` carries only the changed top-level fields.
+    SettingsProto { proto: String, partial: bool },
     // A Go Live stream by its key: who is watching, and whether the streamer paused it (Not verified
     // that `paused` is sent here; a stalled stream reads as Stalled without it).
     StreamUpdate { key: String, viewers: Vec<String>, paused: bool },
@@ -2061,6 +2063,10 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
     match kind {
         "READY" => Some(Event::Ready(Box::new(parse_ready(d)))),
         "USER_SETTINGS_UPDATE" => Some(Event::UserSettings(d.clone())),
+        // Not verified: the payload shape `{settings: {type, proto}, partial}`, inferred from Discord's store handler.
+        "USER_SETTINGS_PROTO_UPDATE" if d["settings"]["type"].as_u64() == Some(1) => {
+            Some(Event::SettingsProto { proto: s(&d["settings"]["proto"]), partial: d["partial"].as_bool().unwrap_or(false) })
+        }
         "GUILD_CREATE" => parse_guild(d).map(Event::GuildCreate),
         "CHANNEL_CREATE" | "CHANNEL_UPDATE" | "THREAD_CREATE" | "THREAD_UPDATE" => {
             let guild_id = d["guild_id"].as_str()?.to_owned();

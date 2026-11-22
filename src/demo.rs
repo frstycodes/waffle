@@ -376,6 +376,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // and an expired code, a message you can't see (no card), and two still loading.
         "link-previews" => demo_link_previews(waffle),
         "forwarded" => demo_forwarded(waffle),
+        "favorites" => demo_favorites(waffle, window, cx),
         // The dialog with #📷-media picked and a note; gpui's channel reads only, so it shows locked.
         "forward-dialog" => {
             if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "2") {
@@ -1794,4 +1795,29 @@ fn demo_role_popout(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
     }
     waffle.role_popout.seed_counts("1", [("r2".to_owned(), 14)].into());
     waffle.open_role_popout(Some("r2".into()), gpui_kit::point(gpui_kit::px(470.), gpui_kit::px(300.)), cx);
+}
+
+// Favorites open: #ranked-lfg loose, then Games holding #patch-notes (nicknamed) and #show-and-tell (3 mentions),
+// from two servers, the first one open.
+fn demo_favorites(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<Waffle>) {
+    let server = |waffle: &Waffle, id: &str, name: &str, channels: Vec<Channel>| {
+        let mut guild = waffle.guilds[1].clone();
+        guild.id = id.into();
+        guild.name = name.into();
+        guild.channels = channels;
+        guild
+    };
+    let night_shift = server(waffle, "6", "Night Shift", vec![channel("6001", "ranked-lfg", ChannelKind::Text, None), channel("6002", "patch-notes", ChannelKind::Text, None)]);
+    let pixel_club = server(waffle, "7", "Pixel Club", vec![channel("7001", "show-and-tell", ChannelKind::Text, None)]);
+    waffle.guilds.extend([night_shift, pixel_club]);
+    waffle.read_states.insert("7001".into(), ReadState { last_read: 100, mentions: 3 });
+    waffle.last_message.insert("7001".into(), 900);
+    let games = waffle.favorites.add_category("Games", 9000);
+    waffle.favorites.add_channel(6001, 0, 0);
+    waffle.favorites.add_channel(6002, 0, games);
+    waffle.favorites.add_channel(7001, 0, games);
+    if let Some(entry) = waffle.favorites.channels.get_mut(&6002) {
+        entry.nickname = "patch notes".into();
+    }
+    waffle.open_favorites(window, cx);
 }
