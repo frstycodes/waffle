@@ -415,7 +415,7 @@ impl Waffle {
         let body = match view.step {
             Step::Cover => cover(&guild, splash.is_some(), cx),
             Step::Prompt(i) => self.prompt_step(&guild, &prompts, i, window, cx),
-            Step::Rules => rules_body(&rules, &view.rules_scroll, cx),
+            Step::Rules => rules_body(&rules, &view.rules_scroll, rules_note(view, cx), cx),
         };
         let page = palette::surface(palette::Level::Page, cx);
         let close = if on_splash_cover { ui::round_button("onboarding-close", Glyph::X, "Close", 40.) } else { ui::icon_button("onboarding-close", Glyph::X, "Close", cx).large() };
@@ -508,11 +508,11 @@ impl Waffle {
             Step::Prompt(_) if !picked_here => ("Skip", Tone::Secondary),
             _ => ("Next", Tone::Primary),
         };
-        let read_hint = (view.step == Step::Rules && view.rules_read).then_some("By clicking \"Finish\", you have read and agreed to the Server Rules.");
-        let (hint, alarm) = match (view.warning, &view.error) {
-            (Some(warning), _) => (Some(warning.text().to_owned()), true),
-            (None, Some(error)) => (Some(error.clone()), true),
-            (None, None) => (read_hint.map(str::to_owned), false),
+        // The rules step's notes sit under the rules (`rules_note`); the footer keeps question and send errors.
+        let hint = match (view.warning, &view.error) {
+            (Some(Warning::Required), _) => Some(Warning::Required.text().to_owned()),
+            (_, Some(error)) => Some(error.clone()),
+            _ => None,
         };
         let back = view.can_go_back().then(|| {
             ui::button("onboarding-back", Tone::Ghost, cx)
@@ -525,7 +525,7 @@ impl Waffle {
         let dots = (view.step != Step::Cover).then(|| progress_dots(view.step, prompts.len() + usize::from(has_rules), cx));
         // The hint gets its own line over the buttons, ending under the button it's about, instead of a
         // third of the row.
-        let hint = hint.map(|hint| div().text_right().text_size(px(14.)).text_color(if alarm { palette::danger_ink(cx) } else { palette::muted(cx) }).child(hint));
+        let hint = hint.map(|hint| div().text_right().text_size(px(14.)).text_color(palette::danger_ink(cx)).child(hint));
         let row = div().flex().items_center().gap(px(12.)).child(div().flex_1().flex().children(back)).children(dots).child(div().flex_1().flex().justify_end().child(next));
         div()
             .flex_none()
@@ -560,7 +560,17 @@ fn cover(guild: &Guild, on_splash: bool, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-fn rules_body(rules: &RulesStep, scroll: &ScrollHandle, cx: &App) -> AnyElement {
+// Under the rules, about the rules: finish reading them, or what pressing Finish means.
+fn rules_note(view: &OnboardingView, cx: &App) -> Option<Div> {
+    let (text, alarm) = match view.warning {
+        Some(Warning::Unread) => (Warning::Unread.text(), true),
+        _ if view.rules_read => ("By clicking \"Finish\", you have read and agreed to the Server Rules.", false),
+        _ => return None,
+    };
+    Some(div().mt(px(12.)).mx(px(4.)).text_size(px(14.)).text_color(if alarm { palette::danger_ink(cx) } else { palette::muted(cx) }).child(text))
+}
+
+fn rules_body(rules: &RulesStep, scroll: &ScrollHandle, note: Option<Div>, cx: &App) -> AnyElement {
     let list = match rules {
         RulesStep::Ready(form) => rules_list(&form.rules, scroll, cx).into_any_element(),
         _ => ui::progress_indeterminate("onboarding-rules-loading", cx),
@@ -569,7 +579,8 @@ fn rules_body(rules: &RulesStep, scroll: &ScrollHandle, cx: &App) -> AnyElement 
         column()
             .child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child("One last step!"))
             .child(heading("Read & Agree to Server Rules".into(), cx))
-            .child(div().mt(px(12.)).child(list)),
+            .child(div().mt(px(12.)).child(list))
+            .children(note),
     )
 }
 
