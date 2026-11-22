@@ -443,33 +443,33 @@ impl Waffle {
     fn forum_header(&self, forum: &Channel, cx: &mut Context<Self>) -> Div {
         let (strong, faint) = (palette::strong(cx), palette::faint(cx));
         div()
-            .h(px(48.))
+            .h_12()
             .flex_none()
-            .pl(px(12.))
-            .pr(px(8.))
+            .pl_3()
+            .pr_2()
             .flex()
             .items_center()
-            .gap(px(8.))
+            .gap_2()
             .border_b_1()
             .border_color(palette::line(cx))
             .window_control_area(WindowControlArea::Drag)
             .child(
                 div()
-                    .h(px(32.))
-                    .px(px(6.))
+                    .h_8()
+                    .px_1p5()
                     .flex_none()
                     .max_w(gpui_kit::relative(0.6))
                     .min_w_0()
                     .flex()
                     .items_center()
-                    .gap(px(6.))
-                    .text_size(px(16.))
+                    .gap_1p5()
+                    .text_size(ui::TEXT_MD)
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(strong)
-                    .child(Icon::new(Glyph::Forum).size(px(20.)).text_color(faint))
+                    .child(Icon::new(Glyph::Forum).size(ui::ICON_XL).text_color(faint))
                     .child(crate::ui::truncating("header-forum-name", forum.name.clone())),
             )
-            .children(forum.topic.clone().map(|t| div().flex_1().min_w_0().pl(px(12.)).border_l_1().border_color(palette::line_strong(cx)).truncate().text_size(px(14.)).text_color(faint).child(t)))
+            .children(forum.topic.clone().map(|t| div().flex_1().min_w_0().pl_3().border_l_1().border_color(palette::line_strong(cx)).truncate().text_size(ui::TEXT_SM).text_color(faint).child(t)))
             .child(div().ml_auto().child(self.caption_clearance(true)))
     }
 
@@ -477,7 +477,7 @@ impl Waffle {
     fn forum_toolbar(&self, forum: &Channel, page: &ForumPage, search: &Entity<InputState>, cx: &mut Context<Self>) -> Div {
         let id = forum.id.clone();
         let sort = ui::button("forum-sort", ui::Tone::Ghost, cx)
-            .child(Icon::new(Glyph::SortDesc).size(px(16.)))
+            .child(Icon::new(Glyph::SortDesc).size(ui::ICON_MD))
             .child(if page.media { "Sort" } else { "Sort & View" })
             .on_click(cx.listener(move |this, _, window, cx| {
                 let id = id.clone();
@@ -493,20 +493,20 @@ impl Waffle {
             .w_full()
             .max_w(px(880.))
             .mx_auto()
-            .px(px(16.))
-            .pt(px(16.))
-            .pb(px(4.))
+            .px_4()
+            .pt_4()
+            .pb_1()
             .flex()
             .flex_col()
-            .gap(px(10.))
-            .child(div().flex().items_center().gap(px(8.)).child(div().flex_1().min_w_0().child(ui::search_field("forum-search", search, cx))).child(sort).children(guidelines).children(new_post))
+            .gap_2p5()
+            .child(div().flex().items_center().gap_2().child(div().flex_1().min_w_0().child(ui::search_field("forum-search", search, cx))).child(sort).children(guidelines).children(new_post))
             .children(self.search_status(forum, page, cx))
             .children((!forum.props.tags.is_empty()).then(|| self.tag_row(forum, &page.filter, cx)))
     }
 
     fn new_post_button(&self, key: &'static str, forum_id: &str, cx: &mut Context<Self>) -> ui::Control {
         let id = forum_id.to_owned();
-        ui::button(key, ui::Tone::Primary, cx).child(Icon::new(Glyph::Plus).size(px(16.))).child("New post").on_click(cx.listener(move |this, _, window, cx| this.open_new_post(id.clone(), window, cx)))
+        ui::button(key, ui::Tone::Primary, cx).child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("New post").on_click(cx.listener(move |this, _, window, cx| this.open_new_post(id.clone(), window, cx)))
     }
 
     // Discord's line under the search: "Searching...", "No matching posts" or the count, then Clear.
@@ -528,7 +528,7 @@ impl Waffle {
             }
             this.queue_forum_search(&id, cx);
         }));
-        Some(div().flex().items_center().gap(px(8.)).text_size(px(14.)).text_color(palette::muted(cx)).child(text).child(clear))
+        Some(div().flex().items_center().gap_2().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(text).child(clear))
     }
 
     // One clipped line of tag chips, then "All" or "N selected", which opens every tag.
@@ -550,7 +550,7 @@ impl Waffle {
             .small()
             .flex_none()
             .child(if filter.is_empty() { "All".to_owned() } else { format!("{} selected", filter.len()) })
-            .child(Icon::new(Glyph::ChevronDown).size(px(14.)))
+            .child(Icon::new(Glyph::ChevronDown).size(ui::ICON_SM))
             .on_click(cx.listener(move |this, _, window, cx| {
                 let id = id.clone();
                 this.open_live_menu(window.mouse_position(), move |this| this.tag_filter_entries(&id), cx);
@@ -558,10 +558,10 @@ impl Waffle {
         div()
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap_1p5()
             .min_w_0()
-            .child(div().flex().gap(px(6.)).min_w_0().overflow_hidden().children(chips))
-            .child(div().flex_none().w(px(1.)).h(px(20.)).mx(px(2.)).bg(palette::line_strong(cx)))
+            .child(div().flex().gap_1p5().min_w_0().overflow_hidden().children(chips))
+            .child(div().flex_none().w(ui::HAIRLINE).h_5().mx_0p5().bg(palette::line_strong(cx)))
             .child(all)
     }
 
@@ -619,7 +619,7 @@ impl Waffle {
 
     fn forum_body(&self, forum: &Channel, page: &ForumPage, window: &mut Window, cx: &mut Context<Self>) -> Div {
         let state = self.forums.get(&forum.id);
-        let error = state.and_then(|s| s.error.clone()).map(|e| div().text_size(px(14.)).text_color(palette::danger_ink(cx)).child(e));
+        let error = state.and_then(|s| s.error.clone()).map(|e| div().text_size(ui::TEXT_SM).text_color(palette::danger_ink(cx)).child(e));
         let more = state.filter(|s| s.has_more && !s.loading && page.words.is_empty()).map(|_| {
             let id = forum.id.clone();
             div().flex().justify_center().child(ui::button("forum-more", ui::Tone::Ghost, cx).child("Load more posts").on_click(cx.listener(move |this, _, _, cx| this.load_forum(id.clone(), cx))))
@@ -630,10 +630,10 @@ impl Waffle {
         let held = state.map_or(0, |s| s.held_back.len());
         let new_posts = (held > 0).then(|| {
             let id = forum.id.clone();
-            let button = ui::button("forum-new-posts", ui::Tone::Primary, cx).small().child(Icon::new(Glyph::ArrowUp).size(px(14.))).child(new_posts_label(held));
+            let button = ui::button("forum-new-posts", ui::Tone::Primary, cx).small().child(Icon::new(Glyph::ArrowUp).size(ui::ICON_SM)).child(new_posts_label(held));
             div().flex().justify_center().child(button.on_click(cx.listener(move |this, _, _, cx| this.show_held_back(&id, cx))))
         });
-        let column = div().w_full().max_w(px(880.)).mx_auto().px(px(16.)).pt(px(8.)).pb(px(16.)).flex().flex_col().gap(px(12.)).children(error).children(new_posts);
+        let column = div().w_full().max_w(px(880.)).mx_auto().px_4().pt_2().pb_4().flex().flex_col().gap_3().children(error).children(new_posts);
         if is_empty {
             return column.child(self.forum_empty(forum, page, cx)).children(no_history);
         }
@@ -659,16 +659,16 @@ impl Waffle {
             };
             let id = forum.id.clone();
             let clear = ui::button("forum-empty-clear", ui::Tone::Secondary, cx).child("Clear all").on_click(cx.listener(move |this, _, _, cx| this.clear_forum_filter(&id, cx)));
-            return ui::empty_state("forum-empty", Illustration::ForumEmpty, title, body, cx).child(div().mt(px(8.)).child(clear));
+            return ui::empty_state("forum-empty", Illustration::ForumEmpty, title, body, cx).child(div().mt_2().child(clear));
         }
-        let new_post = page.can_post.then(|| div().mt(px(8.)).child(self.new_post_button("forum-empty-new", &forum.id, cx)));
+        let new_post = page.can_post.then(|| div().mt_2().child(self.new_post_button("forum-empty-new", &forum.id, cx)));
         ui::empty_state("forum-empty", Illustration::ForumEmpty, "Make the first post!", "Be the first to start the conversation!", cx).children(new_post)
     }
 
     fn post_list(&self, forum: &Channel, page: &ForumPage, posts: &[Channel], cx: &mut Context<Self>) -> AnyElement {
         let previews = self.forums.get(&forum.id).map(|s| &s.previews);
         let cards: Vec<AnyElement> = posts.iter().map(|post| self.post_card(forum, page, post, previews.and_then(|p| p.get(&post.id)), cx)).collect();
-        div().flex().flex_col().gap(px(8.)).children(cards).into_any_element()
+        div().flex().flex_col().gap_2().children(cards).into_any_element()
     }
 
     // A list card: pin, New and tags, the title, the opening message, then reaction, replies and time.
@@ -680,7 +680,7 @@ impl Waffle {
         let excerpt = first.map(|m| {
             let name = format!("{}: ", m.author.name);
             let highlight = HighlightStyle { color: Some(text), font_weight: Some(FontWeight::MEDIUM), ..Default::default() };
-            div().line_clamp(2).text_size(px(14.)).text_color(muted).child(StyledText::new(format!("{name}{}", m.content)).with_highlights([(0..name.len(), highlight)]))
+            div().line_clamp(2).text_size(ui::TEXT_SM).text_color(muted).child(StyledText::new(format!("{name}{}", m.content)).with_highlights([(0..name.len(), highlight)]))
         });
         let tags = self.card_tags(forum, page, post, cx);
         let unread = self.post_unread(&forum.id, post).map(|n| div().font_weight(FontWeight::SEMIBOLD).text_color(palette::accent_ink(cx)).child(format!("({n} New)")));
@@ -688,21 +688,21 @@ impl Waffle {
             .flex()
             .flex_wrap()
             .items_center()
-            .gap_x(px(8.))
-            .gap_y(px(4.))
-            .text_size(px(12.))
+            .gap_x_2()
+            .gap_y_1()
+            .text_size(ui::TEXT_XS)
             .text_color(faint)
             .children(top_reaction(first, forum).map(|(emoji, count)| reaction_chip(emoji, count, cx)))
-            .child(div().flex().items_center().gap(px(4.)).child(Icon::new(Glyph::ChatRound).size(px(14.))).child(meta.message_count.to_string()).children(unread))
+            .child(div().flex().items_center().gap_1().child(Icon::new(Glyph::ChatRound).size(ui::ICON_SM)).child(meta.message_count.to_string()).children(unread))
             .child("\u{2022}")
             .child(post_time(post, page.view.by_creation));
         let open = post.clone();
         let (menu_post, guild_id) = (post.clone(), self.guild_id.clone().unwrap_or_default());
         ui::pressable(div().id(SharedString::from(format!("post-{}", post.id))), 0.99)
-            .py(px(14.))
-            .px(px(16.))
+            .py_3p5()
+            .px_4()
             .flex()
-            .gap(px(16.))
+            .gap_4()
             .squircle(ui::RADIUS_LG)
             .bg(sidebar)
             .border_1()
@@ -715,7 +715,7 @@ impl Waffle {
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .gap(px(6.))
+                    .gap_1p5()
                     .children(tags)
                     .child(post_title(post, &page.words, self.title_ink(&forum.id, post, cx), 16., cx))
                     .children(excerpt)
@@ -737,7 +737,7 @@ impl Waffle {
         }
         let (shown, rest) = applied.split_at(applied.len().min(3));
         let rest_names = rest.iter().map(|t| t.name.as_str()).collect::<Vec<_>>().join(", ");
-        let pin = meta.pinned.then(|| div().id(SharedString::from(format!("post-pin-{}", post.id))).text_color(palette::muted(cx)).child(Icon::new(Glyph::Pin).size(px(14.))).tooltip(|window, cx| ui::tip("Pinned", window, cx)));
+        let pin = meta.pinned.then(|| div().id(SharedString::from(format!("post-pin-{}", post.id))).text_color(palette::muted(cx)).child(Icon::new(Glyph::Pin).size(ui::ICON_SM)).tooltip(|window, cx| ui::tip("Pinned", window, cx)));
         let overflow = (!rest.is_empty()).then(|| {
             div().id(SharedString::from(format!("post-tags-more-{}", post.id))).child(post_tag_badge(None, format!("+{}", rest.len()), false, cx)).tooltip(move |window, cx| ui::tip(rest_names.clone(), window, cx))
         });
@@ -746,7 +746,7 @@ impl Waffle {
                 .flex()
                 .flex_wrap()
                 .items_center()
-                .gap(px(6.))
+                .gap_1p5()
                 .children(is_new.then(|| ui::badge(palette::accent(), palette::on_accent()).child("New")))
                 .children(pin)
                 .children(shown.iter().map(|t| post_tag_badge(t.emoji.as_ref(), t.name.clone(), page.filter.contains(&t.id), cx)))
@@ -778,7 +778,7 @@ impl Waffle {
         let measure = measured.clone();
         div()
             .w_full()
-            .child(div().w_full().flex().items_start().gap(px(16.)).children(stacks.into_iter().map(|cards| div().flex_1().min_w_0().flex().flex_col().gap(px(16.)).children(cards))))
+            .child(div().w_full().flex().items_start().gap_4().children(stacks.into_iter().map(|cards| div().flex_1().min_w_0().flex().flex_col().gap_4().children(cards))))
             .on_children_prepainted(move |bounds, _, cx| {
                 let Some(row) = bounds.first() else { return };
                 let next = f32::from(row.size.width);
@@ -804,34 +804,34 @@ impl Waffle {
         let byline = div()
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap_1p5()
             .min_w_0()
-            .text_size(px(12.))
+            .text_size(ui::TEXT_XS)
             .text_color(muted)
             .children(first.map(|m| ui::avatar(m.author.avatar.clone(), 20.)))
             .children(first.map(|m| div().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::text(cx)).child(m.author.name.clone())))
             .child(div().flex_none().child(if page.media { age } else { format!("posted {age}") }))
             .children(self.is_new_post(&forum.id, post).then(|| ui::badge(palette::accent(), palette::on_accent()).ml_auto().child("New")));
         let picture = media.and_then(|(urls, height)| mosaic_view(&urls, height, 4., cx)).map(|m| m.w_full());
-        let text = picture.is_none().then(|| first.map(|m| div().line_clamp(5).text_size(px(14.)).text_color(muted).child(m.content.clone()))).flatten();
+        let text = picture.is_none().then(|| first.map(|m| div().line_clamp(5).text_size(ui::TEXT_SM).text_color(muted).child(m.content.clone()))).flatten();
         let footer = (!page.media).then(|| {
             div()
                 .flex()
                 .items_center()
-                .gap(px(8.))
-                .text_size(px(12.))
+                .gap_2()
+                .text_size(ui::TEXT_XS)
                 .text_color(faint)
                 .children(top_reaction(first, forum).map(|(emoji, count)| reaction_chip(emoji, count, cx)))
-                .child(div().flex().items_center().gap(px(4.)).child(Icon::new(Glyph::ChatRound).size(px(14.))).child(replies.to_string()).children(unread))
+                .child(div().flex().items_center().gap_1().child(Icon::new(Glyph::ChatRound).size(ui::ICON_SM)).child(replies.to_string()).children(unread))
         });
         let title = post_title(post, &page.words, self.title_ink(&forum.id, post, cx), if page.media { 14. } else { 16. }, cx);
         let open = post.clone();
         let (menu_post, guild_id) = (post.clone(), self.guild_id.clone().unwrap_or_default());
         let card = ui::pressable(div().id(SharedString::from(format!("post-{}", post.id))), 0.99)
-            .p(px(14.))
+            .p_3p5()
             .flex()
             .flex_col()
-            .gap(px(8.))
+            .gap_2()
             .squircle(ui::RADIUS_LG)
             .bg(sidebar)
             .border_1()
@@ -1004,13 +1004,13 @@ impl Waffle {
         let cooling = self.cooldown_left(forum_id);
         let slowmode = (forum.props.slowmode > 0 && !self.skips_slowmode(forum_id)).then(|| slowmode_clock(cooling.map_or(forum.props.slowmode.into(), |left| left.as_secs() + 1), cx));
         let preview = ui::button("new-post-preview", ui::Tone::Ghost, cx)
-            .child(Icon::new(if composer.previewing { Glyph::EyeSlash } else { Glyph::Eye }).size(px(16.)))
+            .child(Icon::new(if composer.previewing { Glyph::EyeSlash } else { Glyph::Eye }).size(ui::ICON_MD))
             .child(if composer.previewing { "Exit Preview" } else { "Preview" })
             .on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.previewing = !c.previewing, cx)));
         let actions = div()
             .flex()
             .items_center()
-            .gap(px(8.))
+            .gap_2()
             .child(preview)
             .children(slowmode)
             .child(div().flex_1())
@@ -1027,16 +1027,16 @@ impl Waffle {
         let head = div()
             .flex()
             .items_start()
-            .gap(px(4.))
+            .gap_1()
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .gap(px(2.))
-                    .child(div().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("New post"))
-                    .child(div().truncate().text_size(px(14.)).text_color(muted).child(format!("in {}", forum.name))),
+                    .gap_0p5()
+                    .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("New post"))
+                    .child(div().truncate().text_size(ui::TEXT_SM).text_color(muted).child(format!("in {}", forum.name))),
             )
             .children(reopen)
             .child(ui::icon_button("new-post-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_new_post(cx))));
@@ -1063,7 +1063,7 @@ impl Waffle {
             .child(ui::text_field("new-post-title", Input::new(&composer.title).appearance(false), &title_focus))
             .child(ui::field_hint("", Some(format!("{title_count} / {MAX_TITLE}").into()), cx));
         let body_focus = composer.body.read(cx).focus_handle(cx);
-        let message = ui::field("Message", cx).child(ui::text_area("new-post-body", Textarea::new(&composer.body).appearance(false).px_0().text_size(px(14.)), &body_focus));
+        let message = ui::field("Message", cx).child(ui::text_area("new-post-body", Textarea::new(&composer.body).appearance(false).px_0().text_size(ui::TEXT_SM), &body_focus));
         let usable: Vec<&ForumTag> = forum.props.tags.iter().filter(|t| manage || !t.moderated).collect();
         let tags = (!usable.is_empty()).then(|| {
             let chips: Vec<AnyElement> = usable
@@ -1074,7 +1074,7 @@ impl Waffle {
                     chip.on_click(cx.listener(move |this, _, _, cx| this.toggle_post_draft_tag(&tag_id, cx))).into_any_element()
                 })
                 .collect();
-            ui::field(format!("Tags \u{b7} pick up to {MAX_TAGS}"), cx).child(div().flex().flex_wrap().gap(px(6.)).children(chips))
+            ui::field(format!("Tags \u{b7} pick up to {MAX_TAGS}"), cx).child(div().flex().flex_wrap().gap_1p5().children(chips))
         });
         let files: Vec<AnyElement> = composer
             .files
@@ -1087,8 +1087,8 @@ impl Waffle {
                 file_chip(file, cx).child(remove).into_any_element()
             })
             .collect();
-        let add = ui::button("new-post-attach", ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::Upload).size(px(14.))).child("Add files").on_click(cx.listener(|this, _, window, cx| this.pick_post_files(window, cx)));
-        let attachments = ui::field("Files", cx).child(div().flex().flex_wrap().items_center().gap(px(6.)).children(files).child(add));
+        let add = ui::button("new-post-attach", ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::Upload).size(ui::ICON_SM)).child("Add files").on_click(cx.listener(|this, _, window, cx| this.pick_post_files(window, cx)));
+        let attachments = ui::field("Files", cx).child(div().flex().flex_wrap().items_center().gap_1p5().children(files).child(add));
         [Some(title.into_any_element()), tags.map(IntoElement::into_any_element), Some(message.into_any_element()), Some(attachments.into_any_element())].into_iter().flatten().collect()
     }
 
@@ -1101,18 +1101,18 @@ impl Waffle {
             false => (title, palette::strong(cx)),
         };
         div()
-            .p(px(16.))
+            .p_4()
             .flex()
             .flex_col()
-            .gap(px(8.))
+            .gap_2()
             .squircle(ui::RADIUS_LG)
             .bg(palette::surface(Level::Sidebar, cx))
             .border_1()
             .border_color(palette::line(cx))
-            .child(div().flex().flex_wrap().gap(px(6.)).children(tags))
+            .child(div().flex().flex_wrap().gap_1p5().children(tags))
             .child(div().text_size(px(18.)).font_weight(FontWeight::SEMIBOLD).text_color(ink).child(heading))
             .child(TextView::markdown("new-post-preview-body", crate::chat::discord_breaks(&content)).selectable(true))
-            .child(div().flex().flex_wrap().gap(px(6.)).children(composer.files.iter().map(|f| file_chip(f, cx).pr(px(10.)))))
+            .child(div().flex().flex_wrap().gap_1p5().children(composer.files.iter().map(|f| file_chip(f, cx).pr_2p5())))
             .into_any_element()
     }
 
@@ -1154,17 +1154,17 @@ impl Waffle {
         let head = div()
             .flex()
             .items_center()
-            .gap(px(4.))
-            .child(Icon::new(Glyph::BookOpen).size(px(16.)).text_color(palette::muted(cx)))
-            .child(div().flex_1().ml(px(4.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Post Guidelines"))
+            .gap_1()
+            .child(Icon::new(Glyph::BookOpen).size(ui::ICON_MD).text_color(palette::muted(cx)))
+            .child(div().flex_1().ml_1().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Post Guidelines"))
             .children(edit)
             .child(close);
         Some(
             div()
-                .p(px(12.))
+                .p_3()
                 .flex()
                 .flex_col()
-                .gap(px(8.))
+                .gap_2()
                 .squircle(ui::RADIUS_MD)
                 .bg(palette::surface(Level::Sidebar, cx))
                 .border_1()
@@ -1495,17 +1495,17 @@ fn file_chip(file: &PendingFile, cx: &Context<Waffle>) -> Div {
         FileKind::Other => Glyph::File,
     };
     div()
-        .h(px(32.))
-        .pl(px(10.))
-        .pr(px(2.))
+        .h_8()
+        .pl_2p5()
+        .pr_0p5()
         .flex()
         .items_center()
-        .gap(px(6.))
+        .gap_1p5()
         .squircle(ui::RADIUS_SM)
         .bg(palette::selected(cx))
         .text_size(px(13.))
         .text_color(palette::text(cx))
-        .child(Icon::new(glyph).size(px(14.)).text_color(palette::muted(cx)))
+        .child(Icon::new(glyph).size(ui::ICON_SM).text_color(palette::muted(cx)))
         .child(div().max_w(px(180.)).truncate().child(file.name.clone()))
         .child(div().flex_none().text_color(palette::faint(cx)).child(crate::chat::format_size(file.size)))
 }
@@ -1515,10 +1515,10 @@ fn slowmode_clock(secs: u64, cx: &Context<Waffle>) -> Stateful<Div> {
         .id("new-post-slowmode")
         .flex()
         .items_center()
-        .gap(px(4.))
-        .text_size(px(12.))
+        .gap_1()
+        .text_size(ui::TEXT_XS)
         .text_color(palette::muted(cx))
-        .child(Icon::new(Glyph::Timer).size(px(14.)))
+        .child(Icon::new(Glyph::Timer).size(ui::ICON_SM))
         .child(countdown(secs))
         .tooltip(|window, cx| ui::tip("Slowmode is enabled", window, cx))
 }
@@ -1538,11 +1538,11 @@ fn tag_item(tag: &ForumTag, act: impl Fn(&mut Waffle, &mut Window, &mut Context<
 // A tag on a card; one being filtered by takes the accent.
 fn post_tag_badge(emoji: Option<&Emoji>, name: impl Into<SharedString>, hit: bool, cx: &Context<Waffle>) -> Div {
     let (fill, ink) = if hit { (palette::accent_soft(cx), palette::accent_ink(cx)) } else { (palette::selected(cx), palette::text(cx)) };
-    ui::badge(fill, ink).h(px(22.)).gap(px(4.)).children(emoji.map(|e| emoji_face(e, 14.))).child(name.into())
+    ui::badge(fill, ink).h(px(22.)).gap_1().children(emoji.map(|e| emoji_face(e, 14.))).child(name.into())
 }
 
 fn reaction_chip(emoji: Emoji, count: Option<u32>, cx: &Context<Waffle>) -> Div {
-    ui::badge(palette::selected(cx), palette::text(cx)).h(px(22.)).gap(px(4.)).child(emoji_face(&emoji, 14.)).children(count.map(|c| c.to_string()))
+    ui::badge(palette::selected(cx), palette::text(cx)).h(px(22.)).gap_1().child(emoji_face(&emoji, 14.)).children(count.map(|c| c.to_string()))
 }
 
 fn no_history_notice(forum: &Channel, cx: &Context<Waffle>) -> Div {
@@ -1553,9 +1553,9 @@ fn no_history_notice(forum: &Channel, cx: &Context<Waffle>) -> Div {
     div()
         .flex()
         .flex_col()
-        .gap(px(8.))
+        .gap_2()
         .child(ui::divider(Some("Older Posts"), cx))
-        .child(div().text_center().text_size(px(14.)).text_color(palette::muted(cx)).child(StyledText::new(text.clone()).with_highlights([(at..at + name.len(), bold)])))
+        .child(div().text_center().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(StyledText::new(text.clone()).with_highlights([(at..at + name.len(), bold)])))
 }
 
 #[cfg(debug_assertions)]
@@ -1691,15 +1691,15 @@ pub(crate) mod demo {
 
 // A post card still loading: title, two lines of its opening message, and the foot.
 fn post_skeleton(i: usize, cx: &gpui_kit::App) -> AnyElement {
-    let line = |part: &str, width: f32| ui::skeleton(SharedString::from(format!("post-skel-{part}-{i}")), 4., cx).h(px(12.)).w(gpui_kit::relative(width));
+    let line = |part: &str, width: f32| ui::skeleton(SharedString::from(format!("post-skel-{part}-{i}")), 4., cx).h_3().w(gpui_kit::relative(width));
     div()
-        .p(px(16.))
+        .p_4()
         .flex()
         .flex_col()
-        .gap(px(10.))
+        .gap_2p5()
         .squircle(ui::RADIUS_MD)
         .bg(palette::surface(Level::Sidebar, cx))
-        .child(line("title", [0.5, 0.35, 0.6, 0.42][i % 4]).h(px(16.)))
+        .child(line("title", [0.5, 0.35, 0.6, 0.42][i % 4]).h_4())
         .child(line("body", 0.9))
         .child(line("body2", 0.7))
         .child(line("foot", 0.25))

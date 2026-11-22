@@ -159,9 +159,9 @@ impl Waffle {
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .gap(px(4.))
-                    .child(div().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Forward message"))
-                    .child(div().text_size(px(14.)).text_color(palette::muted(cx)).child(format!("{} · {}", self.forward_subtitle(&dialog.message), picked_count(dialog.picked.len())))),
+                    .gap_1()
+                    .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Forward message"))
+                    .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(format!("{} · {}", self.forward_subtitle(&dialog.message), picked_count(dialog.picked.len())))),
             )
             .child(ui::icon_button("forward-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_forward(cx))));
         let places = self.forward_places(&query);
@@ -175,7 +175,7 @@ impl Waffle {
                     self.place_row(place, on, full && !on, window, cx)
                 })
                 .collect();
-            div().id("forward-places").flex().flex_col().gap(px(2.)).max_h(px(LIST_HEIGHT)).overflow_y_scroll().children(rows).into_any_element()
+            div().id("forward-places").flex().flex_col().gap_0p5().max_h(px(LIST_HEIGHT)).overflow_y_scroll().children(rows).into_any_element()
         };
         let body = ui::dialog_body()
             .child(head)
@@ -204,9 +204,9 @@ impl Waffle {
             .flex()
             .flex_col()
             .child(div().truncate().child(place.channel.name.clone()))
-            .child(div().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child(place.detail.clone()));
+            .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(place.detail.clone()));
         let mark = match place.locked {
-            true => div().text_color(palette::faint(cx)).child(Icon::new(Glyph::HashtagLock).size(px(18.))).into_any_element(),
+            true => div().text_color(palette::faint(cx)).child(Icon::new(Glyph::HashtagLock).size(ui::ICON_LG)).into_any_element(),
             false => ui::check_live(SharedString::from(format!("forward-check-{id}")), if on { Check::On } else { Check::Off }, window, cx).into_any_element(),
         };
         let lead = self.place_lead(&place, cx);
@@ -244,7 +244,7 @@ impl Waffle {
         let text = crate::chat::content(shown, &ctx, cx).map(|t| div().line_clamp(2).child(t).into_any_element());
         let text = text.or_else(|| {
             let (glyph, label) = attachment_summary(shown)?;
-            Some(div().flex().items_center().gap(px(6.)).text_color(palette::muted(cx)).child(Icon::new(glyph).size(px(16.))).child(label).into_any_element())
+            Some(div().flex().items_center().gap_1p5().text_color(palette::muted(cx)).child(Icon::new(glyph).size(ui::ICON_MD)).child(label).into_any_element())
         })?;
         let thumb = shown.media.first().map(|m| ui::media(crate::discord::thumb_url(m, THUMB * 2.), ui::all(RADIUS_XS)).size(px(THUMB)).flex_none().object_fit(gpui_kit::ObjectFit::Cover));
         Some(
@@ -252,10 +252,10 @@ impl Waffle {
                 .flex()
                 .items_center()
                 .gap_3()
-                .pl(px(12.))
-                .border_l(px(2.))
+                .pl_3()
+                .border_l_2()
                 .border_color(palette::line_strong(cx))
-                .text_size(px(14.))
+                .text_size(ui::TEXT_SM)
                 .text_color(palette::text(cx))
                 .child(div().flex_1().min_w_0().child(text))
                 .children(thumb)
@@ -270,9 +270,9 @@ impl Waffle {
         let note = ui::text_field("forward-note", Input::new(&dialog.note).appearance(false), &focus).trailing(emoji);
         // The field's height, so the two read as one row.
         let send = ui::button("forward-send", ui::Tone::Primary, cx)
-            .h(px(40.))
+            .h_10()
             .disabled(dialog.picked.is_empty())
-            .child(Icon::new(Glyph::PaperPlane).size(px(18.)))
+            .child(Icon::new(Glyph::PaperPlane).size(ui::ICON_LG))
             .child("Send")
             .on_click(cx.listener(|this, _, _, cx| this.send_forward(cx)));
         div().flex().items_center().gap_2().child(div().flex_1().min_w_0().child(note)).child(send).into_any_element()

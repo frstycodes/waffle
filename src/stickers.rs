@@ -193,7 +193,7 @@ impl Waffle {
         let hovered = window.use_keyed_state("sticker-hovered", cx, |_, _| None::<(Sticker, SharedString)>);
         let motion = self.media_prefs().stickers;
         let preview = hovered.read(cx).clone().or_else(|| sections.first().and_then(|s| Some((s.stickers.first()?.clone(), s.name.clone()))));
-        let head = div().p(px(10.)).child(ui::search_field("sticker-search", &self.sticker_search, cx));
+        let head = div().p_2p5().child(ui::search_field("sticker-search", &self.sticker_search, cx));
         let loading = self.sticker_packs.is_none() && sections.is_empty();
         let body: AnyElement = match (&self.sticker_packs, sections.is_empty()) {
             _ if loading => note("Loading stickers…", cx),
@@ -209,14 +209,14 @@ impl Waffle {
         let in_view = scroll.top_item();
         div()
             .id("sticker-rail")
-            .w(px(48.))
+            .w_12()
             .flex_none()
-            .px(px(6.))
-            .pb(px(6.))
+            .px_1p5()
+            .pb_1p5()
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(2.))
+            .gap_0p5()
             .overflow_y_scroll()
             .border_r_1()
             .border_color(palette::line(cx))
@@ -225,10 +225,10 @@ impl Waffle {
                 let scroll = scroll.clone();
                 // A line sets Discord's packs apart from yours.
                 let first_pack = matches!(section.lead, Lead::Pack(_)) && i > 0 && !matches!(sections[i - 1].lead, Lead::Pack(_));
-                let line = first_pack.then(|| div().w(px(20.)).h(px(1.)).my(px(4.)).flex_none().bg(palette::line(cx)).into_any_element());
+                let line = first_pack.then(|| div().w_5().h(ui::HAIRLINE).my_1().flex_none().bg(palette::line(cx)).into_any_element());
                 let tab = div()
                     .id(("sticker-pack", i))
-                    .size(px(36.))
+                    .size_9()
                     .flex_none()
                     .squircle(RADIUS_SM)
                     .flex()
@@ -260,8 +260,8 @@ fn sticker_grid(sections: Vec<Section>, scroll: &ScrollHandle, hovered: &Entity<
         .h_full()
         .overflow_y_scroll()
         .track_scroll(scroll)
-        .px(px(8.))
-        .pb(px(8.))
+        .px_2()
+        .pb_2()
         .children(sections.into_iter().map(|section| {
             let mut cells = Vec::with_capacity(section.stickers.len());
             for (i, sticker) in section.stickers.iter().enumerate() {
@@ -270,8 +270,8 @@ fn sticker_grid(sections: Vec<Section>, scroll: &ScrollHandle, hovered: &Entity<
             div()
                 .flex()
                 .flex_col()
-                .mb(px(4.))
-                .child(div().flex().items_center().gap(px(6.)).py(px(6.)).px(px(4.)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(section.lead.render(16., motion, cx)).child(section.name.clone()))
+                .mb_1()
+                .child(div().flex().items_center().gap_1p5().py_1p5().px_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(section.lead.render(16., motion, cx)).child(section.name.clone()))
                 .child(div().flex().flex_wrap().children(cells))
         }))
 }
@@ -284,9 +284,9 @@ fn sticker_cell(sticker: &Sticker, pack: &SharedString, key: String, hovered: &E
     let mark = sticker.animated().then(|| {
         div()
             .absolute()
-            .right(px(4.))
-            .bottom(px(4.))
-            .size(px(20.))
+            .right_1()
+            .bottom_1()
+            .size_5()
             .squircle(RADIUS_XS)
             .flex()
             .items_center()
@@ -295,13 +295,13 @@ fn sticker_cell(sticker: &Sticker, pack: &SharedString, key: String, hovered: &E
             .border_1()
             .border_color(palette::line(cx))
             .text_color(palette::muted(cx))
-            .child(Icon::new(Glyph::Play).size(px(12.)))
+            .child(Icon::new(Glyph::Play).size(ui::ICON_XS))
     });
     ui::pressable(div().id(SharedString::from(key)), 0.95)
         .relative()
         .w(relative(0.25))
         .h(px(84.))
-        .p(px(8.))
+        .p_2()
         .squircle(RADIUS_MD)
         .cursor_pointer()
         .hover(|s| s.bg(palette::selected(cx)))
@@ -323,11 +323,11 @@ fn sticker_foot(preview: Option<(Sticker, SharedString)>, motion: StickerMotion,
     div()
         .min_h(px(60.))
         .flex_none()
-        .py(px(6.))
-        .px(px(12.))
+        .py_1p5()
+        .px_3()
         .flex()
         .items_center()
-        .gap(px(10.))
+        .gap_2p5()
         .border_t_1()
         .border_color(palette::line(cx))
         .children(preview.map(|(sticker, pack)| {
@@ -335,16 +335,16 @@ fn sticker_foot(preview: Option<(Sticker, SharedString)>, motion: StickerMotion,
             div()
                 .flex()
                 .items_center()
-                .gap(px(10.))
+                .gap_2p5()
                 .min_w_0()
-                .child(div().size(px(44.)).flex_none().child(picture(&sticker, 44., motion.plays(true))))
+                .child(div().size_11().flex_none().child(picture(&sticker, 44., motion.plays(true))))
                 .child(
                     div()
                         .min_w_0()
                         .flex()
                         .flex_col()
                         .child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(format!(":{}:", sticker.name)))
-                        .child(div().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child(detail)),
+                        .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail)),
                 )
         }))
 }
@@ -375,19 +375,19 @@ pub(crate) fn in_chat(sticker: &Sticker, animate: bool, cx: &App) -> AnyElement 
         let text = if lottie { format!("Can't play :{name}: here") } else { format!("Couldn't load :{name}:") };
         div()
             .size(px(IN_CHAT))
-            .p(px(12.))
+            .p_3()
             .flex()
             .flex_col()
             .items_center()
             .justify_center()
-            .gap(px(4.))
+            .gap_1()
             .squircle(RADIUS_LG)
             .border(px(1.5))
             .border_dashed()
             .border_color(line)
-            .text_size(px(12.))
+            .text_size(ui::TEXT_XS)
             .text_color(muted)
-            .child(div().text_color(faint).child(Icon::new(Glyph::Sticker).size(px(28.))))
+            .child(div().text_color(faint).child(Icon::new(Glyph::Sticker).size_7()))
             .child(div().text_center().child(text))
             .into_any_element()
     };
@@ -395,7 +395,7 @@ pub(crate) fn in_chat(sticker: &Sticker, animate: bool, cx: &App) -> AnyElement 
         None => missing(),
         Some(url) => crate::chat::moving(img(url).size_full().object_fit(ObjectFit::Contain).with_fallback(missing), animate),
     };
-    div().mt(px(4.)).size(px(IN_CHAT)).flex_none().child(picture).into_any_element()
+    div().mt_1().size(px(IN_CHAT)).flex_none().child(picture).into_any_element()
 }
 
 #[cfg(test)]

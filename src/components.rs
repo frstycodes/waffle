@@ -558,7 +558,7 @@ pub(crate) fn used_command(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
             .h(px(22.))
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap_1p5()
             .min_w_0()
             .text_size(px(13.))
             .text_color(palette::muted(cx))
@@ -577,7 +577,7 @@ pub(crate) fn interaction_status(message: &Message, ctx: &Rc<RowContext>, cx: &A
         div()
             .flex()
             .items_center()
-            .gap(px(8.))
+            .gap_2()
             .italic()
             .text_color(palette::muted(cx))
             .child(ui::bars(SharedString::from(format!("thinking-{}", message.id)), palette::accent_ink(cx), 14.))
@@ -614,7 +614,7 @@ pub(crate) fn only_you(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Any
     let (this, channel_id, id) = (ctx.this(), message.channel_id.clone(), message.id.clone());
     let reason = message.interaction.as_ref().and_then(|m| m.ephemerality_reason).map(ephemerality_reason);
     let dismiss = ui::button(SharedString::from(format!("dismiss-{}", message.id)), ui::Tone::Link, cx)
-        .text_size(px(12.))
+        .text_size(ui::TEXT_XS)
         .child(if reason.is_some() { "Dismiss" } else { "Dismiss message" })
         .on_click(move |_, _, cx| {
             cx.stop_propagation();
@@ -624,19 +624,19 @@ pub(crate) fn only_you(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Any
             })
             .ok();
         });
-    let line = |lead: &str| div().flex().flex_wrap().items_center().gap(px(4.)).child(lead.to_owned()).child("•").child(dismiss);
+    let line = |lead: &str| div().flex().flex_wrap().items_center().gap_1().child(lead.to_owned()).child("•").child(dismiss);
     let text = match reason {
         Some(reason) => div().flex().flex_col().child("Only you can see this message.").child(line(reason)),
         None => line("Only you can see this"),
     };
     div()
-        .mt(px(6.))
+        .mt_1p5()
         .flex()
         .items_start()
-        .gap(px(6.))
-        .text_size(px(12.))
+        .gap_1p5()
+        .text_size(ui::TEXT_XS)
         .text_color(palette::muted(cx))
-        .child(div().flex_none().h(px(18.)).flex().items_center().child(Icon::new(Glyph::Eye).size(px(14.))))
+        .child(div().flex_none().h(px(18.)).flex().items_center().child(Icon::new(Glyph::Eye).size(ui::ICON_SM)))
         .child(text)
         .into_any_element()
 }
@@ -670,12 +670,12 @@ fn ephemerality_reason(reason: u64) -> &'static str {
 // Discord's red failure line: an error icon and what went wrong. No retry.
 fn failure_line(text: String, cx: &App) -> AnyElement {
     div()
-        .mt(px(4.))
+        .mt_1()
         .flex()
         .items_center()
-        .gap(px(6.))
+        .gap_1p5()
         .text_color(palette::danger_ink(cx))
-        .child(Icon::new(Glyph::WarningCircle).size(px(16.)).flex_none())
+        .child(Icon::new(Glyph::WarningCircle).size(ui::ICON_MD).flex_none())
         .child(div().min_w_0().child(text))
         .into_any_element()
 }
@@ -702,7 +702,7 @@ pub(crate) fn message_components(message: &Message, ctx: &Rc<RowContext>, cx: &m
     let width = MAX_WIDTH.min(ctx.column());
     let room = Room { width, reduced: false };
     let children: Vec<AnyElement> = message.components.iter().enumerate().map(|(i, c)| component(message, c, i.to_string(), room, ctx, cx)).collect();
-    Some(div().mt(px(8.)).w_full().max_w(px(width)).flex().flex_col().gap(px(8.)).children(children).into_any_element())
+    Some(div().mt_2().w_full().max_w(px(width)).flex().flex_col().gap_2().children(children).into_any_element())
 }
 
 // `path` keeps element ids apart: each component's index, from the top level down.
@@ -733,7 +733,7 @@ fn action_row(message: &Message, children: &[Component], path: &str, room: Room,
     div()
         .flex()
         .flex_col()
-        .child(div().flex().flex_wrap().gap(px(8.)).children(controls))
+        .child(div().flex().flex_wrap().gap_2().children(controls))
         .children(failed)
         .into_any_element()
 }
@@ -760,10 +760,10 @@ fn button(message: &Message, b: &Button, path: &str, ctx: &Rc<RowContext>, cx: &
     ui::button(SharedString::from(format!("component-{}-{path}", message.id)), tone(b.style), cx)
         .small()
         .disabled(b.disabled || blocked || premium.is_some() || message.state != SendState::Sent)
-        .when(premium.is_some(), |c| c.child(Icon::new(Glyph::Tag).size(px(14.))))
+        .when(premium.is_some(), |c| c.child(Icon::new(Glyph::Tag).size(ui::ICON_SM)))
         .children(b.emoji.as_deref().map(|e| menu::emoji_face(&as_emoji(e), 18.)))
         .when(!label.is_empty(), |c| c.child(label.clone()))
-        .when(link, |c| c.child(Icon::new(Glyph::Open).size(px(14.))))
+        .when(link, |c| c.child(Icon::new(Glyph::Open).size(ui::ICON_SM)))
         .busy(busy || sku == Some(Sku::Loading))
         .on_click(move |_, window, cx| {
             cx.stop_propagation();
@@ -881,8 +881,8 @@ fn section(message: &Message, children: &[Component], accessory: Option<&Compone
     let row = div()
         .flex()
         .items_start()
-        .gap(px(14.))
-        .child(div().flex_1().min_w_0().flex().flex_col().gap(px(4.)).text_color(palette::strong(cx)).children(text))
+        .gap_3p5()
+        .child(div().flex_1().min_w_0().flex().flex_col().gap_1().text_color(palette::strong(cx)).children(text))
         .children(accessory.map(|a| div().flex_none().child(a)));
     div().flex().flex_col().child(row).children(failed).into_any_element()
 }
@@ -944,11 +944,11 @@ fn file(message: &Message, url: &str, name: Option<&str>, size: Option<u64>, spo
     if !spoiler {
         return card;
     }
-    div().relative().child(card).children(chat::veil(format!("file-{}-{path}", message.id), "Spoiler", ui::all(RADIUS_LG), ctx).map(|v| v.top(px(8.)))).into_any_element()
+    div().relative().child(card).children(chat::veil(format!("file-{}-{path}", message.id), "Spoiler", ui::all(RADIUS_LG), ctx).map(|v| v.top_2())).into_any_element()
 }
 
 fn separator(divider: bool, large: bool, cx: &App) -> AnyElement {
-    div().py(px(if large { 8. } else { 2. })).when(divider, |d| d.child(div().h(px(1.)).bg(palette::line(cx)))).into_any_element()
+    div().py(px(if large { 8. } else { 2. })).when(divider, |d| d.child(div().h(ui::HAIRLINE).bg(palette::line(cx)))).into_any_element()
 }
 
 // A raised card at Discord's padding and gap; the app's accent colour becomes a light tint and a tinted
