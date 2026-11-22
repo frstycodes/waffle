@@ -454,30 +454,15 @@ mod tests {
 
     fn guild() -> Guild {
         let channels = vec![channel("cat", ChannelKind::Category, None), channel("empty", ChannelKind::Category, None), channel("a", ChannelKind::Text, Some("cat")), channel("b", ChannelKind::Text, Some("cat")), channel("loose", ChannelKind::Voice, None)];
-        Guild {
-            id: "g".into(),
-            name: "g".into(),
-            icon: None,
-            channels,
-            roles: Vec::new(),
-            voice_states: Vec::new(),
-            threads: Vec::new(),
-            default_notifications: 0,
-            owner_id: None,
-            my_roles: Vec::new(),
-            emojis: Vec::new(),
-            stickers: Vec::new(),
-            premium_tier: 0,
-            afk_channel_id: None,
-        }
+        Guild { id: "g".into(), name: "g".into(), channels, ..Default::default() }
     }
 
     #[test]
     fn overrides_list_held_then_added_without_defaults() {
         let mut settings = GuildSettings { notifications: 1, ..Default::default() };
         settings.channels.insert("a".into(), ChannelSettings { notifications: 2, ..Default::default() });
-        settings.channels.insert("b".into(), ChannelSettings { notifications: 3, muted: false, mute_end: None });
-        settings.channels.insert("cat".into(), ChannelSettings { notifications: 3, muted: true, mute_end: None });
+        settings.channels.insert("b".into(), ChannelSettings { notifications: 3, muted: false, mute_end: None, flags: 0 });
+        settings.channels.insert("cat".into(), ChannelSettings { notifications: 3, muted: true, mute_end: None, flags: 0 });
         let rows = override_rows(&guild(), &settings, &["loose".into(), "a".into()]);
         let ids: Vec<&str> = rows.iter().map(|r| r.channel.id.as_str()).collect();
         assert_eq!(ids, ["cat", "a", "loose"]);

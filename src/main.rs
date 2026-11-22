@@ -2868,7 +2868,7 @@ impl Waffle {
     // Whether the message pings one of our roles in its server.
     fn mentions_role(&self, message: &Message) -> bool {
         let Some(me) = &self.me else { return false };
-        let mine = self.guild_of(message).and_then(|g| self.member_roles.get(&g)).and_then(|r| r.get(&me.id));
+        let mine = self.guild_id_of(message).and_then(|g| self.member_roles.get(&g)).and_then(|r| r.get(&me.id));
         mine.is_some_and(|roles| message.mention_roles.iter().any(|r| roles.contains(r)))
     }
 

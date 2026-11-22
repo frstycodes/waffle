@@ -58,7 +58,7 @@ impl Waffle {
 
     fn rules_for(&self, message: &Message) -> Rules {
         let me = self.my_id();
-        let guild_id = self.guild_of(message);
+        let guild_id = self.guild_id_of(message);
         let settings = self.settings_for(guild_id.as_deref().unwrap_or("@me"));
         // A thread takes its channel's mute and level; the channel its category's.
         let all = || self.guilds.iter().flat_map(|g| g.channels.iter().chain(g.threads.iter()));
@@ -82,7 +82,7 @@ impl Waffle {
 
     /// The message's server, or None in a DM. History from REST comes without `guild_id`, so a missing one
     /// is looked up by channel.
-    pub(crate) fn guild_of(&self, message: &Message) -> Option<String> {
+    pub(crate) fn guild_id_of(&self, message: &Message) -> Option<String> {
         message.guild_id.clone().or_else(|| self.place_of(None, &message.channel_id).and_then(|(guild, _)| guild))
     }
 

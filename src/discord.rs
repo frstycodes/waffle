@@ -318,6 +318,7 @@ impl Default for GuildSettings {
             mute_scheduled_events: false,
             mobile_push: true,
             hide_muted: false,
+            flags: 0,
             channels: HashMap::new(),
         }
     }

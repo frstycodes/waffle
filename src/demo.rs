@@ -284,9 +284,9 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         "notification-settings" | "notification-settings-muted" => {
             use crate::discord::{ChannelSettings, GuildSettings};
             let mut settings = GuildSettings { notifications: 1, suppress_everyone: true, ..Default::default() };
-            settings.channels.insert("c1".into(), ChannelSettings { notifications: 2, muted: false, mute_end: None });
-            settings.channels.insert("media".into(), ChannelSettings { notifications: 3, muted: true, mute_end: None });
-            settings.channels.insert("long".into(), ChannelSettings { notifications: 0, muted: false, mute_end: None });
+            settings.channels.insert("c1".into(), ChannelSettings { notifications: 2, muted: false, mute_end: None, flags: 0 });
+            settings.channels.insert("media".into(), ChannelSettings { notifications: 3, muted: true, mute_end: None, flags: 0 });
+            settings.channels.insert("long".into(), ChannelSettings { notifications: 0, muted: false, mute_end: None, flags: 0 });
             if scene == "notification-settings-muted" {
                 settings.muted = true;
                 settings.mute_window = Some(28_800);
