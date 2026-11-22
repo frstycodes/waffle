@@ -65,7 +65,8 @@ fn moving_up_shows_the_hovered_tooltip_at_once(cx: &mut TestAppContext) {
     assert_eq!(showing(&drawn), "c");
 }
 
-// No delay set: a tooltip shows the moment its element is hovered, the first one included.
+// No delay set: a tooltip shows 50ms after its element is hovered, not before, so a pointer passing over
+// doesn't flash one.
 struct Plain {
     drawn: Drawn,
 }
@@ -81,15 +82,17 @@ impl Render for Plain {
 }
 
 #[gpui_kit::test]
-fn a_tooltip_shows_at_once_by_default(cx: &mut TestAppContext) {
+fn a_tooltip_shows_after_a_short_delay_by_default(cx: &mut TestAppContext) {
     let drawn: Drawn = Rc::default();
     let (_, cx) = cx.add_window_view({
         let drawn = drawn.clone();
         move |_, _| Plain { drawn }
     });
     move_to(cx, point(px(25.), px(25.)));
-    wait(cx, 0);
-    assert_eq!(drawn.borrow().last().copied(), Some("plain"), "shown with no time passed");
+    wait(cx, 40);
+    assert_eq!(drawn.borrow().last().copied(), None, "not yet: a pointer passing over shows nothing");
+    wait(cx, 10);
+    assert_eq!(drawn.borrow().last().copied(), Some("plain"), "shown 50ms after the hover");
 }
 
 // The hoverable delay holds a tooltip only while the pointer is on its way into it.

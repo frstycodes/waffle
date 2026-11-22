@@ -51,9 +51,10 @@ type StackSafe<T> = stacksafe::StackSafe<T>;
 type StackSafe<T> = T;
 
 const DRAG_THRESHOLD: f64 = 2.;
-// Waffle patch: tooltips show as soon as their element is hovered (upstream waits 500ms). An element can
-// still ask for a delay with `tooltip_show_delay`.
-const DEFAULT_TOOLTIP_SHOW_DELAY: Duration = Duration::ZERO;
+// Waffle patch: tooltips show 50ms after their element is hovered (upstream waits 500ms): long enough that
+// a pointer passing over doesn't flash one, short enough to read as instant. A neighbour of one already up
+// shows at once (`Window::tooltip_is_warm`), and an element can set its own with `tooltip_show_delay`.
+const DEFAULT_TOOLTIP_SHOW_DELAY: Duration = Duration::from_millis(50);
 const HOVERABLE_TOOLTIP_HIDE_DELAY: Duration = Duration::from_millis(500);
 
 /// The styling information for a given group.
