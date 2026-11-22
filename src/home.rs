@@ -27,7 +27,7 @@ use crate::{
     ui::{self, Squircle, Tone},
 };
 
-const MASCOT: &str = "add-friend-mascot-hit";
+pub(crate) const MASCOT: &str = "add-friend-mascot-hit";
 
 // Discord's cap on a friend request's note.
 const NOTE_MAX: usize = 120;

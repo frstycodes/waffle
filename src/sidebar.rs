@@ -621,7 +621,7 @@ impl Waffle {
             .child(gpui_kit::canvas(move |bounds, _, _| record.set(bounds), |_, _, _, _| {}).absolute().inset_0())
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 this.stream_card_hover = hovered.then(|| hover_key.clone());
-                cx.notify();
+                this.redraw(crate::part::Column::Nav, cx);
             }))
             .p(px(6.))
             .squircle(ui::RADIUS_LG)
@@ -1032,7 +1032,7 @@ impl Waffle {
                 false => {}
             }
             this.hovered_row = hovered.then(|| id.clone());
-            cx.notify();
+            this.redraw(crate::part::Column::Nav, cx);
         }))
     }
 
