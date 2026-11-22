@@ -544,6 +544,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         }
         "server-settings" | "server-settings-engagement" | "server-settings-roles" | "server-settings-role" | "server-settings-role-perms" | "server-settings-audit" | "server-settings-bans" | "server-settings-automod" | "server-settings-invites" | "server-settings-dirty" => crate::server_settings::demo::open(waffle, scene, window, cx),
         "channel-settings" | "channel-settings-search" | "channel-settings-perms" | "channel-settings-voice" | "channel-settings-voice-perms" | "channel-settings-invites" | "channel-settings-dirty" => demo_channel_settings(waffle, scene, window, cx),
+        "nav-pins" => demo_pins(waffle, window, cx),
         "channel-menu" => {
             let general = waffle.guild().and_then(|g| g.channels.iter().find(|c| c.id == "general").cloned());
             if let Some(channel) = general {
@@ -909,6 +910,7 @@ fn ready(me: User) -> Ready {
         stickers: Vec::new(),
         premium_tier: 1,
         afk_channel_id: None,
+        community: false,
     };
     let lounge_states = vec![
         VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "12582912".into(), user: Some(user("12582912", "moss lantern")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: true, camera: false },
@@ -1011,6 +1013,7 @@ fn load_guilds(waffle: &mut Waffle) {
             stickers: Vec::new(),
             premium_tier: 1,
             afk_channel_id: None,
+            community: false,
         });
     }
     if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
@@ -1737,4 +1740,58 @@ fn reactors(count: usize) -> Vec<Reactor> {
         ("31000010", "mikey", "mickeeeyyyyyy"),
     ];
     people.iter().take(count).map(|&(id, name, username)| Reactor { user: user(id, name), username: username.into() }).collect()
+}
+
+// `nav-pins`: Night Shift, a Community server with opt-in on (Show all channels unticked): two pinned
+// channels above the rest, a few opted-in channels, #art kept in view by a mention, and #memes and
+// Gaming hidden. Home lists six DMs with two pinned ones first.
+fn demo_pins(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<Waffle>) {
+    use crate::discord::{ChannelSettings, GuildSettings, channel_flag, guild_flag};
+    let Some(template) = waffle.guilds.first().cloned() else { return };
+    let layout = [
+        ("ns-welcome", "welcome", ChannelKind::Text, None),
+        ("ns-info", "Information", ChannelKind::Category, None),
+        ("ns-announcements", "announcements", ChannelKind::Text, Some("ns-info")),
+        ("ns-rules", "rules", ChannelKind::Text, Some("ns-info")),
+        ("ns-text", "Text", ChannelKind::Category, None),
+        ("ns-general", "general", ChannelKind::Text, Some("ns-text")),
+        ("ns-off-topic", "off-topic", ChannelKind::Text, Some("ns-text")),
+        ("ns-memes", "memes", ChannelKind::Text, Some("ns-text")),
+        ("ns-art", "art", ChannelKind::Text, Some("ns-text")),
+        ("ns-voice", "Voice", ChannelKind::Category, None),
+        ("ns-lounge", "Lounge", ChannelKind::Voice, Some("ns-voice")),
+        ("ns-gaming", "Gaming", ChannelKind::Voice, Some("ns-voice")),
+    ];
+    let channels: Vec<Channel> = layout
+        .iter()
+        .enumerate()
+        .map(|(i, &(id, name, kind, parent))| Channel { position: i as i64, ..channel(id, name, kind, parent) })
+        .collect();
+    let general = channels.iter().find(|c| c.id == "ns-general").cloned();
+    waffle.guilds.push(Guild { id: "6".into(), name: "Night Shift".into(), channels, voice_states: Vec::new(), threads: Vec::new(), community: true, ..template });
+
+    let pinned = channel_flag::FAVORITED | channel_flag::OPT_IN_ENABLED;
+    let flags = [("ns-general", pinned), ("ns-announcements", channel_flag::FAVORITED), ("ns-info", channel_flag::OPT_IN_ENABLED), ("ns-welcome", channel_flag::OPT_IN_ENABLED), ("ns-off-topic", channel_flag::OPT_IN_ENABLED), ("ns-lounge", channel_flag::OPT_IN_ENABLED)];
+    let channels = flags.iter().map(|&(id, flags)| (id.to_owned(), ChannelSettings { notifications: 3, flags, ..Default::default() })).collect();
+    waffle.guild_settings.insert("6".into(), GuildSettings { flags: guild_flag::OPT_IN_CHANNELS_ON, channels, ..Default::default() });
+    waffle.last_message.insert("ns-art".into(), 200);
+    waffle.read_states.insert("ns-art".into(), ReadState { last_read: 100, mentions: 1 });
+
+    // Newest message first, as the list keeps them; "dm-mira" and the group are pinned.
+    let Some(wren) = waffle.dms.first().cloned() else { return };
+    let people = [("dm-toma", "toma reed", "16777216"), ("dm-moss", "moss lantern", "12582912"), ("dm-mira", "Mira", "20971520"), ("dm-ferris", "ferris", "25165824")];
+    for (id, name, user_id) in people {
+        waffle.dms.push(Channel { id: id.into(), name: name.into(), recipient: Some(user(user_id, name)), ..wren.clone() });
+    }
+    let mut group = channel("dm-squad", "Ranked squad", ChannelKind::Dm, None);
+    group.recipients = vec![user("12582912", "moss lantern"), user("16777216", "toma reed"), user("8388608", "Wren")];
+    waffle.dms.push(group);
+    let dm_pins = ["dm-mira", "dm-squad"].map(|id| (id.to_owned(), ChannelSettings { notifications: 3, flags: channel_flag::FAVORITED, ..Default::default() }));
+    waffle.guild_settings.insert("@me".into(), GuildSettings { channels: dm_pins.into_iter().collect(), ..Default::default() });
+
+    waffle.restore = None;
+    waffle.guild_id = Some("6".into());
+    if let Some(general) = general {
+        waffle.open_channel(general, window, cx);
+    }
 }
