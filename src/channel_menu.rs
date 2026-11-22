@@ -711,7 +711,7 @@ impl Waffle {
     pub(crate) fn open_thread_menu(&mut self, thread: Channel, guild_id: String, at: Point<Pixels>, cx: &mut Context<Self>) {
         // The thread as it is now (joined, archived, locked change while the menu is open).
         self.open_live_menu(at, move |this| {
-            let current = this.guilds.iter().flat_map(|g| g.threads.iter()).find(|t| t.id == thread.id).cloned().unwrap_or_else(|| thread.clone());
+            let current = this.guilds.iter().flat_map(|g| g.threads.iter()).find(|t| t.id == thread.id).cloned().or_else(|| this.forum_post(&thread.id)).unwrap_or_else(|| thread.clone());
             this.thread_menu(&current, &guild_id)
         }, cx);
     }
@@ -728,6 +728,7 @@ impl Waffle {
         let id = thread.id.clone();
         let read = item("Mark as read", move |this, _, cx| this.mark_channel_read(&id, cx)).icon(Glyph::Checks);
         out.push(if self.unread(&thread.id) { read } else { read.disabled() }.entry());
+        out.extend(self.edit_tags_entry(&thread, manage, owner));
         out.push(Entry::Separator);
 
         if !meta.joined {
