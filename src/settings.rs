@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 
 mod advanced;
 mod games;
-mod profile;
+pub(crate) mod profile;
+pub(crate) mod proto;
 pub(crate) mod registry;
 mod updates;
 mod view;

@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod accounts;
+mod active_now;
 mod attachments;
 mod app_keys;
 mod crash;
@@ -35,7 +36,9 @@ mod mascot;
 mod material;
 mod forum;
 mod forward;
+mod group_dm;
 mod reactions;
+mod requests;
 mod gif;
 mod games;
 mod go_live;
@@ -667,6 +670,7 @@ pub struct Waffle {
     poll_picks: HashMap<String, Vec<u32>>,
     poll_peek: HashSet<String>,
     forward_dialog: Option<forward::ForwardDialog>,
+    group_dialog: Option<group_dm::GroupDialog>,
     status_flyout: status_menu::Flyout,
     status_input: Entity<SearchState>,
     clear_after: status_menu::ClearAfter,
@@ -685,6 +689,8 @@ pub struct Waffle {
     // Every user seen as their server shows them, keyed by guild then user, for voice rows and tiles.
     members: HashMap<String, HashMap<String, User>>,
     dms: Vec<Channel>,
+    // DMs waiting in Message Requests, requests and spam both; kept out of `dms` until accepted.
+    dm_requests: Vec<Channel>,
     // None shows direct messages.
     guild_id: Option<String>,
     channel: Option<Channel>,
@@ -801,6 +807,8 @@ pub struct Waffle {
     add_friend_input: Entity<SearchState>,
     add_friend_note: Entity<TextareaState>,
     add_friend_result: Option<Result<SharedString, SharedString>>,
+    // Set while a one-second repaint runs for Active Now's play clocks.
+    active_now_ticking: Rc<std::cell::Cell<bool>>,
     // The gateway refused the token once and REST accepted it; set until the next READY.
     auth_retried: bool,
     // The background updater: its status (a staged update installs on Restart or the next launch).
@@ -866,6 +874,8 @@ pub struct Waffle {
     popover_at: gpui_kit::Point<gpui_kit::Pixels>,
     // The full Inbox page in the content column ("See all").
     inbox_page: bool,
+    // The Message Requests page, on its tab; None while it's closed.
+    requests_page: Option<requests::RequestsTab>,
     // Joining a server: invite screen, onboarding, rules, Channels & Roles and the Server Guide.
     join: joining::Join,
     // A server page open in the content column instead of a channel (Server Guide, Channels & Roles).
@@ -1076,6 +1086,7 @@ impl Waffle {
             poll_picks: HashMap::new(),
             poll_peek: HashSet::new(),
             forward_dialog: None,
+            group_dialog: None,
             status_flyout: status_menu::Flyout::default(),
             status_input,
             clear_after: status_menu::ClearAfter::default(),
@@ -1089,6 +1100,7 @@ impl Waffle {
             drag_motion: Default::default(),
             members: HashMap::new(),
             dms: Vec::new(),
+            dm_requests: Vec::new(),
             guild_id: None,
             channel: None,
             last_channel: HashMap::new(),
@@ -1169,6 +1181,7 @@ impl Waffle {
             add_friend_input,
             add_friend_note,
             add_friend_result: None,
+            active_now_ticking: Rc::default(),
             auth_retried: false,
             share_picker: None,
             share_choice: None,
@@ -1205,6 +1218,7 @@ impl Waffle {
             pending_jump: None,
             popover_at: gpui_kit::Point::default(),
             inbox_page: false,
+            requests_page: None,
             join: joining::Join::default(),
             guild_page: None,
             gif_picker: None,
@@ -1376,6 +1390,7 @@ impl Waffle {
         self.channel = None;
         self.guilds.clear();
         self.dms.clear();
+        self.dm_requests.clear();
         self.feeds.clear();
         self.settings = None;
         self.status = Status::SignedOut(Login::Preparing);
@@ -1456,7 +1471,7 @@ impl Waffle {
                 }
                 self.guilds = ready.guilds;
                 self.folders = ready.folders;
-                self.dms = ready.dms;
+                (self.dm_requests, self.dms) = ready.dms.into_iter().partition(Channel::is_request);
                 self.dms.sort_by_key(|c| std::cmp::Reverse(self.last_message.get(&c.id).copied().unwrap_or(0)));
                 self.read_states = ready.read_states.into_iter().collect();
                 self.relationships = ready.relationships;
@@ -1524,6 +1539,26 @@ impl Waffle {
                         relationship.user = user;
                     }
                     self.relationships.push(relationship);
+                }
+            }
+            Event::DmUpsert(dm) => self.upsert_dm(dm, cx),
+            Event::DmDelete(id) => {
+                self.dms.retain(|d| d.id != id);
+                self.dm_requests.retain(|d| d.id != id);
+                if self.channel.as_ref().is_some_and(|c| c.id == id) {
+                    self.open_home(cx);
+                }
+            }
+            Event::RecipientChange { channel_id, user, added } => {
+                if !added && self.me.as_ref().is_some_and(|me| me.id == user.id) {
+                    return self.on_event(Event::DmDelete(channel_id), cx);
+                }
+                let open = self.channel.as_mut().filter(|c| c.id == channel_id);
+                for dm in self.dms.iter_mut().filter(|d| d.id == channel_id).chain(open) {
+                    dm.recipients.retain(|r| r.id != user.id);
+                    if added {
+                        dm.recipients.push(user.clone());
+                    }
                 }
             }
             Event::ThreadJoined { id, joined } => {
@@ -1855,6 +1890,7 @@ impl Waffle {
 
     pub(crate) fn open_channel(&mut self, channel: Channel, window: &mut Window, cx: &mut Context<Self>) {
         self.inbox_page = false;
+        self.requests_page = None;
         self.held_unread = None;
         self.guild_page = None;
         self.note_channel_viewed(&channel, cx);

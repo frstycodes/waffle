@@ -173,8 +173,13 @@ impl Waffle {
                 ui::icon_button("dm-video-call", Glyph::Video, "Start Video Call", cx).occlude().on_click(cx.listener(move |this, _, _, cx| this.start_dm_call(video.clone(), true, cx))),
             ]
         });
+        let add_members = (channel.kind == ChannelKind::Dm).then(|| {
+            let tip = if channel.raw_type == 3 { "Add Members" } else { "Add Friends to DM" };
+            let from = channel.clone();
+            ui::icon_button("dm-add-members", Glyph::GroupPlus, tip, cx).occlude().on_click(cx.listener(move |this, _, window, cx| this.open_group_picker(Some(from.clone()), window, cx)))
+        });
         let members_on = matches!(self.right_panel, RightPanel::Members);
-        let members = self.guild_id.is_some().then(|| {
+        let members = (self.guild_id.is_some() || channel.raw_type == 3).then(|| {
             ui::icon_button("members-toggle", Glyph::Users, if members_on { "Hide Member List" } else { "Show Member List" }, cx)
                 .occlude()
                 .when(members_on, |b| b.bg(selected).text_color(strong))
@@ -197,7 +202,7 @@ impl Waffle {
             .window_control_area(WindowControlArea::Drag)
             .child(crumbs)
             .children(topic)
-            .child(div().ml_auto().flex_none().flex().items_center().gap(px(2.)).children(join).children(calls.into_iter().flatten()).children(threads).children(bell).child(pins).children(members).children(search))
+            .child(div().ml_auto().flex_none().flex().items_center().gap(px(2.)).children(join).children(calls.into_iter().flatten()).children(threads).children(bell).child(pins).children(add_members).children(members).children(search))
             .child(self.caption_clearance(!self.panel_shown()));
         ui::hard_edge(|| false, cx).child(bar)
     }
@@ -530,6 +535,7 @@ impl Waffle {
             .border(px(0.5))
             .border_color(if focused { palette::line_strong(cx) } else { palette::line(cx) })
             .children(self.autocomplete_popup(cx))
+            .children(self.request_bar(cx))
             .children(self.composer_bar(cx))
             .children(self.attachment_tray(cx))
             .child(row);
