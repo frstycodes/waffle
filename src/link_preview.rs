@@ -212,6 +212,7 @@ impl Waffle {
             this.update(cx, |this, cx| match joined {
                 Ok(guild_id) => {
                     this.join.just_joined.insert(guild_id.clone());
+                    this.apply_invite_settings(&guild_id, cx);
                     this.open_joined_guild(guild_id, cx)
                 }
                 Err(error) => this.show_toast(error, cx),
