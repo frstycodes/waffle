@@ -79,9 +79,23 @@ fn a_tooltip_re_renders_only_its_own_view(cx: &mut TestAppContext) {
     assert_eq!(*shown.borrow(), 1, "the tooltip shows");
     assert_eq!(renders(cx).1, 1, "showing it leaves the other column replaying");
 
+    // Its entrance animates over the next frames; the window repaints the tooltip, no view re-renders.
+    let shown_at = renders(cx);
+    for _ in 0..6 {
+        frame(cx, 60);
+    }
+    assert_eq!(renders(cx), shown_at, "the entrance re-renders neither column");
+
     move_to(cx, point(px(300.), px(50.)));
     wait(cx, 0);
     assert_eq!(renders(cx).1, 1, "hiding it leaves the other column replaying");
+
+    // The closed tooltip lingers a moment, still without re-rendering anything.
+    let hidden_at = renders(cx);
+    for _ in 0..4 {
+        frame(cx, 40);
+    }
+    assert_eq!(renders(cx), hidden_at, "the linger re-renders neither column");
 
     move_to(cx, point(px(50.), px(50.)));
     wait(cx, 0);
@@ -91,6 +105,13 @@ fn a_tooltip_re_renders_only_its_own_view(cx: &mut TestAppContext) {
 
 fn move_to(cx: &mut VisualTestContext, position: Point<Pixels>) {
     cx.simulate_event(MouseMoveEvent { position, pressed_button: None, modifiers: Default::default() });
+}
+
+// One platform frame `ms` after the last: what an animation asked for on the next frame runs, then the window draws.
+fn frame(cx: &mut VisualTestContext, ms: u64) {
+    cx.executor().advance_clock(Duration::from_millis(ms));
+    cx.update(|window, cx| window.simulate_next_frame(cx));
+    cx.run_until_parked();
 }
 
 fn wait(cx: &mut VisualTestContext, ms: u64) {

@@ -2536,6 +2536,14 @@ impl Window {
         }
     }
 
+    /// Waffle patch: draws the window again without re-rendering a view: cached views replay. For what the
+    /// window paints by itself, such as a tooltip's entrance and linger.
+    pub(crate) fn redraw(&mut self) {
+        if self.invalidator.not_drawing() {
+            self.invalidator.set_dirty(true);
+        }
+    }
+
     /// Waffle patch: draws the window again re-rendering only `view` and the views around it, while
     /// cached views elsewhere replay. For changes that only `view`'s elements paint, such as their tooltip.
     pub(crate) fn refresh_view(&mut self, view: EntityId, cx: &mut App) {
@@ -4104,7 +4112,7 @@ impl Window {
             return None;
         }
         let (tooltip, bounds) = entrance.last.clone()?;
-        self.on_next_frame(|window, _| window.refresh());
+        self.on_next_frame(|window, _| window.redraw());
         let mut element = self.entering_tooltip(&tooltip, bounds, Some(ended), cx);
         element.layout_as_root(AvailableSpace::min_size(), self, cx);
         self.with_absolute_element_offset(bounds.origin, |window| element.prepaint(window, cx));
@@ -4126,7 +4134,7 @@ impl Window {
             false => ((now - started).as_secs_f32() / TOOLTIP_ENTRANCE.as_secs_f32()).min(1.),
         };
         if t < 1. {
-            self.on_next_frame(|window, _| window.refresh());
+            self.on_next_frame(|window, _| window.redraw());
         }
         let origin = match tooltip.anchor {
             Some(anchor) => point(
