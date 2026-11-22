@@ -66,6 +66,7 @@ impl Waffle {
             .text_color(theme.foreground)
             .text_size(px(16.))
             .on_key_down(cx.listener(Self::on_root_key))
+            .on_action(cx.listener(|this, _: &crate::app_keys::AddServer, window, cx| this.add_server_shortcut(window, cx)))
             .on_action(cx.listener(Self::toggle_soundboard_key))
             .on_modifiers_changed(cx.listener(|this, e: &gpui_kit::ModifiersChangedEvent, _, cx| {
                 if this.shift_held != e.modifiers.shift {
@@ -102,7 +103,7 @@ impl Waffle {
             && let Some(call) = self.render_call_with_chat(window, cx)
         {
             let (overlays, call_overlays) = (self.render_overlays(window, cx), self.render_call_overlays(window, cx));
-            let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_stage_topic(window, cx)).or_else(|| self.render_modify_attachment(window, cx)).or_else(|| self.render_notification_settings(window, cx)).or_else(|| self.render_new_post(window, cx)));
+            let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_create_server(window, cx)).or_else(|| self.render_invite(window, cx)).or_else(|| self.render_stage_topic(window, cx)).or_else(|| self.render_modify_attachment(window, cx)).or_else(|| self.render_notification_settings(window, cx)).or_else(|| self.render_new_post(window, cx)));
             let combos = self.render_keyboard_combos(window, cx);
             crate::gif::set_covered(!overlays.is_empty() || !call_overlays.is_empty() || menu.is_some() || dialog.is_some() || combos.is_some());
             return root
@@ -128,7 +129,7 @@ impl Waffle {
         };
         // Anything drawn over the chat pauses its GIFs (the GIF layer paints above the whole app).
         let (overlays, call_overlays) = (self.render_overlays(window, cx), self.render_call_overlays(window, cx));
-        let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_stage_topic(window, cx)).or_else(|| self.render_modify_attachment(window, cx)).or_else(|| self.render_notification_settings(window, cx)).or_else(|| self.render_new_post(window, cx)));
+        let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_create_server(window, cx)).or_else(|| self.render_invite(window, cx)).or_else(|| self.render_stage_topic(window, cx)).or_else(|| self.render_modify_attachment(window, cx)).or_else(|| self.render_notification_settings(window, cx)).or_else(|| self.render_new_post(window, cx)));
         let (viewer, settings) = (self.viewer_overlay(window, cx), self.render_settings(window, cx));
         let channel_settings = self.render_channel_settings(window, cx);
         let server_settings = self.render_server_settings(window, cx);

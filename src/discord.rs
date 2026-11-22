@@ -270,6 +270,7 @@ pub struct Guild {
     pub system_channel_flags: u64,
     // Discord's feature flags (COMMUNITY, GUILD_ONBOARDING, MEMBER_VERIFICATION_GATE_ENABLED, ...).
     pub features: Vec<String>,
+    pub vanity_url_code: Option<String>,
     // The invite splash: the image a server shows behind its invites and onboarding.
     pub splash: Option<String>,
     pub rules_channel_id: Option<String>,
@@ -3366,6 +3367,7 @@ fn parse_guild(g: &Value) -> Option<Guild> {
         me: Membership::default(),
         events: g["guild_scheduled_events"].as_array().into_iter().flatten().filter_map(parse_scheduled_event).collect(),
         public_updates_channel_id: props["public_updates_channel_id"].as_str().or(g["public_updates_channel_id"].as_str()).map(str::to_owned),
+        vanity_url_code: props["vanity_url_code"].as_str().or(g["vanity_url_code"].as_str()).map(str::to_owned),
     })
 }
 
@@ -4483,6 +4485,7 @@ mod tests {
             system_channel_flags: 0,
             events: Vec::new(),
             public_updates_channel_id: None,
+            vanity_url_code: None,
             threads: Vec::new(),
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -4526,6 +4529,7 @@ mod tests {
             system_channel_flags: 0,
             events: Vec::new(),
             public_updates_channel_id: None,
+            vanity_url_code: None,
             threads: vec![thread],
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -4572,6 +4576,7 @@ mod tests {
             system_channel_flags: 0,
             events: Vec::new(),
             public_updates_channel_id: None,
+            vanity_url_code: None,
             threads: Vec::new(),
             my_roles: vec!["mods".into()],
             default_notifications: Default::default(),

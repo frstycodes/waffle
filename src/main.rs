@@ -15,6 +15,7 @@ mod send_options;
 mod app_keys;
 mod crash;
 mod create_channel;
+mod create_server;
 mod modify_attachment;
 mod restart;
 mod feed_keys;
@@ -69,6 +70,7 @@ mod playback;
 mod audio_player;
 mod poll;
 mod inbox;
+mod invite;
 mod joining;
 mod status_menu;
 mod stickers;
@@ -845,6 +847,8 @@ pub struct Waffle {
     // The ⌘/ Keyboard combos dialog (shortcuts.rs).
     keyboard_combos: bool,
     create_channel: Option<create_channel::CreateChannel>,
+    create_server: Option<create_server::CreateServer>,
+    invite: Option<invite::Invite>,
     notification_settings: Option<notification_settings::NotificationSettings>,
     stage_topic: Option<stage_dialogs::StageTopic>,
     modify_attachment: Option<modify_attachment::ModifyAttachment>,
@@ -1124,7 +1128,7 @@ impl Waffle {
                 return;
             }
             if this.create_channel.is_some() {
-                return this.submit_create_channel(cx);
+                return this.advance_create_channel(window, cx);
             }
             if this.modify_attachment.is_some() {
                 return this.save_modify_attachment(cx);
@@ -1263,6 +1267,8 @@ impl Waffle {
             dialog: None,
             keyboard_combos: false,
             create_channel: None,
+            create_server: None,
+            invite: None,
             notification_settings: None,
             stage_topic: None,
             modify_attachment: None,

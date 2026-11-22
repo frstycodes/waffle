@@ -154,6 +154,20 @@ pub fn hard_edge(scrolled: impl Fn() -> bool + 'static, cx: &App) -> Div {
     div().relative().flex_none().w_full().child(rule.absolute().bottom_0().left_0().right_0().h(px(1.)))
 }
 
+/// A fade over the foot of a scrolling list while more of it lies below, dissolving into `fill` (the surface under
+/// the list); it goes once the list reaches its end. Asked as the frame paints, like `hard_edge`. Lay it absolutely
+/// over the list's bottom edge, inside the list's relative parent.
+pub fn more_below(scroll: &gpui_kit::ScrollHandle, fill: Hsla) -> Div {
+    let scroll = scroll.clone();
+    let fade = gpui_kit::canvas(|_, _, _| {}, move |bounds, _, window, _| {
+        let max = scroll.max_offset().y;
+        if max > px(0.) && scroll.offset().y > -max + px(1.) {
+            window.paint_quad(gpui_kit::fill(bounds, linear_gradient(180., linear_color_stop(fill.opacity(0.), 0.), linear_color_stop(fill, 1.))));
+        }
+    });
+    div().absolute().left_0().right_0().bottom_0().h(px(32.)).child(fade.size_full())
+}
+
 /// A vertical scroll area moving `list` on `scroll`, with the kit's scrollbar over it. Not `overflow_y_scrollbar`: that
 /// tracks a handle of its own, which nothing outside can read.
 pub fn scroll_area(list: Stateful<Div>, scroll: &gpui_kit::ScrollHandle) -> Div {

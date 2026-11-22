@@ -6,7 +6,7 @@ use gpui_kit::{App, KeyBinding, actions};
 
 use crate::Waffle;
 
-actions!(waffle, [Quit, Restart, FocusSearch, ZoomIn, ZoomOut, ResetZoom, ToggleInbox, MarkTopUnreadRead, ToggleSoundboard]);
+actions!(waffle, [Quit, Restart, FocusSearch, ZoomIn, ZoomOut, ResetZoom, ToggleInbox, MarkTopUnreadRead, ToggleSoundboard, AddServer]);
 
 // Discord's zoom levels.
 pub(crate) const ZOOM_STEPS: [f32; 11] = [0.5, 0.67, 0.75, 0.8, 0.9, 1., 1.1, 1.25, 1.5, 1.75, 2.];
@@ -25,6 +25,8 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("secondary-shift-e", MarkTopUnreadRead, None),
         // Waffle's own: Discord leaves its Toggle Soundboard keybind unset. The window's root handles it (soundboard.rs).
         KeyBinding::new("secondary-shift-b", ToggleSoundboard, None),
+        // Discord's "Create or join a server".
+        KeyBinding::new("secondary-shift-n", AddServer, None),
     ]);
     cx.on_action(|_: &ToggleInbox, cx| update_main(cx, Waffle::toggle_inbox));
     cx.on_action(|_: &MarkTopUnreadRead, cx| update_main(cx, Waffle::mark_top_unread_read));
