@@ -143,7 +143,7 @@ let FILLED = true;
 try { FILLED = localStorage.getItem("waffle-icons-weight") !== "outline"; } catch {}
 // Line-only glyphs whose Reicon filled form wraps them in a tile or circle: Discord draws these as
 // bare lines in either weight, so they keep the outline.
-const LINE_ONLY = new Set(["hashtag2", "add", "arrow-right5", "arrow-up5", "check-read", "sort", "search"]);
+const LINE_ONLY = new Set(["hashtag2", "add", "arrow-right5", "arrow-up5", "check-read", "sort", "search", "refresh2"]);
 const ICON = name => (FILLED && !LINE_ONLY.has(name) && REICON_FILLED[name]) || REICON[name] || "";
 $("#weight").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;

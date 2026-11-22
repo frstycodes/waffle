@@ -403,7 +403,7 @@ EXTRA = {"podcast", "messages2", "gallery", "bullhorn", "inbox", "hashtag2", "vo
 
 # Line-only glyphs whose Reicon filled form wraps them in a tile or circle: Discord draws these as bare
 # lines in either weight, so they keep the outline. Mirrors LINE_ONLY in design/icons.html.
-LINE_ONLY = {"hashtag2", "add", "arrow-right5", "arrow-up5", "check-read", "sort", "search"}
+LINE_ONLY = {"hashtag2", "add", "arrow-right5", "arrow-up5", "check-read", "sort", "search", "refresh2"}
 ROOT_ATTRS = 'xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
 
 

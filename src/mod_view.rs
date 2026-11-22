@@ -14,7 +14,7 @@ use crate::{
     icons::Glyph,
     layout::decorated_avatar,
     palette,
-    panel::{group_label, wait_line},
+    panel::group_label,
     server_settings::{
         audit,
         perms::{self, CREATE_GUILD_EXPRESSIONS, MANAGE_GUILD, MANAGE_GUILD_EXPRESSIONS, MANAGE_WEBHOOKS, Permission},
@@ -306,7 +306,7 @@ impl Waffle {
 
     pub(crate) fn mod_view_body(&self, view: &ModView, cx: &mut Context<Self>) -> AnyElement {
         if view.loading() {
-            return wait_line("mod-view-wait", "Loading member…", cx).into_any_element();
+            return info_skeleton(cx).into_any_element();
         }
         let Some(guild) = self.guilds.iter().find(|g| g.id == view.guild_id) else { return div().into_any_element() };
         let roles = self.member_roles.get(&view.guild_id).and_then(|r| r.get(&view.user_id)).cloned().unwrap_or_default();
@@ -508,6 +508,12 @@ impl Waffle {
 #[cfg(debug_assertions)]
 impl Waffle {
     // Demo scenes: everything already back, timed out 42 minutes more, unusual DMs three days ago.
+    // Mod View opened and never answered, so it holds its skeleton.
+    pub(crate) fn demo_mod_view_loading(&mut self, guild_id: String, user_id: String, cx: &mut Context<Self>) {
+        self.right_panel = RightPanel::ModView(Box::new(ModView::new(guild_id, user_id)));
+        cx.notify();
+    }
+
     pub(crate) fn demo_mod_view(&mut self, guild_id: String, user_id: String, audit: Value, cx: &mut Context<Self>) {
         let now = Utc::now();
         let guild = self.guilds.iter().find(|g| g.id == guild_id).cloned();
@@ -680,6 +686,50 @@ impl Count {
     }
 }
 
+// The main page before the member lands: real section labels, rows shaped like the loaded ones. Signals is
+// left out, since whether it shows depends on the member.
+fn info_skeleton(cx: &App) -> Div {
+    let bar = |id: (&'static str, usize), w: f32| ui::skeleton(id, ui::RADIUS_XS, cx).h(px(12.)).w(px(w));
+    let rows = |key: &'static str, widths: &[(f32, f32)]| {
+        widths.iter().enumerate().fold(div().flex().flex_col().gap(px(2.)), |d, (i, &(label, value))| {
+            d.child(line(cx).child(bar((key, i * 2), label)).child(div().flex_1()).child(bar((key, i * 2 + 1), value)))
+        })
+    };
+    let pills = |key: &'static str, widths: &[f32]| {
+        widths.iter().enumerate().fold(div().px(px(6.)).flex().flex_wrap().gap(px(4.)), |d, (i, &w)| d.child(ui::skeleton((key, i), ui::RADIUS_XS, cx).h(px(22.)).w(px(w))))
+    };
+    let who = div()
+        .flex()
+        .items_center()
+        .gap(px(12.))
+        .px_2()
+        .child(ui::skeleton_circle("mv-sk-face", 48., cx))
+        .child(div().flex().flex_col().gap(px(8.)).child(bar(("mv-sk-name", 0), 120.).h(px(14.))).child(bar(("mv-sk-name", 1), 80.)));
+    let actions = (0..5usize).fold(div().flex().gap_1().px_1(), |d, i| d.child(ui::skeleton(("mv-sk-act", i), ui::RADIUS_SM, cx).size(px(32.))));
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(16.))
+        .child(div().flex().flex_col().gap(px(12.)).child(who).child(actions))
+        .child(section("Server activity", cx).child(rows("mv-sk-activity", &[(72., 32.), (48., 24.), (56., 28.), (64., 20.)])))
+        .child(section("Mod permissions", cx).child(pills("mv-sk-perms", &[112., 96., 128.])))
+        .child(section("Roles", cx).child(pills("mv-sk-roles", &[80., 72.])))
+        .child(section("Account", cx).child(rows("mv-sk-account", &[(136., 16.), (96., 16.), (104., 76.), (100., 76.), (84., 64.)])))
+}
+
+// The action log before it lands: entry-shaped rows, a glyph then a title over its byline.
+fn audit_skeleton(cx: &App) -> Div {
+    [(168., 120.), (140., 96.), (152., 108.)].iter().enumerate().fold(div().flex().flex_col().gap(px(2.)), |d, (i, &(title, meta))| {
+        d.child(
+            line(cx)
+                .py(px(6.))
+                .items_start()
+                .child(ui::skeleton_circle(("mv-sk-audit-glyph", i), 16., cx))
+                .child(div().flex().flex_col().gap(px(6.)).child(ui::skeleton(("mv-sk-audit", i * 2), ui::RADIUS_XS, cx).h(px(12.)).w(px(title))).child(ui::skeleton(("mv-sk-audit", i * 2 + 1), ui::RADIUS_XS, cx).h(px(10.)).w(px(meta)))),
+        )
+    })
+}
+
 fn section(title: &'static str, cx: &App) -> Div {
     div().flex().flex_col().gap(px(2.)).child(group_label(title, cx))
 }
@@ -782,7 +832,7 @@ fn permissions_page(view: &ModView, guild: &Guild, roles: &[String], cx: &App) -
 
 fn audit_page(view: &ModView, cx: &App) -> AnyElement {
     let (entries, names) = match &view.audit {
-        None => return wait_line("mod-view-audit-wait", "Loading the action log…", cx).into_any_element(),
+        None => return audit_skeleton(cx).into_any_element(),
         Some(Err(error)) => return ui::callout(ui::Notice::Danger, Glyph::WarningCircle, "Couldn't load the action log", error.clone(), cx).into_any_element(),
         Some(Ok(page)) => page,
     };

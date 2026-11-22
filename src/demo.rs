@@ -534,6 +534,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             waffle.stream_card_hover = Some("stream-12582912".into());
         }
         "mod-view" => demo_mod_view(waffle, cx),
+        "mod-view-loading" => demo_mod_view_loading(waffle, cx),
         "user-menu" => {
             demo_call(waffle);
             waffle.call_view = false;
@@ -1749,19 +1750,7 @@ fn reactors(count: usize) -> Vec<Reactor> {
 // Mod View on Wren: timed out for 42 minutes, flagged for unusual DMs three days ago, two roles, joined
 // through an invite, with a short action log.
 fn demo_mod_view(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
-    if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
-        for role in &mut guild.roles {
-            role.permissions = match role.id.as_str() {
-                "r1" => crate::discord::perm::MODERATE_MEMBERS | crate::discord::perm::MANAGE_MESSAGES | (1 << 17),
-                "r2" => crate::discord::perm::SEND_MESSAGES,
-                _ => role.permissions,
-            };
-        }
-    }
-    waffle.member_roles.entry("1".into()).or_default().insert("8388608".into(), vec!["r1".into(), "r2".into()]);
-    let members = waffle.members.entry("1".into()).or_default();
-    members.insert("8388608".into(), user("8388608", "Wren"));
-    members.insert("12582912".into(), user("12582912", "moss lantern"));
+    mod_view_fixture(waffle);
     let audit = serde_json::json!({
         "audit_log_entries": [
             { "id": "1441000000000000000", "action_type": 24, "user_id": "12582912", "target_id": "8388608", "reason": "spam in #media", "changes": [{ "key": "communication_disabled_until", "new_value": "2026-11-22T21:30:00+00:00" }] },
@@ -1893,4 +1882,27 @@ fn demo_pins(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<Waffle>)
     if let Some(general) = general {
         waffle.open_channel(general, window, cx);
     }
+}
+
+// Mod View on Wren before anything answers: the skeleton.
+fn demo_mod_view_loading(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
+    mod_view_fixture(waffle);
+    waffle.demo_mod_view_loading("1".into(), "8388608".into(), cx);
+}
+
+// Moderation rights for us in server 1, and Wren's two roles there.
+fn mod_view_fixture(waffle: &mut Waffle) {
+    if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
+        for role in &mut guild.roles {
+            role.permissions = match role.id.as_str() {
+                "r1" => crate::discord::perm::MODERATE_MEMBERS | crate::discord::perm::MANAGE_MESSAGES | (1 << 17),
+                "r2" => crate::discord::perm::SEND_MESSAGES,
+                _ => role.permissions,
+            };
+        }
+    }
+    waffle.member_roles.entry("1".into()).or_default().insert("8388608".into(), vec!["r1".into(), "r2".into()]);
+    let members = waffle.members.entry("1".into()).or_default();
+    members.insert("8388608".into(), user("8388608", "Wren"));
+    members.insert("12582912".into(), user("12582912", "moss lantern"));
 }
