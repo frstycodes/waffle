@@ -3329,7 +3329,7 @@ mod tests {
     #[test]
     fn media_settings_split_uploads_from_link_media() {
         use crate::discord::{File, Media, MediaKind, Message};
-        let media = |url: &str| Media { url: url.into(), width: 1., height: 1., kind: MediaKind::Image };
+        let media = |url: &str| Media { url: url.into(), width: 1., height: 1., kind: MediaKind::Image, description: None };
         let message = Message { media: vec![media("a.png"), media("b.png"), media("link.png")], media_files: vec![File { name: "a.png".into(), url: "a.png".into(), size: 1 }, File { name: "b.png".into(), url: "b.png".into(), size: 1 }], ..Default::default() };
         let mut prefs = super::MediaPrefs { attachments: true, links: true, gifs: true, emoji: true, stickers: crate::stickers::StickerMotion::Always, spoilers: crate::settings::Spoilers::OnClick };
         assert_eq!(super::inline_media(&message, &prefs), [0, 1, 2]);
