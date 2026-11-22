@@ -1,7 +1,7 @@
 # What app code may not write by hand: the design system (`crate::ui`) has the token or component for it, or a
 # narrower redraw exists. Counted by tools/ui_lint.py (cargo test, and the edit hooks in .claude/settings.json).
-# One rule a line: name<TAB>regex<TAB>scope<TAB>what to do instead. Scope is `any`, or `impl:Type` to count only
-# inside `impl Type` blocks. Strings and comments never count. A line (or the line above it) holding
+# One rule a line: name<TAB>regex<TAB>scope<TAB>what to do instead. Scope is `any`, `impl:Type` to count only
+# inside `impl Type` blocks, or `file` for a file-wide limit, whose second column is the limit instead of a regex. Strings and comments never count. A line (or the line above it) holding
 # `lint-allow(<rule>): <reason>` in a comment is exempt from that rule. The design system itself (src/ui.rs,
 # src/ui/, palette, motion, icons) is exempt; it's where these values live.
 raw-px	px\(-?[0-9]	any	Spacing: gpui's scale (gap_2, p_1p5, mt_3 … see ui/tokens.rs). Sizes: a ui token (TEXT_*, ICON_*, AVATAR_*, RADIUS_*, HAIRLINE) or a named const.
@@ -10,3 +10,4 @@ raw-weight	FontWeight\([0-9]	any	Weight: a named FontWeight (NORMAL, MEDIUM, SEM
 raw-floating	(^|[^a-z_])(deferred|anchored)\(	any	Floating surface: ui::floating / ui::floating_at. They occlude, so nothing under them takes the pointer.
 kit-tooltip	Tooltip::new\(	any	Tooltip: ui::tip(text, window, cx), the design's tooltip.
 global-notify	cx\.notify\(\)	impl:Waffle	App-wide redraw: notifying Waffle re-renders every column. Notify only when what's drawn changed; for state one column draws use self.redraw(Column::X, cx); fast-changing state gets its own entity (CLAUDE.md, Rendering).
+file-lines	800	file	Split it: move a self-contained part (a view, a section, a group of helpers) into its own module, and put new code in a new file rather than a long one. Counts lines of code: blank lines, comments and #[cfg(test)] modules don't count. A file that was already longer when the rule came in may only shrink.

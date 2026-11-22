@@ -1,5 +1,5 @@
-# Counts what app code writes by hand that the design system, or a narrower redraw, already covers
-# (src/ui/rules.tsv), and holds every file to its count in src/ui/rules.baseline. Counts only fall.
+# Counts what app code writes by hand that the design system, or a narrower redraw, already covers, and how
+# long each file is (src/ui/rules.tsv). Holds every file to its count in src/ui/rules.baseline; counts only fall.
 #
 #   python3 tools/ui_lint.py              warnings: what's left, by rule and by file
 #   python3 tools/ui_lint.py FILE...      warnings for those files; exit 1 if one went over its count
@@ -8,7 +8,8 @@
 #   python3 tools/ui_lint.py --hook pre|post   for .claude/settings.json: reads the hook's JSON on stdin
 #
 # A line is exempt from a rule when it, or the line above it, carries `lint-allow(<rule>): <reason>` in a
-# comment; several rules go comma-separated. An allow without a reason is itself reported.
+# comment; several rules go comma-separated. An allow without a reason is itself reported. A file-wide rule
+# (`file-lines`) is waived by the allow in one of the file's first lines.
 import json, os, re, sys
 from collections import Counter, defaultdict
 
@@ -21,6 +22,12 @@ EXEMPT = ("src/ui.rs", "src/ui/", "src/palette.rs", "src/motion.rs", "src/icons.
 ALLOW = re.compile(r"lint-allow\(([a-z0-9_, -]+)\)\s*:?\s*(.*)")
 NO_REASON = "allow-without-reason"
 IMPL_OPEN = re.compile(r"^\s*impl\b[^{]*\b(\w+)\s*\{")
+TEST_ATTR = re.compile(r"#\[cfg\(test\)\]")
+MOD_OPEN = re.compile(r"^\s*(pub(\([^)]*\))?\s+)?mod\s+\w+\s*\{")
+# How many of a file's first lines may hold its file-wide allow.
+HEAD_LINES = 5
+# A file past this share of its limit gets a warning before each edit.
+WARN_AT = 0.75
 RAW_STRING = re.compile(r'r(#*)"')
 
 
@@ -30,7 +37,9 @@ def load_rules():
         if line.startswith("#") or not line.strip():
             continue
         name, pattern, scope, fix = line.rstrip("\n").split("\t")
-        rules.append({"name": name, "pattern": re.compile(pattern), "scope": scope, "fix": fix})
+        # A `file` rule's second column is its limit, not a pattern.
+        pattern = int(pattern) if scope == "file" else re.compile(pattern)
+        rules.append({"name": name, "pattern": pattern, "scope": scope, "fix": fix})
     return rules
 
 
@@ -97,25 +106,44 @@ def allowed(comment):
     return {r.strip() for r in m.group(1).split(",")}, bool(m.group(2).strip())
 
 
+class Hits(defaultdict):
+    """{rule: [(line number, line)]} for one file, and how many lines of code it has outside its tests."""
+
+    def __init__(self):
+        super().__init__(list)
+        self.code_lines = 0
+
+
 def scan(path, text, rules):
-    """{rule: [(line number, line)]} for one file."""
-    hits = defaultdict(list)
+    hits = Hits()
     lines = text.splitlines()
     parsed = split_code(lines)
+    in_design_system = path.startswith(EXEMPT)
     depth, impl_stack = 0, []  # impl_stack: (type, depth its body opened at)
-    prev_allow = set()
+    prev_allow, file_allow = set(), set()
+    test_attr, test_depth = False, None  # test_depth: the depth a `#[cfg(test)] mod` body opened at
+    code_lines = []
     for n, (code, comment) in enumerate(parsed, 1):
         here, reason_given = allowed(comment)
         if here and not reason_given:
             hits[NO_REASON].append((n, lines[n - 1]))
+        if n <= HEAD_LINES and reason_given:
+            file_allow |= here
         skip = here | prev_allow
         # A comment-only line passes its allow to the next line.
         prev_allow = here if not code.strip() else set()
+        if test_depth is None and test_attr and MOD_OPEN.match(code):
+            test_depth = depth + 1
+        if code.strip():
+            starts_tests = bool(TEST_ATTR.search(code))
+            test_attr = starts_tests or (test_attr and code.strip().startswith("#["))
+            if test_depth is None and not starts_tests:
+                code_lines.append((n, lines[n - 1]))
         if m := IMPL_OPEN.match(code):
             impl_stack.append((m.group(1), depth + 1))
         inside = {t for t, _ in impl_stack}
         for rule in rules:
-            if rule["name"] in skip:
+            if rule["name"] in skip or rule["scope"] == "file" or in_design_system:
                 continue
             scope = rule["scope"]
             if scope.startswith("impl:") and scope[5:] not in inside:
@@ -125,6 +153,13 @@ def scan(path, text, rules):
         depth += code.count("{") - code.count("}")
         while impl_stack and depth < impl_stack[-1][1]:
             impl_stack.pop()
+        if test_depth is not None and depth < test_depth:
+            test_depth = None
+    hits.code_lines = len(code_lines)
+    for rule in rules:
+        # Over its limit, every line of code counts, so the baseline holds the file at its size.
+        if rule["scope"] == "file" and rule["name"] not in file_allow and len(code_lines) > rule["pattern"]:
+            hits[rule["name"]] = code_lines
     return hits
 
 
@@ -133,8 +168,7 @@ def sources():
         for f in sorted(files):
             if f.endswith(".rs"):
                 rel = os.path.relpath(os.path.join(base, f), ROOT).replace(os.sep, "/")
-                if not rel.startswith(EXEMPT):
-                    yield rel
+                yield rel
 
 
 def scan_tree(rules):
@@ -183,26 +217,36 @@ def fixes(rules):
 def file_report(rel, hits, baseline, rules):
     """(blocking problems, warning) for one file."""
     fix = fixes(rules)
-    problems = []
+    limits = {r["name"]: r["pattern"] for r in rules if r["scope"] == "file"}
+    problems, warnings = [], []
     for rule, count, allowed_count in over(rel, hits, baseline):
+        if rule in limits:
+            problems.append(f"{rule} in {rel}: {count} lines of code, allowed {allowed_count or limits[rule]}. {fix[rule]}")
+            continue
         lines = "\n".join(f"  {rel}:{n}: {l.strip()}" for n, l in added_lines(rel, hits[rule])[:20])
-        problems.append(f"{rule} in {rel}: {count}, allowed {allowed_count}. {fix[rule]}\n{lines}")
-    debt = ", ".join(f"{baseline[(rel, r)]} {r}" for r in fix if baseline[(rel, r)])
-    warning = (
-        f"Careful: {rel} still has {debt} from before the rules. Don't add to them; migrate the lines you touch "
-        f"(src/ui/CATALOG.md has the replacements). A line that can't comply takes `// lint-allow(<rule>): <reason>`."
-        if debt
-        else ""
-    )
-    return problems, warning
+        problems.append(f"{rule} in {rel}: {count}, allowed {allowed_count}. {fix[rule]}")
+        problems[-1] += f"\n{lines}"
+    debt = ", ".join(f"{baseline[(rel, r)]} {r}" for r in fix if baseline[(rel, r)] and r not in limits)
+    if debt:
+        warnings.append(
+            f"Careful: {rel} still has {debt} from before the rules. Don't add to them; migrate the lines you touch "
+            f"(src/ui/CATALOG.md has the replacements). A line that can't comply takes `// lint-allow(<rule>): <reason>`."
+        )
+    for rule, limit in limits.items():
+        if hits.code_lines >= limit * WARN_AT:
+            cap = baseline[(rel, rule)] or limit
+            warnings.append(f"Careful: {rel} has {hits.code_lines} lines of code; it may not pass {cap}. {fix[rule]}")
+    return problems, " ".join(warnings)
 
 
 def summary(tree, rules):
     totals, by_file = Counter(), Counter()
+    limits = {r["name"] for r in rules if r["scope"] == "file"}
     for rel, hits in tree.items():
         for r, h in hits.items():
-            totals[r] += len(h)
-            by_file[rel] += len(h)
+            # A file-wide rule counts files over the limit, not their lines.
+            totals[r] += 1 if r in limits else len(h)
+            by_file[rel] += 0 if r in limits else len(h)
     fix = fixes(rules)
     out = ["Hand-written UI values and app-wide redraws left (warnings; each count may only fall):"]
     out += [f"  {totals[r]:>5}  {r}: {fix[r]}" for r in fix if totals[r]]
@@ -265,9 +309,10 @@ def check(rules):
 def update(rules):
     tree, baseline = scan_tree(rules), load_baseline()
     counts = Counter({(rel, r): len(h) for rel, hits in tree.items() for r, h in hits.items()})
-    first_run = not os.path.exists(os.path.join(ROOT, BASELINE))
-    rose = [f"{f}:{r} {c} > {baseline[(f, r)]}" for (f, r), c in counts.items() if c > baseline[(f, r)]]
-    if rose and not first_run:
+    # A rule the baseline has never recorded (a new one) records today's counts once; every other count only falls.
+    known = {r for _, r in baseline}
+    rose = [f"{f}:{r} {c} > {baseline[(f, r)]}" for (f, r), c in counts.items() if c > baseline[(f, r)] and r in known]
+    if rose:
         sys.exit("The baseline only falls; these rose (fix them instead):\n  " + "\n  ".join(rose))
     with open(os.path.join(ROOT, BASELINE), "w", encoding="utf-8") as f:
         f.write("# Left from before the rules (tools/ui_lint.py). Only ever lower: `python3 tools/ui_lint.py --update`.\n")
@@ -282,7 +327,7 @@ def hook(event, rules):
     payload = json.load(sys.stdin)
     path = payload.get("tool_input", {}).get("file_path", "")
     rel = os.path.relpath(path, ROOT).replace(os.sep, "/") if path else ""
-    if not rel.startswith("src/") or not rel.endswith(".rs") or rel.startswith(EXEMPT) or not os.path.exists(path):
+    if not rel.startswith("src/") or not rel.endswith(".rs") or not os.path.exists(path):
         return 0
     hits = scan(rel, open(path, encoding="utf-8").read(), rules)
     problems, warning = file_report(rel, hits, load_baseline(), rules)
@@ -291,7 +336,7 @@ def hook(event, rules):
             print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": warning}}))
         return 0
     if problems:
-        print(json.dumps({"decision": "block", "reason": "This edit adds hand-written UI values or app-wide redraws. Fix them now:\n\n" + "\n\n".join(problems)}))
+        print(json.dumps({"decision": "block", "reason": "This edit breaks the codebase's rules (tools/ui_lint.py, CLAUDE.md). Fix it now:\n\n" + "\n\n".join(problems)}))
     return 0
 
 
