@@ -190,6 +190,8 @@ pub struct Prefs {
     pub zoom: f32,
     // The server voice channel (guild, channel) a restart left, offered back once the new session is ready.
     pub rejoin_voice: Option<(String, String)>,
+    // Announcement channels whose "Share with your followers!" bump was turned off with Don't show again.
+    pub publish_bump_hidden: Vec<String>,
 }
 
 const KEYBINDS_VERSION: u32 = 1;
@@ -247,6 +249,7 @@ impl Default for Prefs {
             search_history: HashMap::new(),
             zoom: 1.,
             rejoin_voice: None,
+            publish_bump_hidden: Vec::new(),
         }
     }
 }

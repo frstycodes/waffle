@@ -17,6 +17,7 @@ mod channel_menu;
 mod channel_settings;
 mod dm_call;
 mod dm_start;
+mod announcements;
 mod chat;
 mod composer_emoji;
 #[cfg(debug_assertions)]
@@ -627,6 +628,7 @@ pub struct Waffle {
     poll_picks: HashMap<String, Vec<u32>>,
     poll_peek: HashSet<String>,
     forward_dialog: Option<forward::ForwardDialog>,
+    announcements: announcements::Announcements,
     status_flyout: status_menu::Flyout,
     status_input: Entity<SearchState>,
     clear_after: status_menu::ClearAfter,
@@ -1011,6 +1013,7 @@ impl Waffle {
             poll_picks: HashMap::new(),
             poll_peek: HashSet::new(),
             forward_dialog: None,
+            announcements: Default::default(),
             status_flyout: status_menu::Flyout::default(),
             status_input,
             clear_after: status_menu::ClearAfter::default(),
@@ -1508,7 +1511,10 @@ impl Waffle {
                     self.open_joined_guild(id, cx);
                 }
             }
-            Event::MessageCreate(message) => self.on_message(*message, cx),
+            Event::MessageCreate(message) => {
+                self.offer_publish_bump(&message);
+                self.on_message(*message, cx)
+            }
             Event::MessageUpdate(patch) => {
                 let (channel_id, id) = (patch["channel_id"].as_str().unwrap_or_default(), patch["id"].as_str().unwrap_or_default());
                 if let Some(m) = self.message_mut(channel_id, id) {
@@ -1809,6 +1815,7 @@ impl Waffle {
 
     fn show_channel(&mut self, channel: Channel, window: &mut Window, cx: &mut Context<Self>) {
         self.call_view = false;
+        self.announcement_channel_opened(&channel, cx);
         let placeholder = format!("Message {}", channel_mention(&channel));
         self.composer.update(cx, |state, cx| state.set_placeholder(placeholder, window, cx));
         self.last_channel.insert(self.guild_id.clone(), channel.id.clone());
@@ -2119,7 +2126,7 @@ impl Waffle {
         self.last_typing_sent = None;
         if let Some(editing) = self.editing.take() {
             self.restore_draft(window, cx);
-            return self.edit(editing, content, cx);
+            return self.save_edit(editing, content, cx);
         }
         self.drafts.clear(&channel.id);
         self.save_drafts_soon(cx);

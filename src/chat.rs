@@ -73,6 +73,10 @@ impl Waffle {
             Some(Feed { error: Some(error), .. }) => empty_state("failed", Mood::Idle, "Couldn't load messages", error.clone(), cx),
             _ => skeleton(cx),
         };
+        let composer = match self.follow_blocker(&channel, cx) {
+            Some(blocker) => blocker,
+            None => self.render_composer(window, cx).into_any_element(),
+        };
         let chat = div()
             .relative()
             .flex_1()
@@ -85,7 +89,7 @@ impl Waffle {
             // The feed stops under the header, a hard edge.
             .child(header)
             // The composer floats over the feed, which scrolls on under its glass.
-            .child(div().relative().flex_1().min_h_0().child(body).children(unread_bar).child(self.render_composer(window, cx)));
+            .child(div().relative().flex_1().min_h_0().child(body).children(unread_bar).child(composer));
         // The members column beside the feed runs to the window's top with a header of its own on the same line.
         let panel = self.panel_column_width().map(|w| self.part(crate::part::Column::Panel, gpui_kit::StyleRefinement::default().w(px(w)).h_full().flex_none(), cx));
         let drop_zone = self.drop_zone(&channel, cx);
@@ -104,6 +108,7 @@ impl Waffle {
         let lead = match channel.kind {
             ChannelKind::Dm => ui::dm_face(&channel.face(), 24., palette::surface(Level::Page, cx)),
             ChannelKind::Thread => Icon::new(Glyph::Thread).size(px(20.)).text_color(faint).into_any_element(),
+            _ if channel.raw_type == 5 => Icon::new(Glyph::Megaphone).size(px(20.)).text_color(faint).into_any_element(),
             _ => Icon::new(Glyph::Hashtag).size(px(20.)).text_color(faint).into_any_element(),
         };
         let here = div()
@@ -189,7 +194,7 @@ impl Waffle {
             .window_control_area(WindowControlArea::Drag)
             .child(crumbs)
             .children(topic)
-            .child(div().ml_auto().flex_none().flex().items_center().gap(px(2.)).children(join).children(calls.into_iter().flatten()).children(threads).children(bell).child(pins).children(members).children(search))
+            .child(div().ml_auto().flex_none().flex().items_center().gap(px(2.)).children(self.follow_button(channel, cx)).children(join).children(calls.into_iter().flatten()).children(threads).children(bell).child(pins).children(members).children(search))
             .child(self.caption_clearance(!self.panel_shown()));
         ui::hard_edge(|| false, cx).child(bar)
     }
@@ -467,6 +472,7 @@ impl Waffle {
             threads: channel.is_some_and(|c| c.kind == ChannelKind::Text && self.can_in(&c.id, crate::discord::perm::CREATE_PUBLIC_THREADS)),
             poll_picks: self.poll_picks.clone(),
             poll_peek: self.poll_peek.clone(),
+            announce: self.newsroom(channel),
         })
     }
 
@@ -894,6 +900,7 @@ pub(crate) struct RowContext {
     column: f32,
     poll_picks: HashMap<String, Vec<u32>>,
     poll_peek: std::collections::HashSet<String>,
+    announce: crate::announcements::Newsroom,
 }
 
 // More than a few rows below the viewport: the feed is scrolled away from its newest message.
@@ -942,6 +949,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .text_size(px(16.))
         .text_color(ink)
         .children(content(message, ctx, cx))
+        .children(crate::announcements::publish_bump(message, mine, &ctx.announce, ctx.this.clone(), cx))
         .children(message.forward.as_ref().map(|original| forward_card(original, ctx, cx)))
         .children(media.map(|m| div().when(pending, |d| d.opacity(0.6)).child(m)))
         .children(message.stickers.iter().map(|s| div().when(pending, |d| d.opacity(0.6)).child(crate::stickers::in_chat(s, cx))))
@@ -1094,7 +1102,8 @@ fn message_head(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> impl IntoE
                 .child(StyledText::new(name).with_highlights(runs)),
         )
         .children(message.author.tag.as_ref().map(|tag| guild_tag(tag, cx)))
-        .when(message.author.bot, |h| h.child(ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px(px(6.)).gap(px(3.)).child(Icon::new(Glyph::Checkmark).size(px(11.))).child("APP")))
+        .when(crate::announcements::is_crosspost(message), |h| h.child(crate::announcements::server_tag(cx)))
+        .when(message.author.bot && !crate::announcements::is_crosspost(message), |h| h.child(ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px(px(6.)).gap(px(3.)).child(Icon::new(Glyph::Checkmark).size(px(11.))).child("APP")))
         .child(div().flex_none().relative().top(px(1.)).whitespace_nowrap().text_size(px(12.)).text_color(palette::faint(cx)).child(format_stamp(&message.timestamp)))
         .when(message.pinned, |h| h.child(div().flex_none().self_center().text_color(palette::muted(cx)).child(Icon::new(Glyph::Pin).size(px(14.)))))
 }
@@ -1385,6 +1394,9 @@ fn pin_line(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement
 }
 
 pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyElement> {
+    if message.flags & Message::SOURCE_MESSAGE_DELETED != 0 {
+        return Some(crate::announcements::source_deleted(cx));
+    }
     if message.content.is_empty() || only_media_link(message) {
         return None;
     }
@@ -2649,6 +2661,7 @@ fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> Any
                 this.update(cx, |this, cx| this.create_thread(msg.clone(), window, cx)).ok();
             }));
         }
+        bar = bar.children(crate::announcements::publish_button(message, mine, &ctx.announce, ctx.this.clone(), cx));
     }
     let (this, msg) = (ctx.this.clone(), message.clone());
     bar = bar.child(ui::icon_button(SharedString::from(format!("more-{}", message.id)), Glyph::MoreVertical, "More", cx).on_click(move |event, _, cx| { cx.stop_propagation();

@@ -375,6 +375,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // and an expired code, a message you can't see (no card), and two still loading.
         "link-previews" => demo_link_previews(waffle),
         "forwarded" => demo_forwarded(waffle),
+        scene if scene.starts_with("announcements") => demo_announcements(waffle, scene, window, cx),
         // The dialog with #📷-media picked and a note; gpui's channel reads only, so it shows locked.
         "forward-dialog" => {
             if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "2") {
@@ -1741,4 +1742,53 @@ fn reactors(count: usize) -> Vec<Reactor> {
         ("31000010", "mikey", "mickeeeyyyyyy"),
     ];
     people.iter().take(count).map(|&(id, name, username)| Reactor { user: user(id, name), username: username.into() }).collect()
+}
+
+// Night Owls as a NEWS server with #announcements: a crosspost from Bevy and one whose source was deleted, our
+// published message and a fresh one under its Publish bump, the toolbar up. `-publish` opens the confirm (12
+// following servers, 3 of 10 used), `-limit` the rate-limit alert, `-follow` the Follow dialog, `-member` the
+// blocker a member who can't post sees, and `-settings` the channel's Announcement Channel switch.
+fn demo_announcements(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
+    let mut news = channel("news", "announcements", ChannelKind::Text, Some("c0"));
+    (news.raw_type, news.topic) = (5, Some("Patch notes and server news".into()));
+    let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") else { return };
+    guild.features.push("NEWS".into());
+    guild.channels.insert(1, news.clone());
+    if scene == "announcements-member" {
+        guild.owner_id = Some("8388608".into());
+        for everyone in guild.roles.iter_mut().filter(|r| r.id == "1") {
+            everyone.permissions = crate::discord::VIEW_CHANNEL | crate::discord::perm::READ_MESSAGE_HISTORY;
+        }
+    }
+    let me = user("4194304", "kiwi");
+    let post = |id: &str, author: User, days: i64, content: &str, flags: u64| Message {
+        id: id.into(),
+        channel_id: "news".into(),
+        guild_id: Some("1".into()),
+        author,
+        content: content.into(),
+        timestamp: (chrono::Utc::now() - chrono::Duration::days(days)).to_rfc3339(),
+        flags,
+        ..Default::default()
+    };
+    let bevy = User { id: "77".into(), name: "Bevy #announcements".into(), avatar: avatar_url("5", None), bot: true, ..Default::default() };
+    let fresh = post("954", me.clone(), 0, "Patch 7.1 is live! Healer ult range now shows on the minimap. Full notes in #patch-notes.", 0);
+    let messages = vec![
+        post("951", bevy.clone(), 3, "Bevy 0.17 is out: required components everywhere and a new picking backend.", Message::IS_CROSSPOST),
+        post("952", bevy, 2, "", Message::IS_CROSSPOST | Message::SOURCE_MESSAGE_DELETED),
+        post("953", me, 1, "Ranked season 7 starts Friday.", Message::CROSSPOSTED),
+        fresh.clone(),
+    ];
+    waffle.feeds.insert("news".into(), Feed { messages: std::sync::Arc::new(messages), loaded: true, ..Default::default() });
+    waffle.open_channel(news.clone(), window, cx);
+    waffle.offer_publish_bump(&fresh);
+    waffle.demo_announcement_stats("news", 3);
+    match scene {
+        "announcements-publish" => waffle.open_publish(fresh, cx),
+        "announcements-limit" => waffle.demo_publish_limit(1415.),
+        "announcements-follow" => waffle.open_follow(news, cx),
+        "announcements-settings" => waffle.open_channel_settings(news, "1".into(), window, cx),
+        "announcements-member" => {}
+        _ => waffle.hovered_message = Some("954".into()),
+    }
 }

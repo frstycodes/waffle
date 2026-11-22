@@ -266,6 +266,7 @@ impl Waffle {
             | self.status_editor.take().is_some()
             | self.poll_creator.take().is_some()
             | self.forward_dialog.take().is_some()
+            | self.dismiss_announcement_dialog()
             | self.reactions_dialog.take().is_some()
             | self.emoji_picker.take().is_some()
             | self.switcher.take().is_some()
@@ -289,6 +290,7 @@ impl Waffle {
         out.extend(self.status_editor_overlay(window, cx));
         out.extend(self.poll_creator_overlay(window, cx));
         out.extend(self.forward_overlay(window, cx));
+        out.extend(self.announcement_overlay(window, cx));
         out.extend(self.reactions_overlay(window, cx));
         out.extend(self.emoji_overlay(window, cx));
         out.extend(self.switcher_overlay(window, cx));

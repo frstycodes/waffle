@@ -110,13 +110,23 @@ pub struct Draft {
     pub topic: String,
     pub props: ChannelProps,
     pub overwrites: Vec<Overwrite>,
+    // Type 5 rather than 0 (docs/discord-announcements-re.md, Channel settings toggle).
+    pub announcement: bool,
 }
 
 impl Draft {
     pub fn of(channel: &Channel) -> Self {
-        Self { name: channel.name.clone(), topic: channel.topic.clone().unwrap_or_default(), props: (*channel.props).clone(), overwrites: channel.overwrites.clone() }
+        Self {
+            name: channel.name.clone(),
+            topic: channel.topic.clone().unwrap_or_default(),
+            props: (*channel.props).clone(),
+            overwrites: channel.overwrites.clone(),
+            announcement: channel.raw_type == ANNOUNCEMENT,
+        }
     }
 }
+
+const ANNOUNCEMENT: u8 = 5;
 
 // The Modify Channel body: only fields that changed, in Discord's names.
 pub fn patch_body(before: &Channel, draft: &Draft) -> Map<String, Value> {
@@ -127,6 +137,9 @@ pub fn patch_body(before: &Channel, draft: &Draft) -> Map<String, Value> {
     }
     if draft.topic.trim() != before.topic.as_deref().unwrap_or_default() {
         body.insert("topic".into(), if draft.topic.trim().is_empty() { Value::Null } else { json!(draft.topic.trim()) });
+    }
+    if draft.announcement != (before.raw_type == ANNOUNCEMENT) {
+        body.insert("type".into(), json!(if draft.announcement { ANNOUNCEMENT } else { 0 }));
     }
     if new.nsfw != old.nsfw {
         body.insert("nsfw".into(), json!(new.nsfw));
@@ -734,9 +747,29 @@ impl Waffle {
                 .child(ui::settings_text("Hide threads after", Some("New threads close after this long without activity"), cx))
                 .child(div().w(px(220.)).flex_none().child(self.cs_select(Select::Archive, &options, &current.to_string(), label, cx)))
         });
-        let chat = ui::settings_card(cx).child(slowmode).child(nsfw).children(archive);
-        out.push(ui::settings_group(if voice { "Text chat" } else { "Chat" }, cx).child(chat).child(ui::settings_caption("Members with Bypass slowmode aren't slowed down.", cx)).into_any_element());
+        let announcement = self.announcement_toggle(channel, view.draft.announcement, window, cx);
+        let chat = ui::settings_card(cx).child(slowmode).child(nsfw).children(announcement.0).children(archive);
+        out.push(ui::settings_group(if voice { "Text chat" } else { "Chat" }, cx).child(chat).child(ui::settings_caption("Members with Bypass slowmode aren't slowed down.", cx)).children(announcement.1).into_any_element());
         out
+    }
+
+    // Discord's Announcement Channel switch and its profile notice, for text and announcement channels in a
+    // NEWS server. GAP: Discord also leaves out the rules and community-updates channels; Waffle doesn't know them.
+    fn announcement_toggle(&self, channel: &Channel, on: bool, window: &mut Window, cx: &mut Context<Self>) -> (Option<AnyElement>, Option<AnyElement>) {
+        let news = self.guilds.iter().find(|g| g.channel(&channel.id).is_some()).is_some_and(|g| g.features.iter().any(|f| f == "NEWS"));
+        if !news || !matches!(channel.raw_type, 0 | ANNOUNCEMENT) {
+            return (None, None);
+        }
+        let row = ui::settings_switch("cs-announcement", "Announcement Channel", "Users can Follow this channel in their own servers. Posts you \"Publish\" from this channel will appear in those servers.", on, true, window, cx)
+            .on_click(cx.listener(|this, _, _, cx| this.edit_draft(cx, |d| d.announcement = !d.announcement)));
+        let notice = ui::callout(
+            Notice::Info,
+            Glyph::Info,
+            "By creating an announcement channel, your server profile will be visible to others outside your server members.",
+            "You can control Profile privacy in Server Settings > Profile.",
+            cx,
+        );
+        (Some(row.into_any_element()), Some(div().mt(px(8.)).child(notice).into_any_element()))
     }
 
     // A dropdown on this window: the trigger, and its list rising from it while open.
@@ -1060,6 +1093,8 @@ mod tests {
         draft.props.video_full = true;
         let body = Value::Object(patch_body(&before, &draft));
         assert_eq!(body, json!({ "name": "highlights", "topic": null, "rate_limit_per_user": 30, "video_quality_mode": 2 }));
+        draft.announcement = true;
+        assert_eq!(patch_body(&before, &draft)["type"], json!(5));
     }
 
     #[test]

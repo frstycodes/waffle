@@ -1485,6 +1485,22 @@ impl Client {
         self.run(req).await
     }
 
+    /// A call whose failure the caller reads itself: Discord's status and body as sent, with none of `call`'s
+    /// retries (a publish's 429 carries the minutes to wait in `retry_after`).
+    pub async fn call_raw(&self, method: reqwest::Method, path: String, body: Option<Value>) -> Result<(u16, Value), String> {
+        let req = self.request(method, &path);
+        let req = match body {
+            Some(body) => req.json(&body),
+            None => req,
+        };
+        let sent = async move {
+            let res = req.send().await.map_err(|e| e.to_string())?;
+            let status = res.status().as_u16();
+            Ok((status, res.json().await.unwrap_or(Value::Null)))
+        };
+        runtime().spawn(sent).await.map_err(|e| e.to_string())?
+    }
+
     /// The message a link points at, through the history endpoint (`around`, one message), as Discord's
     /// client does. None: it's gone, or the channel isn't one you can read (403, or no history access, which
     /// returns an empty list).
@@ -2506,7 +2522,9 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         }
     }
     // Reference type 1 is a forward; only 0 (or none, on older messages) is a reply.
-    let is_reply = matches!(m["message_reference"]["type"].as_u64(), None | Some(0));
+    // A crosspost's reference points at its source in the followed channel, not at a message it answers.
+    let is_crosspost = m["flags"].as_u64().unwrap_or(0) & Message::IS_CROSSPOST != 0;
+    let is_reply = !is_crosspost && matches!(m["message_reference"]["type"].as_u64(), None | Some(0));
     let reply = (is_reply && m["referenced_message"].is_object()).then(|| parse_message(&m["referenced_message"])).flatten().map(Box::new);
     Some(Message {
         id: m["id"].as_str()?.to_owned(),
