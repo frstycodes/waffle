@@ -92,7 +92,7 @@ src/notification_settings.rs	raw-px	5
 src/overlays.rs	file-lines	907
 src/overlays.rs	global-notify	17
 src/overlays.rs	raw-px	11
-src/panel.rs	global-notify	4
+src/panel.rs	global-notify	3
 src/panel.rs	raw-px	9
 src/pip.rs	global-notify	2
 src/poll.rs	global-notify	10
