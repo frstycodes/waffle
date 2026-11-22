@@ -39,12 +39,12 @@ const PREVIEW_RETRY: std::time::Duration = std::time::Duration::from_secs(20);
 // Long enough that a hiccup in a streamer's capture doesn't read as stalled.
 // The stage redraws once a second during a call, so the loader shows within a second of this.
 const STALL_AFTER: Duration = Duration::from_secs(3);
-const STAGE_PAD: f32 = 16.;
+pub(crate) const STAGE_PAD: f32 = 16.;
 const STAGE_GAP: f32 = 16.;
 const HEAD_HEIGHT: f32 = 32.;
-const CONTROLS_HEIGHT: f32 = 48.;
+pub(crate) const CONTROLS_HEIGHT: f32 = 48.;
 // A group's inset around its buttons.
-const DOCK_PAD: f32 = 4.;
+pub(crate) const DOCK_PAD: f32 = 4.;
 // .tiles: 10px apart, 8px once the grid is three across; avatars shrink in small tiles.
 const TILE_GAP: f32 = 10.;
 const TILE_GAP_DENSE: f32 = 8.;
@@ -58,7 +58,7 @@ const STRIP_LIMIT: usize = 12;
 // Names on strip cards and the focused stream show while the pointer is anywhere on the stage.
 const STAGE_GROUP: &str = "call-stage";
 // The stage's header band, the app's one header line.
-const FOCUS_HEAD: f32 = 48.;
+pub(crate) const FOCUS_HEAD: f32 = 48.;
 const CONTROLS_IDLE: Duration = Duration::from_secs(3);
 const CHAT_WIDTH: f32 = 340.;
 // The connection popover's colour bands (its legend): under 80 ms, 80 to 120, over 120.
@@ -587,7 +587,7 @@ impl Waffle {
         if states.is_empty()
             && let Some(me) = &self.me
         {
-            return vec![VoiceState { guild_id: None, channel_id: Some(call.channel.id.clone()), user_id: me.id.clone(), user: Some(me.clone()), muted: self.muted, deafened: self.deafened, server_muted: false, server_deafened: false, streaming: false, camera: false }];
+            return vec![VoiceState { guild_id: None, channel_id: Some(call.channel.id.clone()), user_id: me.id.clone(), user: Some(me.clone()), muted: self.muted, deafened: self.deafened, server_muted: false, server_deafened: false, streaming: false, camera: false, suppress: false, requested_at: None }];
         }
         states
     }
@@ -678,6 +678,9 @@ impl Waffle {
     // card instead fills the stage edge to edge under the header, the controls floating over it.
     pub(crate) fn render_call(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         self.call.as_ref()?;
+        if self.call_is_stage() {
+            return Some(self.render_stage(window, cx));
+        }
         let tiles = self.ordered_tiles();
         // .call.autohide: 260ms out, drifting 6px toward its edge; any move brings it back.
         // The chrome steps aside whenever the pointer has left the stage, and with a stream focused,
@@ -692,27 +695,31 @@ impl Waffle {
         if let Some(big) = focused {
             return Some(self.focus_stage(big, &tiles, shown, cx));
         }
-        let viewport = window.viewport_size();
-        let chat = if self.call_chat_shown() { CHAT_WIDTH } else { 0. };
-        let stage_size = match self.call_fullscreen {
-            true => (f32::from(viewport.width) - chat, f32::from(viewport.height)),
-            false => (f32::from(viewport.width) - RAIL_WIDTH - self.channels_width - chat, f32::from(viewport.height) - 1.),
-        };
-        let (_, _, width, height) = tile_area(stage_size);
+        let (_, _, width, height) = tile_area(self.stage_size(window));
         let body = self.card_stage(&tiles, (width, height), cx);
         let stage = div().flex_1().min_h_0().flex().flex_col().gap(px(STAGE_GAP)).pt(px(STAGE_GAP)).px(px(STAGE_PAD)).pb(px(STAGE_PAD));
         Some(
             self.stage_root(cx)
                 .flex()
                 .flex_col()
-                .child(self.stage_head(cx).opacity(shown))
+                .child(self.stage_head(self.call_header(cx)).opacity(shown))
                 .child(stage.child(div().flex_1().min_h_0().child(body)).child(div().opacity(shown).child(self.call_controls(cx))))
                 .into_any_element(),
         )
     }
 
+    // The stage's size in the window, beside the rail, the channel list and the call's chat.
+    pub(crate) fn stage_size(&self, window: &Window) -> (f32, f32) {
+        let viewport = window.viewport_size();
+        let chat = if self.call_chat_shown() { CHAT_WIDTH } else { 0. };
+        match self.call_fullscreen {
+            true => (f32::from(viewport.width) - chat, f32::from(viewport.height)),
+            false => (f32::from(viewport.width) - RAIL_WIDTH - self.channels_width - chat, f32::from(viewport.height) - 1.),
+        }
+    }
+
     // The stage's own surface, tracking the pointer for the chrome's autohide.
-    fn stage_root(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+    pub(crate) fn stage_root(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         div()
             .id("call-view")
             .group(STAGE_GROUP)
@@ -750,7 +757,7 @@ impl Waffle {
         let overlay_head = self.call_fullscreen;
         let drift = 6. * (1. - shown);
         let band = CONTROLS_HEIGHT + STAGE_PAD * 2.;
-        let head = self.stage_head(cx);
+        let head = self.stage_head(self.call_header(cx));
         let (in_flow, floating) = if overlay_head { (None, Some(head)) } else { (Some(head), None) };
         let toggle_bottom = if strip { STRIP_GAP } else { band + STRIP_GAP };
         let media = div()
@@ -862,6 +869,31 @@ impl Waffle {
         div().size_full().flex().flex_wrap().items_center().justify_center().content_center().gap(px(gap(cols))).children(rendered).into_any_element()
     }
 
+    // A stage's speakers as the call's cards, in Discord's columns for the width (1 under 424px, 2 under
+    // 624, 3 under 824, else 4).
+    pub(crate) fn speaker_grid(&self, width: f32, cx: &mut Context<Self>) -> AnyElement {
+        let tiles: Vec<Tile> = self
+            .ordered_tiles()
+            .into_iter()
+            .filter(|t| match t {
+                Tile::User(s) | Tile::Stream(s) => s.on_stage() == discord::OnStage::Speaker,
+                Tile::Ended(_) => true,
+            })
+            .collect();
+        let cols = match width {
+            w if w < 424. => 1,
+            w if w < 624. => 2,
+            w if w < 824. => 3,
+            _ => 4,
+        }
+        .min(tiles.len().max(1));
+        let gap = if cols >= 3 { TILE_GAP_DENSE } else { TILE_GAP };
+        let tile_w = (width - gap * (cols as f32 - 1.)) / cols as f32;
+        let rows = tiles.len().div_ceil(cols).max(1) as f32;
+        let height = rows * tile_w * 9. / 16. + gap * (rows - 1.);
+        div().w(px(width)).h(px(height)).child(self.tile_grid(&tiles, width, height, cx)).into_any_element()
+    }
+
     // Full screen shows the call alone: no servers, channels or user panel.
     pub(crate) fn set_call_fullscreen(&mut self, on: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.call_fullscreen = on;
@@ -878,7 +910,7 @@ impl Waffle {
 
     // The header line over the stage: it drags the window, and clears Windows' caption buttons while the
     // stage runs to the window's right edge.
-    fn stage_head(&self, cx: &mut Context<Self>) -> Div {
+    pub(crate) fn stage_head(&self, header: impl IntoElement) -> Div {
         div()
             .h(px(FOCUS_HEAD))
             .flex_none()
@@ -888,7 +920,7 @@ impl Waffle {
             .items_center()
             // Drag area: every control inside it occludes it, or Windows' caption takes its clicks.
             .window_control_area(gpui_kit::WindowControlArea::Drag)
-            .child(div().flex_1().min_w_0().child(self.call_header(cx)))
+            .child(div().flex_1().min_w_0().child(header))
             .child(self.caption_clearance(!self.call_chat_shown()))
     }
 
@@ -983,7 +1015,6 @@ impl Waffle {
         let stop = watching.map(|_| keeps_chrome(stage_button("stop-watching", if several { "Stop all" } else { "Stop watching" }), cx).occlude().on_click(cx.listener(|this, _, _, cx| this.stop_watching(cx))));
         // A DM call's stage is opened from its window; this is the way back to the chat (Esc too).
         let back = call.guild_id.is_none().then(|| keeps_chrome(stage_button("back-to-chat", "Back to chat"), cx).occlude().on_click(cx.listener(|this, _, window, cx| this.back_to_chat(window, cx))));
-        let chat_open = self.call_chat;
         div()
             .h(px(HEAD_HEIGHT))
             .flex()
@@ -999,12 +1030,15 @@ impl Waffle {
             .children(stop)
             .child(who)
             .child(div().w(px(1.)).h(px(20.)).mx(px(2.)).flex_none().bg(stage::wash(0.14)))
-            .child(
-                keeps_chrome(stage_icon_button("call-chat", Glyph::ChatRound, if chat_open { "Chat: hide the channel's messages" } else { "Chat: show the channel's messages beside the call" }, chat_open), cx)
-                    .occlude()
-                    .on_click(cx.listener(|this, _, window, cx| this.toggle_call_chat(window, cx))),
-            )
+            .child(self.chat_toggle(cx))
             .into_any_element()
+    }
+
+    pub(crate) fn chat_toggle(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+        let open = self.call_chat;
+        keeps_chrome(stage_icon_button("call-chat", Glyph::ChatRound, if open { "Chat: hide the channel's messages" } else { "Chat: show the channel's messages beside the call" }, open), cx)
+            .occlude()
+            .on_click(cx.listener(|this, _, window, cx| this.toggle_call_chat(window, cx)))
     }
 
     // The chevron above the filmstrip that folds it away and back, as Discord's.
@@ -1286,6 +1320,7 @@ impl Waffle {
         let name = tile_name(
             div()
                 .when(is_stream, |d| d.child(Icon::new(Glyph::Screen).size(px(14.)).text_color(gpui_kit::white())))
+                .when(!is_stream && self.stage_moderator(&state.user_id), |d| d.child(crate::stage_view::moderator_mark(&state.user_id)))
                 .when(!is_stream && state.server_muted, |d| d.child(vmark(Glyph::MicOff, None, MarkKind::Server)))
                 .when(!is_stream && !state.server_muted && muted && !deafened, |d| d.child(Icon::new(Glyph::MicOff).size(px(14.)).text_color(stage::off_ink())))
                 .when(!is_stream && deafened, |d| d.child(Icon::new(Glyph::HeadphonesOff).size(px(14.)).text_color(stage::off_ink())))
@@ -1402,33 +1437,50 @@ impl Waffle {
 
     // .controls: mic and camera as split buttons with their device menus, share, activities, more,
     // then the one red fill that leaves.
-    fn call_controls(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let call = self.call.as_ref().expect("in a call");
+    pub(crate) fn mic_control(&self, cx: &mut Context<Self>) -> Div {
         let muted = self.muted || self.deafened;
-        let connected = call.stage == Stage::Connected;
-        let sharing = call.sharing.is_some();
-        let menu_open = |kind: DeviceKind| self.device_menu.as_ref().is_some_and(|m| m.on_stage && m.kind == kind);
         let mic_state = if muted { Control::Off } else { Control::Rest };
-        let camera_state = if call.camera_on { Control::On } else { Control::Rest };
-        let mic = split_control(
+        split_control(
             control("call-mic", if muted { Glyph::MicOffFill } else { Glyph::MicFill }, if muted { "Unmute" } else { "Mute" }, mic_state, true).on_click(cx.listener(|this, _, _, cx| this.toggle_mute(cx))),
-            control("call-mic-devices", Glyph::ChevronUpBold, "Microphone options", if menu_open(DeviceKind::Input) { Control::Open } else { Control::Rest }, true)
+            control("call-mic-devices", Glyph::ChevronUpBold, "Microphone options", if self.stage_menu_open(DeviceKind::Input) { Control::Open } else { Control::Rest }, true)
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_stage_device_menu(DeviceKind::Input, e.position, cx))),
-        );
-        let camera = split_control(
+        )
+    }
+
+    pub(crate) fn camera_control(&self, cx: &mut Context<Self>) -> Div {
+        let call = self.call.as_ref().expect("in a call");
+        let connected = call.stage == Stage::Connected;
+        let camera_state = if call.camera_on { Control::On } else { Control::Rest };
+        split_control(
             control("call-camera", if call.camera_on { Glyph::VideoFill } else { Glyph::VideoOffFill }, if call.camera_on { "Turn off camera" } else { "Turn on camera" }, camera_state, connected)
                 .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_camera(cx)))),
-            control("call-camera-devices", Glyph::ChevronUpBold, "Camera options", if menu_open(DeviceKind::Camera) { Control::Open } else { Control::Rest }, true)
+            control("call-camera-devices", Glyph::ChevronUpBold, "Camera options", if self.stage_menu_open(DeviceKind::Camera) { Control::Open } else { Control::Rest }, true)
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_stage_device_menu(DeviceKind::Camera, e.position, cx))),
-        );
-        // Live, the main half stops the stream and the chevron holds its options, as Discord's.
+        )
+    }
+
+    // Live, the main half stops the stream and the chevron holds its options, as Discord's.
+    pub(crate) fn share_control(&self, cx: &mut Context<Self>) -> Div {
+        let call = self.call.as_ref().expect("in a call");
+        let connected = call.stage == Stage::Connected;
+        let sharing = call.sharing.is_some();
         let share_state = if sharing { Control::Active } else { Control::Rest };
-        let share = split_control(
+        split_control(
             control("call-share", Glyph::ShareScreenFill, if sharing { "Stop streaming" } else { "Share your screen" }, share_state, connected)
                 .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_screen_share(cx)))),
             control("call-share-options", Glyph::ChevronUpBold, "Stream options", if self.menu.is_some() && sharing { Control::Open } else { Control::Rest }, sharing)
                 .when(sharing, |b| b.on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_stream_menu(e.position, cx)))),
-        );
+        )
+    }
+
+    fn stage_menu_open(&self, kind: DeviceKind) -> bool {
+        self.device_menu.as_ref().is_some_and(|m| m.on_stage && m.kind == kind)
+    }
+
+    fn call_controls(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let call = self.call.as_ref().expect("in a call");
+        let connected = call.stage == Stage::Connected;
+        let (mic, camera, share) = (self.mic_control(cx), self.camera_control(cx), self.share_control(cx));
         let activities = control("call-activities", Glyph::ActivitiesFill, "Activities and soundboard", Control::Rest, connected)
             .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.show_toast("Activities and the soundboard aren't in Waffle yet", cx))));
         let more = control("call-more", Glyph::More, "More options", Control::Rest, true).on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_call_more(e.position, cx)));
@@ -1987,7 +2039,7 @@ fn panel_action(id: &'static str, glyph: Glyph, tip: &'static str, enabled: bool
 }
 
 // .iconbtn on the stage: muted until hovered; `pressed` holds the selected fill.
-fn stage_icon_button(id: &'static str, glyph: Glyph, tip: &'static str, pressed: bool) -> Stateful<Div> {
+pub(crate) fn stage_icon_button(id: impl Into<ElementId>, glyph: Glyph, tip: &'static str, pressed: bool) -> Stateful<Div> {
     div()
         .id(id)
         .size(px(32.))
@@ -2006,7 +2058,7 @@ fn stage_icon_button(id: &'static str, glyph: Glyph, tip: &'static str, pressed:
 }
 
 // .btn.btn--sm on the stage: the quiet fill.
-fn stage_button(id: impl Into<gpui_kit::ElementId>, label: &'static str) -> Stateful<Div> {
+pub(crate) fn stage_button(id: impl Into<ElementId>, label: &'static str) -> Stateful<Div> {
     div()
         .id(id)
         .h(px(30.))
@@ -2047,7 +2099,7 @@ fn watch_button_look() -> Div {
 // A call control's state: .cbtn at rest, .off (coral), .on (light), .active (accent), the open
 // chevron ([aria-expanded]). The red .leave is its own button.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Control {
+pub(crate) enum Control {
     Rest,
     Off,
     On,
@@ -2057,7 +2109,7 @@ enum Control {
 
 // .cbtn: 40x40 inside its group, a squircle; icons 20px (the chevron 12px on a 20px strip). Pressed, it sinks to 92%.
 // The group is opaque, so a button at rest has no fill of its own.
-fn control(id: &'static str, glyph: Glyph, tip: &'static str, state: Control, enabled: bool) -> ui::Pressable {
+pub(crate) fn control(id: &'static str, glyph: Glyph, tip: &'static str, state: Control, enabled: bool) -> ui::Pressable {
     let (fill, hover, ink) = match state {
         Control::Rest => (gpui_kit::transparent_black(), stage::wash(0.08), gpui_kit::white()),
         Control::Off => (stage::off(false), stage::off(true), stage::off_ink()),
@@ -2094,7 +2146,7 @@ fn split_control(main: impl IntoElement, chevron: impl IntoElement) -> Div {
 }
 
 // .cgroup: related controls on one opaque plate with a hairline, so they read over any picture.
-fn control_group() -> Div {
+pub(crate) fn control_group() -> Div {
     div()
         .h(px(CONTROLS_HEIGHT))
         .flex()
@@ -2418,7 +2470,7 @@ mod order_tests {
     use super::*;
 
     fn person(id: &str, streaming: bool, camera: bool) -> VoiceState {
-        VoiceState { guild_id: None, channel_id: Some("c".into()), user_id: id.into(), user: None, muted: false, deafened: false, server_muted: false, server_deafened: false, streaming, camera }
+        VoiceState { guild_id: None, channel_id: Some("c".into()), user_id: id.into(), user: None, muted: false, deafened: false, server_muted: false, server_deafened: false, streaming, camera, suppress: false, requested_at: None }
     }
 
     #[test]

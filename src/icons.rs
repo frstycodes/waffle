@@ -12,7 +12,7 @@ pub const NEW_TAG: &str = "shapes/new-tag.svg";
 // Reicon (MIT, github.com/dqev/reicon) in its filled weight, like Discord's chrome, plus Waffle's own glyphs
 // (muted, deafened, camera off, GIF...), all written to assets/icons/reicon/ by tools/reicon.py, which also
 // keeps these paths in step with its map (design/icons.html). Order matches `Glyph`.
-const GLYPHS: [(&str, &[u8]); 152] = [
+const GLYPHS: [(&str, &[u8]); 154] = [
     ("icons/hashtag.svg", include_bytes!("../assets/icons/reicon/hashtag2.svg")),
     ("icons/hashtag-lock.svg", include_bytes!("../assets/icons/reicon/lock2.svg")),
     ("icons/volume-high.svg", include_bytes!("../assets/icons/reicon/volume-high.svg")),
@@ -168,6 +168,9 @@ const GLYPHS: [(&str, &[u8]); 152] = [
     ("icons/bookmark.svg", include_bytes!("../assets/icons/bookmark.svg")),
     ("icons/book-open.svg", include_bytes!("../assets/icons/reicon/book-open.svg")),
     ("icons/arrow-left.svg", include_bytes!("../assets/icons/reicon/arrow-left.svg")),
+    // Raise hand on a stage: the same hand as HandWaving, named for its own concept.
+    ("icons/hand.svg", include_bytes!("../assets/icons/reicon/hand.svg")),
+    ("icons/stage.svg", include_bytes!("../assets/icons/reicon/podcast.svg")),
 ];
 
 const BRAND: [(&str, &[u8]); 4] = [
@@ -332,6 +335,8 @@ pub enum Glyph {
     Bookmark,
     BookOpen,
     ArrowLeft,
+    Hand,
+    Stage,
 }
 
 impl IconNamed for Glyph {

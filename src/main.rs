@@ -89,6 +89,9 @@ mod tray;
 mod text_file;
 mod ui;
 mod splash;
+mod stage;
+mod stage_dialogs;
+mod stage_view;
 mod updater;
 mod design_system;
 mod app_icon;
@@ -797,6 +800,7 @@ pub struct Waffle {
     unread_scroll_pending: bool,
     dialog: Option<menu::Dialog>,
     create_channel: Option<create_channel::CreateChannel>,
+    stage_topic: Option<stage_dialogs::StageTopic>,
     dialog_input: Entity<SearchState>,
     // A short notice at the bottom, e.g. why a moderation action failed.
     toast: Option<SharedString>,
@@ -1038,6 +1042,9 @@ impl Waffle {
         let dialog_input = cx.new(|cx| SearchState::new(window, cx));
         // Enter in the field submits its dialog; the input keeps the key from reaching the dialog itself.
         cx.subscribe_in(&dialog_input, window, |this: &mut Self, _, event: &InputEvent, window, cx| {
+            if this.stage_topic.is_some() {
+                return this.stage_topic_input(event, window, cx);
+            }
             if !matches!(event, InputEvent::PressEnter { .. }) {
                 return;
             }
@@ -1166,6 +1173,7 @@ impl Waffle {
             unread_scroll_pending: false,
             dialog: None,
             create_channel: None,
+            stage_topic: None,
             dialog_input,
             toast: None,
             add_friend_input,
@@ -1660,7 +1668,8 @@ impl Waffle {
                 let is_here = ours.is_some() && state.channel_id == ours;
                 let was_live = states.iter().any(|v| v.user_id == state.user_id && v.channel_id == ours && v.streaming);
                 let is_live = is_here && state.streaming;
-                if let Some(cue) = member_cue(mine, was_here, is_here) {
+                let silent = self.call.as_ref().is_some_and(|c| c.channel.raw_type == 13);
+                if let Some(cue) = member_cue(mine, was_here, is_here).filter(|_| !silent) {
                     sounds::play(cue);
                 } else if !mine && !was_live && is_live {
                     sounds::play(sounds::Cue::StreamStarted);
@@ -1682,6 +1691,12 @@ impl Waffle {
             Event::Call { channel_id, ringing } => self.on_dm_call(channel_id, ringing, cx),
             Event::CallEnded { channel_id } => self.on_dm_call_ended(&channel_id),
             Event::VoiceServer(_) => {}
+            Event::StageInstance { guild_id, channel_id, instance } => {
+                if let Some(guild) = self.guilds.iter_mut().find(|g| g.id == guild_id) {
+                    guild.stage_instances.retain(|s| s.channel_id != channel_id);
+                    guild.stage_instances.extend(instance);
+                }
+            }
             Event::VoiceStartTimes { guild_id, times, all } => {
                 if all
                     && let Some(guild) = self.guilds.iter().find(|g| g.id == guild_id)
@@ -3058,7 +3073,8 @@ impl Waffle {
     }
 
     fn leave_voice(&mut self, cx: &mut Context<Self>) {
-        if self.end_call(cx) {
+        let stage = self.call.as_ref().is_some_and(|c| c.channel.raw_type == 13);
+        if self.end_call(cx) && !stage {
             sounds::play(sounds::Cue::Disconnect);
         }
     }
@@ -3095,7 +3111,10 @@ impl Waffle {
                 let Some(call) = &mut self.call else { return };
                 call.connected = true;
                 call.stage = voice::Stage::Connected;
-                sounds::play(connected_cue(self.call_switched));
+                // Stages make no join or leave sounds (docs/discord-stage-re.md).
+                if call.channel.raw_type != 13 {
+                    sounds::play(connected_cue(self.call_switched));
+                }
                 if std::mem::take(&mut self.camera_on_connect) {
                     self.toggle_camera(cx);
                 }
@@ -3221,13 +3240,16 @@ impl Waffle {
             }
             voice::VoiceEvent::Moved(channel_id) => return self.follow_voice_move(&channel_id, cx),
             voice::VoiceEvent::Disconnected(reason) => {
+                let stage = self.call.as_ref().is_some_and(|c| c.channel.raw_type == 13);
                 if let Some(call) = self.call.take() {
                     self.last_call = Some(VoiceNotice { guild_id: call.guild_id.clone(), channel: call.channel.clone(), at: Instant::now(), why: NoticeWhy::Elsewhere });
                     release_frames(call, cx);
                 }
                 self.call_focus = None;
                 self.stop_ringing_out();
-                sounds::play(sounds::Cue::Disconnect);
+                if !stage {
+                    sounds::play(sounds::Cue::Disconnect);
+                }
                 match reason.as_str() {
                     "Left" => {}
                     voice::ANOTHER_LOCATION => self.taken_elsewhere(),
