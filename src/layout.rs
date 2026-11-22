@@ -78,6 +78,7 @@ impl Waffle {
                     cx.notify();
                 }
             }));
+        let root = self.listen_shortcuts(root, cx);
         self.restore_last_channel(window, cx);
         if let Status::SignedOut(login) = &self.status {
             let login = login.clone();
@@ -97,7 +98,8 @@ impl Waffle {
         {
             let (overlays, call_overlays) = (self.render_overlays(window, cx), self.render_call_overlays(window, cx));
             let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_stage_topic(window, cx)).or_else(|| self.render_modify_attachment(window, cx)).or_else(|| self.render_notification_settings(window, cx)).or_else(|| self.render_new_post(window, cx)));
-            crate::gif::set_covered(!overlays.is_empty() || !call_overlays.is_empty() || menu.is_some() || dialog.is_some());
+            let combos = self.render_keyboard_combos(window, cx);
+            crate::gif::set_covered(!overlays.is_empty() || !call_overlays.is_empty() || menu.is_some() || dialog.is_some() || combos.is_some());
             return root
                 .child(call)
                 .children(self.call_window(cx))
@@ -106,6 +108,7 @@ impl Waffle {
                 .children(self.render_toast(cx))
                 .children(menu)
                 .children(dialog)
+                .children(combos)
                 .into_any_element();
         }
         // A settings view covers the whole window and its nav takes the sidebar's place, so the app under it
@@ -124,7 +127,8 @@ impl Waffle {
         let (viewer, settings) = (self.viewer_overlay(window, cx), self.render_settings(window, cx));
         let channel_settings = self.render_channel_settings(window, cx);
         let server_settings = self.render_server_settings(window, cx);
-        crate::gif::set_covered(!overlays.is_empty() || !call_overlays.is_empty() || menu.is_some() || dialog.is_some() || viewer.is_some() || settings.is_some() || channel_settings.is_some() || server_settings.is_some());
+        let combos = self.render_keyboard_combos(window, cx);
+        crate::gif::set_covered(combos.is_some() || !overlays.is_empty() || !call_overlays.is_empty() || menu.is_some() || dialog.is_some() || viewer.is_some() || settings.is_some() || channel_settings.is_some() || server_settings.is_some());
         // Over everything but popups: a DM call's window, or, away from a server call, the stream we watch.
         let pip = self.call_window(cx).or_else(|| (!self.call_view).then(|| self.stream_pip(cx)).flatten());
         self.pip_drop_zone(root, cx)
@@ -139,6 +143,7 @@ impl Waffle {
             .children(settings)
             .children(channel_settings)
             .children(server_settings)
+            .children(combos)
             .children(crate::window_controls::render(window, cx))
             .children(self.render_landing(window, cx))
             .into_any_element()

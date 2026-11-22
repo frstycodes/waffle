@@ -978,8 +978,10 @@ impl Waffle {
     pub(crate) fn show_toast(&mut self, text: impl Into<SharedString>, cx: &mut Context<Self>) {
         let text = text.into();
         self.toast = Some(text.clone());
+        // Settings › Accessibility's minimum lengthens a toast, never shortens it.
+        let shown = std::time::Duration::from_secs(u64::from(self.prefs.min_toast_secs.max(4)));
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(std::time::Duration::from_secs(4)).await;
+            cx.background_executor().timer(shown).await;
             this.update(cx, |this, cx| {
                 if this.toast.as_ref() == Some(&text) {
                     this.toast = None;

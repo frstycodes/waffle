@@ -15,7 +15,10 @@
 // painted against a rounded edge (an image, a header strip, a hover fill) must round itself to
 // match, or sit inset by the surface's padding. `surface` insets its content; `media` and `edge`
 // round theirs.
-use std::time::Duration;
+use std::{
+    sync::atomic::{AtomicBool, AtomicU8, Ordering},
+    time::Duration,
+};
 
 use gpui_kit::{
     Animation, AnimationElement, AnimationExt, AnyElement, App, BoxShadow, Corners, Div, ElementId, FontWeight, Hsla, ImageSource, Img, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, SharedString, SizeRefinement,
@@ -27,7 +30,7 @@ use gpui_kit::{
     div, img, linear_color_stop, linear_gradient, point, prelude::FluentBuilder, px, relative,
 };
 
-use crate::{discord::Status, icons::Glyph, illustration::Illustration, mascot, motion, palette};
+use crate::{discord::Status, icons::Glyph, illustration::Illustration, mascot, motion, palette, settings::Density};
 
 mod control;
 mod date;
@@ -70,6 +73,33 @@ impl<T: Styled> Squircle for T {}
 
 // Padding a surface keeps between its rounded edge and its rows.
 pub const SURFACE_INSET: f32 = 6.;
+
+// Settings › Accessibility's density and switch indicators, read while laying out (atomics: the rail's
+// geometry helpers run without an App).
+static DENSITY: AtomicU8 = AtomicU8::new(Density::Default as u8);
+static SWITCH_ICONS: AtomicBool = AtomicBool::new(false);
+
+pub fn set_density(density: Density) {
+    DENSITY.store(density as u8, Ordering::Relaxed);
+}
+
+pub fn set_switch_icons(on: bool) {
+    SWITCH_ICONS.store(on, Ordering::Relaxed);
+}
+
+// UI density, the space between the server, channel and member lists: `default` is the Default
+// density's padding or gap, about a quarter less in Compact and more in Spacious. Discord's channel
+// rows step 4px either way (`NAME_LINE_HEIGHT` 20/24/28), which a 16px row padding scaled here matches.
+// Not verified: Discord's rail and member list gaps per density; these are scaled, not its numbers.
+pub fn density_pad(default: f32) -> f32 {
+    const COMPACT: u8 = Density::Compact as u8;
+    const SPACIOUS: u8 = Density::Spacious as u8;
+    match DENSITY.load(Ordering::Relaxed) {
+        COMPACT => default * 0.75,
+        SPACIOUS => default * 1.25,
+        _ => default,
+    }
+}
 
 // Motion tokens (design/tokens.css): press, hover, pop, panel.
 pub const DUR_PRESS: Duration = Duration::from_millis(120);
@@ -351,8 +381,15 @@ fn switch_track(id: &ElementId, on: bool, pressed: bool, window: &mut Window, cx
         .bg(mix(gpui_kit::white(), gpui_kit::white().opacity(0.42), glass))
         .shadow(knob_glass(glass))
         // The backdrop blur keeps to the knob's unscaled box: gpui's blur doesn't follow transforms.
-        .when(glass > 0., |k| k.backdrop_blur(px(2. * glass)).backdrop_saturate(1. + 0.8 * glass));
+        .when(glass > 0., |k| k.backdrop_blur(px(2. * glass)).backdrop_saturate(1. + 0.8 * glass))
+        .when(SWITCH_ICONS.load(Ordering::Relaxed), |k| k.flex().items_center().justify_center().child(switch_indicator(fill > 0.5)));
     div().w(px(40.)).h(px(24.)).flex_none().relative().rounded_full().bg(mix(palette::track(cx), palette::accent(), fill.clamp(0., 1.))).child(knob)
+}
+
+// "Show on/off indicators": a tick or a cross in the knob, which is white in both themes.
+fn switch_indicator(on: bool) -> Icon {
+    let (glyph, alpha) = if on { (Glyph::Checkmark, 1.) } else { (Glyph::X, 0.6) };
+    Icon::new(glyph).size(px(12.)).text_color(palette::on_accent().opacity(alpha))
 }
 
 // The knob's shadows, from resting (`t` 0) to pressed glass (`t` 1): a lit inner rim and a deeper drop.
@@ -498,7 +535,7 @@ pub fn monogram(name: &str, size: f32) -> Div {
         .size(px(size))
         .flex_none()
         .rounded_full()
-        .bg(linear_gradient(135., linear_color_stop(palette::oklch(0.53, 0.12, hue), 0.), linear_color_stop(palette::oklch(0.41, 0.13, hue + 35.), 1.)))
+        .bg(linear_gradient(135., linear_color_stop(palette::picture_oklch(0.53, 0.12, hue), 0.), linear_color_stop(palette::picture_oklch(0.41, 0.13, hue + 35.), 1.)))
         .flex()
         .items_center()
         .justify_center()

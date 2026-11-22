@@ -1023,6 +1023,9 @@ pub struct Message {
     // Rich link cards (articles, YouTube, bots).
     pub embeds: Vec<Embed>,
     pub files: Vec<File>,
+    // The uploads among `media`, as files: `media_files[i]` is `media[i]`, since attachments lead `media`.
+    #[serde(default)]
+    pub media_files: Vec<File>,
     pub reactions: Vec<Reaction>,
     pub reply_to: Option<String>,
     pub reply: Option<Box<Message>>,
@@ -1367,6 +1370,16 @@ pub struct AccountSettings {
     pub friends_all: bool,
     pub friends_mutual_friends: bool,
     pub friends_mutual_guilds: bool,
+    // Chat and accessibility rows Discord syncs (docs/discord-settings-re.md). Believed, not checked against a
+    // live READY: the legacy object carries these keys under the same names as the protobuf fields.
+    pub message_display_compact: bool,
+    pub inline_attachment_media: bool,
+    pub inline_embed_media: bool,
+    pub gif_auto_play: bool,
+    pub animate_emoji: bool,
+    // 0 always, 1 on interaction, 2 never.
+    pub animate_stickers: u8,
+    pub convert_emoticons: bool,
     // From the settings proto (settings::proto): DmSpamFilterV2, 0 while unset.
     pub dm_spam_filter: u8,
     // Message Requests on: `default_message_request_restricted` off.
@@ -1388,6 +1401,13 @@ impl Default for AccountSettings {
             friends_all: true,
             friends_mutual_friends: true,
             friends_mutual_guilds: true,
+            message_display_compact: false,
+            inline_attachment_media: true,
+            inline_embed_media: true,
+            gif_auto_play: true,
+            animate_emoji: true,
+            animate_stickers: 0,
+            convert_emoticons: true,
             dm_spam_filter: 0,
             message_requests: true,
             restricted_guilds: Vec::new(),
@@ -1409,6 +1429,15 @@ impl AccountSettings {
         flag("render_reactions", &mut self.render_reactions);
         flag("show_current_game", &mut self.show_current_game);
         flag("default_guilds_restricted", &mut self.default_guilds_restricted);
+        flag("message_display_compact", &mut self.message_display_compact);
+        flag("inline_attachment_media", &mut self.inline_attachment_media);
+        flag("inline_embed_media", &mut self.inline_embed_media);
+        flag("gif_auto_play", &mut self.gif_auto_play);
+        flag("animate_emoji", &mut self.animate_emoji);
+        flag("convert_emoticons", &mut self.convert_emoticons);
+        if let Some(when) = v["animate_stickers"].as_u64() {
+            self.animate_stickers = when.min(2) as u8;
+        }
         if v["restricted_guilds"].is_array() {
             self.restricted_guilds = strings(&v["restricted_guilds"]);
         }
@@ -2998,23 +3027,28 @@ const ATTACHMENT_SPOILER: u64 = 8;
 pub fn parse_message(m: &Value) -> Option<Message> {
     let mut media = Vec::new();
     let mut files = Vec::new();
+    let mut media_files = Vec::new();
     for a in m["attachments"].as_array().into_iter().flatten() {
         let url = a["url"].as_str().unwrap_or_default().to_owned();
         let kind = a["content_type"].as_str().unwrap_or_default();
         let id = a["id"].as_str().unwrap_or_default().to_owned();
         let description = a["description"].as_str().filter(|d| !d.is_empty()).map(str::to_owned);
         let spoiler = a["flags"].as_u64().unwrap_or(0) & ATTACHMENT_SPOILER != 0;
-        let attachment = |url: String, w: f64, h: f64, kind: MediaKind| Media { url, width: w as f32, height: h as f32, kind, id: Some(id.clone()), description: description.clone(), spoiler };
-        match (a["width"].as_f64(), a["height"].as_f64()) {
-            (Some(w), Some(h)) if kind.starts_with("video/") => {
-                // Discord's media proxy returns a still frame for a video when asked for an image format.
+        let file = File { name: a["filename"].as_str().unwrap_or("file").to_owned(), url: url.clone(), size: a["size"].as_u64().unwrap_or(0), id: id.clone(), spoiler };
+        let (Some(w), Some(h)) = (a["width"].as_f64(), a["height"].as_f64()) else {
+            files.push(file);
+            continue;
+        };
+        media_files.push(file);
+        let kind = match kind.starts_with("video/") {
+            // Discord's media proxy returns a still frame for a video when asked for an image format.
+            true => {
                 let proxy = a["proxy_url"].as_str().unwrap_or(&url);
-                let poster = format!("{proxy}{}format=jpeg", if proxy.contains('?') { "&" } else { "?" });
-                media.push(attachment(url, w, h, MediaKind::Video { poster }))
+                MediaKind::Video { poster: format!("{proxy}{}format=jpeg", if proxy.contains('?') { "&" } else { "?" }) }
             }
-            (Some(w), Some(h)) => media.push(attachment(url, w, h, MediaKind::Image)),
-            _ => files.push(File { name: a["filename"].as_str().unwrap_or("file").to_owned(), url, size: a["size"].as_u64().unwrap_or(0), id: id.clone(), spoiler }),
-        }
+            false => MediaKind::Image,
+        };
+        media.push(Media { url, width: w as f32, height: h as f32, kind, id: Some(id), description, spoiler });
     }
     let flags = m["flags"].as_u64().unwrap_or(0);
     let attachment_media = media.len();
@@ -3037,6 +3071,7 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         media,
         embeds,
         files,
+        media_files,
         reactions: m["reactions"]
             .as_array()
             .into_iter()
@@ -3982,12 +4017,13 @@ mod tests {
     #[test]
     fn sorts_attachments_into_images_and_files() {
         let m = parse_message(&json!({ "id": "1", "channel_id": "c", "author": { "id": "u" }, "attachments": [
-            { "url": "a.png", "width": 10, "height": 20, "content_type": "image/png" },
+            { "url": "a.png", "width": 10, "height": 20, "content_type": "image/png", "description": "a red door" },
             { "url": "b.zip", "filename": "b.zip", "size": 5 },
         ], "referenced_message": { "id": "0", "channel_id": "c", "author": { "id": "v", "username": "zoe" }, "content": "hi" },
            "message_reference": { "message_id": "0" } }))
         .unwrap();
         assert_eq!(m.media.len(), 1);
+        assert_eq!(m.media[0].description.as_deref(), Some("a red door"));
         assert_eq!(m.files[0].name, "b.zip");
         assert_eq!(m.reply.unwrap().author.name, "zoe");
         assert_eq!(m.reply_to.as_deref(), Some("0"));
@@ -4042,6 +4078,7 @@ mod tests {
         assert_eq!(m.media[0].kind, MediaKind::Video { poster: "https://media/v.mp4?format=jpeg".into() });
         assert_eq!(m.media[1].url, "g.mp4");
         assert_eq!(m.media[1].kind, MediaKind::Gif { poster: "t.png".into() });
+        assert_eq!(m.media_files.iter().map(|f| f.url.as_str()).collect::<Vec<_>>(), ["v.mp4"], "only uploads have files");
         assert_eq!(m.embeds.len(), 1);
         assert_eq!(m.embeds[0].provider.as_deref(), Some("YouTube"));
     }
