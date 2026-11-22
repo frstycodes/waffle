@@ -4,7 +4,7 @@
 // section with design/primitives.html.
 //
 // Pressable controls (buttons, icon buttons, chips, swatches, tab options, menu rows) live in `control`,
-// fields in `field`, the sliding strips in `tabs`, tracks and waits in `feedback`, grouped settings in
+// fields and dropdowns in `field`, the ruled data table in `table`, the sliding strips in `tabs`, tracks and waits in `feedback`, grouped settings in
 // `group`; this file holds the marks, badges, people, surfaces, motion helpers and the live switch, check
 // and radio.
 //
@@ -34,6 +34,7 @@ mod dialog;
 mod feedback;
 mod field;
 mod group;
+mod table;
 mod tabs;
 mod tri;
 mod tunnel;
@@ -41,8 +42,9 @@ mod tunnel;
 pub use control::{Control, Pressable, button, chip, hover_fade, icon_button, menu_row, pressable, round_button, swatch, tip};
 pub use dialog::{dialog, dialog_body, modal};
 pub use feedback::{meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
-pub use field::{code_cell, drop_zone, field, field_error, field_frame, field_hint, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
+pub use field::{Align, check_options, code_cell, drop_zone, dropdown, field, field_error, field_frame, field_hint, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
 pub use group::{settings_caption, settings_card, settings_choice, settings_close, settings_column, settings_group, SettingsHighlight, settings_nav_item, settings_page, SETTINGS_NAV_WIDTH, SETTINGS_WIDTH, settings_row, settings_nav_edge, settings_sidebar, settings_switch, settings_text, settings_title, settings_window};
+pub use table::{Col, table, table_head, table_row};
 pub use tabs::{Tab, pill_tabs, segmented_live, tabs};
 pub use tri::{Tri, tri_state};
 pub use tunnel::{TUNNEL_GRACE, Tunnel};
