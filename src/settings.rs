@@ -9,6 +9,7 @@ use gpui_kit::{
 };
 use serde::{Deserialize, Serialize};
 
+mod activity;
 mod advanced;
 mod games;
 mod profile;
@@ -518,6 +519,7 @@ enum Select {
     Action(usize),
     UiFont,
     MonoFont,
+    JoinActivity,
 }
 
 // The live drag payload for a slider; drawn as nothing.
@@ -851,7 +853,7 @@ impl Waffle {
             Page::Appearance => self.appearance_page(window, cx),
             Page::Updates => self.updates_page(window, cx),
             Page::Advanced => self.advanced_page(cx),
-            Page::ActivityPrivacy => self.games_page(window, cx),
+            Page::ActivityPrivacy => [self.activity_sharing_page(window, cx), self.games_page(window, cx)].into_iter().flatten().collect(),
             Page::ContentSocial | Page::Chat => Vec::new(),
         };
         sections.extend(self.registry_sections(page, window, cx));
@@ -1842,6 +1844,9 @@ impl Waffle {
         if let Some(s) = &mut self.settings {
             s.select = None;
         }
+        if select == Select::JoinActivity {
+            return self.set_join_activity_default(id.parse().unwrap_or(0), cx);
+        }
         if matches!(select, Select::UiFont | Select::MonoFont) {
             self.update_prefs(cx, |p| match select {
                 Select::UiFont => p.ui_font = id.to_owned(),
@@ -1860,7 +1865,7 @@ impl Waffle {
                     bind.action = action;
                 }
             }
-            Select::UiFont | Select::MonoFont => {}
+            Select::UiFont | Select::MonoFont | Select::JoinActivity => {}
         });
     }
 
