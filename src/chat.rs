@@ -524,8 +524,8 @@ impl Waffle {
         let typers = self.typers();
         let names: Vec<&str> = typers.iter().map(|t| t.name.as_str()).collect();
         // A glass pill just above the composer, out of the flow, so the box never moves when someone types.
-        // Out of the way while suggestions are open, which rise over the same spot.
-        let typing = (!names.is_empty() && self.autocomplete.is_none()).then(|| {
+        // Out of the way while suggestions or Hold Up! are open, which rise over the same spot.
+        let typing = (!names.is_empty() && self.autocomplete.is_none() && self.hold_up.is_none()).then(|| {
             div().absolute().left(px(28.)).top(px(-28.)).max_w(gpui_kit::relative(0.6)).h(px(24.)).px(px(10.)).flex().items_center().gap(px(8.)).rounded_full()
                 .bg(palette::surface(Level::Raised, cx).opacity(0.72))
                 .backdrop_blur(px(16.))
