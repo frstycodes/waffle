@@ -10,9 +10,10 @@ use gpui_kit::{
     prelude::FluentBuilder,
     px,
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::{api, features};
+use crate::server_settings::api::Call;
 use crate::{
     Waffle,
     discord::{AccountSettings, Invite, Status, parse_invite},
@@ -63,13 +64,22 @@ impl Waffle {
         }, cx);
     }
 
-    // Once a join from the invite screen goes through: the nickname picked there.
+    // Once a join from the invite screen goes through: the nickname and privacy picked there.
     pub(crate) fn apply_invite_settings(&mut self, guild_id: &str, cx: &mut Context<Self>) {
-        let Some(nick) = self.join.invite_nicknames.remove(guild_id) else { return };
-        self.server_call(api::nickname(guild_id, &nick), |this, result, cx| {
-            if let Err(error) = result {
-                this.show_toast(error, cx);
-            }
+        let Some(picked) = self.join.invite_settings.remove(guild_id) else { return };
+        if let Some(nick) = &picked.nickname {
+            self.server_call(api::nickname(guild_id, nick), |this, result, cx| {
+                if let Err(error) = result {
+                    this.show_toast(error, cx);
+                }
+            }, cx);
+        }
+        let Some(body) = privacy_body(&self.account_settings, guild_id, &picked) else { return };
+        // Not verified: Discord's own client writes these through its protobuf settings; the legacy
+        // PATCH /users/@me/settings still takes both lists.
+        self.server_call(Call::new(reqwest::Method::PATCH, "/users/@me/settings".into(), Some(body.clone())), |this, result, cx| match result {
+            Ok(_) => this.account_settings.apply(&body),
+            Err(error) => this.show_toast(error, cx),
         }, cx);
     }
 
@@ -77,12 +87,7 @@ impl Waffle {
         let Some(view) = self.join.invite.take() else { return };
         let Preview::Ready(invite) = view.preview else { return };
         let typed = view.nickname.map(|n| n.read(cx).value().to_string()).unwrap_or_default();
-        if let Some(nick) = picked_nickname(&typed) {
-            self.join.invite_nicknames.insert(invite.guild_id, nick);
-        }
-        // Not verified: how Discord applies "Allow direct messages" and "Show your activity status" after
-        // joining (docs/discord-joining-re.md §6). Waffle doesn't keep the per-server lists they'd go into
-        // (`restricted_guilds` and its activity twin), so both switches apply nothing yet.
+        self.join.invite_settings.insert(invite.guild_id, Picked { nickname: picked_nickname(&typed), allow_dms: view.allow_dms, show_activity: view.show_activity });
         self.join_invite(view.code, cx);
         cx.notify();
     }
@@ -319,6 +324,27 @@ fn preview(result: Result<Value, String>) -> Preview {
 }
 
 // The nickname to set once joined; an empty field keeps your name.
+// What the invite screen's Server Settings held when you accepted, applied once the join lands.
+pub struct Picked {
+    nickname: Option<String>,
+    allow_dms: bool,
+    show_activity: bool,
+}
+
+// The account's per-server lists with this server added where a switch was turned off; None when
+// nothing changes.
+fn privacy_body(account: &AccountSettings, guild_id: &str, picked: &Picked) -> Option<Value> {
+    let with = |list: &[String]| -> Option<Vec<String>> { (!list.iter().any(|g| g == guild_id)).then(|| list.iter().cloned().chain([guild_id.to_owned()]).collect()) };
+    let mut body = serde_json::Map::new();
+    if !picked.allow_dms && let Some(list) = with(&account.restricted_guilds) {
+        body.insert("restricted_guilds".into(), json!(list));
+    }
+    if !picked.show_activity && let Some(list) = with(&account.activity_restricted_guilds) {
+        body.insert("activity_restricted_guild_ids".into(), json!(list));
+    }
+    (!body.is_empty()).then_some(Value::Object(body))
+}
+
 fn picked_nickname(typed: &str) -> Option<String> {
     let nick = typed.trim();
     (!nick.is_empty()).then(|| nick.to_owned())
@@ -346,6 +372,16 @@ pub fn demo(waffle: &mut Waffle, scene: &str, _window: &mut Window, cx: &mut Con
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn privacy_adds_this_server_only_where_a_switch_is_off() {
+        let account = super::AccountSettings { restricted_guilds: vec!["7".into()], ..Default::default() };
+        let picked = |allow_dms, show_activity| super::Picked { nickname: None, allow_dms, show_activity };
+        assert_eq!(super::privacy_body(&account, "9", &picked(true, true)), None);
+        assert_eq!(super::privacy_body(&account, "9", &picked(false, true)), Some(serde_json::json!({ "restricted_guilds": ["7", "9"] })));
+        assert_eq!(super::privacy_body(&account, "7", &picked(false, true)), None, "already restricted");
+        assert_eq!(super::privacy_body(&account, "9", &picked(true, false)), Some(serde_json::json!({ "activity_restricted_guild_ids": ["9"] })));
+    }
+
     use serde_json::json;
 
     use super::*;

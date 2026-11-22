@@ -1008,6 +1008,9 @@ pub struct AccountSettings {
     pub friends_all: bool,
     pub friends_mutual_friends: bool,
     pub friends_mutual_guilds: bool,
+    // Servers whose members can't DM you, and servers that don't see your activity.
+    pub restricted_guilds: Vec<String>,
+    pub activity_restricted_guilds: Vec<String>,
 }
 
 impl Default for AccountSettings {
@@ -1022,6 +1025,8 @@ impl Default for AccountSettings {
             friends_all: true,
             friends_mutual_friends: true,
             friends_mutual_guilds: true,
+            restricted_guilds: Vec::new(),
+            activity_restricted_guilds: Vec::new(),
         }
     }
 }
@@ -1039,6 +1044,12 @@ impl AccountSettings {
         flag("render_reactions", &mut self.render_reactions);
         flag("show_current_game", &mut self.show_current_game);
         flag("default_guilds_restricted", &mut self.default_guilds_restricted);
+        if v["restricted_guilds"].is_array() {
+            self.restricted_guilds = strings(&v["restricted_guilds"]);
+        }
+        if v["activity_restricted_guild_ids"].is_array() {
+            self.activity_restricted_guilds = strings(&v["activity_restricted_guild_ids"]);
+        }
         if let Some(level) = v["explicit_content_filter"].as_u64() {
             self.explicit_content_filter = level.min(2) as u8;
         }
