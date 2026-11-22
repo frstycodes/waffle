@@ -521,6 +521,7 @@ pub mod perm {
 pub mod message_flag {
     pub const SUPPRESS_EMBEDS: u64 = 1 << 2;
     pub const EPHEMERAL: u64 = 1 << 6;
+    pub const IS_VOICE_MESSAGE: u64 = 1 << 13;
 }
 
 impl Guild {
@@ -948,6 +949,20 @@ pub struct File {
     pub id: String,
     #[serde(default)]
     pub spoiler: bool,
+    // A voice message's length and loudness, as Discord sends them with the recording.
+    #[serde(default)]
+    pub duration_secs: Option<f32>,
+    // One loudness byte per sample (0-255), up to 256; empty when missing or not valid base64.
+    #[serde(default)]
+    pub waveform: Vec<u8>,
+}
+
+impl File {
+    // Discord plays a file inline by its name alone, not its content type.
+    pub fn is_audio(&self) -> bool {
+        let lower = self.name.to_ascii_lowercase();
+        !self.url.is_empty() && [".mp3", ".m4a", ".ogg", ".opus", ".wav", ".flac"].iter().any(|ext| lower.ends_with(ext))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1149,6 +1164,11 @@ impl Message {
 
     pub fn embeds_suppressed(&self) -> bool {
         self.flags & message_flag::SUPPRESS_EMBEDS != 0
+    }
+
+    // Its audio files play in the voice player, and it can't be edited.
+    pub fn is_voice(&self) -> bool {
+        self.flags & message_flag::IS_VOICE_MESSAGE != 0
     }
 
     pub fn silent(&self) -> bool {
@@ -3329,6 +3349,7 @@ fn parse_pins(body: &Value) -> Vec<Message> {
 const ATTACHMENT_SPOILER: u64 = 8;
 
 pub fn parse_message(m: &Value) -> Option<Message> {
+    use base64::Engine;
     let mut media = Vec::new();
     let mut files = Vec::new();
     let mut media_files = Vec::new();
@@ -3338,7 +3359,15 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         let id = a["id"].as_str().unwrap_or_default().to_owned();
         let description = a["description"].as_str().filter(|d| !d.is_empty()).map(str::to_owned);
         let spoiler = a["flags"].as_u64().unwrap_or(0) & ATTACHMENT_SPOILER != 0;
-        let file = File { name: a["filename"].as_str().unwrap_or("file").to_owned(), url: url.clone(), size: a["size"].as_u64().unwrap_or(0), id: id.clone(), spoiler };
+        let file = File {
+            name: a["filename"].as_str().unwrap_or("file").to_owned(),
+            url: url.clone(),
+            size: a["size"].as_u64().unwrap_or(0),
+            id: id.clone(),
+            spoiler,
+            duration_secs: a["duration_secs"].as_f64().map(|d| d as f32),
+            waveform: a["waveform"].as_str().and_then(|w| base64::engine::general_purpose::STANDARD.decode(w).ok()).unwrap_or_default(),
+        };
         let (Some(w), Some(h)) = (a["width"].as_f64(), a["height"].as_f64()) else {
             files.push(file);
             continue;
@@ -4441,6 +4470,21 @@ mod tests {
         let body = forward_body(&original, Some("g"), "n");
         assert_eq!(body["message_reference"], json!({ "type": 1, "message_id": "9", "channel_id": "src", "guild_id": "g" }));
         assert!(body.get("content").is_none());
+    }
+
+    #[test]
+    fn reads_voice_messages() {
+        let m = parse_message(&json!({ "id": "1", "channel_id": "c", "author": { "id": "u" }, "flags": 8192,
+            "attachments": [{ "id": "9", "filename": "voice-message.ogg", "url": "https://cdn/v.ogg", "size": 9000, "duration_secs": 4.2, "waveform": "AP8=" }] }))
+        .unwrap();
+        assert!(m.is_voice());
+        let file = &m.files[0];
+        assert_eq!((file.id.as_str(), file.duration_secs, file.waveform.as_slice()), ("9", Some(4.2), [0u8, 255].as_slice()));
+        assert!(file.is_audio());
+        let plain = parse_message(&json!({ "id": "2", "channel_id": "c", "author": { "id": "u" },
+            "attachments": [{ "filename": "notes.PDF", "url": "u", "size": 1, "waveform": "not base64!" }] }))
+        .unwrap();
+        assert!(!plain.is_voice() && !plain.files[0].is_audio() && plain.files[0].waveform.is_empty());
     }
 
     #[test]

@@ -937,8 +937,8 @@ fn file(message: &Message, url: &str, name: Option<&str>, size: Option<u64>, spo
         name: name.map(str::to_owned).or_else(|| url.rsplit('/').next().map(str::to_owned)).unwrap_or_default(),
         url: url.to_owned(),
         size: size.unwrap_or(0),
-        id: String::new(),
         spoiler,
+        ..Default::default()
     });
     let card = chat::file_card(message, &file, cx);
     if !spoiler {
@@ -1187,7 +1187,7 @@ mod tests {
 
     #[test]
     fn attachment_urls_resolve_to_the_message_files() {
-        let message = Message { files: vec![File { name: "log.txt".into(), url: "https://cdn.discordapp.com/attachments/1/2/log.txt?ex=1".into(), size: 3, id: String::new(), spoiler: false }], ..Default::default() };
+        let message = Message { files: vec![File { name: "log.txt".into(), url: "https://cdn.discordapp.com/attachments/1/2/log.txt?ex=1".into(), size: 3, ..Default::default() }], ..Default::default() };
         assert_eq!(resolve(&message, "attachment://log.txt"), message.files[0].url);
         assert_eq!(resolve(&message, "https://x/y.png"), "https://x/y.png");
     }

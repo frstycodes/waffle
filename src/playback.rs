@@ -258,7 +258,7 @@ impl AsRef<[u8]> for Tail {
 
 // One output stream for every video, opened on first use. Its device handle has to stay on the thread
 // that opened it on some platforms, so that thread keeps it for the life of the app.
-fn mixer() -> Option<Mixer> {
+pub(crate) fn mixer() -> Option<Mixer> {
     static MIXER: OnceLock<Option<Mixer>> = OnceLock::new();
     MIXER
         .get_or_init(|| {

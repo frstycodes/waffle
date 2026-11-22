@@ -274,6 +274,10 @@ pub struct Prefs {
     pub rejoin_voice: Option<(String, String)>,
     // Announcement channels whose "Share with your followers!" bump was turned off with Don't show again.
     pub publish_bump_hidden: Vec<String>,
+    // Discord's one playback speed for every voice message.
+    pub voice_rate: f32,
+    // Where each voice message was left, by attachment id, oldest first; Discord keeps 25.
+    pub voice_resume: Vec<(String, f32)>,
 }
 
 const KEYBINDS_VERSION: u32 = 1;
@@ -355,6 +359,8 @@ impl Default for Prefs {
             zoom: 1.,
             rejoin_voice: None,
             publish_bump_hidden: Vec::new(),
+            voice_rate: 1.,
+            voice_resume: Vec::new(),
         }
     }
 }

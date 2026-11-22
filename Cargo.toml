@@ -73,7 +73,7 @@ rtcp = "0.17"
 interceptor = "0.17"
 webrtc-util = { version = "0.17", default-features = false, features = ["marshal"] }
 async-trait = "0.1"
-rodio = { version = "0.23.0", default-features = false, features = ["playback", "mp3", "symphonia-aac"] }
+rodio = { version = "0.23.0", default-features = false, features = ["playback", "mp3", "symphonia-aac", "wav", "flac", "vorbis", "mp4"] }
 
 [dev-dependencies]
 # Headless windows for tests/gpui_overscroll.rs. gpui-kit's own test-support pulls in a gpui-fast that
