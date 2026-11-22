@@ -12,7 +12,7 @@ pub const NEW_TAG: &str = "shapes/new-tag.svg";
 // Reicon (MIT, github.com/dqev/reicon) in its filled weight, like Discord's chrome, plus Waffle's own glyphs
 // (muted, deafened, camera off, GIF...), all written to assets/icons/reicon/ by tools/reicon.py, which also
 // keeps these paths in step with its map (design/icons.html). Order matches `Glyph`.
-const GLYPHS: [(&str, &[u8]); 165] = [
+const GLYPHS: [(&str, &[u8]); 166] = [
     ("icons/hashtag.svg", include_bytes!("../assets/icons/reicon/hashtag2.svg")),
     ("icons/hashtag-lock.svg", include_bytes!("../assets/icons/reicon/lock2.svg")),
     ("icons/volume-high.svg", include_bytes!("../assets/icons/reicon/volume-high.svg")),
@@ -158,6 +158,7 @@ const GLYPHS: [(&str, &[u8]); 165] = [
     ("icons/media-locked.svg", include_bytes!("../assets/icons/reicon/media-locked.svg")),
     ("icons/calendar.svg", include_bytes!("../assets/icons/reicon/calendar.svg")),
     ("icons/filter.svg", include_bytes!("../assets/icons/reicon/filter.svg")),
+    ("icons/star.svg", include_bytes!("../assets/icons/reicon/star.svg")),
     ("icons/megaphone.svg", include_bytes!("../assets/icons/reicon/bullhorn.svg")),
     // Reicon has no moon; drawn to match its filled weight.
     ("icons/moon.svg", include_bytes!("../assets/icons/moon.svg")),
@@ -186,12 +187,13 @@ const GLYPHS: [(&str, &[u8]); 165] = [
     ("icons/arrow-counter-clockwise.svg", include_bytes!("../assets/icons/reicon/rotate-left.svg")),
 ];
 
-const BRAND: [(&str, &[u8]); 4] = [
+const BRAND: [(&str, &[u8]); 5] = [
     (MARK, include_bytes!("../assets/brand/waffle-mark.svg")),
     (NEW_TAG, include_bytes!("../assets/icons/new-tag.svg")),
     // Stand-in art for the demo's profile scene, which stays offline.
     ("demo/decoration.png", include_bytes!("../assets/demo/decoration.png")),
     ("demo/banner.png", include_bytes!("../assets/demo/banner.png")),
+    (crate::voice_status::ART, include_bytes!("../assets/illustrations/voice-status.png")),
 ];
 
 // Services' marks for profile connections, plus Discord's own, from Simple Icons 13.21.0 (CC0,
@@ -372,6 +374,7 @@ pub enum Glyph {
     MediaLocked,
     Calendar,
     Filter,
+    Star,
     Megaphone,
     Moon,
     Sticker,

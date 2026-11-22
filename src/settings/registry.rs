@@ -168,6 +168,7 @@ pub static SETTINGS: &[Setting] = &[
     s("output-device", VoiceVideo, "Voice", "Output device", None, &["speaker", "headphones", "audio", "output"], Custom),
     s("input-volume", VoiceVideo, "Voice", "Input volume", None, &["mic volume", "gain", "loudness"], Custom),
     s("output-volume", VoiceVideo, "Voice", "Output volume", None, &["speaker volume", "volume", "loudness"], Custom),
+    s("soundboard-volume", VoiceVideo, "Voice", "Soundboard Volume", None, &["soundboard", "sounds", "volume"], Custom),
     s("mic-test", VoiceVideo, "Voice", "Mic test", Some("Hear yourself back"), &["test", "loopback", "hear myself"], Custom),
     s("input-profile", VoiceVideo, "Input profile", "Input profile", Some("Voice isolation, studio or custom"), &["voice isolation", "studio", "custom", "preset"], Custom),
     s("input-mode", VoiceVideo, "Input mode", "Input mode", Some("Voice activity or push to talk"), &["push to talk", "ptt", "voice activity", "vad", "open mic"], Custom),

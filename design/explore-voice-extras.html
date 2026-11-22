@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Chat, Status, Soundboard</title>
+<meta name="description" content="Text chat in voice channels, voice channel status and soundboard playback, before they're built.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<style>
+  /* Waffle's tokens (tokens.css), inlined so the page stands alone. */
+  :root { --n-h: 260; --accent: #efa831; --on-accent: #2a1c00; --alert: oklch(0.58 0.21 25); --online: oklch(0.74 0.16 155);
+    --radius-xs: 8px; --radius-sm: 11px; --radius-md: 14px; --radius-lg: 20px; --ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+  :root, :root[data-theme="dark"] { color-scheme: dark; --bg-rail: oklch(0.150 0.004 260); --bg-sidebar: oklch(0.180 0.004 260); --bg-page: oklch(0.210 0.004 260); --bg-raised: oklch(0.250 0.005 260); --bg-overlay: oklch(0.275 0.005 260); --hover: oklch(1 0 0 / 0.05); --press: oklch(1 0 0 / 0.09); --selected: oklch(1 0 0 / 0.08); --line: oklch(1 0 0 / 0.08); --line-strong: oklch(1 0 0 / 0.14); --text-strong: oklch(0.97 0.004 260); --text: oklch(0.88 0.008 260); --text-muted: oklch(0.72 0.012 260); --text-faint: oklch(0.65 0.012 260); --accent-ink: #f6b84d; --accent-soft: oklch(0.78 0.15 75 / 0.16); --danger-ink: #ff7a8c; --online-ink: oklch(0.78 0.15 155); --warning-ink: oklch(0.82 0.14 80); --shadow-pop: 0 12px 32px oklch(0 0 0 / 0.45), 0 0 0 1px var(--line-strong); }
+  :root[data-theme="light"] { color-scheme: light; --bg-rail: oklch(0.905 0.005 260); --bg-sidebar: oklch(0.948 0.004 260); --bg-page: oklch(0.982 0.002 260); --bg-raised: oklch(0.995 0.001 260); --bg-overlay: oklch(0.998 0.001 260); --hover: oklch(0.3 0.008 260 / 0.06); --press: oklch(0.3 0.008 260 / 0.1); --selected: oklch(0.3 0.008 260 / 0.09); --line: oklch(0.3 0.008 260 / 0.1); --line-strong: oklch(0.3 0.008 260 / 0.18); --text-strong: oklch(0.20 0.009 260); --text: oklch(0.30 0.009 260); --text-muted: oklch(0.46 0.009 260); --text-faint: oklch(0.49 0.009 260); --accent-ink: #8a5601; --accent-soft: oklch(0.7 0.15 75 / 0.14); --danger-ink: #b0182f; --online-ink: oklch(0.48 0.13 155); --warning-ink: oklch(0.52 0.12 65); --online: oklch(0.62 0.16 155); --shadow-pop: 0 12px 32px oklch(0.3 0.008 260 / 0.16), 0 0 0 1px var(--line-strong); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme]) { color-scheme: light; --bg-rail: oklch(0.905 0.005 260); --bg-sidebar: oklch(0.948 0.004 260); --bg-page: oklch(0.982 0.002 260); --bg-raised: oklch(0.995 0.001 260); --bg-overlay: oklch(0.998 0.001 260); --hover: oklch(0.3 0.008 260 / 0.06); --press: oklch(0.3 0.008 260 / 0.1); --selected: oklch(0.3 0.008 260 / 0.09); --line: oklch(0.3 0.008 260 / 0.1); --line-strong: oklch(0.3 0.008 260 / 0.18); --text-strong: oklch(0.20 0.009 260); --text: oklch(0.30 0.009 260); --text-muted: oklch(0.46 0.009 260); --text-faint: oklch(0.49 0.009 260); --accent-ink: #8a5601; --accent-soft: oklch(0.7 0.15 75 / 0.14); --danger-ink: #b0182f; --online-ink: oklch(0.48 0.13 155); --warning-ink: oklch(0.52 0.12 65); --online: oklch(0.62 0.16 155); --shadow-pop: 0 12px 32px oklch(0.3 0.008 260 / 0.16), 0 0 0 1px var(--line-strong); } }
+  /* The call stage is dark in both themes. */
+  .call { color-scheme: dark; --bg-page: oklch(0.210 0.004 260); --bg-overlay: oklch(0.275 0.005 260); --hover: oklch(1 0 0 / 0.05); --selected: oklch(1 0 0 / 0.08); --line: oklch(1 0 0 / 0.08); --line-strong: oklch(1 0 0 / 0.14); --text-strong: oklch(0.97 0.004 260); --text: oklch(0.88 0.008 260); --text-muted: oklch(0.72 0.012 260); --text-faint: oklch(0.65 0.012 260); --accent-ink: #f6b84d; --shadow-pop: 0 12px 32px oklch(0 0 0 / 0.45), 0 0 0 1px var(--line-strong); }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg-page); color: var(--text); font: 14px/1.45 "Figtree", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 96px; }
+  header.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 28px; margin: 0; color: var(--text-strong); flex: 1; }
+  h2 { font-size: 20px; color: var(--text-strong); margin: 48px 0 4px; }
+  h3 { font-size: 14px; color: var(--text-muted); font-weight: 600; margin: 0 0 8px; }
+  p.lede { color: var(--text-muted); margin: 4px 0 16px; max-width: 76ch; }
+  .note { color: var(--text-muted); font-size: 12px; margin: 8px 0 0; max-width: 60ch; }
+  .btn { font: inherit; font-weight: 600; color: var(--text-strong); background: var(--selected); border: 0; border-radius: var(--radius-md); height: 32px; padding: 0 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { background: var(--line-strong); }
+  .btn.primary { background: var(--accent); color: var(--on-accent); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .iconbtn { width: 28px; height: 28px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); display: inline-grid; place-items: center; cursor: pointer; font-size: 16px; position: relative; flex: none; }
+  .iconbtn:hover { background: var(--hover); color: var(--text-strong); }
+  .board { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 16px; display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+  .col { display: grid; gap: 8px; min-width: 0; }
+  .av { --size: 24px; width: var(--size); height: var(--size); border-radius: 50%; flex: none; background: oklch(0.65 0.12 var(--hue, 30)); display: grid; place-items: center; color: #fff; font-size: calc(var(--size) * 0.42); font-weight: 700; }
+  .count { min-width: 16px; height: 16px; padding: 0 5px; border-radius: 99px; background: var(--alert); color: #fff; font-size: 11px; font-weight: 700; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
+  .count.grey { background: var(--text-faint); color: var(--bg-page); }
+  kbd { font: 600 11px/1 "Figtree"; padding: 3px 5px; border-radius: 5px; background: var(--selected); color: var(--text-muted); }
+
+  /* Sidebar */
+  .sidebar { width: 260px; background: var(--bg-sidebar); border-radius: var(--radius-lg); padding: 10px 8px 12px 16px; display: grid; gap: 2px; }
+  .cat { color: var(--text-faint); font-size: 12px; font-weight: 600; padding: 12px 8px 4px; }
+  .ch { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 6px 0 8px; border-radius: var(--radius-sm); color: var(--text-muted); font-weight: 500; position: relative; cursor: pointer; }
+  .ch:hover, .ch.hover { background: var(--hover); color: var(--text); }
+  .ch.sel { background: var(--selected); color: var(--text-strong); }
+  .ch.strong { color: var(--text-strong); }
+  .ch.unread { color: var(--text-strong); font-weight: 600; }
+  .ch.unread::before { content: ""; position: absolute; left: -8px; width: 4px; height: 8px; border-radius: 0 4px 4px 0; background: var(--text-strong); }
+  .ch > i:first-child { font-size: 18px; color: var(--text-faint); }
+  .ch .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ch .acts { display: none; gap: 2px; }
+  .ch:hover .acts, .ch.hover .acts { display: flex; }
+  .ch .acts .iconbtn { width: 24px; height: 24px; font-size: 16px; color: var(--text-muted); }
+  .ch .timer { font-size: 12px; color: var(--online-ink); font-weight: 400; font-variant-numeric: tabular-nums; }
+  .chat-mark { display: inline-flex; align-items: center; gap: 3px; color: var(--text-muted); }
+  .chat-mark i { font-size: 16px; }
+  /* A voice channel with a status: two lines in one row, one fill, one hit area */
+  .ch.two { flex-direction: column; align-items: stretch; gap: 2px; padding: 6px 6px 6px 8px; }
+  .ch.two .line { display: flex; align-items: center; gap: 8px; min-height: 20px; min-width: 0; }
+  .ch .sub { display: flex; align-items: center; gap: 6px; padding-left: 26px; font-size: 12px; font-weight: 400; color: var(--text-muted); min-width: 0; }
+  .ch .sub span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ch .sub.set { color: var(--text); font-weight: 500; align-self: flex-start; border-radius: var(--radius-xs); }
+  .ch .sub.set:hover { color: var(--text-strong); }
+  .ch .sub.set i { font-size: 14px; }
+  .person { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px 0 32px; color: var(--text-muted); border-radius: var(--radius-sm); }
+  .person.speaking .av { box-shadow: 0 0 0 2px var(--bg-sidebar), 0 0 0 4px var(--online); }
+
+  /* Status dialog: illustrated hero, centred title, one field, two equal buttons */
+  .modal { position: relative; width: min(100%, 440px); background: var(--bg-raised); border-radius: 28px; box-shadow: var(--shadow-pop); overflow: hidden; }
+  .modal .close { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; font-size: 18px; z-index: 1; }
+  .modal .hero { height: 210px; display: grid; place-items: center; overflow: hidden; background: radial-gradient(120% 90% at 0% 0%, var(--accent-soft), transparent 70%); }
+  .modal .hero img { width: 380px; max-width: 92%; }
+  .modal .mbody { padding: 16px 24px 24px; display: grid; gap: 8px; }
+  .modal h4 { margin: 0; text-align: center; font-size: 20px; font-weight: 700; color: var(--text-strong); text-wrap: balance; }
+  .modal p { margin: 0 0 12px; text-align: center; color: var(--text-muted); text-wrap: pretty; }
+  .flabel { font-weight: 600; color: var(--text-strong); }
+  .mfoot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+  .mfoot .btn { height: 40px; justify-content: center; }
+  .field { display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 6px 0 12px; border-radius: var(--radius-md); background: var(--bg-page); border: 1px solid var(--line-strong); }
+  .field:focus-within { border-color: color-mix(in oklch, var(--text-strong) 30%, transparent); }
+  .field input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text-strong); font: inherit; font-size: 16px; }
+  .field .iconbtn { font-size: 20px; }
+  .meta { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; min-height: 16px; }
+  .meta.over { color: var(--danger-ink); }
+
+  /* Call stage */
+  .call { position: relative; width: 100%; background: oklch(0.15 0.004 260); border-radius: var(--radius-lg); color: var(--text); display: grid; grid-template-rows: auto 1fr auto; min-height: 520px; overflow: hidden; }
+  .callhead { display: flex; align-items: center; gap: 8px; padding: 12px 12px 0 16px; min-width: 0; }
+  .callhead .title { display: grid; min-width: 0; line-height: 1.25; }
+  .callhead b { color: var(--text-strong); font-weight: 600; }
+  .callhead .st { color: var(--text-muted); font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .callhead .spacer { flex: 1; }
+  .callhead .iconbtn { width: 32px; height: 32px; font-size: 20px; color: var(--text); }
+  .callhead .iconbtn[aria-pressed="true"] { background: var(--selected); color: var(--text-strong); }
+  .callhead .iconbtn .count { position: absolute; right: -2px; bottom: -2px; box-shadow: 0 0 0 2px oklch(0.15 0.004 260); }
+  .callhead .iconbtn .count.grey { background: oklch(0.65 0.012 260); color: oklch(0.15 0.004 260); }
+  .stage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 16px; align-content: center; }
+  .tile { position: relative; aspect-ratio: 16/9; border-radius: var(--radius-lg); background: oklch(0.24 0.02 var(--hue, 350)); display: grid; place-items: center; overflow: hidden; }
+  .tile .av { --size: 64px; }
+  .tile.speaking::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 2px var(--online), inset 0 0 0 4px oklch(0.15 0.004 260 / 0.6); }
+  .tile .name { position: absolute; left: 8px; bottom: 8px; height: 24px; padding: 0 8px; border-radius: var(--radius-xs); background: oklch(0 0 0 / 0.6); font-size: 12px; font-weight: 600; display: flex; align-items: center; color: #fff; }
+  /* Soundboard effect: the emoji rises over whoever played it */
+  .burst { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .burst span { position: absolute; bottom: -40px; font-size: 32px; animation: rise 1.8s var(--ease-out) forwards; }
+  @keyframes rise { 0% { transform: translateY(0) scale(0.95); opacity: 0; } 15% { opacity: 1; } 100% { transform: translateY(-220px) scale(1.05); opacity: 0; } }
+  .tile .played { position: absolute; top: 8px; left: 8px; height: 24px; padding: 0 8px; border-radius: var(--radius-xs); background: oklch(0 0 0 / 0.6); font-size: 12px; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 6px; }
+  .controls { display: flex; justify-content: center; gap: 8px; padding: 0 16px 16px; position: relative; }
+  .cbtn { width: 48px; height: 48px; border: 0; border-radius: var(--radius-md); background: oklch(0.25 0.005 260); color: #fff; font-size: 22px; display: grid; place-items: center; cursor: pointer; }
+  .cbtn:hover { background: oklch(0.3 0.005 260); }
+  .cbtn[aria-expanded="true"] { background: oklch(0.34 0.005 260); }
+  .cbtn.leave { background: #c21f3a; }
+  /* Message previews: up to three, top right of the stage */
+  .previews { position: absolute; top: 56px; right: 12px; width: 300px; display: grid; gap: 6px; z-index: 2; }
+  .preview { display: grid; grid-template-columns: 24px 1fr; gap: 2px 8px; padding: 8px 10px; border-radius: var(--radius-md); background: oklch(0.25 0.005 260 / 0.92); box-shadow: 0 4px 16px oklch(0 0 0 / 0.35), 0 0 0 1px var(--line); cursor: pointer; animation: pin 220ms var(--ease-out); }
+  .preview:hover { background: oklch(0.28 0.005 260 / 0.96); }
+  .preview .av { grid-row: span 2; --size: 24px; }
+  .preview b { color: var(--text-strong); font-size: 12px; font-weight: 600; }
+  .preview span { color: var(--text); font-size: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .preview.mention { box-shadow: 0 4px 16px oklch(0 0 0 / 0.35), inset 0 0 0 1px oklch(0.78 0.15 75 / 0.5); }
+  @keyframes pin { from { opacity: 0; transform: translateX(12px); } }
+  /* Docked chat */
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) 340px; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--line); }
+  .split .call { border-radius: 0; }
+  .drawer { background: var(--bg-page); display: grid; grid-template-rows: 48px 1fr auto; min-width: 0; }
+  .drawer .dh { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); color: var(--text-strong); font-weight: 600; }
+  .drawer .dh i { color: var(--text-muted); font-size: 20px; }
+  .drawer .msgs { padding: 12px 16px; display: grid; gap: 12px; align-content: end; }
+  .msg { display: grid; grid-template-columns: 32px 1fr; gap: 0 10px; }
+  .msg .av { --size: 32px; }
+  .msg b { color: var(--text-strong); font-weight: 600; } .msg time { color: var(--text-faint); font-size: 12px; margin-left: 6px; }
+  .sys { display: flex; gap: 10px; color: var(--text-muted); font-size: 14px; align-items: center; }
+  .sys i { width: 32px; text-align: center; font-size: 16px; color: var(--text-faint); }
+  .composer { margin: 0 12px 12px; height: 44px; border-radius: var(--radius-md); background: var(--bg-raised); border: 1px solid var(--line); display: flex; align-items: center; padding: 0 12px; color: var(--text-faint); }
+
+  /* Soundboard picker */
+  .sb { width: 452px; background: var(--bg-overlay); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); display: grid; grid-template-columns: 52px 1fr; grid-template-rows: auto 1fr; height: 420px; overflow: hidden; color: var(--text); }
+  .sb .search { grid-column: 1 / -1; padding: 12px 12px 8px; }
+  .sb .search .field { height: 36px; }
+  .sb .search .field input { font-size: 14px; }
+  .sb .guilds { display: grid; align-content: start; gap: 6px; padding: 4px 8px 8px; border-right: 1px solid var(--line); }
+  .sb .gtile { width: 36px; height: 36px; border: 0; padding: 0; font: inherit; font-weight: 600; font-size: 12px; border-radius: var(--radius-sm); background: var(--selected); display: grid; place-items: center; font-size: 16px; color: var(--text-muted); cursor: pointer; }
+  .sb .gtile.sel { background: var(--accent-soft); color: var(--accent-ink); }
+  .sb .list { overflow: auto; padding: 0 12px 12px; }
+  .sb .sec { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-muted); padding: 10px 2px 6px; }
+  .sb .sounds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .snd { position: relative; height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-sm); background: var(--selected); color: var(--text-strong); font: inherit; font-weight: 500; border: 0; cursor: pointer; text-align: left; min-width: 0; }
+  .snd { --snd-fill: var(--bg-overlay); background: linear-gradient(var(--selected), var(--selected)), var(--bg-overlay); }
+  .snd:hover, .snd.hover { --snd-fill: color-mix(in oklch, var(--bg-overlay), var(--text-strong) 14%); background: var(--snd-fill); }
+  .snd .e { font-size: 16px; flex: none; }
+  .snd .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .snd .tools { display: none; position: absolute; right: 4px; top: 0; bottom: 0; align-items: center; padding-left: 16px; background: linear-gradient(to right, transparent, var(--snd-fill) 16px); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+  .snd:hover .tools, .snd.hover .tools { display: flex; }
+  .snd .tools .iconbtn { width: 22px; height: 22px; font-size: 14px; }
+  .snd .fav { color: var(--accent-ink); }
+  .snd.playing { box-shadow: inset 0 0 0 1px var(--accent); }
+  .snd.playing .e { animation: bob 500ms ease-in-out infinite alternate; }
+  @keyframes bob { to { transform: scale(1.15); } }
+  .snd.locked { opacity: 0.5; cursor: default; }
+  .snd.cool { opacity: 0.5; }
+  .sb .foot { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--text-muted); }
+  .sb .foot input[type=range] { flex: 1; accent-color: var(--accent); }
+  .tip { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); white-space: nowrap; background: var(--bg-overlay); color: var(--text-strong); font-size: 12px; padding: 4px 8px; border-radius: var(--radius-xs); box-shadow: var(--shadow-pop); }
+  @media (max-width: 720px) { .split { grid-template-columns: 1fr; } .previews { width: calc(100% - 24px); } .sb { width: 100%; } }
+</style>
+<script>try{const t=localStorage.getItem("voice-extras-theme");if(t)document.documentElement.dataset.theme=t}catch{}</script>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>Voice chat, status and soundboard</h1>
+    <button class="btn" id="theme"><i class="ph ph-circle-half"></i>Light / dark</button>
+  </header>
+  <p class="lede">Parity §4.4, §4.5 and §4.2: behaviour and copy follow Discord (see <code>docs/discord-*-re.md</code>); the look is Waffle's. The call stage stays dark in both themes.</p>
+
+  <h2>1. Voice channel rows</h2>
+  <p class="lede">The status is the row's second line, inside its fill and hit area. Open Chat leads Invite and Edit on hover, and stays shown while you're in the channel. Unread chat only marks the channel you're in; mentions show the red count everywhere, and clicking a row with mentions joins and opens the chat.</p>
+  <div class="board">
+    <div class="sidebar" aria-label="Sidebar">
+      <div class="cat">Voice channels</div>
+      <div class="ch two unread"><div class="line"><i class="ph-fill ph-speaker-high"></i><span class="nm">Lounge</span><span class="acts" style="display: flex"><button class="iconbtn" aria-label="Open Chat" title="Open Chat"><i class="ph-fill ph-chat-circle"></i></button><button class="iconbtn" aria-label="Invite people"><i class="ph-fill ph-user-plus"></i></button><button class="iconbtn" aria-label="Edit channel"><i class="ph-fill ph-gear-six"></i></button></span></div><div class="sub"><span>🎮 ranked grind, come through</span></div></div>
+      <div class="person speaking"><span class="av" style="--hue: 20">M</span>Mira</div>
+      <div class="person"><span class="av" style="--hue: 300">Y</span>you</div>
+      <div class="ch two hover"><div class="line"><i class="ph-fill ph-speaker-high"></i><span class="nm">Movie night</span>
+        <span class="acts"><button class="iconbtn" aria-label="Open Chat" title="Open Chat"><i class="ph-fill ph-chat-circle"></i></button><button class="iconbtn" aria-label="Invite people"><i class="ph-fill ph-user-plus"></i></button><button class="iconbtn" aria-label="Edit channel"><i class="ph-fill ph-gear-six"></i></button></span></div><div class="sub"><span>🍿 Dune: Part Two at 9</span></div></div>
+      <div class="person"><span class="av" style="--hue: 200">J</span>Jun</div>
+      <div class="ch"><i class="ph-fill ph-speaker-high"></i><span class="nm">Study hall</span></div>
+      <div class="ch unread"><i class="ph-fill ph-speaker-high"></i><span class="nm">Duo queue</span><span class="count" title="2 mentions">2</span></div>
+      <div class="ch"><i class="ph-fill ph-speaker-high"></i><span class="nm">AFK</span></div>
+    </div>
+    <div class="sidebar" aria-label="Sidebar, joined without a status">
+      <div class="cat">Voice channels</div>
+      <div class="ch two strong hover"><div class="line"><i class="ph-fill ph-speaker-high"></i><span class="nm">Lounge</span>
+        <span class="acts"><button class="iconbtn" aria-label="Open Chat"><i class="ph-fill ph-chat-circle"></i></button><button class="iconbtn" aria-label="Invite people"><i class="ph-fill ph-user-plus"></i></button><button class="iconbtn" aria-label="Edit channel"><i class="ph-fill ph-gear-six"></i></button></span></div><div class="sub set" role="button" tabindex="0"><span>Set a channel status</span><i class="ph-fill ph-pencil-simple"></i></div></div>
+      <div class="person"><span class="av" style="--hue: 300">Y</span>you</div>
+      <p class="note" style="padding: 0 8px">Only while you're in the channel and allowed to set it. Clicking opens the dialog below.</p>
+    </div>
+  </div>
+
+  <h2>2. Status editor</h2>
+  <p class="lede">Discord's own dialog: a spot illustration over a playful question, then one field with the emoji picker inside it. Waffle draws its own art (Codex, honey and graphite); the copy is Discord's.</p>
+  <div class="board">
+    <div class="col"><h3>Empty</h3>
+      <div class="modal" role="dialog" aria-labelledby="st-title">
+        <button class="iconbtn close" aria-label="Close"><i class="ph-bold ph-x"></i></button>
+        <div class="hero"><img src="../assets/illustrations/voice-status.png" alt=""></div>
+        <div class="mbody">
+          <h4 id="st-title">What are we chatting about?</h4>
+          <p>Let others know what you're up to in the voice channel!</p>
+          <label class="flabel" for="statusin">Status</label>
+          <div class="field"><input id="statusin" maxlength="600" placeholder="Status for Lounge" autocomplete="off" value=""><button class="iconbtn" aria-label="Pick an emoji"><i class="ph-fill ph-smiley"></i></button></div>
+          <div class="meta" id="statusmeta"><span></span><span id="statuscount"></span></div>
+          <div class="mfoot"><button class="btn">Cancel</button><button class="btn primary" id="statussave">Set Status</button></div>
+        </div>
+      </div>
+      <p class="note">Type to see the counter: it appears after 250 characters and turns red past 500, which disables Set Status.</p>
+    </div>
+    <div class="col"><h3>Editing an existing status</h3>
+      <div class="modal" role="dialog" aria-labelledby="st-title2">
+        <button class="iconbtn close" aria-label="Close"><i class="ph-bold ph-x"></i></button>
+        <div class="hero"><img src="../assets/illustrations/voice-status.png" alt=""></div>
+        <div class="mbody">
+          <h4 id="st-title2">What are we chatting about?</h4>
+          <p>Let others know what you're up to in the voice channel!</p>
+          <label class="flabel" for="statusin2">Status</label>
+          <div class="field"><input id="statusin2" maxlength="600" placeholder="Status for Lounge" autocomplete="off" value="🎮 ranked grind, come through"><button class="iconbtn" aria-label="Pick an emoji"><i class="ph-fill ph-smiley"></i></button></div>
+          <div class="meta" id="statusmeta2"><span></span><span id="statuscount2"></span></div>
+          <div class="mfoot"><button class="btn">Cancel</button><button class="btn primary" id="statussave2">Set Status</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>3. In the call</h2>
+  <p class="lede">The header carries the status under the channel name. New messages float in at the top right, three at most; they share one 10-second timer that restarts with each message and freeze while hovered. Clicking one opens the chat at that message. Hidden while the chat is open. The chat button shows mentions, else unread, as a count (99+).</p>
+  <div class="call" id="call">
+    <div class="callhead">
+      <i class="ph-fill ph-speaker-high" style="font-size: 20px; color: var(--text-muted)"></i>
+      <div class="title"><b>Lounge</b><span class="st">🎮 ranked grind, come through</span></div>
+      <span class="spacer"></span>
+      <button class="iconbtn" aria-label="Layout"><i class="ph-fill ph-squares-four"></i></button>
+      <button class="iconbtn" aria-label="Show Chat, 2, unread" title="Show Chat" aria-pressed="false" id="chatbtn"><i class="ph-fill ph-chat-circle"></i><span class="count">2</span></button>
+    </div>
+    <div class="stage">
+      <div class="tile speaking" style="--hue: 20"><span class="av" style="--hue: 20">M</span><span class="name">Mira</span><div class="burst" id="burst"></div><span class="played" id="played" hidden></span></div>
+      <div class="tile" style="--hue: 200"><span class="av" style="--hue: 200">J</span><span class="name">Jun</span></div>
+      <div class="tile" style="--hue: 130"><span class="av" style="--hue: 130">T</span><span class="name">Theo</span></div>
+      <div class="tile" style="--hue: 300"><span class="av" style="--hue: 300">Y</span><span class="name">You</span></div>
+    </div>
+    <div class="previews" id="previews" aria-live="polite"></div>
+    <div class="controls">
+      <button class="cbtn" aria-label="Mute"><i class="ph-fill ph-microphone"></i></button>
+      <button class="cbtn" aria-label="Turn on camera"><i class="ph-fill ph-video-camera"></i></button>
+      <button class="cbtn" aria-label="Share your screen"><i class="ph-fill ph-screencast"></i></button>
+      <button class="cbtn" aria-label="Soundboard" aria-expanded="false" title="Soundboard"><i class="ph-fill ph-music-notes"></i></button>
+      <button class="cbtn" aria-label="Activities"><i class="ph-fill ph-rocket-launch"></i></button>
+      <button class="cbtn leave" aria-label="Leave call"><i class="ph-fill ph-phone-x"></i></button>
+    </div>
+  </div>
+  <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap"><button class="btn" id="newmsg">New message</button><button class="btn" id="newmention">New mention</button><button class="btn" id="playfx">Mira plays a sound</button></div>
+
+  <h3 style="margin-top: 24px">Chat open</h3>
+  <div class="split">
+    <div class="call" style="min-height: 440px">
+      <div class="callhead"><i class="ph-fill ph-speaker-high" style="font-size: 20px; color: var(--text-muted)"></i><div class="title"><b>Lounge</b><span class="st">🎮 ranked grind, come through</span></div><span class="spacer"></span><button class="iconbtn" aria-label="Hide chat" aria-pressed="true"><i class="ph-fill ph-chat-circle"></i></button></div>
+      <div class="stage" style="grid-template-columns: 1fr 1fr"><div class="tile speaking" style="--hue: 20"><span class="av" style="--hue: 20">M</span><span class="name">Mira</span></div><div class="tile" style="--hue: 200"><span class="av" style="--hue: 200">J</span><span class="name">Jun</span></div></div>
+      <div class="controls"><button class="cbtn" aria-label="Mute"><i class="ph-fill ph-microphone"></i></button><button class="cbtn" aria-label="Soundboard"><i class="ph-fill ph-music-notes"></i></button><button class="cbtn leave" aria-label="Leave call"><i class="ph-fill ph-phone-x"></i></button></div>
+    </div>
+    <div class="drawer">
+      <div class="dh"><i class="ph-fill ph-speaker-high"></i><span style="flex: 1">Lounge</span><button class="iconbtn" aria-label="Close Chat"><i class="ph-bold ph-x"></i></button></div>
+      <div class="msgs">
+        <div class="sys"><i class="ph-fill ph-pencil-simple"></i><span><b style="color: var(--text-strong)">Mira</b> set the channel status: 🎮 ranked grind, come through</span></div>
+        <div class="msg"><span class="av" style="--hue: 200">J</span><div><b>Jun</b><time>9:41 PM</time><div>who's carrying tonight</div></div></div>
+        <div class="msg"><span class="av" style="--hue: 20">M</span><div><b>Mira</b><time>9:42 PM</time><div>@you get in here</div></div></div>
+      </div>
+      <div class="composer">Message 🔊 Lounge</div>
+    </div>
+  </div>
+  <p class="note">The docked chat already ships (<code>call_chat_drawer</code>); the status set line is a system message and only shown here for context.</p>
+
+  <h2>4. Soundboard</h2>
+  <p class="lede">Opened from its own control in the call bar (and <kbd>⌘</kbd><kbd>⇧</kbd><kbd>B</kbd>). Click plays to everyone; Preview plays it only to you; the star favourites it (250 at most). The rail jumps between Favorites, Frequently Used, each server and Discord Sounds; other servers' sounds sit below a divider, locked without Nitro.</p>
+  <div class="board">
+    <div class="col"><h3>Picker</h3>
+      <div class="sb" role="dialog" aria-label="Soundboard">
+        <div class="search"><label class="field"><i class="ph ph-magnifying-glass" style="color: var(--text-faint)"></i><input placeholder="Find the perfect sound" autocomplete="off"><button class="iconbtn" aria-label="Soundboard Volume" title="Control volume"><i class="ph-fill ph-speaker-high"></i></button></label></div>
+        <div class="guilds">
+          <button class="gtile sel" aria-label="Favorites" title="Favorites"><i class="ph-fill ph-star"></i></button>
+          <button class="gtile" aria-label="Night Shift" title="Night Shift">NS</button>
+          <button class="gtile" aria-label="Pixel Pals" title="Pixel Pals">PP</button>
+          <button class="gtile" aria-label="Discord Sounds" title="Discord Sounds"><i class="ph-fill ph-music-notes"></i></button>
+        </div>
+        <div class="list">
+          <div class="sec"><i class="ph-fill ph-star"></i>Favorites</div>
+          <div class="sounds">
+            <button class="snd playing"><span class="e">🦆</span><span class="n">quack</span></button>
+            <button class="snd"><span class="e">🥁</span><span class="n">ba dum tss</span></button>
+          </div>
+          <div class="sec"><i class="ph-fill ph-clock"></i>Frequently Used</div>
+          <div class="sounds">
+            <button class="snd"><span class="e">📯</span><span class="n">airhorn</span></button>
+            <button class="snd"><span class="e">🎺</span><span class="n">sad trombone</span></button>
+          </div>
+          <div class="sec">Night Shift</div>
+          <div class="sounds">
+            <button class="snd"><span class="e">📯</span><span class="n">airhorn</span></button>
+            <button class="snd"><span class="e">😂</span><span class="n">mira laughing extremely loudly</span></button>
+            <button class="snd"><span class="e">🎺</span><span class="n">sad trombone</span></button>
+            <button class="snd"><span class="e">🚨</span><span class="n">bruh</span></button>
+          </div>
+          <hr style="border: 0; border-top: 1px solid var(--line); margin: 12px 0 0"><div class="sec">Pixel Pals</div>
+          <div class="sounds">
+            <button class="snd locked" title="Use custom soundboard sounds across voice channels. Only with Nitro."><span class="e">🔒</span><span class="n">yippee</span></button>
+            <button class="snd locked" title="Use custom soundboard sounds across voice channels. Only with Nitro."><span class="e">🔒</span><span class="n">vine boom</span></button>
+          </div>
+          <div class="sec">Discord Sounds</div>
+          <div class="sounds">
+            <button class="snd"><span class="e">🦆</span><span class="n">quack</span></button>
+            <button class="snd"><span class="e">🔊</span><span class="n">airhorn</span></button>
+            <button class="snd"><span class="e">🦗</span><span class="n">cricket</span></button>
+            <button class="snd"><span class="e">👏</span><span class="n">golf clap</span></button>
+            <button class="snd"><span class="e">👻</span><span class="n">sad horn</span></button>
+            <button class="snd"><span class="e">🥁</span><span class="n">ba dum tss</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col" style="max-width: 360px"><h3>States</h3>
+      <p class="note" style="margin: 0">Playing: an outline and a bobbing emoji while it plays. Locked: another server's sound without Nitro, dimmed with Discord's reason in the tooltip. The control's tooltip is "Open Soundboard", or says why it's off: "Soundboard disabled when deafened", "…when server muted", "…when suppressed". No permission (Use Soundboard and Speak): the control is hidden. Discord has no cooldown UI; a rate-limited play fails silently.</p>
+      <p class="note">The speaker in the search field opens "Soundboard Volume", the same value as Settings › Voice &amp; Video. At 0 the icon crosses out and Preview says "Increase your Soundboard volume setting to preview". You hear others' sounds unless you're deafened or muted their soundboard; self-mute doesn't block them.</p>
+    </div>
+  </div>
+</main>
+<script>
+  const root = document.documentElement;
+  document.getElementById("theme").onclick = () => { const next = matchMedia("(prefers-color-scheme: dark)").matches ? (root.dataset.theme === "light" ? "dark" : "light") : (root.dataset.theme === "dark" ? "light" : "dark"); root.dataset.theme = next; try { localStorage.setItem("voice-extras-theme", next) } catch {} };
+
+  const LIMIT = 500, SHOW_AFTER = 250, input = document.getElementById("statusin"), count = document.getElementById("statuscount"), meta = document.getElementById("statusmeta"), save = document.getElementById("statussave");
+  input.oninput = () => { const left = LIMIT - [...input.value].length; count.textContent = [...input.value].length > SHOW_AFTER ? left : ""; meta.classList.toggle("over", left < 0); save.disabled = left < 0; };
+
+  document.querySelectorAll(".snd:not(.locked)").forEach(b => {
+    const fav = b.closest(".sounds") === document.querySelector(".sounds");
+    b.insertAdjacentHTML("beforeend", `<span class="tools"><span class="iconbtn" role="button" aria-label="Preview" title="Preview, only you hear it"><i class="ph-fill ph-speaker-high"></i></span><span class="iconbtn${fav ? " fav" : ""}" role="button" aria-label="${fav ? "Unfavorite" : "Favorite"}"><i class="ph-${fav ? "fill" : "bold"} ph-star"></i></span></span>`);
+  });
+  const previews = document.getElementById("previews");
+  const people = [["Jun", 200], ["Mira", 20], ["Theo", 130]];
+  const lines = ["who's carrying tonight", "brb grabbing food", "that clutch was insane, did anyone clip it? I swear the whole lobby saw that", "gg", "one more?"];
+  function preview(mention) {
+    const [who, hue] = people[Math.floor(Math.random() * people.length)];
+    const el = document.createElement("div");
+    el.className = "preview" + (mention ? " mention" : "");
+    el.innerHTML = `<span class="av" style="--hue:${hue}">${who[0]}</span><b>${who}</b><span>${mention ? "@you " : ""}${lines[Math.floor(Math.random() * lines.length)]}</span>`;
+    previews.append(el);
+    while (previews.children.length > 3) previews.firstChild.remove();
+    arm();
+  }
+  let timer;
+  function arm() { clearTimeout(timer); if (!previews.matches(":hover")) timer = setTimeout(clear, 10000); }
+  function clear() { [...previews.children].forEach(el => { el.style.transition = "opacity 200ms, transform 200ms"; el.style.opacity = 0; el.style.transform = "translateY(-8px)"; setTimeout(() => el.remove(), 200); }); }
+  previews.onmouseenter = () => clearTimeout(timer);
+  previews.onmouseleave = arm;
+  document.getElementById("newmsg").onclick = () => preview(false);
+  document.getElementById("newmention").onclick = () => preview(true);
+  document.getElementById("playfx").onclick = () => {
+    const burst = document.getElementById("burst"), played = document.getElementById("played");
+    for (let i = 0; i < 6; i++) { const s = document.createElement("span"); s.textContent = "🦆"; s.style.left = (10 + Math.random() * 75) + "%"; s.style.animationDelay = (i * 90) + "ms"; burst.append(s); setTimeout(() => s.remove(), 2400); }
+    played.innerHTML = `<i class="ph-fill ph-music-notes"></i>quack`; played.hidden = false; setTimeout(() => played.hidden = true, 2400);
+  };
+</script>
+</body>
+</html>

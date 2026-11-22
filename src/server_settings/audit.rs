@@ -164,8 +164,8 @@ pub const ACTIONS: &[(u16, &str)] = &[
     (167, "Update onboarding"),
     (190, "Set up server guide"),
     (191, "Update server guide"),
-    (192, "Set voice channel status"),
-    (193, "Clear voice channel status"),
+    (192, "Create voice channel status"),
+    (193, "Delete voice channel status"),
 ];
 
 impl Entry {
@@ -272,8 +272,8 @@ pub fn sentence(e: &Entry, d: &Directory) -> Vec<Seg> {
         163..=165 => vec![t(&verb(" added an onboarding question", " updated an onboarding question", " deleted an onboarding question"))],
         166 | 167 => vec![t(if e.action == 166 { " set up onboarding" } else { " updated onboarding" })],
         190 | 191 => vec![t(if e.action == 190 { " set up the server guide" } else { " updated the server guide" })],
-        192 => vec![t(" set the status of "), n(channel_opt()), t(&format!(" to \u{201C}{}\u{201D}", e.option("status").unwrap_or_default()))],
-        193 => vec![t(" cleared the status of "), n(channel_opt())],
+        192 => vec![t(" set a voice channel status in "), n(channel_opt())],
+        193 => vec![t(" removed a voice channel status in "), n(channel_opt())],
         other => vec![t(&format!(" made a change Waffle can't show yet (action {other})"))],
     };
     out.extend(rest);
@@ -467,7 +467,8 @@ mod tests {
             say(&entry(143, Some("u2"), none.clone(), json!({ "channel_id": "c1", "auto_moderation_rule_name": "Block links", "auto_moderation_rule_trigger_type": "1" }))),
             "AutoMod blocked a message by Oren in #general for breaking Block links"
         );
-        assert_eq!(say(&entry(192, None, none.clone(), json!({ "channel_id": "c1", "status": "lofi" }))), "Mika set the status of #general to \u{201C}lofi\u{201D}");
+        assert_eq!(say(&entry(192, None, none.clone(), json!({ "channel_id": "c1", "status": "lofi" }))), "Mika set a voice channel status in #general");
+        assert_eq!(say(&entry(193, None, none.clone(), json!({ "channel_id": "c1" }))), "Mika removed a voice channel status in #general");
         assert_eq!(say(&entry(999, None, none, json!({}))), "Mika made a change Waffle can't show yet (action 999)");
     }
 

@@ -1,4 +1,4 @@
-// App shortcuts: ⌘R / ⌘Q on macOS, Ctrl+R / Ctrl+Q on Windows and Linux; ⌘= / ⌘- / ⌘0 zoom like Discord; ⌘F / Ctrl+F in a channel or DM
+// App shortcuts: ⌘R / ⌘Q on macOS, Ctrl+R / Ctrl+Q on Windows and Linux; ⌘= / ⌘- / ⌘0 zoom like Discord; ⌘⇧B the soundboard in a call; ⌘F / Ctrl+F in a channel or DM
 // (the "Chat" key context, so Settings can bind its own); ⌘I toggles the Inbox and ⌘⇧E reads its top unread
 // channel, as Discord's. Alt+F4 on Windows stays the window's close, which hides Waffle to the tray like
 // Discord (tray.rs).
@@ -6,7 +6,7 @@ use gpui_kit::{App, KeyBinding, actions};
 
 use crate::Waffle;
 
-actions!(waffle, [Quit, Restart, FocusSearch, ZoomIn, ZoomOut, ResetZoom, ToggleInbox, MarkTopUnreadRead]);
+actions!(waffle, [Quit, Restart, FocusSearch, ZoomIn, ZoomOut, ResetZoom, ToggleInbox, MarkTopUnreadRead, ToggleSoundboard]);
 
 // Discord's zoom levels.
 pub(crate) const ZOOM_STEPS: [f32; 11] = [0.5, 0.67, 0.75, 0.8, 0.9, 1., 1.1, 1.25, 1.5, 1.75, 2.];
@@ -23,6 +23,8 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("secondary-0", ResetZoom, None),
         KeyBinding::new("secondary-i", ToggleInbox, None),
         KeyBinding::new("secondary-shift-e", MarkTopUnreadRead, None),
+        // Waffle's own: Discord leaves its Toggle Soundboard keybind unset. The window's root handles it (soundboard.rs).
+        KeyBinding::new("secondary-shift-b", ToggleSoundboard, None),
     ]);
     cx.on_action(|_: &ToggleInbox, cx| update_main(cx, Waffle::toggle_inbox));
     cx.on_action(|_: &MarkTopUnreadRead, cx| update_main(cx, Waffle::mark_top_unread_read));

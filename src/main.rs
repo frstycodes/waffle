@@ -23,6 +23,7 @@ mod cache;
 mod captcha;
 mod query;
 mod call;
+mod call_previews;
 mod channel_menu;
 mod channel_settings;
 mod dm_call;
@@ -99,6 +100,8 @@ mod viewer;
 mod hotkeys;
 mod key_hook;
 mod sounds;
+mod soundboard;
+mod soundboard_fx;
 mod system_message;
 #[cfg(target_os = "windows")]
 mod tray;
@@ -112,6 +115,7 @@ mod updater;
 mod design_system;
 mod app_icon;
 mod voice;
+mod voice_status;
 mod window_controls;
 
 use std::{
@@ -650,6 +654,7 @@ enum EmojiTarget {
     // An answer's emoji in the poll creator, by row.
     PollAnswer(usize),
     ForwardNote,
+    VoiceStatus,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -658,6 +663,8 @@ enum Edge {
     Panel,
     // The nav column of the settings views (app, server, channel), one width for all three.
     Settings,
+    // The voice channel's chat beside the call, growing leftward.
+    CallChat,
 }
 
 struct Drag {
@@ -888,8 +895,15 @@ pub struct Waffle {
     call_fullscreen: bool,
     // The voice channel's own chat, open beside the call.
     call_chat: bool,
+    // New messages in the call's voice channel, floating over the stage while its chat is closed.
+    call_previews: call_previews::CallPreviews,
+    // When the call channel's unread count last changed, for the chat button's highlight.
+    call_unread_at: Option<Instant>,
     // Voice channel → when its current session began (Unix seconds), from CHANNEL_INFO.
     voice_start: HashMap<String, u64>,
+    // Voice channel → its status as Discord sends it (custom emoji as `<:name:id>`); absent when it has none.
+    voice_status: HashMap<String, String>,
+    voice_status_dialog: Option<voice_status::VoiceStatusDialog>,
     // Servers whose channel info we've asked for since connecting.
     channel_info_requested: HashSet<String>,
     // Each call participant's avatar colour for their tile; None while loading or when it failed.
@@ -986,6 +1000,7 @@ pub struct Waffle {
     games: games::Games,
     emoji_picker: Option<EmojiTarget>,
     emoji_search: Entity<SearchState>,
+    soundboard: soundboard::Soundboard,
     switcher: Option<usize>,
     switcher_input: Entity<SearchState>,
     // The read position when the open channel was opened: messages after it sit under the NEW line.
@@ -1083,6 +1098,7 @@ impl Waffle {
         // Typing filters the picker and switcher; the views read the inputs' text on render.
         let emoji_search = cx.new(|cx| SearchState::new(window, cx).placeholder("Find the perfect emoji"));
         cx.subscribe_in(&emoji_search, window, Self::on_emoji_search).detach();
+        let soundboard = soundboard::Soundboard::new(window, cx);
         let feed_focus = cx.focus_handle();
         // Esc closing a focused popup (search, ⌘K) leaves nothing focused, and app keys only reach the root
         // through the focus path, so take focus back.
@@ -1276,7 +1292,11 @@ impl Waffle {
             stream_volumes: HashMap::new(),
             call_fullscreen: false,
             call_chat: false,
+            call_previews: Default::default(),
+            call_unread_at: None,
             voice_start: HashMap::new(),
+            voice_status: HashMap::new(),
+            voice_status_dialog: None,
             channel_info_requested: HashSet::new(),
             avatar_colors: HashMap::new(),
             pins: None,
@@ -1344,6 +1364,7 @@ impl Waffle {
             pip: Default::default(),
             emoji_picker: None,
             emoji_search,
+            soundboard,
             switcher: None,
             switcher_input,
             unread_marker: None,
@@ -1838,6 +1859,9 @@ impl Waffle {
             Event::Call { channel_id, ringing } => self.on_dm_call(channel_id, ringing, cx),
             Event::CallEnded { channel_id } => self.on_dm_call_ended(&channel_id),
             Event::VoiceServer(_) => {}
+            Event::VoiceEffect(effect) => self.on_voice_effect(effect, cx),
+            Event::SoundboardSounds { guild_id, sounds, all } => self.soundboard.store_sounds(guild_id, sounds, all),
+            Event::SoundboardSoundDelete { guild_id, sound_id } => self.soundboard.remove_sound(&guild_id, &sound_id),
             Event::StageInstance { guild_id, channel_id, instance } => {
                 if let Some(guild) = self.guilds.iter_mut().find(|g| g.id == guild_id) {
                     guild.stage_instances.retain(|s| s.channel_id != channel_id);
@@ -1859,6 +1883,7 @@ impl Waffle {
                     };
                 }
             }
+            Event::VoiceStatuses { guild_id, statuses, all } => self.on_voice_statuses(&guild_id, statuses, all, cx),
             Event::StreamUpdate { key, viewers, paused } => {
                 match paused {
                     true => self.stream_paused.insert(key.clone()),
@@ -1950,6 +1975,8 @@ impl Waffle {
         if let Some(typers) = self.typing.get_mut(&channel_id) {
             typers.retain(|t| t.user_id != message.author.id);
         }
+        let own_send = self.feeds.get(&channel_id).is_some_and(|f| f.messages.iter().any(|m| m.state != SendState::Sent && m.nonce.is_some() && m.nonce == message.nonce));
+        self.note_call_message(&message, own_send, cx);
         let is_dm = self.dms.iter().any(|d| d.id == channel_id);
         let hidden = self.hidden_author(&message.author.id).is_some();
         if !mine && !is_open && !hidden && (self.mentions_me(&message) || is_dm) {
@@ -3223,6 +3250,10 @@ impl Waffle {
             }
         })
         .detach();
+        // Loaded now, so the chat button can count what arrives before the chat is first opened.
+        if guild_id.is_some() {
+            self.prefetch(&channel.id, cx);
+        }
         self.call = Some(Call { session, guild_id, channel, connected: false, stage: voice::Stage::AwaitingEndpoint, stats: None, level: (SILENCE_DB, false), speaking: HashSet::new(), last_spoke: HashMap::new(), cameras: HashMap::new(), camera_on: false, watching: Vec::new(), focus: None, ended: Vec::new(), sharing: None, share_label: None, share_source: None, live_since: None, self_view: None, issues: HashSet::new(), joined: Instant::now(), _events: task });
         cx.notify();
     }
@@ -3277,7 +3308,11 @@ impl Waffle {
         self.camera_on_connect = false;
         self.stop_ringing_out();
         let Some(call) = self.call.take() else { return false };
+        self.soundboard.leave_call();
         self.call_focus = None;
+        self.call_chat = false;
+        self.call_previews = Default::default();
+        self.call_unread_at = None;
         if call.guild_id.is_none() {
             let name = self.dms.iter().find(|d| d.id == call.channel.id).map_or_else(|| call.channel.name.clone(), |d| d.name.clone());
             self.show_call_ended(name, call.joined.elapsed().as_secs(), cx);
@@ -3307,6 +3342,7 @@ impl Waffle {
                 if call.channel.raw_type != 13 {
                     sounds::play(connected_cue(self.call_switched));
                 }
+                self.fetch_soundboard(cx);
                 if std::mem::take(&mut self.camera_on_connect) {
                     self.toggle_camera(cx);
                 }

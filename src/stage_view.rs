@@ -57,7 +57,7 @@ impl Room<'_> {
 impl Waffle {
     pub(crate) fn render_stage(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let Some(room) = self.room() else { return self.stage_root(cx).into_any_element() };
-        let (width, height) = self.stage_size(window);
+        let (width, height) = self.stage_size(window, cx);
         let requests_open = room.moderator && room.topic.is_some() && self.requests_open(&room.channel.id, cx);
         let body = match room.topic {
             Some(_) => self.stage_people(&room, width - STAGE_PAD * 2., cx),

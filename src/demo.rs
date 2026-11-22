@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | chat-compact | chat-large-text | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | keyboard-combos | appearance | appearance-scrolled | settings-accessibility | notifications | content-social | chat-settings | settings-contrast | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | notification-settings | notification-settings-muted | inbox-mark-read | mark-unread | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | app-replies | components | components-users | components-v2 | command-picker | command-picker-search | command-options | command-options-loading | command-options-failed | command-options-empty | command-options-tab | command-options-errors | app-modal | app-modal-error | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | call-streams-failed | call-streams-reconnecting | call-streams-issues | call-streams-hidden | inbox-saved | games | stage | stage-audience | stage-requests | stage-invited | stage-waiting | stage-start | stage-start-dialog | stage-edit | stage-end | stage-full | requests | requests-spam | requests-empty | request-open | active-now | active-now-empty | group-dm | group-picker | group-edit | group-leave | profile-stranger | profile-editor | profile-editor-server | activity-privacy | embed-suppress | system-messages | system-messages-open | chat-media-settings | voice-messages | updating (the launch splash alone). | send-options | tts | blocked-messages | blocked-messages-shown | guard-slowmode | guard-slowmode-counting | guard-slowmode-queued | guard-immune | guard-no-permission | guard-timeout | guard-blocked-dm
+// WAFFLE_DEMO=chat | chat-compact | chat-large-text | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | keyboard-combos | appearance | appearance-scrolled | settings-accessibility | notifications | content-social | chat-settings | settings-contrast | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | notification-settings | notification-settings-muted | inbox-mark-read | mark-unread | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | app-replies | components | components-users | components-v2 | command-picker | command-picker-search | command-options | command-options-loading | command-options-failed | command-options-empty | command-options-tab | command-options-errors | app-modal | app-modal-error | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | call-streams-failed | call-streams-reconnecting | call-streams-issues | call-streams-hidden | inbox-saved | games | stage | stage-audience | stage-requests | stage-invited | stage-waiting | stage-start | stage-start-dialog | stage-edit | stage-end | stage-full | requests | requests-spam | requests-empty | request-open | active-now | active-now-empty | group-dm | group-picker | group-edit | group-leave | profile-stranger | profile-editor | profile-editor-server | activity-privacy | embed-suppress | system-messages | system-messages-open | chat-media-settings | voice-messages | sidebar-voice-chat | call-previews | call-previews-unread | call-chat | soundboard | soundboard-effect | voice-status | voice-status-set | voice-status-dialog | voice-status-dialog-long | updating (the launch splash alone). | send-options | tts | blocked-messages | blocked-messages-shown | guard-slowmode | guard-slowmode-counting | guard-slowmode-queued | guard-immune | guard-no-permission | guard-timeout | guard-blocked-dm
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -743,6 +743,25 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                 window.refresh();
             });
         }
+        // In hangout: both voice channels with a status (a custom emoji in study-hall's), the call header too.
+        // `-set`: in hangout without one, so its row offers "Set a channel status".
+        "voice-status" | "voice-status-set" => {
+            demo_call(waffle);
+            if scene == "voice-status" {
+                let statuses = vec![("lounge".into(), "🎮 ranked grind, come through".into()), ("hub".into(), "finals week <:ferris:1> quiet please, cameras optional, snacks encouraged".into())];
+                waffle.on_event(Event::VoiceStatuses { guild_id: "1".into(), statuses, all: true }, cx);
+            }
+        }
+        // The status dialog empty, and `-long` with 480 characters typed: the counter showing 20 left.
+        "voice-status-dialog" | "voice-status-dialog-long" => {
+            demo_call(waffle);
+            let Some(lounge) = waffle.guild().and_then(|g| g.channels.iter().find(|c| c.id == "lounge").cloned()) else { return };
+            waffle.open_voice_status(&lounge, window, cx);
+            if let Some(dialog) = waffle.voice_status_dialog.as_ref().filter(|_| scene == "voice-status-dialog-long") {
+                let long = "lofi and bug fixing, drop in whenever ".repeat(13);
+                dialog.input.update(cx, |state, cx| state.set_value(&long[..480], window, cx));
+            }
+        }
         "dm-empty" | "group-empty" | "group-start" | "group-mention" => demo_dm_start(waffle, scene, window, cx),
         "guard-slowmode" | "guard-slowmode-counting" | "guard-slowmode-queued" | "guard-immune" | "guard-no-permission" | "guard-timeout" | "guard-blocked-dm" => demo_guard(waffle, scene, window, cx),
         "requests" | "requests-spam" | "requests-empty" | "request-open" => demo_requests(waffle, scene, window, cx),
@@ -859,6 +878,9 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                 waffle.set_call_fullscreen(true, window, cx);
             }
         }
+        // Text chat in the voice channel we're in: the sidebar's rows, the stage's message previews (with a
+        // mention, or unread only) and the chat open beside the call.
+        "sidebar-voice-chat" | "call-previews" | "call-previews-unread" | "call-chat" => demo_voice_chat(waffle, scene, window, cx),
         "call" | "call-info" | "call-devices" | "call-watch" | "call-focus" | "pip" => {
             demo_call(waffle);
             // As if the pointer rests on the stage, so its chrome shows.
@@ -882,6 +904,13 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                 "call-devices" => waffle.open_device_menu(crate::call::DeviceKind::Input, gpui_kit::point(gpui_kit::px(260.), gpui_kit::px(760.)), cx),
                 _ => {}
             }
+        }
+        // The soundboard over the call: favorites, frequently used, Night Owls' sounds, gpui's locked without
+        // Nitro, Discord's own, quack playing. "soundboard-effect": Wren's quack rising on her tile.
+        "soundboard" | "soundboard-effect" => {
+            demo_call(waffle);
+            waffle.call_pointer_inside = true;
+            crate::soundboard::demo(waffle, scene == "soundboard", window, cx);
         }
         _ if scene.starts_with("stage") => demo_stage(waffle, scene, window, cx),
         _ => {}
@@ -1160,6 +1189,50 @@ fn demo_call_in(waffle: &mut Waffle, channel_id: &str) {
     });
     waffle.call_view = true;
     waffle.restore = None;
+}
+
+// In hangout: two unread messages there (a mention of us in the previews scenes), and two mentions
+// waiting in study-hall, whose other unread stays hidden since we aren't in it.
+fn demo_voice_chat(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
+    demo_call(waffle);
+    waffle.call_pointer_inside = true;
+    let said = |id: &str, author: User, content: &str| Message {
+        id: id.into(),
+        channel_id: "lounge".into(),
+        guild_id: Some("1".into()),
+        author,
+        content: content.into(),
+        timestamp: "2026-11-22T21:41:00Z".into(),
+        ..Default::default()
+    };
+    let (wren, moss, toma) = (user("8388608", "Wren"), user("12582912", "moss lantern"), user("16777216", "toma reed"));
+    waffle.feeds.insert("lounge".into(), Feed { messages: std::sync::Arc::new(vec![said("500", toma, "who's carrying tonight")]), loaded: true, ..Default::default() });
+    waffle.read_states.insert("lounge".into(), ReadState { last_read: 500, mentions: 0 });
+    waffle.read_states.insert("hub".into(), ReadState { last_read: 100, mentions: 2 });
+    waffle.last_message.insert("hub".into(), 900);
+    let mut arrivals = vec![
+        said("501", wren.clone(), "anyone up for ranked after this?"),
+        said("502", moss, "give me ten minutes, I'm finishing a render that has been stuck at 97% for the better part of an hour and I refuse to cancel it now"),
+    ];
+    if matches!(scene, "call-previews" | "call-chat") {
+        let mut mention = said("503", wren, "<@4194304> get in here, we need a fourth");
+        mention.mentions = vec![me_user()];
+        arrivals.push(mention);
+    }
+    for message in arrivals {
+        waffle.on_event(Event::MessageCreate(Box::new(message)), cx);
+    }
+    // Held as if hovered, so the cards outlast their 10 s.
+    waffle.call_previews.freeze(true, std::time::Instant::now());
+    match scene {
+        "sidebar-voice-chat" => waffle.call_view = false,
+        "call-chat" => {
+            if let Some(lounge) = waffle.call.as_ref().map(|c| c.channel.clone()) {
+                waffle.open_call_chat(lounge, window, cx);
+            }
+        }
+        _ => {}
+    }
 }
 
 // #town-hall, a stage: four speakers (Wren moderates), fourteen listeners with three hands up and one

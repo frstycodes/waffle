@@ -230,6 +230,13 @@ pub struct Prefs {
     // Discord's per-user "Mute Soundboard" and "Disable Video", kept locally like the volume.
     pub soundboard_mutes: Vec<String>,
     pub hidden_video: Vec<String>,
+    // Discord's Soundboard Volume as it stores it: amplitude, 100 = as uploaded, 0 = soundboard muted.
+    // Shown on its perceptual scale (soundboard::perceptual).
+    pub soundboard_volume: f32,
+    // Soundboard favorites by sound id, oldest first, and how often we've played each sound. Discord syncs
+    // both in its frecency settings; Waffle keeps them here.
+    pub soundboard_favorites: Vec<String>,
+    pub soundboard_uses: Vec<(String, u32)>,
     // Voice channels where our own Go Live's preview is hidden (Discord's per-channel "Hide Preview").
     pub hidden_self_streams: Vec<String>,
     // Registered games: ids not to detect, programs added as games, and every game seen here.
@@ -242,6 +249,10 @@ pub struct Prefs {
     pub emoji_times: Vec<(crate::discord::Emoji, Vec<i64>)>,
     pub sticker_uses: Vec<(crate::discord::Sticker, u32)>,
     pub mention_filters: crate::inbox::MentionFilters,
+    // The voice channel chat's width beside the call, and the voice channels whose new message
+    // previews are off (Discord's "Show New Message Previews", local only).
+    pub call_chat_width: f32,
+    pub call_previews_off: Vec<String>,
     // Go Live quality: height (0 = source), frame rate, and whether the source's sound goes too.
     pub stream_resolution: u32,
     pub stream_fps: u32,
@@ -334,6 +345,9 @@ impl Default for Prefs {
             local_mutes: Vec::new(),
             soundboard_mutes: Vec::new(),
             hidden_video: Vec::new(),
+            soundboard_volume: 100.,
+            soundboard_favorites: Vec::new(),
+            soundboard_uses: Vec::new(),
             hidden_self_streams: Vec::new(),
             games_off: Vec::new(),
             games_added: Vec::new(),
@@ -342,6 +356,8 @@ impl Default for Prefs {
             emoji_times: Vec::new(),
             sticker_uses: Vec::new(),
             mention_filters: crate::inbox::MentionFilters::default(),
+            call_chat_width: crate::call::CHAT_MIN_WIDTH,
+            call_previews_off: Vec::new(),
             stream_resolution: 720,
             stream_fps: 30,
             stream_audio: true,
@@ -596,6 +612,7 @@ fn prefs_file() -> Option<std::path::PathBuf> {
 enum Slider {
     InputVolume,
     OutputVolume,
+    SoundboardVolume,
     Sensitivity,
     ReleaseDelay,
     Attenuation,
@@ -606,6 +623,7 @@ impl Slider {
         match self {
             Slider::InputVolume => prefs.input_volume / 2.,
             Slider::OutputVolume => prefs.output_volume / 2.,
+            Slider::SoundboardVolume => crate::soundboard::slider_fraction(prefs.soundboard_volume),
             Slider::Sensitivity => (prefs.sensitivity_db + 100.) / 100.,
             Slider::ReleaseDelay => prefs.ptt_release_ms as f32 / 2000.,
             Slider::Attenuation => f32::from(prefs.attenuation) / 100.,
@@ -617,6 +635,7 @@ impl Slider {
         match self {
             Slider::InputVolume => prefs.input_volume = f * 2.,
             Slider::OutputVolume => prefs.output_volume = f * 2.,
+            Slider::SoundboardVolume => prefs.soundboard_volume = crate::soundboard::amplitude(f * 100.),
             Slider::Sensitivity => prefs.sensitivity_db = (f * 100. - 100.).round(),
             Slider::ReleaseDelay => prefs.ptt_release_ms = (f * 2000.).round() as u32,
             Slider::Attenuation => prefs.attenuation = (f * 100.).round() as u8,
@@ -870,6 +889,7 @@ impl Waffle {
             Action::ToggleVoiceMode => self.update_prefs(cx, |p| p.push_to_talk = !p.push_to_talk),
             Action::ToggleScreenShare => self.toggle_share_keybind(cx),
             Action::Disconnect => self.leave_voice(cx),
+            Action::ToggleVoiceChannelChat => self.toggle_call_chat_keybind(cx),
             Action::Unassigned => {}
         }
         cx.notify();
@@ -893,6 +913,11 @@ impl Waffle {
         self.keep_mic_test_choice();
         sounds::play(if self.deafened { Cue::Deafen } else { Cue::Undeafen });
         self.sync_voice_flags();
+        // Deafening stops every soundboard sound playing, as Discord's does.
+        if self.deafened {
+            self.soundboard.stop_playing();
+            self.soundboard.close_picker();
+        }
         cx.notify();
     }
 
@@ -1401,6 +1426,9 @@ impl Waffle {
             .gap(px(24.))
             .child(div().flex_1().min_w_0().child(self.volume("Microphone volume", &percent(prefs.input_volume), Slider::InputVolume, cx)))
             .child(div().flex_1().min_w_0().child(self.volume("Speaker volume", &percent(prefs.output_volume), Slider::OutputVolume, cx)));
+        // Discord's own name for it; it sits under the speaker it plays through.
+        let soundboard = format!("{}%", crate::soundboard::perceptual(prefs.soundboard_volume).round() as i32);
+        let soundboard = div().flex().gap(px(24.)).child(div().flex_1()).child(div().flex_1().min_w_0().child(self.volume("Soundboard Volume", &soundboard, Slider::SoundboardVolume, cx)));
         let test_button = ui::button("mic-test", Tone::Primary, cx)
             .min_w(px(112.))
             .child(Icon::new(if testing { Glyph::Stop } else { Glyph::Mic }).size(px(16.)))
@@ -1412,7 +1440,7 @@ impl Waffle {
         let notice = no_input.then(|| self.no_input_notice(mic, cx));
         ui::settings_group("Devices", cx).child(
             card_pad(cx)
-                .child(div().flex().flex_col().gap(px(16.)).child(devices).child(volumes))
+                .child(div().flex().flex_col().gap(px(16.)).child(devices).child(volumes).child(soundboard))
                 .child(mic_test)
                 .children(notice)
                 .child(ui::settings_caption(format!("Talk normally. You'll hear yourself back through {speaker}."), cx).px_0()),

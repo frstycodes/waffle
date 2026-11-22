@@ -14,6 +14,7 @@ pub enum Action {
     ToggleVoiceMode,
     Disconnect,
     ToggleScreenShare,
+    ToggleVoiceChannelChat,
     Unassigned,
 }
 
@@ -21,7 +22,7 @@ pub enum Action {
 pub const SHARE_KEYS: &str = if cfg!(target_os = "macos") { "shift+cmd+l" } else { "ctrl+shift+l" };
 
 impl Action {
-    pub const ALL: [Action; 8] = [
+    pub const ALL: [Action; 9] = [
         Action::Unassigned,
         Action::PushToTalk,
         Action::PushToMute,
@@ -30,6 +31,7 @@ impl Action {
         Action::ToggleDeafen,
         Action::Disconnect,
         Action::ToggleScreenShare,
+        Action::ToggleVoiceChannelChat,
     ];
 
     pub fn label(self) -> &'static str {
@@ -41,6 +43,7 @@ impl Action {
             Action::ToggleVoiceMode => "Toggle Voice Activity Mode",
             Action::Disconnect => "Disconnect From Voice",
             Action::ToggleScreenShare => "Toggle Screen Share",
+            Action::ToggleVoiceChannelChat => "Toggle Voice Channel Chat",
             Action::Unassigned => "Unassigned",
         }
     }

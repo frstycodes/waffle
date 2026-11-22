@@ -21,6 +21,7 @@ use crate::{
     menu::{Entry, item, submenu},
     palette::{self, stage},
     settings::Page,
+    soundboard,
     ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, RADIUS_XS, Squircle},
     voice::{self, Stage},
 };
@@ -60,13 +61,22 @@ const STAGE_GROUP: &str = "call-stage";
 // The stage's header band, the app's one header line.
 pub(crate) const FOCUS_HEAD: f32 = 48.;
 const CONTROLS_IDLE: Duration = Duration::from_secs(3);
-const CHAT_WIDTH: f32 = 340.;
+// The voice channel's chat beside the call: at least 450 wide, leaving the stage 550 (Discord's numbers).
+const CHAT_SLIDE: Duration = Duration::from_millis(260);
+pub(crate) const CHAT_MIN_WIDTH: f32 = 450.;
+const CHAT_STAGE_ROOM: f32 = 550.;
 // The connection popover's colour bands (its legend): under 80 ms, 80 to 120, over 120.
 const PING_FAIR: u32 = 80;
 const PING_BAD: u32 = 120;
 // When the panel says "Poor connection": a bad average ping, or this much packet loss.
 const LOSS_POOR_PCT: f32 = 5.;
 const METER_BARS: usize = 28;
+
+// The chat's width for a window this wide: what was asked for, within Discord's bounds. A window too
+// narrow for both keeps the minimum.
+pub(crate) fn chat_width(wanted: f32, window: f32) -> f32 {
+    wanted.min(window - CHAT_STAGE_ROOM).max(CHAT_MIN_WIDTH)
+}
 
 // The stage's tile area (left, top, width, height), between its header and controls.
 fn tile_area(stage: (f32, f32)) -> (f32, f32, f32, f32) {
@@ -451,8 +461,17 @@ impl Waffle {
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_stream_menu(e.position, cx))),
             false => panel_action("panel-share", Glyph::ShareScreen, ready("Share your screen"), connected, cx).when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_screen_share(cx)))),
         };
-        let activities = panel_action("panel-activities", Glyph::Activities, ready("Activities and soundboard"), connected, cx)
-            .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.show_toast("Activities and the soundboard aren't in Waffle yet", cx))));
+        let activities = panel_action("panel-activities", Glyph::Activities, ready("Activities"), connected, cx)
+            .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.show_toast("Activities aren't in Waffle yet", cx))));
+        let access = self.soundboard_access();
+        let soundboard = (access != soundboard::Access::Hidden).then(|| {
+            let on = connected && access == soundboard::Access::Ready;
+            panel_action("panel-soundboard", Glyph::Soundboard, if connected { access.tip() } else { wait }, on, cx)
+                .relative()
+                .when(self.soundboard_open(), |b| b.bg(palette::press(cx)))
+                .child(self.soundboard_probe(soundboard::PANEL_CONTROL))
+                .when(on, |b| b.on_click(cx.listener(|this, _, window, cx| this.open_soundboard(Some(soundboard::PANEL_CONTROL), window, cx))))
+        });
         let voice = div()
             .h(px(VOICE_HEIGHT))
             .flex_none()
@@ -464,7 +483,7 @@ impl Waffle {
             .relative()
             .child(ui::inset_rule(PANEL_PAD, cx))
             .child(top)
-            .child(div().flex().gap(px(6.)).child(camera).child(share).child(activities));
+            .child(div().flex().gap(px(6.)).child(camera).child(share).children(soundboard).child(activities));
         Some(voice.into_any_element())
     }
 
@@ -614,12 +633,30 @@ impl Waffle {
 
     // The call view, with the voice channel's chat beside it when open (the stage shrinks; the
     // chat never covers the stream).
+    // The panel slides in from the window's right edge and back out the same way, the stage narrowing
+    // with it: its width rides one critically damped spring, so a click mid-slide reverses from where
+    // it is. The panel keeps its full width inside a clip that grows from the right.
     pub(crate) fn render_call_with_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let call_channel = self.call.as_ref()?.channel.clone();
-        let chat_open = self.call_chat_shown();
-        let drawer = chat_open.then(|| self.call_chat_drawer(&call_channel, window, cx));
+        let reveal = self.call_chat_reveal(window, cx);
+        // Leaving shows another channel's messages, so only the call's own chat slides out.
+        let on_call_channel = self.channel.as_ref().is_some_and(|c| c.id == call_channel.id);
+        let drawer = (reveal > 0.001 && on_call_channel).then(|| {
+            let width = self.call_chat_width(window);
+            let panel = self.call_chat_drawer(&call_channel, window, cx);
+            div().w(px(width * reveal)).flex_none().h_full().overflow_hidden().child(div().w(px(width)).h_full().child(panel))
+        });
         let call = self.render_call(window, cx)?;
-        Some(div().size_full().flex().child(div().flex_1().min_w_0().h_full().child(call)).children(drawer).into_any_element())
+        let previews = self.render_call_previews(cx);
+        Some(div().size_full().flex().child(div().relative().flex_1().min_w_0().h_full().child(call).children(previews)).children(drawer).into_any_element())
+    }
+
+    // 0 closed to 1 open. A critically damped spring keeps its velocity when re-targeted, so reversing
+    // mid-slide never snaps; reduced motion lands at once. 260ms: Apple's drawer response (~0.3s) at the
+    // app's quicker pace.
+    fn call_chat_reveal(&self, window: &mut Window, cx: &mut App) -> f32 {
+        let target = if self.call_chat_shown() { 1. } else { 0. };
+        gpui_kit::base::spring("call-chat-reveal", target, gpui_kit::base::Spring::new(CHAT_SLIDE), window, cx)
     }
 
     fn call_chat_drawer(&mut self, channel: &discord::Channel, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -627,9 +664,8 @@ impl Waffle {
         let messages = self.render_messages(0., cx).into_any_element();
         let composer = self.render_composer(window, cx).into_any_element();
         div()
-            .w(px(CHAT_WIDTH))
-            .flex_none()
-            .h_full()
+            .relative()
+            .size_full()
             .flex()
             .flex_col()
             .bg(theme.background)
@@ -657,21 +693,22 @@ impl Waffle {
             )
             .child(div().relative().flex_1().min_h_0().child(messages))
             .child(composer)
-            .with_animation("call-chat-in", Animation::new(Duration::from_millis(220)), |d, t| d.opacity(t.min(1.)).ml(px((1. - crate::motion::back_out(t)) * 24.)))
+            .child(self.resize_handle(crate::Edge::CallChat, cx))
             .into_any_element()
     }
 
-    // Opens the voice channel's text chat beside the call, as Discord's chat button does.
-    fn toggle_call_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.call_chat = !self.call_chat;
-        if self.call_chat
-            && let Some(channel) = self.call.as_ref().map(|c| c.channel.clone())
-            && self.channel.as_ref().is_none_or(|c| c.id != channel.id)
-        {
-            self.open_channel(channel, window, cx);
-            self.call_view = true;
+    // Shows or hides the voice channel's text chat beside the call, as Discord's chat button does.
+    pub(crate) fn toggle_call_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.call_chat_shown() {
+            self.call_chat = false;
+            return cx.notify();
         }
-        cx.notify();
+        let Some(channel) = self.call.as_ref().map(|c| c.channel.clone()) else { return };
+        self.open_call_chat(channel, window, cx);
+    }
+
+    pub(crate) fn call_chat_width(&self, window: &Window) -> f32 {
+        chat_width(self.prefs.call_chat_width, f32::from(window.viewport_size().width))
     }
 
     // .call: the stage, dark in both themes. The header, the tiles and the control bar; a focused
@@ -695,7 +732,7 @@ impl Waffle {
         if let Some(big) = focused {
             return Some(self.focus_stage(big, &tiles, shown, cx));
         }
-        let (_, _, width, height) = tile_area(self.stage_size(window));
+        let (_, _, width, height) = tile_area(self.stage_size(window, cx));
         let body = self.card_stage(&tiles, (width, height), cx);
         let stage = div().flex_1().min_h_0().flex().flex_col().gap(px(STAGE_GAP)).pt(px(STAGE_GAP)).px(px(STAGE_PAD)).pb(px(STAGE_PAD));
         Some(
@@ -709,9 +746,9 @@ impl Waffle {
     }
 
     // The stage's size in the window, beside the rail, the channel list and the call's chat.
-    pub(crate) fn stage_size(&self, window: &Window) -> (f32, f32) {
+    pub(crate) fn stage_size(&self, window: &mut Window, cx: &mut App) -> (f32, f32) {
         let viewport = window.viewport_size();
-        let chat = if self.call_chat_shown() { CHAT_WIDTH } else { 0. };
+        let chat = self.call_chat_width(window) * self.call_chat_reveal(window, cx);
         match self.call_fullscreen {
             true => (f32::from(viewport.width) - chat, f32::from(viewport.height)),
             false => (f32::from(viewport.width) - RAIL_WIDTH - self.channels_width - chat, f32::from(viewport.height) - 1.),
@@ -924,7 +961,7 @@ impl Waffle {
             .child(self.caption_clearance(!self.call_chat_shown()))
     }
 
-    fn call_chat_shown(&self) -> bool {
+    pub(crate) fn call_chat_shown(&self) -> bool {
         self.call_chat && self.call.as_ref().is_some_and(|call| self.channel.as_ref().is_some_and(|c| c.id == call.channel.id))
     }
 
@@ -1022,7 +1059,7 @@ impl Waffle {
             .gap(px(8.))
             .text_color(stage::strong())
             .child(Icon::new(glyph).size(px(20.)).text_color(stage::muted()))
-            .child(div().min_w_0().truncate().text_size(px(16.)).font_weight(FontWeight::MEDIUM).child(title))
+            .child(div().min_w_0().flex().flex_col().child(div().min_w_0().truncate().text_size(px(16.)).line_height(px(18.)).font_weight(FontWeight::MEDIUM).child(title)).children(self.call_status_line(&call.channel, cx)))
             .child(timer)
             .children(health)
             .child(div().flex_1())
@@ -1034,11 +1071,26 @@ impl Waffle {
             .into_any_element()
     }
 
+    // The voice channel's chat: "Show Chat" / "Hide Chat", highlighted while mentions wait or for a
+    // while after new messages, with the count on its corner (mentions, else unread).
     pub(crate) fn chat_toggle(&self, cx: &mut Context<Self>) -> Stateful<Div> {
-        let open = self.call_chat;
-        keeps_chrome(stage_icon_button("call-chat", Glyph::ChatRound, if open { "Chat: hide the channel's messages" } else { "Chat: show the channel's messages beside the call" }, open), cx)
+        let open = self.call_chat_shown();
+        keeps_chrome(stage_icon_button("call-chat", Glyph::ChatRound, if open { "Hide Chat" } else { "Show Chat" }, open || self.call_chat_highlighted()), cx)
+            .relative()
+            .children(self.call_chat_badge())
             .occlude()
             .on_click(cx.listener(|this, _, window, cx| this.toggle_call_chat(window, cx)))
+    }
+
+    // Only for the voice channel we're in.
+    fn call_chat_badge(&self) -> Option<Div> {
+        let (mentions, unread) = self.call_chat_counts()?;
+        let badge = match (mentions, unread) {
+            (0, 0) => return None,
+            (0, unread) => ui::count_badge(unread),
+            (mentions, _) => ui::count_badge(mentions),
+        };
+        Some(div().absolute().right(px(-4.)).bottom(px(-4.)).rounded_full().border_2().border_color(stage::bg()).child(badge))
     }
 
     // The chevron above the filmstrip that folds it away and back, as Discord's.
@@ -1160,7 +1212,7 @@ impl Waffle {
             .p(px(12.))
             .text_center();
         if small {
-            return card.child(Icon::new(Glyph::ScreenOff).size(px(24.)).text_color(stage::muted())).child(tile_ring(false, false, radius)).into_any_element();
+            return card.child(Icon::new(Glyph::ScreenOff).size(px(24.)).text_color(stage::muted())).child(tile_ring(false, false, false, radius)).into_any_element();
         }
         card.child(div().text_size(px(16.)).font_weight(FontWeight::MEDIUM).text_color(stage::strong()).child(heading))
             .child(div().text_size(px(12.)).text_color(stage::muted()).child(line))
@@ -1168,7 +1220,7 @@ impl Waffle {
                 cx.stop_propagation();
                 close(this, cx);
             }))))
-            .when(!fill, |d| d.child(tile_ring(false, false, radius)))
+            .when(!fill, |d| d.child(tile_ring(false, false, false, radius)))
             .with_animation(SharedString::from(format!("{key}-in")), Animation::new(ui::DUR_PANEL), |d, t| d.opacity(t.min(1.)))
             .into_any_element()
     }
@@ -1254,6 +1306,7 @@ impl Waffle {
             return self.stage_notice(format!("hidden-{}", state.user_id), size, ("Stream preview hidden", "You're still live; only your own preview is off.".into(), "Show preview"), |this, cx| this.toggle_self_stream_hidden(cx), cx);
         }
         let talking = !is_stream && self.speaking(&state.user_id);
+        let sounding = !is_stream && self.soundboard_playing(&state.user_id);
         let camera = (!is_stream).then(|| call.cameras.get(&state.user_id)).flatten();
         let media = is_stream || camera.is_some();
         // A stream card plays the stream once it's watched (our own from the local capture), and shows
@@ -1377,6 +1430,7 @@ impl Waffle {
             })
             .child(name)
             .children(off_chip)
+            .children((!is_stream).then(|| self.soundboard_tile_effect(&state.user_id, effect_area(w), cx)).flatten())
             .cursor_pointer()
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_card(&card, cx)))
             .when(is_stream && me && !small, |d| {
@@ -1420,7 +1474,7 @@ impl Waffle {
                 )
             })
             // Every card answers the pointer with a brighter edge; the focused one has no edge at all.
-            .when(!fill || talking, |d| d.child(tile_ring(talking, local_muted, radius).when(!talking, |r| r.group_hover(group.clone(), |s| s.border_color(stage::wash(0.2))))))
+            .when(!fill || talking || sounding, |d| d.child(tile_ring(talking, sounding, local_muted, radius).when(!talking && !sounding, |r| r.group_hover(group.clone(), |s| s.border_color(stage::wash(0.2))))))
             .on_mouse_down(MouseButton::Right, cx.listener(move |this, e: &MouseDownEvent, _, cx| this.voice_user_menu(&menu_user, e.position, cx)))
             .into_any_element()
     }
@@ -1481,8 +1535,16 @@ impl Waffle {
         let call = self.call.as_ref().expect("in a call");
         let connected = call.stage == Stage::Connected;
         let (mic, camera, share) = (self.mic_control(cx), self.camera_control(cx), self.share_control(cx));
-        let activities = control("call-activities", Glyph::ActivitiesFill, "Activities and soundboard", Control::Rest, connected)
-            .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.show_toast("Activities and the soundboard aren't in Waffle yet", cx))));
+        let activities = control("call-activities", Glyph::ActivitiesFill, "Activities", Control::Rest, connected)
+            .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.show_toast("Activities aren't in Waffle yet", cx))));
+        let access = self.soundboard_access();
+        let soundboard = (access != soundboard::Access::Hidden).then(|| {
+            let on = connected && access == soundboard::Access::Ready;
+            control("call-soundboard", Glyph::Soundboard, access.tip(), if self.soundboard_open() { Control::Open } else { Control::Rest }, on)
+                .relative()
+                .child(self.soundboard_probe(soundboard::CALL_CONTROL))
+                .when(on, |b| b.on_click(cx.listener(|this, _, window, cx| this.open_soundboard(Some(soundboard::CALL_CONTROL), window, cx))))
+        });
         let more = control("call-more", Glyph::More, "More options", Control::Rest, true).on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_call_more(e.position, cx)));
         let leave = self.leave_control(cx);
         // Full screen at the bar's right end, as Discord's.
@@ -1504,7 +1566,7 @@ impl Waffle {
             .items_center()
             .gap(px(8.))
             .child(control_group().child(mic).child(camera))
-            .child(control_group().child(share).child(activities).child(more))
+            .child(control_group().child(share).children(soundboard).child(activities).child(more))
             .child(leave)
             .child(div().absolute().right_0().top(px((CONTROLS_HEIGHT - 32.) / 2.)).flex().gap(px(4.)).children(volume).child(fullscreen))
     }
@@ -1560,7 +1622,9 @@ impl Waffle {
                     let channel = call.channel.id.clone();
                     entries.push(item("Invite to voice", move |this, window, cx| this.show_invite(guild.clone(), channel.clone(), window, cx)).icon(Glyph::GroupPlus).entry());
                 }
-                entries.push(item("Soundboard", |this, _, cx| this.show_toast("The soundboard isn't in Waffle yet", cx)).icon(Glyph::Soundboard).entry());
+                if this.soundboard_access() == soundboard::Access::Ready {
+                    entries.push(item("Soundboard", |this, window, cx| this.open_soundboard(Some(soundboard::CALL_CONTROL), window, cx)).icon(Glyph::Soundboard).entry());
+                }
                 if this.call_focus.is_some() {
                     let hidden = this.call_strip_hidden;
                     entries.push(
@@ -1572,6 +1636,11 @@ impl Waffle {
                         .icon(Glyph::Users)
                         .entry(),
                     );
+                }
+                if call.guild_id.is_some() {
+                    let id = call.channel.id.clone();
+                    let on = this.call_previews_enabled(&id);
+                    entries.push(item("Show New Message Previews", move |this, _, cx| this.toggle_call_previews(&id, cx)).checked(on).entry());
                 }
                 entries
             },
@@ -2180,13 +2249,26 @@ fn tile_name(content: Div) -> Div {
 
 // The tile's edge, drawn above its media so a stream can't hide it: a faint 1px line, or while
 // speaking a 2px green ring with a dark inner line (neutral when they're muted for you).
-fn tile_ring(speaking: bool, local_muted: bool, radius: f32) -> Div {
+// The tile a soundboard effect plays across: a card is 16:9 at its width.
+// GAP: the focused tile fills the stage, whose size isn't known here; 960 wide stands in.
+fn effect_area(width: f32) -> (f32, f32) {
+    let width = if width.is_finite() { width } else { 960. };
+    (width, width * 9. / 16.)
+}
+
+// A soundboard sound gets its own ring, as Discord's, so it never reads as someone talking: honey,
+// the colour the picker marks a playing sound with. It outranks the speaking green while it plays.
+fn tile_ring(speaking: bool, sounding: bool, local_muted: bool, radius: f32) -> Div {
     let ring = div().absolute().inset_0().squircle(radius);
-    if !speaking {
+    if !speaking && !sounding {
         return ring.border_1().border_color(stage::wash(0.06));
     }
     // The stage is always dark, so the dark theme's green.
-    let color = if local_muted { stage::wash(0.42) } else { palette::status(crate::discord::Status::Online) };
+    let color = match (sounding, local_muted) {
+        (true, _) => palette::accent(),
+        (false, true) => stage::wash(0.42),
+        (false, false) => palette::status(crate::discord::Status::Online),
+    };
     ring.border(px(2.)).border_color(color).child(div().absolute().inset_0().squircle((radius - 2.).max(0.)).border(px(2.)).border_color(stage::bg().opacity(0.6)))
 }
 

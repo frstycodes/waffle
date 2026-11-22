@@ -290,6 +290,7 @@ impl Waffle {
         if voice {
             let open = channel.clone();
             out.push(item("Open chat", move |this, window, cx| this.open_channel(open.clone(), window, cx)).icon(Glyph::ChatRound).entry());
+            out.extend(self.voice_status_entry(channel));
             let id = channel.id.clone();
             out.push(item("Hide names", move |this, _, cx| {
                 if !this.hidden_voice_names.remove(&id) {

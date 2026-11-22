@@ -3631,6 +3631,11 @@ fn readable_with(content: &str, ctx: &RowContext, inline_emoji: bool) -> String 
     out.replace("@everyone", "[@everyone](waffle://everyone)").replace("@here", "[@here](waffle://here)")
 }
 
+// A message's text without markdown, mentions named: for surfaces that set their own ink.
+pub(crate) fn plain_text(content: &str, ctx: &RowContext) -> String {
+    plain(&readable_with(content, ctx, false))
+}
+
 // One line of plain text for the reply quote: markdown markers and link targets dropped.
 fn plain(markdown: &str) -> String {
     let mut out = String::with_capacity(markdown.len());

@@ -163,7 +163,8 @@ pub fn parse_sticker(v: &Value) -> Option<Expression> {
 }
 
 pub fn parse_sound(v: &Value) -> Option<Expression> {
-    Some(Expression { id: v["sound_id"].as_str()?.to_owned(), name: v["name"].as_str().unwrap_or_default().to_owned(), url: None, by_id: v["user"]["id"].as_str().map(str::to_owned), by: name_of(&v["user"]) })
+    let sound = crate::discord::SoundboardSound::parse(v)?;
+    Some(Expression { id: sound.id, name: sound.name, url: None, by_id: v["user"]["id"].as_str().map(str::to_owned), by: name_of(&v["user"]) })
 }
 
 pub fn parse_member(v: &Value) -> Option<Person> {

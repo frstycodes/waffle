@@ -194,6 +194,10 @@ impl Waffle {
                 }
                 cx.notify();
             }
+            EmojiTarget::VoiceStatus => {
+                let shown = self.shown_emoji(&emoji);
+                self.insert_voice_status_emoji(shown, window, cx);
+            }
             EmojiTarget::ForwardNote => {
                 let shown = self.shown_emoji(&emoji);
                 if let Some(dialog) = &self.forward_dialog {
@@ -285,7 +289,7 @@ impl Waffle {
     /// Closes whichever floating surface is open; true if one was.
     pub(crate) fn dismiss_overlay(&mut self, cx: &mut Context<Self>) -> bool {
         // The note's picker sits over the forward dialog: closing it leaves the dialog and its picks.
-        if matches!(self.emoji_picker, Some(EmojiTarget::ForwardNote)) {
+        if matches!(self.emoji_picker, Some(EmojiTarget::ForwardNote | EmojiTarget::VoiceStatus)) {
             self.emoji_picker = None;
             cx.notify();
             return true;
@@ -305,6 +309,7 @@ impl Waffle {
             | self.take_app_modal()
             | self.close_events()
             | self.forward_dialog.take().is_some()
+            | self.voice_status_dialog.take().is_some()
             | self.dismiss_announcement_dialog()
             | self.report_dialog.take().is_some()
             | self.group_dialog.take().is_some()
@@ -315,6 +320,7 @@ impl Waffle {
             | self.pins.take().is_some()
             | std::mem::take(&mut self.inbox_open)
             | self.gif_picker.take().is_some()
+            | self.soundboard.close_picker()
             | self.dismiss_join_overlay()
             | self.dismiss_call_menus()
             | self.close_menu();
@@ -334,6 +340,7 @@ impl Waffle {
         out.extend(self.app_modal_overlay(window, cx));
         out.extend(self.events_overlay(window, cx));
         out.extend(self.forward_overlay(window, cx));
+        out.extend(self.voice_status_overlay(window, cx));
         out.extend(self.announcement_overlay(window, cx));
         out.extend(self.report_overlay(window, cx));
         out.extend(self.group_overlay(window, cx));
@@ -344,6 +351,7 @@ impl Waffle {
         out.extend(self.pins_overlay(cx));
         out.extend(self.inbox_overlay(window, cx));
         out.extend(self.composer_picker_overlay(window, cx));
+        out.extend(self.soundboard_overlay(window, cx));
         out.extend(self.join_overlays(window, cx));
         out
     }

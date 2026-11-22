@@ -807,15 +807,19 @@ impl Waffle {
         if muted && !selected && settings.is_some_and(|s| s.hide_muted) {
             return Vec::new();
         }
-        let unread = self.unread(&channel.id) && !muted;
-        let mentions = self.mention_count(&channel.id);
+        let is_voice = channel.kind == ChannelKind::Voice;
         let in_call = self.call.as_ref().is_some_and(|c| c.channel.id == channel.id);
+        // A voice channel's chat marks it unread only while you're in it; mentions show always, as Discord's.
+        let unread = self.unread(&channel.id) && !muted && (!is_voice || in_call);
+        let mentions = self.mention_count(&channel.id);
+        let hovered = self.hovered_row.as_deref() == Some(channel.id.as_str());
+        // In the channel with no count beside them, its buttons stay out without hover.
+        let actions_shown = selected || hovered || (is_voice && in_call && mentions == 0);
         let state = RowState { selected, unread, muted, strong: in_call };
         let elapsed = self.call.as_ref().filter(|c| c.channel.id == channel.id && c.connected).and_then(|_| self.voice_elapsed(&channel.id)).map(|secs| {
             div().flex_none().text_size(px(12.)).font_weight(FontWeight::NORMAL).text_color(palette::positive_ink(cx)).child(crate::call::clock(secs))
         });
         let group: SharedString = format!("ch-{}", channel.id).into();
-        let hovered = self.hovered_row.as_deref() == Some(channel.id.as_str());
         // An unsent draft outranks the muted bell in the meta slot.
         let meta = match self.drafts.has(&channel.id) {
             true => Some(draft_mark()),
@@ -826,24 +830,34 @@ impl Waffle {
         let carried = self.drag_motion.row(&channel.id);
         let welcomes = channel.kind == ChannelKind::Voice && self.welcomes_voice_drop(channel, guild);
         let row = channel_row(SharedString::from(channel.id.clone()), group.clone(), state, cx).children(self.drag_motion.spot(&channel.id));
+        // A voice channel's status (or the way to set one) is a second line inside the row's fill and hit area.
+        let status_line = self.voice_row_status(channel, cx);
         let row = match carried {
             RowDrag::Hole => hole(row.bg(gpui_kit::transparent_black()), cx),
-            _ => row
-                .when(carried == RowDrag::Hidden, |r| r.invisible())
-                .when(welcomes, |r| r.bg(palette::accent_soft(cx)).text_color(palette::strong(cx)))
-                .child(channel_glyph(channel).size(px(18.)).flex_none().text_color(match (welcomes, selected) {
-                    (true, _) => palette::accent_ink(cx),
-                    (false, true) => palette::muted(cx),
-                    (false, false) => faint,
-                }))
-                .when(topic.is_some(), |r| r.h(px(STAGE_ROW_HEIGHT)))
-                .child(channel_label(channel, topic, cx))
-                .children(elapsed)
-                .children(meta.filter(|_| !selected && !hovered).map(|icon| div().flex_none().flex().text_color(faint).child(icon)))
-                .when(selected || hovered, |r| r.child(self.row_actions(channel, guild, cx)))
-                .when(mentions > 0, |r| r.child(ui::count_badge(mentions))),
+            _ => {
+                let line = div()
+                    .w_full()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(channel_glyph(channel).size(px(18.)).flex_none().text_color(match (welcomes, selected) {
+                        (true, _) => palette::accent_ink(cx),
+                        (false, true) => palette::muted(cx),
+                        (false, false) => faint,
+                    }))
+                    .child(channel_label(channel, topic.clone(), cx))
+                    .children(elapsed)
+                    .children(meta.filter(|_| !actions_shown).map(|icon| div().flex_none().flex().text_color(faint).child(icon)))
+                    .when(actions_shown, |r| r.child(self.row_actions(channel, guild, cx)))
+                    .when(mentions > 0, |r| r.child(ui::count_badge(mentions)));
+                let row = row.when(carried == RowDrag::Hidden, |r| r.invisible()).when(welcomes, |r| r.bg(palette::accent_soft(cx)).text_color(palette::strong(cx)));
+                match status_line {
+                    Some(status) => row.h_auto().py(px((row_height() - 20.) / 2.)).flex_col().items_stretch().gap(px(2.)).child(line.min_h(px(20.))).child(status),
+                    None => row.when(topic.is_some(), |r| r.h(px(STAGE_ROW_HEIGHT))).child(line.h_full()),
+                }
+            }
         };
-        let is_voice = channel.kind == ChannelKind::Voice;
         let row = self.track_row_hover(self.channel_draggable(row, channel, guild, cx), &channel.id, !is_voice, cx);
         let keep = selected || unread;
         if !is_voice {
@@ -862,6 +876,11 @@ impl Waffle {
         let row = self
             .voice_drop_zone(row, channel.id.clone().into(), channel, cx)
             .on_click(cx.listener(move |this, _, window, cx| {
+                // With mentions waiting, Discord joins and opens the chat.
+                if this.mention_count(&join.id) > 0 {
+                    this.show_call(join.clone(), window, cx);
+                    return this.open_call_chat(join.clone(), window, cx);
+                }
                 let in_call = this.call.as_ref().map(|c| c.channel.id.as_str());
                 match voice_row_click(in_call, &join.id) {
                     VoiceRowClick::Join => this.join_voice(join.clone(), cx),
@@ -964,8 +983,17 @@ impl Waffle {
         }))
     }
 
-    // Invite and options, shown in the row's meta slot while it's hovered or selected.
+    // Open Chat (voice channels you may join), invite and options, shown in the row's meta slot while
+    // it's hovered or selected.
     fn row_actions(&self, channel: &Channel, guild: &Guild, cx: &mut Context<Self>) -> Div {
+        let can_chat = channel.kind == ChannelKind::Voice && self.can_in(&channel.id, crate::discord::perm::CONNECT);
+        let open_chat = can_chat.then(|| {
+            let open = channel.clone();
+            row_action(SharedString::from(format!("open-chat-{}", channel.id)), Icon::new(Glyph::ChatRound), "Open Chat", cx).on_click(cx.listener(move |this, _, window, cx| {
+                cx.stop_propagation();
+                this.open_call_chat(open.clone(), window, cx);
+            }))
+        });
         let (gid, cid) = (guild.id.clone(), channel.id.clone());
         let (menu_channel, menu_guild) = (channel.clone(), guild.id.clone());
         let invite = row_action(SharedString::from(format!("invite-{}", channel.id)), Icon::new(Glyph::GroupPlus), "Invite people", cx)
@@ -981,6 +1009,7 @@ impl Waffle {
             .flex_none()
             .flex()
             .gap(px(2.))
+            .children(open_chat)
             .child(invite)
             .child(options)
     }
@@ -1267,7 +1296,8 @@ pub(crate) fn channel_row(id: SharedString, group: SharedString, state: RowState
         .text_color(ink)
         .when(selected, |r| r.bg(palette::selected(cx)))
         .when(!selected, |r| r.hover(move |s| s.bg(hover).text_color(text)))
-        .when(unread && !selected, |r| r.child(div().absolute().left(px(-8.)).w(px(4.)).h(px(8.)).rounded_r(px(4.)).bg(palette::strong(cx))))
+        // Pinned to the name line's centre: a two-line row (a voice status under the name) would drop it to the top.
+        .when(unread && !selected, |r| r.child(div().absolute().left(px(-8.)).top(px((row_height() - 8.) / 2.)).w(px(4.)).h(px(8.)).rounded_r(px(4.)).bg(palette::strong(cx))))
 }
 
 // A category's header row (.cathead): the label, a button that folds the category unless `static_`,
