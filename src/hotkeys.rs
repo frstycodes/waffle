@@ -92,8 +92,9 @@ impl Hotkeys {
         unknown
     }
 
-    // A bind starts when a press makes the held keys exactly its keys, and stops when one of its keys
-    // is let go, so typing other keys mid push-to-talk keeps talking.
+    // A bind starts when a press of one of its keys completes it: all its keys held, with exactly its
+    // modifiers. Other keys held don't stop it, so the bind still works mid-game with W held down. It stops
+    // when one of its keys is let go, so typing other keys mid push-to-talk keeps talking.
     pub fn update(&mut self, held: Vec<&'static str>) -> Vec<(Action, bool)> {
         self.listening = true;
         let mut changes = Vec::new();
@@ -104,8 +105,8 @@ impl Hotkeys {
             }
             still
         });
-        let pressed = held.iter().any(|k| !self.held.contains(k));
-        for (keys, action) in self.binds.iter().filter(|(keys, _)| pressed && same_keys(keys, &held)) {
+        let pressed: Vec<&str> = held.iter().copied().filter(|k| !self.held.contains(k)).collect();
+        for (keys, action) in self.binds.iter().filter(|(keys, _)| pressed.iter().any(|k| keys.contains(k)) && completes(keys, &held)) {
             if !self.active.iter().any(|(k, a)| k == keys && a == action) {
                 self.active.push((keys.clone(), *action));
                 changes.push((*action, true));
@@ -131,9 +132,12 @@ impl Hotkeys {
     }
 }
 
-fn same_keys(a: &[&str], b: &[&str]) -> bool {
-    a.len() == b.len() && a.iter().all(|k| b.contains(k))
+fn completes(bind: &[&str], held: &[&str]) -> bool {
+    let modifier = |k: &&&str| MODIFIERS.contains(*k);
+    bind.iter().all(|k| held.contains(k)) && held.iter().filter(modifier).all(|k| bind.contains(k))
 }
+
+const MODIFIERS: [&str; 4] = ["ctrl", "alt", "shift", "cmd"];
 
 // A saved keybind as key names, or None if any part isn't a key Waffle can listen for.
 pub fn parse(keys: &str) -> Option<Vec<&'static str>> {
@@ -345,6 +349,22 @@ mod tests {
         assert_eq!(h.update(vec!["shift", "cmd", "m"]), vec![(Action::ToggleMute, true)]);
         assert_eq!(h.update(vec!["shift", "cmd"]), vec![(Action::ToggleMute, false)]);
         assert_eq!(h.update(vec!["shift", "cmd"]), vec![], "a release never fires");
+    }
+
+    #[test]
+    fn other_keys_held_dont_block_a_bind() {
+        let mut h = bound(&["`", "shift+cmd+m"]);
+        h.update(vec!["w"]);
+        assert_eq!(h.update(vec!["w", "`"]), vec![(Action::PushToTalk, true)], "push to talk while moving");
+        h.update(vec!["w"]);
+        h.update(vec!["w", "shift", "cmd"]);
+        assert_eq!(h.update(vec!["w", "shift", "cmd", "m"]), vec![(Action::ToggleMute, true)]);
+        h.update(vec![]);
+        h.update(vec!["shift", "m"]);
+        assert_eq!(h.update(vec!["m"]), vec![], "letting go of a modifier isn't a press");
+        assert_eq!(h.update(vec!["m", "w"]), vec![], "a press of another key doesn't complete a bind");
+        h.update(vec![]);
+        assert_eq!(h.update(vec!["alt", "shift", "cmd", "m"]), vec![], "an extra modifier is another shortcut");
     }
 
     #[test]

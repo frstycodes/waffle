@@ -543,6 +543,12 @@ impl Waffle {
         let gid = guild_id.to_owned();
         let hide = settings.hide_muted;
         out.push(item("Hide muted channels", move |this, _, cx| this.patch_guild_settings(gid.clone(), json!({ "hide_muted_channels": !hide }), cx)).checked(hide).icon(Glyph::EyeSlash).entry());
+        if guild.has_feature(crate::joining::features::COMMUNITY) {
+            use crate::joining::settings_flags::OPT_IN_CHANNELS_ON;
+            let (gid, flags) = (guild_id.to_owned(), settings.flags);
+            let show_all = flags & OPT_IN_CHANNELS_ON == 0;
+            out.push(item("Show All Channels", move |this, _, cx| this.patch_guild_settings(gid.clone(), json!({ "flags": flags ^ OPT_IN_CHANNELS_ON }), cx)).checked(show_all).icon(Glyph::Eye).entry());
+        }
         out.push(Entry::Separator);
 
         let gid = guild_id.to_owned();
@@ -875,6 +881,9 @@ fn merge_settings(settings: &mut GuildSettings, body: &Value) {
     if let Some(on) = body["hide_muted_channels"].as_bool() {
         settings.hide_muted = on;
     }
+    if let Some(flags) = body["flags"].as_u64() {
+        settings.flags = flags;
+    }
     for (id, change) in body["channel_overrides"].as_object().into_iter().flatten() {
         let channel = settings.channels.entry(id.clone()).or_insert_with(|| crate::discord::ChannelSettings { notifications: 3, ..Default::default() });
         if let Some(muted) = change["muted"].as_bool() {
@@ -883,6 +892,9 @@ fn merge_settings(settings: &mut GuildSettings, body: &Value) {
         }
         if let Some(level) = change["message_notifications"].as_u64() {
             channel.notifications = level as u8;
+        }
+        if let Some(flags) = change["flags"].as_u64() {
+            channel.flags = flags;
         }
     }
 }

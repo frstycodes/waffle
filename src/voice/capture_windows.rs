@@ -179,10 +179,6 @@ pub fn shareable_windows() -> Result<Vec<ShareableWindow>, String> {
     Ok(windows.collect())
 }
 
-pub fn frontmost_pid() -> Option<i32> {
-    Window::foreground().ok()?.process_id().ok().map(|pid| pid as i32)
-}
-
 struct FrameFlags {
     tx: SyncSender<Arc<VideoFrame>>,
     max_width: u32,

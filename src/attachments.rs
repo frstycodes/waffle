@@ -91,11 +91,16 @@ pub fn admit(pending: &mut Vec<PendingFile>, new: Vec<PendingFile>, limit: u64) 
 pub enum Pasted {
     Files(Vec<PathBuf>),
     Image(gpui_kit::Image),
+    // Over LONG_PASTE: becomes message.txt, as Discord's composer does.
+    LongText(String),
     Text,
 }
 
+// Discord turns a paste longer than this (UTF-16 units, whatever your Nitro) into message.txt.
+const LONG_PASTE: usize = 4000;
+
 /// What a Cmd/Ctrl+V brings. Files copied in Finder or Explorer come with their names as text too; the
-/// files win. Text stays the text field's own paste.
+/// files win. Text stays the text field's own paste, unless it's long.
 pub fn classify(item: &ClipboardItem) -> Pasted {
     let entries = item.entries();
     if let Some(paths) = entries.iter().find_map(|e| match e {
@@ -109,12 +114,24 @@ pub fn classify(item: &ClipboardItem) -> Pasted {
         _ => None,
     }) {
         Some(image) => Pasted::Image(image),
-        None => Pasted::Text,
+        None => match item.text() {
+            Some(text) if text.encode_utf16().count() > LONG_PASTE => Pasted::LongText(text),
+            _ => Pasted::Text,
+        },
     }
 }
 
 /// A pasted picture as a file to upload, named `image.png` like Discord's own paste. Formats Discord
 /// doesn't show inline (TIFF, BMP, SVG) are re-encoded as PNG.
+/// Text too long for a message, as the `message.txt` Discord's client sends it as.
+pub fn save_message_text(text: &str) -> Result<PathBuf, String> {
+    let dir = std::env::temp_dir().join(format!("waffle-paste-{}", crate::nonce()));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("message.txt");
+    std::fs::write(&path, text).map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
 pub fn save_pasted_image(image: &gpui_kit::Image) -> Result<PathBuf, String> {
     let dir = std::env::temp_dir().join(format!("waffle-paste-{}", crate::nonce()));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -196,6 +213,9 @@ mod tests {
     #[test]
     fn text_stays_text() {
         assert_eq!(classify(&ClipboardItem::new_string("hello".into())), Pasted::Text);
+        assert_eq!(classify(&ClipboardItem::new_string("x".repeat(LONG_PASTE))), Pasted::Text);
+        let long = "x".repeat(LONG_PASTE + 1);
+        assert_eq!(classify(&ClipboardItem::new_string(long.clone())), Pasted::LongText(long));
     }
 
     #[test]
