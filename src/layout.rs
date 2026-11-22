@@ -96,7 +96,7 @@ impl Waffle {
             && let Some(call) = self.render_call_with_chat(window, cx)
         {
             let (overlays, call_overlays) = (self.render_overlays(window, cx), self.render_call_overlays(window, cx));
-            let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)));
+            let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_stage_topic(window, cx)).or_else(|| self.render_notification_settings(window, cx)));
             crate::gif::set_covered(!overlays.is_empty() || !call_overlays.is_empty() || menu.is_some() || dialog.is_some());
             return root
                 .child(call)
@@ -120,7 +120,7 @@ impl Waffle {
         };
         // Anything drawn over the chat pauses its GIFs (the GIF layer paints above the whole app).
         let (overlays, call_overlays) = (self.render_overlays(window, cx), self.render_call_overlays(window, cx));
-        let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)));
+        let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_stage_topic(window, cx)).or_else(|| self.render_notification_settings(window, cx)));
         let (viewer, settings) = (self.viewer_overlay(window, cx), self.render_settings(window, cx));
         let channel_settings = self.render_channel_settings(window, cx);
         let server_settings = self.render_server_settings(window, cx);
@@ -160,6 +160,7 @@ impl Waffle {
         match self.call_view.then(|| self.render_call_with_chat(window, cx)).flatten() {
             Some(call) => div().flex_1().min_w_0().h_full().child(call).into_any_element(),
             None if self.inbox_page => self.render_inbox_page(window, cx),
+            None if self.requests_page.is_some() && self.guild_id.is_none() && self.channel.is_none() => self.render_requests_page(window, cx),
             None if self.guild_page.is_some() => self.render_guild_page(window, cx),
             None if self.guild_id.is_none() && self.channel.is_none() => self.render_home(window, cx),
             None if self.channel.as_ref().is_some_and(|c| c.kind == discord::ChannelKind::Forum) => {
@@ -252,6 +253,9 @@ impl Waffle {
         }
         if keystroke.key == "k" && (keystroke.modifiers.platform || keystroke.modifiers.control) {
             self.open_switcher(window, cx);
+            return cx.stop_propagation();
+        }
+        if keystroke.key == "escape" && self.dismiss_notification_settings(cx) {
             return cx.stop_propagation();
         }
         if keystroke.key == "escape" && self.viewer.is_none() && self.dismiss_overlay(cx) {

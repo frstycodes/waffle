@@ -180,7 +180,7 @@ fn needs_discord(error: &str) -> bool {
 }
 
 // A picked image as Discord's image data (a data URI), and whether it's animated.
-fn image_data_uri(path: &std::path::Path) -> Result<(String, bool), String> {
+pub(crate) fn image_data_uri(path: &std::path::Path) -> Result<(String, bool), String> {
     let mime = match path.extension().and_then(|e| e.to_str()).map(str::to_lowercase).as_deref() {
         Some("png") => "image/png",
         Some("jpg" | "jpeg") => "image/jpeg",

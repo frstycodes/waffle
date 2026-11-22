@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod accounts;
+mod active_now;
 mod attachments;
 mod app_keys;
 mod crash;
@@ -35,13 +36,16 @@ mod mascot;
 mod material;
 mod forum;
 mod forward;
+mod group_dm;
 mod reactions;
+mod requests;
 mod gif;
 mod games;
 mod go_live;
 mod h264;
 mod home;
 mod os_image;
+mod notification_settings;
 mod overlays;
 mod overwrites;
 mod playback;
@@ -82,6 +86,9 @@ mod tray;
 mod text_file;
 mod ui;
 mod splash;
+mod stage;
+mod stage_dialogs;
+mod stage_view;
 mod updater;
 mod design_system;
 mod app_icon;
@@ -666,6 +673,7 @@ pub struct Waffle {
     poll_picks: HashMap<String, Vec<u32>>,
     poll_peek: HashSet<String>,
     forward_dialog: Option<forward::ForwardDialog>,
+    group_dialog: Option<group_dm::GroupDialog>,
     status_flyout: status_menu::Flyout,
     status_input: Entity<SearchState>,
     clear_after: status_menu::ClearAfter,
@@ -684,6 +692,8 @@ pub struct Waffle {
     // Every user seen as their server shows them, keyed by guild then user, for voice rows and tiles.
     members: HashMap<String, HashMap<String, User>>,
     dms: Vec<Channel>,
+    // DMs waiting in Message Requests, requests and spam both; kept out of `dms` until accepted.
+    dm_requests: Vec<Channel>,
     // None shows direct messages.
     guild_id: Option<String>,
     channel: Option<Channel>,
@@ -786,8 +796,13 @@ pub struct Waffle {
     window_active: bool,
     // The open channel should land on its first unread once its messages are in.
     unread_scroll_pending: bool,
+    // The channel last marked unread by hand: auto-read leaves it alone until it's opened again or we send there.
+    // Not verified: Discord's exact rule for when the open channel reads itself again after Mark Unread.
+    pub(crate) held_unread: Option<String>,
     dialog: Option<menu::Dialog>,
     create_channel: Option<create_channel::CreateChannel>,
+    notification_settings: Option<notification_settings::NotificationSettings>,
+    stage_topic: Option<stage_dialogs::StageTopic>,
     dialog_input: Entity<SearchState>,
     // A short notice at the bottom, e.g. why a moderation action failed.
     toast: Option<SharedString>,
@@ -795,6 +810,8 @@ pub struct Waffle {
     add_friend_input: Entity<SearchState>,
     add_friend_note: Entity<TextareaState>,
     add_friend_result: Option<Result<SharedString, SharedString>>,
+    // Set while a one-second repaint runs for Active Now's play clocks.
+    active_now_ticking: Rc<std::cell::Cell<bool>>,
     // The gateway refused the token once and REST accepted it; set until the next READY.
     auth_retried: bool,
     // The background updater: its status (a staged update installs on Restart or the next launch).
@@ -860,6 +877,8 @@ pub struct Waffle {
     popover_at: gpui_kit::Point<gpui_kit::Pixels>,
     // The full Inbox page in the content column ("See all").
     inbox_page: bool,
+    // The Message Requests page, on its tab; None while it's closed.
+    requests_page: Option<requests::RequestsTab>,
     // Joining a server: invite screen, onboarding, rules, Channels & Roles and the Server Guide.
     join: joining::Join,
     // A server page open in the content column instead of a channel (Server Guide, Channels & Roles).
@@ -1030,6 +1049,9 @@ impl Waffle {
         let dialog_input = cx.new(|cx| SearchState::new(window, cx));
         // Enter in the field submits its dialog; the input keeps the key from reaching the dialog itself.
         cx.subscribe_in(&dialog_input, window, |this: &mut Self, _, event: &InputEvent, window, cx| {
+            if this.stage_topic.is_some() {
+                return this.stage_topic_input(event, window, cx);
+            }
             if !matches!(event, InputEvent::PressEnter { .. }) {
                 return;
             }
@@ -1069,6 +1091,7 @@ impl Waffle {
             poll_picks: HashMap::new(),
             poll_peek: HashSet::new(),
             forward_dialog: None,
+            group_dialog: None,
             status_flyout: status_menu::Flyout::default(),
             status_input,
             clear_after: status_menu::ClearAfter::default(),
@@ -1082,6 +1105,7 @@ impl Waffle {
             drag_motion: Default::default(),
             members: HashMap::new(),
             dms: Vec::new(),
+            dm_requests: Vec::new(),
             guild_id: None,
             channel: None,
             last_channel: HashMap::new(),
@@ -1152,13 +1176,17 @@ impl Waffle {
             watch_on_connect: None,
             window_active: true,
             unread_scroll_pending: false,
+            held_unread: None,
             dialog: None,
             create_channel: None,
+            notification_settings: None,
+            stage_topic: None,
             dialog_input,
             toast: None,
             add_friend_input,
             add_friend_note,
             add_friend_result: None,
+            active_now_ticking: Rc::default(),
             auth_retried: false,
             share_picker: None,
             share_choice: None,
@@ -1195,6 +1223,7 @@ impl Waffle {
             pending_jump: None,
             popover_at: gpui_kit::Point::default(),
             inbox_page: false,
+            requests_page: None,
             join: joining::Join::default(),
             guild_page: None,
             gif_picker: None,
@@ -1367,6 +1396,7 @@ impl Waffle {
         self.channel = None;
         self.guilds.clear();
         self.dms.clear();
+        self.dm_requests.clear();
         self.feeds.clear();
         self.settings = None;
         self.status = Status::SignedOut(Login::Preparing);
@@ -1447,7 +1477,7 @@ impl Waffle {
                 }
                 self.guilds = ready.guilds;
                 self.folders = ready.folders;
-                self.dms = ready.dms;
+                (self.dm_requests, self.dms) = ready.dms.into_iter().partition(Channel::is_request);
                 self.dms.sort_by_key(|c| std::cmp::Reverse(self.last_message.get(&c.id).copied().unwrap_or(0)));
                 self.read_states = ready.read_states.into_iter().collect();
                 self.relationships = ready.relationships;
@@ -1515,6 +1545,26 @@ impl Waffle {
                         relationship.user = user;
                     }
                     self.relationships.push(relationship);
+                }
+            }
+            Event::DmUpsert(dm) => self.upsert_dm(dm, cx),
+            Event::DmDelete(id) => {
+                self.dms.retain(|d| d.id != id);
+                self.dm_requests.retain(|d| d.id != id);
+                if self.channel.as_ref().is_some_and(|c| c.id == id) {
+                    self.open_home(cx);
+                }
+            }
+            Event::RecipientChange { channel_id, user, added } => {
+                if !added && self.me.as_ref().is_some_and(|me| me.id == user.id) {
+                    return self.on_event(Event::DmDelete(channel_id), cx);
+                }
+                let open = self.channel.as_mut().filter(|c| c.id == channel_id);
+                for dm in self.dms.iter_mut().filter(|d| d.id == channel_id).chain(open) {
+                    dm.recipients.retain(|r| r.id != user.id);
+                    if added {
+                        dm.recipients.push(user.clone());
+                    }
                 }
             }
             Event::ThreadJoined { id, joined } => {
@@ -1611,7 +1661,13 @@ impl Waffle {
                 }
                 self.apply_members(&guild_id);
             }
-            Event::Ack { channel_id, message_id } => {
+            Event::Ack { channel_id, message_id, manual: Some(mentions) } => {
+                if self.channel.as_ref().is_some_and(|c| c.id == channel_id) {
+                    self.unread_marker = Some(message_id);
+                }
+                self.read_states.insert(channel_id, ReadState { last_read: message_id, mentions });
+            }
+            Event::Ack { channel_id, message_id, manual: None } => {
                 let read = self.read_states.entry(channel_id).or_default();
                 read.last_read = read.last_read.max(message_id);
                 read.mentions = 0;
@@ -1642,7 +1698,8 @@ impl Waffle {
                 let is_here = ours.is_some() && state.channel_id == ours;
                 let was_live = states.iter().any(|v| v.user_id == state.user_id && v.channel_id == ours && v.streaming);
                 let is_live = is_here && state.streaming;
-                if let Some(cue) = member_cue(mine, was_here, is_here) {
+                let silent = self.call.as_ref().is_some_and(|c| c.channel.raw_type == 13);
+                if let Some(cue) = member_cue(mine, was_here, is_here).filter(|_| !silent) {
                     sounds::play(cue);
                 } else if !mine && !was_live && is_live {
                     sounds::play(sounds::Cue::StreamStarted);
@@ -1664,6 +1721,12 @@ impl Waffle {
             Event::Call { channel_id, ringing } => self.on_dm_call(channel_id, ringing, cx),
             Event::CallEnded { channel_id } => self.on_dm_call_ended(&channel_id),
             Event::VoiceServer(_) => {}
+            Event::StageInstance { guild_id, channel_id, instance } => {
+                if let Some(guild) = self.guilds.iter_mut().find(|g| g.id == guild_id) {
+                    guild.stage_instances.retain(|s| s.channel_id != channel_id);
+                    guild.stage_instances.extend(instance);
+                }
+            }
             Event::VoiceStartTimes { guild_id, times, all } => {
                 if all
                     && let Some(guild) = self.guilds.iter().find(|g| g.id == guild_id)
@@ -1833,6 +1896,8 @@ impl Waffle {
 
     pub(crate) fn open_channel(&mut self, channel: Channel, window: &mut Window, cx: &mut Context<Self>) {
         self.inbox_page = false;
+        self.requests_page = None;
+        self.held_unread = None;
         self.guild_page = None;
         self.note_channel_viewed(&channel, cx);
         // Results belong to the server or DM they searched: another place closes them.
@@ -2163,6 +2228,9 @@ impl Waffle {
             return;
         }
         let (Some(client), Some(channel)) = (self.client.clone(), self.channel.as_ref()) else { return };
+        if self.held_unread.as_ref() == Some(&channel.id) {
+            return;
+        }
         let Some(&last) = self.last_message.get(&channel.id) else { return };
         let read = self.read_states.entry(channel.id.clone()).or_default();
         if read.last_read >= last && read.mentions == 0 {
@@ -2203,6 +2271,7 @@ impl Waffle {
 
     /// Enter in the composer: saves the edit in progress, otherwise sends (optimistically).
     fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.held_unread = None;
         let (Some(client), Some(channel), Some(me)) = (self.client.clone(), self.channel.clone(), self.me.clone()) else { return };
         let typed = wire_text(&self.composer.read(cx).content());
         let typed = typed.trim();
@@ -2841,7 +2910,7 @@ impl Waffle {
     // Whether the message pings one of our roles in its server.
     fn mentions_role(&self, message: &Message) -> bool {
         let Some(me) = &self.me else { return false };
-        let mine = message.guild_id.as_ref().and_then(|g| self.member_roles.get(g)).and_then(|r| r.get(&me.id));
+        let mine = self.guild_id_of(message).and_then(|g| self.member_roles.get(&g)).and_then(|r| r.get(&me.id));
         mine.is_some_and(|roles| message.mention_roles.iter().any(|r| roles.contains(r)))
     }
 
@@ -3015,7 +3084,8 @@ impl Waffle {
     }
 
     fn leave_voice(&mut self, cx: &mut Context<Self>) {
-        if self.end_call(cx) {
+        let stage = self.call.as_ref().is_some_and(|c| c.channel.raw_type == 13);
+        if self.end_call(cx) && !stage {
             sounds::play(sounds::Cue::Disconnect);
         }
     }
@@ -3052,7 +3122,10 @@ impl Waffle {
                 let Some(call) = &mut self.call else { return };
                 call.connected = true;
                 call.stage = voice::Stage::Connected;
-                sounds::play(connected_cue(self.call_switched));
+                // Stages make no join or leave sounds (docs/discord-stage-re.md).
+                if call.channel.raw_type != 13 {
+                    sounds::play(connected_cue(self.call_switched));
+                }
                 if std::mem::take(&mut self.camera_on_connect) {
                     self.toggle_camera(cx);
                 }
@@ -3178,13 +3251,16 @@ impl Waffle {
             }
             voice::VoiceEvent::Moved(channel_id) => return self.follow_voice_move(&channel_id, cx),
             voice::VoiceEvent::Disconnected(reason) => {
+                let stage = self.call.as_ref().is_some_and(|c| c.channel.raw_type == 13);
                 if let Some(call) = self.call.take() {
                     self.last_call = Some(VoiceNotice { guild_id: call.guild_id.clone(), channel: call.channel.clone(), at: Instant::now(), why: NoticeWhy::Elsewhere });
                     release_frames(call, cx);
                 }
                 self.call_focus = None;
                 self.stop_ringing_out();
-                sounds::play(sounds::Cue::Disconnect);
+                if !stage {
+                    sounds::play(sounds::Cue::Disconnect);
+                }
                 match reason.as_str() {
                     "Left" => {}
                     voice::ANOTHER_LOCATION => self.taken_elsewhere(),

@@ -114,6 +114,22 @@ impl Waffle {
         self.fetch_mentions(cx);
     }
 
+    /// ⌘I / Ctrl+I: the rail's Inbox popover, opened or closed.
+    pub(crate) fn toggle_inbox(&mut self, cx: &mut Context<Self>) {
+        if self.inbox_open {
+            self.inbox_open = false;
+        } else {
+            self.open_inbox(cx);
+        }
+        cx.notify();
+    }
+
+    /// ⌘⇧E / Ctrl+Shift+E: reads the channel at the top of Unreads, as its own Mark read does.
+    pub(crate) fn mark_top_unread_read(&mut self, cx: &mut Context<Self>) {
+        let Some(top) = self.unreads().into_iter().next() else { return };
+        self.mark_channel_read(&top.channel.id, cx);
+    }
+
     fn mark_all_unreads(&mut self, cx: &mut Context<Self>) {
         let channels: Vec<String> = self.unreads().into_iter().map(|u| u.channel.id).collect();
         self.mark_channels_read(&channels, cx);

@@ -76,6 +76,7 @@ impl Waffle {
             Toggle::DeveloperMode => account.developer_mode,
             Toggle::ShareActivity => account.show_current_game,
             Toggle::DmsFromServerMembers => !account.default_guilds_restricted,
+            Toggle::MessageRequests => account.message_requests,
             Toggle::FriendsAll => account.friends_all,
             Toggle::FriendsMutualFriends => account.friends_mutual_friends,
             Toggle::FriendsMutualGuilds => account.friends_mutual_guilds,
@@ -116,6 +117,10 @@ impl Waffle {
                 account.default_guilds_restricted = !on;
                 json!({ "default_guilds_restricted": !on })
             }
+            Toggle::MessageRequests => {
+                account.message_requests = on;
+                return self.save_settings_proto(super::proto::message_requests(on), cx);
+            }
             // Everyone covers the other two, as in Discord: turning it on turns them on.
             Toggle::FriendsAll => {
                 account.friends_all = on;
@@ -140,6 +145,11 @@ impl Waffle {
     fn choice_value(&self, choice: Choice) -> u8 {
         match choice {
             Choice::DmFilter => self.account_settings.explicit_content_filter,
+            // GAP: unset, Discord derives the filter from age and the explicit-content setting; we show its usual result.
+            Choice::SpamFilter => match self.account_settings.dm_spam_filter {
+                0 => super::proto::SPAM_FILTER_NON_FRIENDS,
+                set => set,
+            },
         }
     }
 
@@ -149,6 +159,10 @@ impl Waffle {
             Choice::DmFilter => {
                 self.account_settings.explicit_content_filter = value;
                 json!({ "explicit_content_filter": value })
+            }
+            Choice::SpamFilter => {
+                self.account_settings.dm_spam_filter = value;
+                return self.save_settings_proto(super::proto::spam_filter(value), cx);
             }
         };
         self.save_account_settings(before, patch, cx);
@@ -165,6 +179,22 @@ impl Waffle {
                     this.account_settings = before;
                     this.developer_mode = this.account_settings.developer_mode;
                     this.publish_presence();
+                    this.show_toast("Couldn't save that setting", cx);
+                });
+            }
+        })
+        .detach();
+    }
+
+    // The same for a setting that lives only in the settings proto: `settings` is the base64 of the change.
+    fn save_settings_proto(&mut self, settings: String, cx: &mut Context<Self>) {
+        cx.notify();
+        let Some(client) = self.client.clone() else { return };
+        let before = self.account_settings.clone();
+        cx.spawn(async move |this, cx| {
+            if client.call(reqwest::Method::PATCH, "/users/@me/settings-proto/1".into(), Some(json!({ "settings": settings }))).await.is_err() {
+                let _ = this.update(cx, |this, cx| {
+                    this.account_settings = before;
                     this.show_toast("Couldn't save that setting", cx);
                 });
             }

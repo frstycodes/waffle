@@ -12,10 +12,11 @@ use serde::{Deserialize, Serialize};
 mod activity;
 mod advanced;
 mod games;
-mod profile;
+pub(crate) mod profile;
 mod profile_draft;
 mod profile_preview;
 mod profiles;
+pub(crate) mod proto;
 pub(crate) mod registry;
 mod updates;
 mod view;
@@ -2019,10 +2020,12 @@ const MORE_CUES: [(&str, &str, Cue); 12] = [
 ];
 
 // Built-in shortcuts, each as one or more combos read "or".
-const DEFAULT_KEYBINDS: [(&str, &[&str]); 5] = [
+const DEFAULT_KEYBINDS: [(&str, &[&str]); 7] = [
     ("Quick switcher", &["cmd+k"]),
     ("Navigate between channels", &["alt+ArrowUp", "ArrowDown"]),
     ("Mark channel as read", &["escape"]),
+    ("Toggle Inbox", &["cmd+i"]),
+    ("Mark top Inbox channel as read", &["cmd+shift+e"]),
     ("Previous and next in the image viewer", &["ArrowLeft", "ArrowRight"]),
     ("Close a popup", &["escape"]),
 ];
