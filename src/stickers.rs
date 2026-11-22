@@ -241,7 +241,7 @@ impl Waffle {
                     .child(section.lead.render(24., motion, cx))
                     .tooltip({
                         let name = section.name.clone();
-                        move |window, cx| gpui_kit::component::tooltip::Tooltip::new(name.clone()).build(window, cx)
+                        move |window, cx| ui::tip(name.clone(), window, cx)
                     })
                     .on_click(cx.listener(move |_, _, _, cx| {
                         scroll.scroll_to_top_of_item(i);

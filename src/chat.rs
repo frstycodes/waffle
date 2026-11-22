@@ -12,7 +12,6 @@ use gpui_kit::{
         ActiveTheme, Icon, Sizable, Size,
         input::{Input, Textarea},
         text::{InlineElement, InlineRenderContext, MarkdownExtensions, MarkdownNode, MarkdownParseContext, MarkdownPlugin, TextView, markdown_ast},
-        tooltip::Tooltip,
     },
     div, img, linear_color_stop, linear_gradient, list, point, prelude::*, px,
 };
@@ -772,7 +771,7 @@ impl Waffle {
             .hover(move |s| s.bg(hover))
             .child(Icon::new(Glyph::AtBold).size(ui::ICON_MD))
             .child(if on { "On" } else { "Off" })
-            .tooltip(|window, cx| Tooltip::new("Mention the author of this message").build(window, cx))
+            .tooltip(|window, cx| ui::tip("Mention the author of this message", window, cx))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.reply_ping = !this.reply_ping;
                 cx.notify();
@@ -1481,7 +1480,7 @@ fn silent_mark(id: &str, cx: &App) -> impl IntoElement + use<> {
         .flex_none()
         .self_center()
         .text_color(palette::faint(cx))
-        .tooltip(|window, cx| Tooltip::new("This is a @silent message.").build(window, cx))
+        .tooltip(|window, cx| ui::tip("This is a @silent message.", window, cx))
         .child(Icon::new(Glyph::BellZ).size(ui::ICON_MD))
 }
 
@@ -2482,7 +2481,7 @@ fn alt_button(key: String, ctx: &RowContext) -> Stateful<Div> {
         .left_1p5()
         .bottom_1p5()
         .cursor_pointer()
-        .tooltip(|window, cx| Tooltip::new("Image Description (Alt Text)").build(window, cx))
+        .tooltip(|window, cx| ui::tip("Image Description (Alt Text)", window, cx))
         // On press, judged by the state it was drawn with: the popout's own press-outside close fires too.
         .on_mouse_down(gpui_kit::MouseButton::Left, move |_, _, cx| {
             cx.stop_propagation();
@@ -2927,7 +2926,7 @@ fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Option<&str>, 
             .text_color(faint)
             .children(embed.footer_icon.clone().map(|icon| ui::avatar(icon, 20.)))
             .child(div().min_w_0().child(line))
-            .when_some(stamp.map(|(_, full)| full), |d, full| d.tooltip(move |window, cx| Tooltip::new(full.clone()).build(window, cx)))
+            .when_some(stamp.map(|(_, full)| full), |d, full| d.tooltip(move |window, cx| ui::tip(full.clone(), window, cx)))
     });
     let sections = [top.map(IntoElement::into_any_element), media, footer.map(IntoElement::into_any_element)];
     let full = !embed.images.is_empty() || !embed.fields.is_empty();
@@ -3102,7 +3101,7 @@ fn open_link_button(url: String, row: Option<&Message>, id: &str, ctx: &RowConte
         .cursor_pointer()
         .occlude()
         .when_some(row, |d, m| d.on_hover(track_message_hover(m, ctx)))
-        .tooltip(|window, cx| Tooltip::new("Open Link").build(window, cx))
+        .tooltip(|window, cx| ui::tip("Open Link", window, cx))
         .child(Icon::new(Glyph::Open).size(ui::ICON_LG))
         .on_click(move |_, window, cx| {
             cx.stop_propagation();
@@ -3424,7 +3423,7 @@ fn copy_button(code: String, copied: bool, this: WeakEntity<Waffle>, cx: &App) -
         .when(copied, |b| b.hover(move |s| s.bg(hover)))
         .when(!copied, |b| b.hover(move |s| s.bg(hover).text_color(strong)))
         .child(Icon::new(if copied { Glyph::Checkmark } else { Glyph::Copy }).size(ui::ICON_MD))
-        .tooltip(move |window, cx| Tooltip::new(if copied { "Copied" } else { "Copy" }).build(window, cx))
+        .tooltip(move |window, cx| ui::tip(if copied { "Copied" } else { "Copy" }, window, cx))
         .on_click(move |_, _, cx| { cx.stop_propagation();
             this.update(cx, |this, cx| this.copy_code(code.clone(), code.clone(), cx)).ok();
         })
@@ -3459,7 +3458,7 @@ fn reactions(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyEle
     let add = reaction_pill(SharedString::from(format!("react-add-{}", message.id)), false, cx)
         .px(px(7.))
         .child(Icon::new(Glyph::EmojiAdd).size(ui::ICON_LG))
-        .tooltip(|window, cx| Tooltip::new("Add Reaction").build(window, cx))
+        .tooltip(|window, cx| ui::tip("Add Reaction", window, cx))
         .on_click(move |_, window, cx| { cx.stop_propagation();
             this.update(cx, |this, cx| this.open_emoji_picker(EmojiTarget::Reaction(Box::new(msg.clone())), window, cx)).ok();
         });
@@ -3576,7 +3575,7 @@ fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> Any
                     .cursor_pointer()
                     .hover(move |s| s.bg(hover))
                     .child(face)
-                    .tooltip(|window, cx| Tooltip::new("Click to react").build(window, cx))
+                    .tooltip(|window, cx| ui::tip("Click to react", window, cx))
                     .on_click(move |_, _, cx| { cx.stop_propagation();
                         this.update(cx, |this, cx| this.toggle_reaction(&msg, emoji.clone(), cx)).ok();
                     }),

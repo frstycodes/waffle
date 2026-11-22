@@ -13,7 +13,6 @@ src/channel_menu.rs	global-notify	7
 src/channel_settings.rs	global-notify	22
 src/channel_settings.rs	raw-px	10
 src/chat.rs	global-notify	7
-src/chat.rs	kit-tooltip	8
 src/chat.rs	raw-color	5
 src/chat.rs	raw-floating	1
 src/chat.rs	raw-px	49
@@ -139,7 +138,6 @@ src/stage_view.rs	raw-px	8
 src/status_menu.rs	global-notify	10
 src/status_menu.rs	raw-px	1
 src/stickers.rs	global-notify	4
-src/stickers.rs	kit-tooltip	1
 src/stickers.rs	raw-px	3
 src/system_message.rs	global-notify	2
 src/system_message.rs	raw-px	7
