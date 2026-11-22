@@ -546,6 +546,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             waffle.open_submenus(vec![14, 0]);
         }
         "server-settings" | "server-settings-engagement" | "server-settings-roles" | "server-settings-role" | "server-settings-role-perms" | "server-settings-audit" | "server-settings-bans" | "server-settings-automod" | "server-settings-invites" | "server-settings-dirty" => crate::server_settings::demo::open(waffle, scene, window, cx),
+        "server-settings-members" => demo_server_settings_members(waffle, window, cx),
         "channel-settings" | "channel-settings-search" | "channel-settings-perms" | "channel-settings-voice" | "channel-settings-voice-perms" | "channel-settings-invites" | "channel-settings-dirty" => demo_channel_settings(waffle, scene, window, cx),
         "channel-menu" => {
             let general = waffle.guild().and_then(|g| g.channels.iter().find(|c| c.id == "general").cloned());
@@ -1820,4 +1821,9 @@ fn demo_favorites(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<Waf
         entry.nickname = "patch notes".into();
     }
     waffle.open_favorites(window, cx);
+}
+
+// Server settings on the Members table: six members covering every signal and join method shape.
+fn demo_server_settings_members(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<Waffle>) {
+    crate::server_settings::demo::open(waffle, "server-settings-members", window, cx);
 }

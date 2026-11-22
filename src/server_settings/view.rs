@@ -854,8 +854,12 @@ fn minutes(seconds: u32) -> String {
 
 // A snowflake's creation time, in the reader's local time.
 pub fn snowflake_time(id: &str) -> String {
-    let ms = (id.parse::<u64>().unwrap_or(0) >> 22) + 1_420_070_400_000;
-    chrono::DateTime::from_timestamp_millis(ms as i64).map(|t| t.with_timezone(&chrono::Local).format("%-d %b %Y, %H:%M").to_string()).unwrap_or_default()
+    chrono::DateTime::from_timestamp_millis(snowflake_ms(id)).map(|t| t.with_timezone(&chrono::Local).format("%-d %b %Y, %H:%M").to_string()).unwrap_or_default()
+}
+
+// When a snowflake was made, in epoch milliseconds.
+pub fn snowflake_ms(id: &str) -> i64 {
+    ((id.parse::<u64>().unwrap_or(0) >> 22) + 1_420_070_400_000) as i64
 }
 
 pub fn sentence_spans(segs: &[audit::Seg], cx: &App) -> Div {

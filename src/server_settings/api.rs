@@ -479,8 +479,81 @@ pub fn timeout(guild_id: &str, user_id: &str, until: Option<&str>) -> Call {
     Call::new(Method::PATCH, format!("/guilds/{guild_id}/members/{user_id}"), Some(json!({ "communication_disabled_until": until })))
 }
 
-pub fn search_members(guild_id: &str, query: &str) -> Call {
-    get(format!("/guilds/{guild_id}/members/search?query={}&limit=100", url_encode(query)))
+// The members table (user client, docs/discord-moderation-re.md §3): Discord's sort codes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MemberSort {
+    #[default]
+    JoinedNewest = 1,
+    JoinedOldest = 2,
+    AccountNewest = 3,
+    AccountOldest = 4,
+}
+
+// A safety signal a member can carry; a search for several keeps a member with any of them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Signal {
+    UnusualDmActivity,
+    TimedOut,
+    UnusualAccountActivity,
+    Quarantined,
+}
+
+impl Signal {
+    // In the table's order.
+    pub const ALL: [Signal; 4] = [Signal::UnusualDmActivity, Signal::TimedOut, Signal::UnusualAccountActivity, Signal::Quarantined];
+
+    // Not verified: Discord's client sends these ranges; whether they are epoch milliseconds was not read.
+    fn wire(self, now_ms: i64) -> (&'static str, Value) {
+        match self {
+            Signal::UnusualDmActivity => ("unusual_dm_activity_until", json!({ "range": { "gte": now_ms - UNUSUAL_DM_WINDOW_MS } })),
+            Signal::TimedOut => ("communication_disabled_until", json!({ "range": { "gte": now_ms } })),
+            Signal::UnusualAccountActivity => ("unusual_account_activity", json!(true)),
+            Signal::Quarantined => ("automod_quarantined_username", json!(true)),
+        }
+    }
+}
+
+// How long after `unusual_dm_activity_until` a member still counts as flagged: Discord's client uses 2 days.
+pub const UNUSUAL_DM_WINDOW_MS: i64 = 2 * 24 * 60 * 60 * 1000;
+
+// What the members table asks for; the default lists recent members.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MemberSearch {
+    pub usernames: Vec<String>,
+    pub user_ids: Vec<String>,
+    pub signals: Vec<Signal>,
+    pub sort: MemberSort,
+}
+
+// Where the next chunk starts: the last member already loaded.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MemberCursor {
+    pub joined_at_ms: i64,
+    pub user_id: String,
+}
+
+// A 202 answer carries `retry_after` (seconds) while Discord indexes the server.
+pub fn members_search(guild_id: &str, search: &MemberSearch, limit: usize, after: Option<&MemberCursor>, now_ms: i64) -> Call {
+    let safety: Map<String, Value> = search.signals.iter().map(|s| s.wire(now_ms)).map(|(k, v)| (k.to_owned(), v)).collect();
+    let mut and_query = Map::new();
+    if !search.usernames.is_empty() {
+        and_query.insert("usernames".into(), json!({ "or_query": search.usernames }));
+    }
+    if !search.user_ids.is_empty() {
+        and_query.insert("user_id".into(), json!({ "or_query": search.user_ids }));
+    }
+    let or_query = if safety.is_empty() { json!({}) } else { json!({ "safety_signals": safety }) };
+    let mut body = json!({ "or_query": or_query, "and_query": and_query, "sort": search.sort as u8, "limit": limit });
+    // Not verified: the cursor's `guild_joined_at` unit (epoch milliseconds assumed, as the client keeps it).
+    if let Some(after) = after {
+        body["after"] = json!({ "guild_joined_at": after.joined_at_ms, "user_id": after.user_id });
+    }
+    Call::new(Method::POST, format!("/guilds/{guild_id}/members-search"), Some(body))
+}
+
+// How each member joined, for a search answer that left it out (user client).
+pub fn members_supplemental(guild_id: &str, user_ids: &[String]) -> Call {
+    Call::new(Method::POST, format!("/guilds/{guild_id}/members/supplemental"), Some(json!({ "user_ids": user_ids })))
 }
 
 pub fn prune_count(guild_id: &str, days: u8, roles: &[String]) -> Call {
@@ -513,10 +586,6 @@ pub fn onboarding(guild_id: &str) -> Call {
 // Server Insights has no API a user account can read: the page links to Discord's.
 pub fn insights_url(guild_id: &str) -> String {
     format!("https://discord.com/developers/servers/{guild_id}/analytics")
-}
-
-fn url_encode(text: &str) -> String {
-    reqwest::Url::parse_with_params("x:", &[("q", text)]).map(|u| u.query().unwrap_or_default().trim_start_matches("q=").to_owned()).unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -609,9 +678,24 @@ mod tests {
     }
 
     #[test]
+    fn members_search_body() {
+        let recent = members_search("1", &MemberSearch::default(), 250, None, 0);
+        assert_eq!((recent.method, recent.path.as_str()), (Method::POST, "/guilds/1/members-search"));
+        assert_eq!(recent.body.unwrap(), json!({ "or_query": {}, "and_query": {}, "sort": 1, "limit": 250 }));
+        let search = MemberSearch { usernames: vec!["wren".into()], user_ids: vec!["123456789012345678".into()], signals: vec![Signal::TimedOut, Signal::Quarantined], sort: MemberSort::AccountOldest };
+        let after = MemberCursor { joined_at_ms: 5, user_id: "9".into() };
+        let body = members_search("1", &search, 60, Some(&after), 1_000).body.unwrap();
+        assert_eq!(body["or_query"], json!({ "safety_signals": { "communication_disabled_until": { "range": { "gte": 1_000 } }, "automod_quarantined_username": true } }));
+        assert_eq!(body["and_query"], json!({ "usernames": { "or_query": ["wren"] }, "user_id": { "or_query": ["123456789012345678"] } }));
+        assert_eq!((body["sort"].as_u64(), &body["after"]), (Some(4), &json!({ "guild_joined_at": 5, "user_id": "9" })));
+        let dm = members_search("1", &MemberSearch { signals: vec![Signal::UnusualDmActivity], ..Default::default() }, 1, None, UNUSUAL_DM_WINDOW_MS).body.unwrap();
+        assert_eq!(dm["or_query"]["safety_signals"]["unusual_dm_activity_until"], json!({ "range": { "gte": 0 } }));
+        assert_eq!(members_supplemental("1", &["2".into()]).body.unwrap(), json!({ "user_ids": ["2"] }));
+    }
+
+    #[test]
     fn small_calls() {
         assert_eq!(ban("1", "2", 999_999).body.unwrap(), json!({ "delete_message_seconds": 604_800 }));
-        assert_eq!(search_members("1", "a b&c").path, "/guilds/1/members/search?query=a+b%26c&limit=100");
         assert_eq!(revoke_invite("abc"), Call::new(Method::DELETE, "/invites/abc".into(), None));
         assert_eq!(create_webhook("4", "Bot").body.unwrap(), json!({ "name": "Bot" }));
         assert_eq!(image_data("image/png", b"hi"), "data:image/png;base64,aGk=");
