@@ -528,6 +528,7 @@ impl Waffle {
             let gid = guild_id.to_owned();
             out.push(item("Create category", move |this, window, cx| this.create_channel(gid.clone(), CATEGORY, None, window, cx)).icon(Glyph::FolderPlus).entry());
         }
+        out.extend(self.create_event_entry(guild_id).filter(|_| dropdown));
         out.push(Entry::Separator);
 
         let gid = guild_id.to_owned();
@@ -555,6 +556,7 @@ impl Waffle {
             let gid = guild_id.to_owned();
             out.push(item("Create category", move |this, window, cx| this.create_channel(gid.clone(), CATEGORY, None, window, cx)).icon(Glyph::FolderPlus).entry());
         }
+        out.extend(self.create_event_entry(guild_id).filter(|_| !dropdown));
         out.push(Entry::Separator);
 
         if !dropdown {

@@ -321,6 +321,8 @@ pub struct Dialog {
     preview: Option<Box<crate::discord::Message>>,
     // Discord's "Protip:" under the preview.
     tip: Option<SharedString>,
+    // The dismiss button's label when it isn't "Cancel" (Discord's "Never Mind").
+    cancel: Option<SharedString>,
     on_confirm: OnConfirm,
 }
 
@@ -418,7 +420,7 @@ impl Waffle {
             state.set_value(value.to_owned(), window, cx);
             state.focus(window, cx);
         });
-        self.dialog = Some(Dialog { title: title.into(), body: body.into(), confirm: confirm.into(), danger: false, warn: false, input: true, key: None, preview: None, tip: None, on_confirm: Rc::new(on_confirm) });
+        self.dialog = Some(Dialog { title: title.into(), body: body.into(), confirm: confirm.into(), danger: false, warn: false, input: true, key: None, preview: None, tip: None, cancel: None, on_confirm: Rc::new(on_confirm) });
         cx.notify();
     }
 
@@ -442,6 +444,7 @@ impl Waffle {
             key: None,
             preview: None,
             tip: None,
+            cancel: None,
             on_confirm: Rc::new(move |this, _, window, cx| on_confirm(this, window, cx)),
         });
         cx.notify();
@@ -658,6 +661,12 @@ impl Waffle {
         }
     }
 
+    pub(crate) fn set_dialog_cancel(&mut self, label: impl Into<SharedString>) {
+        if let Some(dialog) = &mut self.dialog {
+            dialog.cancel = Some(label.into());
+        }
+    }
+
     pub(crate) fn dialog_key(&self) -> Option<&'static str> {
         self.dialog.as_ref().and_then(|d| d.key)
     }
@@ -694,7 +703,7 @@ impl Waffle {
                     .flex()
                     .justify_end()
                     .gap(px(8.))
-                    .child(ui::button("dialog-cancel", ui::Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| {
+                    .child(ui::button("dialog-cancel", ui::Tone::Secondary, cx).child(dialog.cancel.clone().unwrap_or("Cancel".into())).on_click(cx.listener(|this, _, _, cx| {
                         this.dialog = None;
                         cx.notify();
                     })))

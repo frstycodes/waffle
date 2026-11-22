@@ -207,6 +207,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         }
         "settings" => waffle.open_settings(crate::settings::Page::Account, window, cx),
         "create-channel" => waffle.open_create_channel("1".into(), 0, Some("c0".into()), window, cx),
+        "events" | "events-create" => demo_events(waffle, scene == "events-create", window, cx),
         "zoom" => crate::layout::apply_zoom(window, 1.5, cx),
         "advanced" => {
             waffle.developer_mode = true;
@@ -1792,4 +1793,60 @@ fn demo_announcements(waffle: &mut Waffle, scene: &str, window: &mut Window, cx:
         "announcements-member" => {}
         _ => waffle.hovered_message = Some("954".into()),
     }
+}
+
+// Night Owls' events: a stage that's live, a voice hangout starting within the hour (yours, marked
+// Interested), a weekly stream somewhere else, and a canceled one. "-create" opens the wizard at its
+// second step instead of the list.
+fn demo_events(waffle: &mut Waffle, create: bool, window: &mut Window, cx: &mut Context<Waffle>) {
+    use chrono::{Datelike, Duration, Utc};
+
+    use crate::discord::ScheduledEvent;
+    let at = |minutes: i64| (Utc::now() + Duration::minutes(minutes)).to_rfc3339();
+    let weekly_start = Utc::now() + Duration::days(3);
+    let event = |id: &str, name: &str, start: String, status: u8, entity_type: u8, creator: User| ScheduledEvent {
+        id: id.into(),
+        guild_id: "1".into(),
+        creator_id: Some(creator.id.clone()),
+        creator: Some(creator),
+        name: name.into(),
+        start,
+        status,
+        entity_type,
+        ..Default::default()
+    };
+    let live = ScheduledEvent {
+        channel_id: Some("stage".into()),
+        description: Some("Round two of the autumn bracket, called live from the stage. Raise a hand to ask the players anything between matches.".into()),
+        interested: 1112,
+        ..event("ev-live", "Community cup: round two of the autumn bracket, with commentary from the whole Night Owls crew", at(-20), ScheduledEvent::ACTIVE, ScheduledEvent::STAGE, user("8388608", "Wren"))
+    };
+    let soon = ScheduledEvent {
+        channel_id: Some("lounge".into()),
+        description: Some("We're watching the director's cut of The Long Night. Bring snacks, keep spoilers in the thread, and stay for the vote on next week's pick, which always runs longer than the film.".into()),
+        interested: 24,
+        me_interested: true,
+        ..event("ev-soon", "Movie night: The Long Night", at(12), ScheduledEvent::SCHEDULED, ScheduledEvent::VOICE, me_user())
+    };
+    let weekly = ScheduledEvent {
+        end: Some((weekly_start + Duration::hours(4)).to_rfc3339()),
+        location: Some("https://twitch.tv/nightowls-community-cup-autumn-bracket-finals".into()),
+        description: Some("Every week on the channel: the bracket, the highlights and the long arguments about map picks.".into()),
+        interested: 318,
+        recurrence: Some(serde_json::json!({ "start": weekly_start.to_rfc3339(), "frequency": 2, "interval": 1, "by_weekday": [weekly_start.weekday().num_days_from_monday()] })),
+        ..event("ev-weekly", "Night Owls weekly stream", weekly_start.to_rfc3339(), ScheduledEvent::SCHEDULED, ScheduledEvent::EXTERNAL, user("16777216", "toma reed"))
+    };
+    let canceled = ScheduledEvent { channel_id: Some("hub".into()), interested: 3, ..event("ev-canceled", "Snack rota planning", at(60 * 26), ScheduledEvent::CANCELED, ScheduledEvent::VOICE, user("20971520", "ferris")) };
+    if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
+        let mut stage = channel("stage", "Friday stage", ChannelKind::Voice, Some("c1"));
+        stage.raw_type = 13;
+        guild.channels.push(stage);
+        guild.features.push("COMMUNITY".into());
+        guild.events = vec![live, soon, weekly, canceled];
+    }
+    if !create {
+        return waffle.open_events("1".into(), cx);
+    }
+    waffle.open_event_wizard("1".into(), None, window, cx);
+    waffle.fill_event_wizard("Community cup: round two", ScheduledEvent::EXTERNAL, "twitch.tv/nightowls", window, cx);
 }

@@ -600,6 +600,7 @@ impl Waffle {
                 // Beside the carried channel: "Move to Archive" while it's aimed into another category.
                 let tag = self.channel_board.dragged().zip(self.channel_board.hint()).and_then(|(moved, hint)| self.category_move(moved, hint.target.as_deref()?));
                 self.drag_motion.set_tag(tag);
+                rows.extend(self.event_rows(&guild, cx));
                 for (i, (category, channels)) in channel_sections(&guild, &me).into_iter().enumerate() {
                     let order: Vec<String> = channels.iter().map(|c| c.id.clone()).collect();
                     let list = self.channel_board.list(channel_list(category.as_ref()), order, window, cx);
