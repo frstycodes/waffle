@@ -276,3 +276,4 @@ Labels used below:
   - There is no count, no dots and no carousel.
 - **OBSERVED** (module 584904): in POPOUT theme, an activity card is wrapped in a clickable that opens the modal's Activity tab (`PRESS_CARD`, label "View All Activity"). The card's context menu also offers "View All Activity" in the popout only.
 - **INFERRED**: "Recent activity" (the outbox) appears only in the full profile modal. The popout section reads current activities only.
+- **OBSERVED** (`web.*` PrivacySettings descriptor): field 14 `default_guilds_activity_restricted` is the enum `GuildActivityStatusRestrictionDefault` with `OFF=0`, `ON_FOR_LARGE_GUILDS=1` and `ON=2`. Field 29 `default_guilds_activity_restricted_v2` (`ACTIVITY_STATUS_UNSET=0`, `OFF=1`, `ON_FOR_LARGE_GUILDS=2`, `ON=3`) exists too. Which of the two the select writes today was not traced. Waffle writes field 14.
