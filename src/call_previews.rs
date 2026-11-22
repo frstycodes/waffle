@@ -263,19 +263,19 @@ fn preview_card(preview: &Preview, ctx: &std::rc::Rc<crate::chat::RowContext>) -
     let text = crate::chat::plain_text(&message.content, ctx);
     let body = (!text.trim().is_empty()).then(|| text.into_any_element()).or_else(|| {
         let (glyph, label) = crate::forward::attachment_summary(message)?;
-        Some(div().flex().items_center().gap(px(6.)).text_color(stage::muted()).child(Icon::new(glyph).size(px(16.))).child(label).into_any_element())
+        Some(div().flex().items_center().gap_1p5().text_color(stage::muted()).child(Icon::new(glyph).size(ui::ICON_MD)).child(label).into_any_element())
     });
     div()
         .id(SharedString::from(format!("call-preview-{}", message.id)))
         .relative()
         .w_full()
-        .py(px(8.))
-        .px(px(10.))
+        .py_2()
+        .px_2p5()
         .squircle(RADIUS_MD)
         .bg(stage::overlay())
         .shadow(shadows)
         .flex()
-        .gap(px(8.))
+        .gap_2()
         .child(ui::avatar(message.author.avatar.clone(), AVATAR))
         .child(
             div()
@@ -283,9 +283,9 @@ fn preview_card(preview: &Preview, ctx: &std::rc::Rc<crate::chat::RowContext>) -
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .gap(px(2.))
-                .child(div().truncate().text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(message.author.name.clone()))
-                .children(body.map(|b| div().text_size(px(14.)).text_color(stage::text()).line_clamp(2).child(b))),
+                .gap_0p5()
+                .child(div().truncate().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(message.author.name.clone()))
+                .children(body.map(|b| div().text_size(ui::TEXT_SM).text_color(stage::text()).line_clamp(2).child(b))),
         )
 }
 

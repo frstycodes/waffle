@@ -212,6 +212,9 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 
 - `palette::set_look` — Stores the prefs' look; true when it changed, so the caller re-applies the theme (`apply`).
 - `palette::data_color` — A colour given as data (a role, an embed, a profile theme, a folder, a nameplate, a theme preview), exactly as given: the saturation setting
+- `palette::stream_ground` — A stream's tile before its first frame: a deep ground under a teal-to-magenta glow, in both themes.
+- `palette::stream_glow`
+- `palette::media_scrim` — The design's media scrim, oklch(0.14 0.004 260): what dims the edges of images and video.
 - `palette::ink_on_light` — Strong ink on a fill that's light whatever the theme (a light profile theme, a pale brand tile).
 - `palette::online_on_light` — Status green deepened to stay readable on a light profile card (the status green is ~2:1 there).
 - `palette::qr_ink` — The QR code's modules: dark on white in both themes, or phones can't read it: oklch(0.22 0.004 260).
