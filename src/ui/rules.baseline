@@ -14,7 +14,7 @@ src/call_previews.rs	global-notify	4
 src/call_previews.rs	raw-px	9
 src/channel_menu.rs	global-notify	7
 src/channel_settings.rs	global-notify	22
-src/channel_settings.rs	raw-px	11
+src/channel_settings.rs	raw-px	10
 src/chat.rs	global-notify	7
 src/chat.rs	kit-tooltip	8
 src/chat.rs	raw-color	5
@@ -86,7 +86,7 @@ src/mod_view.rs	raw-px	3
 src/modify_attachment.rs	global-notify	5
 src/modify_attachment.rs	raw-px	7
 src/notification_settings.rs	global-notify	7
-src/notification_settings.rs	raw-px	7
+src/notification_settings.rs	raw-px	5
 src/overlays.rs	global-notify	17
 src/overlays.rs	raw-px	11
 src/panel.rs	global-notify	4
@@ -118,15 +118,14 @@ src/server_settings/lists.rs	raw-px	4
 src/server_settings/member_bulk.rs	global-notify	2
 src/server_settings/member_dates.rs	global-notify	2
 src/server_settings/members.rs	global-notify	6
-src/server_settings/members.rs	raw-px	1
 src/server_settings/roles.rs	global-notify	6
 src/server_settings/roles.rs	raw-color	1
 src/server_settings/roles.rs	raw-px	3
 src/server_settings/view.rs	global-notify	17
-src/server_settings/view.rs	raw-px	8
+src/server_settings/view.rs	raw-px	7
 src/settings.rs	global-notify	24
 src/settings.rs	raw-color	8
-src/settings.rs	raw-px	35
+src/settings.rs	raw-px	30
 src/settings/accessibility.rs	raw-color	1
 src/settings/accessibility.rs	raw-px	8
 src/settings/activity.rs	raw-px	1

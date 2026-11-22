@@ -259,7 +259,7 @@ fn ns_head(guild: &Guild, cx: &mut Context<Waffle>) -> Div {
                 .flex()
                 .flex_col()
                 .gap_0p5()
-                .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Notification Settings"))
+                .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Notification Settings"))
                 .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).truncate().child(guild.name.clone())),
         )
         .child(ui::icon_button("ns-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_notification_settings(cx))))
@@ -354,7 +354,7 @@ fn ns_override_row(row: &OverrideRow, line: bool, guild_muted: bool, window: &mu
     ui::settings_row(SharedString::from(format!("ns-override-{}", row.channel.id)), line, cx)
         .min_h(px(56.))
         .gap_3()
-        .child(div().flex_none().text_color(muted).child(channel_icon(&row.channel).size(px(18.))))
+        .child(div().flex_none().text_color(muted).child(channel_icon(&row.channel).size(ui::ICON_LG)))
         .child(place)
         .child(div().flex_none().when(guild_muted, |d| d.opacity(0.45)).child(levels))
         .child(div().flex_none().flex().gap_0p5().child(mute).child(remove))

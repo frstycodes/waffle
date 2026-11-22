@@ -1067,7 +1067,7 @@ impl Waffle {
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .line_height(px(18.))
+                .line_height(ui::LINE_DETAIL)
                 .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(me.name.clone()))
                 .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Page::Account.label()));
             ui::menu_row("nav-Account", cx).toggled(view.page == Page::Account, cx).h_auto().py_1p5().child(avatar).child(text).on_click(cx.listener(|this, _, window, cx| this.open_page(Page::Account, window, cx)))
@@ -1102,7 +1102,7 @@ impl Waffle {
                     .px_2p5()
                     .pb_1()
                     .text_size(ui::TEXT_XS)
-                    .line_height(px(18.))
+                    .line_height(ui::LINE_DETAIL)
                     .text_color(palette::muted(cx))
                     .child(format!("Waffle {} ({})", env!("CARGO_PKG_VERSION"), os_name())),
             )
@@ -1175,7 +1175,7 @@ impl Waffle {
             .items_end()
             .gap_4()
             .child(avatar)
-            .child(div().flex_1().min_w_0().pb_3().truncate().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(me.name.clone()))
+            .child(div().flex_1().min_w_0().pb_3().truncate().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(me.name.clone()))
             .child(div().flex_none().pb_2p5().child(ui::button("change-avatar", Tone::Secondary, cx).small().child("Change avatar").on_click(cx.listener(|this, _, _, cx| this.pick_profile_image(profile::ProfileImage::Avatar, cx)))));
         let copied = self.settings.as_ref().is_some_and(|s| s.copied);
         let id = me.id.clone();
@@ -1710,8 +1710,8 @@ impl Waffle {
         ui::settings_row(SharedString::from(format!("keybind-{index}")), line, cx)
             .flex_wrap()
             .gap_3()
-            .child(div().flex_grow(1.).flex_basis(px(0.)).min_w_0().child(action))
-            .child(self.keybind_recorder(index, cx).flex_grow(1.25).flex_basis(px(0.)))
+            .child(div().flex_grow(1.).flex_basis(Pixels::ZERO).min_w_0().child(action))
+            .child(self.keybind_recorder(index, cx).flex_grow(1.25).flex_basis(Pixels::ZERO))
             .child(remove)
             .children(unknown.then(|| error_line("Waffle can't listen for this shortcut. Record it again.", cx).w_full()))
             .into_any_element()

@@ -542,7 +542,7 @@ impl Waffle {
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .line_height(px(18.))
+                    .line_height(ui::LINE_DETAIL)
                     .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(channel.name.clone()))
                     .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(category.unwrap_or_else(|| "Channel settings".into()))),
             );

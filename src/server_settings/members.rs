@@ -12,7 +12,6 @@ use gpui_kit::{
     },
     div,
     prelude::FluentBuilder,
-    px,
 };
 use serde_json::Value;
 
@@ -742,7 +741,7 @@ fn name_cell(member: &Member, cx: &App) -> AnyElement {
         .child(ui::avatar(member.avatar.clone(), 28.))
         .child(ui::truncating(format!("ss-mn-{}", member.id), member.name.clone()).text_color(palette::strong(cx)))
         .when(member.bot, |d| d.child(ui::tag("App", cx).flex_none()))
-        .child(div().flex_1().flex_basis(px(0.)).min_w_0().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(member.username.clone()))
+        .child(div().flex_1().flex_basis(gpui_kit::Pixels::ZERO).min_w_0().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(member.username.clone()))
         .into_any_element()
 }
 

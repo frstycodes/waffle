@@ -386,7 +386,7 @@ impl Waffle {
             .pb_3()
             .min_w_0()
             .child(icon)
-            .child(div().flex_1().min_w_0().flex().flex_col().line_height(px(18.)).child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(name)).child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("Server settings")));
+            .child(div().flex_1().min_w_0().flex().flex_col().line_height(ui::LINE_DETAIL).child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(name)).child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("Server settings")));
         let search = ui::search_field("ss-search", &view.search, cx).into_any_element();
         let query = view.search.read(cx).value().to_string();
         let mut out = vec![head.into_any_element(), div().pb_2().child(search).into_any_element()];
