@@ -19,7 +19,10 @@ use crate::{
 
 // Discord's cover moves on by itself after 3 s.
 const COVER_HOLD: Duration = Duration::from_millis(3000);
-const SPLASH_INSET: f32 = 32.;
+const SPLASH_INSET: f32 = 48.;
+// The question card over a splash: room for the 640px column and the footer, no more.
+const SHEET_WIDTH: f32 = 760.;
+const SHEET_HEIGHT: f32 = 640.;
 const RULES_HEIGHT: f32 = 300.;
 
 // One server's flow: where you are and what you picked, kept when closed halfway.
@@ -414,12 +417,14 @@ impl Waffle {
         let close = if on_splash_cover { ui::round_button("onboarding-close", Glyph::X, "Close", 40.) } else { ui::icon_button("onboarding-close", Glyph::X, "Close", cx).large() };
         let frame = div()
             .relative()
+            .w_full()
             .flex_1()
             .min_h_0()
             .flex()
             .flex_col()
             .when(!on_splash_cover, |d| d.bg(page))
-            .when(splash.is_some() && !on_splash_cover, |d| d.squircle(ui::RADIUS_XL).overflow_hidden())
+            // Over a splash the questions are a card sized to them, so the server's image shows all around.
+            .when(splash.is_some() && !on_splash_cover, |d| d.max_w(px(SHEET_WIDTH)).max_h(px(SHEET_HEIGHT)).squircle(ui::RADIUS_XL).overflow_hidden().shadow(ui::shadow_pop(cx)))
             .child(ui::scroll_area(div().id("onboarding-body").child(body), &view.body_scroll))
             .child(self.onboarding_footer(&prompts, &rules, on_splash_cover, cx))
             .child(div().absolute().top(px(16.)).right(px(16.)).child(close.on_click(cx.listener(|this, _, _, cx| this.close_onboarding(cx)))));
@@ -433,7 +438,7 @@ impl Waffle {
             .bg(page)
             .when_some(splash, |d, url| {
                 // gpui has no text shadow: a dark wash over the splash keeps the cover's white text legible.
-                d.p(px(SPLASH_INSET))
+                d.p(px(SPLASH_INSET)).items_center().justify_center()
                     .child(img(url).absolute().inset_0().size_full().object_fit(ObjectFit::Cover))
                     .when(on_splash_cover, |d| d.child(div().absolute().inset_0().bg(palette::stage::bg().opacity(0.45))))
             })
