@@ -1137,7 +1137,7 @@ impl Waffle {
                     .text_color(if talking { palette::strong(cx) } else { palette::muted(cx) })
                     .hover(move |s| s.bg(hover).text_color(text))
                     // You, in this call from another client (not this app): avatar and name faded, as Discord does.
-                    .child(speaking_avatar(&avatar, talking, cx).when(elsewhere(&state.user_id), |a| a.opacity(0.45)))
+                    .child(speaking_avatar(&avatar, talking, self.soundboard_playing(&state.user_id), cx).when(elsewhere(&state.user_id), |a| a.opacity(0.45)))
                     .child(div().flex_1().min_w_0().truncate().when(elsewhere(&state.user_id), |n| n.opacity(0.45)).child(name.clone()))
                     .children(game.map(|g| g.when(elsewhere(&state.user_id), |g| g.opacity(0.45))))
                     .children(end)
@@ -1517,14 +1517,12 @@ fn audience_row(count: usize, cx: &App) -> Div {
         .child(div().flex_1().min_w_0().truncate().child(format!("{count} in audience")))
 }
 
-// A voice occupant's avatar; while they speak, a green ring sits 1px clear of it, as Discord's does.
-fn speaking_avatar(avatar: &str, talking: bool, cx: &App) -> Div {
-    div()
-        .relative()
-        .flex_none()
-        .size(px(22.))
-        .child(ui::avatar(avatar.to_owned(), 22.))
-        .when(talking, |a| a.child(div().absolute().top(px(-3.)).left(px(-3.)).size_7().rounded_full().border_2().border_color(palette::status_in(crate::discord::Status::Online, cx))))
+// A voice occupant's avatar; while they speak, a green ring sits 1px clear of it, as Discord's does, and
+// while their soundboard sound plays it takes the accent, as their call tile does.
+fn speaking_avatar(avatar: &str, talking: bool, sounding: bool, cx: &App) -> Div {
+    let ring = if sounding { Some(palette::accent()) } else { talking.then(|| palette::status_in(crate::discord::Status::Online, cx)) };
+    let mark = ring.map(|color| div().absolute().top(px(-3.)).left(px(-3.)).size_7().rounded_full().border_2().border_color(color));
+    div().relative().flex_none().size(px(22.)).child(ui::avatar(avatar.to_owned(), 22.)).children(mark)
 }
 
 // What a voice occupant's row shows at its end, as Discord's: their mute and deafen (server ones red),
