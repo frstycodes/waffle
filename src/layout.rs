@@ -162,6 +162,7 @@ impl Waffle {
         match self.call_view.then(|| self.render_call_with_chat(window, cx)).flatten() {
             Some(call) => div().flex_1().min_w_0().h_full().child(call).into_any_element(),
             None if self.inbox_page => self.render_inbox_page(window, cx),
+            None if self.guild_page.is_some() => self.render_guild_page(window, cx),
             None if self.guild_id.is_none() && self.channel.is_none() => self.render_home(window, cx),
             None if self.channel.as_ref().is_some_and(|c| c.kind == discord::ChannelKind::Forum) => {
                 let forum = self.channel.clone().expect("checked above");

@@ -311,7 +311,7 @@ impl Waffle {
             .map(|option| {
                 let picked = picks.contains(&option.value);
                 let (h, s, value) = (host.clone(), select.clone(), option.value.clone());
-                let mut item = menu::item(option.label, move |this, _, cx| this.pick_option(&h, &s, &value, cx));
+                let mut item = menu::item(option.label, move |this, _, cx| this.pick_select_option(&h, &s, &value, cx));
                 if let Some(hint) = option.description {
                     item = item.hint(hint);
                 }
@@ -468,7 +468,7 @@ impl Waffle {
     }
 
     // A multi pick toggles and waits for the menu to close; a single pick closes it, which sends.
-    fn pick_option(&mut self, host: &SelectHost, select: &Select, value: &str, cx: &mut Context<Self>) {
+    fn pick_select_option(&mut self, host: &SelectHost, select: &Select, value: &str, cx: &mut Context<Self>) {
         let multi = is_multi(select);
         if let SelectHost::Modal(ix) = host {
             self.pick_app_modal(*ix, Some(value.to_owned()), cx);
