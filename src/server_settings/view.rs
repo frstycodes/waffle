@@ -338,7 +338,7 @@ impl Waffle {
             _ => self.server_page(page, window, cx),
         };
         let undo = self.undo_bar(page, cx);
-        let body = ui::settings_page("server-settings-scroll", &scroll).child(ui::settings_column(div().flex().flex_col().gap(px(32.)).child(ui::settings_title(page.label(community), cx)).children(undo).children(sections)));
+        let body = ui::settings_page("server-settings-scroll", &scroll).child(ui::settings_column(div().flex().flex_col().gap_8().child(ui::settings_title(page.label(community), cx)).children(undo).children(sections)));
         let main = div()
             .relative()
             .flex_1()
@@ -381,15 +381,15 @@ impl Waffle {
         let head = div()
             .flex()
             .items_center()
-            .gap(px(10.))
-            .px(px(6.))
-            .pb(px(12.))
+            .gap_2p5()
+            .px_1p5()
+            .pb_3()
             .min_w_0()
             .child(icon)
-            .child(div().flex_1().min_w_0().flex().flex_col().line_height(px(18.)).child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(name)).child(div().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child("Server settings")));
+            .child(div().flex_1().min_w_0().flex().flex_col().line_height(px(18.)).child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(name)).child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("Server settings")));
         let search = ui::search_field("ss-search", &view.search, cx).into_any_element();
         let query = view.search.read(cx).value().to_string();
-        let mut out = vec![head.into_any_element(), div().pb(px(8.)).child(search).into_any_element()];
+        let mut out = vec![head.into_any_element(), div().pb_2().child(search).into_any_element()];
         if !query.trim().is_empty() {
             out.extend(self.server_search_results(&query, cx));
             return ui::settings_sidebar("server-settings-nav", &self.settings_nav_scroll, cx).children(out);
@@ -398,13 +398,13 @@ impl Waffle {
         let nav = self.with_access(guild_id, |me| me.nav()).unwrap_or_default();
         for (title, pages) in nav {
             if let Some(title) = title {
-                out.push(div().px(px(10.)).pt(px(14.)).pb(px(4.)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(title).into_any_element());
+                out.push(div().px_2p5().pt_3p5().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(title).into_any_element());
             } else if out.len() > 2 {
-                out.push(div().h(px(1.)).mx(px(10.)).my(px(8.)).flex_none().bg(palette::line(cx)).into_any_element());
+                out.push(div().h(ui::HAIRLINE).mx_2p5().my_2().flex_none().bg(palette::line(cx)).into_any_element());
             }
             for page in pages {
                 let item = if page == Page::Delete {
-                    ui::menu_row("ss-nav-Delete", cx).danger(cx).toggled(view.page == page, cx).child(Icon::new(Glyph::Trash).size(px(18.))).child(page.label(community))
+                    ui::menu_row("ss-nav-Delete", cx).danger(cx).toggled(view.page == page, cx).child(Icon::new(Glyph::Trash).size(ui::ICON_LG)).child(page.label(community))
                 } else {
                     ui::settings_nav_item(SharedString::from(format!("ss-nav-{page:?}")), glyph(page), page.label(community), view.page == page, cx)
                 };
@@ -418,15 +418,15 @@ impl Waffle {
         let Some(guild_id) = self.server_settings.as_ref().map(|v| v.guild_id.clone()) else { return Vec::new() };
         let hits: Vec<_> = registry::search(SERVER_SETTINGS, query).into_iter().filter(|s| self.with_access(&guild_id, |me| me.can_open(s.page)).unwrap_or(false)).collect();
         if hits.is_empty() {
-            return vec![div().px(px(10.)).py(px(8.)).text_color(palette::muted(cx)).child("No settings match").into_any_element()];
+            return vec![div().px_2p5().py_2().text_color(palette::muted(cx)).child("No settings match").into_any_element()];
         }
         hits.into_iter()
             .map(|setting| {
                 let place = format!("{} \u{203a} {}", registry::Scope::label(setting.page), setting.group);
                 ui::menu_row(SharedString::from(format!("ss-result-{}", setting.id)), cx)
                     .h_auto()
-                    .py(px(6.))
-                    .child(div().flex_1().min_w_0().flex().flex_col().child(div().truncate().text_color(palette::strong(cx)).child(setting.title)).child(div().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child(place)))
+                    .py_1p5()
+                    .child(div().flex_1().min_w_0().flex().flex_col().child(div().truncate().text_color(palette::strong(cx)).child(setting.title)).child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(place)))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         if let Some(view) = &this.server_settings {
                             view.search.update(cx, |s, cx| s.set_value("", window, cx));
@@ -452,11 +452,11 @@ impl Waffle {
         let description_focus = view.description.read(cx).focus_handle(cx);
         let count = view.description.read(cx).value().chars().count();
         let description = ui::field("Description", cx)
-            .child(ui::text_area("ss-description", Textarea::new(&view.description).appearance(false).px_0().text_size(px(14.)), &description_focus).error(count > 120))
+            .child(ui::text_area("ss-description", Textarea::new(&view.description).appearance(false).px_0().text_size(ui::TEXT_SM), &description_focus).error(count > 120))
             .child(ui::field_hint("Shows on invites and in Server Discovery.", Some(format!("{count} / 120").into()), cx));
         vec![
             ui::settings_group("Icon and banner", cx).child(ui::settings_card(cx).child(icon_row).child(banner_row)).into_any_element(),
-            ui::settings_group("Name", cx).child(ui::settings_card(cx).p(px(16.)).gap(px(16.)).child(name).child(description)).into_any_element(),
+            ui::settings_group("Name", cx).child(ui::settings_card(cx).p_4().gap_4().child(name).child(description)).into_any_element(),
         ]
     }
 
@@ -604,7 +604,7 @@ impl Waffle {
         }));
         vec![
             ui::callout(Notice::Danger, Glyph::Trash, format!("Deleting {name} can't be undone"), "Every channel, message and role goes, for everyone.", cx).into_any_element(),
-            ui::settings_card(cx).p(px(16.)).gap(px(16.)).child(field).child(div().flex().justify_end().child(delete)).into_any_element(),
+            ui::settings_card(cx).p_4().gap_4().child(field).child(div().flex().justify_end().child(delete)).into_any_element(),
         ]
     }
 
@@ -696,9 +696,9 @@ impl Waffle {
         }));
         let save = ui::button("ss-save", Tone::Primary, cx).loading(saving.then_some("Saving")).child("Save changes").on_click(cx.listener(move |this, _, _, cx| this.save_server_settings(closing, cx)));
         let bar = ui::floating_bar("ss-savebar", cx)
-            .child(div().text_color(ink).flex_none().child(Icon::new(glyph).size(px(20.))))
-            .child(div().flex_1().min_w_0().flex().flex_col().child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title)).children(detail.map(|d| div().text_size(px(12.)).line_height(px(17.)).text_color(palette::muted(cx)).child(d))))
-            .child(div().flex().gap(px(8.)).flex_none().child(reset).child(save));
+            .child(div().text_color(ink).flex_none().child(Icon::new(glyph).size(ui::ICON_XL)))
+            .child(div().flex_1().min_w_0().flex().flex_col().child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title)).children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(px(17.)).text_color(palette::muted(cx)).child(d))))
+            .child(div().flex().gap_2().flex_none().child(reset).child(save));
         Some(ui::foot_dock(bar, "ss-savebar-in"))
     }
 
@@ -720,7 +720,7 @@ impl Waffle {
             }
             cx.notify();
         }));
-        Some(ui::callout_with(Notice::Info, Glyph::CheckCircle, self.server_settings.as_ref()?.undo.as_ref()?.label.clone(), "", div().flex().gap(px(4.)).child(button).child(dismiss), cx).into_any_element())
+        Some(ui::callout_with(Notice::Info, Glyph::CheckCircle, self.server_settings.as_ref()?.undo.as_ref()?.label.clone(), "", div().flex().gap_1().child(button).child(dismiss), cx).into_any_element())
     }
 
     pub(crate) fn offer_undo(&mut self, label: impl Into<String>, call: Call, cx: &mut Context<Self>) {
@@ -765,9 +765,9 @@ impl ImageField {
 
 #[allow(clippy::too_many_arguments)]
 fn image_row(id: &'static str, title: &'static str, detail: &'static str, has: bool, open: bool, field: ImageField, line: bool, cx: &mut Context<Waffle>) -> gpui_kit::Stateful<Div> {
-    let upload = ui::button(SharedString::from(format!("{id}-upload")), Tone::Secondary, cx).small().disabled(!open).child(Icon::new(Glyph::Upload).size(px(16.))).child(if has { "Change" } else { "Upload" }).on_click(cx.listener(move |this, _, _, cx| this.pick_image(field, cx)));
+    let upload = ui::button(SharedString::from(format!("{id}-upload")), Tone::Secondary, cx).small().disabled(!open).child(Icon::new(Glyph::Upload).size(ui::ICON_MD)).child(if has { "Change" } else { "Upload" }).on_click(cx.listener(move |this, _, _, cx| this.pick_image(field, cx)));
     let remove = has.then(|| ui::button(SharedString::from(format!("{id}-remove")), Tone::Ghost, cx).small().child("Remove").on_click(cx.listener(move |this, _, _, cx| this.edit_server_draft(cx, |d| *field.slot(d) = None))));
-    ui::settings_row(id, line, cx).child(ui::settings_text(title, Some(detail), cx)).child(div().flex().gap(px(8.)).flex_none().child(upload).children(remove))
+    ui::settings_row(id, line, cx).child(ui::settings_text(title, Some(detail), cx)).child(div().flex().gap_2().flex_none().child(upload).children(remove))
 }
 
 fn mime(path: &std::path::Path) -> &'static str {
@@ -817,7 +817,7 @@ pub fn value_text(text: String, cx: &App) -> Div {
 }
 
 pub fn loading_line(text: &'static str, cx: &App) -> AnyElement {
-    div().px(px(4.)).text_color(palette::muted(cx)).child(text).into_any_element()
+    div().px_1().text_color(palette::muted(cx)).child(text).into_any_element()
 }
 
 pub fn failed(title: &'static str, error: &str, cx: &App) -> AnyElement {
@@ -827,7 +827,7 @@ pub fn failed(title: &'static str, error: &str, cx: &App) -> AnyElement {
 // A row that sends the member to Discord for what a user client can't do through the API.
 pub fn link_out(id: &'static str, title: &'static str, detail: &'static str, url: impl Into<String>, cx: &mut Context<Waffle>) -> AnyElement {
     let url = url.into();
-    let open = ui::button(SharedString::from(format!("{id}-open")), Tone::Secondary, cx).small().child("Open Discord").child(Icon::new(Glyph::Open).size(px(14.))).on_click(move |_, _, cx| cx.open_url(&url));
+    let open = ui::button(SharedString::from(format!("{id}-open")), Tone::Secondary, cx).small().child("Open Discord").child(Icon::new(Glyph::Open).size(ui::ICON_SM)).on_click(move |_, _, cx| cx.open_url(&url));
     ui::settings_card(cx).child(ui::settings_row(id, false, cx).child(ui::settings_text(title, Some(detail), cx)).child(open)).into_any_element()
 }
 

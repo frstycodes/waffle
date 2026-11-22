@@ -44,10 +44,10 @@ impl Waffle {
     // The link under Appearance's Theme group.
     pub(super) fn accessibility_link(&self, cx: &mut Context<Self>) -> Div {
         let link = ui::button("theme-accessibility", ui::Tone::Link, cx)
-            .text_size(px(12.))
+            .text_size(ui::TEXT_XS)
             .child("Adjust the visual density of chat messages and UI")
             .on_click(cx.listener(|this, _, window, cx| this.open_page(Page::Accessibility, window, cx)));
-        div().px(px(4.)).flex().child(link)
+        div().px_1().flex().child(link)
     }
 
     fn readability_group(&self, window: &mut Window, cx: &mut Context<Self>) -> Div {
@@ -152,7 +152,7 @@ impl Waffle {
         let preview = cfg!(target_os = "macos").then(|| {
             ui::button("tts-preview", ui::Tone::Secondary, cx)
                 .small()
-                .child(Icon::new(Glyph::Play).size(px(14.)))
+                .child(Icon::new(Glyph::Play).size(ui::ICON_SM))
                 .child("Preview")
                 .on_click(cx.listener(|this, _, _, _| crate::message_menu::speak(TTS_SAMPLE, this.prefs.tts_rate)))
         });
@@ -161,13 +161,13 @@ impl Waffle {
             .flex()
             .items_start()
             .justify_between()
-            .gap(px(16.))
+            .gap_4()
             .child(ui::settings_text(tts.title, Some(caption), cx))
-            .child(div().flex().items_center().gap(px(12.)).flex_none().child(value).children(preview));
+            .child(div().flex().items_center().gap_3().flex_none().child(value).children(preview));
         let marks = div()
             .flex()
-            .gap(px(8.))
-            .text_size(px(12.))
+            .gap_2()
+            .text_size(ui::TEXT_XS)
             .text_color(palette::muted(cx))
             .child("Slower")
             .child("x1.0")
@@ -203,24 +203,24 @@ impl Waffle {
         let card = div()
             .flex()
             .flex_col()
-            .py(px(12.))
-            .px(px(8.))
+            .py_3()
+            .px_2()
             .squircle(ui::RADIUS_LG)
             .bg(palette::surface(palette::Level::Group, cx))
             .text_size(px(look.font))
             .line_height(px(look.font * 1.375))
             .children(SAMPLES.iter().enumerate().map(|(i, sample)| look.message(sample, i, cx)));
         let heading = div()
-            .px(px(4.))
+            .px_1()
             .flex()
             .items_center()
-            .gap(px(6.))
-            .text_size(px(12.))
+            .gap_1p5()
+            .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(palette::muted(cx))
-            .child(Icon::new(Glyph::Eye).size(px(14.)))
+            .child(Icon::new(Glyph::Eye).size(ui::ICON_SM))
             .child("Preview");
-        div().flex().flex_col().gap(px(8.)).child(heading).child(card)
+        div().flex().flex_col().gap_2().child(heading).child(card)
     }
 }
 
@@ -250,7 +250,7 @@ fn value_marks<T: std::fmt::Display>(values: &[T], unit: &str, at: usize, cx: &m
 
 fn marks(labels: impl IntoIterator<Item = (SharedString, bool)>, cx: &mut Context<Waffle>) -> Div {
     let (muted, on) = (palette::muted(cx), palette::accent_ink(cx));
-    div().flex().justify_between().text_size(px(12.)).text_color(muted).children(
+    div().flex().justify_between().text_size(ui::TEXT_XS).text_color(muted).children(
         labels.into_iter().map(|(label, chosen)| div().when(chosen, |d| d.text_color(on).font_weight(FontWeight::SEMIBOLD)).child(label)),
     )
 }
@@ -311,29 +311,29 @@ impl PreviewLook {
     }
 
     fn message(&self, sample: &Sample, index: usize, cx: &Context<Waffle>) -> Div {
-        let row = div().px(px(8.)).py(px(if self.compact { 1. } else { 2. })).when(sample.starts_group && index > 0, |d| d.mt(px(self.gap)));
+        let row = div().px_2().py(px(if self.compact { 1. } else { 2. })).when(sample.starts_group && index > 0, |d| d.mt(px(self.gap)));
         let media = self.media(&sample.media, cx);
         if self.compact {
-            let time = div().w(px(52.)).flex_none().text_size(px(12.)).text_color(palette::faint(cx)).child(sample.time);
+            let time = div().w(px(52.)).flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(sample.time);
             let face = (sample.starts_group && self.compact_avatars).then(|| ui::monogram(sample.author, 18.));
-            let line = div().flex().items_baseline().gap(px(8.)).child(time).children(face).when(sample.starts_group, |d| d.child(self.name(sample, cx))).child(self.text(sample, cx));
+            let line = div().flex().items_baseline().gap_2().child(time).children(face).when(sample.starts_group, |d| d.child(self.name(sample, cx))).child(self.text(sample, cx));
             return row.child(line).children(media.map(|m| m.ml(px(60.))));
         }
-        let face = if sample.starts_group { ui::monogram(sample.author, 40.) } else { div().w(px(40.)).flex_none() };
+        let face = if sample.starts_group { ui::monogram(sample.author, 40.) } else { div().w_10().flex_none() };
         let who = sample.starts_group.then(|| {
-            let time = div().text_size(px(12.)).text_color(palette::faint(cx)).child(format!("Today at {}", sample.time));
-            div().flex().items_baseline().gap(px(8.)).child(self.name(sample, cx)).child(time)
+            let time = div().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(format!("Today at {}", sample.time));
+            div().flex().items_baseline().gap_2().child(self.name(sample, cx)).child(time)
         });
         let body = div().flex_1().min_w_0().flex().flex_col().children(who).child(self.text(sample, cx)).children(media);
-        row.flex().gap(px(14.)).child(face).child(body)
+        row.flex().gap_3p5().child(face).child(body)
     }
 
     fn name(&self, sample: &Sample, cx: &Context<Waffle>) -> Div {
         let role = gpui_kit::rgb(sample.color).into();
         let role = if self.desaturate_user_colors { self.saturate(role) } else { role };
         let ink = if self.role_style == RoleStyle::InNames { role } else { palette::strong(cx) };
-        let dot = (self.role_style == RoleStyle::NextToNames).then(|| div().size(px(10.)).flex_none().rounded_full().bg(role));
-        div().flex().items_center().gap(px(6.)).font_weight(FontWeight::SEMIBOLD).text_color(ink).children(dot).child(sample.author)
+        let dot = (self.role_style == RoleStyle::NextToNames).then(|| div().size_2p5().flex_none().rounded_full().bg(role));
+        div().flex().items_center().gap_1p5().font_weight(FontWeight::SEMIBOLD).text_color(ink).children(dot).child(sample.author)
     }
 
     fn text(&self, sample: &Sample, cx: &Context<Waffle>) -> Div {
@@ -357,15 +357,15 @@ impl PreviewLook {
 
     // Images and stickers are user content: saturation leaves them alone.
     fn media(&self, media: &SampleMedia, cx: &Context<Waffle>) -> Option<Div> {
-        let frame = div().mt(px(6.)).flex();
+        let frame = div().mt_1p5().flex();
         match media {
             SampleMedia::None => None,
             SampleMedia::Image { description } => {
                 let fill = linear_gradient(135., linear_color_stop(palette::oklch(0.7, 0.13, 60.), 0.), linear_color_stop(palette::oklch(0.55, 0.12, 200.), 1.));
                 let alt = self.descriptions.then(|| {
-                    div().px(px(6.)).py(px(1.)).rounded(px(6.)).bg(gpui_kit::black().opacity(0.6)).text_size(px(11.)).line_height(px(15.)).text_color(gpui_kit::white()).child(*description)
+                    div().px_1p5().py_px().rounded_md().bg(gpui_kit::black().opacity(0.6)).text_size(ui::TEXT_XXS).line_height(px(15.)).text_color(gpui_kit::white()).child(*description)
                 });
-                Some(frame.child(div().w(px(180.)).h(px(112.)).p(px(6.)).squircle(ui::RADIUS_MD).bg(fill).flex().items_end().children(alt)))
+                Some(frame.child(div().w(px(180.)).h(px(112.)).p_1p5().squircle(ui::RADIUS_MD).bg(fill).flex().items_end().children(alt)))
             }
             SampleMedia::Sticker => Some(frame.child(div().size(px(72.)).flex().items_center().justify_center().text_color(self.saturate(palette::accent_ink(cx))).child(Icon::new(Glyph::Sticker).size(px(56.))))),
         }

@@ -531,11 +531,11 @@ impl Waffle {
         let head = div()
             .flex()
             .items_center()
-            .gap(px(10.))
-            .px(px(6.))
-            .pb(px(12.))
+            .gap_2p5()
+            .px_1p5()
+            .pb_3()
             .min_w_0()
-            .child(ui::icon_tile(channel_glyph(channel), palette::selected(cx), palette::strong(cx)).size(px(40.)).flex_none())
+            .child(ui::icon_tile(channel_glyph(channel), palette::selected(cx), palette::strong(cx)).size_10().flex_none())
             .child(
                 div()
                     .flex_1()
@@ -544,7 +544,7 @@ impl Waffle {
                     .flex_col()
                     .line_height(px(18.))
                     .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(channel.name.clone()))
-                    .child(div().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child(category.unwrap_or_else(|| "Channel settings".into()))),
+                    .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(category.unwrap_or_else(|| "Channel settings".into()))),
             );
         let items: Vec<AnyElement> = self
             .channel_setting_pages(guild_id, channel)
@@ -566,7 +566,7 @@ impl Waffle {
             let label = if channel.kind == ChannelKind::Category { "Delete category" } else { "Delete channel" };
             ui::menu_row("cs-nav-delete", cx)
                 .danger(cx)
-                .child(Icon::new(Glyph::Trash).size(px(18.)))
+                .child(Icon::new(Glyph::Trash).size(ui::ICON_LG))
                 .child(label)
                 .on_click(cx.listener(|this, _, _, cx| {
                     if let Some(view) = &mut this.channel_settings {
@@ -576,8 +576,8 @@ impl Waffle {
                 }))
         });
         let ask = if view.asking_delete { Some(self.delete_ask(channel, cx).into_any_element()) } else { None };
-        let rule = div().h(px(1.)).mx(px(10.)).my(px(8.)).flex_none().bg(palette::line(cx));
-        let search = div().flex_none().pb(px(12.)).child(ui::search_field("channel-settings-search", &view.search, cx));
+        let rule = div().h(ui::HAIRLINE).mx_2p5().my_2().flex_none().bg(palette::line(cx));
+        let search = div().flex_none().pb_3().child(ui::search_field("channel-settings-search", &view.search, cx));
         let query = view.search.read(cx).value().to_string();
         let items = if query.trim().is_empty() { items } else { self.channel_setting_results(channel, guild_id, &query, cx) };
         ui::settings_sidebar("channel-settings-nav", &self.settings_nav_scroll, cx)
@@ -594,14 +594,14 @@ impl Waffle {
         let open = self.channel_setting_pages(guild_id, channel);
         let hits: Vec<&'static Setting<Page>> = registry::search(CHANNEL_SETTINGS, query).into_iter().filter(|s| open.contains(&s.page) && applies(s.id, channel)).collect();
         if hits.is_empty() {
-            return vec![div().px(px(10.)).py(px(8.)).text_color(palette::muted(cx)).child("No settings match").into_any_element()];
+            return vec![div().px_2p5().py_2().text_color(palette::muted(cx)).child("No settings match").into_any_element()];
         }
         hits.into_iter()
             .map(|setting| {
                 let place = format!("{} \u{203a} {}", setting.page.label(), setting.group);
                 ui::menu_row(SharedString::from(format!("cs-result-{}", setting.id)), cx)
                     .h_auto()
-                    .py(px(6.))
+                    .py_1p5()
                     .child(
                         div()
                             .flex_1()
@@ -609,7 +609,7 @@ impl Waffle {
                             .flex()
                             .flex_col()
                             .child(div().truncate().text_color(palette::strong(cx)).child(setting.title))
-                            .child(div().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child(place)),
+                            .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(place)),
                     )
                     .on_click(cx.listener(move |this, _, window, cx| this.jump_to_channel_setting(setting, window, cx)))
                     .into_any_element()
@@ -643,18 +643,18 @@ impl Waffle {
         let id = channel.id.clone();
         let what = if channel.kind == ChannelKind::Category { format!("Delete the {} category? Its channels stay, without a category.", channel.name) } else { format!("Delete #{}? Its messages go with it. This can't be undone.", channel.name) };
         div()
-            .my(px(4.))
-            .p(px(10.))
+            .my_1()
+            .p_2p5()
             .squircle(ui::RADIUS_MD)
             .bg(palette::danger().opacity(0.1))
             .flex()
             .flex_col()
-            .gap(px(8.))
+            .gap_2()
             .child(div().text_color(palette::strong(cx)).child(what))
             .child(
                 div()
                     .flex()
-                    .gap(px(8.))
+                    .gap_2()
                     .child(ui::button("cs-delete-keep", Tone::Secondary, cx).small().flex_1().child("Keep").on_click(cx.listener(|this, _, _, cx| {
                         if let Some(view) = &mut this.channel_settings {
                             view.asking_delete = false;
@@ -680,16 +680,16 @@ impl Waffle {
         let mut out = Vec::new();
 
         let name_focus = view.name.read(cx).focus_handle(cx);
-        let name = ui::field("Channel name", cx).child(ui::text_field("cs-name", Input::new(&view.name).appearance(false), &name_focus).leading(Icon::new(channel_glyph(channel)).size(px(16.))));
+        let name = ui::field("Channel name", cx).child(ui::text_field("cs-name", Input::new(&view.name).appearance(false), &name_focus).leading(Icon::new(channel_glyph(channel)).size(ui::ICON_MD)));
         let topic = (!voice && !category).then(|| {
             let focus = view.topic.read(cx).focus_handle(cx);
             let count = view.topic.read(cx).value().chars().count();
             let cap = if forum { 4096 } else { 1024 };
             ui::field(if forum { "Post guidelines" } else { "Topic" }, cx)
-                .child(ui::text_area("cs-topic", Textarea::new(&view.topic).appearance(false).px_0().text_size(px(14.)), &focus).error(count > cap))
+                .child(ui::text_area("cs-topic", Textarea::new(&view.topic).appearance(false).px_0().text_size(ui::TEXT_SM), &focus).error(count > cap))
                 .child(ui::field_hint("Shows in the channel header.", Some(format!("{count} / {cap}").into()), cx))
         });
-        out.push(ui::settings_group(if category || voice { "Name" } else { "Name and topic" }, cx).child(ui::settings_card(cx).p(px(16.)).gap(px(16.)).child(name).children(topic)).into_any_element());
+        out.push(ui::settings_group(if category || voice { "Name" } else { "Name and topic" }, cx).child(ui::settings_card(cx).p_4().gap_4().child(name).children(topic)).into_any_element());
         if category {
             return out;
         }
@@ -701,8 +701,8 @@ impl Waffle {
             let bitrate_row = ui::settings_row("cs-bitrate", false, cx)
                 .flex_col()
                 .items_stretch()
-                .gap(px(12.))
-                .child(div().flex().items_start().gap(px(16.)).child(ui::settings_text("Bitrate", Some("Higher sounds better and costs slow connections more"), cx)).child(value_text(format!("{} kbps", bitrate / 1000), cx)))
+                .gap_3()
+                .child(div().flex().items_start().gap_4().child(ui::settings_text("Bitrate", Some("Higher sounds better and costs slow connections more"), cx)).child(value_text(format!("{} kbps", bitrate / 1000), cx)))
                 .child(self.range("cs-bitrate".into(), fraction, crate::settings::Fill::Accent, move |this, f, cx| {
                     let kbps = (8. + f.clamp(0., 1.) * (cap - 8_000) as f32 / 1000.).round() as u32;
                     this.edit_draft(cx, |d| d.props.bitrate = kbps * 1000);
@@ -712,8 +712,8 @@ impl Waffle {
             let limit_row = ui::settings_row("cs-limit", true, cx)
                 .flex_col()
                 .items_stretch()
-                .gap(px(12.))
-                .child(div().flex().items_start().gap(px(16.)).child(ui::settings_text("User limit", Some("Members with Move members can still join"), cx)).child(value_text(if limit == 0 { "No limit".into() } else { limit.to_string() }, cx)))
+                .gap_3()
+                .child(div().flex().items_start().gap_4().child(ui::settings_text("User limit", Some("Members with Move members can still join"), cx)).child(value_text(if limit == 0 { "No limit".into() } else { limit.to_string() }, cx)))
                 .child(self.range("cs-limit".into(), limit as f32 / limit_max as f32, crate::settings::Fill::Accent, move |this, f, cx| {
                     let n = (f.clamp(0., 1.) * limit_max as f32).round() as u32;
                     this.edit_draft(cx, |d| d.props.user_limit = n);
@@ -769,7 +769,7 @@ impl Waffle {
             "You can control Profile privacy in Server Settings > Profile.",
             cx,
         );
-        (Some(row.into_any_element()), Some(div().mt(px(8.)).child(notice).into_any_element()))
+        (Some(row.into_any_element()), Some(div().mt_2().child(notice).into_any_element()))
     }
 
     // A dropdown on this window: the trigger, and its list rising from it while open.
@@ -867,7 +867,7 @@ impl Waffle {
             .map(|o| {
                 let id = o.id.clone();
                 let color = role(&o.id).filter(|r| r.color != 0).map_or(palette::faint(cx), |r| palette::role_ink(r.color, dark));
-                let mark = if o.member { div().child(Icon::new(Glyph::User).size(px(16.))).text_color(palette::muted(cx)) } else { div().size(px(12.)).m(px(2.)).rounded_full().bg(color) };
+                let mark = if o.member { div().child(Icon::new(Glyph::User).size(ui::ICON_MD)).text_color(palette::muted(cx)) } else { div().size_3().m_0p5().rounded_full().bg(color) };
                 ui::menu_row(SharedString::from(format!("cs-target-{id}")), cx)
                     .toggled(selected.as_deref() == Some(o.id.as_str()), cx)
                     .child(mark.flex_none())
@@ -886,14 +886,14 @@ impl Waffle {
             roles.sort_by_key(|r| -r.position);
             roles.into_iter().map(|r| (r.id.clone(), r.name.clone())).collect()
         };
-        let add = (!addable.is_empty()).then(|| div().mt(px(8.)).child(self.cs_select(Select::AddRole, &addable, "", "Add a role".into(), cx)));
+        let add = (!addable.is_empty()).then(|| div().mt_2().child(self.cs_select(Select::AddRole, &addable, "", "Add a role".into(), cx)));
         let list = div()
             .w(px(200.))
             .flex_none()
             .flex()
             .flex_col()
-            .gap(px(2.))
-            .child(div().px(px(4.)).pb(px(4.)).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Roles and members"))
+            .gap_0p5()
+            .child(div().px_1().pb_1().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Roles and members"))
             .children(rows)
             .children(add);
 
@@ -919,14 +919,14 @@ impl Waffle {
                 .collect();
             let remove_id = target.id.clone();
             let remove = (target.id != guild.id).then(|| {
-                ui::button("cs-remove-target", Tone::Ghost, cx).small().child(Icon::new(Glyph::Trash).size(px(16.))).child(format!("Remove {who}")).on_click(cx.listener(move |this, _, _, cx| {
+                ui::button("cs-remove-target", Tone::Ghost, cx).small().child(Icon::new(Glyph::Trash).size(ui::ICON_MD)).child(format!("Remove {who}")).on_click(cx.listener(move |this, _, _, cx| {
                     let id = remove_id.clone();
                     this.edit_draft(cx, |d| d.overwrites.retain(|o| o.id != id));
                 }))
             });
-            div().flex_1().min_w_0().flex().flex_col().gap(px(24.)).children(groups).child(div().flex().justify_end().children(remove))
+            div().flex_1().min_w_0().flex().flex_col().gap_6().children(groups).child(div().flex().justify_end().children(remove))
         });
-        out.push(div().flex().items_start().gap(px(24.)).child(list).children(editor).into_any_element());
+        out.push(div().flex().items_start().gap_6().child(list).children(editor).into_any_element());
         out
     }
 
@@ -948,7 +948,7 @@ impl Waffle {
             let code = invite.code.clone();
             ui::settings_row(SharedString::from(format!("cs-invite-{}", invite.code)), i > 0, cx)
                 .child(ui::settings_text(invite.code.clone(), Some(invite.inviter.clone()), cx))
-                .child(div().w(px(80.)).flex_none().text_color(palette::text(cx)).child(uses))
+                .child(div().w_20().flex_none().text_color(palette::text(cx)).child(uses))
                 .child(div().w(px(90.)).flex_none().text_color(palette::muted(cx)).child(expires_label(invite.expires_at.as_deref(), now)))
                 .child(ui::button(SharedString::from(format!("cs-revoke-{}", invite.code)), Tone::Secondary, cx).small().child("Revoke").on_click(cx.listener(move |this, _, _, cx| {
                     let code = code.clone();
@@ -1020,16 +1020,16 @@ impl Waffle {
         let bar = div()
             .w_full()
             .max_w(px(ui::SETTINGS_WIDTH))
-            .py(px(10.))
-            .pl(px(16.))
-            .pr(px(10.))
+            .py_2p5()
+            .pl_4()
+            .pr_2p5()
             .squircle(ui::RADIUS_LG)
             .bg(palette::surface(Level::Overlay, cx))
             .shadow(ui::shadow_pop(cx))
             .flex()
             .items_center()
-            .gap(px(12.))
-            .child(div().text_color(ink).flex_none().child(Icon::new(glyph).size(px(20.))))
+            .gap_3()
+            .child(div().text_color(ink).flex_none().child(Icon::new(glyph).size(ui::ICON_XL)))
             .child(
                 div()
                     .flex_1()
@@ -1037,10 +1037,10 @@ impl Waffle {
                     .flex()
                     .flex_col()
                     .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title))
-                    .children(detail.map(|d| div().text_size(px(12.)).line_height(px(17.)).text_color(palette::muted(cx)).child(d))),
+                    .children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(px(17.)).text_color(palette::muted(cx)).child(d))),
             )
-            .child(div().flex().gap(px(8.)).flex_none().child(reset).child(save));
-        Some(ui::rise(div().absolute().bottom(px(16.)).left(px(40.)).right(px(40.)).child(bar), "cs-savebar-in", std::time::Duration::ZERO))
+            .child(div().flex().gap_2().flex_none().child(reset).child(save));
+        Some(ui::rise(div().absolute().bottom_4().left_10().right_10().child(bar), "cs-savebar-in", std::time::Duration::ZERO))
     }
 }
 
@@ -1067,7 +1067,7 @@ fn value_text(text: String, cx: &App) -> Div {
 }
 
 fn loading_line(text: &'static str, cx: &App) -> AnyElement {
-    div().px(px(4.)).text_color(palette::muted(cx)).child(text).into_any_element()
+    div().px_1().text_color(palette::muted(cx)).child(text).into_any_element()
 }
 
 #[cfg(test)]

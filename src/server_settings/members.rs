@@ -518,13 +518,13 @@ impl Waffle {
             Load::Ready(_) => self.members_table(&guild_id, Gates { powers, bulk, manage_guild }, cx),
         };
         let footer = matches!(m.rows, Load::Ready(_)).then(|| self.members_footer(cx));
-        ui::settings_group(title, cx).gap(px(12.)).child(self.members_toolbar(cx)).child(body).children(footer).into_any_element()
+        ui::settings_group(title, cx).gap_3().child(self.members_toolbar(cx)).child(body).children(footer).into_any_element()
     }
 
     fn members_toolbar(&self, cx: &mut Context<Self>) -> AnyElement {
         let Some(m) = self.server_settings.as_ref().map(|v| &v.lists.members) else { return div().into_any_element() };
         let (filter, pop) = (&m.filter, m.pop.clone());
-        let caret = || Icon::new(Glyph::ChevronDown).size(px(12.));
+        let caret = || Icon::new(Glyph::ChevronDown).size(ui::ICON_XS);
         let signals_chip = ui::chip("ss-member-signals", Some(Glyph::Warning), "Signals", !filter.signals.is_empty(), cx).child(caret()).on_click(cx.listener(|this, _, _, cx| this.member_pop(Some(Pop::Signals), cx)));
         let signals_menu = (pop == Some(Pop::Signals)).then(|| {
             let options: Vec<(String, String, bool)> = Signal::ALL.iter().enumerate().map(|(i, s)| (i.to_string(), signal_label(*s).to_owned(), filter.signals.contains(s))).collect();
@@ -549,7 +549,7 @@ impl Waffle {
         div()
             .flex()
             .items_center()
-            .gap(px(8.))
+            .gap_2()
             .child(div().flex_1().min_w_0().child(ui::search_field("ss-member-search-field", &m.search, cx)))
             .child(div().relative().flex_none().child(signals_chip).children(signals_menu))
             .child(div().relative().flex_none().child(sort_chip).children(sort_menu))
@@ -640,7 +640,7 @@ impl Waffle {
                 this.open_mod_view(guild_id.clone(), user_id.clone(), window, cx);
             }
         }));
-        let mut cell = div().flex().items_center().gap(px(4.)).child(mod_view);
+        let mut cell = div().flex().items_center().gap_1().child(mod_view);
         if !powers.any() {
             return cell.into_any_element();
         }
@@ -655,7 +655,7 @@ impl Waffle {
     fn member_menu_rows(&self, member: &Member, powers: Powers, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let (id, name) = (member.id.clone(), member.name.clone());
         let mut rows = Vec::new();
-        let row = |key: &str, glyph: Glyph, label: String, cx: &mut Context<Self>| ui::menu_row(SharedString::from(format!("ss-member-{key}-{id}")), cx).child(Icon::new(glyph).size(px(16.))).child(div().flex_1().min_w_0().truncate().child(label));
+        let row = |key: &str, glyph: Glyph, label: String, cx: &mut Context<Self>| ui::menu_row(SharedString::from(format!("ss-member-{key}-{id}")), cx).child(Icon::new(glyph).size(ui::ICON_MD)).child(div().flex_1().min_w_0().truncate().child(label));
         if powers.timeout {
             let lift = member.timed_out_until.is_some_and(|t| t > Utc::now());
             let label = if lift { "Remove time out" } else { "Time out for 1 hour" };
@@ -703,7 +703,7 @@ impl Waffle {
     fn members_footer(&self, cx: &mut Context<Self>) -> AnyElement {
         let Some(m) = self.server_settings.as_ref().map(|v| &v.lists.members) else { return div().into_any_element() };
         let (page, size, total) = (m.page, m.page_size, m.total);
-        let size_chip = ui::chip("ss-member-page-size", None, size.to_string(), false, cx).child(Icon::new(Glyph::ChevronDown).size(px(12.))).on_click(cx.listener(|this, _, _, cx| this.member_pop(Some(Pop::PageSize), cx)));
+        let size_chip = ui::chip("ss-member-page-size", None, size.to_string(), false, cx).child(Icon::new(Glyph::ChevronDown).size(ui::ICON_XS)).on_click(cx.listener(|this, _, _, cx| this.member_pop(Some(Pop::PageSize), cx)));
         let size_menu = (m.pop == Some(Pop::PageSize)).then(|| {
             let options: Vec<(String, String)> = PAGE_SIZES.iter().map(|n| (n.to_string(), n.to_string())).collect();
             let this = cx.entity();
@@ -718,8 +718,8 @@ impl Waffle {
         div()
             .flex()
             .items_center()
-            .gap(px(8.))
-            .px(px(4.))
+            .gap_2()
+            .px_1()
             .text_color(palette::muted(cx))
             .child("Showing")
             .child(div().relative().flex_none().child(size_chip).children(size_menu))
@@ -737,12 +737,12 @@ fn name_cell(member: &Member, cx: &App) -> AnyElement {
     div()
         .flex()
         .items_center()
-        .gap(px(8.))
+        .gap_2()
         .min_w_0()
         .child(ui::avatar(member.avatar.clone(), 28.))
         .child(ui::truncating(format!("ss-mn-{}", member.id), member.name.clone()).text_color(palette::strong(cx)))
         .when(member.bot, |d| d.child(ui::tag("App", cx).flex_none()))
-        .child(div().flex_1().flex_basis(px(0.)).min_w_0().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child(member.username.clone()))
+        .child(div().flex_1().flex_basis(px(0.)).min_w_0().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(member.username.clone()))
         .into_any_element()
 }
 
@@ -754,7 +754,7 @@ fn date_cell(key: String, text: String) -> AnyElement {
 fn roles_cell(member: &Member, guild_roles: &[Role], cx: &App) -> AnyElement {
     let mut roles: Vec<&Role> = guild_roles.iter().filter(|r| member.roles.contains(&r.id)).collect();
     roles.sort_by_key(|r| std::cmp::Reverse(r.position));
-    let Some(top) = roles.first() else { return div().text_size(px(12.)).text_color(palette::muted(cx)).child("None").into_any_element() };
+    let Some(top) = roles.first() else { return div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("None").into_any_element() };
     let dark = cx.theme().is_dark();
     let color = if top.color == 0 { palette::faint(cx) } else { palette::role_ink(top.color, dark) };
     let names: SharedString = roles.iter().map(|r| r.name.as_str()).collect::<Vec<_>>().join(", ").into();
@@ -762,10 +762,10 @@ fn roles_cell(member: &Member, guild_roles: &[Role], cx: &App) -> AnyElement {
         .id(SharedString::from(format!("ss-roles-{}", member.id)))
         .flex()
         .items_center()
-        .gap(px(4.))
+        .gap_1()
         .min_w_0()
         .child(ui::role_chip(top.name.clone(), color, cx).flex_shrink(1.).min_w_0().overflow_hidden())
-        .when(roles.len() > 1, |d| d.child(div().flex_none().text_size(px(12.)).text_color(palette::muted(cx)).child(format!("+{}", roles.len() - 1))))
+        .when(roles.len() > 1, |d| d.child(div().flex_none().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(format!("+{}", roles.len() - 1))))
         .tooltip(move |window, cx| ui::tip(names.clone(), window, cx))
         .into_any_element()
 }
@@ -775,14 +775,14 @@ fn signals_cell(member: &Member, now: DateTime<Utc>, cx: &App) -> AnyElement {
     div()
         .flex()
         .items_center()
-        .gap(px(2.))
+        .gap_0p5()
         .children(signals(member, now).into_iter().map(|signal| {
             let (glyph, red, tip) = signal_mark(signal, member, now);
             let tip = SharedString::from(tip);
             div()
                 .id(SharedString::from(format!("ss-signal-{}-{signal:?}", member.id)))
                 .text_color(if red { danger } else { muted })
-                .child(Icon::new(glyph).size(px(16.)))
+                .child(Icon::new(glyph).size(ui::ICON_MD))
                 .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
         }))
         .into_any_element()

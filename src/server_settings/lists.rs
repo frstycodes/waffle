@@ -400,7 +400,7 @@ impl Waffle {
             Load::Ready(items) => items.clone(),
         };
         let can_upload = self.with_access(&guild_id, |me| me.has(perms::MANAGE_GUILD_EXPRESSIONS | perms::CREATE_GUILD_EXPRESSIONS)).unwrap_or(false);
-        let upload = ui::button(SharedString::from(format!("{row_id}-upload")), Tone::Primary, cx).small().disabled(!can_upload).child(Icon::new(Glyph::Upload).size(px(16.))).child(format!("Upload {noun}")).on_click(cx.listener(move |this, _, _, cx| this.upload_expression(page, cx)));
+        let upload = ui::button(SharedString::from(format!("{row_id}-upload")), Tone::Primary, cx).small().disabled(!can_upload).child(Icon::new(Glyph::Upload).size(ui::ICON_MD)).child(format!("Upload {noun}")).on_click(cx.listener(move |this, _, _, cx| this.upload_expression(page, cx)));
         let head = ui::settings_row(row_id, false, cx).child(ui::settings_text(format!("{} of {cap} slots used", items.len()), Some(match page {
             Page::Emoji => "PNG, JPG or GIF up to 256 KB. Names are letters, numbers and underscores.",
             Page::Stickers => "PNG, APNG or GIF, 320 × 320, up to 512 KB.",
@@ -412,8 +412,8 @@ impl Waffle {
             .map(|(i, item)| {
                 let editable = self.with_access(&guild_id, |me| access::can_edit_expression(me, item.by_id.as_deref())).unwrap_or(false);
                 let mark: AnyElement = match &item.url {
-                    Some(url) => gpui_kit::img(url.clone()).size(px(32.)).flex_none().into_any_element(),
-                    None => div().text_color(palette::muted(cx)).child(Icon::new(Glyph::Soundboard).size(px(20.))).into_any_element(),
+                    Some(url) => gpui_kit::img(url.clone()).size_8().flex_none().into_any_element(),
+                    None => div().text_color(palette::muted(cx)).child(Icon::new(Glyph::Soundboard).size(ui::ICON_XL)).into_any_element(),
                 };
                 let label = if page == Page::Emoji { format!(":{}:", item.name) } else { item.name.clone() };
                 let ask_id = format!("x-{}", item.id);
@@ -442,7 +442,7 @@ impl Waffle {
                 this.act_and_reload(call, page, cx);
             }
         }));
-        div().flex().gap(px(6.)).flex_none().child(keep).child(yes).into_any_element()
+        div().flex().gap_1p5().flex_none().child(keep).child(yes).into_any_element()
     }
 
     fn upload_expression(&mut self, page: Page, cx: &mut Context<Self>) {
@@ -597,7 +597,7 @@ impl Waffle {
             };
             let first = channels.first().map(|(id, _)| id.clone());
             let create = first.map(|channel| {
-                ui::button("ss-hook-new", Tone::Secondary, cx).small().child(Icon::new(Glyph::Plus).size(px(16.))).child("New webhook").on_click(cx.listener(move |this, _, _, cx| this.act_and_reload(api::create_webhook(&channel, "Captain Hook"), Page::Integrations, cx)))
+                ui::button("ss-hook-new", Tone::Secondary, cx).small().child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("New webhook").on_click(cx.listener(move |this, _, _, cx| this.act_and_reload(api::create_webhook(&channel, "Captain Hook"), Page::Integrations, cx)))
             });
             out.push(self.followed_channels_group(&guild_id, cx));
             out.push(ui::settings_group("Webhooks", cx).child(ui::settings_card(cx).id("ss-webhooks").children(hooks)).child(div().flex().justify_end().children(create)).into_any_element());
@@ -649,7 +649,7 @@ impl Waffle {
         }));
         vec![
             ui::settings_group("Rules", cx).child(ui::settings_card(cx).id("ss-automod").children(rows)).child(ui::settings_caption("Matching messages are blocked before they post. Admins and members with Manage server are exempt.", cx)).into_any_element(),
-            ui::settings_group("Custom words", cx).child(ui::settings_card(cx).children(custom)).child(div().flex().gap(px(12.)).items_center().child(div().flex_1().child(words)).child(add)).child(ui::settings_caption("Up to six custom word rules. Separate words with commas; * matches any letters.", cx)).into_any_element(),
+            ui::settings_group("Custom words", cx).child(ui::settings_card(cx).children(custom)).child(div().flex().gap_3().items_center().child(div().flex_1().child(words)).child(add)).child(ui::settings_caption("Up to six custom word rules. Separate words with commas; * matches any letters.", cx)).into_any_element(),
         ]
     }
 
@@ -697,7 +697,7 @@ impl Waffle {
         let action = a.query.action_type.map(|n| n.to_string()).unwrap_or_default();
         let filters = div()
             .flex()
-            .gap(px(12.))
+            .gap_3()
             .child(div().flex_1().child(ui::field("Filter by member", cx).child(self.ss_select(Select::AuditUser, &users, &user, cx))))
             .child(div().flex_1().child(ui::field("Filter by action", cx).child(self.ss_select(Select::AuditAction, &actions, &action, cx))));
         let Some(view) = self.server_settings.as_ref() else { return Vec::new() };
@@ -736,24 +736,24 @@ impl Waffle {
         };
         let details = audit::details(e, names);
         let id = e.id.clone();
-        let chevron = (!details.is_empty()).then(|| div().text_color(palette::muted(cx)).child(Icon::new(if open { Glyph::ChevronDown } else { Glyph::ChevronRight }).size(px(16.))));
+        let chevron = (!details.is_empty()).then(|| div().text_color(palette::muted(cx)).child(Icon::new(if open { Glyph::ChevronDown } else { Glyph::ChevronRight }).size(ui::ICON_MD)));
         let head = div()
             .flex()
             .items_start()
-            .gap(px(12.))
+            .gap_3()
             .w_full()
-            .child(div().pt(px(2.)).text_color(ink).flex_none().child(Icon::new(glyph).size(px(18.))))
-            .child(div().flex_1().min_w_0().flex().flex_col().gap(px(2.)).child(sentence_spans(&audit::sentence(e, names), cx)).child(div().text_size(px(12.)).text_color(palette::muted(cx)).child(snowflake_time(&e.id))))
+            .child(div().pt_0p5().text_color(ink).flex_none().child(Icon::new(glyph).size(ui::ICON_LG)))
+            .child(div().flex_1().min_w_0().flex().flex_col().gap_0p5().child(sentence_spans(&audit::sentence(e, names), cx)).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(snowflake_time(&e.id))))
             .children(chevron);
         let body = open.then(|| {
-            div().pl(px(30.)).pt(px(8.)).flex().flex_col().gap(px(4.)).children(details.into_iter().map(|d| {
+            div().pl(px(30.)).pt_2().flex().flex_col().gap_1().children(details.into_iter().map(|d| {
                 let change = match (&d.old, &d.new) {
-                    (Some(old), Some(new)) => div().flex().items_center().gap(px(6.)).child(div().text_color(palette::muted(cx)).line_through().child(old.clone())).child(Icon::new(Glyph::ArrowRight).size(px(12.))).child(div().text_color(palette::strong(cx)).child(new.clone())),
+                    (Some(old), Some(new)) => div().flex().items_center().gap_1p5().child(div().text_color(palette::muted(cx)).line_through().child(old.clone())).child(Icon::new(Glyph::ArrowRight).size(ui::ICON_XS)).child(div().text_color(palette::strong(cx)).child(new.clone())),
                     (None, Some(new)) => div().text_color(palette::strong(cx)).child(new.clone()),
                     (Some(old), None) => div().text_color(palette::muted(cx)).line_through().child(old.clone()),
                     (None, None) => div().text_color(palette::muted(cx)).child("Cleared"),
                 };
-                div().flex().gap(px(8.)).text_size(px(14.)).child(div().w(px(150.)).flex_none().text_color(palette::muted(cx)).child(d.label)).child(div().flex_1().min_w_0().child(change))
+                div().flex().gap_2().text_size(ui::TEXT_SM).child(div().w(px(150.)).flex_none().text_color(palette::muted(cx)).child(d.label)).child(div().flex_1().min_w_0().child(change))
             }))
         });
         let row = ui::settings_row(SharedString::from(format!("ss-audit-{}", e.id)), line, cx).flex_col().items_stretch().child(head).children(body);
@@ -829,7 +829,7 @@ impl Waffle {
                 }, cx);
                 let _ = window;
             }));
-            let rows = [("Verified email to chat", "Turns on the low verification level"), ("Scan every image", "Explicit media is filtered for everyone"), ("Rules and updates channels", "Discord creates #rules and #moderator-only")].map(|(t, d)| ui::settings_row(SharedString::from(format!("ss-community-{t}")), true, cx).child(Icon::new(Glyph::CheckCircle).size(px(18.))).child(ui::settings_text(t, Some(d), cx)).into_any_element());
+            let rows = [("Verified email to chat", "Turns on the low verification level"), ("Scan every image", "Explicit media is filtered for everyone"), ("Rules and updates channels", "Discord creates #rules and #moderator-only")].map(|(t, d)| ui::settings_row(SharedString::from(format!("ss-community-{t}")), true, cx).child(Icon::new(Glyph::CheckCircle).size(ui::ICON_LG)).child(ui::settings_text(t, Some(d), cx)).into_any_element());
             return vec![
                 ui::settings_card(cx).id("ss-community").child(ui::settings_row("ss-community-head", false, cx).child(ui::settings_text("Are you building a community?", Some("Community servers get onboarding, insights, announcement channels and Discovery."), cx))).children(rows).into_any_element(),
                 div().flex().justify_end().child(enable).into_any_element(),
@@ -883,8 +883,8 @@ impl Waffle {
             Load::Ready(t) => t.clone(),
         };
         let copies = ui::settings_card(cx)
-            .child(ui::settings_row("ss-template-copies", false, cx).child(Icon::new(Glyph::CheckCircle).size(px(18.))).child(ui::settings_text("Copies channels, topics, roles, permissions and default settings", None::<&str>, cx)))
-            .child(ui::settings_row("ss-template-skips", true, cx).child(Icon::new(Glyph::XCircle).size(px(18.))).child(ui::settings_text("Not messages, members, bots, the icon or boosts", None::<&str>, cx)));
+            .child(ui::settings_row("ss-template-copies", false, cx).child(Icon::new(Glyph::CheckCircle).size(ui::ICON_LG)).child(ui::settings_text("Copies channels, topics, roles, permissions and default settings", None::<&str>, cx)))
+            .child(ui::settings_row("ss-template-skips", true, cx).child(Icon::new(Glyph::XCircle).size(ui::ICON_LG)).child(ui::settings_text("Not messages, members, bots, the icon or boosts", None::<&str>, cx)));
         let mut out = vec![ui::settings_group("What it copies", cx).child(copies).into_any_element()];
         match templates.first() {
             Some(t) => {
@@ -906,7 +906,7 @@ impl Waffle {
                     }
                     this.act_and_reload(api::create_template(&guild_id, &name, ""), Page::Template, cx);
                 }));
-                out.push(ui::settings_group("Template", cx).child(div().id("ss-template").flex().gap(px(12.)).items_center().child(div().flex_1().child(field)).child(generate)).into_any_element());
+                out.push(ui::settings_group("Template", cx).child(div().id("ss-template").flex().gap_3().items_center().child(div().flex_1().child(field)).child(generate)).into_any_element());
             }
         }
         out
