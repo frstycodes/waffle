@@ -28,11 +28,12 @@ impl Waffle {
         match self.right_panel {
             RightPanel::Search(_) => true,
             RightPanel::Hidden => false,
-            _ => self.guild_id.is_some(),
+            RightPanel::Members => self.guild_id.is_some() || self.open_group().is_some(),
+            RightPanel::Activity => self.guild_id.is_some(),
         }
     }
 
-    // The side panel's width while it shows. A DM has no member list; its side panel is only ever search results.
+    // The side panel's width while it shows. A 1:1 DM has no member list; its side panel is only ever search results.
     pub fn panel_column_width(&self) -> Option<f32> {
         match &self.right_panel {
             _ if !self.panel_shown() => None,
@@ -48,6 +49,7 @@ impl Waffle {
         // query with a way back to the members.
         let (head, body, foot): (Div, AnyElement, Option<AnyElement>) = match &self.right_panel {
             RightPanel::Hidden => return None,
+            RightPanel::Members if self.guild_id.is_none() => (self.panel_head("Members".into(), false, cx), self.group_member_list(cx), self.group_invite_foot(cx)),
             RightPanel::Members => (self.panel_head("Members".into(), false, cx), self.member_list(window, cx), None),
             RightPanel::Activity => (self.panel_head("Activity".into(), true, cx), self.activity_cards(usize::MAX, cx), None),
             RightPanel::Search(results) => {
@@ -104,6 +106,32 @@ impl Waffle {
         }))
     }
 
+    // A group DM's members, you among them, the owner crowned. Its people have no roles or server: just online
+    // and offline, as Discord lists a group.
+    fn group_member_list(&self, cx: &mut Context<Self>) -> AnyElement {
+        let Some(group) = self.open_group() else { return div().into_any_element() };
+        let people = self.me.iter().chain(&group.recipients);
+        let rows: Vec<AnyElement> = people
+            .map(|user| Member { user: user.clone(), roles: Vec::new(), presence: self.presences.get(&user.id).cloned().unwrap_or_default(), boosting_since: None })
+            .map(|member| self.member_row(&member, cx))
+            .collect();
+        div().flex().flex_col().gap(px(2.)).child(group_label(format!("Members · {}", rows.len()), cx)).children(rows).into_any_element()
+    }
+
+    // "Invite to Group DM" under the list while the group has room.
+    fn group_invite_foot(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let group = self.open_group()?.clone();
+        if group.recipients.len() + 1 >= crate::group_dm::LIMIT {
+            return None;
+        }
+        let invite = ui::button("group-invite", ui::Tone::Ghost, cx)
+            .w_full()
+            .child(Icon::new(Glyph::GroupPlus).size(px(18.)))
+            .child("Invite to Group DM")
+            .on_click(cx.listener(move |this, _, window, cx| this.open_group_picker(Some(group.clone()), window, cx)));
+        Some(div().px_2().child(invite).into_any_element())
+    }
+
     // Who is here, grouped by top role, then online and offline (navigation.css .members).
     fn member_list(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let activity = self.activity_section(window, cx);
@@ -124,7 +152,7 @@ impl Waffle {
             }
             ListItem::Member(member) => Some(self.member_row(member, cx)),
         });
-        div().flex().flex_col().gap(px(2.)).children(activity).children(rows.collect::<Vec<_>>()).into_any_element()
+        div().flex().flex_col().gap(px(ui::density_pad(2.))).children(activity).children(rows.collect::<Vec<_>>()).into_any_element()
     }
 
     pub(crate) fn load_activity_feed(&mut self, cx: &mut Context<Self>) {
@@ -201,7 +229,8 @@ impl Waffle {
     fn feed_card(&self, i: usize, entry: &FeedEntry, member: &Member, now: i64, cx: &mut Context<Self>) -> AnyElement {
         let dark = cx.theme().is_dark();
         let (strong, muted, hover) = (palette::strong(cx), palette::muted(cx), palette::hover(cx));
-        let name_ink = self.role_color(self.guild_id.as_ref(), &member.user.id, Some(&member.roles), dark).unwrap_or(strong);
+        let (role_ink, _) = crate::chat::role_marks(self.prefs.role_style, self.role_color(self.guild_id.as_ref(), &member.user.id, Some(&member.roles), dark));
+        let name_ink = role_ink.unwrap_or(strong);
         let when = if entry.live { "Now".to_owned() } else { ago(now - entry.at) };
         let meta = div()
             .flex()
@@ -267,24 +296,37 @@ impl Waffle {
         let dark = cx.theme().is_dark();
         let offline = member.presence.status == Status::Offline;
         let (strong, faint, hover) = (palette::strong(cx), palette::faint(cx), palette::hover(cx));
-        let name_ink = match offline {
-            true => faint,
-            false => self.role_color(self.guild_id.as_ref(), &member.user.id, Some(&member.roles), dark).unwrap_or(strong),
-        };
+        let (role_ink, dot) = crate::chat::role_marks(self.prefs.role_style, self.role_color(self.guild_id.as_ref(), &member.user.id, Some(&member.roles), dark));
+        let name_ink = if offline { faint } else { role_ink.unwrap_or(strong) };
+        let dot = dot.filter(|_| !offline);
+        let name_style = member.user.name_style.as_ref().filter(|_| self.prefs.display_name_styles);
         let surface = palette::surface(palette::Level::Sidebar, cx);
-        let owner = self.guild().is_some_and(|g| g.owner_id.as_ref() == Some(&member.user.id));
+        let owner = match self.guild() {
+            Some(guild) => guild.owner_id.as_ref() == Some(&member.user.id),
+            None => self.open_group().is_some_and(|g| g.props.owner_id.as_ref() == Some(&member.user.id)),
+        };
         let selected = self.profile_card.as_ref().is_some_and(|p| p.user.id == member.user.id);
         let crown = ui::mix(palette::status_in(Status::Idle, cx), strong, 0.4);
+        let boost = palette::boost_ink(cx);
+        let boosting = member.boosting_since.as_deref().and_then(boost_date);
         let name_line = |key: String| {
             div()
                 .flex()
                 .items_center()
                 .gap(px(6.))
                 .min_w_0()
-                .child(crate::name_fonts::styled(ui::truncating(key, member.user.name.clone()).font_weight(FontWeight::NORMAL).text_color(name_ink), member.user.name_style.as_ref()))
+                .child(crate::name_fonts::styled(ui::truncating(key, member.user.name.clone()).font_weight(FontWeight::NORMAL).text_color(name_ink), name_style))
+                .children(dot.map(crate::chat::role_dot))
                 .children(member.user.tag.as_ref().map(|tag| crate::chat::guild_tag(tag, cx)))
-                .when(owner, |r| r.child(Icon::new(Glyph::Crown).size(px(14.)).flex_none().text_color(crown)))
                 .when(member.user.bot, |r| r.child(ui::tag("App", cx)))
+                .when(owner, |r| r.child(Icon::new(Glyph::Crown).size(px(14.)).flex_none().text_color(crown)))
+                .children(boosting.clone().map(|since| {
+                    div()
+                        .id(SharedString::from(format!("member-boost-{}", member.user.id)))
+                        .flex_none()
+                        .child(Icon::new(Glyph::Gem).size(px(14.)).text_color(boost))
+                        .tooltip(move |window, cx| ui::tip(format!("Server boosting since {since}"), window, cx))
+                }))
         };
         let status = self.member_status(member);
         let names = |key: String| div().min_w_0().flex().flex_col().child(name_line(key)).children(status.clone().map(|s| s.line(cx)));
@@ -294,12 +336,22 @@ impl Waffle {
             true => (fill(palette::selected(cx)), None),
             false => (surface, Some(fill(hover))),
         };
-        let plate = member.user.nameplate.as_ref().map(|plate| member_nameplate(plate, names(format!("member-name-mask-{}", member.user.id)), fills, self.panel_width - MEMBER_LIST_INSET, selected, dark));
+        // Discord animates the avatar, decoration and nameplate while the row is hovered or its profile is open.
+        let animate = (selected || self.member_hover.as_deref() == Some(member.user.id.as_str())) && crate::presence::may_animate();
+        let plate = member.user.nameplate.as_ref().map(|plate| member_nameplate(plate, names(format!("member-name-mask-{}", member.user.id)), fills, self.panel_width - MEMBER_LIST_INSET, selected, animate, dark));
         let plated = plate.is_some();
+        let hover_id = member.user.id.clone();
         div()
             .id(SharedString::from(format!("member-{}", member.user.id)))
+            .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                let next = hovered.then(|| hover_id.clone());
+                if this.member_hover != next && (*hovered || this.member_hover.as_deref() == Some(hover_id.as_str())) {
+                    this.member_hover = next;
+                    cx.notify();
+                }
+            }))
             .relative()
-            .h(px(MEMBER_ROW))
+            .h(px(member_row_height()))
             .flex_none()
             .px_2()
             // Discord's room for the art: names stop 32px short of a nameplated row's end.
@@ -313,7 +365,7 @@ impl Waffle {
             .when(selected, |r| r.bg(palette::selected(cx)))
             .when(!selected, |r| r.hover(move |s| s.bg(hover)))
             .children(plate)
-            .child(div().when(offline, |a| a.opacity(0.5)).child(decorated_avatar(&member.user.avatar, member.user.decoration.as_deref(), 32., Some(member.presence.mark()), surface)))
+            .child(div().when(offline, |a| a.opacity(0.5)).child(member_avatar(member, animate, surface)))
             .child(names(format!("member-name-{}", member.user.id)).relative().flex_1())
             .on_click({
                 let user = member.user.clone();
@@ -321,7 +373,8 @@ impl Waffle {
             })
             .on_mouse_down(gpui_kit::MouseButton::Right, {
                 let (user, guild_id) = (member.user.clone(), self.guild_id.clone());
-                cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_user_menu(user.clone(), guild_id.clone(), crate::user_menu::Surface::ServerChat, e.position, cx))
+                let surface = if guild_id.is_some() { crate::user_menu::Surface::ServerChat } else { crate::user_menu::Surface::Group };
+                cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_user_menu(user.clone(), guild_id.clone(), surface, e.position, cx))
             })
             .into_any_element()
     }
@@ -330,7 +383,7 @@ impl Waffle {
 impl Waffle {
     // Discord's line under a member (its ActivityStatus): one primary item, a Go Live first, then the first
     // activity, then being in voice in this server; "+N" when more than one applies; the custom status after
-    // it. Nothing while offline.
+    // it. Hovering it lists every item. Nothing while offline.
     fn member_status(&self, member: &Member) -> Option<MemberStatus> {
         let presence = &member.presence;
         if presence.status == Status::Offline {
@@ -341,55 +394,130 @@ impl Waffle {
             let channel = g.channels.iter().find(|c| Some(&c.id) == state.channel_id.as_ref())?;
             Some((state.streaming, channel.clone()))
         });
-        let activities = presence.activity.as_ref().map_or(0, |a| a.more + 1);
         let custom = presence.custom.clone();
-        let (icon, text, live, sources) = match (&voice, &presence.activity) {
+        let activities: Vec<(ActivityKind, String)> = presence.activity.iter().flat_map(|a| std::iter::once((a.kind, a.text.clone())).chain(a.rest.iter().cloned())).collect();
+        // The hover list, in Discord's order: the stream, each activity, then voice (when not streaming).
+        let stream = voice.as_ref().filter(|(streaming, _)| *streaming).map(|(_, channel)| StatusItem { icon: StatusIcon::Screen, text: "Sharing their screen".into(), channel: Some(channel.clone()) });
+        let in_voice = voice.as_ref().filter(|(streaming, _)| !*streaming).map(|(_, channel)| StatusItem { icon: StatusIcon::Channel(Box::new(channel.clone())), text: "In voice".into(), channel: Some(channel.clone()) });
+        let items: Vec<StatusItem> = stream
+            .into_iter()
+            .chain(activities.iter().map(|(kind, text)| StatusItem { icon: StatusIcon::Activity(*kind), text: text.clone(), channel: None }))
+            .chain(in_voice)
+            .filter(|_| !member.user.bot)
+            .collect();
+        let (icon, text, sources) = match (&voice, activities.first()) {
             // Live: what they're playing names the stream, and isn't counted again.
-            (Some((true, _)), activity) => {
-                let game = activity.as_ref().filter(|a| a.kind == ActivityKind::Playing).map(|a| a.text.clone());
-                let sources = 1 + activities - usize::from(game.is_some());
-                (activity_glyph(ActivityKind::Streaming), game.unwrap_or_else(|| "Sharing their screen".into()), true, sources)
+            (Some((true, _)), first) => {
+                let game = first.filter(|(kind, _)| *kind == ActivityKind::Playing).map(|(_, text)| text.clone());
+                let sources = 1 + activities.len() - usize::from(game.is_some());
+                (StatusIcon::Screen, game.unwrap_or_else(|| "Sharing their screen".into()), sources)
             }
-            (_, Some(activity)) => (activity_glyph(activity.kind), activity.text.clone(), activity.kind == ActivityKind::Streaming, activities + usize::from(voice.is_some())),
-            (Some((false, channel)), None) => (Some(channel_glyph(channel)), "In voice".to_owned(), false, 1),
-            (None, None) => return custom.map(|custom| MemberStatus { icon: None, text: None, live: false, more: 0, custom: Some(custom) }),
+            (_, Some((kind, text))) => (StatusIcon::Activity(*kind), text.clone(), items.len()),
+            (Some((false, channel)), None) => (StatusIcon::Channel(Box::new(channel.clone())), "In voice".to_owned(), 1),
+            (None, None) => return custom.map(|custom| MemberStatus { id: member.user.id.clone(), icon: None, text: None, more: 0, custom: Some(custom), items: Vec::new() }),
         };
         // Bots show no activity icon.
-        let icon = icon.filter(|_| !member.user.bot);
-        Some(MemberStatus { icon, text: Some(text), live, more: sources.saturating_sub(1), custom })
+        let icon = (!member.user.bot).then_some(icon);
+        Some(MemberStatus { id: member.user.id.clone(), icon, text: Some(text), more: sources.saturating_sub(1), custom, items })
     }
 }
 
 #[derive(Clone)]
 struct MemberStatus {
-    icon: Option<Icon>,
+    id: String,
+    icon: Option<StatusIcon>,
     text: Option<String>,
-    live: bool,
     more: usize,
     custom: Option<String>,
+    // Everything they're doing, for the hover list.
+    items: Vec<StatusItem>,
+}
+
+#[derive(Clone)]
+struct StatusItem {
+    icon: StatusIcon,
+    text: String,
+    // Being in voice names the channel after the text: "In voice (🔊 lounge)".
+    channel: Option<crate::discord::Channel>,
+}
+
+#[derive(Clone)]
+enum StatusIcon {
+    Activity(ActivityKind),
+    Screen,
+    Channel(Box<crate::discord::Channel>),
+}
+
+impl StatusIcon {
+    // As Discord's: only the voice channel is tinted online green; activities and a stream take the
+    // line's own colour. A stream is our share glyph rather than Discord's TV.
+    fn icon(&self, green: gpui_kit::Hsla) -> Option<Icon> {
+        let icon = match self {
+            StatusIcon::Activity(kind) => activity_glyph(*kind)?,
+            StatusIcon::Screen => Icon::new(Glyph::ShareScreen),
+            StatusIcon::Channel(channel) => return Some(channel_glyph(channel).size(px(16.)).flex_none().text_color(green)),
+        };
+        Some(icon.size(px(16.)).flex_none())
+    }
 }
 
 impl MemberStatus {
     // Beside a custom status the primary item is its icon alone, as Discord's member list draws it.
-    fn line(self, cx: &App) -> Div {
+    fn line(self, cx: &App) -> gpui_kit::Stateful<Div> {
         let beside_custom = self.custom.is_some();
         let primary = self.icon.is_some() || (self.text.is_some() && !beside_custom);
+        let green = palette::positive_ink(cx);
+        let items = self.items.clone();
         div()
+            .id(SharedString::from(format!("member-status-{}", self.id)))
             .flex()
             .items_center()
             .gap_1()
             .min_w_0()
             .text_size(px(12.))
             .text_color(palette::faint(cx))
-            .children(self.icon.map(|icon| icon.size(px(16.)).flex_none().when(self.live, |i| i.text_color(palette::accent_ink(cx)))))
+            .children(self.icon.and_then(|icon| icon.icon(green)))
             .children(self.text.filter(|_| !beside_custom).map(|text| ui::truncating(format!("member-status-{text}"), text)))
             .when(self.more > 0, |d| d.child(div().flex_none().child(format!("+{}", self.more))))
             .when(primary && beside_custom, |d| d.child(div().flex_none().child("•")))
             .children(self.custom.map(|custom| ui::truncating(format!("member-custom-{custom}"), custom)))
+            .when(!items.is_empty(), |d| d.tooltip(move |_, cx| cx.new(|_| ActivityTip(items.clone())).into()))
     }
 }
 
-const MEMBER_ROW: f32 = 44.;
+// The hover list over a member's activity line, as Discord's: each thing they're doing on its own line.
+struct ActivityTip(Vec<StatusItem>);
+
+impl Render for ActivityTip {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let green = palette::positive_ink_inverted(cx);
+        let rows = self.0.iter().map(|item| {
+            let channel = item.channel.as_ref().map(|channel| {
+                div().flex().items_center().gap(px(2.)).child("(").child(channel_glyph(channel).size(px(14.)).flex_none()).child(div().truncate().child(channel.name.clone())).child(")")
+            });
+            div().flex().items_center().gap(px(6.)).min_w_0().children(item.icon.icon(green)).child(div().flex_none().child(item.text.clone())).children(channel)
+        });
+        div()
+            .max_w(px(280.))
+            .px(px(10.))
+            .py(px(8.))
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .squircle(ui::RADIUS_SM)
+            .bg(palette::strong(cx))
+            .text_color(palette::surface(palette::Level::Page, cx))
+            .text_size(px(12.))
+            .font_weight(FontWeight::MEDIUM)
+            .children(rows)
+    }
+}
+
+// A 32px avatar plus padding that follows UI density: 44px at Default.
+fn member_row_height() -> f32 {
+    32. + ui::density_pad(12.)
+}
+
 const MEMBER_ROW_GROUP: &str = "member-row";
 const NAMEPLATE_END: f32 = 32.;
 // The member list's padding on both sides: a row is the panel's width less this.
@@ -401,7 +529,7 @@ const MEMBER_LIST_INSET: f32 = 16.;
 // and rising to full over the next 50px. gpui has no masks, so the mask is laid over the art instead: the
 // row as it looks without art (its fill, `fills`: at rest and on hover, under the tint) at 70% to the
 // names' end, fading out over 50px. Every layer rounds itself, so nothing has to paint the corners off.
-fn member_nameplate(plate: &crate::discord::Nameplate, names: Div, fills: (gpui_kit::Hsla, Option<gpui_kit::Hsla>), row_width: f32, selected: bool, dark: bool) -> AnyElement {
+fn member_nameplate(plate: &crate::discord::Nameplate, names: Div, fills: (gpui_kit::Hsla, Option<gpui_kit::Hsla>), row_width: f32, selected: bool, animate: bool, dark: bool) -> AnyElement {
     let tint = nameplate_tint(plate, dark);
     let r = px(ui::RADIUS_SM);
     let left = gpui_kit::Corners { top_left: r, bottom_left: r, ..Default::default() };
@@ -451,7 +579,7 @@ fn member_nameplate(plate: &crate::discord::Nameplate, names: Div, fills: (gpui_
         .absolute()
         .inset_0()
         .child(tint_layer().right_0())
-        .child(nameplate_art(plate, MEMBER_ROW, r, r).opacity(if selected { 0.9 } else { 0.6 }))
+        .child(nameplate_art(plate, member_row_height(), r, r, animate).opacity(if selected { 0.9 } else { 0.6 }))
         // Clipped to the row: on a long name the fade runs past its end.
         .child(div().absolute().inset_0().overflow_hidden().flex().pr(px(NAMEPLATE_END - 2.)).child(div().relative().flex().min_w_0().child(held).child(ramp)))
         .into_any_element()
@@ -499,6 +627,20 @@ pub(crate) fn ago(ms: i64) -> String {
         1440..10080 => format!("{}d ago", minutes / 1440),
         _ => format!("{}w ago", minutes / 10080),
     }
+}
+
+// Discord's gem tooltip date, from `premium_since`.
+fn boost_date(iso: &str) -> Option<String> {
+    let day = chrono::NaiveDate::parse_from_str(iso.get(..10)?, "%Y-%m-%d").ok()?;
+    Some(crate::search::day_label(day))
+}
+
+fn member_avatar(member: &Member, animate: bool, surface: gpui_kit::Hsla) -> AnyElement {
+    let (avatar, decoration) = match animate {
+        true => (crate::discord::animated(&member.user.avatar), member.user.decoration.as_deref().map(crate::discord::animated)),
+        false => (member.user.avatar.clone(), member.user.decoration.clone()),
+    };
+    decorated_avatar(&avatar, decoration.as_deref(), 32., Some(member.presence.mark()), surface)
 }
 
 #[cfg(test)]

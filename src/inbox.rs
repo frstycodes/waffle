@@ -6,6 +6,7 @@ use crate::{
     Waffle,
     discord::{Channel, ChannelKind, Message},
     icons::Glyph,
+    illustration::Illustration,
     palette,
     ui::{self, RADIUS_SM, Squircle},
 };
@@ -18,6 +19,8 @@ pub(crate) enum InboxTab {
     Unreads,
     #[default]
     Mentions,
+    // Discord's saved-for-later messages.
+    Saved,
 }
 
 /// What the Mentions tab includes, kept across restarts.
@@ -100,12 +103,31 @@ impl Waffle {
         if tab == InboxTab::Mentions && self.inbox.is_none() {
             self.fetch_mentions(cx);
         }
+        if tab == InboxTab::Saved && self.saved.is_none() {
+            self.fetch_saved(cx);
+        }
         cx.notify();
     }
 
     fn set_mention_filters(&mut self, change: impl FnOnce(&mut MentionFilters), cx: &mut Context<Self>) {
         self.update_prefs(cx, |p| change(&mut p.mention_filters));
         self.fetch_mentions(cx);
+    }
+
+    /// ⌘I / Ctrl+I: the rail's Inbox popover, opened or closed.
+    pub(crate) fn toggle_inbox(&mut self, cx: &mut Context<Self>) {
+        if self.inbox_open {
+            self.inbox_open = false;
+        } else {
+            self.open_inbox(cx);
+        }
+        cx.notify();
+    }
+
+    /// ⌘⇧E / Ctrl+Shift+E: reads the channel at the top of Unreads, as its own Mark read does.
+    pub(crate) fn mark_top_unread_read(&mut self, cx: &mut Context<Self>) {
+        let Some(top) = self.unreads().into_iter().next() else { return };
+        self.mark_channel_read(&top.channel.id, cx);
     }
 
     fn mark_all_unreads(&mut self, cx: &mut Context<Self>) {
@@ -133,8 +155,8 @@ impl Waffle {
             .when(titled, |t| t.child(Icon::new(Glyph::Inbox).size(px(20.)).text_color(palette::faint(cx))).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Inbox")))
             .child(div().flex_1())
             .children(mark_all);
-        const TABS: [InboxTab; 2] = [InboxTab::Unreads, InboxTab::Mentions];
-        let items = [ui::Tab::new("Unreads").count((unread > 0).then_some(unread as u32)), ui::Tab::new("Mentions")];
+        const TABS: [InboxTab; 3] = [InboxTab::Unreads, InboxTab::Mentions, InboxTab::Saved];
+        let items = [ui::Tab::new("Unreads").count((unread > 0).then_some(unread as u32)), ui::Tab::new("Mentions"), ui::Tab::new("Saved")];
         let selected = TABS.iter().position(|t| *t == self.inbox_tab).unwrap_or(1);
         let this = cx.entity().downgrade();
         let tabs = ui::tabs("inbox-tabs", &items, selected, move |i, _, cx| {
@@ -146,7 +168,8 @@ impl Waffle {
     /// The open tab's list: Mentions under its filter chips (at most `limit`), or the unread channels.
     pub(crate) fn inbox_body(&self, limit: Option<usize>, cx: &mut Context<Self>) -> AnyElement {
         match self.inbox_tab {
-            InboxTab::Mentions => div().flex().flex_col().gap_2().child(self.mention_filters(cx)).child(self.mention_list(limit, cx)).into_any_element(),
+            InboxTab::Mentions => div().flex().flex_col().gap_2().child(self.mention_filters(cx)).child(self.message_cards(&self.inbox, limit, ("You're all caught up!", "Mentions of you and your roles land here."), cx)).into_any_element(),
+            InboxTab::Saved => self.message_cards(&self.saved, limit, ("No saved messages", "Save a message from its menu to find it here later."), cx),
             InboxTab::Unreads => self.unread_list(cx),
         }
     }
@@ -166,16 +189,7 @@ impl Waffle {
     fn unread_list(&self, cx: &mut Context<Self>) -> AnyElement {
         let unreads = self.unreads();
         if unreads.is_empty() {
-            return div()
-                .p_6()
-                .flex()
-                .flex_col()
-                .items_center()
-                .gap_1()
-                .text_center()
-                .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("You're all caught up"))
-                .child(div().text_color(palette::muted(cx)).child("New messages in channels you follow will gather here."))
-                .into_any_element();
+            return ui::empty_state("unreads-empty", Illustration::InboxEmpty, "You're all caught up", "New messages in channels you follow will gather here.", cx).into_any_element();
         }
         let messages: Vec<Message> = unreads.iter().flat_map(|u| u.messages.iter().cloned()).collect();
         let ctx = self.row_context_everywhere(&messages, 380., cx);

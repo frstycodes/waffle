@@ -11,7 +11,7 @@ use futures::Future;
 use gpui_util::ResultExt;
 use image::{
     AnimationDecoder, ImageError, ImageFormat, Rgba,
-    codecs::{gif::GifDecoder, webp::WebPDecoder},
+    codecs::{gif::GifDecoder, png::PngDecoder, webp::WebPDecoder},
 };
 use scheduler::Instant;
 use smallvec::SmallVec;
@@ -732,6 +732,27 @@ impl Asset for ImageAssetLoader {
                             frames
                         } else {
                             decode_static_image_from_decoder(decoder)?
+                        }
+                    }
+                    // Waffle: APNG plays like GIF and WebP (Discord's animated avatar decorations are APNG).
+                    ImageFormat::Png if PngDecoder::new(Cursor::new(&bytes)).and_then(|d| d.is_apng()).unwrap_or(false) => {
+                        let decoder = PngDecoder::new(Cursor::new(&bytes))?.apng()?;
+                        let mut frames = SmallVec::new();
+                        for frame in decoder.into_frames() {
+                            match frame {
+                                Ok(mut frame) => {
+                                    for pixel in frame.buffer_mut().chunks_exact_mut(4) {
+                                        pixel.swap(0, 2);
+                                    }
+                                    frames.push(frame);
+                                }
+                                Err(err) => log::debug!("Skipping APNG frame in {source:?} due to decode error: {err}"),
+                            }
+                        }
+                        if frames.is_empty() {
+                            decode_static_image(&bytes, format)?
+                        } else {
+                            frames
                         }
                     }
                     _ => decode_static_image(&bytes, format)?,

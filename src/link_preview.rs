@@ -173,7 +173,7 @@ impl Waffle {
         match link {
             DiscordLink::Message { guild, channel, message } => self.open_linked(guild, channel, Some(message), window, cx),
             DiscordLink::Channel { guild, channel } => self.open_linked(guild, channel, None, window, cx),
-            DiscordLink::Invite(code) => self.join_invite(code, cx),
+            DiscordLink::Invite(code) => self.open_invite(code, cx),
         }
     }
 
@@ -210,7 +210,11 @@ impl Waffle {
         cx.spawn(async move |this, cx| {
             let joined = client.join_invite(&code, captcha_url).await;
             this.update(cx, |this, cx| match joined {
-                Ok(guild_id) => this.open_joined_guild(guild_id, cx),
+                Ok(guild_id) => {
+                    this.join.just_joined.insert(guild_id.clone());
+                    this.apply_invite_settings(&guild_id, cx);
+                    this.open_joined_guild(guild_id, cx)
+                }
                 Err(error) => this.show_toast(error, cx),
             })
             .ok();
@@ -224,6 +228,7 @@ impl Waffle {
             self.joining = Some(guild_id);
             return;
         }
+        self.on_joined(&guild_id, cx);
         let (this, main) = (cx.weak_entity(), self.main_window);
         // The main window's root is this view, so it can only be borrowed once this update ends.
         cx.defer(move |cx| {
