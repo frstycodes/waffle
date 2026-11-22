@@ -69,6 +69,8 @@ pub struct Join {
     // Server → the nickname picked on its invite screen, set once the join goes through.
     pub invite_settings: HashMap<String, invite::Picked>,
     pub onboard: Option<OnboardingView>,
+    // Onboarding closed halfway, by server: its picks and step, for Finish joining.
+    pub paused_onboarding: HashMap<String, OnboardingView>,
     pub rules: Option<RulesView>,
     pub browse: BrowseView,
     pub guide: GuideView,
