@@ -7,7 +7,7 @@ use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 const GATEWAY: &str = "wss://gateway.discord.gg/?v=10&encoding=json";
 pub const API: &str = "https://discord.com/api/v10";
-const CDN: &str = "https://cdn.discordapp.com";
+pub(crate) const CDN: &str = "https://cdn.discordapp.com";
 pub(crate) const VIEW_CHANNEL: u64 = 1 << 10;
 
 // The user-account gateway and several fields below (nameplates, guild tags, member list ops,
@@ -225,7 +225,7 @@ pub struct Role {
     pub managed: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Guild {
     pub id: String,
     pub name: String,
@@ -250,6 +250,9 @@ pub struct Guild {
     pub features: Vec<String>,
     // Scheduled events, from READY / GUILD_CREATE and the GUILD_SCHEDULED_EVENT_* events.
     pub events: Vec<ScheduledEvent>,
+    // A Community server's rules and community-updates channels, which can't be announcement channels.
+    pub rules_channel_id: Option<String>,
+    pub public_updates_channel_id: Option<String>,
 }
 
 // A guild scheduled event (docs/discord-events-re.md). Status 1 scheduled, 2 active, 3 completed, 4 canceled;
@@ -844,6 +847,15 @@ pub struct Message {
     pub kind: u8,
     #[serde(default)]
     pub flags: u64,
+    // A crosspost's source, from its message_reference: the followed server and channel.
+    #[serde(default)]
+    pub crosspost_from: Option<CrosspostSource>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CrosspostSource {
+    pub guild_id: String,
+    pub channel_id: String,
 }
 
 impl Message {
@@ -2354,6 +2366,8 @@ fn parse_guild(g: &Value) -> Option<Guild> {
         afk_channel_id: props["afk_channel_id"].as_str().or(g["afk_channel_id"].as_str()).map(str::to_owned),
         features: strings(if props["features"].is_array() { &props["features"] } else { &g["features"] }),
         events: g["guild_scheduled_events"].as_array().into_iter().flatten().filter_map(parse_scheduled_event).collect(),
+        rules_channel_id: props["rules_channel_id"].as_str().or(g["rules_channel_id"].as_str()).map(str::to_owned),
+        public_updates_channel_id: props["public_updates_channel_id"].as_str().or(g["public_updates_channel_id"].as_str()).map(str::to_owned),
     })
 }
 
@@ -2560,7 +2574,12 @@ pub fn parse_message(m: &Value) -> Option<Message> {
         pin_notice: m["type"] == 6,
         kind: m["type"].as_u64().unwrap_or(0) as u8,
         flags: m["flags"].as_u64().unwrap_or(0),
+        crosspost_from: is_crosspost.then(|| crosspost_source(&m["message_reference"])).flatten(),
     })
+}
+
+fn crosspost_source(reference: &Value) -> Option<CrosspostSource> {
+    Some(CrosspostSource { guild_id: reference["guild_id"].as_str()?.to_owned(), channel_id: reference["channel_id"].as_str()?.to_owned() })
 }
 
 // A forward's snapshot carries the original's content, media and time but no id, author or channel;
@@ -3243,6 +3262,8 @@ mod tests {
             afk_channel_id: None,
             features: Vec::new(),
             events: Vec::new(),
+            rules_channel_id: None,
+            public_updates_channel_id: None,
             threads: Vec::new(),
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -3282,6 +3303,8 @@ mod tests {
             afk_channel_id: None,
             features: Vec::new(),
             events: Vec::new(),
+            rules_channel_id: None,
+            public_updates_channel_id: None,
             threads: vec![thread],
             my_roles: Vec::new(),
             default_notifications: Default::default(),
@@ -3325,6 +3348,8 @@ mod tests {
             afk_channel_id: None,
             features: Vec::new(),
             events: Vec::new(),
+            rules_channel_id: None,
+            public_updates_channel_id: None,
             threads: Vec::new(),
             my_roles: vec!["mods".into()],
             default_notifications: Default::default(),

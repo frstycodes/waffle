@@ -1006,7 +1006,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
             div()
                 .flex()
                 .gap(px(16.))
-                .child(profile_trigger(format!("avatar-{}", message.id), &message.author, ctx).flex_none().mt(px(2.)).child(crate::layout::decorated_avatar(
+                .child(author_trigger(format!("avatar-{}", message.id), message, ctx).flex_none().mt(px(2.)).child(crate::layout::decorated_avatar(
                     &message.author.avatar,
                     message.author.decoration.as_deref(),
                     AVATAR,
@@ -1096,16 +1096,21 @@ fn message_head(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> impl IntoE
         .min_w_0()
         .line_height(px(22.))
         .child(
-            crate::name_fonts::styled(profile_trigger(format!("name-{}", message.id), &message.author, ctx).min_w_0().truncate().text_size(px(16.)).font_weight(FontWeight::MEDIUM), message.author.name_style.as_ref())
+            crate::name_fonts::styled(author_trigger(format!("name-{}", message.id), message, ctx).min_w_0().truncate().text_size(px(16.)).font_weight(FontWeight::MEDIUM), message.author.name_style.as_ref())
                 .text_color(name_color)
                 .hover(|s| s.underline())
                 .child(StyledText::new(name).with_highlights(runs)),
         )
         .children(message.author.tag.as_ref().map(|tag| guild_tag(tag, cx)))
-        .when(crate::announcements::is_crosspost(message), |h| h.child(crate::announcements::server_tag(cx)))
+        .when(crate::announcements::is_crosspost(message), |h| h.child(crate::announcements::server_tag(message, cx)))
         .when(message.author.bot && !crate::announcements::is_crosspost(message), |h| h.child(ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px(px(6.)).gap(px(3.)).child(Icon::new(Glyph::Checkmark).size(px(11.))).child("APP")))
         .child(div().flex_none().relative().top(px(1.)).whitespace_nowrap().text_size(px(12.)).text_color(palette::faint(cx)).child(format_stamp(&message.timestamp)))
         .when(message.pinned, |h| h.child(div().flex_none().self_center().text_color(palette::muted(cx)).child(Icon::new(Glyph::Pin).size(px(14.)))))
+}
+
+// A crosspost's author is its source server, whose card opens instead of the webhook's profile.
+fn author_trigger(id: String, message: &Message, ctx: &Rc<RowContext>) -> Stateful<Div> {
+    crate::announcements::source_trigger(id.clone(), message, ctx.this.clone()).unwrap_or_else(|| profile_trigger(id, &message.author, ctx))
 }
 
 // Clicking an avatar or name opens their profile popout at the pointer, as in Discord.
