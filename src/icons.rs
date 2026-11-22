@@ -12,7 +12,7 @@ pub const NEW_TAG: &str = "shapes/new-tag.svg";
 // Reicon (MIT, github.com/dqev/reicon) in its filled weight, like Discord's chrome, plus Waffle's own glyphs
 // (muted, deafened, camera off, GIF...), all written to assets/icons/reicon/ by tools/reicon.py, which also
 // keeps these paths in step with its map (design/icons.html). Order matches `Glyph`.
-const GLYPHS: [(&str, &[u8]); 157] = [
+const GLYPHS: [(&str, &[u8]); 156] = [
     ("icons/hashtag.svg", include_bytes!("../assets/icons/reicon/hashtag2.svg")),
     ("icons/hashtag-lock.svg", include_bytes!("../assets/icons/reicon/lock2.svg")),
     ("icons/volume-high.svg", include_bytes!("../assets/icons/reicon/volume-high.svg")),
@@ -170,7 +170,6 @@ const GLYPHS: [(&str, &[u8]); 157] = [
     ("icons/rows.svg", include_bytes!("../assets/icons/reicon/row-vertical.svg")),
     ("icons/gallery.svg", include_bytes!("../assets/icons/reicon/gallery.svg")),
     ("icons/map-point.svg", include_bytes!("../assets/icons/reicon/map-point.svg")),
-    ("icons/share.svg", include_bytes!("../assets/icons/reicon/share.svg")),
     ("icons/repeat.svg", include_bytes!("../assets/icons/reicon/repeat.svg")),
     ("icons/forward.svg", include_bytes!("../assets/icons/forward.svg")),
 ];
@@ -339,7 +338,6 @@ pub enum Glyph {
     Rows,
     Gallery,
     MapPoint,
-    Share,
     Repeat,
     Forward,
 }
