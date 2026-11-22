@@ -417,17 +417,23 @@ impl Waffle {
         };
         let page = palette::surface(palette::Level::Page, cx);
         let close = if on_splash_cover { ui::round_button("onboarding-close", Glyph::X, "Close", 40.) } else { ui::icon_button("onboarding-close", Glyph::X, "Close", cx).large() };
+        // Over a splash the questions are a card as tall as they are (up to a cap), so the server's image
+        // shows all around; elsewhere the page fills the window.
+        let card = splash.is_some() && !on_splash_cover;
+        let body = match card {
+            true => hugging_scroll(div().id("onboarding-body").child(body), &view.body_scroll),
+            false => ui::scroll_area(div().id("onboarding-body").child(body), &view.body_scroll),
+        };
         let frame = div()
             .relative()
             .w_full()
-            .flex_1()
             .min_h_0()
             .flex()
             .flex_col()
             .when(!on_splash_cover, |d| d.bg(page))
-            // Over a splash the questions are a card sized to them, so the server's image shows all around.
-            .when(splash.is_some() && !on_splash_cover, |d| d.max_w(px(SHEET_WIDTH)).max_h(px(SHEET_HEIGHT)).squircle(ui::RADIUS_XL).overflow_hidden().shadow(ui::shadow_pop(cx)))
-            .child(ui::scroll_area(div().id("onboarding-body").child(body), &view.body_scroll))
+            .when(card, |d| d.max_w(px(SHEET_WIDTH)).max_h(px(SHEET_HEIGHT)).squircle(ui::RADIUS_XL).overflow_hidden().shadow(ui::shadow_pop(cx)))
+            .when(!card, |d| d.flex_1())
+            .child(body)
             .child(self.onboarding_footer(&prompts, &rules, on_splash_cover, cx))
             .child(div().absolute().top(px(16.)).right(px(16.)).child(close.on_click(cx.listener(|this, _, _, cx| this.close_onboarding(cx)))));
         let root = div()
@@ -509,27 +515,20 @@ impl Waffle {
         });
         let next = ui::button("onboarding-next", tone, cx).large().loading(view.sending.then_some("Finishing…")).child(label).on_click(cx.listener(|this, _, _, cx| this.onboarding_next(cx)));
         let dots = (view.step != Step::Cover).then(|| progress_dots(view.step, prompts.len() + usize::from(has_rules), cx));
+        // The hint gets its own line over the buttons, ending under the button it's about, instead of a
+        // third of the row.
+        let hint = hint.map(|hint| div().text_right().text_size(px(14.)).text_color(if alarm { palette::danger_ink(cx) } else { palette::muted(cx) }).child(hint));
+        let row = div().flex().items_center().gap(px(12.)).child(div().flex_1().flex().children(back)).children(dots).child(div().flex_1().flex().justify_end().child(next));
         div()
             .flex_none()
             .flex()
-            .items_center()
-            .gap(px(12.))
+            .flex_col()
+            .gap(px(10.))
             .px(px(24.))
             .py(px(16.))
             .when(!on_splash_cover, |d| d.border_t_1().border_color(palette::line(cx)))
-            .child(div().flex_1().flex().children(back))
-            .children(dots)
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .items_center()
-                    .justify_end()
-                    .gap(px(12.))
-                    .when_some(hint, |d, hint| d.child(div().min_w_0().text_right().text_size(px(14.)).text_color(if alarm { palette::danger_ink(cx) } else { palette::muted(cx) }).child(hint)))
-                    .child(next),
-            )
+            .children(hint)
+            .child(row)
     }
 }
 
@@ -595,6 +594,12 @@ fn rules_list(rules: &[String], scroll: &ScrollHandle, cx: &App) -> Div {
     });
     let list = div().id("onboarding-rules").max_h(px(RULES_HEIGHT)).overflow_y_scroll().track_scroll(scroll).flex().flex_col().children(rows);
     div().relative().squircle(ui::RADIUS_LG).bg(palette::surface(palette::Level::Group, cx)).p(px(4.)).child(list).vertical_scrollbar(scroll)
+}
+
+// A scroll area that is as tall as its content until its parent caps it (ui::scroll_area always fills).
+fn hugging_scroll(list: gpui_kit::Stateful<Div>, scroll: &ScrollHandle) -> Div {
+    use gpui_kit::base::InteractiveElementExt as _;
+    div().relative().flex().flex_col().flex_shrink(1.).min_h_0().child(list.flex_shrink(1.).min_h_0().overflow_y_scroll().lock_scroll_axis().track_scroll(scroll)).vertical_scrollbar(scroll)
 }
 
 fn column() -> Div {
