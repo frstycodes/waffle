@@ -179,10 +179,10 @@ impl Waffle {
         if parties.iter().any(|p| p.activities.iter().any(|a| a.started.is_some())) {
             self.tick_active_now(cx);
         }
-        let heading = div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Active Now");
+        let heading = div().text_size(ui::TEXT_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Active Now");
         let body = match parties.is_empty() {
             true => quiet_state(cx).into_any_element(),
-            false => div().flex().flex_col().gap(px(12.)).children(parties.iter().map(|p| self.party_card(p, cx))).into_any_element(),
+            false => div().flex().flex_col().gap_3().children(parties.iter().map(|p| self.party_card(p, cx))).into_any_element(),
         };
         let column = div()
             .id("active-now")
@@ -192,7 +192,7 @@ impl Waffle {
             .border_l_1()
             .border_color(palette::line(cx))
             .overflow_y_scrollbar()
-            .child(div().p(px(16.)).flex().flex_col().gap(px(12.)).child(heading).child(body));
+            .child(div().p_4().flex().flex_col().gap_3().child(heading).child(body));
         Some(column.into_any_element())
     }
 
@@ -239,15 +239,15 @@ impl Waffle {
             .flex_col()
             .child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title(&names)))
             .children(sub.map(|s| div().truncate().text_size(px(13.)).text_color(palette::muted(cx)).child(s)));
-        let head = div().flex().items_center().gap(px(10.)).child(faces).child(who).children(head_mark(party, cx));
+        let head = div().flex().items_center().gap_2p5().child(faces).child(who).children(head_mark(party, cx));
         let first = party.members[0].clone();
         let hover = palette::line_strong(cx);
         div()
             .id(SharedString::from(format!("active-now-{}", party.key)))
-            .p(px(12.))
+            .p_3()
             .flex()
             .flex_col()
-            .gap(px(10.))
+            .gap_2p5()
             .squircle(ui::RADIUS_LG)
             .bg(raised)
             .border_1()
@@ -283,15 +283,15 @@ impl Waffle {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(6.))
+                    .gap_1p5()
                     .min_w_0()
-                    .child(div().truncate().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(channel_name))
+                    .child(div().truncate().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(channel_name))
                     .when(!party.streamers.is_empty(), |d| d.child(ui::live_badge())),
             )
-            .child(div().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child(guild.name.clone()));
+            .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(guild.name.clone()));
         Some(
             inner(cx)
-                .child(div().flex_none().text_color(palette::muted(cx)).child(Icon::new(Glyph::VolumeHigh).size(px(20.))))
+                .child(div().flex_none().text_color(palette::muted(cx)).child(Icon::new(Glyph::VolumeHigh).size(ui::ICON_XL)))
                 .child(meta)
                 .child(ui::listed_stack(SharedString::from(format!("active-now-voice-{channel_id}")), "In voice", occupants, 3, 20., group, palette::surface(palette::Level::Raised, cx), palette::muted(cx)))
                 // The button keeps its press, so the card's own click (the profile) never fires with it.
@@ -303,12 +303,12 @@ impl Waffle {
 // The mark beside the title: Spotify's notes, the game's icon, or a pad for several games.
 fn head_mark(party: &Party, cx: &App) -> Option<AnyElement> {
     let muted = palette::muted(cx);
-    let glyph = |icon: Icon, ink: Hsla| div().flex_none().text_color(ink).child(icon.size(px(20.))).into_any_element();
+    let glyph = |icon: Icon, ink: Hsla| div().flex_none().text_color(ink).child(icon.size(ui::ICON_XL)).into_any_element();
     match party.activities.as_slice() {
         [] => None,
         [one] if is_spotify(one) => Some(glyph(Nav::MusicFill.icon(), palette::positive_ink(cx))),
         [one] => Some(match &one.image {
-            Some(url) => ui::media(url.clone(), ui::all(ui::RADIUS_XS)).size(px(24.)).flex_none().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
+            Some(url) => ui::media(url.clone(), ui::all(ui::RADIUS_XS)).size_6().flex_none().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
             None => glyph(crate::sidebar::activity_glyph(one.kind).unwrap_or(Nav::GameFill.icon()), muted),
         }),
         _ => Some(glyph(Nav::GameFill.icon(), muted)),
@@ -316,26 +316,26 @@ fn head_mark(party: &Party, cx: &App) -> Option<AnyElement> {
 }
 
 fn inner(cx: &App) -> Div {
-    div().p(px(10.)).flex().items_center().gap(px(10.)).squircle(ui::RADIUS_MD).bg(palette::surface(palette::Level::Group, cx))
+    div().p_2p5().flex().items_center().gap_2p5().squircle(ui::RADIUS_MD).bg(palette::surface(palette::Level::Group, cx))
 }
 
 fn art(image: Option<&String>, fallback: Icon, cx: &App) -> AnyElement {
     match image {
-        Some(url) => ui::media(url.clone(), ui::all(ui::RADIUS_SM)).size(px(48.)).flex_none().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
-        None => div().size(px(48.)).flex_none().squircle(ui::RADIUS_SM).bg(palette::surface(palette::Level::Raised, cx)).text_color(palette::muted(cx)).flex().items_center().justify_center().child(fallback.size(px(24.))).into_any_element(),
+        Some(url) => ui::media(url.clone(), ui::all(ui::RADIUS_SM)).size_12().flex_none().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
+        None => div().size_12().flex_none().squircle(ui::RADIUS_SM).bg(palette::surface(palette::Level::Raised, cx)).text_color(palette::muted(cx)).flex().items_center().justify_center().child(fallback.size_6()).into_any_element(),
     }
 }
 
 // A game's rich presence, or a Spotify track with its progress.
 fn activity_section(rich: &RichPresence, cx: &App) -> Div {
-    let line = |text: String| div().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child(text);
-    let name = |text: String| div().truncate().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(text);
-    let meta = div().flex_1().min_w_0().flex().flex_col().gap(px(2.));
+    let line = |text: String| div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(text);
+    let name = |text: String| div().truncate().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(text);
+    let meta = div().flex_1().min_w_0().flex().flex_col().gap_0p5();
     if is_spotify(rich) {
         let artists = rich.state.as_ref().map(|s| format!("by {}", s.replace("; ", ", ")));
         let track = rich.started.zip(rich.ends).map(|(start, end)| {
             let done = progress(start, end, now_ms());
-            div().mt(px(6.)).h(px(4.)).w_full().rounded(px(2.)).bg(palette::line_strong(cx)).overflow_hidden().child(div().h_full().w(gpui_kit::relative(done)).bg(palette::muted(cx)))
+            div().mt_1p5().h_1().w_full().rounded_xs().bg(palette::line_strong(cx)).overflow_hidden().child(div().h_full().w(gpui_kit::relative(done)).bg(palette::muted(cx)))
         });
         let meta = meta.child(name(rich.details.clone().unwrap_or_else(|| rich.name.clone()))).children(artists.map(line)).children(track);
         return inner(cx).child(art(rich.image.as_ref(), Nav::MusicFill.icon(), cx)).child(meta);

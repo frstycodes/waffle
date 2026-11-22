@@ -6,7 +6,7 @@
 // ones. Nothing is drawn on other platforms.
 use gpui_kit::{AnyElement, App, Hsla, Window, WindowControlArea, component::Icon, div, prelude::*, px};
 
-use crate::{icons::Glyph, layout::HEADER_HEIGHT, palette, sidebar::Nav};
+use crate::{icons::Glyph, layout::HEADER_HEIGHT, palette, sidebar::Nav, ui};
 
 const BUTTON_WIDTH: f32 = 46.;
 /// Room the controls take at the right of the header line.
@@ -39,7 +39,7 @@ pub fn render(window: &Window, cx: &App) -> Option<AnyElement> {
             // registered first. Blocking the mouse hides those from the hit test under the button.
             .occlude()
             .window_control_area(area)
-            .child(icon.size(px(16.)))
+            .child(icon.size(ui::ICON_MD))
     };
     let maximize = if window.is_maximized() { Nav::Restore } else { Nav::Maximize };
     Some(

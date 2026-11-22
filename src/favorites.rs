@@ -664,7 +664,7 @@ impl Waffle {
             let section = div().flex().flex_col().gap(px(row_gap())).child(self.favorite_category_head(category, collapsed, cx)).children(channel_rows);
             let section = Board::target(section, favorite_board, CATEGORY_LIST, key.clone(), |_: &FavoriteCategoryDrag| false, cx);
             let spaced = !rows.is_empty();
-            rows.push(div().when(spaced, |d| d.mt(px(14.))).child(categories.item(&key, section)).into_any_element());
+            rows.push(div().when(spaced, |d| d.mt_3p5()).child(categories.item(&key, section)).into_any_element());
         }
         rows
     }
@@ -722,7 +722,7 @@ impl Waffle {
                 .when(carried == RowDrag::Hidden, |r| r.invisible())
                 .child(favorite_glyph(&channel).size(px(18.)).flex_none().text_color(if selected { palette::muted(cx) } else { faint }))
                 .child(ui::truncating(format!("fav-name-{}", channel.id), name.clone()).flex_1())
-                .children(origin.map(|o| div().flex_none().max_w(px(96.)).truncate().text_size(px(12.)).font_weight(FontWeight::NORMAL).text_color(faint).child(o)))
+                .children(origin.map(|o| div().flex_none().max_w_24().truncate().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(faint).child(o)))
                 .when(mentions > 0, |r| r.child(ui::count_badge(mentions))),
         };
         let size = point(px(self.channels_width - 16.), px(row_height()));
@@ -763,13 +763,13 @@ fn favorites_empty(cx: &mut Context<Waffle>) -> AnyElement {
         .flex()
         .flex_col()
         .items_center()
-        .gap(px(8.))
-        .py(px(32.))
-        .px(px(16.))
+        .gap_2()
+        .py_8()
+        .px_4()
         .text_center()
-        .text_size(px(14.))
+        .text_size(ui::TEXT_SM)
         .text_color(palette::muted(cx))
-        .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::Star).size(px(32.))))
+        .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::Star).size_8()))
         .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Favorites will show up here!"))
         .child("Right-click any channel and pick Add to favorites.")
         .into_any_element()

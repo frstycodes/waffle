@@ -567,16 +567,16 @@ impl Waffle {
         let head = div()
             .flex()
             .items_center()
-            .gap(px(12.))
+            .gap_3()
             .child(ui::server_tile(icon.as_deref(), &name, 48., cx))
             .child(
                 div()
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .gap(px(4.))
-                    .child(div().flex().items_center().gap(px(6.)).min_w_0().child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(name.clone())).child(ui::tag(if source.official { "Official" } else { "Server" }, cx)))
-                    .child(div().flex().items_center().gap(px(4.)).text_size(px(12.)).text_color(palette::muted(cx)).child(Icon::new(Glyph::Megaphone).size(px(14.))).child(div().truncate().child(source.channel.clone()))),
+                    .gap_1()
+                    .child(div().flex().items_center().gap_1p5().min_w_0().child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(name.clone())).child(ui::tag(if source.official { "Official" } else { "Server" }, cx)))
+                    .child(div().flex().items_center().gap_1().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Icon::new(Glyph::Megaphone).size(ui::ICON_SM)).child(div().truncate().child(source.channel.clone()))),
             );
         let action = match member {
             Some(_) => ui::button("source-card-go", ui::Tone::Primary, cx).w_full().child("Go to Server").on_click(cx.listener(move |this, _, window, cx| this.go_to_source(&source, window, cx))),
@@ -595,8 +595,8 @@ impl Waffle {
             .id("source-card")
             .occlude()
             .w(px(SOURCE_CARD_WIDTH))
-            .p(px(16.))
-            .gap(px(16.))
+            .p_4()
+            .gap_4()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(head)
             .child(action);
@@ -758,7 +758,7 @@ impl Waffle {
             ui::button("follow-button", ui::Tone::Secondary, cx)
                 .small()
                 .occlude()
-                .child(Icon::new(Glyph::Plus).size(px(16.)))
+                .child(Icon::new(Glyph::Plus).size(ui::ICON_MD))
                 .child("Follow")
                 .on_click(cx.listener(move |this, _, _, cx| this.open_follow(source.clone(), cx)))
                 .into_any_element(),
@@ -779,27 +779,27 @@ impl Waffle {
             .flex()
             .flex_col()
             .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Follow to get this channel's updates in your own server."))
-            .children(following_line(self.follower_stats(&channel.id)).map(|line| div().text_size(px(12.)).text_color(palette::muted(cx)).child(line)));
+            .children(following_line(self.follower_stats(&channel.id)).map(|line| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(line)));
         let card = div()
             .id("follow-blocker")
             .occlude()
-            .mx(px(16.))
+            .mx_4()
             .min_h(px(56.))
-            .py(px(10.))
-            .pl(px(16.))
-            .pr(px(10.))
+            .py_2p5()
+            .pl_4()
+            .pr_2p5()
             .flex()
             .items_center()
-            .gap(px(12.))
+            .gap_3()
             .squircle(RADIUS_LG)
             .bg(palette::surface(Level::Raised, cx))
             .border_1()
             .border_color(palette::line(cx))
-            .text_size(px(14.))
-            .child(Icon::new(Glyph::Megaphone).size(px(20.)).text_color(palette::muted(cx)))
+            .text_size(ui::TEXT_SM)
+            .child(Icon::new(Glyph::Megaphone).size(ui::ICON_XL).text_color(palette::muted(cx)))
             .child(text)
             .child(ui::button("follow-blocker-button", ui::Tone::Primary, cx).child("Follow").on_click(cx.listener(move |this, _, _, cx| this.open_follow(source.clone(), cx))));
-        Some(div().absolute().left_0().right_0().bottom_0().pb(px(8.)).child(card).into_any_element())
+        Some(div().absolute().left_0().right_0().bottom_0().pb_2().child(card).into_any_element())
     }
 
     pub(crate) fn announcement_overlay(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -838,15 +838,15 @@ impl Waffle {
         let head = div()
             .flex()
             .items_start()
-            .gap(px(12.))
+            .gap_3()
             .child(dialog_title("Add this channel's updates to your server!", cx).flex_1().min_w_0())
             .child(ui::icon_button("follow-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_announcement_dialog(cx))));
         let source = div()
             .flex()
             .items_center()
-            .gap(px(10.))
-            .py(px(10.))
-            .px(px(12.))
+            .gap_2p5()
+            .py_2p5()
+            .px_3()
             .squircle(RADIUS_MD)
             .bg(palette::surface(Level::Page, cx))
             .children(source_guild.map(|g| ui::server_tile(g.icon.as_deref(), &g.name, 32., cx)))
@@ -856,7 +856,7 @@ impl Waffle {
                     .flex()
                     .flex_col()
                     .children(source_guild.map(|g| div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(g.name.clone())))
-                    .child(div().flex().items_center().gap(px(4.)).text_size(px(12.)).text_color(palette::muted(cx)).child(Icon::new(Glyph::Megaphone).size(px(14.))).child(follow.source.name.clone())),
+                    .child(div().flex().items_center().gap_1().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Icon::new(Glyph::Megaphone).size(ui::ICON_SM)).child(follow.source.name.clone())),
             );
         let intro = div()
             .text_color(palette::muted(cx))
@@ -870,7 +870,7 @@ impl Waffle {
             .on_click(cx.listener(|this, e: &ClickEvent, _, cx| this.open_follow_channels(e.position(), cx)));
         let hint = match follow.error {
             Some(error) => ui::field_error(error, cx),
-            None if destinations.is_empty() => div().text_size(px(12.)).text_color(palette::danger_ink(cx)).child(NO_WEBHOOK_SERVERS),
+            None if destinations.is_empty() => div().text_size(ui::TEXT_XS).text_color(palette::danger_ink(cx)).child(NO_WEBHOOK_SERVERS),
             None => ui::field_hint("Only servers and channels you have webhook permissions in are shown.", None, cx),
         };
         let ready = channel.is_some();
@@ -893,22 +893,22 @@ impl Waffle {
 }
 
 fn dialog_title(text: impl Into<SharedString>, cx: &App) -> Div {
-    div().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(text.into())
+    div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(text.into())
 }
 
 fn footer() -> Div {
-    div().flex().justify_end().gap(px(8.))
+    div().flex().justify_end().gap_2()
 }
 
 // Better than Discord: how many of the hour's ten Waffle has used here.
 fn quota(used: usize, cx: &App) -> Div {
     let (on, off) = (palette::muted(cx), palette::line_strong(cx));
-    let pips = (0..PUBLISH_LIMIT).map(|i| div().w(px(10.)).h(px(4.)).rounded(px(2.)).bg(if i < used { on } else { off }));
+    let pips = (0..PUBLISH_LIMIT).map(|i| div().w_2p5().h_1().rounded_xs().bg(if i < used { on } else { off }));
     div()
         .flex()
         .items_center()
-        .gap(px(8.))
-        .text_size(px(12.))
+        .gap_2()
+        .text_size(ui::TEXT_XS)
         .text_color(palette::muted(cx))
         .child(div().flex().gap(px(3.)).children(pips))
         .child(format!("{} of {PUBLISH_LIMIT} published this hour", used.min(PUBLISH_LIMIT)))
@@ -957,19 +957,19 @@ pub(crate) fn publish_bump(message: &Message, mine: bool, newsroom: &Newsroom, t
     let (publish, dismiss, hide) = (this.clone(), this.clone(), this);
     let (msg, id, channel_id) = (message.clone(), message.id.clone(), message.channel_id.clone());
     let strip = div()
-        .mt(px(6.))
+        .mt_1p5()
         .max_w(px(520.))
-        .py(px(8.))
-        .pl(px(12.))
-        .pr(px(10.))
+        .py_2()
+        .pl_3()
+        .pr_2p5()
         .flex()
         .items_center()
-        .gap(px(8.))
+        .gap_2()
         .squircle(RADIUS_MD)
         .bg(palette::selected(cx))
-        .text_size(px(14.))
+        .text_size(ui::TEXT_SM)
         .text_color(palette::text(cx))
-        .child(Icon::new(Glyph::Megaphone).size(px(16.)).text_color(palette::muted(cx)))
+        .child(Icon::new(Glyph::Megaphone).size(ui::ICON_MD).text_color(palette::muted(cx)))
         .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Share with your followers!"))
         .child(ui::button(SharedString::from(format!("bump-publish-{}", message.id)), ui::Tone::Link, cx).child("Publish").on_click(move |_, _, cx| {
             cx.stop_propagation();
@@ -983,9 +983,9 @@ pub(crate) fn publish_bump(message: &Message, mine: bool, newsroom: &Newsroom, t
     let faint = palette::faint(cx);
     let never = div()
         .id(SharedString::from(format!("bump-hide-{}", message.id)))
-        .mt(px(4.))
+        .mt_1()
         .w_auto()
-        .text_size(px(12.))
+        .text_size(ui::TEXT_XS)
         .text_color(faint)
         .cursor_pointer()
         .hover(|s| s.underline())

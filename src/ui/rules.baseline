@@ -1,10 +1,10 @@
 # Left from before the rules (tools/ui_lint.py). Only ever lower: `python3 tools/ui_lint.py --update`.
 src/accounts.rs	global-notify	3
 src/active_now.rs	global-notify	1
-src/active_now.rs	raw-px	25
+src/active_now.rs	raw-px	1
 src/announcements.rs	global-notify	18
 src/announcements.rs	raw-floating	1
-src/announcements.rs	raw-px	48
+src/announcements.rs	raw-px	6
 src/app_modal.rs	global-notify	6
 src/audio_player.rs	raw-floating	2
 src/audio_player.rs	raw-px	34
@@ -41,11 +41,11 @@ src/dm_call.rs	kit-tooltip	4
 src/dm_call.rs	raw-px	56
 src/drag.rs	global-notify	1
 src/drag.rs	raw-floating	1
-src/drag.rs	raw-px	39
+src/drag.rs	raw-px	24
 src/events.rs	global-notify	14
 src/events.rs	raw-px	9
 src/favorites.rs	global-notify	3
-src/favorites.rs	raw-px	10
+src/favorites.rs	raw-px	2
 src/feed_keys.rs	global-notify	4
 src/forum.rs	global-notify	18
 src/forum.rs	raw-px	105
@@ -60,9 +60,8 @@ src/group_dm.rs	raw-px	1
 src/hidden.rs	global-notify	1
 src/home.rs	global-notify	14
 src/home.rs	kit-tooltip	1
-src/home.rs	raw-px	34
+src/home.rs	raw-px	3
 src/inbox.rs	global-notify	2
-src/inbox.rs	raw-px	9
 src/interactions.rs	global-notify	6
 src/invite.rs	global-notify	11
 src/invite.rs	raw-px	2
@@ -80,7 +79,7 @@ src/joining/rules.rs	raw-px	3
 src/layout.rs	global-notify	8
 src/layout.rs	kit-tooltip	3
 src/layout.rs	raw-color	1
-src/layout.rs	raw-px	42
+src/layout.rs	raw-px	11
 src/link_preview.rs	global-notify	1
 src/link_preview.rs	raw-px	35
 src/login.rs	raw-px	13
@@ -88,7 +87,7 @@ src/main.rs	global-notify	71
 src/main.rs	raw-px	9
 src/menu.rs	global-notify	15
 src/menu.rs	raw-color	1
-src/menu.rs	raw-px	66
+src/menu.rs	raw-px	24
 src/mod_view.rs	global-notify	8
 src/mod_view.rs	raw-px	3
 src/modify_attachment.rs	global-notify	5
@@ -96,9 +95,9 @@ src/modify_attachment.rs	raw-px	7
 src/notification_settings.rs	global-notify	7
 src/notification_settings.rs	raw-px	36
 src/overlays.rs	global-notify	18
-src/overlays.rs	raw-px	72
+src/overlays.rs	raw-px	12
 src/panel.rs	global-notify	5
-src/panel.rs	raw-px	56
+src/panel.rs	raw-px	9
 src/pip.rs	global-notify	2
 src/pip.rs	raw-floating	2
 src/pip.rs	raw-px	4
@@ -109,7 +108,7 @@ src/profile.rs	global-notify	7
 src/profile.rs	kit-tooltip	5
 src/profile.rs	raw-color	8
 src/profile.rs	raw-floating	1
-src/profile.rs	raw-px	96
+src/profile.rs	raw-px	12
 src/rail_drag.rs	global-notify	2
 src/reactions.rs	global-notify	5
 src/reactions.rs	raw-px	37
@@ -119,7 +118,7 @@ src/requests.rs	global-notify	3
 src/restart.rs	global-notify	1
 src/role_popout.rs	global-notify	2
 src/role_popout.rs	raw-floating	1
-src/role_popout.rs	raw-px	14
+src/role_popout.rs	raw-px	4
 src/search_menu.rs	global-notify	7
 src/search_menu.rs	raw-px	23
 src/search_results.rs	global-notify	4
@@ -164,7 +163,7 @@ src/shortcuts.rs	raw-px	1
 src/sidebar.rs	global-notify	3
 src/sidebar.rs	kit-tooltip	6
 src/sidebar.rs	raw-color	2
-src/sidebar.rs	raw-px	118
+src/sidebar.rs	raw-px	34
 src/soundboard.rs	global-notify	10
 src/soundboard.rs	raw-px	51
 src/splash.rs	raw-px	4
@@ -174,7 +173,7 @@ src/stage_view.rs	global-notify	1
 src/stage_view.rs	kit-tooltip	1
 src/stage_view.rs	raw-px	92
 src/status_menu.rs	global-notify	10
-src/status_menu.rs	raw-px	36
+src/status_menu.rs	raw-px	4
 src/stickers.rs	global-notify	4
 src/stickers.rs	kit-tooltip	1
 src/stickers.rs	raw-px	35
@@ -191,4 +190,3 @@ src/voice_status.rs	global-notify	7
 src/voice_status.rs	kit-tooltip	1
 src/voice_status.rs	raw-px	20
 src/window_controls.rs	raw-color	1
-src/window_controls.rs	raw-px	1

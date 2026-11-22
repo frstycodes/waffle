@@ -153,13 +153,13 @@ impl Waffle {
         let head = div()
             .flex()
             .items_center()
-            .gap(px(6.))
-            .px(px(8.))
-            .pt(px(6.))
-            .pb(px(8.))
+            .gap_1p5()
+            .px_2()
+            .pt_1p5()
+            .pb_2()
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(palette::strong(cx))
-            .children(role.and_then(|r| r.icon.clone()).map(|icon| img(icon).size(px(16.)).flex_none()))
+            .children(role.and_then(|r| r.icon.clone()).map(|icon| img(icon).size_4().flex_none()))
             .child(div().min_w_0().truncate().child(title.to_owned()))
             .children(count.map(|n| div().flex_none().font_weight(FontWeight::NORMAL).text_color(palette::faint(cx)).child(format!("\u{a0}— {}", crate::link_preview::grouped(n.into())))));
         let top = crate::layout::TITLE_HEIGHT + 8.;
@@ -169,11 +169,11 @@ impl Waffle {
             .occlude()
             .w(px(WIDTH))
             .max_h(px(max_height))
-            .gap(px(2.))
+            .gap_0p5()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(head)
-            .child(div().id("role-popout-rows").flex_shrink(1.).min_h_0().overflow_y_scroll().flex().flex_col().gap(px(2.)).children(rows))
-            .children(more.map(|n| div().px(px(8.)).py(px(6.)).text_size(px(14.)).text_color(palette::faint(cx)).child(format!("+{} more", crate::link_preview::grouped(n.into())))));
+            .child(div().id("role-popout-rows").flex_shrink(1.).min_h_0().overflow_y_scroll().flex().flex_col().gap_0p5().children(rows))
+            .children(more.map(|n| div().px_2().py_1p5().text_size(ui::TEXT_SM).text_color(palette::faint(cx)).child(format!("+{} more", crate::link_preview::grouped(n.into())))));
         let key = SharedString::from(format!("role-popout-{}", open.role_id.as_deref().unwrap_or("everyone")));
         let placed = gpui_kit::anchored()
             .position(open.at)

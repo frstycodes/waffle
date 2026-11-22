@@ -124,7 +124,7 @@ impl Waffle {
         // The rail's slot in the header row holds macOS's traffic lights while they show (Home then leads the
         // rail under the row); otherwise Home sits in it, inset like the header's other controls.
         let lights = crate::layout::traffic_lights_shown(window);
-        let separator = div().w(px(24.)).h(px(2.)).flex_none().rounded(px(1.)).bg(palette::line_strong(cx));
+        let separator = div().w_6().h_0p5().flex_none().rounded(px(1.)).bg(palette::line_strong(cx));
         // Under the lights the rail starts below a strip the channel header's height (so their edges meet in one line),
         // its first tile just under that edge.
         let top = if lights { 4. } else { HEADER_INSET };
@@ -135,13 +135,13 @@ impl Waffle {
             .h_full()
             .flex_none()
             .pt(px(top))
-            .pb(px(12.))
+            .pb_3()
             .flex()
             .flex_col()
             .items_center()
             .gap(px(rail_gap()))
             .overflow_y_scroll()
-            .text_size(px(14.))
+            .text_size(ui::TEXT_SM)
             // Without the lights, Home holds the slot over a drag strip; Home keeps its clicks from the strip,
             // and the rail still scrolls under it.
             .when(!lights, |rail| rail.child(div().absolute().top_0().left_0().w_full().h(px(crate::layout::HEADER_HEIGHT)).window_control_area(gpui_kit::WindowControlArea::Drag)))
@@ -163,7 +163,7 @@ impl Waffle {
         let inbox = rail_action("rail-inbox", Icon::new(Glyph::Inbox), "Inbox", cx)
             .relative()
             .when(open, |b| b.bg(palette::selected(cx)).text_color(palette::strong(cx)))
-            .when(mentions, |b| b.child(div().absolute().top(px(6.)).right(px(6.)).size(px(8.)).rounded_full().bg(palette::alert())))
+            .when(mentions, |b| b.child(div().absolute().top_1p5().right_1p5().size_2().rounded_full().bg(palette::alert())))
             .on_click(cx.listener(|this, _, _, cx| this.open_inbox(cx)));
         // Under the traffic lights a strip sits above the tiles, a hard edge they scroll up to (ui::hard_edge).
         let lights = crate::layout::traffic_lights_shown(window);
@@ -177,7 +177,7 @@ impl Waffle {
             .items_center()
             .children(strip)
             .child(div().relative().flex_1().min_h_0().w_full().child(self.render_rail(window, cx)))
-            .child(div().flex_none().pt(px(rail_gap())).pb(px(8.)).child(inbox))
+            .child(div().flex_none().pt(px(rail_gap())).pb_2().child(inbox))
             .child(div().flex_none().h(self.user_panel_clearance()))
     }
 
@@ -463,7 +463,7 @@ impl Waffle {
             .h(px(TILE))
             .flex_none()
             .cursor_pointer()
-            .child(div().absolute().left_0().top(px((TILE - pill_height) / 2.)).w(px(4.)).h(px(pill_height)).rounded_r(px(4.)).bg(palette::strong(cx)))
+            .child(div().absolute().left_0().top(px((TILE - pill_height) / 2.)).w_1().h(px(pill_height)).rounded_r_sm().bg(palette::strong(cx)))
             // GAP: muted tiles skip the design's saturate(0.35): gpui has no element filters.
             // The tooltip hangs off the tile rather than the rail-wide item, so it opens a fixed gap from the art.
             .child(
@@ -571,7 +571,7 @@ impl Waffle {
                     .object_fit(gpui_kit::ObjectFit::Cover)
                     .with_animation(SharedString::from(format!("stream-preview-{}", streamer.id)), Animation::new(ui::DUR_POP), |el, t| el.opacity(t))
             }))
-            .child(ui::live_badge().absolute().top(px(8.)).left(px(8.)))
+            .child(ui::live_badge().absolute().top_2().left_2())
             .child(
                 div()
                     .absolute()
@@ -596,20 +596,20 @@ impl Waffle {
             }));
         let cap = div()
             .id(SharedString::from(format!("stream-card-cap-{}", streamer.id)))
-            .px(px(6.))
-            .pt(px(2.))
-            .pb(px(4.))
+            .px_1p5()
+            .pt_0p5()
+            .pb_1()
             .flex()
             .items_center()
-            .gap(px(8.))
+            .gap_2()
             .min_w_0()
             .child(ui::avatar(streamer.avatar.to_owned(), 24.))
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
-                    .child(div().truncate().text_size(px(14.)).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(app.unwrap_or(streamer.name).to_owned()))
-                    .child(div().truncate().text_size(px(12.)).text_color(palette::faint(cx)).child(detail.join(" · "))),
+                    .child(div().truncate().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(app.unwrap_or(streamer.name).to_owned()))
+                    .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(detail.join(" · "))),
             )
             .when_some(who, |d, who| d.tooltip(move |window, cx| Tooltip::new(who.clone()).build(window, cx)));
         let record = self.stream_card_bounds.clone();
@@ -623,14 +623,14 @@ impl Waffle {
                 this.stream_card_hover = hovered.then(|| hover_key.clone());
                 this.redraw(crate::part::Column::Nav, cx);
             }))
-            .p(px(6.))
+            .p_1p5()
             .squircle(ui::RADIUS_LG)
             .bg(overlay)
             .shadow(ui::shadow_pop(cx))
             .flex()
             .flex_col()
-            .gap(px(6.))
-            .text_size(px(14.))
+            .gap_1p5()
+            .text_size(ui::TEXT_SM)
             .child(thumb)
             .child(cap)
             .transform_origin(point(relative(0.), relative(0.)))
@@ -658,7 +658,7 @@ impl Waffle {
                             continue;
                         }
                         Section::ActiveNow => {
-                            rows.push(self.static_section("active-now-head", "Active now", &channels, &guild, window, cx).when(i > 0, |s| s.mt(px(16.))).into_any_element());
+                            rows.push(self.static_section("active-now-head", "Active now", &channels, &guild, window, cx).when(i > 0, |s| s.mt_4()).into_any_element());
                             continue;
                         }
                         Section::Uncategorised => None,
@@ -691,7 +691,7 @@ impl Waffle {
                 }
             }
             (_, None) => {
-                rows.push(dm_find(cx).mb(px(8.)).on_click(cx.listener(|this, _, window, cx| this.open_switcher(window, cx))).into_any_element());
+                rows.push(dm_find(cx).mb_2().on_click(cx.listener(|this, _, window, cx| this.open_switcher(window, cx))).into_any_element());
                 rows.push(self.friends_row(cx));
                 rows.extend(self.requests_row(cx));
                 let start = cat_add("dm-start", None, "Start a conversation", cx).on_click(cx.listener(|this, _, window, cx| this.open_switcher(window, cx)));
@@ -726,11 +726,11 @@ impl Waffle {
                     .py_2()
                     .squircle(ui::RADIUS_MD)
                     .bg(warning.opacity(0.12))
-                    .text_size(px(12.))
+                    .text_size(ui::TEXT_XS)
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(div().size(px(6.)).flex_none().rounded_full().bg(warning))
+                    .child(div().size_1p5().flex_none().rounded_full().bg(warning))
                     .child(div().truncate().child(format!("Reconnecting… {}", reconnecting.clone().unwrap_or_default()))),
             )
         });
@@ -753,13 +753,13 @@ impl Waffle {
             .flex_col()
             .bg(crate::material::sidebar_fill(cx))
             .text_color(palette::muted(cx))
-            .text_size(px(14.))
+            .text_size(ui::TEXT_SM)
             // The list stops under the header, a hard edge (ui::hard_edge).
             .child(ui::hard_edge(self.sidebar_scrolled(window), cx).child(header))
             .child(ui::scroll_area(
                 div()
                     .id("channels")
-                    .pt(px(8.))
+                    .pt_2()
                     .px_2()
                     .pb_2()
                     .flex()
@@ -787,7 +787,7 @@ impl Waffle {
                 .min_w_0()
                 .px_2()
                 .truncate()
-                .text_size(px(16.))
+                .text_size(ui::TEXT_MD)
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(palette::strong(cx))
                 .child("Home")
@@ -870,13 +870,13 @@ impl Waffle {
         let actions_shown = selected || hovered || (is_voice && in_call && mentions == 0);
         let state = RowState { selected, unread, muted, strong: in_call };
         let elapsed = self.call.as_ref().filter(|c| c.channel.id == channel.id && c.connected).and_then(|_| self.voice_elapsed(&channel.id)).map(|secs| {
-            div().flex_none().text_size(px(12.)).font_weight(FontWeight::NORMAL).text_color(palette::positive_ink(cx)).child(crate::call::clock(secs))
+            div().flex_none().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(palette::positive_ink(cx)).child(crate::call::clock(secs))
         });
         let group: SharedString = format!("ch-{}", channel.id).into();
         // An unsent draft outranks the muted bell in the meta slot.
         let meta = match self.drafts.has(&channel.id) {
             true => Some(draft_mark()),
-            false => muted.then(|| Nav::BellSlash.icon().size(px(16.))),
+            false => muted.then(|| Nav::BellSlash.icon().size_4()),
         };
         let faint = palette::faint(cx);
         let topic = guild.stage(&channel.id).map(|s| s.topic.clone());
@@ -906,7 +906,7 @@ impl Waffle {
                     .when(mentions > 0, |r| r.child(ui::count_badge(mentions)));
                 let row = row.when(carried == RowDrag::Hidden, |r| r.invisible()).when(welcomes, |r| r.bg(palette::accent_soft(cx)).text_color(palette::strong(cx)));
                 match status_line {
-                    Some(status) => row.h_auto().py(px((row_height() - 20.) / 2.)).flex_col().items_stretch().gap(px(2.)).child(line.min_h(px(20.))).child(status),
+                    Some(status) => row.h_auto().py(px((row_height() - 20.) / 2.)).flex_col().items_stretch().gap_0p5().child(line.min_h_5()).child(status),
                     None => row.when(topic.is_some(), |r| r.h(px(STAGE_ROW_HEIGHT))).child(line.h_full()),
                 }
             }
@@ -1061,7 +1061,7 @@ impl Waffle {
         div()
             .flex_none()
             .flex()
-            .gap(px(2.))
+            .gap_0p5()
             .children(open_chat)
             .child(invite)
             .child(options)
@@ -1083,7 +1083,7 @@ impl Waffle {
         let avatar_of = |v: &crate::discord::VoiceState| v.user.as_ref().map(|u| u.avatar.clone()).unwrap_or_else(|| crate::discord::avatar_url(&v.user_id, None));
         if self.hidden_voice_names.contains(&channel.id) && !present.is_empty() {
             let sidebar = crate::material::sidebar_fill(cx);
-            return vec![div().h(px(30.)).pl(px(32.)).flex().items_center().child(ui::avatar_stack(present.iter().map(|v| avatar_of(v)), 22., sidebar)).into_any_element()];
+            return vec![div().h(px(30.)).pl_8().flex().items_center().child(ui::avatar_stack(present.iter().map(|v| avatar_of(v)), 22., sidebar)).into_any_element()];
         }
         let (hover, selected, text) = (palette::hover(cx), palette::selected(cx), palette::text(cx));
         let mut rows = Vec::new();
@@ -1107,7 +1107,7 @@ impl Waffle {
                 div()
                     .id(SharedString::from(format!("voice-game-{}", state.user_id)))
                     .flex_none()
-                    .child(img(game.icon.clone()).size(px(16.)).squircle(4.))
+                    .child(img(game.icon.clone()).size_4().squircle(4.))
                     .tooltip(move |window, cx| Tooltip::new(game.label()).build(window, cx))
             });
             let key = SharedString::from(format!("voice-{}", state.user_id));
@@ -1128,7 +1128,7 @@ impl Waffle {
             };
             rows.push(
                 row.when(carried == RowDrag::Hidden, |r| r.invisible())
-                    .pl(px(32.))
+                    .pl_8()
                     .pr_2()
                     .flex()
                     .items_center()
@@ -1162,7 +1162,7 @@ impl Waffle {
         }
         // .vd-slot: where the person held over this channel will sit.
         if self.welcomes_voice_drop(channel, guild) {
-            rows.push(div().h(px(30.)).ml(px(32.)).flex_none().squircle(ui::RADIUS_SM).border(px(1.5)).border_color(palette::accent()).bg(palette::accent_soft(cx)).into_any_element());
+            rows.push(div().h(px(30.)).ml_8().flex_none().squircle(ui::RADIUS_SM).border(px(1.5)).border_color(palette::accent()).bg(palette::accent_soft(cx)).into_any_element());
         }
         rows
     }
@@ -1268,8 +1268,8 @@ impl Waffle {
                 let (menu_thread, guild_id) = (thread.clone(), guild.id.clone());
                 // The first branch starts just below its parent, never touching the parent's fill.
                 let gap = if i == 0 { -4. } else { row_gap() };
-                let branch = div().absolute().left(px(16.)).top(px(-gap)).w(px(12.)).h(px(THREAD_HEIGHT / 2. + gap)).border_l(px(1.5)).border_b(px(1.5)).rounded_bl(px(8.)).border_color(line);
-                let trunk = (i + 1 < count).then(|| div().absolute().left(px(16.)).top(px(THREAD_HEIGHT / 2. - 8.)).bottom_0().w(px(1.5)).bg(line));
+                let branch = div().absolute().left_4().top(px(-gap)).w_3().h(px(THREAD_HEIGHT / 2. + gap)).border_l(px(1.5)).border_b(px(1.5)).rounded_bl_lg().border_color(line);
+                let trunk = (i + 1 < count).then(|| div().absolute().left_4().top(px(THREAD_HEIGHT / 2. - 8.)).bottom_0().w(px(1.5)).bg(line));
                 let state = RowState { selected, unread, muted: false, strong: false };
                 let row = channel_row(SharedString::from(format!("thread-{}", thread.id)), format!("thread-{}", thread.id).into(), state, cx)
                     .h(px(THREAD_HEIGHT))
@@ -1310,7 +1310,7 @@ impl Waffle {
             // A group always counts us and at least one other, so never "1 member".
             (false, None) => (!channel.recipients.is_empty()).then(|| div().child(format!("{} members", channel.recipients.len() + 1))),
         };
-        let line = call_line.map(|(glyph, label, ink)| div().child(Icon::new(glyph).size(px(14.)).flex_none().text_color(ink)).child(div().text_color(ink).child(label))).or(line);
+        let line = call_line.map(|(glyph, label, ink)| div().child(Icon::new(glyph).size(ui::ICON_SM).flex_none().text_color(ink)).child(div().text_color(ink).child(label))).or(line);
         let state = RowState { selected, unread, muted: false, strong: false };
         let (open, close_id) = (channel.clone(), channel.id.clone());
         let group: SharedString = format!("dm-{}", channel.id).into();
@@ -1325,8 +1325,8 @@ impl Waffle {
             }));
         let row = channel_row(SharedString::from(channel.id.clone()), group.clone(), state, cx);
         self.track_row_hover(row, &channel.id, true, cx)
-            .h(px(44.))
-            .gap(px(10.))
+            .h_11()
+            .gap_2p5()
             .font_weight(FontWeight::NORMAL)
             .child(div().when(offline, |a| a.opacity(0.5)).child(face))
             .child(
@@ -1336,11 +1336,11 @@ impl Waffle {
                     .flex()
                     .flex_col()
                     .child(div().truncate().font_weight(if unread { FontWeight::MEDIUM } else { FontWeight::NORMAL }).child(channel.name.clone()))
-                    .children(line.map(|l| l.flex().items_center().gap_1().min_w_0().text_size(px(12.)).text_color(faint))),
+                    .children(line.map(|l| l.flex().items_center().gap_1().min_w_0().text_size(ui::TEXT_XS).text_color(faint))),
             )
             .when(mentions > 0 && !hovered, |r| r.child(ui::count_badge(mentions)))
             .when(mentions == 0 && !selected && !hovered && self.drafts.has(&channel.id), |r| r.child(div().flex_none().flex().text_color(faint).child(draft_mark())))
-            .when(pinned && !hovered, |r| r.child(div().flex_none().flex().text_color(faint).child(Icon::new(Glyph::Pin).size(px(14.)))))
+            .when(pinned && !hovered, |r| r.child(div().flex_none().flex().text_color(faint).child(Icon::new(Glyph::Pin).size(ui::ICON_SM))))
             .when(hovered, |r| r.child(close))
             .on_click(cx.listener(move |this, _, window, cx| this.open_channel(open.clone(), window, cx)))
             .on_mouse_down(gpui_kit::MouseButton::Right, {
@@ -1398,7 +1398,7 @@ pub(crate) fn channel_row(id: SharedString, group: SharedString, state: RowState
         .when(selected, |r| r.bg(palette::selected(cx)))
         .when(!selected, |r| r.hover(move |s| s.bg(hover).text_color(text)))
         // Pinned to the name line's centre: a two-line row (a voice status under the name) would drop it to the top.
-        .when(unread && !selected, |r| r.child(div().absolute().left(px(-8.)).top(px((row_height() - 8.) / 2.)).w(px(4.)).h(px(8.)).rounded_r(px(4.)).bg(palette::strong(cx))))
+        .when(unread && !selected, |r| r.child(div().absolute().left_neg_2().top(px((row_height() - 8.) / 2.)).w_1().h_2().rounded_r_sm().bg(palette::strong(cx))))
 }
 
 // A category's header row (.cathead): the label, a button that folds the category unless `static_`,
@@ -1409,14 +1409,14 @@ pub(crate) fn category_head(group: SharedString, label: Stateful<Div>, static_: 
         label
             .flex_1()
             .min_w_0()
-            .h(px(28.))
-            .px(px(6.))
+            .h_7()
+            .px_1p5()
             .squircle(ui::RADIUS_SM)
             .flex()
             .items_center()
             .gap_1()
             .whitespace_nowrap()
-            .text_size(px(12.))
+            .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::MEDIUM)
             .text_color(palette::faint(cx))
             .when(!static_, |l| l.cursor_pointer().hover(move |s| s.bg(hover).text_color(strong))),
@@ -1435,8 +1435,8 @@ pub(crate) fn category_action(id: impl Into<gpui_kit::ElementId>, icon: Icon, re
     div()
         .id(id)
         .absolute()
-        .right(px(2.))
-        .size(px(24.))
+        .right_0p5()
+        .size_6()
         .squircle(ui::RADIUS_XS)
         .flex()
         .items_center()
@@ -1445,7 +1445,7 @@ pub(crate) fn category_action(id: impl Into<gpui_kit::ElementId>, icon: Icon, re
         .text_color(palette::muted(cx))
         .hover(move |s| s.text_color(strong))
         .when_some(reveal_on, |add, group| add.opacity(0.).group_hover(group, |s| s.opacity(1.)))
-        .child(icon.size(px(14.)))
+        .child(icon.size(ui::ICON_SM))
         .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
 }
 
@@ -1454,20 +1454,20 @@ fn row_action(id: SharedString, icon: Icon, tooltip: &'static str, cx: &App) -> 
     let strong = palette::strong(cx);
     div()
         .id(id)
-        .size(px(24.))
+        .size_6()
         .squircle(ui::RADIUS_XS)
         .flex()
         .items_center()
         .justify_center()
         .text_color(palette::muted(cx))
         .hover(move |s| s.text_color(strong))
-        .child(icon.size(px(16.)))
+        .child(icon.size(ui::ICON_MD))
         .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
 }
 
 // The pencil on a row whose channel holds an unsent draft.
 fn draft_mark() -> Icon {
-    Icon::new(Glyph::Pen).size(px(14.))
+    Icon::new(Glyph::Pen).size(ui::ICON_SM)
 }
 
 // The type glyph a channel leads with (Discord's raw types: 5 announcement, 13 stage, 16 media); a private
@@ -1497,7 +1497,7 @@ pub(crate) fn channel_glyph(channel: &Channel) -> Icon {
 fn channel_label(channel: &Channel, topic: Option<String>, cx: &App) -> AnyElement {
     let name = ui::truncating(format!("channel-name-{}", channel.id), channel.name.clone()).flex_1();
     let Some(topic) = topic else { return name.into_any_element() };
-    let topic = div().text_size(px(12.)).line_height(px(16.)).font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).truncate().child(topic);
+    let topic = div().text_size(ui::TEXT_XS).line_height(px(16.)).font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).truncate().child(topic);
     div().flex_1().min_w_0().flex().flex_col().child(name).child(topic).into_any_element()
 }
 
@@ -1513,7 +1513,7 @@ fn audience_row(count: usize, cx: &App) -> Div {
         .gap_2()
         .font_weight(FontWeight::NORMAL)
         .text_color(palette::muted(cx))
-        .child(Icon::new(Glyph::Headphones).size(px(16.)).flex_none())
+        .child(Icon::new(Glyph::Headphones).size(ui::ICON_MD).flex_none())
         .child(div().flex_1().min_w_0().truncate().child(format!("{count} in audience")))
 }
 
@@ -1524,7 +1524,7 @@ fn speaking_avatar(avatar: &str, talking: bool, cx: &App) -> Div {
         .flex_none()
         .size(px(22.))
         .child(ui::avatar(avatar.to_owned(), 22.))
-        .when(talking, |a| a.child(div().absolute().top(px(-3.)).left(px(-3.)).size(px(28.)).rounded_full().border(px(2.)).border_color(palette::status_in(crate::discord::Status::Online, cx))))
+        .when(talking, |a| a.child(div().absolute().top(px(-3.)).left(px(-3.)).size_7().rounded_full().border_2().border_color(palette::status_in(crate::discord::Status::Online, cx))))
 }
 
 // What a voice occupant's row shows at its end, as Discord's: their mute and deafen (server ones red),
@@ -1570,16 +1570,16 @@ fn voice_mark_for(state: &crate::discord::VoiceState, cx: &App) -> Option<AnyEle
         return None;
     }
     let (faint, danger) = (palette::faint(cx), palette::danger_ink(cx));
-    let mark = |icon: Icon, color: Hsla| div().flex_none().flex().text_color(color).child(icon.size(px(16.))).into_any_element();
+    let mark = |icon: Icon, color: Hsla| div().flex_none().flex().text_color(color).child(icon.size(ui::ICON_MD)).into_any_element();
     let elements = marks.into_iter().map(|m| match m {
         VoiceMark::ServerMuted => mark(Nav::MicOffFill.icon(), danger),
         VoiceMark::ServerDeafened => mark(Nav::DeafenedFill.icon(), danger),
-        VoiceMark::Live => ui::live_badge().h(px(18.)).px(px(6.)).text_size(px(11.)).into_any_element(),
+        VoiceMark::Live => ui::live_badge().h(px(18.)).px_1p5().text_size(ui::TEXT_XXS).into_any_element(),
         VoiceMark::Camera => mark(Nav::CameraFill.icon(), faint),
         VoiceMark::Muted => mark(Nav::MicOffFill.icon(), faint),
         VoiceMark::Deafened => mark(Nav::DeafenedFill.icon(), faint),
     });
-    Some(div().flex_none().flex().items_center().gap(px(6.)).children(elements).into_any_element())
+    Some(div().flex_none().flex().items_center().gap_1p5().children(elements).into_any_element())
 }
 
 // The DM list's header: a field-shaped button that opens the quick switcher.
@@ -1728,7 +1728,7 @@ fn flying_tile(mini: &Mini, badge: &Badge, head_pill: f32, i: usize, total: usiz
     let pill = (badge.pill > 0.).then(|| {
         let height = lerp(head_pill, badge.pill);
         let center = lerp(TILE / 2., slot_y(i) + TILE / 2.);
-        div().absolute().left_0().top(px(center - height / 2.)).w(px(4.)).h(px(height)).rounded_r(px(4.)).bg(palette::strong(cx))
+        div().absolute().left_0().top(px(center - height / 2.)).w_1().h(px(height)).rounded_r_sm().bg(palette::strong(cx))
     });
     div().absolute().inset_0().children(pill).child(tile).into_any_element()
 }
@@ -1839,17 +1839,17 @@ impl Render for ServerPreview {
         let (wash, strong) = (palette::selected(cx), palette::strong(cx));
         // Six slots at most per row, the last a "+n" when they don't all fit; the card stays a glance, not a roster.
         let row = |key: &'static str, title: &'static str, glyph: Glyph, people: &[ui::Entry]| {
-            div().flex().items_center().gap(px(8.)).child(Icon::new(glyph).size(px(16.)).text_color(muted)).child(ui::listed_stack(key, title, people.to_vec(), PREVIEW_FACES, 24., surface, wash, strong))
+            div().flex().items_center().gap_2().child(Icon::new(glyph).size(ui::ICON_MD).text_color(muted)).child(ui::listed_stack(key, title, people.to_vec(), PREVIEW_FACES, 24., surface, wash, strong))
         };
         // Anchored flush to the tile; plain tooltips get their 12px gap from Tooltip's own margin.
-        div().pl(px(12.)).child(ui::surface(cx)
+        div().pl_3().child(ui::surface(cx)
             .max_w(px(280.))
-            .p(px(12.))
-            .gap(px(8.))
-            .child(div().truncate().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(self.name.clone()))
+            .p_3()
+            .gap_2()
+            .child(div().truncate().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(self.name.clone()))
             .when(!self.voice.is_empty(), |c| c.child(row("server-preview-voice", "In voice", Glyph::VolumeHigh, &self.voice)))
             .when(!self.live.is_empty(), |c| c.child(row("server-preview-live", "Live", Glyph::ShareScreen, &self.live)))
-            .when(self.muted, |c| c.child(div().text_size(px(12.)).text_color(muted).child("Muted"))))
+            .when(self.muted, |c| c.child(div().text_size(ui::TEXT_XS).text_color(muted).child("Muted"))))
     }
 }
 
@@ -1867,7 +1867,7 @@ fn rail_action(id: &'static str, icon: Icon, tooltip: &'static str, cx: &App) ->
         .bg(raised)
         .text_color(palette::muted(cx))
         .hover(move |s| s.bg(raised).text_color(strong))
-        .child(icon.size(px(20.)))
+        .child(icon.size(ui::ICON_XL))
         .tooltip(move |window, cx| Tooltip::new(tooltip).build(window, cx))
         .tooltip_show_delay(Duration::ZERO)
         .tooltip_placement(TooltipPlacement::Side)
@@ -1888,7 +1888,7 @@ fn count_chip(count: u32, scale: f32, rail: Hsla) -> Div {
     let chip = if scale >= 0.999 { ui::cut_out(chip, rail) } else { chip };
     chip.scale(scale.max(0.))
         .opacity(scale.clamp(0., 1.))
-        .child(ui::count_badge(count).min_w(px(18.)).h(px(18.)).px(px(5.)).text_size(px(12.)))
+        .child(ui::count_badge(count).min_w(px(18.)).h(px(18.)).px(px(5.)).text_size(ui::TEXT_XS))
 }
 
 // What a server's icon badge shows, as Discord's GuildMediaStateStore decides it; the highest wins.
@@ -1939,13 +1939,13 @@ fn media_badge(media: Media, rail: Hsla, cx: &App) -> Div {
     // Dark with white ink in both themes, as Discord draws it; green while you're connected.
     let fill = if media.connected { palette::status_in(Status_::Online, cx) } else { gpui_kit::hsla(0., 0., 0.08, 1.) };
     ui::cut_out(div().absolute().right(px(RAIL_WIDTH - TILE_X - TILE - 4. - RING)).top(px(-4. - RING)).p(px(RING)).rounded_full(), rail).child(
-        div().size(px(20.)).rounded_full().bg(fill).flex().items_center().justify_center().text_color(gpui_kit::white()).child(icon.size(px(12.))),
+        div().size_5().rounded_full().bg(fill).flex().items_center().justify_center().text_color(gpui_kit::white()).child(icon.size(ui::ICON_XS)),
     )
 }
 
 // Going onto a tile (making or joining a folder): a ring around it. Reordering shows as the rail making room.
 fn combine_ring_mark() -> Div {
-    div().absolute().left(px(TILE_X - 4.)).top(px(-4.)).size(px(TILE + 8.)).squircle(ui::RADIUS_LG + 4.).border_2().border_color(palette::accent())
+    div().absolute().left(px(TILE_X - 4.)).top_neg_1().size(px(TILE + 8.)).squircle(ui::RADIUS_LG + 4.).border_2().border_color(palette::accent())
 }
 
 // The rail's own sortable list, and a folder's.
@@ -2058,7 +2058,7 @@ fn list_skeleton(i: usize, channels: bool, cx: &App) -> AnyElement {
         .items_center()
         .gap(px(if channels { 8. } else { 12. }))
         .child(mark)
-        .child(ui::skeleton(SharedString::from(format!("list-skel-name-{i}")), 4., cx).h(px(12.)).w(relative(width)))
+        .child(ui::skeleton(SharedString::from(format!("list-skel-name-{i}")), 4., cx).h_3().w(relative(width)))
         .into_any_element()
 }
 
@@ -2342,12 +2342,12 @@ pub(crate) fn server_name_button(name: SharedString, cx: &mut Context<Waffle>) -
         .items_center()
         .gap_2()
         .cursor_pointer()
-        .text_size(px(16.))
+        .text_size(ui::TEXT_MD)
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(palette::strong(cx))
         .hover(move |s| s.bg(hover))
         .child(ui::truncating("server-name", name).flex_1())
-        .child(Nav::Caret.icon().size(px(16.)).text_color(palette::muted(cx)))
+        .child(Nav::Caret.icon().size_4().text_color(palette::muted(cx)))
         .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(|this, _: &gpui_kit::MouseDownEvent, _, cx| {
             // Drops from the button's bottom edge, at its left.
             let at = gpui_kit::point(px(RAIL_WIDTH + 8.), px(crate::layout::HEADER_HEIGHT - 4.));

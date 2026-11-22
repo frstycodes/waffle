@@ -332,14 +332,14 @@ impl Waffle {
             .id("status-menu")
             .occlude()
             .absolute()
-            .left(px(16.))
+            .left_4()
             .bottom(px(self.panel_stack_height() + 16.))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, _, _| this.status_flyout.tunnel.track(e.position)))
             .child(self.custom_status_row(cx))
             .children(PRESENCES.iter().map(|&(status, label, _)| self.presence_row(status, label, cx)))
             .child(menu::separator(cx))
-            .child(div().pt(px(6.)).pb(px(2.)).px(px(10.)).text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child("Accounts"))
+            .child(div().pt_1p5().pb_0p5().px_2p5().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child("Accounts"))
             .children(self.prefs.accounts.iter().map(|account| self.account_row(account, cx)))
             .when(self.can_add_account(), |card| card.child(menu::separator(cx)).child(add));
         Some(backdrop("status-backdrop", cx).child(ui::rise(card.transform_origin(ui::corner(false, true)), "status-menu", Duration::ZERO)).into_any_element())
@@ -379,7 +379,7 @@ impl Waffle {
             Some(until) => row.hint(format!("Until {}", when(until.naive_local(), Local::now().naive_local()))),
             None => row,
         };
-        let chevron = timed.then(|| div().flex_none().text_color(palette::muted(cx)).child(Icon::new(Glyph::ChevronRight).size(px(16.))));
+        let chevron = timed.then(|| div().flex_none().text_color(palette::muted(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)));
         let flyout = open.then(|| {
             div().absolute().top(px(-ui::SURFACE_INSET)).left_full().ml(px(ui::SURFACE_INSET + 4.)).child(ui::floating("status-duration-float", self.duration_flyout(status, cx)).with_priority(1))
         });
@@ -429,7 +429,7 @@ impl Waffle {
             .flex_col()
             .line_height(px(18.))
             .child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(account.name.clone()))
-            .child(div().truncate().text_size(px(12.)).text_color(palette::muted(cx)).child(status.label()));
+            .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(status.label()));
         let (switch_id, out_id) = (account.id.clone(), account.id.clone());
         let log_out = (!current).then(|| {
             ui::icon_button(SharedString::from(format!("log-out-{}", account.id)), Glyph::DoorExit, format!("Log out of {}", account.name), cx).small().on_click(cx.listener(move |this, _, window, cx| {
@@ -439,9 +439,9 @@ impl Waffle {
         });
         ui::menu_row(SharedString::from(format!("account-{}", account.id)), cx)
             .toggled(current, cx)
-            .min_h(px(48.))
-            .pl(px(8.))
-            .pr(px(6.))
+            .min_h_12()
+            .pl_2()
+            .pr_1p5()
             .child(avatar_with_status(&account.avatar, 32., Some(status.into()), ring))
             .child(name)
             .children(log_out)
@@ -461,9 +461,9 @@ impl Waffle {
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .gap(px(4.))
-                    .child(div().text_size(px(20.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Set your status"))
-                    .child(div().text_size(px(14.)).text_color(palette::muted(cx)).child("Shown on your profile and in member lists.")),
+                    .gap_1()
+                    .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Set your status"))
+                    .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child("Shown on your profile and in member lists.")),
             )
             .child(ui::icon_button("status-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_status_editor(cx))));
         let clear_after = ui::select("status-clear-after", Some(self.clear_after.glyph()), self.clear_after.name(), false, cx)
@@ -495,7 +495,7 @@ impl Waffle {
         let profile = self.my_profile();
         let ink = Ink::new(profile.theme, cx);
         let text = self.status_input.read(cx).value().trim().to_owned();
-        let face = div().min_w_0().flex().items_center().gap(px(6.)).text_color(ink.text);
+        let face = div().min_w_0().flex().items_center().gap_1p5().text_color(ink.text);
         let face = if text.is_empty() && editor.emoji.is_none() {
             face.text_color(ink.muted).child(div().italic().child("What's on your mind?"))
         } else {
@@ -512,7 +512,7 @@ impl Waffle {
             .flex_col()
             .child(banner)
             .child(div().px(px(inset - AVATAR_RING)).mt(px(-(AVATAR / 2. + AVATAR_RING))).mb_2().flex().child(avatar))
-            .child(div().absolute().top(px(banner_height - 20.)).left(px(inset + AVATAR + AVATAR_RING + 6.)).right(px(12.)).flex().child(bubble(face, ink, cx)));
+            .child(div().absolute().top(px(banner_height - 20.)).left(px(inset + AVATAR + AVATAR_RING + 6.)).right_3().flex().child(bubble(face, ink, cx)));
         let (outer, inner) = profile::themed_card(ink, f32::MAX, cx);
         outer.child(inner.child(header).child(div().px(px(inset)).pb(px(inset)).child(name_block(me, &profile, ink)))).into_any_element()
     }
@@ -527,7 +527,7 @@ impl Waffle {
         let length = self.status_input.read(cx).value().chars().count();
         let emoji = div()
             .id("status-emoji")
-            .size(px(24.))
+            .size_6()
             .flex()
             .items_center()
             .justify_center()
@@ -535,10 +535,10 @@ impl Waffle {
             .text_color(palette::muted(cx))
             .child(match &editor.emoji {
                 Some(emoji) => emoji_face(emoji, 20.),
-                None => Icon::new(Glyph::Emoji).size(px(20.)).into_any_element(),
+                None => Icon::new(Glyph::Emoji).size(ui::ICON_XL).into_any_element(),
             })
             .on_click(cx.listener(|this, _, window, cx| this.open_emoji_picker(EmojiTarget::CustomStatus, window, cx)));
-        let count = div().text_size(px(12.)).text_color(if length >= TEXT_WARN { palette::warning_ink(cx) } else { palette::faint(cx) }).child(format!("{length}/{TEXT_MAX}"));
+        let count = div().text_size(ui::TEXT_XS).text_color(if length >= TEXT_WARN { palette::warning_ink(cx) } else { palette::faint(cx) }).child(format!("{length}/{TEXT_MAX}"));
         let focus = self.status_input.read(cx).focus_handle(cx);
         let field = ui::text_field("status-text", Input::new(&self.status_input).appearance(false), &focus).leading(emoji).trailing(count);
         if length == 0 {
@@ -556,15 +556,15 @@ impl Waffle {
 fn presence_choice(status: Status, label: &'static str, detail: &'static str, on: bool, cx: &mut Context<Waffle>) -> gpui_kit::Stateful<Div> {
     let row = div()
         .id(SharedString::from(format!("status-choice-{label}")))
-        .min_h(px(44.))
-        .px(px(10.))
-        .py(px(6.))
+        .min_h_11()
+        .px_2p5()
+        .py_1p5()
         .squircle(ui::RADIUS_MD)
         .flex()
         .items_center()
-        .gap(px(12.))
+        .gap_3()
         .when(on, |r| r.bg(palette::selected(cx)))
-        .child(ui::status_mark(status, 14., palette::surface(palette::Level::Raised, cx), cx).border(px(0.)))
+        .child(ui::status_mark(status, 14., palette::surface(palette::Level::Raised, cx), cx).border_0())
         .child(
             div()
                 .flex_1()
@@ -572,7 +572,7 @@ fn presence_choice(status: Status, label: &'static str, detail: &'static str, on
                 .flex()
                 .flex_col()
                 .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(label))
-                .when(!detail.is_empty(), |d| d.child(div().text_size(px(12.)).text_color(palette::muted(cx)).child(detail))),
+                .when(!detail.is_empty(), |d| d.child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail))),
         )
         .child(ui::radio(on, cx))
         .on_click(cx.listener(move |this, _, _, cx| {
@@ -593,9 +593,9 @@ fn bubble(content: Div, ink: Ink, cx: &App) -> Stateful<Div> {
         .id("status-bubble")
         .relative()
         .min_w_0()
-        .child(dot(8.).left(px(-8.)).top(px(-14.)))
-        .child(dot(16.).left(px(4.)).top(px(-8.)))
-        .child(div().relative().min_w_0().min_h(px(36.)).px(px(12.)).py(px(8.)).rounded(px(18.)).bg(fill).border_1().border_color(edge).flex().items_center().text_size(px(14.)).line_height(px(18.)).child(content))
+        .child(dot(8.).left_neg_2().top_neg_3p5())
+        .child(dot(16.).left_1().top_neg_2())
+        .child(div().relative().min_w_0().min_h_9().px_3().py_2().rounded(px(18.)).bg(fill).border_1().border_color(edge).flex().items_center().text_size(ui::TEXT_SM).line_height(px(18.)).child(content))
 }
 
 #[cfg(test)]

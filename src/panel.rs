@@ -73,12 +73,12 @@ impl Waffle {
                 // The sidebar's tone: the step from the feed's tone is the only edge it needs.
                 .bg(palette::surface(palette::Level::Sidebar, cx))
                 .text_color(palette::text(cx))
-                .text_size(px(14.))
+                .text_size(ui::TEXT_SM)
                 // The list stops under the header, a hard edge with the sidebar's hairline once it has scrolled.
                 .child(ui::hard_edge(move || ui::scrolled(&scroll), cx).child(head))
-                .child(ui::scroll_area(div().id("right-panel").pt(px(8.)).px_2().pb_2().flex().flex_col().gap(px(2.)).child(body), &self.panel_scroll))
+                .child(ui::scroll_area(div().id("right-panel").pt_2().px_2().pb_2().flex().flex_col().gap_0p5().child(body), &self.panel_scroll))
                 .child(self.resize_handle(Edge::Panel, cx))
-                .children(foot.map(|pager| div().flex_none().py(px(8.)).border_t_1().border_color(line).child(pager)))
+                .children(foot.map(|pager| div().flex_none().py_2().border_t_1().border_color(line).child(pager)))
                 .into_any_element(),
         )
     }
@@ -89,7 +89,7 @@ impl Waffle {
         let close = close.then(|| self.back_button(cx));
         self.panel_frame(cx)
             .children(lead)
-            .child(div().flex_1().min_w_0().truncate().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).child(title))
+            .child(div().flex_1().min_w_0().truncate().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).child(title))
             .children(tools)
             .children(close)
     }
@@ -127,7 +127,7 @@ impl Waffle {
             .map(|user| Member { user: user.clone(), roles: Vec::new(), presence: self.presences.get(&user.id).cloned().unwrap_or_default(), boosting_since: None })
             .map(|member| self.member_row(&member, self.side_spot(cx), cx))
             .collect();
-        div().flex().flex_col().gap(px(2.)).child(group_label(format!("Members · {}", rows.len()), cx)).children(rows).into_any_element()
+        div().flex().flex_col().gap_0p5().child(group_label(format!("Members · {}", rows.len()), cx)).children(rows).into_any_element()
     }
 
     // "Invite to Group DM" under the list while the group has room.
@@ -138,7 +138,7 @@ impl Waffle {
         }
         let invite = ui::button("group-invite", ui::Tone::Ghost, cx)
             .w_full()
-            .child(Icon::new(Glyph::GroupPlus).size(px(18.)))
+            .child(Icon::new(Glyph::GroupPlus).size(ui::ICON_LG))
             .child("Invite to Group DM")
             .on_click(cx.listener(move |this, _, window, cx| this.open_group_picker(Some(group.clone()), window, cx)));
         Some(div().px_2().child(invite).into_any_element())
@@ -229,13 +229,13 @@ impl Waffle {
         }));
         let alpha = fold.target().alpha();
         let cards = (!folded || alpha > 0.05).then(|| div().opacity(alpha).child(self.activity_cards(ACTIVITY_SHOWN, cx)));
-        Some(div().flex().flex_col().gap(px(2.)).child(category_head("activity-head".into(), label, false, cx).child(all)).children(cards))
+        Some(div().flex().flex_col().gap_0p5().child(category_head("activity-head".into(), label, false, cx).child(all)).children(cards))
     }
 
     fn activity_cards(&self, limit: usize, cx: &mut Context<Self>) -> AnyElement {
         let now = chrono::Utc::now().timestamp_millis();
         let cards: Vec<AnyElement> = self.guild_activity().into_iter().take(limit).enumerate().map(|(i, (entry, member))| self.feed_card(i, entry, member, now, cx)).collect();
-        div().flex().flex_col().gap(px(8.)).children(cards).into_any_element()
+        div().flex().flex_col().gap_2().children(cards).into_any_element()
     }
 
     // One card: who (avatar, name in their role's colour), what, and when, with its art on the right.
@@ -248,19 +248,19 @@ impl Waffle {
         let meta = div()
             .flex()
             .items_center()
-            .gap(px(4.))
+            .gap_1()
             .min_w_0()
-            .text_size(px(12.))
+            .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::NORMAL)
             .text_color(muted)
-            .children(activity_glyph(entry.kind).map(|icon| icon.size(px(14.)).flex_none().when(entry.live, |i| i.text_color(palette::status_in(Status::Online, cx)))))
+            .children(activity_glyph(entry.kind).map(|icon| icon.size(ui::ICON_SM).flex_none().when(entry.live, |i| i.text_color(palette::status_in(Status::Online, cx)))))
             .child(div().flex_none().child(when))
-            .when_some(entry.streak_days, |m, days| m.child(div().w(px(6.)).flex_none()).child(Icon::default().data(BOLT).size(px(14.)).flex_none()).child(div().truncate().child(format!("{days}× streak"))));
+            .when_some(entry.streak_days, |m, days| m.child(div().w_1p5().flex_none()).child(Icon::default().data(BOLT).size_3p5().flex_none()).child(div().truncate().child(format!("{days}× streak"))));
         let image = entry.image.clone().or_else(|| self.app_icon(entry.app_id.as_deref()?, cx));
         let art = match image {
-            Some(url) => img(url).size(px(44.)).flex_none().object_fit(gpui_kit::ObjectFit::Cover).squircle(ui::RADIUS_MD).into_any_element(),
+            Some(url) => img(url).size_11().flex_none().object_fit(gpui_kit::ObjectFit::Cover).squircle(ui::RADIUS_MD).into_any_element(),
             None => div()
-                .size(px(44.))
+                .size_11()
                 .flex_none()
                 .squircle(ui::RADIUS_MD)
                 .bg(palette::selected(cx))
@@ -268,16 +268,16 @@ impl Waffle {
                 .items_center()
                 .justify_center()
                 .text_color(muted)
-                .children(activity_glyph(entry.kind).or_else(|| activity_glyph(ActivityKind::Playing)).map(|icon| icon.size(px(20.))))
+                .children(activity_glyph(entry.kind).or_else(|| activity_glyph(ActivityKind::Playing)).map(|icon| icon.size(ui::ICON_XL)))
                 .into_any_element(),
         };
         div()
             .id(SharedString::from(format!("activity-{i}")))
             .flex()
             .items_center()
-            .gap(px(10.))
-            .px(px(10.))
-            .py(px(8.))
+            .gap_2p5()
+            .px_2p5()
+            .py_2()
             .squircle(ui::RADIUS_LG)
             .bg(palette::surface(palette::Level::Page, cx))
             .border_1()
@@ -290,8 +290,8 @@ impl Waffle {
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .gap(px(1.))
-                    .child(div().flex().items_center().gap(px(6.)).min_w_0().text_size(px(12.)).child(ui::avatar(member.user.avatar.clone(), 14.).flex_none()).child(div().truncate().text_color(name_ink).child(member.user.name.clone())))
+                    .gap_px()
+                    .child(div().flex().items_center().gap_1p5().min_w_0().text_size(ui::TEXT_XS).child(ui::avatar(member.user.avatar.clone(), 14.).flex_none()).child(div().truncate().text_color(name_ink).child(member.user.name.clone())))
                     .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(strong).child(entry.title.clone()))
                     .child(meta),
             )
@@ -326,18 +326,18 @@ impl Waffle {
             div()
                 .flex()
                 .items_center()
-                .gap(px(6.))
+                .gap_1p5()
                 .min_w_0()
                 .child(crate::name_fonts::styled(ui::truncating(key, member.user.name.clone()).font_weight(FontWeight::NORMAL).text_color(name_ink), name_style))
                 .children(dot.map(crate::chat::role_dot))
                 .children(member.user.tag.as_ref().map(|tag| crate::chat::guild_tag(tag, cx)))
                 .when(member.user.bot, |r| r.child(ui::tag("App", cx)))
-                .when(owner, |r| r.child(Icon::new(Glyph::Crown).size(px(14.)).flex_none().text_color(crown)))
+                .when(owner, |r| r.child(Icon::new(Glyph::Crown).size(ui::ICON_SM).flex_none().text_color(crown)))
                 .children(boosting.clone().map(|since| {
                     div()
                         .id(SharedString::from(format!("member-boost-{}", member.user.id)))
                         .flex_none()
-                        .child(Icon::new(Glyph::Gem).size(px(14.)).text_color(boost))
+                        .child(Icon::new(Glyph::Gem).size(ui::ICON_SM).text_color(boost))
                         .tooltip(move |window, cx| ui::tip(format!("Server boosting since {since}"), window, cx))
                 }))
         };
@@ -371,7 +371,7 @@ impl Waffle {
             .when(plated, |r| r.pr(px(NAMEPLATE_END)))
             .flex()
             .items_center()
-            .gap(px(10.))
+            .gap_2p5()
             .squircle(ui::RADIUS_SM)
             .group(MEMBER_ROW_GROUP)
             .cursor_pointer()
@@ -472,9 +472,9 @@ impl StatusIcon {
         let icon = match self {
             StatusIcon::Activity(kind) => activity_glyph(*kind)?,
             StatusIcon::Screen => Icon::new(Glyph::ShareScreen),
-            StatusIcon::Channel(channel) => return Some(channel_glyph(channel).size(px(16.)).flex_none().text_color(green)),
+            StatusIcon::Channel(channel) => return Some(channel_glyph(channel).size_4().flex_none().text_color(green)),
         };
-        Some(icon.size(px(16.)).flex_none())
+        Some(icon.size(ui::ICON_MD).flex_none())
     }
 }
 
@@ -491,7 +491,7 @@ impl MemberStatus {
             .items_center()
             .gap_1()
             .min_w_0()
-            .text_size(px(12.))
+            .text_size(ui::TEXT_XS)
             .text_color(palette::faint(cx))
             .children(self.icon.and_then(|icon| icon.icon(green)))
             .children(self.text.filter(|_| !beside_custom).map(|text| ui::truncating(format!("member-status-{text}"), text)))
@@ -519,21 +519,21 @@ impl Render for ActivityTip {
         let green = palette::positive_ink_inverted(cx);
         let rows = self.0.iter().map(|item| {
             let channel = item.channel.as_ref().map(|channel| {
-                div().flex().items_center().gap(px(2.)).child("(").child(channel_glyph(channel).size(px(14.)).flex_none()).child(div().truncate().child(channel.name.clone())).child(")")
+                div().flex().items_center().gap_0p5().child("(").child(channel_glyph(channel).size_3p5().flex_none()).child(div().truncate().child(channel.name.clone())).child(")")
             });
-            div().flex().items_center().gap(px(6.)).min_w_0().children(item.icon.icon(green)).child(div().flex_none().child(item.text.clone())).children(channel)
+            div().flex().items_center().gap_1p5().min_w_0().children(item.icon.icon(green)).child(div().flex_none().child(item.text.clone())).children(channel)
         });
         div()
             .max_w(px(280.))
-            .px(px(10.))
-            .py(px(8.))
+            .px_2p5()
+            .py_2()
             .flex()
             .flex_col()
-            .gap(px(6.))
+            .gap_1p5()
             .squircle(ui::RADIUS_SM)
             .bg(palette::strong(cx))
             .text_color(palette::surface(palette::Level::Page, cx))
-            .text_size(px(12.))
+            .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::MEDIUM)
             .children(rows)
     }
@@ -600,7 +600,7 @@ fn member_nameplate(plate: &crate::discord::Nameplate, names: Div, fills: (gpui_
         // The avatar and the gap after it.
         .child(div().w(px(42.)).flex_none())
         .child(names.opacity(0.))
-        .child(div().w(px(2.)).flex_none());
+        .child(div().w_0p5().flex_none());
     div()
         .absolute()
         .inset_0()
@@ -613,12 +613,12 @@ fn member_nameplate(plate: &crate::discord::Nameplate, names: Div, fills: (gpui_
 
 // A group heading (.cat): "Online · 4".
 pub(crate) fn group_label(text: impl Into<SharedString>, cx: &App) -> Div {
-    div().h(px(28.)).flex_none().px(px(6.)).flex().items_center().whitespace_nowrap().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(text.into())
+    div().h_7().flex_none().px_1p5().flex().items_center().whitespace_nowrap().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(text.into())
 }
 
 // A wait names what it waits on, beside the mini wave (.pwait).
 pub(crate) fn wait_line(id: &'static str, text: &'static str, cx: &App) -> Div {
-    div().min_h(px(32.)).px_2().flex().items_center().gap_2().text_color(palette::muted(cx)).font_weight(FontWeight::NORMAL).child(ui::bars(id, palette::muted(cx), 12.)).child(text)
+    div().min_h_8().px_2().flex().items_center().gap_2().text_color(palette::muted(cx)).font_weight(FontWeight::NORMAL).child(ui::bars(id, palette::muted(cx), 12.)).child(text)
 }
 
 // The list before Discord sends it: the static label, no false count, rows shaped like the real ones.
@@ -627,12 +627,12 @@ fn members_loading(cx: &App) -> Div {
     let bar = move |w: f32, h: f32| div().w(gpui_kit::relative(w)).h(px(h)).squircle(ui::RADIUS_XS).bg(fill);
     // GAP: the design sweeps one shimmer band across all skeletons; these hold still.
     let row = move |name: f32, line: Option<f32>| {
-        div().h(px(44.)).px_2().flex().items_center().gap(px(10.)).child(div().size(px(32.)).flex_none().rounded_full().bg(fill)).child(div().flex_1().flex().flex_col().gap(px(6.)).child(bar(name, 12.)).children(line.map(|w| bar(w, 8.))))
+        div().h_11().px_2().flex().items_center().gap_2p5().child(div().size_8().flex_none().rounded_full().bg(fill)).child(div().flex_1().flex().flex_col().gap_1p5().child(bar(name, 12.)).children(line.map(|w| bar(w, 8.))))
     };
     div()
         .flex()
         .flex_col()
-        .gap(px(2.))
+        .gap_0p5()
         .child(wait_line("members-wait", "Loading members…", cx))
         .child(group_label("Online", cx))
         .child(row(0.7, Some(0.45)))
