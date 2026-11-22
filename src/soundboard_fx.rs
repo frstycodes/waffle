@@ -16,8 +16,11 @@ pub enum Family {
 }
 
 impl Family {
-    // Discord's animation_type 1 is Basic (its one launch); 0 is Premium, whose id picks one of 21
-    // variants: 0-4 hop across, 5-9 glide in rows, 10-15 pop in a grid, 16-20 rain.
+    pub const ALL: [Family; 5] = [Family::Launch, Family::Parade, Family::Glide, Family::Pop, Family::Rain];
+
+    // Discord's animation_type 0 is Premium, whose id picks one of 21 variants: 0-4 hop across, 5-9
+    // glide in rows, 10-15 pop in a grid, 16-20 rain. Type 1, Basic, is Discord's one launch; Waffle
+    // varies it across every family by its id instead, so most plays don't all look alike.
     pub fn of(animation_type: Option<u8>, animation_id: Option<u64>) -> Self {
         match (animation_type, animation_id) {
             (Some(0), Some(id)) => match id % 21 {
@@ -26,8 +29,14 @@ impl Family {
                 10..=15 => Family::Pop,
                 _ => Family::Rain,
             },
-            _ => Family::Launch,
+            (_, Some(id)) => Self::ALL[(id % 5) as usize],
+            (_, None) => Family::Launch,
         }
+    }
+
+    // Our own play, which Discord doesn't echo back with its animation: any family at random.
+    pub fn random() -> Self {
+        Self::ALL[rand::random::<usize>() % Self::ALL.len()]
     }
 
     pub fn duration(self) -> Duration {
@@ -200,8 +209,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn premium_ids_pick_families_and_basic_launches() {
-        assert_eq!(Family::of(Some(1), Some(3)), Family::Launch);
+    fn premium_ids_pick_families_and_basic_ids_vary() {
+        assert_eq!(Family::of(Some(1), Some(0)), Family::Launch);
+        assert_eq!(Family::of(Some(1), Some(3)), Family::Pop);
+        assert_eq!(Family::of(Some(1), Some(9)), Family::Rain);
         assert_eq!(Family::of(None, None), Family::Launch);
         assert_eq!(Family::of(Some(0), Some(2)), Family::Parade);
         assert_eq!(Family::of(Some(0), Some(7)), Family::Glide);
@@ -211,7 +222,7 @@ mod tests {
 
     #[test]
     fn every_effect_starts_and_ends_off_stage_and_shows_in_between() {
-        for family in [Family::Launch, Family::Parade, Family::Glide, Family::Pop, Family::Rain] {
+        for family in Family::ALL {
             let end = family.duration().as_secs_f32();
             let visible = |secs: f32| (0..family.copies()).filter_map(|i| particle(family, i, secs, 7)).filter(|p| p.opacity > 0. && p.scale_y > 0.05 && (-0.1..1.1).contains(&p.y)).count();
             assert!(visible(end * 0.4) > 0, "{family:?} shows nothing mid-way");
