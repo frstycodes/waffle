@@ -593,11 +593,10 @@ impl Waffle {
         };
         let guild_roles = self.guilds.iter().find(|g| g.id == guild_id).map(|g| g.roles.clone()).unwrap_or_default();
         let now = Utc::now();
-        let min_width = ui::table_min_width(&cols);
-        let mut table = ui::table("ss-members-table", cx).min_w(px(min_width)).child(head);
+        let mut rows: Vec<AnyElement> = Vec::new();
         if shown.is_empty() {
             let note = if m.more { "Loading members…" } else { "No members match this search." };
-            table = table.child(ui::table_row("ss-members-none", &[Col::Grow { weight: 1., min: 0. }], [div().text_color(palette::muted(cx)).child(note).into_any_element()], cx));
+            rows.push(ui::table_row("ss-members-none", &[Col::Grow { weight: 1., min: 0. }], [div().text_color(palette::muted(cx)).child(note).into_any_element()], cx).into_any_element());
         }
         for member in shown {
             let picked = m.selected.contains(&member.id);
@@ -617,9 +616,9 @@ impl Waffle {
             cells.push(roles_cell(member, &guild_roles, cx));
             cells.push(signals_cell(member, now, cx));
             cells.push(self.member_actions(member, powers, cx));
-            table = table.child(ui::table_row(SharedString::from(format!("ss-member-{}", member.id)), &cols, cells, cx).when(picked, |r| r.bg(palette::selected(cx))));
+            rows.push(ui::table_row(SharedString::from(format!("ss-member-{}", member.id)), &cols, cells, cx).when(picked, |r| r.bg(palette::selected(cx))).into_any_element());
         }
-        div().id("ss-members-scroll").w_full().overflow_x_scroll().child(table).into_any_element()
+        ui::table("ss-members-table", ui::table_min_width(&cols), head, rows, cx).into_any_element()
     }
 
     // Open Mod View, then the row's moderation menu.
