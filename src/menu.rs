@@ -313,7 +313,16 @@ pub struct Dialog {
     preview: Option<Box<crate::discord::Message>>,
     // Discord's "Protip:" under the preview.
     tip: Option<SharedString>,
+    other: Other,
     on_confirm: OnConfirm,
+}
+
+// The button beside the confirm: Cancel, none (a notice the confirm only closes), or a second way through
+// (Discord's "No, just disconnect quietly").
+enum Other {
+    Cancel,
+    None,
+    Instead(SharedString, OnConfirm),
 }
 
 impl Waffle {
@@ -410,7 +419,7 @@ impl Waffle {
             state.set_value(value.to_owned(), window, cx);
             state.focus(window, cx);
         });
-        self.dialog = Some(Dialog { title: title.into(), body: body.into(), confirm: confirm.into(), danger: false, warn: false, input: true, key: None, preview: None, tip: None, on_confirm: Rc::new(on_confirm) });
+        self.dialog = Some(Dialog { title: title.into(), body: body.into(), confirm: confirm.into(), danger: false, warn: false, input: true, key: None, preview: None, tip: None, other: Other::Cancel, on_confirm: Rc::new(on_confirm) });
         cx.notify();
     }
 
@@ -434,6 +443,7 @@ impl Waffle {
             key: None,
             preview: None,
             tip: None,
+            other: Other::Cancel,
             on_confirm: Rc::new(move |this, _, window, cx| on_confirm(this, window, cx)),
         });
         cx.notify();
@@ -451,6 +461,22 @@ impl Waffle {
         self.confirm(title, body, confirm, on_confirm, cx);
         if let Some(dialog) = &mut self.dialog {
             dialog.warn = true;
+        }
+    }
+
+    // A confirm whose other button acts too, in place of Cancel.
+    pub(crate) fn set_dialog_instead(&mut self, label: impl Into<SharedString>, action: impl Fn(&mut Waffle, &mut Window, &mut Context<Waffle>) + 'static) {
+        if let Some(dialog) = &mut self.dialog {
+            dialog.other = Other::Instead(label.into(), Rc::new(move |this, _, window, cx| action(this, window, cx)));
+        }
+    }
+
+    // A notice: one button, which only closes it.
+    pub(crate) fn notice(&mut self, title: impl Into<SharedString>, body: impl Into<SharedString>, button: impl Into<SharedString>, cx: &mut Context<Self>) {
+        self.confirm(title, body, button, |_, _, _| {}, cx);
+        if let Some(dialog) = &mut self.dialog {
+            dialog.danger = false;
+            dialog.other = Other::None;
         }
     }
 
@@ -653,6 +679,22 @@ impl Waffle {
         self.dialog.as_ref().and_then(|d| d.key)
     }
 
+    fn dialog_other(&self, cx: &mut Context<Self>) -> Option<ui::Control> {
+        let button = |label: SharedString| ui::button("dialog-cancel", ui::Tone::Secondary, cx).child(label);
+        match &self.dialog.as_ref()?.other {
+            Other::None => None,
+            Other::Cancel => Some(button("Cancel".into()).on_click(cx.listener(|this, _, _, cx| {
+                this.dialog = None;
+                cx.notify();
+            }))),
+            Other::Instead(label, _) => Some(button(label.clone()).on_click(cx.listener(|this, _, window, cx| {
+                let Some(Dialog { other: Other::Instead(_, action), .. }) = this.dialog.take() else { return };
+                action(this, String::new(), window, cx);
+                cx.notify();
+            }))),
+        }
+    }
+
     pub(crate) fn render_dialog(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let dialog = self.dialog.as_ref()?;
         let submit = cx.listener(|this, _, window, cx| this.confirm_dialog(window, cx));
@@ -685,10 +727,7 @@ impl Waffle {
                     .flex()
                     .justify_end()
                     .gap(px(8.))
-                    .child(ui::button("dialog-cancel", ui::Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| {
-                        this.dialog = None;
-                        cx.notify();
-                    })))
+                    .children(self.dialog_other(cx))
                     .child(ui::button("dialog-confirm", tone, cx).child(dialog.confirm.clone()).when_some(dialog.key, |b, key| b.children(key.split('+').map(|k| ui::kbd_translucent(crate::settings::key_name(k), gpui_kit::white())))).on_click(submit)),
             );
         let backdrop = div().id("dialog-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {

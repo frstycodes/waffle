@@ -27,7 +27,7 @@ use gpui_kit::{
     div, img, linear_color_stop, linear_gradient, point, prelude::FluentBuilder, px, relative,
 };
 
-use crate::{discord::Status, icons::Glyph, mascot, motion, palette};
+use crate::{discord::Status, icons::Glyph, illustration::Illustration, mascot, motion, palette};
 
 mod control;
 mod dialog;
@@ -129,6 +129,22 @@ pub fn scroll_area(list: Stateful<Div>, scroll: &gpui_kit::ScrollHandle) -> Div 
         .vertical_scrollbar(scroll)
 }
 
+/// A list that scrolls inside a fixed box, its top and bottom edges fading into `surface` wherever there is
+/// more to scroll to: a short box of rows doesn't look scrollable on its own, and the fade says it is.
+pub fn scroll_fade(list: Stateful<Div>, scroll: &gpui_kit::ScrollHandle, surface: Hsla) -> Div {
+    // gpui's offset runs negative as you scroll down; max_offset is positive.
+    let (scrolled, max) = (-f32::from(scroll.offset().y), f32::from(scroll.max_offset().y));
+    let edge = |top: bool| {
+        let fade = div().absolute().left_0().right_0().h(px(32.)).bg(linear_gradient(if top { 180. } else { 0. }, linear_color_stop(surface, 0.), linear_color_stop(surface.opacity(0.), 1.)));
+        if top { fade.top_0() } else { fade.bottom_0() }
+    };
+    div()
+        .relative()
+        .child(list.overflow_y_scroll().track_scroll(scroll))
+        .children((scrolled > 1.).then(|| edge(true)))
+        .children((scrolled < max - 1.).then(|| edge(false)))
+        .vertical_scrollbar(scroll)
+}
 
 thread_local! {
     // Labels whose text overflowed their box when last painted, by key; they show the full text on hover.
@@ -727,8 +743,13 @@ pub fn toast(id: impl Into<ElementId>, glyph: Glyph, ink: Hsla, title: impl Into
         .into_any_element()
 }
 
-// An empty or waiting state: the mascot, what's missing, and room for one action.
-pub fn empty_state(id: &'static str, mood: mascot::Mood, title: impl Into<SharedString>, body: impl Into<SharedString>, cx: &App) -> Div {
+// An empty or waiting state: spot art (the mascot, or an illustration where Discord leads with one), what's
+// missing, and room for one action.
+pub fn empty_state(id: &'static str, art: impl Into<Art>, title: impl Into<SharedString>, body: impl Into<SharedString>, cx: &App) -> Div {
+    let art = match art.into() {
+        Art::Mascot(mood) => mascot::mascot_at(id, mood, 0.6, cx),
+        Art::Illustration(art) => img(art.path()).w(px(200.)).h(px(150.)).into_any_element(),
+    };
     div()
         .flex()
         .flex_col()
@@ -737,9 +758,26 @@ pub fn empty_state(id: &'static str, mood: mascot::Mood, title: impl Into<Shared
         .py(px(32.))
         .px(px(16.))
         .text_center()
-        .child(div().mb(px(8.)).child(mascot::mascot_at(id, mood, 0.6, cx)))
+        .child(div().mb(px(8.)).child(art))
         .child(div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.into()))
         .child(div().max_w(px(320.)).text_color(palette::muted(cx)).child(body.into()))
+}
+
+pub enum Art {
+    Mascot(mascot::Mood),
+    Illustration(Illustration),
+}
+
+impl From<mascot::Mood> for Art {
+    fn from(mood: mascot::Mood) -> Self {
+        Self::Mascot(mood)
+    }
+}
+
+impl From<Illustration> for Art {
+    fn from(art: Illustration) -> Self {
+        Self::Illustration(art)
+    }
 }
 
 // A divider, with an optional label naming what follows.

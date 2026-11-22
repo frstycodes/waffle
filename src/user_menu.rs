@@ -1,13 +1,14 @@
 // Discord's user context menus, built item-for-item from its own menu code (docs/discord-menus-user-
 // message.md, read from Discord web 2026-11-14). Each item carries Discord's show-condition; items
-// for features Waffle doesn't have (activities, apps, stages, mod view, E2EE codes) are left out.
+// for features Waffle doesn't have (activities, apps, mod view, E2EE codes) are left out.
 use gpui_kit::{Context, Pixels, Point, Window};
 use reqwest::Method;
 use serde_json::json;
 
 use crate::{
     Waffle,
-    discord::{ChannelKind, Relation, User, perm},
+    discord::{ChannelKind, Guild, OnStage, Relation, User, VoiceState, perm},
+    stage::STAGE,
     icons::Glyph,
     menu::{Entry, HeadLead, header, item, slider, submenu},
 };
@@ -91,6 +92,23 @@ impl Waffle {
         }
         let theirs = self.member_roles.get(guild_id).and_then(|r| r.get(target)).map(|roles| guild.roles.iter().filter(|r| roles.contains(&r.id)).map(|r| r.position).max().unwrap_or(0)).unwrap_or(0);
         guild.top_position(&me.id) > theirs
+    }
+
+    // On a stage: a moderator moves others between audience and speakers; anyone on stage can step down,
+    // and a moderator in the audience can step up.
+    fn stage_items(&self, guild: &Guild, state: &VoiceState, is_me: bool, me: &str) -> Option<Entry> {
+        let channel = guild.channel(state.channel_id.as_deref()?).filter(|c| c.raw_type == STAGE)?;
+        let moderator = guild.is_stage_moderator(me, channel);
+        let speaker = state.on_stage() == OnStage::Speaker;
+        let (gid, cid, uid) = (guild.id.clone(), channel.id.clone(), state.user_id.clone());
+        let row = match (is_me, speaker) {
+            (true, true) => item("Leave the Stage", move |this, _, cx| this.leave_the_stage(&gid, &cid, cx)).icon(Glyph::ArrowDown),
+            (true, false) if moderator => item("Speak on Stage", move |this, _, cx| this.set_my_suppress(&gid, &cid, false, false, cx)).icon(Glyph::Stage),
+            (false, true) if moderator => item("Move to Audience", move |this, _, cx| this.move_to_audience(&gid, &cid, &uid, cx)).icon(Glyph::ArrowDown),
+            (false, false) if moderator => item("Invite to Speak", move |this, _, cx| this.invite_to_speak(&gid, &cid, &uid, cx)).icon(Glyph::Hand),
+            _ => return None,
+        };
+        Some(row.entry())
     }
 
     fn user_menu(&self, user: &User, guild_id: Option<&str>, surface: Surface, at: Point<Pixels>) -> Vec<Entry> {
@@ -303,6 +321,7 @@ impl Waffle {
             let gid = guild.id.clone();
             // Voice moderation is per channel: overwrites on the channel they're in apply.
             let can = |bit| state.channel_id.as_ref().is_some_and(|c| self.can_in(c, bit));
+            out.extend(self.stage_items(guild, state, is_me, &me.id));
             if can(perm::MUTE_MEMBERS) {
                 let (gid, uid, on) = (gid.clone(), target.clone(), state.server_muted);
                 out.push(item("Server mute", move |this, _, cx| this.server_voice_optimistic(&gid, &uid, json!({ "mute": !on }), |v| v.server_muted = !v.server_muted, cx)).checked(on).hint(format!("Mutes {name} for everyone")).icon(Glyph::MicOff).entry());
