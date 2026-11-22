@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | call-streams-failed | call-streams-reconnecting | call-streams-issues | call-streams-hidden | inbox-saved | games | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -283,6 +283,12 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         "jump" => waffle.jump_to("103".into(), cx),
         // The rail's Inbox on each tab: mentions under their filter chips, and the unread channels with the
         // newest cached messages of one.
+        "inbox-saved" => {
+            waffle.saved = Some(Some(Ok(self::messages().into_iter().rev().take(3).collect())));
+            waffle.inbox_tab = crate::inbox::InboxTab::Saved;
+            waffle.inbox_open = true;
+        }
+        "games" => waffle.open_settings(crate::settings::Page::ActivityPrivacy, window, cx),
         "inbox" | "inbox-unreads" => {
             let all = self::messages();
             waffle.inbox = Some(Some(Ok(all.iter().filter(|m| !m.mentions.is_empty() || m.content.contains("@")).cloned().collect())));
@@ -605,7 +611,7 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         // Three streams (one watched at 4:3, so focus letterboxes it; one unopened; our own) and two
         // cameras: the grid's order, chips and Watch, focus and full screen. Ended adds two ended
         // streams' cards: one streamer still in the call, one who left.
-        "call-streams" | "call-streams-ended" | "call-streams-focus" | "call-streams-strip" | "call-streams-full" => {
+        "call-streams" | "call-streams-ended" | "call-streams-focus" | "call-streams-strip" | "call-streams-full" | "call-streams-failed" | "call-streams-reconnecting" | "call-streams-issues" | "call-streams-hidden" => {
             demo_call(waffle);
             waffle.call_pointer_inside = true;
             if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
@@ -625,8 +631,32 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                 if scene == "call-streams-ended" {
                     call.ended = vec!["20971520".into(), "99".into()];
                 }
+                // The watched stream's states, and every issue a tile can carry: ours (4194304) and our camera
+                // (shown here on Wren's tile key, as a viewer would see a 2012 on a camera that never arrived).
+                use crate::voice::issues::*;
+                match scene {
+                    "call-streams-failed" => call.watching[0].state = crate::WatchState::Failed(crate::STREAM_FAILED_TO_START),
+                    "call-streams-reconnecting" => {
+                        call.watching[0].state = crate::WatchState::Reconnecting;
+                        call.watching[0].frame = None;
+                    }
+                    "call-streams-issues" => {
+                        call.watching[0].state = crate::WatchState::Active;
+                        let now = std::time::Instant::now();
+                        call.watching[0].arrivals = (0..60).map(|i| now - std::time::Duration::from_millis(i * 33)).rev().collect();
+                        for code in [STREAM_SEND_NETWORK_QUALITY, SOUNDSHARE_FAILED] {
+                            call.issues.insert(("4194304".into(), code));
+                        }
+                        call.issues.insert(("12582912".into(), STREAM_VIEW_HIGH_PACKET_LOSS));
+                        call.issues.insert(("camera:8388608".into(), RECEIVER_READY_TIMEOUT));
+                    }
+                    _ => {}
+                }
             }
-            if !matches!(scene, "call-streams" | "call-streams-ended") {
+            if scene == "call-streams-hidden" {
+                waffle.prefs.hidden_self_streams.push("lounge".into());
+            }
+            if !matches!(scene, "call-streams" | "call-streams-ended" | "call-streams-failed" | "call-streams-reconnecting" | "call-streams-issues" | "call-streams-hidden") {
                 waffle.call_focus = Some("stream:12582912".into());
                 // Holds the chrome up for the first half minute, as if the pointer had just moved.
                 waffle.call_pointer_at = std::time::Instant::now() + std::time::Duration::from_secs(30);
