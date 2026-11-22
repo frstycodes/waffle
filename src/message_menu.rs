@@ -68,7 +68,7 @@ impl Waffle {
         }).icon(Glyph::Link).entry());
         if cfg!(target_os = "macos") && !message.content.is_empty() {
             let text = message.content.clone();
-            out.push(item("Speak message", move |_, _, _| speak(&text)).icon(Glyph::Soundboard).entry());
+            out.push(item("Speak message", move |this, _, _| speak(&text, this.prefs.tts_rate)).icon(Glyph::Soundboard).entry());
         }
         out.push(Entry::Separator);
 
@@ -185,6 +185,22 @@ impl MessageAction {
         }
     }
 
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Edit => "Edit message",
+            Self::Reply => "Reply",
+            Self::Forward => "Forward",
+            Self::Thread => "Create thread",
+            Self::React => "Add reaction",
+            Self::CopyText => "Copy text",
+            Self::Pin => "Pin message",
+            Self::MarkUnread => "Mark unread",
+            Self::Save => "Save message",
+            Self::Delete => "Delete message",
+            Self::CopyId => "Copy message ID",
+        }
+    }
+
     pub fn for_combo(combo: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|a| a.keys().contains(&combo))
     }
@@ -206,20 +222,24 @@ impl Waffle {
     }
 
     fn action_item(&self, action: MessageAction, message: &Message) -> crate::menu::Item {
-        let (label, glyph) = match action {
-            MessageAction::Edit => ("Edit message", Glyph::Pen),
-            MessageAction::Reply => ("Reply", Glyph::Reply),
-            MessageAction::Forward => ("Forward", Glyph::Forward),
-            MessageAction::Thread => ("Create thread", Glyph::Thread),
-            MessageAction::React => ("Add reaction", Glyph::Emoji),
-            MessageAction::CopyText => ("Copy text", Glyph::Copy),
-            MessageAction::Pin if message.pinned => ("Unpin message", Glyph::PinSlash),
-            MessageAction::Pin => ("Pin message", Glyph::Pin),
-            MessageAction::MarkUnread => ("Mark unread", Glyph::Envelope),
-            MessageAction::Save if self.saved_ids.contains(&message.id) => ("Remove from saved", Glyph::Bookmark),
-            MessageAction::Save => ("Save message", Glyph::Bookmark),
-            MessageAction::Delete => ("Delete message", Glyph::Trash),
-            MessageAction::CopyId => ("Copy message ID", Glyph::Id),
+        let glyph = match action {
+            MessageAction::Edit => Glyph::Pen,
+            MessageAction::Reply => Glyph::Reply,
+            MessageAction::Forward => Glyph::Forward,
+            MessageAction::Thread => Glyph::Thread,
+            MessageAction::React => Glyph::Emoji,
+            MessageAction::CopyText => Glyph::Copy,
+            MessageAction::Pin if message.pinned => Glyph::PinSlash,
+            MessageAction::Pin => Glyph::Pin,
+            MessageAction::MarkUnread => Glyph::Envelope,
+            MessageAction::Save => Glyph::Bookmark,
+            MessageAction::Delete => Glyph::Trash,
+            MessageAction::CopyId => Glyph::Id,
+        };
+        let label = match action {
+            MessageAction::Pin if message.pinned => "Unpin message",
+            MessageAction::Save if self.saved_ids.contains(&message.id) => "Remove from saved",
+            _ => action.label(),
         };
         let m = message.clone();
         let row = item(label, move |this, window, cx| this.run_message_action(action, &m, false, window, cx)).icon(glyph).shortcut(action.keys()[0]);
@@ -367,13 +387,16 @@ pub(crate) fn shortcode(emoji: &Emoji) -> String {
     format!(":{name}:")
 }
 
-// Discord's "Speak message", through the system voice.
-fn speak(text: &str) {
+// Discord's "Speak message", through the system voice. `rate` is Discord's text-to-speech rate, 1 normal.
+pub(crate) fn speak(text: &str, rate: f32) {
     let text = text.to_owned();
+    // `say` reads 175 words a minute as normal. It takes 0 as its default speed, so the slowest end of
+    // Discord's range speaks at 1, its slowest.
+    let wpm = ((175. * rate).round() as u32).max(1);
     // Through stdin, so text starting with "-" can't be read as `say` options.
     std::thread::spawn(move || {
         use std::io::Write;
-        let Ok(mut child) = std::process::Command::new("say").stdin(std::process::Stdio::piped()).spawn() else { return };
+        let Ok(mut child) = std::process::Command::new("say").arg("-r").arg(wpm.to_string()).stdin(std::process::Stdio::piped()).spawn() else { return };
         if let Some(mut stdin) = child.stdin.take() {
             let _ = stdin.write_all(text.as_bytes());
         }

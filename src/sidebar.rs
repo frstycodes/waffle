@@ -22,9 +22,9 @@ use crate::{
     ui::{self, Squircle},
 };
 
-// Rail geometry: 44px tiles 8px apart, centred in the 68px rail, so the state pill sits on its edge.
+// Rail geometry: 44px tiles 8px apart (at Default density), centred in the 68px rail, so the state pill
+// sits on its edge.
 pub(crate) const TILE: f32 = 44.;
-const RAIL_GAP: f32 = 8.;
 // How far a header control sits below the window's top: a 34px control centred in the 48px header row.
 const HEADER_INSET: f32 = 7.;
 pub(crate) const TILE_X: f32 = (RAIL_WIDTH - TILE) / 2.;
@@ -35,10 +35,21 @@ const MINI_INSET: f32 = (TILE - 2. * MINI - MINI_GAP) / 2.;
 // pill splits into theirs and its count hands over to theirs on the way. Closing runs it backwards.
 const TRIP: Duration = Duration::from_millis(260);
 
-const ROW_HEIGHT: f32 = 32.;
+// Spacing that follows UI density (`ui::density_pad`).
+fn rail_gap() -> f32 {
+    ui::density_pad(8.)
+}
+
+// A channel row: its 16px of text plus padding, 32px at Default density.
+fn row_height() -> f32 {
+    16. + ui::density_pad(16.)
+}
+
+fn row_gap() -> f32 {
+    ui::density_pad(2.)
+}
 // A live stage's row: its name with the topic under it.
 const STAGE_ROW_HEIGHT: f32 = 44.;
-const ROW_GAP: f32 = 2.;
 
 #[derive(Clone)]
 pub(crate) enum Face {
@@ -126,7 +137,7 @@ impl Waffle {
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(RAIL_GAP))
+            .gap(px(rail_gap()))
             .overflow_y_scroll()
             .text_size(px(14.))
             // Without the lights, Home holds the slot over a drag strip; Home keeps its clicks from the strip,
@@ -162,7 +173,7 @@ impl Waffle {
             .items_center()
             .children(strip)
             .child(div().relative().flex_1().min_h_0().w_full().child(self.render_rail(window, cx)))
-            .child(div().flex_none().pt(px(RAIL_GAP)).pb(px(8.)).child(inbox))
+            .child(div().flex_none().pt(px(rail_gap())).pb(px(8.)).child(inbox))
             .child(div().flex_none().h(self.user_panel_clearance()))
     }
 
@@ -186,7 +197,7 @@ impl Waffle {
     // reaches past it into Home or the next tile. A leaving tile keeps its last count and stays until its
     // exit settles. Each slot carries the gap above it, so the column cancels the rail's own gap.
     fn rail_dm_tiles(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Div {
-        const SLOT: f32 = TILE + RAIL_GAP;
+        let slot = TILE + rail_gap();
         let wanted: Vec<(Channel, u32)> = self.rail_dms().into_iter().map(|dm| {
             let count = self.mention_count(&dm.id);
             (dm, count)
@@ -199,7 +210,7 @@ impl Waffle {
         for (dm, count) in keep_leaving(wanted.clone(), before, |a, b| a.0.id == b.0.id) {
             let part = Part::RailDm(dm.id.clone());
             let present = wanted.iter().any(|(w, _)| w.id == dm.id);
-            let motion = Motion::new(Target::default().height(SLOT).opacity(1.)).exit(gone).present(present).transition(motion::snappy());
+            let motion = Motion::new(Target::default().height(slot).opacity(1.)).exit(gone).present(present).transition(motion::snappy());
             let motion = if launch { motion } else { motion.initial(gone) };
             let frame = self.motions.frame_one(part.clone(), motion, window, cx);
             if !frame.is_mounted() {
@@ -207,21 +218,21 @@ impl Waffle {
                 continue;
             }
             // Past 1 is the spring's overshoot, kept so the tile and its slot bounce together; below 0 is clamped.
-            let shown = (frame.target().height_px().unwrap_or(SLOT) / SLOT).max(0.);
+            let shown = (frame.target().height_px().unwrap_or(slot) / slot).max(0.);
             let tile = self.dm_tile(dm.clone(), count, window, cx);
             slots.push(
                 div()
                     .relative()
                     .w(px(RAIL_WIDTH))
-                    .h(px(shown * SLOT))
+                    .h(px(shown * slot))
                     .flex_none()
-                    .child(div().absolute().left_0().top(px(RAIL_GAP * shown - (1. - shown) * TILE / 2.)).opacity(frame.target().alpha().clamp(0., 1.)).scale(shown).child(tile))
+                    .child(div().absolute().left_0().top(px(rail_gap() * shown - (1. - shown) * TILE / 2.)).opacity(frame.target().alpha().clamp(0., 1.)).scale(shown).child(tile))
                     .into_any_element(),
             );
             kept.push((dm, count));
         }
         self.rail_dms_shown = (!launch || !self.dms.is_empty()).then_some(kept);
-        div().flex_none().flex().flex_col().mt(px(-RAIL_GAP)).children(slots)
+        div().flex_none().flex().flex_col().mt(px(-rail_gap())).children(slots)
     }
 
     fn dm_tile(&mut self, dm: Channel, mentions: u32, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -374,7 +385,7 @@ impl Waffle {
         div()
             .relative()
             .w(px(RAIL_WIDTH))
-            .h(px(TILE + motion.trip * count as f32 * (TILE + RAIL_GAP)))
+            .h(px(TILE + motion.trip * count as f32 * (TILE + rail_gap())))
             .flex_none()
             .child(div().absolute().top_0().bottom_0().left(px(TILE_X)).w(px(TILE)).squircle(ui::RADIUS_LG).bg(tint.opacity(0.18 * motion.trip)))
             // Servers over the head: in flight they cross its tinted face, which would shade them until
@@ -632,7 +643,7 @@ impl Waffle {
                 rows.push(self.friends_row(cx));
                 rows.extend(self.requests_row(cx));
                 let start = cat_add("dm-start", None, "Start a conversation", cx).on_click(cx.listener(|this, _, window, cx| this.open_switcher(window, cx)));
-                rows.push(div().mt(px(16.)).child(category_head("dm-head".into(), div().id("dm-head").child("Direct messages"), true, cx).child(start)).into_any_element());
+                rows.push(div().mt(px(ui::density_pad(16.))).child(category_head("dm-head".into(), div().id("dm-head").child("Direct messages"), true, cx).child(start)).into_any_element());
                 match self.dms.is_empty() {
                     true => rows.push(muted_line("No direct messages yet", cx)),
                     false => rows.extend(self.dms.clone().iter().map(|c| self.dm_row(c, cx))),
@@ -701,7 +712,7 @@ impl Waffle {
                     .pb_2()
                     .flex()
                     .flex_col()
-                    .gap(px(ROW_GAP))
+                    .gap(px(row_gap()))
                     .children(rows)
 ,
                 &self.channels_scroll,
@@ -783,7 +794,7 @@ impl Waffle {
             true => row.element,
             false => div().opacity(alpha).child(row.element).into_any_element(),
         });
-        div().when(spaced, |g| g.mt(px(16.))).flex().flex_col().gap(px(ROW_GAP)).child(head).children(rows).into_any_element()
+        div().when(spaced, |g| g.mt(px(ui::density_pad(16.)))).flex().flex_col().gap(px(row_gap())).child(head).children(rows).into_any_element()
     }
 
     fn channel_rows(&self, channel: &Channel, guild: &Guild, window: &mut Window, cx: &mut Context<Self>) -> Vec<ChannelRow> {
@@ -1083,7 +1094,7 @@ impl Waffle {
             _ => Vec::new(),
         };
         // The ghost is the row and its people, 30px each under it 1px apart.
-        let size = point(px(self.channels_width - 16.), px(ROW_HEIGHT + people.len() as f32 * 31.));
+        let size = point(px(self.channels_width - 16.), px(row_height() + people.len() as f32 * 31.));
         let look = crate::drag::Look::Channel { channel: Box::new(channel.clone()), people };
         let ghost = crate::drag::pick_up(cx.weak_entity(), channel.id.clone().into(), look, size, 1.05, 0., true);
         let row = row.on_drag(drag, Board::lift(cx.weak_entity(), channel_board, channel.id.clone(), ghost));
@@ -1126,7 +1137,7 @@ impl Waffle {
                 let target = thread.clone();
                 let (menu_thread, guild_id) = (thread.clone(), guild.id.clone());
                 // The first branch starts just below its parent, never touching the parent's fill.
-                let gap = if i == 0 { -4. } else { ROW_GAP };
+                let gap = if i == 0 { -4. } else { row_gap() };
                 let branch = div().absolute().left(px(16.)).top(px(-gap)).w(px(12.)).h(px(THREAD_HEIGHT / 2. + gap)).border_l(px(1.5)).border_b(px(1.5)).rounded_bl(px(8.)).border_color(line);
                 let trunk = (i + 1 < count).then(|| div().absolute().left(px(16.)).top(px(THREAD_HEIGHT / 2. - 8.)).bottom_0().w(px(1.5)).bg(line));
                 let state = RowState { selected, unread, muted: false, strong: false };
@@ -1241,7 +1252,7 @@ pub(crate) fn channel_row(id: SharedString, group: SharedString, state: RowState
         .id(id)
         .group(group)
         .relative()
-        .h(px(ROW_HEIGHT))
+        .h(px(row_height()))
         .w_full()
         .flex_none()
         .px_2()
@@ -1502,7 +1513,7 @@ pub(crate) fn hover_ease() -> Transition {
 
 // Where an open folder's `i`th server sits, from the folder's top.
 fn slot_y(i: usize) -> f32 {
-    (i + 1) as f32 * (TILE + RAIL_GAP)
+    (i + 1) as f32 * (TILE + rail_gap())
 }
 
 // A server on its way between its mini tile and its slot. Past the fourth, servers have no mini and
@@ -1848,7 +1859,7 @@ fn list_skeleton(i: usize, channels: bool, cx: &App) -> AnyElement {
         false => ui::skeleton_circle(SharedString::from(format!("list-skel-mark-{i}")), 32., cx),
     };
     div()
-        .h(px(if channels { ROW_HEIGHT } else { 42. }))
+        .h(px(if channels { row_height() } else { 42. }))
         .px_2()
         .flex()
         .items_center()

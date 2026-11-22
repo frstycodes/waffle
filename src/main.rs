@@ -28,6 +28,7 @@ mod discord;
 mod drafts;
 mod frecency_sync;
 mod drag;
+mod emoticons;
 mod icons;
 mod illustration;
 mod images;
@@ -77,6 +78,7 @@ mod search_menu;
 mod search_results;
 mod server_settings;
 mod settings;
+mod shortcuts;
 mod shell;
 mod user_menu;
 mod video;
@@ -145,6 +147,7 @@ fn main() {
     gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
         app_keys::init(cx);
+        shortcuts::init(cx);
         cx.text_system()
             .add_fonts(
                 [
@@ -168,7 +171,7 @@ fn main() {
         // The design is drawn with `-webkit-font-smoothing: antialiased`; macOS smoothing would thicken every stroke.
         cx.text_system().set_font_smoothing(false);
         cx.set_http_client(std::sync::Arc::new(discord::Images::default()));
-        cx.set_reduce_motion(material::system_reduce_motion() || settings::Prefs::load().reduce_motion);
+        cx.set_reduce_motion(settings::Prefs::load().reduces_motion());
         settings::Prefs::load().app_icon.apply();
         // WAVE_DESIGN=1 opens only the design system gallery, no sign-in needed.
         if std::env::var_os("WAVE_DESIGN").is_some() {
@@ -806,6 +809,8 @@ pub struct Waffle {
     // Not verified: Discord's exact rule for when the open channel reads itself again after Mark Unread.
     pub(crate) held_unread: Option<String>,
     dialog: Option<menu::Dialog>,
+    // The ⌘/ Keyboard combos dialog (shortcuts.rs).
+    keyboard_combos: bool,
     create_channel: Option<create_channel::CreateChannel>,
     notification_settings: Option<notification_settings::NotificationSettings>,
     stage_topic: Option<stage_dialogs::StageTopic>,
@@ -1202,6 +1207,7 @@ impl Waffle {
             unread_scroll_pending: false,
             held_unread: None,
             dialog: None,
+            keyboard_combos: false,
             create_channel: None,
             notification_settings: None,
             stage_topic: None,
@@ -2306,6 +2312,10 @@ impl Waffle {
         self.held_unread = None;
         let (Some(client), Some(channel), Some(me)) = (self.client.clone(), self.channel.clone(), self.me.clone()) else { return };
         let typed = wire_text(&self.composer.read(cx).content());
+        let typed = match self.account_settings.convert_emoticons {
+            true => emoticons::convert(&typed),
+            false => typed,
+        };
         let typed = typed.trim();
         if typed.is_empty() && self.pending_files.is_empty() {
             return;
