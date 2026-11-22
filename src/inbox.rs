@@ -73,6 +73,11 @@ impl Waffle {
         list.into_iter().map(|(_, u)| u).collect()
     }
 
+    /// The channel at the top of the Unreads tab.
+    pub(crate) fn top_unread_channel(&self) -> Option<String> {
+        self.unreads().into_iter().next().map(|u| u.channel.id)
+    }
+
     /// Closes the Inbox, opens the message's channel (a server's or a DM) and scrolls to it, flashed.
     pub(crate) fn open_message(&mut self, guild_id: Option<String>, channel_id: &str, message_id: String, window: &mut Window, cx: &mut Context<Self>) {
         self.inbox_open = false;

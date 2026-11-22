@@ -68,6 +68,7 @@ mod search_menu;
 mod search_results;
 mod server_settings;
 mod settings;
+mod shortcuts;
 mod shell;
 mod user_menu;
 mod video;
@@ -132,6 +133,7 @@ fn main() {
     gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
         app_keys::init(cx);
+        shortcuts::init(cx);
         cx.text_system()
             .add_fonts(
                 [
@@ -746,6 +748,8 @@ pub struct Waffle {
     // The open channel should land on its first unread once its messages are in.
     unread_scroll_pending: bool,
     dialog: Option<menu::Dialog>,
+    // The ⌘/ Keyboard combos dialog (shortcuts.rs).
+    keyboard_combos: bool,
     create_channel: Option<create_channel::CreateChannel>,
     dialog_input: Entity<SearchState>,
     // A short notice at the bottom, e.g. why a moderation action failed.
@@ -1095,6 +1099,7 @@ impl Waffle {
             window_active: true,
             unread_scroll_pending: false,
             dialog: None,
+            keyboard_combos: false,
             create_channel: None,
             dialog_input,
             toast: None,
