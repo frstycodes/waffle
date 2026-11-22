@@ -7,7 +7,7 @@ use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 const GATEWAY: &str = "wss://gateway.discord.gg/?v=10&encoding=json";
 pub const API: &str = "https://discord.com/api/v10";
-const CDN: &str = "https://cdn.discordapp.com";
+pub(crate) const CDN: &str = "https://cdn.discordapp.com";
 pub(crate) const VIEW_CHANNEL: u64 = 1 << 10;
 
 // The user-account gateway and several fields below (nameplates, guild tags, member list ops,
@@ -225,7 +225,7 @@ pub struct Role {
     pub managed: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Guild {
     pub id: String,
     pub name: String,
@@ -246,6 +246,33 @@ pub struct Guild {
     pub premium_tier: u8,
     // People idling here don't count as voice activity (Discord's server icon badge skips it).
     pub afk_channel_id: Option<String>,
+    // Discord's feature flags (COMMUNITY, GUILD_ONBOARDING, MEMBER_VERIFICATION_GATE_ENABLED, ...).
+    pub features: Vec<String>,
+    // The invite splash: the image a server shows behind its invites and onboarding.
+    pub splash: Option<String>,
+    pub rules_channel_id: Option<String>,
+    // Our own membership here: pending rules, onboarding and to-do flags, join date.
+    pub me: Membership,
+}
+
+// Our member entry's join state. `flags` are Discord's guild member flags (see `joining::flags`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Membership {
+    pub pending: bool,
+    pub flags: u64,
+    pub joined_at: Option<String>,
+}
+
+impl Membership {
+    pub fn parse(m: &Value) -> Self {
+        Membership { pending: m["pending"].as_bool().unwrap_or(false), flags: m["flags"].as_u64().unwrap_or(0), joined_at: m["joined_at"].as_str().map(str::to_owned) }
+    }
+}
+
+impl Guild {
+    pub fn has_feature(&self, feature: &str) -> bool {
+        self.features.iter().any(|f| f == feature)
+    }
 }
 
 // Your notification settings for one server, or for DMs under the key "@me" (Discord's
@@ -259,6 +286,8 @@ pub struct GuildSettings {
     pub suppress_everyone: bool,
     pub suppress_roles: bool,
     pub hide_muted: bool,
+    // user_guild_settings flags; bit 14 (16384) is "pick your channels" (opt-in channels on).
+    pub flags: u64,
     pub channels: HashMap<String, ChannelSettings>,
 }
 
@@ -267,6 +296,8 @@ pub struct ChannelSettings {
     pub muted: bool,
     pub mute_end: Option<String>,
     pub notifications: u8,
+    // channel_overrides flags; bit 12 (4096) follows the channel (or category) when opt-in is on.
+    pub flags: u64,
 }
 
 impl GuildSettings {
@@ -297,6 +328,7 @@ pub fn parse_guild_settings(g: &Value) -> (String, GuildSettings) {
                     muted: c["muted"].as_bool().unwrap_or(false),
                     mute_end: c["mute_config"]["end_time"].as_str().map(str::to_owned),
                     notifications: c["message_notifications"].as_u64().unwrap_or(3) as u8,
+                    flags: c["flags"].as_u64().unwrap_or(0),
                 },
             ))
         })
@@ -308,6 +340,7 @@ pub fn parse_guild_settings(g: &Value) -> (String, GuildSettings) {
         suppress_everyone: g["suppress_everyone"].as_bool().unwrap_or(false),
         suppress_roles: g["suppress_roles"].as_bool().unwrap_or(false),
         hide_muted: g["hide_muted_channels"].as_bool().unwrap_or(false),
+        flags: g["flags"].as_u64().unwrap_or(0),
         channels,
     };
     (key, settings)
@@ -975,6 +1008,9 @@ pub struct AccountSettings {
     pub friends_all: bool,
     pub friends_mutual_friends: bool,
     pub friends_mutual_guilds: bool,
+    // Servers whose members can't DM you, and servers that don't see your activity.
+    pub restricted_guilds: Vec<String>,
+    pub activity_restricted_guilds: Vec<String>,
 }
 
 impl Default for AccountSettings {
@@ -989,6 +1025,8 @@ impl Default for AccountSettings {
             friends_all: true,
             friends_mutual_friends: true,
             friends_mutual_guilds: true,
+            restricted_guilds: Vec::new(),
+            activity_restricted_guilds: Vec::new(),
         }
     }
 }
@@ -1006,6 +1044,12 @@ impl AccountSettings {
         flag("render_reactions", &mut self.render_reactions);
         flag("show_current_game", &mut self.show_current_game);
         flag("default_guilds_restricted", &mut self.default_guilds_restricted);
+        if v["restricted_guilds"].is_array() {
+            self.restricted_guilds = strings(&v["restricted_guilds"]);
+        }
+        if v["activity_restricted_guild_ids"].is_array() {
+            self.activity_restricted_guilds = strings(&v["activity_restricted_guild_ids"]);
+        }
         if let Some(level) = v["explicit_content_filter"].as_u64() {
             self.explicit_content_filter = level.min(2) as u8;
         }
@@ -1035,7 +1079,7 @@ pub enum Event {
     ChannelUpsert { guild_id: String, channel: Channel },
     ChannelDelete { guild_id: String, id: String },
     // A member's roles, nickname or server avatar changed.
-    MemberUpdate { guild_id: String, user: User, roles: Vec<String> },
+    MemberUpdate { guild_id: String, user: User, roles: Vec<String>, membership: Membership },
     // A friend, block or request was added, changed or removed (`None` kind = removed).
     RelationshipChange { user_id: String, relationship: Option<Relationship> },
     // Our membership of a thread changed (joined or left).
@@ -1749,12 +1793,23 @@ async fn send_or_gone(req: reqwest::RequestBuilder) -> Result<Option<Value>, Str
 
 // A server invite's card: `GET /invites/{code}?with_counts=true`.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+// Cached previews predate some fields.
+#[serde(default)]
 pub struct Invite {
     pub guild_id: String,
     pub name: String,
     pub icon: Option<String>,
     pub online: Option<u64>,
     pub members: Option<u64>,
+    pub features: Vec<String>,
+    pub splash: Option<String>,
+    // The invite lets you pick a server nickname before joining (Discord's `is_nickname_changeable`).
+    pub nickname_changeable: bool,
+}
+
+// A server's invite splash on the CDN, wide enough for a full-window background.
+pub fn splash_url(guild_id: &str, hash: &str) -> String {
+    format!("{CDN}/splashes/{guild_id}/{hash}.jpg?size=2048")
 }
 
 // The server a joined invite was to; a group DM invite has none.
@@ -1772,6 +1827,9 @@ pub fn parse_invite(v: &Value) -> Option<Invite> {
         icon: guild["icon"].as_str().map(|hash| format!("{CDN}/icons/{id}/{hash}.png?size=96")),
         online: v["approximate_presence_count"].as_u64(),
         members: v["approximate_member_count"].as_u64(),
+        features: strings(&guild["features"]),
+        splash: guild["splash"].as_str().map(|hash| splash_url(id, hash)),
+        nickname_changeable: v["is_nickname_changeable"].as_bool().unwrap_or(false),
     })
 }
 
@@ -2028,6 +2086,7 @@ fn dispatch(kind: &str, d: &Value) -> Option<Event> {
             guild_id: d["guild_id"].as_str()?.to_owned(),
             user: parse_member_user(d, &d["user"], d["guild_id"].as_str()),
             roles: strings(&d["roles"]),
+            membership: Membership::parse(d),
         }),
         "RELATIONSHIP_ADD" | "RELATIONSHIP_UPDATE" => {
             let kind = match d["type"].as_u64()? {
@@ -2112,7 +2171,9 @@ fn parse_ready(d: &Value) -> Ready {
             .enumerate()
             .filter_map(|(i, g)| {
                 let mut guild = parse_guild(g)?;
-                guild.my_roles = my_roles(g, &d["merged_members"][i], d["user"]["id"].as_str().unwrap_or_default());
+                let member = my_member(g, &d["merged_members"][i], d["user"]["id"].as_str().unwrap_or_default());
+                guild.my_roles = strings(&member["roles"]);
+                guild.me = Membership::parse(&member);
                 Some(guild)
             })
             .collect(),
@@ -2207,13 +2268,17 @@ fn parse_guild(g: &Value) -> Option<Guild> {
         my_roles: Vec::new(),
         premium_tier: props["premium_tier"].as_u64().or(g["premium_tier"].as_u64()).unwrap_or(0) as u8,
         afk_channel_id: props["afk_channel_id"].as_str().or(g["afk_channel_id"].as_str()).map(str::to_owned),
+        features: strings(if props["features"].is_array() { &props["features"] } else { &g["features"] }),
+        splash: props["splash"].as_str().or(g["splash"].as_str()).map(|hash| splash_url(id, hash)),
+        rules_channel_id: props["rules_channel_id"].as_str().or(g["rules_channel_id"].as_str()).map(str::to_owned),
+        me: Membership::default(),
     })
 }
 
 // READY lists our own member entry per server, either inside each guild or in `merged_members`.
-fn my_roles(guild: &Value, merged: &Value, me: &str) -> Vec<String> {
-    let mine = |list: &Value| list.as_array().into_iter().flatten().find(|m| m["user_id"].as_str().or(m["user"]["id"].as_str()) == Some(me)).map(|m| strings(&m["roles"]));
-    mine(&guild["members"]).or_else(|| mine(merged)).unwrap_or_default()
+fn my_member(guild: &Value, merged: &Value, me: &str) -> Value {
+    let mine = |list: &Value| list.as_array().into_iter().flatten().find(|m| m["user_id"].as_str().or(m["user"]["id"].as_str()) == Some(me)).cloned();
+    mine(&guild["members"]).or_else(|| mine(merged)).unwrap_or(Value::Null)
 }
 
 pub fn parse_thread(c: &Value, guild_id: &str) -> Option<Channel> {
@@ -3070,6 +3135,7 @@ mod tests {
             threads: Vec::new(),
             my_roles: Vec::new(),
             default_notifications: Default::default(),
+            ..Default::default()
         };
         fn visible(g: &Guild) -> Vec<&str> {
             g.channels.iter().filter(|c| g.can_view("me", c)).map(|c| c.id.as_str()).collect()
@@ -3107,6 +3173,7 @@ mod tests {
             threads: vec![thread],
             my_roles: Vec::new(),
             default_notifications: Default::default(),
+            ..Default::default()
         };
         let can = |g: &Guild, me: &str, id: &str| g.channel_permissions(me, g.channel(id).unwrap()) & perm::MANAGE_MESSAGES != 0;
         let all = ["open", "locked", "mine", "everyone", "t"];
@@ -3148,6 +3215,7 @@ mod tests {
             threads: Vec::new(),
             my_roles: vec!["mods".into()],
             default_notifications: Default::default(),
+            ..Default::default()
         };
         let to = |g: &Guild, me: &str, who: &str| ["b", "full", "locked", "closed"].into_iter().filter(|id| g.can_move(me, who, g.channel(id).unwrap())).collect::<Vec<_>>();
 
@@ -3376,7 +3444,7 @@ mod tests {
     fn invites_read_their_server_and_counts() {
         let body = json!({ "code": "waffle", "guild": { "id": "9", "name": "Dumpling Hall", "icon": "ff" }, "approximate_member_count": 8311, "approximate_presence_count": 1204 });
         let invite = parse_invite(&body).unwrap();
-        assert_eq!(invite, Invite { guild_id: "9".into(), name: "Dumpling Hall".into(), icon: Some("https://cdn.discordapp.com/icons/9/ff.png?size=96".into()), online: Some(1204), members: Some(8311) });
+        assert_eq!(invite, Invite { guild_id: "9".into(), name: "Dumpling Hall".into(), icon: Some("https://cdn.discordapp.com/icons/9/ff.png?size=96".into()), online: Some(1204), members: Some(8311), ..Default::default() });
         assert_eq!(parse_invite(&json!({ "code": "gdm", "channel": { "id": "5", "type": 3 } })), None, "a group DM invite has no server card");
     }
 }

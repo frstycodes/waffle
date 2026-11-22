@@ -46,6 +46,7 @@ mod overwrites;
 mod playback;
 mod poll;
 mod inbox;
+mod joining;
 mod status_menu;
 mod stickers;
 mod memory;
@@ -811,6 +812,10 @@ pub struct Waffle {
     popover_at: gpui_kit::Point<gpui_kit::Pixels>,
     // The full Inbox page in the content column ("See all").
     inbox_page: bool,
+    // Joining a server: invite screen, onboarding, rules, Channels & Roles and the Server Guide.
+    join: joining::Join,
+    // A server page open in the content column instead of a channel (Server Guide, Channels & Roles).
+    guild_page: Option<joining::GuildPage>,
     // The GIF picker: None closed, Some(None) loading, Some(Some(..)) results.
     gif_picker: Option<Option<Result<Vec<Gif>, SharedString>>>,
     // Which tab the GIF picker shows; stickers share its frame.
@@ -1133,6 +1138,8 @@ impl Waffle {
             pending_jump: None,
             popover_at: gpui_kit::Point::default(),
             inbox_page: false,
+            join: joining::Join::default(),
+            guild_page: None,
             gif_picker: None,
             picker_tab: stickers::PickerTab::default(),
             sticker_packs: None,
@@ -1424,12 +1431,13 @@ impl Waffle {
                     self.channel = None;
                 }
             }
-            Event::MemberUpdate { guild_id, user, roles } => {
+            Event::MemberUpdate { guild_id, user, roles, membership } => {
                 self.profile_changed(&user.id);
                 if self.me.as_ref().is_some_and(|me| me.id == user.id)
                     && let Some(guild) = self.guilds.iter_mut().find(|g| g.id == guild_id)
                 {
                     guild.my_roles = roles.clone();
+                    guild.me = membership;
                 }
                 self.member_roles.entry(guild_id.clone()).or_default().insert(user.id.clone(), roles);
                 self.members.entry(guild_id.clone()).or_default().insert(user.id.clone(), user);
@@ -1469,6 +1477,8 @@ impl Waffle {
                         if guild.my_roles.is_empty() {
                             guild.my_roles = std::mem::take(&mut existing.my_roles);
                         }
+                        // Same for our membership state: GUILD_CREATE doesn't carry it.
+                        guild.me = std::mem::take(&mut existing.me);
                         for thread in existing.threads.drain(..) {
                             if !guild.threads.iter().any(|t| t.id == thread.id) {
                                 guild.threads.push(thread);
@@ -1666,6 +1676,7 @@ impl Waffle {
     }
 
     fn on_message(&mut self, message: Message, cx: &mut Context<Self>) {
+        self.note_message_sent(&message, cx);
         let channel_id = message.channel_id.clone();
         let mine = self.me.as_ref().is_some_and(|me| me.id == message.author.id);
         let is_open = self.channel.as_ref().is_some_and(|c| c.id == channel_id);
@@ -1738,6 +1749,7 @@ impl Waffle {
 
     fn open_guild(&mut self, guild_id: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         self.guild_id = guild_id.clone();
+        self.guild_page = None;
         self.refresh_stream_previews(cx);
         self.request_channel_info();
         let remembered = self.last_channel.get(&guild_id).cloned();
@@ -1760,6 +1772,8 @@ impl Waffle {
 
     pub(crate) fn open_channel(&mut self, channel: Channel, window: &mut Window, cx: &mut Context<Self>) {
         self.inbox_page = false;
+        self.guild_page = None;
+        self.note_channel_viewed(&channel, cx);
         // Results belong to the server or DM they searched: another place closes them.
         let scope = match &self.guild_id {
             Some(guild) => format!("guilds/{guild}"),
