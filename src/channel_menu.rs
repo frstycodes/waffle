@@ -13,7 +13,7 @@ use crate::{
 };
 
 // Discord's mute lengths (seconds; -1 is "until I turn it back on").
-const MUTE_FOR: [(&str, i64); 6] =
+pub(crate) const MUTE_FOR: [(&str, i64); 6] =
     [("For 15 minutes", 900), ("For 1 hour", 3600), ("For 3 hours", 10_800), ("For 8 hours", 28_800), ("For 24 hours", 86_400), ("Until I turn it back on", -1)];
 
 // Discord's channel types for creating channels.
@@ -76,6 +76,13 @@ impl Waffle {
             .ok();
         })
         .detach();
+    }
+
+    // Saves part of one channel's or category's override in a server.
+    pub(crate) fn patch_channel_override(&mut self, guild_id: String, channel_id: &str, body: Value, cx: &mut Context<Self>) {
+        let mut overrides = serde_json::Map::new();
+        overrides.insert(channel_id.to_owned(), body);
+        self.patch_guild_settings(guild_id, json!({ "channel_overrides": overrides }), cx);
     }
 
     // A channel or thread edit (name, category, archived, locked, …) shown at once; the old copy
@@ -203,10 +210,7 @@ impl Waffle {
             .iter()
             .map(|&(text, seconds)| {
                 let apply = apply.clone();
-                let row = item(text, move |this, _, cx| {
-                    let end = (seconds > 0).then(|| (chrono::Utc::now() + chrono::Duration::seconds(seconds)).to_rfc3339());
-                    apply(this, json!({ "muted": true, "mute_config": { "selected_time_window": seconds, "end_time": end } }), cx);
-                });
+                let row = item(text, move |this, _, cx| apply(this, mute_body(seconds), cx));
                 // Each length says when it ends; the menu redraws, so the times stay current.
                 let now = chrono::Local::now();
                 if seconds > 0 { row.hint(format!("Until {}", until(now + chrono::Duration::seconds(seconds), now))) } else { row }.entry()
@@ -249,18 +253,14 @@ impl Waffle {
         let (gid, cid) = (guild_id.to_owned(), channel.id.clone());
         let mut out = vec![self.mute_entry("Mute channel", "Unmute channel", settings.channel_muted(&channel.id), overrides.mute_end.as_deref(), move |this, mut body, cx| {
             body["channel_id"] = json!(cid);
-            let mut overrides = serde_json::Map::new();
-            overrides.insert(cid.clone(), body);
-            this.patch_guild_settings(gid.clone(), json!({ "channel_overrides": overrides }), cx);
+            this.patch_channel_override(gid.clone(), &cid, body, cx);
         })];
         // Discord has no notification levels for voice channels.
         if channel.kind != ChannelKind::Voice {
             let inherited = if channel.parent_id.is_some() { "Use category default" } else { "Use server default" };
             let (gid, cid) = (guild_id.to_owned(), channel.id.clone());
             let radios = self.notification_radios(overrides.notifications, Some((inherited, settings.notifications)), move |this, level, cx| {
-                let mut overrides = serde_json::Map::new();
-                overrides.insert(cid.clone(), json!({ "message_notifications": level }));
-                this.patch_guild_settings(gid.clone(), json!({ "channel_overrides": overrides }), cx);
+                this.patch_channel_override(gid.clone(), &cid, json!({ "message_notifications": level }), cx);
             });
             out.push(submenu("Notification settings", radios).hint(notification_label(effective(overrides.notifications, settings.notifications))).icon(Glyph::Bell).entry());
         }
@@ -374,15 +374,11 @@ impl Waffle {
 
         let (gid, cid) = (guild_id.to_owned(), category.id.clone());
         out.push(self.mute_entry("Mute category", "Unmute category", settings.channel_muted(&category.id), overrides.mute_end.as_deref(), move |this, body, cx| {
-            let mut overrides = serde_json::Map::new();
-            overrides.insert(cid.clone(), body);
-            this.patch_guild_settings(gid.clone(), json!({ "channel_overrides": overrides }), cx);
+            this.patch_channel_override(gid.clone(), &cid, body, cx);
         }));
         let (gid, cid) = (guild_id.to_owned(), category.id.clone());
         let radios = self.notification_radios(overrides.notifications, Some(("Use server default", settings.notifications)), move |this, level, cx| {
-            let mut overrides = serde_json::Map::new();
-            overrides.insert(cid.clone(), json!({ "message_notifications": level }));
-            this.patch_guild_settings(gid.clone(), json!({ "channel_overrides": overrides }), cx);
+            this.patch_channel_override(gid.clone(), &cid, json!({ "message_notifications": level }), cx);
         });
         out.push(submenu("Notification settings", radios).hint(notification_label(effective(overrides.notifications, settings.notifications))).icon(Glyph::Bell).entry());
         out.push(Entry::Separator);
@@ -533,13 +529,7 @@ impl Waffle {
         let gid = guild_id.to_owned();
         out.push(self.mute_entry("Mute server", "Unmute server", settings.is_muted(), settings.mute_end.as_deref(), move |this, body, cx| this.patch_guild_settings(gid.clone(), body, cx)));
         let gid = guild_id.to_owned();
-        let mut notifications = self.notification_radios(settings.notifications, None, move |this, level, cx| this.patch_guild_settings(gid.clone(), json!({ "message_notifications": level }), cx));
-        notifications.push(Entry::Separator);
-        for (label, field, on) in [("Suppress @everyone and @here", "suppress_everyone", settings.suppress_everyone), ("Suppress all role @mentions", "suppress_roles", settings.suppress_roles)] {
-            let gid = guild_id.to_owned();
-            notifications.push(item(label, move |this, _, cx| this.patch_guild_settings(gid.clone(), json!({ field: !on }), cx)).checked(on).entry());
-        }
-        out.push(submenu("Notification settings", notifications).hint(notification_label(settings.notifications)).icon(Glyph::Bell).entry());
+        out.push(item("Notification settings", move |this, window, cx| this.open_notification_settings(gid.clone(), window, cx)).hint(notification_label(settings.notifications)).icon(Glyph::Bell).entry());
         let gid = guild_id.to_owned();
         let hide = settings.hide_muted;
         out.push(item("Hide muted channels", move |this, _, cx| this.patch_guild_settings(gid.clone(), json!({ "hide_muted_channels": !hide }), cx)).checked(hide).icon(Glyph::EyeSlash).entry());
@@ -868,6 +858,7 @@ fn merge_settings(settings: &mut GuildSettings, body: &Value) {
     if let Some(muted) = body["muted"].as_bool() {
         settings.muted = muted;
         settings.mute_end = end(body);
+        settings.mute_window = body["mute_config"]["selected_time_window"].as_i64();
     }
     if let Some(level) = body["message_notifications"].as_u64() {
         settings.notifications = level as u8;
@@ -877,6 +868,15 @@ fn merge_settings(settings: &mut GuildSettings, body: &Value) {
     }
     if let Some(on) = body["suppress_roles"].as_bool() {
         settings.suppress_roles = on;
+    }
+    if let Some(value) = body["notify_highlights"].as_u64() {
+        settings.notify_highlights = value as u8;
+    }
+    if let Some(on) = body["mute_scheduled_events"].as_bool() {
+        settings.mute_scheduled_events = on;
+    }
+    if let Some(on) = body["mobile_push"].as_bool() {
+        settings.mobile_push = on;
     }
     if let Some(on) = body["hide_muted_channels"].as_bool() {
         settings.hide_muted = on;
@@ -899,6 +899,12 @@ fn merge_settings(settings: &mut GuildSettings, body: &Value) {
     }
 }
 
+// A mute for `seconds` (-1 until turned back on), as a settings PATCH body.
+pub(crate) fn mute_body(seconds: i64) -> Value {
+    let end = (seconds > 0).then(|| (chrono::Utc::now() + chrono::Duration::seconds(seconds)).to_rfc3339());
+    json!({ "muted": true, "mute_config": { "selected_time_window": seconds, "end_time": end } })
+}
+
 fn set_joined(this: &mut Waffle, thread_id: &str, joined: bool) {
     for meta in this.guilds.iter_mut().flat_map(|g| g.threads.iter_mut()).filter(|t| t.id == thread_id).filter_map(|t| t.thread.as_mut()) {
         meta.joined = joined;
@@ -912,9 +918,8 @@ pub(crate) fn rail_key(entry: &crate::RailEntry, guilds: &[crate::discord::Guild
     }
 }
 
-// What a "use the default" level resolves to.
 // When a mute ends, as a menu says it: "8:56 PM", or "tomorrow at 4:41 AM", or a date further out.
-fn until(end: chrono::DateTime<chrono::Local>, now: chrono::DateTime<chrono::Local>) -> String {
+pub(crate) fn until(end: chrono::DateTime<chrono::Local>, now: chrono::DateTime<chrono::Local>) -> String {
     let time = end.format("%-I:%M %p");
     match (end.date_naive() - now.date_naive()).num_days() {
         0 => time.to_string(),
@@ -923,7 +928,8 @@ fn until(end: chrono::DateTime<chrono::Local>, now: chrono::DateTime<chrono::Loc
     }
 }
 
-fn effective(level: u8, inherited: u8) -> u8 {
+// What a "use the default" level resolves to.
+pub(crate) fn effective(level: u8, inherited: u8) -> u8 {
     if level == 3 { inherited } else { level }
 }
 
@@ -949,5 +955,19 @@ mod tests {
         merge_settings(&mut settings, &json!({ "channel_overrides": { "9": { "message_notifications": 2 } } }));
         assert_eq!(settings.channels["9"].notifications, 2);
         assert!(!settings.channels["9"].muted);
+    }
+
+    #[test]
+    fn notification_dialog_fields_apply_locally() {
+        let mut settings = GuildSettings::default();
+        assert!(settings.mobile_push);
+        merge_settings(&mut settings, &json!({ "notify_highlights": 1, "mute_scheduled_events": true, "mobile_push": false }));
+        assert_eq!(settings.notify_highlights, 1);
+        assert!(settings.mute_scheduled_events && !settings.mobile_push);
+        merge_settings(&mut settings, &mute_body(3600));
+        assert_eq!(settings.mute_window, Some(3600));
+        assert!(settings.muted && settings.mute_end.is_some());
+        merge_settings(&mut settings, &json!({ "muted": false }));
+        assert_eq!((settings.muted, settings.mute_window, settings.mute_end.as_deref()), (false, None, None));
     }
 }

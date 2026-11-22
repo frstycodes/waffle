@@ -42,6 +42,7 @@ mod go_live;
 mod h264;
 mod home;
 mod os_image;
+mod notification_settings;
 mod overlays;
 mod overwrites;
 mod playback;
@@ -786,8 +787,12 @@ pub struct Waffle {
     window_active: bool,
     // The open channel should land on its first unread once its messages are in.
     unread_scroll_pending: bool,
+    // The channel last marked unread by hand: auto-read leaves it alone until it's opened again or we send there.
+    // Not verified: Discord's exact rule for when the open channel reads itself again after Mark Unread.
+    pub(crate) held_unread: Option<String>,
     dialog: Option<menu::Dialog>,
     create_channel: Option<create_channel::CreateChannel>,
+    notification_settings: Option<notification_settings::NotificationSettings>,
     stage_topic: Option<stage_dialogs::StageTopic>,
     dialog_input: Entity<SearchState>,
     // A short notice at the bottom, e.g. why a moderation action failed.
@@ -1154,8 +1159,10 @@ impl Waffle {
             watch_on_connect: None,
             window_active: true,
             unread_scroll_pending: false,
+            held_unread: None,
             dialog: None,
             create_channel: None,
+            notification_settings: None,
             stage_topic: None,
             dialog_input,
             toast: None,
@@ -1613,7 +1620,13 @@ impl Waffle {
                 }
                 self.apply_members(&guild_id);
             }
-            Event::Ack { channel_id, message_id } => {
+            Event::Ack { channel_id, message_id, manual: Some(mentions) } => {
+                if self.channel.as_ref().is_some_and(|c| c.id == channel_id) {
+                    self.unread_marker = Some(message_id);
+                }
+                self.read_states.insert(channel_id, ReadState { last_read: message_id, mentions });
+            }
+            Event::Ack { channel_id, message_id, manual: None } => {
                 let read = self.read_states.entry(channel_id).or_default();
                 read.last_read = read.last_read.max(message_id);
                 read.mentions = 0;
@@ -1842,6 +1855,7 @@ impl Waffle {
 
     pub(crate) fn open_channel(&mut self, channel: Channel, window: &mut Window, cx: &mut Context<Self>) {
         self.inbox_page = false;
+        self.held_unread = None;
         self.guild_page = None;
         self.note_channel_viewed(&channel, cx);
         // Results belong to the server or DM they searched: another place closes them.
@@ -2172,6 +2186,9 @@ impl Waffle {
             return;
         }
         let (Some(client), Some(channel)) = (self.client.clone(), self.channel.as_ref()) else { return };
+        if self.held_unread.as_ref() == Some(&channel.id) {
+            return;
+        }
         let Some(&last) = self.last_message.get(&channel.id) else { return };
         let read = self.read_states.entry(channel.id.clone()).or_default();
         if read.last_read >= last && read.mentions == 0 {
@@ -2212,6 +2229,7 @@ impl Waffle {
 
     /// Enter in the composer: saves the edit in progress, otherwise sends (optimistically).
     fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.held_unread = None;
         let (Some(client), Some(channel), Some(me)) = (self.client.clone(), self.channel.clone(), self.me.clone()) else { return };
         let typed = wire_text(&self.composer.read(cx).content());
         let typed = typed.trim();
@@ -2850,7 +2868,7 @@ impl Waffle {
     // Whether the message pings one of our roles in its server.
     fn mentions_role(&self, message: &Message) -> bool {
         let Some(me) = &self.me else { return false };
-        let mine = message.guild_id.as_ref().and_then(|g| self.member_roles.get(g)).and_then(|r| r.get(&me.id));
+        let mine = self.guild_id_of(message).and_then(|g| self.member_roles.get(&g)).and_then(|r| r.get(&me.id));
         mine.is_some_and(|roles| message.mention_roles.iter().any(|r| roles.contains(r)))
     }
 

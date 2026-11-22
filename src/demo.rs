@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | call-streams-failed | call-streams-reconnecting | call-streams-issues | call-streams-hidden | inbox-saved | games | stage | stage-audience | stage-requests | stage-invited | stage-waiting | stage-start | stage-start-dialog | stage-edit | stage-end | stage-full | updating (the launch splash alone).
+// WAFFLE_DEMO=chat | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | appearance | appearance-scrolled | notifications | content-social | chat-settings | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | notification-settings | notification-settings-muted | inbox-mark-read | mark-unread | home | add-friend | create-channel | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | call-streams-failed | call-streams-reconnecting | call-streams-issues | call-streams-hidden | inbox-saved | games | stage | stage-audience | stage-requests | stage-invited | stage-waiting | stage-start | stage-start-dialog | stage-edit | stage-end | stage-full | updating (the launch splash alone).
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -279,6 +279,22 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
                 waffle.open_notify_menu(channel, "1".into(), gpui_kit::point(gpui_kit::px(1180.), gpui_kit::px(40.)), cx);
             }
         }
+        // The server's Notification Settings: a category on Nothing, a muted channel, @everyone suppressed;
+        // `-muted` adds an eight-hour server mute, which locks the levels, highlights and push.
+        "notification-settings" | "notification-settings-muted" => {
+            use crate::discord::{ChannelSettings, GuildSettings};
+            let mut settings = GuildSettings { notifications: 1, suppress_everyone: true, ..Default::default() };
+            settings.channels.insert("c1".into(), ChannelSettings { notifications: 2, muted: false, mute_end: None, flags: 0 });
+            settings.channels.insert("media".into(), ChannelSettings { notifications: 3, muted: true, mute_end: None, flags: 0 });
+            settings.channels.insert("long".into(), ChannelSettings { notifications: 0, muted: false, mute_end: None, flags: 0 });
+            if scene == "notification-settings-muted" {
+                settings.muted = true;
+                settings.mute_window = Some(28_800);
+                settings.mute_end = Some((chrono::Utc::now() + chrono::Duration::hours(8)).to_rfc3339());
+            }
+            waffle.guild_settings.insert("1".into(), settings);
+            waffle.open_notification_settings("1".into(), window, cx);
+        }
         // A jump landing: the message centred, filled and squiggled.
         "jump" => waffle.jump_to("103".into(), cx),
         // The rail's Inbox on each tab: mentions under their filter chips, and the unread channels with the
@@ -296,6 +312,29 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             waffle.feeds.insert("staff".into(), Feed { messages: std::sync::Arc::new(staff), loaded: true, ..Default::default() });
             waffle.inbox_tab = if scene == "inbox" { crate::inbox::InboxTab::Mentions } else { crate::inbox::InboxTab::Unreads };
             waffle.inbox_open = true;
+        }
+        // The Inbox on Mentions just after the first mention was marked read: it's gone, and the next card
+        // shows as hovered, Jump and Mark As Read up (overlays.rs reads the scene name for that).
+        "inbox-mark-read" => {
+            let mentions: Vec<Message> = self::messages().into_iter().filter(|m| !m.mentions.is_empty() || m.content.contains("@")).collect();
+            let first = mentions.first().map(|m| m.id.clone());
+            waffle.inbox = Some(Some(Ok(mentions)));
+            waffle.inbox_tab = crate::inbox::InboxTab::Mentions;
+            waffle.inbox_open = true;
+            if let Some(id) = first {
+                waffle.mark_mention_read(id, cx);
+            }
+        }
+        // Read to the end, then Mark Unread on Zoe's mention: the NEW line moves above it and the channel
+        // counts that mention again.
+        "mark-unread" => {
+            let last = waffle.feeds.get("general").and_then(|f| f.messages.iter().map(|m| crate::order(&m.id)).max()).unwrap_or(0);
+            waffle.last_message.insert("general".into(), last);
+            waffle.read_states.insert("general".into(), ReadState { last_read: last, mentions: 0 });
+            let marked = waffle.feeds.get("general").and_then(|f| f.messages.iter().find(|m| m.id == "104").cloned());
+            if let Some(message) = marked {
+                waffle.mark_unread(&message, cx);
+            }
         }
         // A bare `@` in the composer: every member, in the suggestion popup.
         // Typed once the window is up: the composer's events aren't wired while the app is being built.
