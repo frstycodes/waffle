@@ -604,7 +604,7 @@ impl Waffle {
         let right = f32::from(card.at.x) + SOURCE_CARD_WIDTH + 8. > f32::from(viewport.width);
         let rise = ui::rise(surface.transform_origin(ui::corner(right, false)), "source-card-rise", std::time::Duration::ZERO);
         // lint-allow(raw-floating): placed inside the overlay backdrop, which already occludes; the card occludes itself.
-        let placed = gpui_kit::anchored().position(card.at).snap_to_window_with_margin(px(8.)).child(rise);
+        let placed = gpui_kit::anchored().position(card.at).snap_to_window_with_margin(ui::WINDOW_MARGIN).child(rise);
         Some(crate::overlays::backdrop("source-card-backdrop", cx).child(placed).into_any_element())
     }
 
@@ -818,7 +818,7 @@ impl Waffle {
         let text = publish_text(self.follower_stats(&message.channel_id).guilds_following);
         ui::dialog_body()
             .child(dialog_title("Are you sure?", cx))
-            .child(div().line_height(px(20.)).text_color(palette::muted(cx)).child(crate::chat::emphasised(&text, palette::strong(cx))))
+            .child(div().line_height(ui::LINE_SM).text_color(palette::muted(cx)).child(crate::chat::emphasised(&text, palette::strong(cx))))
             .child(quota(self.published_this_hour(&message.channel_id), cx))
             .child(
                 footer()
@@ -894,7 +894,7 @@ impl Waffle {
 }
 
 fn dialog_title(text: impl Into<SharedString>, cx: &App) -> Div {
-    div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(text.into())
+    div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(text.into())
 }
 
 fn footer() -> Div {

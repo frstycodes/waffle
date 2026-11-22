@@ -311,7 +311,7 @@ fn ghost(held: &Held, origin: Point<Pixels>, settle: f32, cx: &App) -> Div {
         Look::Channel { channel, people } => row_card(ui::RADIUS_MD, lifted, cx)
             .flex_col()
             .gap_px()
-            .child(div().h_8().px_2().flex().items_center().gap_2().child(channel_glyph(channel).size(px(18.)).flex_none().text_color(palette::faint(cx))).child(div().flex_1().min_w_0().truncate().child(channel.name.clone())))
+            .child(div().h_8().px_2().flex().items_center().gap_2().child(channel_glyph(channel).size(ui::ICON_LG).flex_none().text_color(palette::faint(cx))).child(div().flex_1().min_w_0().truncate().child(channel.name.clone())))
             .children(people.iter().map(|(avatar, name)| person(avatar, name).text_color(palette::muted(cx)))),
         Look::Label { dot, text } => row_card(ui::RADIUS_MD, lifted, cx)
             .h(held.size.y)

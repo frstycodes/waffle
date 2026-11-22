@@ -238,7 +238,7 @@ impl Waffle {
             .flex()
             .flex_col()
             .child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title(&names)))
-            .children(sub.map(|s| div().truncate().text_size(px(13.)).text_color(palette::muted(cx)).child(s)));
+            .children(sub.map(|s| div().truncate().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(s)));
         let head = div().flex().items_center().gap_2p5().child(faces).child(who).children(head_mark(party, cx));
         let first = party.members[0].clone();
         let hover = palette::line_strong(cx);

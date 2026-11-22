@@ -450,8 +450,8 @@ impl Waffle {
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .child(ui::truncating("me-name", me.name.clone()).line_height(px(18.)).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
-                    .child(div().line_height(px(16.)).text_size(ui::TEXT_XS).text_color(faint).child(status_line)),
+                    .child(ui::truncating("me-name", me.name.clone()).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
+                    .child(div().line_height(ui::LINE_XS).text_size(ui::TEXT_XS).text_color(faint).child(status_line)),
             );
         let voice = self.voice_panel(cx);
         div()

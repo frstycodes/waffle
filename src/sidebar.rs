@@ -894,7 +894,7 @@ impl Waffle {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(channel_glyph(channel).size(px(18.)).flex_none().text_color(match (welcomes, selected) {
+                    .child(channel_glyph(channel).size(ui::ICON_LG).flex_none().text_color(match (welcomes, selected) {
                         (true, _) => palette::accent_ink(cx),
                         (false, true) => palette::muted(cx),
                         (false, false) => faint,
@@ -1497,7 +1497,7 @@ pub(crate) fn channel_glyph(channel: &Channel) -> Icon {
 fn channel_label(channel: &Channel, topic: Option<String>, cx: &App) -> AnyElement {
     let name = ui::truncating(format!("channel-name-{}", channel.id), channel.name.clone()).flex_1();
     let Some(topic) = topic else { return name.into_any_element() };
-    let topic = div().text_size(ui::TEXT_XS).line_height(px(16.)).font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).truncate().child(topic);
+    let topic = div().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).truncate().child(topic);
     div().flex_1().min_w_0().flex().flex_col().child(name).child(topic).into_any_element()
 }
 

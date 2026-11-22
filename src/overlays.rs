@@ -723,7 +723,7 @@ impl Waffle {
             .children(preview.map(|(emoji, source)| {
                 let face = match emoji.url() {
                     Some(url) => img(url).size_7().into_any_element(),
-                    None => div().text_size(ui::TEXT_XL).line_height(px(28.)).child(emoji.name.clone()).into_any_element(),
+                    None => div().text_size(ui::TEXT_XL).line_height(ui::LINE_XL).child(emoji.name.clone()).into_any_element(),
                 };
                 div()
                     .flex()

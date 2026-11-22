@@ -684,7 +684,7 @@ impl Waffle {
                     .flex()
                     .justify_between()
                     .text_size(ui::TEXT_SM)
-                    .line_height(px(20.))
+                    .line_height(ui::LINE_SM)
                     .font_weight(FontWeight::NORMAL)
                     .text_color(palette::text(cx))
                     .child(label)
@@ -782,17 +782,17 @@ impl Waffle {
                     .items_center()
                     .gap_2p5()
                     .text_size(ui::TEXT_LG)
-                    .line_height(px(24.))
+                    .line_height(ui::LINE_LG)
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(palette::strong(cx))
                     .when(dialog.warn, |d| d.child(div().text_color(palette::danger_ink(cx)).child(Icon::new(Glyph::Warning).size(px(22.)))))
                     .child(dialog.title.clone()),
             )
-            .child(div().text_size(ui::TEXT_SM).line_height(px(20.)).text_color(palette::muted(cx)).child(dialog.body.clone()))
-            .children(dialog.note.clone().map(|note| div().text_size(ui::TEXT_XS).line_height(px(16.)).text_color(palette::faint(cx)).child(note)))
+            .child(div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(palette::muted(cx)).child(dialog.body.clone()))
+            .children(dialog.note.clone().map(|note| div().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::faint(cx)).child(note)))
             .children(preview)
             .children(dialog.tip.clone().map(|tip| {
-                div().text_size(ui::TEXT_SM).line_height(px(20.)).text_color(palette::text(cx)).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::positive_ink(cx)).child("Protip:")).child(tip)
+                div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(palette::text(cx)).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::positive_ink(cx)).child("Protip:")).child(tip)
             }))
             .when(dialog.input, |d| d.child(field(cx).child(div().flex_1().min_w_0().child(Input::new(&self.dialog_input).appearance(false)))))
             .child(
@@ -833,7 +833,7 @@ pub(crate) fn menu_item_row(id: SharedString, item: &Item, sub_open: bool, lead_
     let (hint, hint_hover) = hint_inks(item, cx);
     row.group(id.clone())
         .min_h(px(item.height()))
-        .line_height(px(20.))
+        .line_height(ui::LINE_SM)
         .highlighted(sub_open)
         .disabled(item.disabled)
         .children(lead.map(|lead| div().size(px(LEAD)).flex_none().flex().items_center().justify_center().child(lead)))
@@ -847,7 +847,7 @@ pub(crate) fn menu_item_row(id: SharedString, item: &Item, sub_open: bool, lead_
                 .children(item.hint.clone().map(|text| {
                     div()
                         .text_size(ui::TEXT_XS)
-                        .line_height(px(16.))
+                        .line_height(ui::LINE_XS)
                         .font_weight(FontWeight::NORMAL)
                         .text_color(if sub_open { hint_hover } else { hint })
                         .group_hover(id.clone(), move |s| s.text_color(hint_hover))
@@ -892,7 +892,7 @@ pub(crate) fn separator(cx: &App) -> Div {
 }
 
 fn menu_label(text: SharedString, cx: &App) -> Div {
-    div().h(px(LABEL)).flex_none().px_2p5().pt_2().text_size(ui::TEXT_XS).line_height(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::faint(cx)).child(text)
+    div().h(px(LABEL)).flex_none().px_2p5().pt_2().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::faint(cx)).child(text)
 }
 
 fn menu_header(lead: &HeadLead, title: SharedString, subtitle: Option<SharedString>, cx: &App) -> Div {
@@ -918,8 +918,8 @@ fn menu_header(lead: &HeadLead, title: SharedString, subtitle: Option<SharedStri
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .child(div().truncate().text_size(ui::TEXT_SM).line_height(px(18.)).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title))
-                .children(subtitle.map(|s| div().truncate().text_size(ui::TEXT_XS).line_height(px(16.)).text_color(palette::muted(cx)).child(s))),
+                .child(div().truncate().text_size(ui::TEXT_SM).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title))
+                .children(subtitle.map(|s| div().truncate().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::muted(cx)).child(s))),
         )
 }
 
@@ -1052,7 +1052,7 @@ impl Waffle {
             .flex()
             .items_center()
             .text_size(ui::TEXT_SM)
-            .line_height(px(20.))
+            .line_height(ui::LINE_SM)
             .font_weight(FontWeight::NORMAL)
             .text_color(palette::strong(cx))
             .child(text.clone());

@@ -646,7 +646,7 @@ pub(crate) fn name_block(user: &User, profile: &Profile, ink: Ink) -> Div {
         .flex()
         .flex_col()
         .gap_0p5()
-        .child(crate::name_fonts::styled(div().truncate().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD), user.name_style.as_ref()).text_color(ink.strong).child(StyledText::new(user.name.clone()).with_highlights(name)))
+        .child(crate::name_fonts::styled(div().truncate().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD), user.name_style.as_ref()).text_color(ink.strong).child(StyledText::new(user.name.clone()).with_highlights(name)))
         .when(!handle.is_empty() || tag.is_some(), |b| {
             b.child(div().flex().flex_wrap().items_center().gap_x_1p5().gap_y_1().text_size(ui::TEXT_SM).text_color(ink.text).when(!handle.is_empty(), |l| l.child(div().min_w_0().truncate().child(handle))).children(tag))
         })

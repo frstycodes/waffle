@@ -720,7 +720,7 @@ impl Waffle {
             RowDrag::Hole => hole(row.bg(gpui_kit::transparent_black()), cx),
             _ => row
                 .when(carried == RowDrag::Hidden, |r| r.invisible())
-                .child(favorite_glyph(&channel).size(px(18.)).flex_none().text_color(if selected { palette::muted(cx) } else { faint }))
+                .child(favorite_glyph(&channel).size(ui::ICON_LG).flex_none().text_color(if selected { palette::muted(cx) } else { faint }))
                 .child(ui::truncating(format!("fav-name-{}", channel.id), name.clone()).flex_1())
                 .children(origin.map(|o| div().flex_none().max_w_24().truncate().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(faint).child(o)))
                 .when(mentions > 0, |r| r.child(ui::count_badge(mentions))),

@@ -427,7 +427,7 @@ impl Waffle {
             .min_w_0()
             .flex()
             .flex_col()
-            .line_height(px(18.))
+            .line_height(ui::LINE_DETAIL)
             .child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(account.name.clone()))
             .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(status.label()));
         let (switch_id, out_id) = (account.id.clone(), account.id.clone());
@@ -462,7 +462,7 @@ impl Waffle {
                     .flex()
                     .flex_col()
                     .gap_1()
-                    .child(div().text_size(ui::TEXT_LG).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Set your status"))
+                    .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Set your status"))
                     .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child("Shown on your profile and in member lists.")),
             )
             .child(ui::icon_button("status-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_status_editor(cx))));
@@ -595,7 +595,7 @@ fn bubble(content: Div, ink: Ink, cx: &App) -> Stateful<Div> {
         .min_w_0()
         .child(dot(8.).left_neg_2().top_neg_3p5())
         .child(dot(16.).left_1().top_neg_2())
-        .child(div().relative().min_w_0().min_h_9().px_3().py_2().rounded(px(18.)).bg(fill).border_1().border_color(edge).flex().items_center().text_size(ui::TEXT_SM).line_height(px(18.)).child(content))
+        .child(div().relative().min_w_0().min_h_9().px_3().py_2().rounded(px(18.)).bg(fill).border_1().border_color(edge).flex().items_center().text_size(ui::TEXT_SM).line_height(ui::LINE_DETAIL).child(content))
 }
 
 #[cfg(test)]
