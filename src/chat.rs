@@ -27,6 +27,7 @@ use crate::{
     motion,
     overlays::ComposerPicker,
     palette::{self, Level},
+    settings::RoleStyle,
     ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, RADIUS_XS, Squircle},
 };
 
@@ -429,6 +430,14 @@ impl Waffle {
             previews: self.file_previews.clone(),
             embeds: self.account_settings.render_embeds,
             reactions: self.account_settings.render_reactions,
+            compact: self.account_settings.message_display_compact,
+            compact_avatars: self.prefs.compact_avatars,
+            font_size: f32::from(self.prefs.chat_font_size),
+            group_spacing: f32::from(self.prefs.group_spacing(self.account_settings.message_display_compact)),
+            role_style: self.prefs.role_style,
+            underline_links: self.prefs.underline_links,
+            name_styles: self.prefs.display_name_styles,
+            image_descriptions: self.prefs.view_image_descriptions,
             // Later entries win: the server's member cache last, so nicknames beat the account names
             // that history loaded over REST carries (it has no member objects).
             names: messages
@@ -496,7 +505,9 @@ impl Waffle {
             .child(div().flex_1().min_w_0().child(Textarea::new(&self.composer).appearance(false).with_size(Size::XSmall).py(px(4.)).px(px(2.)).text_size(px(15.)).line_height(px(22.)).text_color(strong).token(mention_chip(cx))))
             .children([(ComposerPicker::Gifs, "composer-gif", Glyph::Gif, "Open GIF picker"), (ComposerPicker::Stickers, "composer-sticker", Glyph::Sticker, "Open sticker picker"), (ComposerPicker::Emoji, "composer-emoji", Glyph::Emoji, "Select Emoji")].map(|(picker, id, glyph, label)| {
                 ui::icon_button(id, glyph, label, cx).toggled(open_picker == Some(picker), cx).on_click(cx.listener(move |this, _, window, cx| this.show_composer_picker(picker, window, cx)))
-            }));
+            }))
+            // Not verified: the tooltip; Discord's chat box shows its button only when this setting is on.
+            .when(self.prefs.send_button, |r| r.child(ui::icon_button("composer-send", Glyph::PaperPlane, "Send Message", cx).disabled(!self.has_draft).on_click(cx.listener(|this, _, window, cx| this.submit(window, cx)))));
         let card = div()
             .relative()
             .mx(px(16.))
@@ -850,6 +861,34 @@ impl RowContext {
     pub(crate) fn this(&self) -> WeakEntity<Waffle> {
         self.this.clone()
     }
+
+    // A name's line box at the chat's text size: 22px at 16, Discord's 1.375.
+    fn name_line(&self) -> f32 {
+        (self.font_size * 1.375).round()
+    }
+
+    // The body's first line box (the row's 1.45 line height), which the time beside it centres in.
+    fn body_line(&self) -> f32 {
+        (self.font_size * 1.45).round()
+    }
+
+    fn role_marks(&self, user_id: &str) -> (Option<Hsla>, Option<Hsla>) {
+        role_marks(self.role_style, self.colors.get(user_id).copied())
+    }
+}
+
+// Role colors: the name's ink and the dot after it, as each style shows someone's role colour.
+pub(crate) fn role_marks(style: RoleStyle, color: Option<Hsla>) -> (Option<Hsla>, Option<Hsla>) {
+    match style {
+        RoleStyle::InNames => (color, None),
+        RoleStyle::NextToNames => (None, color),
+        RoleStyle::Hidden => (None, None),
+    }
+}
+
+// Not verified: Discord's dot size; 10px as in design/explore-settings.html.
+pub(crate) fn role_dot(color: Hsla) -> Div {
+    div().size(px(10.)).flex_none().rounded_full().bg(color)
 }
 
 pub(crate) struct RowContext {
@@ -860,6 +899,16 @@ pub(crate) struct RowContext {
     // Settings › Chat: Discord's render_embeds and render_reactions.
     embeds: bool,
     reactions: bool,
+    // Accessibility and Chat settings: Discord's message display, text size, group spacing, role colours,
+    // link underlines, display-name styles and image descriptions.
+    compact: bool,
+    compact_avatars: bool,
+    font_size: f32,
+    group_spacing: f32,
+    role_style: RoleStyle,
+    underline_links: bool,
+    name_styles: bool,
+    image_descriptions: bool,
     names: HashMap<String, String>,
     // The chat's surface, for drawing authors' display-name styles on; None in a server.
     style_ground: Option<Hsla>,
@@ -902,7 +951,7 @@ pub(crate) fn away_from_present(visible_end: usize, count: usize) -> bool {
 }
 
 // An avatar column and a content column; a continuation shows its time in the gutter on hover, and the
-// toolbar floats at the row's top right.
+// toolbar floats at the row's top right. Compact display puts each message on one line after its time.
 fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     if let Some(call) = &message.call {
         return call_line(message, call, ctx, cx);
@@ -933,17 +982,24 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
     };
     let pending = message.state != SendState::Sent;
     let landed = ctx.flash.as_ref() == Some(&message.id);
+    let text = content(message, ctx, cx);
+    let lead = match ctx.compact {
+        true => compact_line(message, starts_group, text, ctx, cx),
+        false => text,
+    };
     let body = div()
         .relative()
         .flex_1()
         .min_w_0()
         .flex()
         .flex_col()
-        .text_size(px(16.))
+        .text_size(px(ctx.font_size))
         .text_color(ink)
-        .children(content(message, ctx, cx))
+        .children(message.reply.as_ref().filter(|_| ctx.compact).map(|reply| reply_preview(reply, message.reply_to.clone(), ctx, cx)))
+        .children(lead)
         .children(message.forward.as_ref().map(|original| forward_card(original, ctx, cx)))
         .children(media.map(|m| div().when(pending, |d| d.opacity(0.6)).child(m)))
+        .children(image_descriptions(message, ctx, cx))
         .children(message.stickers.iter().map(|s| div().when(pending, |d| d.opacity(0.6)).child(crate::stickers::in_chat(s, cx))))
         .children(message.poll.as_ref().map(|p| poll_card(message, p, ctx, cx)))
         .children(message.embeds.iter().filter(|_| ctx.embeds).enumerate().map(|(i, e)| embed_card(e, message.reply_to.as_deref(), format!("embed-{}-{i}", message.id), ctx, cx)))
@@ -974,13 +1030,17 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .on_hover(track_message_hover(message, ctx));
     // Last, so it paints over the message's own content where it overlaps it.
     let toolbar = hovered.then(|| actions(message, mine, ctx, cx));
+    if ctx.compact {
+        let line = div().flex().gap(px(8.)).child(compact_time(message, ctx, cx)).child(body);
+        return inset(with_message_menu(row.when(starts_group, |r| r.mt(px(ctx.group_spacing))).child(line).children(toolbar), message, ctx), mention);
+    }
     if !starts_group {
         let gutter = div()
             .w(px(AVATAR))
             .flex_none()
             .flex()
             .justify_end()
-            .line_height(px(23.))
+            .line_height(px(ctx.body_line()))
             .text_size(px(12.))
             .text_color(palette::faint(cx))
             .whitespace_nowrap()
@@ -991,7 +1051,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         return inset(with_message_menu(row.child(div().flex().gap(px(16.)).child(gutter).child(body)).children(toolbar), message, ctx), mention);
     }
     let row = row
-        .mt(px(12.))
+        .mt(px(ctx.group_spacing))
         .pt(px(4.))
         .children(message.reply.as_ref().map(|reply| reply_preview(reply, message.reply_to.clone(), ctx, cx)))
         .child(
@@ -1074,29 +1134,98 @@ fn inset(row: AnyElement, flush: bool) -> AnyElement {
     div().w_full().when(!flush, |d| d.px(px(8.))).child(row).into_any_element()
 }
 
-// Name in its top role's colour, tags, the time, and a pin when pinned.
+// The author, the time, and a pin when pinned.
 fn message_head(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> impl IntoElement + use<> {
-    let name_color = ctx.colors.get(&message.author.id).copied().unwrap_or(palette::strong(cx));
-    let name = ctx.name_of(&message.author);
-    let runs = ctx.style_ground.zip(message.author.name_style.as_ref()).map(|(ground, style)| name_runs(&name, style, ground)).unwrap_or_default();
     // GAP: gpui text reports no baseline to taffy, so `items_baseline` would line up box bottoms and
-    // lift the name. One 22px line box, centred, with the smaller time nudged 1px, shares a baseline.
+    // lift the name. One line box, centred, with the smaller time nudged 1px, shares a baseline.
     div()
         .flex()
         .items_center()
         .gap(px(8.))
         .min_w_0()
-        .line_height(px(22.))
+        .line_height(px(ctx.name_line()))
+        .child(author(message, ctx, cx))
+        .child(div().flex_none().relative().top(px(1.)).whitespace_nowrap().text_size(px(12.)).text_color(palette::faint(cx)).child(format_stamp(&message.timestamp)))
+        .when(message.pinned, |h| h.child(div().flex_none().self_center().text_color(palette::muted(cx)).child(Icon::new(Glyph::Pin).size(px(14.)))))
+}
+
+// The name in its display-name style (unless those are off) and its role colour or dot, per Role colors,
+// then the server tag and APP for a bot.
+fn author(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Div {
+    let (ink, dot) = ctx.role_marks(&message.author.id);
+    let name = ctx.name_of(&message.author);
+    let style = message.author.name_style.as_ref().filter(|_| ctx.name_styles);
+    let runs = ctx.style_ground.zip(style).map(|(ground, style)| name_runs(&name, style, ground)).unwrap_or_default();
+    div()
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .min_w_0()
         .child(
-            crate::name_fonts::styled(profile_trigger(format!("name-{}", message.id), &message.author, ctx).min_w_0().truncate().text_size(px(16.)).font_weight(FontWeight::MEDIUM), message.author.name_style.as_ref())
-                .text_color(name_color)
+            crate::name_fonts::styled(profile_trigger(format!("name-{}", message.id), &message.author, ctx).min_w_0().truncate().text_size(px(ctx.font_size)).font_weight(FontWeight::MEDIUM), style)
+                .text_color(ink.unwrap_or(palette::strong(cx)))
                 .hover(|s| s.underline())
                 .child(StyledText::new(name).with_highlights(runs)),
         )
+        .children(dot.map(role_dot))
         .children(message.author.tag.as_ref().map(|tag| guild_tag(tag, cx)))
         .when(message.author.bot, |h| h.child(ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px(px(6.)).gap(px(3.)).child(Icon::new(Glyph::Checkmark).size(px(11.))).child("APP")))
-        .child(div().flex_none().relative().top(px(1.)).whitespace_nowrap().text_size(px(12.)).text_color(palette::faint(cx)).child(format_stamp(&message.timestamp)))
-        .when(message.pinned, |h| h.child(div().flex_none().self_center().text_color(palette::muted(cx)).child(Icon::new(Glyph::Pin).size(px(14.)))))
+}
+
+// Not verified: Discord's compact time column and avatar; 52px and 18px in design/explore-settings.html,
+// the column widened to fit "12:59 PM".
+const COMPACT_TIME: f32 = 56.;
+const COMPACT_AVATAR: f32 = 18.;
+
+// Compact's time column: every message shows its own time, so names and text line up down the feed.
+fn compact_time(message: &Message, ctx: &RowContext, cx: &App) -> Div {
+    div()
+        .w(px(COMPACT_TIME))
+        .flex_none()
+        .flex()
+        .items_center()
+        .h(px(ctx.body_line()))
+        .whitespace_nowrap()
+        .text_size(px(12.))
+        .text_color(palette::faint(cx))
+        .map(|t| match message.state {
+            SendState::Sending => t.child(Icon::new(Glyph::Clock).size(px(14.))),
+            _ => t.child(clock(&message.timestamp)),
+        })
+}
+
+// Compact's first line: a group's first message leads with its author (a small avatar when Show user
+// avatars is on) and the text follows on the same line; a continuation is its text alone.
+fn compact_line(message: &Message, starts_group: bool, text: Option<AnyElement>, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyElement> {
+    if !starts_group {
+        return text;
+    }
+    let line = ctx.body_line();
+    let avatar = ctx.compact_avatars.then(|| profile_trigger(format!("avatar-{}", message.id), &message.author, ctx).flex_none().h(px(line)).flex().items_center().child(ui::avatar(message.author.avatar.clone(), COMPACT_AVATAR)));
+    Some(
+        div()
+            .flex()
+            .items_start()
+            .gap(px(6.))
+            .min_w_0()
+            .children(avatar)
+            .child(author(message, ctx, cx).flex_none().max_w(gpui_kit::relative(0.4)).h(px(line)))
+            .children(text.map(|text| div().flex_1().min_w_0().child(text)))
+            .into_any_element(),
+    )
+}
+
+// Show image descriptions: each attachment's alt text, small under its media.
+// Not verified: where Discord draws it; design/explore-settings.html puts it on the image.
+fn image_descriptions(message: &Message, ctx: &RowContext, cx: &App) -> Option<Div> {
+    if !ctx.image_descriptions {
+        return None;
+    }
+    let descriptions: Vec<String> = message.media.iter().filter_map(|m| m.description.clone()).collect();
+    if descriptions.is_empty() {
+        return None;
+    }
+    Some(div().mt(px(4.)).flex().flex_col().text_size(px(12.)).line_height(px(16.)).text_color(palette::muted(cx)).children(descriptions))
 }
 
 // Clicking an avatar or name opens their profile popout at the pointer, as in Discord.
@@ -1194,7 +1323,8 @@ fn reply_preview(reply: &Message, target: Option<String>, ctx: &Rc<RowContext>, 
         .id(SharedString::from(format!("reply-{}", reply.id)))
         .relative()
         .h(px(REPLY_HEIGHT))
-        .pl(px(CONTENT_INSET))
+        // Compact draws it in the text column, with no avatar for the spine to reach.
+        .when(!ctx.compact, |r| r.pl(px(CONTENT_INSET)).child(reply_spine(cx)))
         .mb(px(2.))
         .min_w_0()
         .flex()
@@ -1204,7 +1334,6 @@ fn reply_preview(reply: &Message, target: Option<String>, ctx: &Rc<RowContext>, 
         .text_size(px(14.))
         .text_color(faint)
         .hover(move |s| s.text_color(text))
-        .child(reply_spine(cx))
         .child(ui::avatar(reply.author.avatar.clone(), 16.))
         .child(div().flex_none().font_weight(FontWeight::MEDIUM).text_color(muted).child(ctx.name_of(&reply.author)))
         .child(snippet)
@@ -1489,6 +1618,7 @@ fn markdown(id: SharedString, text: String, ctx: &RowContext) -> TextView {
     let this = ctx.this.clone();
     let (copy_target, copied) = (ctx.this.clone(), ctx.copied.clone());
     let badges = MentionBadges { this: ctx.this.clone(), fill: ctx.mention_fill, hover: ctx.mention_hover, ink: ctx.mention_ink };
+    let text = if ctx.underline_links { underline_links(&text) } else { text };
     TextView::markdown(id, discord_breaks(&text))
         // Constant: the plugin only changes how mentions draw, never what parses.
         .markdown_extensions(MarkdownExtensions::default().parser_revision(1).plugin(badges))
@@ -1538,6 +1668,96 @@ pub(crate) fn discord_breaks(text: &str) -> String {
         out.push_str(if breaks { "  \n" } else { "\n" });
     }
     out
+}
+
+// Always underline links: each web link wrapped in `<u>`, since the markdown view never underlines a link
+// itself. A bare address becomes `<url>`, which autolinks after the tag where a bare one might not.
+// Mentions and emoji, links too, are left alone.
+fn underline_links(markdown: &str) -> String {
+    outside_code(markdown, |text| {
+        let mut out = String::with_capacity(text.len() + 16);
+        let mut rest = text;
+        while let Some((start, end, bare)) = next_link(rest) {
+            out.push_str(&rest[..start]);
+            let link = &rest[start..end];
+            match bare {
+                true => out.push_str(&format!("<u><{link}></u>")),
+                false => out.push_str(&format!("<u>{link}</u>")),
+            }
+            rest = &rest[end..];
+        }
+        out.push_str(rest);
+        out
+    })
+}
+
+// The next web link in `text`: its byte range and whether it's a bare address. A masked `[label](url)`
+// and an `<url>` keep their own syntax; a bare one ends at whitespace, less trailing punctuation.
+fn next_link(text: &str) -> Option<(usize, usize, bool)> {
+    let mut from = 0;
+    loop {
+        let at = from + text[from..].find("http")?;
+        let after = &text[at..];
+        from = at + 4;
+        if !(after.starts_with("https://") || after.starts_with("http://")) {
+            continue;
+        }
+        let before = &text[..at];
+        if let Some(label) = before.strip_suffix("](").or_else(|| before.strip_suffix("](<")) {
+            let (Some(open), Some(close)) = (label.rfind('['), after.find(')')) else { continue };
+            let close = at + close + 1;
+            if label[..open].ends_with('!') {
+                from = close;
+                continue;
+            }
+            return Some((open, close, false));
+        }
+        if let Some(end) = after.find('>').filter(|_| before.ends_with('<')) {
+            return Some((at - 1, at + end + 1, false));
+        }
+        if !before.chars().next_back().is_none_or(|c| c.is_whitespace() || "*_~(".contains(c)) {
+            continue;
+        }
+        let word = &after[..after.find(|c: char| c.is_whitespace() || c == '<').unwrap_or(after.len())];
+        let url = word.trim_end_matches(['.', ',', '!', '?', ')', ';', ':', '*', '_', '~', '|', '\'', '"']);
+        return Some((at, at + url.len(), true));
+    }
+}
+
+// `f` applied to the text outside code: a run of backticks opens a span or block that the next run of the
+// same length closes, as in markdown; a run never closed is plain text.
+pub(crate) fn outside_code(text: &str, mut f: impl FnMut(&str) -> String) -> String {
+    let mut out = String::with_capacity(text.len());
+    let (mut plain, mut at) = (0, 0);
+    while let Some(open) = text[at..].find('`').map(|i| at + i) {
+        let len = backtick_run(&text[open..]);
+        match closing_run(text, open + len, len) {
+            Some(end) => {
+                out.push_str(&f(&text[plain..open]));
+                out.push_str(&text[open..end]);
+                (plain, at) = (end, end);
+            }
+            None => at = open + len,
+        }
+    }
+    out.push_str(&f(&text[plain..]));
+    out
+}
+
+fn backtick_run(text: &str) -> usize {
+    text.bytes().take_while(|&b| b == b'`').count()
+}
+
+// Where the next run of exactly `len` backticks at or after `from` ends.
+fn closing_run(text: &str, mut from: usize, len: usize) -> Option<usize> {
+    while let Some(open) = text[from..].find('`').map(|i| from + i) {
+        let run = backtick_run(&text[open..]);
+        if run == len {
+            return Some(open + run);
+        }
+        from = open + run;
+    }
+    None
 }
 
 fn split_subtext(content: &str) -> (String, Vec<String>) {
@@ -3062,7 +3282,7 @@ mod tests {
 
     #[test]
     fn bare_media_links_are_hidden() {
-        let gif = crate::discord::Media { url: "https://t/x.mp4".into(), width: 1., height: 1., kind: crate::discord::MediaKind::Image };
+        let gif = crate::discord::Media { url: "https://t/x.mp4".into(), width: 1., height: 1., kind: crate::discord::MediaKind::Image, description: None };
         let msg = |content: &str, media: bool| Message { content: content.into(), media: if media { vec![gif.clone()] } else { vec![] }, ..Default::default() };
         assert!(only_media_link(&msg("https://klipy.com/gifs/x", true)));
         assert!(!only_media_link(&msg("look https://klipy.com/gifs/x", true)));
@@ -3182,5 +3402,21 @@ mod tests {
         // A long screenshot is held at 1:2.5 and cropped; an unknown size is a square.
         assert_eq!(fit_frame((400., 4000.), max), (88., 220.));
         assert_eq!(fit_frame((0., 0.), max), (220., 220.));
+    }
+    #[test]
+    fn links_are_underlined_outside_code() {
+        assert_eq!(underline_links("see https://a.io/x. ok"), "see <u><https://a.io/x></u>. ok");
+        assert_eq!(underline_links("[docs](https://a.io) and <https://b.io>"), "<u>[docs](https://a.io)</u> and <u><https://b.io></u>");
+        assert_eq!(underline_links("[docs](<https://a.io>)"), "<u>[docs](<https://a.io>)</u>");
+        assert_eq!(underline_links("`https://a.io` ```\nhttps://b.io\n```"), "`https://a.io` ```\nhttps://b.io\n```");
+        assert_eq!(underline_links("[@wren](waffle://user/1) <img src=\"https://cdn/e.png\" />"), "[@wren](waffle://user/1) <img src=\"https://cdn/e.png\" />");
+        assert_eq!(underline_links("an `unclosed https://a.io"), "an `unclosed <u><https://a.io></u>");
+    }
+
+    #[test]
+    fn code_runs_close_only_on_their_own_length() {
+        let upper = |text: &str| outside_code(text, str::to_uppercase);
+        assert_eq!(upper("a ``b ` c`` d"), "A ``b ` c`` D");
+        assert_eq!(upper("a ```\nb\n``` c `d` e"), "A ```\nb\n``` C `d` E");
     }
 }

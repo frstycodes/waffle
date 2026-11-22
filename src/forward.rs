@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn attachments_read_as_counts() {
-        let image = Media { url: "a.png".into(), width: 1., height: 1., kind: MediaKind::Image };
+        let image = Media { url: "a.png".into(), width: 1., height: 1., kind: MediaKind::Image, description: None };
         let file = File { name: "a.zip".into(), url: "a.zip".into(), size: 1 };
         let summary = |m: Message| attachment_summary(&m).map(|(_, label)| label);
         assert_eq!(summary(Message { media: vec![image.clone()], ..Default::default() }).as_deref(), Some("1 image"));
