@@ -16,7 +16,7 @@ src/channel_menu.rs	global-notify	7
 src/channel_settings.rs	file-lines	976
 src/channel_settings.rs	global-notify	22
 src/channel_settings.rs	raw-px	10
-src/chat.rs	file-lines	3429
+src/chat.rs	file-lines	3424
 src/chat.rs	global-notify	6
 src/chat.rs	raw-px	40
 src/chat_guard.rs	global-notify	4

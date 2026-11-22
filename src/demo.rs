@@ -1345,8 +1345,9 @@ fn demo_dm_call(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut 
     let messages = vec![
         record("301", &me, 180, Some(168), &["4194304", "8388608"]),
         record("302", &zoe, 90, Some(89), &["8388608"]),
-        text("303", &zoe, 89, "call me when you're back"),
-        text("304", &me, 3, "back now"),
+        // A two-line message and a one-line one: each lays out at the feed's width, never one glyph per line.
+        text("303", &zoe, 89, "call me when you're back\nnot before 9 though"),
+        text("304", &me, 3, "ardia browser use garnu"),
     ];
     waffle.feeds.insert("dm".into(), Feed { messages: std::sync::Arc::new(messages), loaded: true, ..Default::default() });
     let state = VoiceState { guild_id: None, channel_id: Some("dm".into()), user_id: zoe.id.clone(), user: Some(zoe), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false, suppress: false, requested_at: None };
