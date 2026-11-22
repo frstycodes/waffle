@@ -635,7 +635,11 @@ impl Waffle {
                 for (i, (section, channels)) in self.sidebar_sections(&guild).into_iter().enumerate() {
                     let category = match section {
                         Section::Pinned => {
-                            rows.push(self.pinned_section(&channels, &guild, window, cx));
+                            rows.push(self.static_section("pinned-head", "Pinned channels", &channels, &guild, window, cx).into_any_element());
+                            continue;
+                        }
+                        Section::ActiveNow => {
+                            rows.push(self.static_section("active-now-head", "Active now", &channels, &guild, window, cx).when(i > 0, |s| s.mt(px(16.))).into_any_element());
                             continue;
                         }
                         Section::Uncategorised => None,
@@ -1141,23 +1145,24 @@ impl Waffle {
         }
     }
 
-    // Pinned channels under a static head: no fold, no add, not in any drag list.
-    fn pinned_section(&mut self, channels: &[Channel], guild: &Guild, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let head = category_head("pinned-head".into(), div().id("pinned-head").child("Pinned channels"), true, cx);
+    // Pinned channels or Active Now under a static head: no fold, no add, not in any drag list.
+    fn static_section(&mut self, id: &'static str, title: &'static str, channels: &[Channel], guild: &Guild, window: &mut Window, cx: &mut Context<Self>) -> Div {
+        let head = category_head(id.into(), div().id(id).child(title), true, cx);
         let mut rows = Vec::new();
         for channel in channels {
             rows.extend(self.channel_rows(channel, guild, window, cx).into_iter().map(|row| row.element));
         }
-        div().flex().flex_col().gap(px(ROW_GAP)).child(head).children(rows).into_any_element()
+        div().flex().flex_col().gap(px(ROW_GAP)).child(head).children(rows)
     }
 
     // The channel list's sections as drawn: what's open, in a call or mentioning us stays in view
-    // under opt-in.
+    // under opt-in, and so does a channel whose joined thread is unread or mentions us.
     pub(crate) fn sidebar_sections(&self, guild: &Guild) -> Vec<(Section, Vec<Channel>)> {
         let open = self.channel.as_ref().map(|c| c.id.as_str());
         let in_call = self.call.as_ref().map(|c| c.channel.id.as_str());
         let keep = |c: &Channel| open == Some(c.id.as_str()) || in_call == Some(c.id.as_str()) || self.mention_count(&c.id) > 0;
-        channel_sections(guild, self.my_id(), self.guild_settings.get(&guild.id), keep)
+        let noticed = |t: &Channel| self.unread(&t.id) || self.mention_count(&t.id) > 0;
+        channel_sections(guild, self.my_id(), self.guild_settings.get(&guild.id), keep, noticed)
     }
 
     // DMs as listed and stepped through: pinned first, each group newest first.
@@ -1501,17 +1506,22 @@ pub(crate) enum Section {
     Pinned,
     Uncategorised,
     Category(Box<Channel>),
+    ActiveNow,
 }
 
-// The channel list in order: Pinned channels (server order, voice after text), then the
-// uncategorised channels, then each category. Pinned channels leave their category and always
-// show. With opt-in on, the rest show only when they or their category are in our list, or `keep`.
-pub(crate) fn channel_sections(guild: &Guild, me: &str, settings: Option<&GuildSettings>, keep: impl Fn(&Channel) -> bool) -> Vec<(Section, Vec<Channel>)> {
+// The channel list in order: Pinned channels (server order, voice after text), the uncategorised
+// channels, each category, then Active Now. Pinned channels leave their category and always show.
+// With opt-in on, the rest show only when they or their category are in our list, `keep` holds them,
+// or a joined active thread under them is `noticed`. Voice channels we haven't added that have
+// people in them leave their category for Active Now (Discord's `voiceChannelsCategory`, #791513).
+pub(crate) fn channel_sections(guild: &Guild, me: &str, settings: Option<&GuildSettings>, keep: impl Fn(&Channel) -> bool, noticed: impl Fn(&Channel) -> bool) -> Vec<(Section, Vec<Channel>)> {
     let visible = |c: &&Channel| matches!(c.kind, ChannelKind::Text | ChannelKind::Voice | ChannelKind::Forum) && guild.can_view(me, c);
     let pinned = |c: &Channel| settings.is_some_and(|s| s.pinned(&c.id));
     let opt_in = settings.filter(|s| s.opt_in());
-    let listed = |c: &Channel| opt_in.is_none_or(|s| s.opted_in(&c.id) || c.parent_id.as_ref().is_some_and(|p| s.opted_in(p)) || keep(c));
-    let shown = |c: &&Channel| visible(c) && !pinned(c) && listed(c);
+    let added = |c: &Channel| opt_in.is_none_or(|s| s.opted_in(&c.id) || c.parent_id.as_ref().is_some_and(|p| s.opted_in(p)));
+    let active_now = |c: &Channel| opt_in.is_some() && c.kind == ChannelKind::Voice && !added(c) && guild.voice_states.iter().any(|v| v.channel_id.as_ref() == Some(&c.id));
+    let listed = |c: &Channel| added(c) || keep(c) || has_noticed_thread(guild, c, &noticed);
+    let shown = |c: &&Channel| visible(c) && !pinned(c) && !active_now(c) && listed(c);
     let mut pins: Vec<Channel> = guild.channels.iter().filter(visible).filter(|c| pinned(c)).cloned().collect();
     pins.sort_by_key(|c| (c.kind == ChannelKind::Voice, c.position));
     let uncategorised = guild.channels.iter().filter(shown).filter(|c| c.parent_id.is_none()).cloned().collect();
@@ -1520,8 +1530,22 @@ pub(crate) fn channel_sections(guild: &Guild, me: &str, settings: Option<&GuildS
         let children = guild.channels.iter().filter(shown).filter(|c| c.parent_id.as_ref() == Some(&category.id)).cloned().collect();
         sections.push((Section::Category(Box::new(category.clone())), children));
     }
+    let mut voice: Vec<Channel> = guild.channels.iter().filter(visible).filter(|c| !pinned(c) && active_now(c)).cloned().collect();
+    let category_position = |c: &Channel| c.parent_id.as_ref().and_then(|p| guild.channels.iter().find(|x| &x.id == p)).map_or(-1, |p| p.position);
+    voice.sort_by_key(|c| (category_position(c), c.position));
+    sections.push((Section::ActiveNow, voice));
     sections.retain(|(_, channels)| !channels.is_empty());
     sections
+}
+
+// Discord's `eN` (#791513): a joined, unarchived thread under the channel that is `noticed`.
+// GAP: Discord also counts a thread you recently visited and read; Waffle keeps no visit history.
+fn has_noticed_thread(guild: &Guild, channel: &Channel, noticed: impl Fn(&Channel) -> bool) -> bool {
+    guild
+        .threads
+        .iter()
+        .filter(|t| t.parent_id.as_ref() == Some(&channel.id))
+        .any(|t| t.thread.as_ref().is_some_and(|m| m.joined && !m.archived) && noticed(t))
 }
 
 // Stable, so each group keeps the recency order it came in.
@@ -2025,6 +2049,7 @@ mod tests {
                     Section::Pinned => "pinned".to_owned(),
                     Section::Uncategorised => "loose".to_owned(),
                     Section::Category(c) => c.id.clone(),
+                    Section::ActiveNow => "active".to_owned(),
                 };
                 (name, channels.iter().map(|c| c.id.as_str()).collect())
             })
@@ -2044,12 +2069,62 @@ mod tests {
             channel("rules", 0, 7, Some("info")),
         ]);
         let pins = settings(0, &[("lounge", channel_flag::FAVORITED), ("general", channel_flag::FAVORITED)]);
-        let all = channel_sections(&guild, "me", Some(&pins), |_| false);
+        let all = channel_sections(&guild, "me", Some(&pins), |_| false, |_| false);
         assert_eq!(ids(&all), [("pinned".into(), vec!["general", "lounge"]), ("loose".into(), vec!["loose"]), ("cat".into(), vec!["memes", "art"]), ("info".into(), vec!["rules"])]);
 
         let opt_in = settings(guild_flag::OPT_IN_CHANNELS_ON, &[("lounge", channel_flag::FAVORITED), ("memes", channel_flag::OPT_IN_ENABLED), ("info", channel_flag::OPT_IN_ENABLED)]);
-        let listed = channel_sections(&guild, "me", Some(&opt_in), |c| c.id == "art");
+        let listed = channel_sections(&guild, "me", Some(&opt_in), |c| c.id == "art", |_| false);
         assert_eq!(ids(&listed), [("pinned".into(), vec!["lounge"]), ("cat".into(), vec!["memes", "art"]), ("info".into(), vec!["rules"])]);
+    }
+
+    fn thread(id: &str, parent: &str, joined: bool, archived: bool) -> Channel {
+        let mut json = serde_json::json!({ "id": id, "type": 11, "parent_id": parent, "thread_metadata": { "archived": archived } });
+        if joined {
+            json["member"] = serde_json::json!({});
+        }
+        crate::discord::parse_channel(&json, "g").unwrap()
+    }
+
+    #[test]
+    fn opt_in_keeps_a_channel_whose_joined_active_thread_is_noticed() {
+        let mut guild = guild(vec![channel("cat", 4, 0, None), channel("general", 0, 1, Some("cat")), channel("art", 0, 2, Some("cat")), channel("memes", 0, 3, Some("cat")), channel("clips", 0, 4, Some("cat")), channel("quiet", 0, 5, Some("cat"))]);
+        guild.threads = vec![thread("art-t", "art", true, false), thread("memes-t", "memes", false, false), thread("clips-t", "clips", true, true), thread("quiet-t", "quiet", true, false)];
+        let opt_in = settings(guild_flag::OPT_IN_CHANNELS_ON, &[("general", channel_flag::OPT_IN_ENABLED)]);
+        let noticed = |t: &Channel| t.id != "quiet-t";
+        let listed = channel_sections(&guild, "me", Some(&opt_in), |_| false, noticed);
+        assert_eq!(ids(&listed), [("cat".into(), vec!["general", "art"])], "an unjoined, archived or read thread doesn't hold its channel");
+    }
+
+    #[test]
+    fn opt_in_gathers_occupied_unadded_voice_into_active_now_last() {
+        let mut guild = guild(vec![
+            channel("hangout", 2, 0, None),
+            channel("b", 4, 2, None),
+            channel("b-voice", 2, 0, Some("b")),
+            channel("a", 4, 1, None),
+            channel("a-text", 0, 0, Some("a")),
+            channel("a-voice", 2, 3, Some("a")),
+            channel("a-lounge", 2, 1, Some("a")),
+            channel("a-empty", 2, 2, Some("a")),
+            channel("a-added", 2, 4, Some("a")),
+            channel("a-pinned", 2, 5, Some("a")),
+        ]);
+        let state = |user: &str, channel: &str| crate::discord::VoiceState { user_id: user.into(), channel_id: Some(channel.into()), ..Default::default() };
+        guild.voice_states = ["hangout", "b-voice", "a-voice", "a-lounge", "a-lounge", "a-added", "a-pinned"].iter().enumerate().map(|(i, c)| state(&i.to_string(), c)).collect();
+        let opt_in = settings(guild_flag::OPT_IN_CHANNELS_ON, &[("a-text", channel_flag::OPT_IN_ENABLED), ("a-added", channel_flag::OPT_IN_ENABLED), ("a-pinned", channel_flag::FAVORITED)]);
+        let listed = channel_sections(&guild, "me", Some(&opt_in), |_| false, |_| false);
+        assert_eq!(
+            ids(&listed),
+            [("pinned".into(), vec!["a-pinned"]), ("a".into(), vec!["a-text", "a-added"]), ("active".into(), vec!["hangout", "a-lounge", "a-voice", "b-voice"])],
+            "by category position, then channel position; added, pinned and empty channels stay out"
+        );
+
+        guild.voice_states.retain(|v| v.channel_id.as_deref() != Some("a-voice"));
+        let left = channel_sections(&guild, "me", Some(&opt_in), |_| false, |_| false);
+        assert_eq!(left.last().map(|(_, c)| c.iter().map(|c| c.id.as_str()).collect::<Vec<_>>()), Some(vec!["hangout", "a-lounge", "b-voice"]), "empties leave as people do");
+
+        let all = channel_sections(&guild, "me", Some(&settings(0, &[])), |_| false, |_| false);
+        assert!(!all.iter().any(|(s, _)| matches!(s, Section::ActiveNow)), "no Active Now with opt-in off");
     }
 
     #[test]
