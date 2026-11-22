@@ -1046,10 +1046,6 @@ mod tests {
         parse_channel(&json!({ "id": "c", "type": 0, "name": "clips", "topic": "Plays", "rate_limit_per_user": 0 }), "g").map(|c| Channel { overwrites, ..c }).unwrap()
     }
 
-    fn ow(id: &str, allow: u64, deny: u64) -> Overwrite {
-        Overwrite { id: id.into(), allow, deny, member: false }
-    }
-
     #[test]
     fn patch_sends_only_what_changed() {
         let before = channel(Vec::new());

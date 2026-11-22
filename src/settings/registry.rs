@@ -53,6 +53,7 @@ pub enum Toggle {
     DeveloperMode,
     ShareActivity,
     DmsFromServerMembers,
+    MessageRequests,
     FriendsAll,
     FriendsMutualFriends,
     FriendsMutualGuilds,
@@ -62,6 +63,7 @@ pub enum Toggle {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Choice {
     DmFilter,
+    SpamFilter,
 }
 
 impl Choice {
@@ -73,6 +75,8 @@ impl Choice {
                 (1, "Filter DMs from non-friends", Some("Messages from friends aren't scanned")),
                 (0, "Don't filter direct messages", None),
             ],
+            // DmSpamFilterV2's values (settings::proto).
+            Choice::SpamFilter => &[(3, "Filter all spam", None), (2, "Filter messages from non-friends (Recommended)", None), (1, "Don't filter spam", None)],
         }
     }
 }
@@ -111,6 +115,8 @@ pub static SETTINGS: &[Setting] = &[
     s("delete-account", Account, "On discord.com", "Disable or delete account", None, &["delete", "remove account", "deactivate", "close account"], Link(DISCORD)),
     // Content & social
     s("dm-server-members", ContentSocial, "Direct messages", "Allow DMs from server members", Some("Applies to servers you join from now on"), &["dm", "direct messages", "privacy", "strangers", "message requests"], Switch(Toggle::DmsFromServerMembers)),
+    s("message-requests", ContentSocial, "Direct messages", "Message requests", Some("Filter messages from server members you may not know."), &["message requests", "dm", "strangers", "requests", "inbox"], Switch(Toggle::MessageRequests)),
+    s("dm-spam-filter", ContentSocial, "Automatically filter suspected spam messages", "Automatically filter suspected spam messages", Some("Discord can filter out some messages that contain spam. These messages go to your Spam inbox."), &["dm spam filter", "spam", "messages", "inbox", "message requests"], Control::Choice(Choice::SpamFilter)),
     s("dm-filter", ContentSocial, "Message filtering", "Filter direct messages", Some("Discord blurs explicit images in DMs it scans"), &["spam", "explicit", "nsfw", "safe", "sensitive media", "filter"], Control::Choice(Choice::DmFilter)),
     s("friends-all", ContentSocial, "Who can send you a friend request", "Everyone", None, &["friend request", "who can add me", "add friend"], Switch(Toggle::FriendsAll)),
     s("friends-mutual-friends", ContentSocial, "Who can send you a friend request", "Friends of friends", None, &["friend request", "mutual friends"], Switch(Toggle::FriendsMutualFriends)),
