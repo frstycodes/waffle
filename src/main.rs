@@ -24,6 +24,7 @@ mod demo;
 mod discord;
 mod drafts;
 mod drag;
+mod emoticons;
 mod icons;
 mod illustration;
 mod images;
@@ -2087,6 +2088,10 @@ impl Waffle {
     fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let (Some(client), Some(channel), Some(me)) = (self.client.clone(), self.channel.clone(), self.me.clone()) else { return };
         let typed = wire_text(&self.composer.read(cx).content());
+        let typed = match self.account_settings.convert_emoticons {
+            true => emoticons::convert(&typed),
+            false => typed,
+        };
         let typed = typed.trim();
         if typed.is_empty() && self.pending_files.is_empty() {
             return;
