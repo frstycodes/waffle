@@ -4,7 +4,6 @@ src/active_now.rs	global-notify	1
 src/announcements.rs	global-notify	18
 src/announcements.rs	raw-px	3
 src/app_modal.rs	global-notify	6
-src/audio_player.rs	raw-floating	2
 src/audio_player.rs	raw-px	8
 src/call.rs	global-notify	21
 src/call.rs	raw-color	3
@@ -90,7 +89,6 @@ src/overlays.rs	raw-px	11
 src/panel.rs	global-notify	4
 src/panel.rs	raw-px	9
 src/pip.rs	global-notify	2
-src/pip.rs	raw-floating	2
 src/poll.rs	global-notify	10
 src/poll.rs	raw-px	12
 src/presence.rs	raw-px	6

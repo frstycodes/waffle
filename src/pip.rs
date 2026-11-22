@@ -81,7 +81,7 @@ fn nearest(at: (f32, f32), size: Size, area: (f32, f32)) -> Corner {
     }
 }
 
-fn anchored<E: Styled>(d: E, corner: Corner, insets: Insets) -> E {
+fn pin_to<E: Styled>(d: E, corner: Corner, insets: Insets) -> E {
     let d = match corner {
         Corner::TopLeft | Corner::BottomLeft => d.left(px(MARGIN)),
         Corner::TopRight | Corner::BottomRight => d.right(px(MARGIN)),
@@ -158,14 +158,14 @@ impl Waffle {
                 player
                     .with_animation(SharedString::from(format!("pip-snap-{n}")), Animation::new(SNAP), move |d, t| {
                         if t >= 1. {
-                            return anchored(d, corner, insets);
+                            return pin_to(d, corner, insets);
                         }
                         let e = crate::motion::back_out(t);
                         d.left(px(from.0 + (to.0 - from.0) * e)).top(px(from.1 + (to.1 - from.1) * e))
                     })
                     .into_any_element()
             }
-            _ => anchored(player, pip.corner, insets).into_any_element(),
+            _ => pin_to(player, pip.corner, insets).into_any_element(),
         };
         placed
     }
