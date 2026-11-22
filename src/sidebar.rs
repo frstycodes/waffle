@@ -40,6 +40,7 @@ const ROW_GAP: f32 = 2.;
 #[derive(Clone)]
 pub(crate) enum Face {
     Home,
+    Favorites,
     // A DM on the rail: the person's avatar, round like every person, or a group's.
     Person(crate::discord::DmFace),
     Icon(String),
@@ -80,7 +81,7 @@ impl Waffle {
         let home = RailTile {
             key: "dms".into(),
             name: "Direct messages".into(),
-            selected: self.guild_id.is_none(),
+            selected: self.rail_selected(None),
             unread: false,
             mentions: dm_mentions,
             muted: false,
@@ -92,6 +93,7 @@ impl Waffle {
             handed: false,
         };
         let home = self.rail_item(home, window, cx);
+        let favorites = self.favorites_item(window, cx);
         let dm_tiles = self.rail_dm_tiles(window, cx);
         let entries = self.rail_entries();
         let order: Vec<String> = entries.iter().map(|e| crate::channel_menu::rail_key(e, &self.guilds)).collect();
@@ -130,6 +132,7 @@ impl Waffle {
             // and the rail still scrolls under it.
             .when(!lights, |rail| rail.child(div().absolute().top_0().left_0().w_full().h(px(crate::layout::HEADER_HEIGHT)).window_control_area(gpui_kit::WindowControlArea::Drag)))
             .child(if lights { home } else { div().block_mouse_except_scroll().child(home).into_any_element() })
+            .children(favorites)
             .child(dm_tiles)
             .child(separator)
             .children(items)
@@ -225,7 +228,7 @@ impl Waffle {
         let tile = RailTile {
             key: format!("dm-{}", dm.id),
             name: dm.recipient.as_ref().map_or_else(|| dm.name.clone(), |u| u.name.clone()).into(),
-            selected: self.guild_id.is_none() && self.channel.as_ref().is_some_and(|c| c.id == dm.id),
+            selected: self.rail_selected(None) && self.channel.as_ref().is_some_and(|c| c.id == dm.id),
             unread: false,
             // Every DM message counts as a mention, so this is its unread count.
             mentions,
@@ -246,6 +249,35 @@ impl Waffle {
                 this.open_channel(dm.clone(), window, cx);
             }))
             .into_any_element()
+    }
+
+    // Whether the rail marks this server (None: Home) as open; Favorites holds the mark while it shows.
+    fn rail_selected(&self, guild_id: Option<&String>) -> bool {
+        !self.in_favorites() && self.guild_id.as_ref() == guild_id
+    }
+
+    // The star tile after Home, once something is favourited (or Favorites was shown on purpose).
+    fn favorites_item(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if !self.favorites.shown() {
+            return None;
+        }
+        let (unread, mentions) = self.favorites_badge();
+        let tile = RailTile {
+            key: crate::favorites::RAIL_KEY.into(),
+            name: "Favorites".into(),
+            selected: self.in_favorites(),
+            unread,
+            mentions,
+            muted: self.favorites.muted,
+            media: None,
+            face: Face::Favorites,
+            guild_id: None,
+            badge_scale: 1.,
+            open: 0.,
+            handed: false,
+        };
+        let item = self.rail_item(tile, window, cx);
+        Some(div().id("rail-favorites-hit").child(item).on_click(cx.listener(|this, _, window, cx| this.open_favorites(window, cx))).into_any_element())
     }
 
     // Who's in the server's voice channels and who's live there, by avatar, for its hover card.
@@ -288,7 +320,7 @@ impl Waffle {
         RailTile {
             key: guild.id.clone(),
             name: guild.name.clone().into(),
-            selected: self.guild_id.as_ref() == Some(&guild.id),
+            selected: self.rail_selected(Some(&guild.id)),
             unread,
             mentions,
             muted: self.guild_settings.get(&guild.id).is_some_and(|s| s.is_muted()),
@@ -314,12 +346,12 @@ impl Waffle {
         let motion = FolderMotion::frame(&key, open, window, cx);
         let tint: Hsla = folder.color.map(|c| rgb(c).into()).unwrap_or(palette::faint(cx));
         let (unread, mentions) = guilds.iter().map(|g| self.guild_badge(g)).fold((false, 0), |(u, m), (gu, gm)| (u || gu, m + gm));
-        let has_selected = guilds.iter().any(|g| self.guild_id.as_ref() == Some(&g.id));
+        let has_selected = guilds.iter().any(|g| self.rail_selected(Some(&g.id)));
         let name: SharedString = folder.name.clone().unwrap_or_else(|| guilds.iter().map(|g| g.name.as_str()).take(3).collect::<Vec<_>>().join(", ")).into();
         let minis: Vec<Mini> = guilds.iter().map(|g| mini(g)).collect();
         let badges: Vec<Badge> = guilds.iter().map(|g| {
             let (unread, mentions) = self.guild_badge(g);
-            Badge { pill: pill_height(self.guild_id.as_ref() == Some(&g.id), false, unread), mentions }
+            Badge { pill: pill_height(self.rail_selected(Some(&g.id)), false, unread), mentions }
         }).collect();
         // The height the servers' pills split from and merge back into: the head's own, hover included.
         let media = guilds.iter().filter_map(|g| self.guild_media(g)).max_by_key(|m| (m.kind, m.connected));
@@ -444,7 +476,7 @@ impl Waffle {
             .when_some(guild_id.clone(), |item, guild_id| item.on_click(cx.listener(move |this, _, window, cx| this.open_guild(Some(guild_id.clone()), window, cx))))
             .when(key == "dms", |item| item.on_click(cx.listener(|this, _, window, cx| this.open_guild(None, window, cx))));
         let item = match key.as_str() {
-            k if k == "dms" || k.starts_with("dm-") => item,
+            k if k == "dms" || k == crate::favorites::RAIL_KEY || k.starts_with("dm-") => item,
             _ => self.rail_draggable(item, RailDrag { key: key.clone() }, look, self.rail_list_of(&key), cx),
         };
         let Some(guild_id) = guild_id else { return item.into_any_element() };
@@ -595,6 +627,7 @@ impl Waffle {
         let mut rows: Vec<AnyElement> = Vec::new();
         match (&self.status, self.guild().cloned()) {
             (Status::Connecting, _) => rows.push(muted_line("Connecting to Discord…", cx)),
+            _ if self.in_favorites() => rows.extend(self.favorite_rows(cx)),
             (_, Some(guild)) => {
                 let me = self.my_id().to_owned();
                 // Beside the carried channel: "Move to Archive" while it's aimed into another category.
@@ -707,6 +740,9 @@ impl Waffle {
 
     /// What heads the channel list: the open server's name, or "Home" (its search leads the list below).
     pub(crate) fn channel_list_head(&self, cx: &mut Context<Self>) -> AnyElement {
+        if self.in_favorites() {
+            return server_name_button("Favorites".into(), cx).into_any_element();
+        }
         match self.guild() {
             Some(guild) => server_name_button(guild.name.clone().into(), cx).into_any_element(),
             None => div()
@@ -1515,6 +1551,11 @@ pub(crate) fn render_face(face: Face, size: f32, radius: f32, selected: bool, op
             .bg(if selected { palette::accent() } else { crate::material::lifted(palette::surface(palette::Level::Raised, cx), cx) })
             .child(svg().path(crate::icons::MARK).size(px(size / 2.)).text_color(if selected { palette::on_accent() } else { palette::logo_ink(cx) }))
             .into_any_element(),
+        Face::Favorites => tile()
+            .bg(if selected { palette::accent() } else { crate::material::lifted(palette::surface(palette::Level::Raised, cx), cx) })
+            .text_color(if selected { palette::on_accent() } else { palette::warning_ink(cx) })
+            .child(Icon::new(Glyph::Star).size(px(size / 2.)))
+            .into_any_element(),
         Face::Folder { tint, minis } => tile()
             .relative()
             .bg(tint.opacity(0.24 * (1. - open)))
@@ -1963,9 +2004,12 @@ pub(crate) fn server_name_button(name: SharedString, cx: &mut Context<Waffle>) -
         .child(ui::truncating("server-name", name).flex_1())
         .child(Nav::Caret.icon().size(px(16.)).text_color(palette::muted(cx)))
         .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(|this, _: &gpui_kit::MouseDownEvent, _, cx| {
-            let Some(guild_id) = this.guild_id.clone() else { return };
             // Drops from the button's bottom edge, at its left.
             let at = gpui_kit::point(px(RAIL_WIDTH + 8.), px(crate::layout::HEADER_HEIGHT - 4.));
+            if this.in_favorites() {
+                return this.open_favorites_menu(at, cx);
+            }
+            let Some(guild_id) = this.guild_id.clone() else { return };
             this.open_server_menu(guild_id, at, true, cx);
         }))
 }

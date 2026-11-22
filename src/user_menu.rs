@@ -45,11 +45,15 @@ impl Waffle {
         let read = item("Mark as read", move |this, _, cx| this.mark_channel_read(&id, cx)).icon(Glyph::Checks);
         entries.push(if unread { read } else { read.disabled() }.entry());
         entries.push(Entry::Separator);
+        entries.extend(self.favorite_add_entry(channel));
+        entries.push(Entry::Separator);
         if let Some(user) = channel.recipient.clone() {
             entries.extend(self.user_menu(&user, None, Surface::Dm, at).into_iter().filter(|e| !e.is_copy_id()));
         }
         let id = channel.id.clone();
         entries.push(item("Close DM", move |this, _, cx| this.close_dm(&id, cx)).icon(Glyph::X).entry());
+        entries.push(Entry::Separator);
+        entries.extend(self.favorite_remove_entry(channel));
         entries.push(Entry::Separator);
         if self.developer_mode {
             if let Some(user) = &channel.recipient {

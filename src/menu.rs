@@ -307,6 +307,8 @@ pub struct Dialog {
     // Leads the title with the warning mark: for what can't be undone.
     warn: bool,
     pub(crate) input: bool,
+    // A notice with one button that only closes it (Discord's alert modal).
+    alert: bool,
     // A key that confirms it from anywhere, drawn on the confirm button (D for a message's delete).
     key: Option<&'static str>,
     // The message it acts on, drawn as search draws a hit (Discord's unpin confirm).
@@ -410,7 +412,7 @@ impl Waffle {
             state.set_value(value.to_owned(), window, cx);
             state.focus(window, cx);
         });
-        self.dialog = Some(Dialog { title: title.into(), body: body.into(), confirm: confirm.into(), danger: false, warn: false, input: true, key: None, preview: None, tip: None, on_confirm: Rc::new(on_confirm) });
+        self.dialog = Some(Dialog { title: title.into(), body: body.into(), confirm: confirm.into(), danger: false, warn: false, input: true, alert: false, key: None, preview: None, tip: None, on_confirm: Rc::new(on_confirm) });
         cx.notify();
     }
 
@@ -431,12 +433,21 @@ impl Waffle {
             danger: true,
             warn: false,
             input: false,
+            alert: false,
             key: None,
             preview: None,
             tip: None,
             on_confirm: Rc::new(move |this, _, window, cx| on_confirm(this, window, cx)),
         });
         cx.notify();
+    }
+
+    pub(crate) fn alert(&mut self, title: impl Into<SharedString>, body: impl Into<SharedString>, cx: &mut Context<Self>) {
+        self.confirm(title, body, "Okay", |_, _, _| {}, cx);
+        if let Some(dialog) = &mut self.dialog {
+            dialog.danger = false;
+            dialog.alert = true;
+        }
     }
 
     // A confirm for a deletion that can't be undone: the title leads with the warning mark.
@@ -685,10 +696,12 @@ impl Waffle {
                     .flex()
                     .justify_end()
                     .gap(px(8.))
-                    .child(ui::button("dialog-cancel", ui::Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| {
-                        this.dialog = None;
-                        cx.notify();
-                    })))
+                    .when(!dialog.alert, |row| {
+                        row.child(ui::button("dialog-cancel", ui::Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| {
+                            this.dialog = None;
+                            cx.notify();
+                        })))
+                    })
                     .child(ui::button("dialog-confirm", tone, cx).child(dialog.confirm.clone()).when_some(dialog.key, |b, key| b.children(key.split('+').map(|k| ui::kbd_translucent(crate::settings::key_name(k), gpui_kit::white())))).on_click(submit)),
             );
         let backdrop = div().id("dialog-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {

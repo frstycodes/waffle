@@ -1,6 +1,7 @@
 // Discord's channel, category, server, folder and server-dropdown menus, item-for-item from its
-// menu code (docs/discord-menus-channel-server.md, read from Discord web 2026-11-14). Favorites,
-// stages, events, apps and the full server-settings screens aren't built, so their items are left out.
+// menu code (docs/discord-menus-channel-server.md, read from Discord web 2026-11-14). Stages, events,
+// apps and the full server-settings screens aren't built, so their items are left out. Favorites-mode
+// menus live in favorites.rs.
 use gpui_kit::{Context, Pixels, Point, SharedString, Window};
 use reqwest::Method;
 use serde_json::{Value, json};
@@ -280,6 +281,8 @@ impl Waffle {
         let read = item("Mark as read", move |this, _, cx| this.mark_channel_read(&id, cx)).icon(Glyph::Checks);
         out.push(if self.unread(&channel.id) { read } else { read.disabled() }.entry());
         out.push(Entry::Separator);
+        out.extend(self.favorite_add_entry(channel));
+        out.push(Entry::Separator);
 
         let (gid, cid) = (guild_id.to_owned(), channel.id.clone());
         out.push(item(if voice { "Invite to voice" } else { "Invite people" }, move |this, window, cx| this.show_invite(gid.clone(), cid.clone(), window, cx)).brand().icon(Glyph::GroupPlus).entry());
@@ -326,6 +329,8 @@ impl Waffle {
             out.push(self.delete_channel_entry(channel, "Delete channel"));
             out.push(Entry::Separator);
         }
+        out.extend(self.favorite_remove_entry(channel));
+        out.push(Entry::Separator);
 
         if self.developer_mode {
             let id = channel.id.clone();
@@ -729,6 +734,8 @@ impl Waffle {
         let read = item("Mark as read", move |this, _, cx| this.mark_channel_read(&id, cx)).icon(Glyph::Checks);
         out.push(if self.unread(&thread.id) { read } else { read.disabled() }.entry());
         out.push(Entry::Separator);
+        out.extend(self.favorite_add_entry(&thread));
+        out.push(Entry::Separator);
 
         if !meta.joined {
             let id = thread.id.clone();
@@ -801,8 +808,9 @@ impl Waffle {
             })
             .icon(Glyph::DoorExit)
             .entry());
-            out.push(Entry::Separator);
         }
+        out.extend(self.favorite_remove_entry(&thread));
+        out.push(Entry::Separator);
         if self.developer_mode {
             let id = thread.id.clone();
             out.push(item("Copy thread ID", move |this, _, cx| this.copy_text(id.clone(), cx)).icon(Glyph::Id).entry());

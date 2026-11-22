@@ -24,6 +24,7 @@ mod demo;
 mod discord;
 mod drafts;
 mod drag;
+mod favorites;
 mod icons;
 mod images;
 mod layout;
@@ -888,6 +889,9 @@ pub struct Waffle {
     back: Vec<(Option<String>, Channel)>,
     forward: Vec<(Option<String>, Channel)>,
     folded: HashSet<String>,
+    favorites: favorites::Favorites,
+    // Set while the channel list shows Favorites: the channel opened from it, "" before one is.
+    favorites_open: Option<String>,
     hovered: Option<String>,
     motions: Motions<Part>,
     // The DM tiles on the rail with their counts, leaving ones included until their exit settles; None until
@@ -1189,6 +1193,8 @@ impl Waffle {
             back: Vec::new(),
             forward: Vec::new(),
             folded: HashSet::new(),
+            favorites: Default::default(),
+            favorites_open: None,
             hovered: None,
             motions: Motions::new(),
             rail_dms_shown: None,
@@ -1332,6 +1338,7 @@ impl Waffle {
 
     pub fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {
         match event {
+            Event::SettingsProto { proto, partial } => self.apply_settings_proto(&proto, partial, cx),
             Event::UserSettings(changed) => {
                 self.account_settings.apply(&changed);
                 self.developer_mode = self.account_settings.developer_mode;
@@ -1392,6 +1399,7 @@ impl Waffle {
                 self.load_activity_feed(cx);
                 self.splash_ready(cx);
                 self.rejoin_after_restart(cx);
+                self.load_favorites(cx);
             }
             Event::Batch(events) => {
                 for event in events {
@@ -1737,6 +1745,7 @@ impl Waffle {
 
     fn open_guild(&mut self, guild_id: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         self.guild_id = guild_id.clone();
+        self.favorites_open = None;
         self.refresh_stream_previews(cx);
         self.request_channel_info();
         let remembered = self.last_channel.get(&guild_id).cloned();
