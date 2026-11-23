@@ -118,25 +118,22 @@ impl Waffle {
         let view = self.notification_settings.as_ref()?;
         let guild = self.guilds.iter().find(|g| g.id == view.guild_id)?;
         let settings = self.settings_for(&view.guild_id);
-        let scroller = div()
+        let scroller = ui::col()
             .id("ns-scroll")
             .flex_1()
-            .min_h_0()
             .overflow_y_scroll()
             .px_6()
             .pt_1()
             .pb_4()
-            .flex()
-            .flex_col()
             .gap_5()
             .child(self.ns_mute_card(view, guild, &settings, window, cx))
             .child(ns_levels(&settings, window, cx))
             .child(ns_switches(&settings, window, cx))
             .child(ns_push_card(&settings, window, cx))
             .child(self.ns_overrides(view, guild, &settings, window, cx));
-        let done = div().flex().justify_end().px_6().pt_3().pb_5().child(ui::button("ns-done", Tone::Primary, cx).child("Done").on_click(cx.listener(|this, _, _, cx| this.close_notification_settings(cx))));
+        let done = ui::row().items_stretch().justify_end().px_6().pt_3().pb_5().child(ui::button("ns-done", Tone::Primary, cx).child("Done").on_click(cx.listener(|this, _, _, cx| this.close_notification_settings(cx))));
         let height = (f32::from(window.viewport_size().height) * 0.85).min(MAX_HEIGHT);
-        let body = div().h(px(height)).flex().flex_col().child(ns_head(guild, cx)).child(scroller).child(done);
+        let body = ui::col().h(px(height)).child(ns_head(guild, cx)).child(scroller).child(done);
         let card = div().id("ns-card").occlude().child(ui::dialog("notification-settings", WIDTH, body, window, cx));
         let backdrop = div().id("ns-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_notification_settings(cx)));
         Some(ui::modal(backdrop, card, cx))
@@ -205,7 +202,7 @@ impl Waffle {
         let query = view.search.read(cx).value().trim().to_lowercase();
         let sections = override_choices(guild, taken, &query);
         let muted = palette::muted(cx);
-        let mut list = div().id("ns-pick-list").max_h(px(260.)).overflow_y_scroll().flex().flex_col().gap_px();
+        let mut list = ui::col().id("ns-pick-list").max_h(px(260.)).overflow_y_scroll().gap_px();
         if sections.is_empty() {
             list = list.child(div().px_2p5().py_2().text_color(muted).child("No channels found"));
         }
@@ -215,7 +212,7 @@ impl Waffle {
                 let id = c.id.clone();
                 ui::menu_row(SharedString::from(format!("ns-pick-{}", c.id)), cx)
                     .child(div().flex_none().text_color(muted).child(channel_icon(&c).size_4()))
-                    .child(div().flex_1().min_w_0().truncate().child(c.name.clone()))
+                    .child(ui::line(c.name.clone()).flex_1())
                     .on_click(cx.listener(move |this, _, _, cx| this.add_override(&id, cx)))
             }));
         }
@@ -243,9 +240,7 @@ impl Waffle {
 }
 
 fn ns_head(guild: &Guild, cx: &mut Context<Waffle>) -> Div {
-    div()
-        .flex()
-        .items_center()
+    ui::row()
         .gap_3()
         .pl_6()
         .pr_4()
@@ -253,14 +248,11 @@ fn ns_head(guild: &Guild, cx: &mut Context<Waffle>) -> Div {
         .pb_3()
         .child(ui::server_tile(guild.icon.as_deref(), &guild.name, 40., cx))
         .child(
-            div()
+            ui::col()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .gap_0p5()
                 .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Notification Settings"))
-                .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).truncate().child(guild.name.clone())),
+                .child(ui::line(guild.name.clone()).text_size(ui::TEXT_XS).text_color(palette::muted(cx))),
         )
         .child(ui::icon_button("ns-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_notification_settings(cx))))
 }
@@ -324,14 +316,11 @@ fn ns_override_row(row: &OverrideRow, line: bool, guild_muted: bool, window: &mu
     let id = row.channel.id.clone();
     let name = row.channel.name.clone();
     let (strong, muted) = (palette::strong(cx), palette::muted(cx));
-    let place = div()
+    let place = ui::col()
         .flex_1()
-        .min_w_0()
-        .flex()
-        .flex_col()
         .gap_px()
-        .child(div().truncate().text_color(strong).child(name.clone()))
-        .child(div().truncate().text_size(ui::TEXT_XS).text_color(muted).child(row.subtitle.clone()));
+        .child(ui::line(name.clone()).text_color(strong))
+        .child(ui::line(row.subtitle.clone()).text_size(ui::TEXT_XS).text_color(muted));
     let this = cx.entity();
     let level_id = id.clone();
     let selected = if guild_muted { SEGMENTS.len() } else { usize::from(row.level) };
@@ -357,7 +346,7 @@ fn ns_override_row(row: &OverrideRow, line: bool, guild_muted: bool, window: &mu
         .child(div().flex_none().text_color(muted).child(channel_icon(&row.channel).size(ui::ICON_LG)))
         .child(place)
         .child(div().flex_none().when(guild_muted, |d| d.opacity(0.45)).child(levels))
-        .child(div().flex_none().flex().gap_0p5().child(mute).child(remove))
+        .child(ui::row().items_stretch().flex_none().gap_0p5().child(mute).child(remove))
         .into_any_element()
 }
 

@@ -661,7 +661,7 @@ impl Waffle {
                 continue;
             };
             let key = category.to_string();
-            let section = div().flex().flex_col().gap(px(row_gap())).child(self.favorite_category_head(category, collapsed, cx)).children(channel_rows);
+            let section = ui::col().gap(px(row_gap())).child(self.favorite_category_head(category, collapsed, cx)).children(channel_rows);
             let section = Board::target(section, favorite_board, CATEGORY_LIST, key.clone(), |_: &FavoriteCategoryDrag| false, cx);
             let spaced = !rows.is_empty();
             rows.push(div().when(spaced, |d| d.mt_3p5()).child(categories.item(&key, section)).into_any_element());
@@ -722,7 +722,7 @@ impl Waffle {
                 .when(carried == RowDrag::Hidden, |r| r.invisible())
                 .child(favorite_glyph(&channel).size(ui::ICON_LG).flex_none().text_color(if selected { palette::muted(cx) } else { faint }))
                 .child(ui::truncating(format!("fav-name-{}", channel.id), name.clone()).flex_1())
-                .children(origin.map(|o| div().flex_none().max_w_24().truncate().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(faint).child(o)))
+                .children(origin.map(|o| ui::line(o).flex_none().max_w_24().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(faint)))
                 .when(mentions > 0, |r| r.child(ui::count_badge(mentions))),
         };
         let size = point(px(self.channels_width - 16.), px(row_height()));
@@ -759,9 +759,7 @@ fn favorite_glyph(channel: &Channel) -> Icon {
 }
 
 fn favorites_empty(cx: &mut Context<Waffle>) -> AnyElement {
-    div()
-        .flex()
-        .flex_col()
+    ui::col()
         .items_center()
         .gap_2()
         .py_8()

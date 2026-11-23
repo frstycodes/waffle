@@ -338,7 +338,7 @@ impl Waffle {
             _ => self.server_page(page, window, cx),
         };
         let undo = self.undo_bar(page, cx);
-        let body = ui::settings_page("server-settings-scroll", &scroll).child(ui::settings_column(div().flex().flex_col().gap_8().child(ui::settings_title(page.label(community), cx)).children(undo).children(sections)));
+        let body = ui::settings_page("server-settings-scroll", &scroll).child(ui::settings_column(ui::col().gap_8().child(ui::settings_title(page.label(community), cx)).children(undo).children(sections)));
         let main = div()
             .relative()
             .flex_1()
@@ -378,15 +378,12 @@ impl Waffle {
             Some(url) => ui::avatar(url, 40.).flex_none().into_any_element(),
             None => ui::monogram(&name, 40.).flex_none().into_any_element(),
         };
-        let head = div()
-            .flex()
-            .items_center()
+        let head = ui::row()
             .gap_2p5()
             .px_1p5()
             .pb_3()
-            .min_w_0()
             .child(icon)
-            .child(div().flex_1().min_w_0().flex().flex_col().line_height(ui::LINE_DETAIL).child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(name)).child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("Server settings")));
+            .child(ui::col().flex_1().line_height(ui::LINE_DETAIL).child(ui::line(name).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx))).child(ui::line("Server settings").text_size(ui::TEXT_XS).text_color(palette::muted(cx))));
         let search = ui::search_field("ss-search", &view.search, cx).into_any_element();
         let query = view.search.read(cx).value().to_string();
         let mut out = vec![head.into_any_element(), div().pb_2().child(search).into_any_element()];
@@ -426,7 +423,7 @@ impl Waffle {
                 ui::menu_row(SharedString::from(format!("ss-result-{}", setting.id)), cx)
                     .h_auto()
                     .py_1p5()
-                    .child(div().flex_1().min_w_0().flex().flex_col().child(div().truncate().text_color(palette::strong(cx)).child(setting.title)).child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(place)))
+                    .child(ui::col().flex_1().child(ui::line(setting.title).text_color(palette::strong(cx))).child(ui::line(place).text_size(ui::TEXT_XS).text_color(palette::muted(cx))))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         if let Some(view) = &this.server_settings {
                             view.search.update(cx, |s, cx| s.set_value("", window, cx));
@@ -604,7 +601,7 @@ impl Waffle {
         }));
         vec![
             ui::callout(Notice::Danger, Glyph::Trash, format!("Deleting {name} can't be undone"), "Every channel, message and role goes, for everyone.", cx).into_any_element(),
-            ui::settings_card(cx).p_4().gap_4().child(field).child(div().flex().justify_end().child(delete)).into_any_element(),
+            ui::settings_card(cx).p_4().gap_4().child(field).child(ui::row().items_stretch().justify_end().child(delete)).into_any_element(),
         ]
     }
 
@@ -697,8 +694,8 @@ impl Waffle {
         let save = ui::button("ss-save", Tone::Primary, cx).loading(saving.then_some("Saving")).child("Save changes").on_click(cx.listener(move |this, _, _, cx| this.save_server_settings(closing, cx)));
         let bar = ui::floating_bar("ss-savebar", cx)
             .child(div().text_color(ink).flex_none().child(Icon::new(glyph).size(ui::ICON_XL)))
-            .child(div().flex_1().min_w_0().flex().flex_col().child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title)).children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(px(17.)).text_color(palette::muted(cx)).child(d))))
-            .child(div().flex().gap_2().flex_none().child(reset).child(save));
+            .child(ui::col().flex_1().child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title)).children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(px(17.)).text_color(palette::muted(cx)).child(d))))
+            .child(ui::row().items_stretch().gap_2().flex_none().child(reset).child(save));
         Some(ui::foot_dock(bar, "ss-savebar-in"))
     }
 
@@ -720,7 +717,7 @@ impl Waffle {
             }
             cx.notify();
         }));
-        Some(ui::callout_with(Notice::Info, Glyph::CheckCircle, self.server_settings.as_ref()?.undo.as_ref()?.label.clone(), "", div().flex().gap_1().child(button).child(dismiss), cx).into_any_element())
+        Some(ui::callout_with(Notice::Info, Glyph::CheckCircle, self.server_settings.as_ref()?.undo.as_ref()?.label.clone(), "", ui::row().items_stretch().gap_1().child(button).child(dismiss), cx).into_any_element())
     }
 
     pub(crate) fn offer_undo(&mut self, label: impl Into<String>, call: Call, cx: &mut Context<Self>) {
@@ -767,7 +764,7 @@ impl ImageField {
 fn image_row(id: &'static str, title: &'static str, detail: &'static str, has: bool, open: bool, field: ImageField, line: bool, cx: &mut Context<Waffle>) -> gpui_kit::Stateful<Div> {
     let upload = ui::button(SharedString::from(format!("{id}-upload")), Tone::Secondary, cx).small().disabled(!open).child(Icon::new(Glyph::Upload).size(ui::ICON_MD)).child(if has { "Change" } else { "Upload" }).on_click(cx.listener(move |this, _, _, cx| this.pick_image(field, cx)));
     let remove = has.then(|| ui::button(SharedString::from(format!("{id}-remove")), Tone::Ghost, cx).small().child("Remove").on_click(cx.listener(move |this, _, _, cx| this.edit_server_draft(cx, |d| *field.slot(d) = None))));
-    ui::settings_row(id, line, cx).child(ui::settings_text(title, Some(detail), cx)).child(div().flex().gap_2().flex_none().child(upload).children(remove))
+    ui::settings_row(id, line, cx).child(ui::settings_text(title, Some(detail), cx)).child(ui::row().items_stretch().gap_2().flex_none().child(upload).children(remove))
 }
 
 fn mime(path: &std::path::Path) -> &'static str {
@@ -854,7 +851,7 @@ pub fn snowflake_ms(id: &str) -> i64 {
 
 pub fn sentence_spans(segs: &[audit::Seg], cx: &App) -> Div {
     let (strong, text) = (palette::strong(cx), palette::text(cx));
-    div().flex().flex_wrap().min_w_0().children(segs.iter().map(|s| match s {
+    ui::row().items_stretch().flex_wrap().children(segs.iter().map(|s| match s {
         audit::Seg::Name(n) => div().font_weight(FontWeight::MEDIUM).text_color(strong).child(n.clone()),
         audit::Seg::Text(t) => div().text_color(text).whitespace_nowrap().child(t.clone()),
     }))

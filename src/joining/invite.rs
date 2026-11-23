@@ -150,11 +150,9 @@ impl Waffle {
         let open = view.settings_open;
         let angle = transition("invite-settings-chevron", if open { 90. } else { 0. }, Transition::new(ui::DUR_POP).easing(motion::ease_out()), window, cx);
         let (strong, muted, hover) = (palette::strong(cx), palette::muted(cx), palette::hover(cx));
-        let head = div()
+        let head = ui::row()
             .id("invite-settings")
             .w_full()
-            .flex()
-            .items_center()
             .gap_3()
             .px_3p5()
             .py_3()
@@ -164,11 +162,8 @@ impl Waffle {
             .text_color(strong)
             .child(Icon::new(Glyph::Settings).size(ui::ICON_XL))
             .child(
-                div()
+                ui::col()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
                     .child(div().font_weight(FontWeight::SEMIBOLD).child("Server Settings"))
                     .child(div().text_size(ui::TEXT_DETAIL).text_color(muted).child("You can customize these at any time")),
             )
@@ -183,7 +178,7 @@ impl Waffle {
         let activity = self.account_settings.show_current_game.then(|| {
             ui::toggle_row("invite-activity", "Show your activity status", None, view.show_activity, window, cx).on_click(cx.listener(|this, _, _, cx| this.edit_invite(cx, |v| v.show_activity = !v.show_activity)))
         });
-        let body = div().px_3p5().pt_1().pb_3p5().flex().flex_col().gap_3().children(nickname).child(dms).children(activity);
+        let body = ui::col().px_3p5().pt_1().pb_3p5().gap_3().children(nickname).child(dms).children(activity);
         div().w_full().mt_5().squircle(16.).bg(palette::surface(palette::Level::Group, cx)).text_left().child(head).children(unfold("invite-settings-body", open, body, window, cx))
     }
 }
@@ -203,12 +198,11 @@ fn shell(splash: Option<(&str, &str)>, wide: bool, left: Div, window: &mut Windo
         ui::edge(div().flex_1().relative().bg(fallback), right_corners)
             .child(ui::media(url.to_owned(), right_corners).absolute().inset_0().size_full().object_fit(gpui_kit::ObjectFit::Cover))
     });
-    div()
+    ui::row().items_stretch()
         .id("invite-card")
         .w(px(width))
         // Only beside a splash: the image wants the height. Alone, a card is as tall as what it says.
         .when(two_columns, |card| card.min_h(px(420.)))
-        .flex()
         .squircle(RADIUS_XL)
         .overflow_hidden()
         .bg(palette::surface(palette::Level::Raised, cx))
@@ -226,20 +220,18 @@ fn shell(splash: Option<(&str, &str)>, wide: bool, left: Div, window: &mut Windo
 }
 
 fn column() -> Div {
-    div().min_w_0().pt_10().px_7().pb_7().flex().flex_col().items_center().text_center().gap_1p5()
+    ui::col().pt_10().px_7().pb_7().items_center().text_center().gap_1p5()
 }
 
 fn actions() -> Div {
-    div().w_full().mt_auto().pt_6().flex().flex_col().gap_2()
+    ui::col().w_full().mt_auto().pt_6().gap_2()
 }
 
 // The server's tile, `label`, its name (with the verified mark) and its counts.
 fn heading(invite: &Invite, label: &'static str, cx: &App) -> Div {
     let verified = invite.features.iter().any(|f| f == features::VERIFIED || f == features::PARTNERED);
-    let count = |n: Option<u64>, label: &'static str, dot| n.map(|n| div().flex().items_center().gap_1p5().child(div().size_2().rounded_full().bg(dot)).child(format!("{} {label}", grouped(n))));
-    let name = div()
-        .flex()
-        .items_center()
+    let count = |n: Option<u64>, label: &'static str, dot| n.map(|n| ui::row().gap_1p5().child(div().size_2().rounded_full().bg(dot)).child(format!("{} {label}", grouped(n))));
+    let name = ui::row()
         .justify_center()
         .gap_2()
         .text_size(px(24.))
@@ -253,8 +245,7 @@ fn heading(invite: &Invite, label: &'static str, cx: &App) -> Div {
         .child(div().text_color(palette::muted(cx)).child(label))
         .child(name)
         .child(
-            div()
-                .flex()
+            ui::row().items_stretch()
                 .flex_wrap()
                 .justify_center()
                 .gap_x_3p5()
@@ -274,7 +265,7 @@ fn loading(cx: &App) -> Div {
 }
 
 fn invalid(cx: &mut Context<Waffle>) -> Div {
-    let tile = div().size(px(72.)).mb_2p5().squircle(22.).bg(palette::selected(cx)).flex().items_center().justify_center().text_color(palette::faint(cx)).child(Icon::new(Glyph::Prohibit).size_8());
+    let tile = ui::row().size(px(72.)).mb_2p5().squircle(22.).bg(palette::selected(cx)).justify_center().text_color(palette::faint(cx)).child(Icon::new(Glyph::Prohibit).size_8());
     // Not verified: the button label on Discord's invalid-invite screen.
     let okay = ui::button("invite-okay", Tone::Secondary, cx).large().w_full().child("Okay").on_click(cx.listener(|this, _, _, cx| this.close_invite(cx)));
     column()
@@ -303,11 +294,9 @@ fn unfold(id: &'static str, open: bool, body: Div, window: &mut Window, cx: &mut
         return None;
     }
     Some(
-        div()
+        ui::col()
             .h(px(height))
             .overflow_hidden()
-            .flex()
-            .flex_col()
             .child(body.flex_none())
             .on_children_prepainted(move |bounds, _, cx| {
                 let Some(body) = bounds.first() else { return };

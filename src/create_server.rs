@@ -332,16 +332,16 @@ fn templates_step(form: &CreateServer, limit: ServerLimit, window: &mut Window, 
     let own = card_row("create-server-own", ui::icon_tile(Glyph::Plus, palette::accent(), palette::on_accent()), "Create my own", None, off, cx)
         .when(!off, |r| r.on_click(cx.listener(|this, _, window, cx| this.pick_create_server_template(None, window, cx))));
     let rows: Vec<AnyElement> = TEMPLATES.iter().enumerate().map(|(i, t)| template_row(i, t, form.expanded.contains(&i), off, cx).into_any_element()).collect();
-    let templates = div().flex().flex_col().gap_2().child(section_label("Start from a template", cx)).child(div().flex().flex_col().gap_0p5().children(rows));
+    let templates = ui::col().gap_2().child(section_label("Start from a template", cx)).child(ui::col().gap_0p5().children(rows));
     // The head and the invite footer stay put; the rows scroll once the window is too short for them.
     let room = (f32::from(window.viewport_size().height) * 0.92 - 330.).max(200.);
-    let list = div().id("create-server-templates").flex().flex_col().gap_4().max_h(px(room)).overflow_y_scroll().child(own).child(templates);
+    let list = ui::col().id("create-server-templates").gap_4().max_h(px(room)).overflow_y_scroll().child(own).child(templates);
     let join = ui::button("create-server-join", Tone::Secondary, cx).w_full().disabled(off).child("Join a server").on_click(cx.listener(move |this, _, window, cx| {
         if !off {
             this.create_server_step(Step::Join, window, cx);
         }
     }));
-    let foot = div().flex().flex_col().gap_2p5().items_center().child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Have an invite already?")).child(join);
+    let foot = ui::col().gap_2p5().items_center().child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Have an invite already?")).child(join);
     ui::dialog_body()
         .child(head("Create your server", "Your server is where you and your friends hang out. Make yours and start talking.", cx))
         .children(limit_notice(limit, cx))
@@ -352,20 +352,18 @@ fn templates_step(form: &CreateServer, limit: ServerLimit, window: &mut Window, 
 fn intent_step(cx: &mut Context<Waffle>) -> Div {
     let tile = |glyph, hue| ui::icon_tile(glyph, template_fill(hue), gpui_kit::white());
     let to_customize = |id: &'static str, glyph, hue, label: &'static str, cx: &mut Context<Waffle>| card_row(id, tile(glyph, hue), label, None, false, cx).on_click(cx.listener(|this, _, window, cx| this.create_server_step(Step::Customize, window, cx)));
-    let rows = div()
-        .flex()
-        .flex_col()
+    let rows = ui::col()
         .gap_2()
         .child(to_customize("create-server-intent-friends", Glyph::Heart, 55., "For me and my friends", cx))
         .child(to_customize("create-server-intent-community", Glyph::Users, 205., "For a club or community", cx));
     let skip = ui::button("create-server-skip", Tone::Link, cx).child("skip this question").on_click(cx.listener(|this, _, window, cx| this.create_server_step(Step::Customize, window, cx)));
-    let hint = div().flex().flex_wrap().justify_center().items_center().gap_1().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child("Not sure? You can").child(skip).child("for now.");
+    let hint = ui::row().flex_wrap().justify_center().gap_1().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child("Not sure? You can").child(skip).child("for now.");
     let back = back_button(cx);
     ui::dialog_body()
         .child(head("Tell us more about your server", "In order to help you with your setup, is your new server for just a few friends or a larger community?", cx))
         .child(rows)
         .child(hint)
-        .child(div().flex().child(back))
+        .child(ui::row().items_stretch().child(back))
 }
 
 fn customize_step(form: &CreateServer, cx: &mut Context<Waffle>) -> Div {
@@ -374,10 +372,8 @@ fn customize_step(form: &CreateServer, cx: &mut Context<Waffle>) -> Div {
     let focus = form.name.read(cx).focus_handle(cx);
     let field = ui::text_field("create-server-name", Input::new(&form.name).appearance(false), &focus).error(form.error.is_some());
     let guidelines = ui::button("create-server-guidelines", Tone::Link, cx).text_size(ui::TEXT_XS).child("Community Guidelines").on_click(|_, _, cx| cx.open_url("https://discord.com/guidelines"));
-    let legal = div().flex().flex_wrap().items_center().gap(px(3.)).text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("By creating a server, you agree to Discord's").child(div().flex().items_center().child(guidelines).child("."));
-    let name_group = div()
-        .flex()
-        .flex_col()
+    let legal = ui::row().flex_wrap().gap(px(3.)).text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("By creating a server, you agree to Discord's").child(ui::row().child(guidelines).child("."));
+    let name_group = ui::col()
         .gap_2()
         .child(required_label("Server name", cx))
         .child(field)
@@ -389,10 +385,10 @@ fn customize_step(form: &CreateServer, cx: &mut Context<Waffle>) -> Div {
         .loading(form.busy.then_some("Creating"))
         .child("Create")
         .on_click(cx.listener(|this, _, _, cx| this.submit_create_server(cx)));
-    let actions = div().flex().gap_2().child(back_button(cx).flex_1()).child(create);
+    let actions = ui::row().items_stretch().gap_2().child(back_button(cx).flex_1()).child(create);
     ui::dialog_body()
         .child(head("Customize your server", "Give your new server a personality with a name and an icon. You can always change it later.", cx))
-        .child(div().flex().justify_center().child(upload_tile(form.icon.as_ref().map(|i| i.path.clone()), cx)))
+        .child(ui::row().items_stretch().justify_center().child(upload_tile(form.icon.as_ref().map(|i| i.path.clone()), cx)))
         .child(name_group)
         .child(actions)
 }
@@ -400,9 +396,9 @@ fn customize_step(form: &CreateServer, cx: &mut Context<Waffle>) -> Div {
 fn join_step(form: &CreateServer, limit: ServerLimit, cx: &mut Context<Waffle>) -> Div {
     let focus = form.invite.read(cx).focus_handle(cx);
     let field = ui::text_field("create-server-invite", Input::new(&form.invite).appearance(false), &focus).error(form.error.is_some());
-    let invite_group = div().flex().flex_col().gap_2().child(required_label("Invite link", cx)).child(field).children(form.error.clone().map(|e| ui::field_error(e, cx)));
+    let invite_group = ui::col().gap_2().child(required_label("Invite link", cx)).child(field).children(form.error.clone().map(|e| ui::field_error(e, cx)));
     let examples: Vec<AnyElement> = INVITE_EXAMPLES.iter().enumerate().map(|(i, example)| invite_example(i, example, &form.invite, cx).into_any_element()).collect();
-    let examples = div().flex().flex_col().gap_1p5().child(section_label("Invites should look like", cx)).child(div().flex().flex_col().gap_0p5().children(examples));
+    let examples = ui::col().gap_1p5().child(section_label("Invites should look like", cx)).child(ui::col().gap_0p5().children(examples));
     let discovery = card_row("create-server-discovery", ui::icon_tile(Glyph::Search, template_fill(155.), gpui_kit::white()), "Don't have an invite?", Some("Check out Discoverable communities in Server Discovery."), false, cx)
         .on_click(|_, _, cx| cx.open_url("https://discord.com/servers"));
     let join = ui::button("create-server-join-submit", Tone::Primary, cx)
@@ -411,7 +407,7 @@ fn join_step(form: &CreateServer, limit: ServerLimit, cx: &mut Context<Waffle>) 
         .loading(form.busy.then_some("Joining"))
         .child("Join server")
         .on_click(cx.listener(|this, _, _, cx| this.submit_join_server(cx)));
-    let actions = div().flex().gap_2().child(back_button(cx).flex_1()).child(join);
+    let actions = ui::row().items_stretch().gap_2().child(back_button(cx).flex_1()).child(join);
     ui::dialog_body()
         .child(head("Join a server", "Enter an invite below to join an existing server", cx))
         .children(limit_notice(limit, cx))
@@ -423,16 +419,12 @@ fn join_step(form: &CreateServer, limit: ServerLimit, cx: &mut Context<Waffle>) 
 
 // The dialog's title, its line under it and the close button.
 fn head(title: &'static str, subtitle: &'static str, cx: &mut Context<Waffle>) -> impl IntoElement {
-    div()
-        .flex()
+    ui::row()
         .items_start()
         .gap_3()
         .child(
-            div()
+            ui::col()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .gap_1()
                 .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
                 .child(div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(palette::muted(cx)).child(subtitle)),
@@ -445,7 +437,7 @@ fn section_label(text: &'static str, cx: &App) -> impl IntoElement {
 }
 
 fn required_label(text: &'static str, cx: &App) -> impl IntoElement {
-    div().flex().gap_1().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(text).child(div().text_color(palette::danger_ink(cx)).child("*"))
+    ui::row().items_stretch().gap_1().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(text).child(div().text_color(palette::danger_ink(cx)).child("*"))
 }
 
 // Near the cap a faint count; at it, the danger callout that explains why everything below is off.
@@ -472,18 +464,13 @@ fn template_fill(hue: f32) -> Hsla {
 // A bordered row leading to the next step: the tile, the label (and a line under it), a chevron.
 fn card_row(id: &'static str, tile: impl IntoElement, label: &'static str, detail: Option<&'static str>, off: bool, cx: &App) -> Stateful<Div> {
     let hover = palette::hover(cx);
-    let text = div()
+    let text = ui::col()
         .flex_1()
-        .min_w_0()
-        .flex()
-        .flex_col()
         .gap_0p5()
         .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(label))
         .children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::muted(cx)).child(d)));
-    div()
+    ui::row()
         .id(id)
-        .flex()
-        .items_center()
         .gap_3()
         .p_3()
         .squircle(ui::RADIUS_LG)
@@ -504,9 +491,8 @@ fn template_row(i: usize, template: &Template, expanded: bool, off: bool, cx: &m
     let long = chans.len() > CHIPS_SHOWN;
     let group: SharedString = format!("create-server-template-{i}").into();
     let clamped = long && !expanded;
-    let chips = div()
+    let chips = ui::row().items_stretch()
         .relative()
-        .flex()
         .flex_wrap()
         .gap_x_2p5()
         .gap_y_1()
@@ -523,17 +509,16 @@ fn template_row(i: usize, template: &Template, expanded: bool, off: bool, cx: &m
             this.toggle_template_channels(i, cx);
         }))
     });
-    div()
+    ui::row()
         .id(("create-server-template", i))
         .group(group)
-        .flex()
         .items_start()
         .gap_3()
         .px_3()
         .py_2p5()
         .squircle(ui::RADIUS_LG)
         .child(ui::icon_tile(template.glyph, template_fill(template.hue), gpui_kit::white()))
-        .child(div().flex_1().min_w_0().pt_0p5().flex().flex_col().items_start().gap_1().child(div().font_weight(FontWeight::MEDIUM).text_color(strong).child(template.label)).child(chips).children(more))
+        .child(ui::col().flex_1().pt_0p5().items_start().gap_1().child(div().font_weight(FontWeight::MEDIUM).text_color(strong).child(template.label)).child(chips).children(more))
         .child(div().flex_none().mt_2p5().text_color(faint).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)))
         .when(off, |r| r.opacity(0.5).cursor_not_allowed())
         .when(!off, |r| r.cursor_pointer().hover(move |s| s.bg(hover)).on_click(cx.listener(move |this, _, window, cx| this.pick_create_server_template(Some(i), window, cx))))
@@ -552,7 +537,7 @@ fn channel_chips(template: &Template) -> Vec<(Glyph, &'static str)> {
 }
 
 fn channel_chip(glyph: Glyph, name: &'static str, faint: Hsla) -> impl IntoElement {
-    div().flex().items_center().gap(px(3.)).whitespace_nowrap().child(div().text_color(faint).child(Icon::new(glyph).size(ui::ICON_XS))).child(name)
+    ui::row().gap(px(3.)).whitespace_nowrap().child(div().text_color(faint).child(Icon::new(glyph).size(ui::ICON_XS))).child(name)
 }
 
 // The clamped list's last line dissolving into its row: the dialog's surface, or the surface under the row's
@@ -569,10 +554,8 @@ fn upload_tile(picked: Option<PathBuf>, cx: &mut Context<Waffle>) -> impl IntoEl
     let radius = 24.;
     let face = match picked {
         Some(path) => img(path).size_full().squircle(radius).into_any_element(),
-        None => div()
+        None => ui::col()
             .size_full()
-            .flex()
-            .flex_col()
             .items_center()
             .justify_center()
             .gap_0p5()
@@ -585,7 +568,7 @@ fn upload_tile(picked: Option<PathBuf>, cx: &mut Context<Waffle>) -> impl IntoEl
             .child(div().text_size(ui::TEXT_XXS).font_weight(FontWeight::BOLD).child("UPLOAD"))
             .into_any_element(),
     };
-    let badge = div()
+    let badge = ui::row()
         .absolute()
         .top_neg_1()
         .right_neg_1()
@@ -593,8 +576,6 @@ fn upload_tile(picked: Option<PathBuf>, cx: &mut Context<Waffle>) -> impl IntoEl
         .rounded_full()
         .bg(accent)
         .text_color(palette::on_accent())
-        .flex()
-        .items_center()
         .justify_center()
         .child(Icon::new(Glyph::Plus).size(ui::ICON_SM));
     div()

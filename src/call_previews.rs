@@ -218,15 +218,13 @@ impl Waffle {
                 .with_animation(SharedString::from(format!("call-preview-in-{}", p.message.id)), Animation::new(ui::DUR_PANEL), |card, t| card.opacity(t).left(px(12. * (1. - crate::motion::back_out(t)))))
                 .into_any_element()
         });
-        let stack = div()
+        let stack = ui::col()
             .id("call-previews")
             .occlude()
             .absolute()
             .top(px(TOP))
             .right(px(RIGHT))
             .w(px(WIDTH))
-            .flex()
-            .flex_col()
             .gap(px(GAP))
             .children(leaving)
             .children(cards)
@@ -263,9 +261,9 @@ fn preview_card(preview: &Preview, ctx: &std::rc::Rc<crate::chat::RowContext>) -
     let text = crate::chat::plain_text(&message.content, ctx);
     let body = (!text.trim().is_empty()).then(|| text.into_any_element()).or_else(|| {
         let (glyph, label) = crate::forward::attachment_summary(message)?;
-        Some(div().flex().items_center().gap_1p5().text_color(stage::muted()).child(Icon::new(glyph).size(ui::ICON_MD)).child(label).into_any_element())
+        Some(ui::row().gap_1p5().text_color(stage::muted()).child(Icon::new(glyph).size(ui::ICON_MD)).child(label).into_any_element())
     });
-    div()
+    ui::row().items_stretch()
         .id(SharedString::from(format!("call-preview-{}", message.id)))
         .relative()
         .w_full()
@@ -274,17 +272,13 @@ fn preview_card(preview: &Preview, ctx: &std::rc::Rc<crate::chat::RowContext>) -
         .squircle(RADIUS_MD)
         .bg(stage::overlay())
         .shadow(shadows)
-        .flex()
         .gap_2()
         .child(ui::avatar(message.author.avatar.clone(), AVATAR))
         .child(
-            div()
+            ui::col()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .gap_0p5()
-                .child(div().truncate().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(message.author.name.clone()))
+                .child(ui::line(message.author.name.clone()).text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()))
                 .children(body.map(|b| div().text_size(ui::TEXT_SM).text_color(stage::text()).line_clamp(2).child(b))),
         )
 }

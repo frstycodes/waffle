@@ -1070,13 +1070,10 @@ impl Waffle {
         let me = (!searching).then(|| self.me.clone()).flatten().map(|me| {
             let sidebar = crate::material::sidebar_fill(cx);
             let avatar = ui::badged(ui::avatar(me.avatar.clone(), ui::AVATAR_LG), ui::AVATAR_LG, ui::Shape::Round, sidebar).status(Some(self.my_status));
-            let text = div()
+            let text = ui::col()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .line_height(ui::LINE_DETAIL)
-                .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(me.name.clone()))
+                .child(ui::line(me.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
                 .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Page::Account.label()));
             ui::menu_row("nav-Account", cx).toggled(view.page == Page::Account, cx).h_auto().py_1p5().child(avatar).child(text).on_click(cx.listener(|this, _, window, cx| this.open_page(Page::Account, window, cx)))
         });
@@ -1126,20 +1123,17 @@ impl Waffle {
 
     // Log out asks in place: what happens, then Stay or Log out.
     fn log_out_ask(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let buttons = div()
-            .flex()
+        let buttons = ui::row().items_stretch()
             .gap_2()
             .child(ui::button("log-out-stay", Tone::Secondary, cx).small().flex_1().child("Stay").on_click(cx.listener(|this, _, _, cx| this.set_ask(None, cx))))
             .child(ui::button("log-out-yes", Tone::Danger, cx).small().flex_1().child("Log out").on_click(cx.listener(|this, _, window, cx| this.sign_out(window, cx))));
         reveal(
             "log-out-ask",
-            div()
+            ui::col()
                 .my_1()
                 .p_2p5()
                 .squircle(ui::RADIUS_MD)
                 .bg(palette::danger().opacity(0.1))
-                .flex()
-                .flex_col()
                 .gap_2()
                 .child(
                     div()
@@ -1172,14 +1166,13 @@ impl Waffle {
         let banner_button = ui::button("change-banner", Tone::OnMedia, cx).small().child("Change banner").on_click(cx.listener(|this, _, _, cx| this.pick_profile_image(profile::ProfileImage::Banner, cx)));
         let banner = div().relative().h(px(120.)).child(banner_art).child(div().absolute().top_3().right_3().child(banner_button));
         let avatar = ui::badged(ui::avatar(me.avatar.clone(), PROFILE_AVATAR).border(px(6.)).border_color(fill), PROFILE_AVATAR, ui::Shape::Round, fill).mark(ui::Spot::BottomRight, ui::Badge::status(self.my_status, PROFILE_STATUS));
-        let identity = div()
+        let identity = ui::row()
             .mt(px(-42.))
             .px_2p5()
-            .flex()
             .items_end()
             .gap_4()
             .child(avatar)
-            .child(div().flex_1().min_w_0().pb_3().truncate().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(me.name.clone()))
+            .child(ui::line(me.name.clone()).flex_1().pb_3().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
             .child(div().flex_none().pb_2p5().child(ui::button("change-avatar", Tone::Secondary, cx).small().child("Change avatar").on_click(cx.listener(|this, _, _, cx| this.pick_profile_image(profile::ProfileImage::Avatar, cx)))));
         let copied = self.settings.as_ref().is_some_and(|s| s.copied);
         let id = me.id.clone();
@@ -1190,16 +1183,14 @@ impl Waffle {
             .child(if copied { "Copied" } else { "Copy ID" })
             .on_click(cx.listener(move |this, _, _, cx| this.copy_user_id(&id, cx)));
         let mut lines = Hairlines::default();
-        let fields = div()
+        let fields = ui::col()
             .pt_3()
             .px_1()
             .pb_1()
-            .flex()
-            .flex_col()
             .child(self.profile_row("acct-name", profile::ProfileField::DisplayName, "Display name", me.name.clone().into(), lines.next(), cx))
             .child(self.profile_row("acct-username", profile::ProfileField::Username, "Username", self.my_account.username.clone().into(), lines.next(), cx))
             .child(ui::settings_row("acct-id", lines.next(), cx).child(field_text("User ID", me.id.clone(), cx)).child(copy));
-        let card = div().squircle(ui::RADIUS_XL).bg(fill).flex().flex_col().child(banner).child(identity).child(fields);
+        let card = ui::col().squircle(ui::RADIUS_XL).bg(fill).child(banner).child(identity).child(fields);
         vec![Section::keyed("Account info", ui::settings_group("Account info", cx).child(card))]
     }
 
@@ -1271,10 +1262,8 @@ impl Waffle {
                         .child(preview),
                 )
                 .child(
-                    div()
+                    ui::col()
                         .px_1()
-                        .flex()
-                        .flex_col()
                         .gap_px()
                         .child(label)
                         .children(note.map(|n| div().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child(n))),
@@ -1284,8 +1273,7 @@ impl Waffle {
                     palette::sync(window, cx);
                 }))
         };
-        let picks = div()
-            .flex()
+        let picks = ui::row().items_stretch()
             .gap_3()
             .child(pick("theme-light", ThemePref::Light, mini_window(&MINI_LIGHT).into_any_element(), "Light", None, cx))
             .child(pick("theme-dark", ThemePref::Dark, mini_window(&MINI_DARK).into_any_element(), "Midnight", None, cx))
@@ -1350,7 +1338,7 @@ impl Waffle {
                     icon.apply();
                 }))
         });
-        div().flex().flex_wrap().gap_2().children(tiles).into_any_element()
+        ui::row().items_stretch().flex_wrap().gap_2().children(tiles).into_any_element()
     }
 
     fn voice_page(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Vec<Section> {
@@ -1397,9 +1385,7 @@ impl Waffle {
         let advanced_rows = advanced.then(|| reveal("voice-advanced-body", self.advanced_voice_rows(custom, window, cx)));
         out.push(Section::new(ui::settings_card(cx).child(expander).children(advanced_rows)));
 
-        let camera = div()
-            .flex()
-            .flex_col()
+        let camera = ui::col()
             .gap_1p5()
             .child(field_label("Camera", cx))
             .child(self.device_select(Select::Camera, Glyph::Video, &cameras, prefs.camera.as_deref(), 40., cx));
@@ -1418,33 +1404,31 @@ impl Waffle {
         // The mic test's "isn't detecting any input", or in a call the No audio detected warning.
         let in_call_silent = prefs.silence_warning && self.call.as_ref().is_some_and(|c| c.session.input_detected() == Some(false));
         let no_input = if testing { view.mic_input == Some(false) } else { in_call_silent };
-        let column = |label: &'static str, field: AnyElement, cx: &App| div().flex_1().min_w_0().flex().flex_col().gap_1p5().child(field_label(label, cx)).child(field);
+        let column = |label: &'static str, field: AnyElement, cx: &App| ui::col().flex_1().gap_1p5().child(field_label(label, cx)).child(field);
         let percent = |v: f32| format!("{}%", (v * 100.).round() as i32);
-        let devices = div()
-            .flex()
+        let devices = ui::row().items_stretch()
             .gap_6()
             .child(column("Microphone", self.device_select(Select::Microphone, Glyph::Mic, inputs, prefs.input_device.as_deref(), 40., cx), cx))
             .child(column("Speaker", self.device_select(Select::Speaker, Glyph::Headphones, outputs, prefs.output_device.as_deref(), 40., cx), cx));
-        let volumes = div()
-            .flex()
+        let volumes = ui::row().items_stretch()
             .gap_6()
             .child(div().flex_1().min_w_0().child(self.volume("Microphone volume", &percent(prefs.input_volume), Slider::InputVolume, cx)))
             .child(div().flex_1().min_w_0().child(self.volume("Speaker volume", &percent(prefs.output_volume), Slider::OutputVolume, cx)));
         // Discord's own name for it; it sits under the speaker it plays through.
         let soundboard = format!("{}%", crate::soundboard::perceptual(prefs.soundboard_volume).round() as i32);
-        let soundboard = div().flex().gap_6().child(div().flex_1()).child(div().flex_1().min_w_0().child(self.volume("Soundboard Volume", &soundboard, Slider::SoundboardVolume, cx)));
+        let soundboard = ui::row().items_stretch().gap_6().child(div().flex_1()).child(div().flex_1().min_w_0().child(self.volume("Soundboard Volume", &soundboard, Slider::SoundboardVolume, cx)));
         let test_button = ui::button("mic-test", Tone::Primary, cx)
             .min_w(px(112.))
             .child(Icon::new(if testing { Glyph::Stop } else { Glyph::Mic }).size(ui::ICON_MD))
             .child(if testing { "Stop testing" } else { "Test mic" })
             .on_click(cx.listener(|this, _, _, cx| this.toggle_mic_test(cx)));
-        let mic_test = div().flex().items_center().gap_4().child(test_button).child(mic_wave(self.mic_level, testing, cx));
+        let mic_test = ui::row().gap_4().child(test_button).child(mic_wave(self.mic_level, testing, cx));
         let speaker = outputs.iter().find(|(id, _)| Some(id.as_str()) == prefs.output_device.as_deref()).map_or("your speaker", |(_, name)| name.as_str());
         let mic = inputs.iter().find(|(id, _)| Some(id.as_str()) == prefs.input_device.as_deref()).map_or("your microphone", |(_, name)| name.as_str());
         let notice = no_input.then(|| self.no_input_notice(mic, cx));
         ui::settings_group("Devices", cx).child(
             card_pad(cx)
-                .child(div().flex().flex_col().gap_4().child(devices).child(volumes).child(soundboard))
+                .child(ui::col().gap_4().child(devices).child(volumes).child(soundboard))
                 .child(mic_test)
                 .children(notice)
                 .child(ui::settings_caption(format!("Talk normally. You'll hear yourself back through {speaker}."), cx).px_0()),
@@ -1453,9 +1437,8 @@ impl Waffle {
 
     // Names the device and every likely fix, with the fixes one click away.
     fn no_input_notice(&self, mic: &str, cx: &mut Context<Self>) -> Div {
-        let actions = div()
+        let actions = ui::row().items_stretch()
             .mt_2()
-            .flex()
             .flex_wrap()
             .gap_2()
             .child(ui::button("nomic-pick", Tone::Secondary, cx).small().child("Choose another input").on_click(cx.listener(|this, _, _, cx| {
@@ -1478,13 +1461,10 @@ impl Waffle {
     }
 
     fn volume(&self, label: &'static str, value: &str, slider: Slider, cx: &mut Context<Self>) -> Div {
-        div()
-            .flex()
-            .flex_col()
+        ui::col()
             .gap_2()
             .child(
-                div()
-                    .flex()
+                ui::row().items_stretch()
                     .justify_between()
                     .text_size(ui::TEXT_XS)
                     .font_weight(FontWeight::MEDIUM)
@@ -1560,7 +1540,7 @@ impl Waffle {
             cx.notify();
         }));
         let mut body = Hairlines(true);
-        let rest = more.then(|| reveal("more-sounds-body", div().flex().flex_col().children(MORE_CUES.iter().map(|&(id, label, cue)| self.cue_row(id, label, cue, body.next(), window, cx)))));
+        let rest = more.then(|| reveal("more-sounds-body", ui::col().children(MORE_CUES.iter().map(|&(id, label, cue)| self.cue_row(id, label, cue, body.next(), window, cx)))));
         ui::settings_group("Sounds", cx).child(ui::settings_card(cx).children(first).child(expander).children(rest)).child(ui::settings_caption("Message and mention sounds are under Notifications.", cx))
     }
 
@@ -1574,20 +1554,17 @@ impl Waffle {
         let ask = asking.then(|| {
             reveal(
                 "reset-ask",
-                div()
+                ui::row()
                     .w_full()
                     .py_2p5()
                     .px_3()
                     .squircle(ui::RADIUS_MD)
                     .bg(palette::danger().opacity(0.1))
-                    .flex()
                     .flex_wrap()
-                    .items_center()
                     .gap_2()
                     .child(div().flex_1().min_w(px(200.)).font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child("Reset every voice and video setting to its default?"))
                     .child(
-                        div()
-                            .flex()
+                        ui::row().items_stretch()
                             .gap_2()
                             .child(ui::button("reset-keep", Tone::Secondary, cx).small().child("Keep my settings").on_click(cx.listener(|this, _, _, cx| this.set_ask(None, cx))))
                             .child(ui::button("reset-yes", Tone::Danger, cx).small().child("Reset voice settings").on_click(cx.listener(|this, _, _, cx| this.reset_voice(cx)))),
@@ -1595,9 +1572,7 @@ impl Waffle {
             )
         });
         let done = done.then(|| {
-            div()
-                .flex()
-                .items_center()
+            ui::row()
                 .gap_1p5()
                 .font_weight(FontWeight::NORMAL)
                 .text_color(palette::positive_ink(cx))
@@ -1642,11 +1617,10 @@ impl Waffle {
     }
 
     fn keybinds_page(&self, cx: &mut Context<Self>) -> Vec<Section> {
-        let header = div()
-            .flex()
+        let header = ui::row()
             .items_start()
             .gap_4()
-            .child(div().flex_1().min_w_0().flex().flex_col().gap_1().child(ui::settings_title("Keybinds", cx)).child(div().text_color(palette::muted(cx)).child("Shortcuts that work everywhere, even while another app is in front.")))
+            .child(ui::col().flex_1().gap_1().child(ui::settings_title("Keybinds", cx)).child(div().text_color(palette::muted(cx)).child("Shortcuts that work everywhere, even while another app is in front.")))
             .child(ui::button("add-keybind", Tone::Primary, cx).child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("Add a keybind").on_click(cx.listener(|this, _, _, cx| {
                 this.update_prefs(cx, |p| p.keybinds.push(Keybind { action: Action::Unassigned, keys: None }));
                 let index = this.prefs.keybinds.len() - 1;
@@ -1671,7 +1645,7 @@ impl Waffle {
             Glyph::Keyboard,
             "Keybinds need Input Monitoring",
             "Turn on Waffle in System Settings, under Privacy & Security, Input Monitoring. Already on? An update can leave it stale: remove Waffle with \u{2212} and add it again. Keybinds start working as soon as you do.",
-            div().mt_2().flex().child(open),
+            ui::row().items_stretch().mt_2().child(open),
             cx,
         ))
     }
@@ -1687,13 +1661,11 @@ impl Waffle {
         let action = self.select_field(Select::Action(index), None, &actions, &format!("{:?}", keybind.action), sentence(keybind.action.label()).into(), 36., cx);
         let (danger, hover, press) = (palette::danger_ink(cx), palette::hover(cx), palette::press(cx));
         // The design's .iconbtn.rm: ui::icon_button, but hovering to the danger ink.
-        let remove = div()
+        let remove = ui::row()
             .id(SharedString::from(format!("keybind-delete-{index}")))
             .size_8()
             .flex_none()
             .squircle(ui::RADIUS_SM)
-            .flex()
-            .items_center()
             .justify_center()
             .cursor_pointer()
             .text_color(palette::muted(cx))
@@ -1728,9 +1700,7 @@ impl Waffle {
         let keys = self.prefs.keybinds.get(index).and_then(|k| k.keys.clone());
         let unknown = keys.as_ref().is_some_and(|k| self.keybind_errors.contains(k));
         let value = match (&keys, recording) {
-            (_, true) => div()
-                .flex()
-                .items_center()
+            (_, true) => ui::row()
                 .gap_1p5()
                 .text_color(palette::muted(cx))
                 .child(div().text_color(palette::accent_ink(cx)).child(Icon::new(Glyph::Record).size(ui::ICON_SM)))
@@ -1751,18 +1721,15 @@ impl Waffle {
         } else {
             "Record keybind"
         };
-        div()
+        ui::row()
             .relative()
             .h_10()
-            .min_w_0()
             .pl(px(11.))
             .pr_1()
             .squircle(ui::RADIUS_MD)
             .bg(palette::surface(Level::Page, cx))
             .border_1()
             .border_color(border)
-            .flex()
-            .items_center()
             .gap_2()
             .children(recording.then(|| pulse_ring(SharedString::from(format!("record-ring-{index}")), cx)))
             .child(div().flex_1().min_w_0().p_px().overflow_hidden().whitespace_nowrap().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child(value))
@@ -1843,7 +1810,7 @@ impl Waffle {
             )
             .into_any_element(),
         );
-        div().flex().flex_col().children(rows)
+        ui::col().children(rows)
     }
 
     // Three options fit in a row, so noise suppression is a segmented control. Krisp is licensed to
@@ -1856,9 +1823,7 @@ impl Waffle {
         };
         let degraded = selected == 2 && self.call.as_ref().is_some_and(|c| c.session.noise_suppression_degraded());
         let detail = if degraded {
-            div()
-                .flex()
-                .items_center()
+            ui::row()
                 .gap_1()
                 .text_size(ui::TEXT_XS)
                 .font_weight(FontWeight::NORMAL)
@@ -1893,15 +1858,13 @@ impl Waffle {
     fn cue_row(&self, id: &'static str, title: &'static str, cue: Cue, line: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let on = !self.prefs.silenced_cues.contains(&cue);
         let (selected, press) = (palette::selected(cx), palette::press(cx));
-        let play = div()
+        let play = ui::row()
             .id(SharedString::from(format!("preview-{id}")))
             .size_9()
             .flex_none()
             .squircle(ui::RADIUS_MD)
             .bg(selected)
             .text_color(palette::strong(cx))
-            .flex()
-            .items_center()
             .justify_center()
             .cursor_pointer()
             .hover(move |s| s.bg(press))
@@ -1924,7 +1887,7 @@ impl Waffle {
         ui::settings_row(SharedString::from(format!("cue-{id}")), line, cx)
             .min_h(px(52.))
             .child(ui::settings_text(title, None::<&str>, cx))
-            .child(div().flex().items_center().gap_2().flex_none().child(play).child(switch))
+            .child(ui::row().gap_2().flex_none().child(play).child(switch))
             .into_any_element()
     }
 
@@ -1934,14 +1897,11 @@ impl Waffle {
         let text = if enabled {
             ui::settings_text(title, detail, cx)
         } else {
-            div()
+            ui::col()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .gap_0p5()
-                .child(div().truncate().font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child(title))
-                .child(div().flex().items_center().gap_1().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Icon::new(Glyph::Info).size(ui::ICON_SM)).children(detail))
+                .child(ui::line(title).font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)))
+                .child(ui::row().gap_1().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Icon::new(Glyph::Info).size(ui::ICON_SM)).children(detail))
         };
         let switch = ui::switch_live(id, on, window, cx);
         let row = ui::settings_row(SharedString::from(format!("row-{id}")), line, cx).child(text);
@@ -2171,16 +2131,14 @@ fn nav_item(page: Page, selected: bool, cx: &mut Context<Waffle>) -> impl IntoEl
 fn sub_items(page: Page, current: usize, anchors: &[usize], cx: &mut Context<Waffle>) -> impl IntoElement {
     let (strong, muted, hover) = (palette::strong(cx), palette::muted(cx), palette::hover(cx));
     let anchors = anchors.to_vec();
-    div().pt_0p5().pb_1().flex().flex_col().gap_px().children(page.sections().iter().enumerate().map(move |(i, name)| {
+    ui::col().pt_0p5().pb_1().gap_px().children(page.sections().iter().enumerate().map(move |(i, name)| {
         let item = anchors.get(i).copied().unwrap_or(0);
-        div()
+        ui::row()
             .id(SharedString::from(format!("sub-{name}")))
             .min_h_7()
             .pl(px(38.))
             .pr_2p5()
             .squircle(ui::RADIUS_SM)
-            .flex()
-            .items_center()
             .cursor_pointer()
             .font_weight(FontWeight::NORMAL)
             .text_color(if i == current { strong } else { muted })
@@ -2212,11 +2170,8 @@ fn stack_row(id: &'static str, line: bool, cx: &App) -> Stateful<Div> {
 
 // A label over its value, as Account info lists them.
 pub(super) fn field_text(label: &'static str, value: impl Into<SharedString>, cx: &App) -> Div {
-    div()
+    ui::col()
         .flex_1()
-        .min_w_0()
-        .flex()
-        .flex_col()
         .gap_0p5()
         .child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(label))
         .child(div().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child(value.into()))
@@ -2228,11 +2183,11 @@ pub(super) fn field_label(text: &'static str, cx: &App) -> Div {
 
 // A title and description with the value it sets on the right.
 fn numbered(title: &'static str, detail: &'static str, value: &str, cx: &App) -> Div {
-    div().flex().items_start().justify_between().gap_4().child(ui::settings_text(title, Some(detail), cx)).child(div().whitespace_nowrap().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(value.to_owned()))
+    ui::row().items_start().justify_between().gap_4().child(ui::settings_text(title, Some(detail), cx)).child(div().whitespace_nowrap().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(value.to_owned()))
 }
 
 fn scale(stops: &[&'static str], cx: &App) -> Div {
-    div().flex().justify_between().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).children(stops.iter().copied())
+    ui::row().items_stretch().justify_between().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).children(stops.iter().copied())
 }
 
 fn radio_row(id: &'static str, line: bool, title: &'static str, detail: &'static str, on: bool, cx: &App) -> Stateful<Div> {
@@ -2243,23 +2198,20 @@ fn radio_row(id: &'static str, line: bool, title: &'static str, detail: &'static
 #[allow(clippy::too_many_arguments)]
 fn expander_row(id: &'static str, line: bool, title: &str, summary: &str, open: bool, window: &mut Window, cx: &mut App) -> Stateful<Div> {
     let angle = turn(format!("chevron-{id}"), if open { 90. } else { 0. }, window, cx);
-    let chev = div()
+    let chev = ui::row()
         .size_8()
         .flex_none()
         .squircle(ui::RADIUS_SM)
         .bg(palette::selected(cx))
         .text_color(palette::strong(cx))
-        .flex()
-        .items_center()
         .justify_center()
         .child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD).rotate(angle));
     ui::settings_choice(ui::settings_row(id, line, cx), cx).child(ui::settings_text(title.to_owned(), (!open).then(|| summary.to_owned()), cx)).child(chev)
 }
 
 fn error_line(text: &'static str, cx: &App) -> Div {
-    div()
+    ui::row()
         .px_0p5()
-        .flex()
         .items_start()
         .gap_1p5()
         .text_size(ui::TEXT_XS)
@@ -2282,7 +2234,7 @@ fn mic_wave(level_db: f32, live: bool, cx: &App) -> Div {
     // Quieter than a whisper reads as silence, so the wave stays flat in a quiet room.
     let voice = ((level - 0.35) / 0.55).clamp(0., 1.);
     let (rest, on) = (palette::line_strong(cx), palette::accent());
-    div().flex_1().min_w_0().h_10().flex().items_center().gap(px(3.)).children((0..BARS).map(move |i| {
+    ui::row().flex_1().h_10().gap(px(3.)).children((0..BARS).map(move |i| {
         let shape = (i as f32 / BARS as f32 * std::f32::consts::PI).sin();
         let jitter = 0.6 + 0.6 * ((i as f32 * 12.9898 + level_db * 78.233).sin() * 0.5 + 0.5);
         let l = if live { (voice * shape * jitter).clamp(0.1, 1.) } else { 0.1 };
@@ -2345,7 +2297,7 @@ fn inset_ring(color: Hsla, width: f32) -> BoxShadow {
 
 // Keycaps for a recorded binding, with the platform's own key names.
 pub(crate) fn key_caps(keys: &str, cx: &App) -> Div {
-    div().flex().items_center().gap_1().children(keys.split('+').map(|key| ui::kbd(key_name(key), cx)))
+    ui::row().gap_1().children(keys.split('+').map(|key| ui::kbd(key_name(key), cx)))
 }
 
 // ⌘ ⇧ ⌥ ⌃ on macOS, printed names elsewhere; arrows as arrows, letters upper-case.

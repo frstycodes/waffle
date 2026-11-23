@@ -115,28 +115,25 @@ pub(crate) fn dm_start_header(start: &DmStart, this: WeakEntity<Waffle>, cx: &Ap
         (DmFace::One(url), true) => decorated_avatar(url, None, FACE, start.status, page),
         (face, _) => ui::dm_face(face, FACE, page),
     };
-    div()
+    ui::col()
         .w_full()
-        .min_w_0()
         .px_4()
         .pt_2()
         .pb_4()
-        .flex()
-        .flex_col()
         .items_start()
         .gap_1()
         .child(div().mb_2().child(face))
-        .child(div().max_w_full().truncate().text_size(ui::TEXT_XL).line_height(relative(1.2)).font_weight(FontWeight::BOLD).text_color(palette::strong(cx)).child(start.name.clone()))
-        .children(start.subtitle.clone().map(|s| div().max_w_full().truncate().text_size(ui::TEXT_MD).text_color(palette::muted(cx)).child(s)))
+        .child(ui::line(start.name.clone()).max_w_full().text_size(ui::TEXT_XL).line_height(relative(1.2)).font_weight(FontWeight::BOLD).text_color(palette::strong(cx)))
+        .children(start.subtitle.clone().map(|s| ui::line(s).max_w_full().text_size(ui::TEXT_MD).text_color(palette::muted(cx))))
         .child(div().mt_1p5().text_size(ui::TEXT_MD).text_color(palette::muted(cx)).child(emphasised(&start.line, palette::strong(cx))))
-        .children(start.mutual.clone().map(|m| div().mt_0p5().flex().items_center().gap_1p5().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::Users).size(ui::ICON_MD)).child(m)))
+        .children(start.mutual.clone().map(|m| ui::row().mt_0p5().gap_1p5().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::Users).size(ui::ICON_MD)).child(m)))
         .children(actions(start, this, cx))
         .into_any_element()
 }
 
 fn actions(start: &DmStart, this: WeakEntity<Waffle>, cx: &App) -> Option<AnyElement> {
     let person = start.person.clone()?;
-    let row = div().mt_3().flex().flex_wrap().items_center().gap_2();
+    let row = ui::row().mt_3().flex_wrap().gap_2();
     let act = move |id: &'static str, tone: Tone, label: &'static str, glyph: Option<Glyph>, run: fn(&mut Waffle, User, &mut Context<Waffle>)| {
         let (this, person) = (this.clone(), person.clone());
         ui::button(id, tone, cx)
@@ -149,7 +146,7 @@ fn actions(start: &DmStart, this: WeakEntity<Waffle>, cx: &App) -> Option<AnyEle
             })
     };
     let state = |glyph: Glyph, label: &'static str| {
-        div().flex().items_center().gap_1p5().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(glyph).size(ui::ICON_LG).text_color(palette::positive_ink(cx))).child(label)
+        ui::row().gap_1p5().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(glyph).size(ui::ICON_LG).text_color(palette::positive_ink(cx))).child(label)
     };
     let block = || act("dm-start-block", Tone::Ghost, "Block", None, |this, user, cx| this.ask_block(user, cx));
     let row = match start.next {

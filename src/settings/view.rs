@@ -69,7 +69,7 @@ impl Waffle {
     // A choice fills its card with one radio row per option.
     fn choice_rows(&self, setting: &'static Setting, choice: Choice, cx: &mut Context<Self>) -> impl IntoElement {
         let current = self.choice_value(choice);
-        div().id(setting.id).flex().flex_col().children(choice.options().iter().enumerate().map(|(i, &(value, title, detail))| {
+        ui::col().id(setting.id).children(choice.options().iter().enumerate().map(|(i, &(value, title, detail))| {
             let row = ui::settings_row(SharedString::from(format!("{}-{value}", setting.id)), i > 0, cx).child(ui::radio(current == value, cx)).child(ui::settings_text(title, detail, cx));
             ui::settings_choice(row, cx).on_click(cx.listener(move |this, _, _, cx| this.choose_setting(choice, value, cx)))
         }))
@@ -314,13 +314,10 @@ impl Waffle {
                     .h_auto()
                     .py_1p5()
                     .child(
-                        div()
+                        ui::col()
                             .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .child(div().truncate().text_color(palette::strong(cx)).child(setting.title))
-                            .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(place)),
+                            .child(ui::line(setting.title).text_color(palette::strong(cx)))
+                            .child(ui::line(place).text_size(ui::TEXT_XS).text_color(palette::muted(cx))),
                     )
                     .on_click(cx.listener(move |this, _, window, cx| this.jump_to_setting(setting, window, cx)))
                     .into_any_element()

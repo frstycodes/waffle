@@ -66,20 +66,18 @@ impl Waffle {
         let line = palette::line(cx);
         let scroll = self.panel_scroll.clone();
         Some(
-            div()
+            ui::col()
                 .relative()
                 .w(px(width))
                 .h_full()
                 .flex_none()
-                .flex()
-                .flex_col()
                 // The sidebar's tone: the step from the feed's tone is the only edge it needs.
                 .bg(palette::surface(palette::Level::Sidebar, cx))
                 .text_color(palette::text(cx))
                 .text_size(ui::TEXT_SM)
                 // The list stops under the header, a hard edge with the sidebar's hairline once it has scrolled.
                 .child(ui::hard_edge(move || ui::scrolled(&scroll), cx).child(head))
-                .child(ui::scroll_area(div().id("right-panel").pt_2().px_2().pb_2().flex().flex_col().gap_0p5().child(body), &self.panel_scroll))
+                .child(ui::scroll_area(ui::col().id("right-panel").pt_2().px_2().pb_2().gap_0p5().child(body), &self.panel_scroll))
                 .child(self.resize_handle(Edge::Panel, cx))
                 .children(foot.map(|pager| div().flex_none().py_2().border_t_1().border_color(line).child(pager)))
                 .into_any_element(),
@@ -92,18 +90,16 @@ impl Waffle {
         let close = close.then(|| self.back_button(cx));
         self.panel_frame(cx)
             .children(lead)
-            .child(div().flex_1().min_w_0().truncate().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).child(title))
+            .child(ui::line(title).flex_1().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD))
             .children(tools)
             .children(close)
     }
 
     pub(crate) fn panel_frame(&self, cx: &App) -> Div {
-        div()
+        ui::row()
             .h(px(crate::layout::HEADER_HEIGHT))
             .pl_4()
             .pr(px(8. + crate::window_controls::WIDTH))
-            .flex()
-            .items_center()
             .gap_2()
             .window_control_area(gpui_kit::WindowControlArea::Drag)
             .text_color(palette::strong(cx))
@@ -130,7 +126,7 @@ impl Waffle {
             .map(|user| Member { user: user.clone(), roles: Vec::new(), presence: self.presences.get(&user.id).cloned().unwrap_or_default(), boosting_since: None })
             .map(|member| self.member_row(&member, self.side_spot(cx), cx))
             .collect();
-        div().flex().flex_col().gap_0p5().child(group_label(format!("Members · {}", rows.len()), cx)).children(rows).into_any_element()
+        ui::col().gap_0p5().child(group_label(format!("Members · {}", rows.len()), cx)).children(rows).into_any_element()
     }
 
     // "Invite to Group DM" under the list while the group has room.
@@ -192,8 +188,8 @@ impl Waffle {
             Entry::Group(label, spaced) => group_label(label.clone(), cx).when(*spaced, |l| l.mt_3()).into_any_element(),
             Entry::Member(member) => self.member_row(member, spot, cx),
         });
-        let block = div().relative().flex().flex_col().gap(px(gap)).child(measure.absolute().size_0()).children(spacer(before)).children(rows.collect::<Vec<_>>()).children(spacer(after));
-        div().flex().flex_col().gap(px(gap)).children(activity).child(block).into_any_element()
+        let block = ui::col().relative().gap(px(gap)).child(measure.absolute().size_0()).children(spacer(before)).children(rows.collect::<Vec<_>>()).children(spacer(after));
+        ui::col().gap(px(gap)).children(activity).child(block).into_any_element()
     }
 
     pub(crate) fn load_activity_feed(&mut self, cx: &mut Context<Self>) {
@@ -257,13 +253,13 @@ impl Waffle {
         }));
         let alpha = fold.target().alpha();
         let cards = (!folded || alpha > 0.05).then(|| div().opacity(alpha).child(self.activity_cards(ACTIVITY_SHOWN, cx)));
-        Some(div().flex().flex_col().gap_0p5().child(category_head("activity-head".into(), label, false, cx).child(all)).children(cards))
+        Some(ui::col().gap_0p5().child(category_head("activity-head".into(), label, false, cx).child(all)).children(cards))
     }
 
     fn activity_cards(&self, limit: usize, cx: &mut Context<Self>) -> AnyElement {
         let now = chrono::Utc::now().timestamp_millis();
         let cards: Vec<AnyElement> = self.guild_activity().into_iter().take(limit).enumerate().map(|(i, (entry, member))| self.feed_card(i, entry, member, now, cx)).collect();
-        div().flex().flex_col().gap_2().children(cards).into_any_element()
+        ui::col().gap_2().children(cards).into_any_element()
     }
 
     // One card: who (avatar, name in their role's colour), what, and when, with its art on the right.
@@ -273,36 +269,29 @@ impl Waffle {
         let (role_ink, _) = crate::chat::role_marks(self.prefs.role_style, self.role_color(self.guild_id.as_ref(), &member.user.id, Some(&member.roles), dark));
         let name_ink = role_ink.unwrap_or(strong);
         let when = if entry.live { "Now".to_owned() } else { ago(now - entry.at) };
-        let meta = div()
-            .flex()
-            .items_center()
+        let meta = ui::row()
             .gap_1()
-            .min_w_0()
             .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::NORMAL)
             .text_color(muted)
             .children(activity_glyph(entry.kind).map(|icon| icon.size(ui::ICON_SM).flex_none().when(entry.live, |i| i.text_color(palette::status_in(Status::Online, cx)))))
             .child(div().flex_none().child(when))
-            .when_some(entry.streak_days, |m, days| m.child(div().w_1p5().flex_none()).child(Icon::default().data(BOLT).size_3p5().flex_none()).child(div().truncate().child(format!("{days}× streak"))));
+            .when_some(entry.streak_days, |m, days| m.child(div().w_1p5().flex_none()).child(Icon::default().data(BOLT).size_3p5().flex_none()).child(ui::line(format!("{days}× streak"))));
         let image = entry.image.clone().or_else(|| self.app_icon(entry.app_id.as_deref()?, cx));
         let art = match image {
             Some(url) => img(url).size_11().flex_none().object_fit(gpui_kit::ObjectFit::Cover).squircle(ui::RADIUS_MD).into_any_element(),
-            None => div()
+            None => ui::row()
                 .size_11()
                 .flex_none()
                 .squircle(ui::RADIUS_MD)
                 .bg(palette::selected(cx))
-                .flex()
-                .items_center()
                 .justify_center()
                 .text_color(muted)
                 .children(activity_glyph(entry.kind).or_else(|| activity_glyph(ActivityKind::Playing)).map(|icon| icon.size(ui::ICON_XL)))
                 .into_any_element(),
         };
-        div()
+        ui::row()
             .id(SharedString::from(format!("activity-{i}")))
-            .flex()
-            .items_center()
             .gap_2p5()
             .px_2p5()
             .py_2()
@@ -313,14 +302,11 @@ impl Waffle {
             .cursor_pointer()
             .hover(move |s| s.bg(hover))
             .child(
-                div()
+                ui::col()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
                     .gap_px()
-                    .child(div().flex().items_center().gap_1p5().min_w_0().text_size(ui::TEXT_XS).child(ui::avatar(member.user.avatar.clone(), 14.).flex_none()).child(div().truncate().text_color(name_ink).child(member.user.name.clone())))
-                    .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(strong).child(entry.title.clone()))
+                    .child(ui::row().gap_1p5().text_size(ui::TEXT_XS).child(ui::avatar(member.user.avatar.clone(), 14.).flex_none()).child(ui::line(member.user.name.clone()).text_color(name_ink)))
+                    .child(ui::line(entry.title.clone()).font_weight(FontWeight::MEDIUM).text_color(strong))
                     .child(meta),
             )
             .child(art)
@@ -351,11 +337,8 @@ impl Waffle {
         let boost = palette::boost_ink(cx);
         let boosting = member.boosting_since.as_deref().and_then(boost_date);
         let name_line = |key: String| {
-            div()
-                .flex()
-                .items_center()
+            ui::row()
                 .gap_1p5()
-                .min_w_0()
                 .child(crate::name_fonts::styled(ui::truncating(key, member.user.name.clone()).font_weight(FontWeight::NORMAL).text_color(name_ink), name_style))
                 .children(dot.map(crate::chat::role_dot))
                 .children(member.user.tag.as_ref().map(|tag| crate::chat::guild_tag(tag, cx)))
@@ -370,7 +353,7 @@ impl Waffle {
                 }))
         };
         let status = self.member_status(member);
-        let names = |key: String| div().min_w_0().flex().flex_col().child(name_line(key)).children(status.clone().map(|s| s.line(cx)));
+        let names = |key: String| ui::col().child(name_line(key)).children(status.clone().map(|s| s.line(cx)));
         // The row's fill in each state, laid solid over the panel, for the nameplate's mask to wash in.
         let fill = |wash: gpui_kit::Hsla| ui::mix(surface, wash.opacity(1.), wash.a);
         let fills = match selected {
@@ -383,7 +366,7 @@ impl Waffle {
         let plate = member.user.nameplate.as_ref().map(|plate| row_nameplate(plate, names(format!("member-name-mask-{}", member.user.id)), row));
         let plated = plate.is_some();
         let hover_id = member.user.id.clone();
-        div()
+        ui::row()
             .id(SharedString::from(format!("member-{}", member.user.id)))
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 let next = hovered.then(|| hover_id.clone());
@@ -398,8 +381,6 @@ impl Waffle {
             .px_2()
             // Discord's room for the art: names stop 32px short of a nameplated row's end.
             .when(plated, |r| r.pr(px(NAMEPLATE_END)))
-            .flex()
-            .items_center()
             .gap_2p5()
             .squircle(ui::RADIUS_SM)
             .group(MEMBER_ROW_GROUP)
@@ -514,12 +495,9 @@ impl MemberStatus {
         let primary = self.icon.is_some() || (self.text.is_some() && !beside_custom);
         let green = palette::positive_ink(cx);
         let items = self.items.clone();
-        div()
+        ui::row()
             .id(SharedString::from(format!("member-status-{}", self.id)))
-            .flex()
-            .items_center()
             .gap_1()
-            .min_w_0()
             .text_size(ui::TEXT_XS)
             .text_color(palette::faint(cx))
             .children(self.icon.and_then(|icon| icon.icon(green)))
@@ -549,16 +527,14 @@ impl Render for ActivityTip {
         let green = palette::positive_ink_inverted(cx);
         let rows = self.0.iter().map(|item| {
             let channel = item.channel.as_ref().map(|channel| {
-                div().flex().items_center().gap_0p5().child("(").child(channel_glyph(channel).size_3p5().flex_none()).child(div().truncate().child(channel.name.clone())).child(")")
+                ui::row().gap_0p5().child("(").child(channel_glyph(channel).size_3p5().flex_none()).child(ui::line(channel.name.clone())).child(")")
             });
-            div().flex().items_center().gap_1p5().min_w_0().children(item.icon.icon(green)).child(div().flex_none().child(item.text.clone())).children(channel)
+            ui::row().gap_1p5().children(item.icon.icon(green)).child(div().flex_none().child(item.text.clone())).children(channel)
         });
-        div()
+        ui::col()
             .max_w(px(280.))
             .px_2p5()
             .py_2()
-            .flex()
-            .flex_col()
             .gap_1p5()
             .squircle(ui::RADIUS_SM)
             .bg(palette::strong(cx))
@@ -618,12 +594,11 @@ pub(crate) fn row_nameplate(plate: &crate::discord::Nameplate, names: Div, row: 
     // gpui gradients take two stops, so the four-stop tint is three pieces side by side.
     let piece = |width: f32, from: f32, to: f32| div().h_full().w(relative(width)).bg(linear_gradient(90., linear_color_stop(tint.opacity(from), 0.), linear_color_stop(tint.opacity(to), 1.)));
     let tint_layer = || {
-        div()
+        ui::row().items_stretch()
             .absolute()
             .top_0()
             .bottom_0()
             .left_0()
-            .flex()
             .child(ui::edge(piece(0.2, 0., 0.08), left))
             .child(piece(0.3, 0.08, 0.08))
             .child(ui::edge(piece(0.5, 0.08, 0.2), gpui_kit::Corners { top_right: r, bottom_right: r, ..Default::default() }))
@@ -644,11 +619,8 @@ pub(crate) fn row_nameplate(plate: &crate::discord::Nameplate, names: Div, row: 
     // ones (and stopping as short of the end), sizes the held part, which shows the row's own fill and
     // tint at the row's width, clipped to that part.
     let backdrop = ui::edge(tint_layer().w(px(row_width)).bg(rest), left).when_some(hovered, |d, h| d.group_hover(group, move |s| s.bg(h)));
-    let held = div()
+    let held = ui::row()
         .relative()
-        .flex()
-        .items_center()
-        .min_w_0()
         .overflow_hidden()
         .opacity(0.7)
         .pl_2()
@@ -663,18 +635,18 @@ pub(crate) fn row_nameplate(plate: &crate::discord::Nameplate, names: Div, row: 
         .child(tint_layer().right_0())
         .child(nameplate_art(plate, height, r, r, animate).opacity(if selected { 0.9 } else { 0.6 }))
         // Clipped to the row: on a long name the fade runs past its end.
-        .child(div().absolute().inset_0().overflow_hidden().flex().pr(px(NAMEPLATE_END - 2.)).child(div().relative().flex().min_w_0().child(held).child(ramp)))
+        .child(ui::row().items_stretch().absolute().inset_0().overflow_hidden().pr(px(NAMEPLATE_END - 2.)).child(ui::row().items_stretch().relative().child(held).child(ramp)))
         .into_any_element()
 }
 
 // A group heading (.cat): "Online · 4".
 pub(crate) fn group_label(text: impl Into<SharedString>, cx: &App) -> Div {
-    div().h_7().flex_none().px_1p5().flex().items_center().whitespace_nowrap().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(text.into())
+    ui::row().h_7().flex_none().px_1p5().whitespace_nowrap().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(text.into())
 }
 
 // A wait names what it waits on, beside the mini wave (.pwait).
 pub(crate) fn wait_line(id: &'static str, text: &'static str, cx: &App) -> Div {
-    div().min_h_8().px_2().flex().items_center().gap_2().text_color(palette::muted(cx)).font_weight(FontWeight::NORMAL).child(ui::bars(id, palette::muted(cx), 12.)).child(text)
+    ui::row().min_h_8().px_2().gap_2().text_color(palette::muted(cx)).font_weight(FontWeight::NORMAL).child(ui::bars(id, palette::muted(cx), 12.)).child(text)
 }
 
 // The list before Discord sends it: the static label, no false count, rows shaped like the real ones.
@@ -683,11 +655,9 @@ fn members_loading(cx: &App) -> Div {
     let bar = move |w: f32, h: f32| div().w(gpui_kit::relative(w)).h(px(h)).squircle(ui::RADIUS_XS).bg(fill);
     // GAP: the design sweeps one shimmer band across all skeletons; these hold still.
     let row = move |name: f32, line: Option<f32>| {
-        div().h_11().px_2().flex().items_center().gap_2p5().child(div().size_8().flex_none().rounded_full().bg(fill)).child(div().flex_1().flex().flex_col().gap_1p5().child(bar(name, 12.)).children(line.map(|w| bar(w, 8.))))
+        ui::row().h_11().px_2().gap_2p5().child(div().size_8().flex_none().rounded_full().bg(fill)).child(ui::col().flex_1().gap_1p5().child(bar(name, 12.)).children(line.map(|w| bar(w, 8.))))
     };
-    div()
-        .flex()
-        .flex_col()
+    ui::col()
         .gap_0p5()
         .child(wait_line("members-wait", "Loading members…", cx))
         .child(group_label("Online", cx))

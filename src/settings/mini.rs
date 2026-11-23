@@ -32,14 +32,12 @@ pub(super) fn mini_window(m: &Mini) -> Div {
         .gap_1()
         .child(div().w(relative(0.6)).h_3p5().squircle(4.).bg(palette::accent()))
         .child(div().w(relative(0.6)).h_3p5().squircle(4.).bg(palette::data_color(m.faint)));
-    let side = div().w(relative(0.28)).h_full().bg(palette::data_color(m.side)).py_2().px_1p5().flex().flex_col().gap(px(MINI_GAP)).child(bar(m.faint, 1.)).child(bar(m.ink, 0.8)).child(bar(m.faint, 0.6)).child(bar(m.faint, 1.));
-    let content = div()
+    let side = ui::col().w(relative(0.28)).h_full().bg(palette::data_color(m.side)).py_2().px_1p5().gap(px(MINI_GAP)).child(bar(m.faint, 1.)).child(bar(m.ink, 0.8)).child(bar(m.faint, 0.6)).child(bar(m.faint, 1.));
+    let content = ui::col()
         .flex_1()
         .h_full()
         .py_2p5()
         .px_2()
-        .flex()
-        .flex_col()
         .justify_end()
         .gap(px(MINI_GAP))
         .child(bar(m.ink, 0.4))
@@ -47,7 +45,7 @@ pub(super) fn mini_window(m: &Mini) -> Div {
         .child(bar(m.ink, 0.4))
         .child(bar(m.faint, 0.85))
         .child(div().mt_1().h_3().w_full().squircle(4.).bg(palette::data_color(m.faint)));
-    div().w_full().h(px(MINI_HEIGHT)).squircle(ui::RADIUS_MD).bg(palette::data_color(m.page)).flex().child(rail).child(side).child(content)
+    ui::row().items_stretch().w_full().h(px(MINI_HEIGHT)).squircle(ui::RADIUS_MD).bg(palette::data_color(m.page)).child(rail).child(side).child(content)
 }
 
 const MINI_HEIGHT: f32 = 130.;

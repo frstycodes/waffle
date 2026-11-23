@@ -178,12 +178,10 @@ impl Waffle {
             .with_animation(SharedString::from(format!("viewer-{index}")), Animation::new(Duration::from_millis(140)), |el, t| el.opacity(t));
         let strip = self.strip(viewer, viewport.0 - 96., window, cx);
         let nav = |id: &'static str, glyph: Glyph, enabled: bool, delta: isize| {
-            div()
+            ui::row()
                 .id(id)
                 .size_12()
                 .rounded_full()
-                .flex()
-                .items_center()
                 .justify_center()
                 .bg(gpui_kit::white().opacity(if enabled { 0.12 } else { 0.04 }))
                 .text_color(gpui_kit::white().opacity(if enabled { 1. } else { 0.3 }))
@@ -193,35 +191,30 @@ impl Waffle {
                 .on_click(cx.listener(move |this, _, _, cx| this.step_viewer(delta, cx)))
         };
         let url = item.url.clone();
-        let top = div()
+        let top = ui::row().items_stretch()
             .absolute()
             .top(px(TITLE_HEIGHT + 8.))
             .right_4()
-            .flex()
             .gap_2()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(top_button("viewer-open").px_3().gap_1p5().child(Icon::new(Glyph::Open).size(ui::ICON_MD)).child("Open in Browser").on_click(move |_, _, cx| cx.open_url(&url)))
             .child(top_button("viewer-close").w_8().justify_center().child(Icon::new(Glyph::X).size(ui::ICON_LG)).on_click(cx.listener(|this, _, _, cx| this.close_viewer(cx))));
-        let foot = div()
+        let foot = ui::col()
             .absolute()
             .bottom_4()
             .left_0()
             .right_0()
-            .flex()
-            .flex_col()
             .items_center()
             .gap_2()
             .child(div().text_size(ui::TEXT_SM).text_color(gpui_kit::white().opacity(0.8)).child(format!("{position} / {total}")))
             .child(strip);
         Some(
-            div()
+            ui::row()
                 .id("viewer")
                 .absolute()
                 .occlude()
                 .inset_0()
                 .bg(gpui_kit::black().opacity(0.88))
-                .flex()
-                .items_center()
                 .justify_between()
                 .px_6()
                 .pb(px(STAGE_INSET.1 / 2. - 50.))
@@ -305,7 +298,7 @@ impl Waffle {
             .overflow_x_scroll()
             .track_scroll(&viewer.strip)
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(div().relative().w(px(content)).h_full().p(px(PAD)).flex().gap(px(GAP)).children(thumbs).child(ring))
+            .child(ui::row().items_stretch().relative().w(px(content)).h_full().p(px(PAD)).gap(px(GAP)).children(thumbs).child(ring))
             .into_any_element()
     }
 }
@@ -348,12 +341,10 @@ fn neighbours(viewer: &Viewer, viewport: (f32, f32)) -> Vec<AnyElement> {
 }
 
 fn top_button(id: &'static str) -> gpui_kit::Stateful<gpui_kit::Div> {
-    div()
+    ui::row()
         .id(id)
         .h_8()
         .squircle(ui::RADIUS_SM)
-        .flex()
-        .items_center()
         .cursor_pointer()
         .text_color(gpui_kit::white())
         .bg(gpui_kit::white().opacity(0.12))
@@ -361,8 +352,8 @@ fn top_button(id: &'static str) -> gpui_kit::Stateful<gpui_kit::Div> {
 }
 
 fn play_mark() -> impl IntoElement {
-    div().absolute().inset_0().flex().items_center().justify_center().child(
-        div().size_6().rounded_full().bg(gpui_kit::black().opacity(0.6)).flex().items_center().justify_center().text_color(gpui_kit::white()).child(Icon::new(Glyph::Play).size(ui::ICON_SM)),
+    ui::row().absolute().inset_0().justify_center().child(
+        ui::row().size_6().rounded_full().bg(gpui_kit::black().opacity(0.6)).justify_center().text_color(gpui_kit::white()).child(Icon::new(Glyph::Play).size(ui::ICON_SM)),
     )
 }
 

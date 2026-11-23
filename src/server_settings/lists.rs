@@ -442,7 +442,7 @@ impl Waffle {
                 this.act_and_reload(call, page, cx);
             }
         }));
-        div().flex().gap_1p5().flex_none().child(keep).child(yes).into_any_element()
+        ui::row().items_stretch().gap_1p5().flex_none().child(keep).child(yes).into_any_element()
     }
 
     fn upload_expression(&mut self, page: Page, cx: &mut Context<Self>) {
@@ -600,7 +600,7 @@ impl Waffle {
                 ui::button("ss-hook-new", Tone::Secondary, cx).small().child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("New webhook").on_click(cx.listener(move |this, _, _, cx| this.act_and_reload(api::create_webhook(&channel, "Captain Hook"), Page::Integrations, cx)))
             });
             out.push(self.followed_channels_group(&guild_id, cx));
-            out.push(ui::settings_group("Webhooks", cx).child(ui::settings_card(cx).id("ss-webhooks").children(hooks)).child(div().flex().justify_end().children(create)).into_any_element());
+            out.push(ui::settings_group("Webhooks", cx).child(ui::settings_card(cx).id("ss-webhooks").children(hooks)).child(ui::row().items_stretch().justify_end().children(create)).into_any_element());
         }
         out.push(link_out("app-directory", "App directory", "Find and add apps on Discord.", format!("https://discord.com/application-directory?guild_id={guild_id}"), cx));
         out
@@ -649,7 +649,7 @@ impl Waffle {
         }));
         vec![
             ui::settings_group("Rules", cx).child(ui::settings_card(cx).id("ss-automod").children(rows)).child(ui::settings_caption("Matching messages are blocked before they post. Admins and members with Manage server are exempt.", cx)).into_any_element(),
-            ui::settings_group("Custom words", cx).child(ui::settings_card(cx).children(custom)).child(div().flex().gap_3().items_center().child(div().flex_1().child(words)).child(add)).child(ui::settings_caption("Up to six custom word rules. Separate words with commas; * matches any letters.", cx)).into_any_element(),
+            ui::settings_group("Custom words", cx).child(ui::settings_card(cx).children(custom)).child(ui::row().gap_3().child(div().flex_1().child(words)).child(add)).child(ui::settings_caption("Up to six custom word rules. Separate words with commas; * matches any letters.", cx)).into_any_element(),
         ]
     }
 
@@ -695,8 +695,7 @@ impl Waffle {
         actions.extend(audit::ACTIONS.iter().map(|(n, l)| (n.to_string(), (*l).to_owned())));
         let user = a.query.user_id.clone().unwrap_or_default();
         let action = a.query.action_type.map(|n| n.to_string()).unwrap_or_default();
-        let filters = div()
-            .flex()
+        let filters = ui::row().items_stretch()
             .gap_3()
             .child(div().flex_1().child(ui::field("Filter by member", cx).child(self.ss_select(Select::AuditUser, &users, &user, cx))))
             .child(div().flex_1().child(ui::field("Filter by action", cx).child(self.ss_select(Select::AuditAction, &actions, &action, cx))));
@@ -717,7 +716,7 @@ impl Waffle {
         let rows: Vec<AnyElement> = a.entries.iter().enumerate().map(|(i, e)| self.ss_audit_row(e, &a.names, a.open.contains(&e.id), i > 0, cx)).collect();
         out.push(ui::settings_card(cx).id("ss-audit").children(rows).into_any_element());
         if a.next.is_some() {
-            out.push(div().flex().justify_center().child(ui::button("ss-audit-more", Tone::Secondary, cx).loading(a.loading.then_some("Loading")).child("Load more").on_click(cx.listener(|this, _, _, cx| {
+            out.push(ui::row().items_stretch().justify_center().child(ui::button("ss-audit-more", Tone::Secondary, cx).loading(a.loading.then_some("Loading")).child("Load more").on_click(cx.listener(|this, _, _, cx| {
                 if let Some(l) = this.lists() {
                     l.audit.query.before = l.audit.next.take();
                     l.audit.loading = true;
@@ -737,23 +736,22 @@ impl Waffle {
         let details = audit::details(e, names);
         let id = e.id.clone();
         let chevron = (!details.is_empty()).then(|| div().text_color(palette::muted(cx)).child(Icon::new(if open { Glyph::ChevronDown } else { Glyph::ChevronRight }).size(ui::ICON_MD)));
-        let head = div()
-            .flex()
+        let head = ui::row()
             .items_start()
             .gap_3()
             .w_full()
             .child(div().pt_0p5().text_color(ink).flex_none().child(Icon::new(glyph).size(ui::ICON_LG)))
-            .child(div().flex_1().min_w_0().flex().flex_col().gap_0p5().child(sentence_spans(&audit::sentence(e, names), cx)).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(snowflake_time(&e.id))))
+            .child(ui::col().flex_1().gap_0p5().child(sentence_spans(&audit::sentence(e, names), cx)).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(snowflake_time(&e.id))))
             .children(chevron);
         let body = open.then(|| {
-            div().pl(px(30.)).pt_2().flex().flex_col().gap_1().children(details.into_iter().map(|d| {
+            ui::col().pl(px(30.)).pt_2().gap_1().children(details.into_iter().map(|d| {
                 let change = match (&d.old, &d.new) {
-                    (Some(old), Some(new)) => div().flex().items_center().gap_1p5().child(div().text_color(palette::muted(cx)).line_through().child(old.clone())).child(Icon::new(Glyph::ArrowRight).size(ui::ICON_XS)).child(div().text_color(palette::strong(cx)).child(new.clone())),
+                    (Some(old), Some(new)) => ui::row().gap_1p5().child(div().text_color(palette::muted(cx)).line_through().child(old.clone())).child(Icon::new(Glyph::ArrowRight).size(ui::ICON_XS)).child(div().text_color(palette::strong(cx)).child(new.clone())),
                     (None, Some(new)) => div().text_color(palette::strong(cx)).child(new.clone()),
                     (Some(old), None) => div().text_color(palette::muted(cx)).line_through().child(old.clone()),
                     (None, None) => div().text_color(palette::muted(cx)).child("Cleared"),
                 };
-                div().flex().gap_2().text_size(ui::TEXT_SM).child(div().w(px(150.)).flex_none().text_color(palette::muted(cx)).child(d.label)).child(div().flex_1().min_w_0().child(change))
+                ui::row().items_stretch().gap_2().text_size(ui::TEXT_SM).child(div().w(px(150.)).flex_none().text_color(palette::muted(cx)).child(d.label)).child(div().flex_1().min_w_0().child(change))
             }))
         });
         let row = ui::settings_row(SharedString::from(format!("ss-audit-{}", e.id)), line, cx).flex_col().items_stretch().child(head).children(body);
@@ -832,7 +830,7 @@ impl Waffle {
             let rows = [("Verified email to chat", "Turns on the low verification level"), ("Scan every image", "Explicit media is filtered for everyone"), ("Rules and updates channels", "Discord creates #rules and #moderator-only")].map(|(t, d)| ui::settings_row(SharedString::from(format!("ss-community-{t}")), true, cx).child(Icon::new(Glyph::CheckCircle).size(ui::ICON_LG)).child(ui::settings_text(t, Some(d), cx)).into_any_element());
             return vec![
                 ui::settings_card(cx).id("ss-community").child(ui::settings_row("ss-community-head", false, cx).child(ui::settings_text("Are you building a community?", Some("Community servers get onboarding, insights, announcement channels and Discovery."), cx))).children(rows).into_any_element(),
-                div().flex().justify_end().child(enable).into_any_element(),
+                ui::row().items_stretch().justify_end().child(enable).into_any_element(),
             ];
         }
         let disable = ui::button("ss-community-disable", Tone::Secondary, cx).small().child("Disable Community").on_click(cx.listener(move |this, _, _, cx| {
@@ -906,7 +904,7 @@ impl Waffle {
                     }
                     this.act_and_reload(api::create_template(&guild_id, &name, ""), Page::Template, cx);
                 }));
-                out.push(ui::settings_group("Template", cx).child(div().id("ss-template").flex().gap_3().items_center().child(div().flex_1().child(field)).child(generate)).into_any_element());
+                out.push(ui::settings_group("Template", cx).child(ui::row().id("ss-template").gap_3().child(div().flex_1().child(field)).child(generate)).into_any_element());
             }
         }
         out

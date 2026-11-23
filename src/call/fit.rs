@@ -125,7 +125,7 @@ impl Waffle {
                 Dock::Compact | Dock::Tight => control_group().child(more),
             })
             .child(leave)
-            .when(fold != Dock::Tight, |bar| bar.child(div().absolute().right_0().top_0().h(px(CONTROLS_HEIGHT)).flex().items_center().gap_1().children(volume).child(fullscreen)))
+            .when(fold != Dock::Tight, |bar| bar.child(ui::row().absolute().right_0().top_0().h(px(CONTROLS_HEIGHT)).gap_1().children(volume).child(fullscreen)))
     }
 
     // The one red button. Watching the stream shown big, it stops watching it rather than leaving, as

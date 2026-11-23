@@ -553,19 +553,16 @@ pub(crate) fn used_command(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
     let name = if you { "You".to_owned() } else { ctx.name_of(&meta.user) };
     let strong = palette::strong(cx);
     Some(
-        div()
+        ui::row()
             .pl(px(chat::CONTENT_INSET))
             .h(px(22.))
-            .flex()
-            .items_center()
             .gap_1p5()
-            .min_w_0()
             .text_size(ui::TEXT_DETAIL)
             .text_color(palette::muted(cx))
             .child(ui::avatar(meta.user.avatar.clone(), 16.))
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(name))
             .child(div().flex_none().child("used"))
-            .child(div().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::accent_ink(cx)).child(format!("/{command}")))
+            .child(ui::line(format!("/{command}")).font_weight(FontWeight::SEMIBOLD).text_color(palette::accent_ink(cx)))
             .into_any_element(),
     )
 }
@@ -574,9 +571,7 @@ pub(crate) fn used_command(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
 // thinking...", or why it never answered.
 pub(crate) fn interaction_status(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyElement> {
     let waiting = |text: String| {
-        div()
-            .flex()
-            .items_center()
+        ui::row()
             .gap_2()
             .italic()
             .text_color(palette::muted(cx))
@@ -624,19 +619,18 @@ pub(crate) fn only_you(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Any
             })
             .ok();
         });
-    let line = |lead: &str| div().flex().flex_wrap().items_center().gap_1().child(lead.to_owned()).child("•").child(dismiss);
+    let line = |lead: &str| ui::row().flex_wrap().gap_1().child(lead.to_owned()).child("•").child(dismiss);
     let text = match reason {
-        Some(reason) => div().flex().flex_col().child("Only you can see this message.").child(line(reason)),
+        Some(reason) => ui::col().child("Only you can see this message.").child(line(reason)),
         None => line("Only you can see this"),
     };
-    div()
+    ui::row()
         .mt_1p5()
-        .flex()
         .items_start()
         .gap_1p5()
         .text_size(ui::TEXT_XS)
         .text_color(palette::muted(cx))
-        .child(div().flex_none().h(px(18.)).flex().items_center().child(Icon::new(Glyph::Eye).size(ui::ICON_SM)))
+        .child(ui::row().flex_none().h(px(18.)).child(Icon::new(Glyph::Eye).size(ui::ICON_SM)))
         .child(text)
         .into_any_element()
 }
@@ -669,10 +663,8 @@ fn ephemerality_reason(reason: u64) -> &'static str {
 
 // Discord's red failure line: an error icon and what went wrong. No retry.
 fn failure_line(text: String, cx: &App) -> AnyElement {
-    div()
+    ui::row()
         .mt_1()
-        .flex()
-        .items_center()
         .gap_1p5()
         .text_color(palette::danger_ink(cx))
         .child(Icon::new(Glyph::WarningCircle).size(ui::ICON_MD).flex_none())
@@ -702,7 +694,7 @@ pub(crate) fn message_components(message: &Message, ctx: &Rc<RowContext>, cx: &m
     let width = MAX_WIDTH.min(ctx.column());
     let room = Room { width, reduced: false };
     let children: Vec<AnyElement> = message.components.iter().enumerate().map(|(i, c)| component(message, c, i.to_string(), room, ctx, cx)).collect();
-    Some(div().mt_2().w_full().max_w(px(width)).flex().flex_col().gap_2().children(children).into_any_element())
+    Some(ui::col().mt_2().w_full().max_w(px(width)).gap_2().children(children).into_any_element())
 }
 
 // `path` keeps element ids apart: each component's index, from the top level down.
@@ -730,10 +722,8 @@ fn component(message: &Message, c: &Component, path: String, room: Room, ctx: &R
 fn action_row(message: &Message, children: &[Component], path: &str, room: Room, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     let controls: Vec<AnyElement> = children.iter().enumerate().map(|(i, c)| component(message, c, format!("{path}-{i}"), room, ctx, cx)).collect();
     let failed = failed_line(message, children, ctx, cx);
-    div()
-        .flex()
-        .flex_col()
-        .child(div().flex().flex_wrap().gap_2().children(controls))
+    ui::col()
+        .child(ui::row().items_stretch().flex_wrap().gap_2().children(controls))
         .children(failed)
         .into_any_element()
 }
@@ -878,13 +868,12 @@ fn section(message: &Message, children: &[Component], accessory: Option<&Compone
     let text: Vec<AnyElement> = children.iter().enumerate().map(|(i, c)| component(message, c, format!("{path}-{i}"), room, ctx, cx)).collect();
     let failed = failed_line(message, accessory, ctx, cx);
     let accessory = accessory.map(|a| component(message, a, format!("{path}-a"), room, ctx, cx));
-    let row = div()
-        .flex()
+    let row = ui::row()
         .items_start()
         .gap_3p5()
-        .child(div().flex_1().min_w_0().flex().flex_col().gap_1().text_color(palette::strong(cx)).children(text))
+        .child(ui::col().flex_1().gap_1().text_color(palette::strong(cx)).children(text))
         .children(accessory.map(|a| div().flex_none().child(a)));
-    div().flex().flex_col().child(row).children(failed).into_any_element()
+    ui::col().child(row).children(failed).into_any_element()
 }
 
 fn thumbnail(message: &Message, url: &str, spoiler: bool, size: (Option<u32>, Option<u32>), path: &str, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
@@ -964,7 +953,7 @@ fn container(message: &Message, accent: Option<u32>, children: &[Component], pat
     };
     let room = Room { width: width - 2. * CONTAINER_INSET, reduced: true };
     let children: Vec<AnyElement> = children.iter().enumerate().map(|(i, c)| component(message, c, format!("{path}-{i}"), room, ctx, cx)).collect();
-    div().relative().w_full().p(px(CONTAINER_PAD)).flex().flex_col().gap(px(CONTAINER_GAP)).squircle(RADIUS_LG).bg(fill).border_1().border_color(edge).children(children)
+    ui::col().relative().w_full().p(px(CONTAINER_PAD)).gap(px(CONTAINER_GAP)).squircle(RADIUS_LG).bg(fill).border_1().border_color(edge).children(children)
 }
 
 // Every select in a component tree, depth first.

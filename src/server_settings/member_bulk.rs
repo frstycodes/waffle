@@ -249,8 +249,8 @@ impl Waffle {
         });
         let clear = ui::icon_button("ss-bulk-clear", Glyph::X, "Clear selection", cx).on_click(cx.listener(|this, _, _, cx| this.clear_member_selection(cx)));
         let bar = ui::floating_bar("ss-bulk", cx)
-            .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).text_color(crate::palette::strong(cx)).child(format!("{count} selected")))
-            .child(div().flex().flex_none().gap_2().children(role).children(timeout).children(kick).children(ban).child(clear));
+            .child(ui::line(format!("{count} selected")).flex_1().font_weight(FontWeight::SEMIBOLD).text_color(crate::palette::strong(cx)))
+            .child(ui::row().items_stretch().flex_none().gap_2().children(role).children(timeout).children(kick).children(ban).child(clear));
         Some(ui::foot_dock(bar, "ss-bulk-in").into_any_element())
     }
 

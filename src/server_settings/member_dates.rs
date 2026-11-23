@@ -217,7 +217,7 @@ impl Waffle {
     pub(super) fn date_header(&self, column: DateColumn, filterable: bool, cx: &mut Context<Self>) -> AnyElement {
         let Some(m) = self.server_settings.as_ref().map(|v| &v.lists.members) else { return div().into_any_element() };
         if !filterable {
-            return div().truncate().child(column.label()).into_any_element();
+            return ui::line(column.label()).into_any_element();
         }
         let menu = match column {
             DateColumn::Joined => &m.joined_menu,
@@ -226,17 +226,14 @@ impl Waffle {
         let open = m.pop == Some(Pop::Date(column));
         let active = menu.filter.is_active();
         let ink = if active || open { palette::accent_ink(cx) } else { palette::muted(cx) };
-        let trigger = div()
+        let trigger = ui::row()
             .id(SharedString::from(format!("ss-date-{}", column.key())))
-            .min_w_0()
-            .flex()
-            .items_center()
             .gap_1()
             .cursor_pointer()
             .text_color(ink)
             .hover(|s| s.text_color(palette::strong(cx)))
             .child(div().flex_none().child(column.label()))
-            .when(active, |d| d.child(div().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).child(menu.filter.label())))
+            .when(active, |d| d.child(ui::line(menu.filter.label()).font_weight(FontWeight::SEMIBOLD)))
             .child(Icon::new(if active { Glyph::Filter } else { Glyph::ChevronDown }).size(ui::ICON_XS).flex_none())
             .on_click(cx.listener(move |this, _, _, cx| this.member_pop(Some(Pop::Date(column)), cx)));
         let list = open.then(|| ui::menu_dropdown(SharedString::from(format!("ss-date-menu-{}", column.key())), 20., Align::Start, self.date_menu_rows(column, menu, cx), self.member_dismiss(cx), cx));
@@ -257,7 +254,7 @@ impl Waffle {
             return [back.into_any_element(), field("after", "After date", &menu.after, cx), field("before", "Before date", &menu.before, cx)]
                 .into_iter()
                 .chain(error)
-                .chain([div().px_2p5().py_1p5().flex().justify_end().child(apply).into_any_element()])
+                .chain([ui::row().items_stretch().px_2p5().py_1p5().justify_end().child(apply).into_any_element()])
                 .collect();
         }
         let chosen = |p: Preset| menu.filter == DateFilter::Preset(p);
@@ -265,7 +262,7 @@ impl Waffle {
             .into_iter()
             .map(|preset| {
                 ui::menu_row(SharedString::from(format!("ss-date-{key}-{preset:?}")), cx)
-                    .child(div().flex_1().min_w_0().truncate().child(preset.label()))
+                    .child(ui::line(preset.label()).flex_1())
                     .child(div().text_color(accent).when(!chosen(preset), |d| d.invisible()).child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD)))
                     .on_click(cx.listener(move |this, _, _, cx| this.pick_date_preset(column, preset, cx)))
                     .into_any_element()
@@ -275,7 +272,7 @@ impl Waffle {
         rows.push(div().py_1().child(ui::divider(None, cx)).into_any_element());
         rows.push(
             ui::menu_row(SharedString::from(format!("ss-date-{key}-custom")), cx)
-                .child(div().flex_1().min_w_0().truncate().child(if custom { menu.filter.label() } else { "Custom range".into() }))
+                .child(ui::line(if custom { menu.filter.label() } else { "Custom range".into() }).flex_1())
                 .child(div().text_color(if custom { accent } else { palette::muted(cx) }).child(Icon::new(if custom { Glyph::Checkmark } else { Glyph::ChevronRight }).size(ui::ICON_MD)))
                 .on_click(cx.listener(move |this, _, _, cx| this.toggle_custom_range(column, true, cx)))
                 .into_any_element(),

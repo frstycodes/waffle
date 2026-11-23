@@ -671,17 +671,14 @@ impl Waffle {
     }
 
     fn menu_slider(&self, label: SharedString, key: SharedString, value: f32, on_set: SetValue, cx: &mut Context<Self>) -> Div {
-        div()
+        ui::col()
             .h(px(SLIDER_ROW))
             .pt_1p5()
             .pb_2p5()
             .px_2p5()
-            .flex()
-            .flex_col()
             .gap_2()
             .child(
-                div()
-                    .flex()
+                ui::row().items_stretch()
                     .justify_between()
                     .text_size(ui::TEXT_SM)
                     .line_height(ui::LINE_SM)
@@ -777,9 +774,7 @@ impl Waffle {
         });
         let body = ui::dialog_body()
             .child(
-                div()
-                    .flex()
-                    .items_center()
+                ui::row()
                     .gap_2p5()
                     .text_size(ui::TEXT_LG)
                     .line_height(ui::LINE_LG)
@@ -796,8 +791,7 @@ impl Waffle {
             }))
             .when(dialog.input, |d| d.child(field(cx).child(div().flex_1().min_w_0().child(Input::new(&self.dialog_input).appearance(false)))))
             .child(
-                div()
-                    .flex()
+                ui::row().items_stretch()
                     .justify_end()
                     .gap_2()
                     .children(self.dialog_other(cx))
@@ -836,14 +830,11 @@ pub(crate) fn menu_item_row(id: SharedString, item: &Item, sub_open: bool, lead_
         .line_height(ui::LINE_SM)
         .highlighted(sub_open)
         .disabled(item.disabled)
-        .children(lead.map(|lead| div().size(px(LEAD)).flex_none().flex().items_center().justify_center().child(lead)))
+        .children(lead.map(|lead| ui::row().size(px(LEAD)).flex_none().justify_center().child(lead)))
         .child(
-            div()
+            ui::col()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .child(div().truncate().child(item.label.clone()))
+                .child(ui::line(item.label.clone()))
                 .children(item.hint.clone().map(|text| {
                     div()
                         .text_size(ui::TEXT_XS)
@@ -900,26 +891,21 @@ fn menu_header(lead: &HeadLead, title: SharedString, subtitle: Option<SharedStri
     let lead = match lead {
         HeadLead::Avatar { url, status } => crate::layout::avatar_with_status(url, 32., *status, overlay),
         HeadLead::Server { icon, name } => ui::server_tile(icon.as_deref(), name, 32., cx),
-        HeadLead::Tile(glyph) => div().size_8().squircle(RADIUS_SM).bg(palette::selected(cx)).text_color(palette::strong(cx)).flex().items_center().justify_center().child(Icon::new(*glyph).size(ui::ICON_LG)).into_any_element(),
+        HeadLead::Tile(glyph) => ui::row().size_8().squircle(RADIUS_SM).bg(palette::selected(cx)).text_color(palette::strong(cx)).justify_center().child(Icon::new(*glyph).size(ui::ICON_LG)).into_any_element(),
     };
-    div()
+    ui::row()
         .h(px(HEADER))
         .flex_none()
         .pt_2()
         .pb_2p5()
         .px_2p5()
-        .flex()
-        .items_center()
         .gap_2p5()
         .child(div().flex_none().child(lead))
         .child(
-            div()
+            ui::col()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .child(div().truncate().text_size(ui::TEXT_SM).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title))
-                .children(subtitle.map(|s| div().truncate().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::muted(cx)).child(s))),
+                .child(ui::line(title).text_size(ui::TEXT_SM).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
+                .children(subtitle.map(|s| ui::line(s).text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::muted(cx)))),
         )
 }
 
@@ -951,7 +937,7 @@ fn quick_reactions(quick: &[(Emoji, Act)], more: Act, cx: &mut Context<Waffle>) 
             this.shut_menu(window, cx);
             more(this, window, cx);
         }));
-    div().h(px(EMOJI_ROW)).flex_none().pt_0p5().px_0p5().pb_1().flex().gap_1().children(faces).child(picker)
+    ui::row().items_stretch().h(px(EMOJI_ROW)).flex_none().pt_0p5().px_0p5().pb_1().gap_1().children(faces).child(picker)
 }
 
 pub(crate) fn emoji_face(emoji: &Emoji, size: f32) -> AnyElement {

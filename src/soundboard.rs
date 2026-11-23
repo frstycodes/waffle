@@ -443,7 +443,7 @@ impl Waffle {
             false => effects.iter().filter_map(|e| Some(effect_scene(e.id, e.family, e.emoji.as_ref()?, tile))).collect(),
         };
         let label = latest.map(|name| {
-            div()
+            ui::row()
                 .absolute()
                 .top_2()
                 .left_2()
@@ -452,14 +452,12 @@ impl Waffle {
                 .px_2()
                 .squircle(8.)
                 .bg(gpui_kit::black().opacity(0.6))
-                .flex()
-                .items_center()
                 .gap_1p5()
                 .text_size(ui::TEXT_XS)
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(gpui_kit::white())
                 .child(Icon::new(Glyph::Soundboard).size(ui::ICON_SM))
-                .child(div().min_w_0().truncate().child(name))
+                .child(ui::line(name))
         });
         Some(div().absolute().inset_0().overflow_hidden().children(bursts).children(label).into_any_element())
     }
@@ -476,7 +474,7 @@ impl Waffle {
             }
             (None, None) => picker.at,
         };
-        let card = div()
+        let card = ui::col()
             .id("soundboard")
             .occlude()
             .w(px(PICKER_SIZE.0))
@@ -485,8 +483,6 @@ impl Waffle {
             .bg(palette::surface(palette::Level::Overlay, cx))
             .shadow(ui::shadow_pop(cx))
             .relative()
-            .flex()
-            .flex_col()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .children(self.picker_content(picker, cx));
         let card = ui::rise(card.transform_origin(gpui_kit::point(gpui_kit::relative(0.5), gpui_kit::relative(1.))), "soundboard", Duration::ZERO);
@@ -496,13 +492,11 @@ impl Waffle {
     fn picker_content(&self, picker: &Picker, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let sections = self.sound_sections(cx);
         let muted = self.prefs.soundboard_volume <= 0.;
-        let volume = div()
+        let volume = ui::row()
             .id("soundboard-volume")
             .size_7()
             .flex_none()
             .squircle(8.)
-            .flex()
-            .items_center()
             .justify_center()
             .cursor_pointer()
             .text_color(palette::muted(cx))
@@ -518,15 +512,13 @@ impl Waffle {
             }));
         let head = div().flex_none().pt_3().px_3().pb_2().child(ui::search_field("soundboard-search", &self.soundboard.search, cx).trailing(volume));
         let in_view = picker.scroll.top_item();
-        let rail = div()
+        let rail = ui::col()
             .id("soundboard-rail")
             .w(px(52.))
             .flex_none()
             .px_2()
             .pt_1()
             .pb_2()
-            .flex()
-            .flex_col()
             .items_center()
             .gap_1p5()
             .overflow_y_scroll()
@@ -537,13 +529,11 @@ impl Waffle {
                 let scroll = picker.scroll.clone();
                 let (selected, hover) = (palette::accent_soft(cx), palette::hover(cx));
                 let tip: SharedString = if section.locked { NITRO_LOCKED.into() } else { section.name.clone() };
-                let tab = div()
+                let tab = ui::row()
                     .id(("soundboard-tab", i))
                     .size_9()
                     .flex_none()
                     .squircle(RADIUS_SM)
-                    .flex()
-                    .items_center()
                     .justify_center()
                     .cursor_pointer()
                     .text_color(if i == in_view { palette::accent_ink(cx) } else { palette::muted(cx) })
@@ -572,12 +562,11 @@ impl Waffle {
         let volume_card = picker.volume_open.then(|| self.volume_card(cx).into_any_element());
         let mut content = vec![
             head.into_any_element(),
-            div()
+            ui::row().items_stretch()
                 .flex_1()
                 .min_h_0()
-                .flex()
                 .child(rail)
-                .child(div().flex_1().min_w_0().h_full().flex().flex_col().relative().children(over_limit).child(list).child(gpui_kit::component::scroll::Scrollbar::vertical(&picker.scroll)))
+                .child(ui::col().flex_1().h_full().relative().children(over_limit).child(list).child(gpui_kit::component::scroll::Scrollbar::vertical(&picker.scroll)))
                 .into_any_element(),
         ];
         content.extend(volume_card);
@@ -588,7 +577,7 @@ impl Waffle {
     fn volume_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let value = format!("{}%", perceptual(self.prefs.soundboard_volume).round() as i32);
         let slider = self.range("soundboard-picker-volume".into(), slider_fraction(self.prefs.soundboard_volume), Fill::Accent, |this, f, cx| this.update_prefs(cx, |p| p.soundboard_volume = amplitude(f * 100.)), cx);
-        div()
+        ui::col()
             .id("soundboard-volume-card")
             .occlude()
             .absolute()
@@ -599,17 +588,13 @@ impl Waffle {
             .squircle(RADIUS_SM + 4.)
             .bg(palette::surface(palette::Level::Overlay, cx))
             .shadow(ui::shadow_pop(cx))
-            .flex()
-            .flex_col()
             .gap_2()
-            .child(div().flex().justify_between().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child("Soundboard Volume").child(div().text_color(palette::strong(cx)).child(value)))
+            .child(ui::row().items_stretch().justify_between().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child("Soundboard Volume").child(div().text_color(palette::strong(cx)).child(value)))
             .child(slider)
     }
 
     fn sound_section(&self, section: Section, cx: &mut Context<Self>) -> AnyElement {
-        let header = div()
-            .flex()
-            .items_center()
+        let header = ui::row()
             .gap_1p5()
             .pt_2p5()
             .pb_1p5()
@@ -622,13 +607,13 @@ impl Waffle {
         let rows = section.sounds.chunks(3).map(|row| {
             let tiles = row.iter().map(|s| self.sound_tile(&section.key, s, section.locked, cx).into_any_element());
             let fillers = (row.len()..3).map(|_| div().flex_1().into_any_element());
-            div().flex().gap_1p5().children(tiles.chain(fillers).collect::<Vec<_>>())
+            ui::row().items_stretch().gap_1p5().children(tiles.chain(fillers).collect::<Vec<_>>())
         }).collect::<Vec<_>>();
         div()
             .when(section.first_locked, |d| d.mt_3().border_t_1().border_color(palette::line(cx)))
             .when(section.locked, |d| d.opacity(0.5))
             .child(header)
-            .child(div().flex().flex_col().gap_1p5().children(rows))
+            .child(ui::col().gap_1p5().children(rows))
             .into_any_element()
     }
 
@@ -640,26 +625,23 @@ impl Waffle {
         let strong = palette::strong(cx);
         let (rest, hover) = (ui::mix(overlay, strong, 0.08), ui::mix(overlay, strong, 0.14));
         let edge = if self.soundboard.is_playing(&sound.id) { palette::accent() } else { gpui_kit::transparent_black() };
-        let tile = div()
+        let tile = ui::row()
             .id(group.clone())
             .group(group.clone())
             .relative()
             .flex_1()
-            .min_w_0()
             .h_9()
             .px_2()
             .squircle(RADIUS_SM)
             .border_1()
             .border_color(edge)
             .bg(rest)
-            .flex()
-            .items_center()
             .gap_1p5()
             .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::MEDIUM)
             .text_color(strong)
             .child(div().flex_none().child(emoji_face(sound.emoji.as_ref(), 16.)))
-            .child(div().flex_1().min_w_0().truncate().child(sound.name.clone()));
+            .child(ui::line(sound.name.clone()).flex_1());
         if locked {
             return tile.cursor(gpui_kit::CursorStyle::OperationNotAllowed).tooltip(|window, cx| ui::tip(NITRO_LOCKED, window, cx));
         }
@@ -678,15 +660,13 @@ impl Waffle {
             cx.stop_propagation();
             this.toggle_favorite(starred.clone(), cx);
         }));
-        let tools = div()
+        let tools = ui::row()
             .absolute()
             .top_0()
             .bottom_0()
             .right_0()
             .pl_4()
             .pr_1()
-            .flex()
-            .items_center()
             .gap_0p5()
             .bg(linear_gradient(90., linear_color_stop(hover.opacity(0.), 0.), linear_color_stop(hover, 0.25)))
             .opacity(0.)
@@ -786,12 +766,10 @@ fn emoji_face(emoji: Option<&Emoji>, size: f32) -> AnyElement {
 // The 22px buttons over a hovered sound.
 fn tool(id: String, glyph: Glyph, tip: &'static str, ink: Option<Hsla>, cx: &App) -> gpui_kit::Stateful<gpui_kit::Div> {
     let strong = palette::strong(cx);
-    div()
+    ui::row()
         .id(SharedString::from(id))
         .size(px(22.))
         .squircle(6.)
-        .flex()
-        .items_center()
         .justify_center()
         .cursor_pointer()
         .text_color(ink.unwrap_or_else(|| palette::muted(cx)))
@@ -807,13 +785,11 @@ fn effect_scene(effect: u64, family: Family, emoji: &Emoji, (width, height): (f3
     let total = family.duration();
     let copies = (0..family.copies()).map(|i| {
         let size = height * 0.34;
-        div()
+        ui::row()
             .absolute()
             .left_0()
             .top_0()
             .size(px(size))
-            .flex()
-            .items_center()
             .justify_center()
             .child(emoji_face(Some(emoji), size * 0.9))
             .with_animation(("soundboard-fx", (effect as usize) * 64 + i), Animation::new(total), move |el, t| {

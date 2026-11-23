@@ -57,12 +57,10 @@ impl Waffle {
         let sidebar_width = if self.settings_open() { self.settings_width } else { RAIL_WIDTH + self.channels_width };
         crate::material::sync_sidebar_material(window, sidebar_width, cx.theme().is_dark(), self.prefs.native_sidebar);
         let theme = cx.theme().clone();
-        let root = div()
+        let root = ui::col()
             .id("waffle")
             .track_focus(&self.focus)
             .size_full()
-            .flex()
-            .flex_col()
             .when(!crate::material::active(), |d| d.bg(theme.title_bar))
             .text_color(theme.foreground)
             .text_size(ui::TEXT_MD)
@@ -106,7 +104,7 @@ impl Waffle {
         }
         // A settings view covers the whole window and its nav takes the sidebar's place, so the app under it
         // isn't drawn: over the native material its own sidebar would show through the settings nav.
-        let body = div().relative().flex_1().min_h_0().flex();
+        let body = ui::row().items_stretch().relative().flex_1().min_h_0();
         let body = if self.settings_open() {
             body
         } else {
@@ -153,7 +151,7 @@ impl Waffle {
         crate::gif::begin_inline_layout();
         let content = self.render_main_content(window, cx);
         match self.voice_notice_bar(cx) {
-            Some(bar) => div().size_full().flex().flex_col().child(bar).child(div().flex_1().min_h_0().flex().child(content)).into_any_element(),
+            Some(bar) => ui::col().size_full().child(bar).child(ui::row().items_stretch().flex_1().min_h_0().child(content)).into_any_element(),
             None => content,
         }
     }
@@ -185,12 +183,10 @@ impl Waffle {
             crate::NoticeWhy::Elsewhere => (palette::danger(), gpui_kit::white(), "Your voice has been disconnected because you connected at another location.".to_owned()),
             crate::NoticeWhy::Restarted => (palette::accent(), palette::on_accent(), format!("You left {} when Waffle restarted.", notice.channel.name)),
         };
-        let reconnect = div()
+        let reconnect = ui::row()
             .id("voice-notice-reconnect")
             .h_6()
             .px_2p5()
-            .flex()
-            .items_center()
             .squircle(crate::ui::RADIUS_XS)
             .border_1()
             .border_color(ink.opacity(0.6))
@@ -199,11 +195,9 @@ impl Waffle {
             .hover(move |s| s.bg(ink.opacity(0.12)))
             .child("Reconnect")
             .on_click(cx.listener(|this, _, _, cx| this.reconnect_voice(cx)));
-        let close = div()
+        let close = ui::row()
             .id("voice-notice-close")
             .size_6()
-            .flex()
-            .items_center()
             .justify_center()
             .squircle(crate::ui::RADIUS_XS)
             .cursor_pointer()
@@ -215,18 +209,16 @@ impl Waffle {
                 cx.notify();
             }));
         Some(
-            div()
+            ui::row()
                 .flex_none()
                 .h_9()
                 .pl_4()
                 .pr_2()
-                .flex()
-                .items_center()
                 .gap_3()
                 .bg(fill)
                 .text_color(ink)
                 .text_size(ui::TEXT_SM)
-                .child(div().flex_1().min_w_0().flex().items_center().justify_center().gap_3().child(div().truncate().child(text)).child(reconnect))
+                .child(ui::row().flex_1().justify_center().gap_3().child(ui::line(text)).child(reconnect))
                 .child(close)
                 .child(self.caption_clearance(cfg!(target_os = "windows"))),
         )
@@ -309,11 +301,11 @@ impl Waffle {
     // A settings view: its nav with a resize handle on the edge, then the page. It covers the window, so it
     // tracks a drag of that handle itself.
     pub(crate) fn settings_frame(&self, id: &'static str, nav: AnyElement, main: impl IntoElement, cx: &mut Context<Self>) -> gpui_kit::Stateful<Div> {
-        let nav = div().relative().flex_none().h_full().w(px(self.settings_width)).flex().flex_col().child(ui::settings_nav_edge(cx)).child(nav).child(self.resize_handle(Edge::Settings, cx));
+        let nav = ui::col().relative().flex_none().h_full().w(px(self.settings_width)).child(ui::settings_nav_edge(cx)).child(nav).child(self.resize_handle(Edge::Settings, cx));
         // The page's top band drags the window too, as every other column's header does; it stops above
         // the close button, which sits below the caption buttons.
         let drag = div().absolute().top_0().left_0().right_0().h(px(TITLE_HEIGHT)).window_control_area(gpui_kit::WindowControlArea::Drag);
-        let main = div().relative().flex_1().min_w_0().h_full().flex().child(main).child(drag);
+        let main = ui::row().items_stretch().relative().flex_1().h_full().child(main).child(drag);
         ui::settings_window(id, nav, main, cx)
     }
 
@@ -399,8 +391,8 @@ impl Waffle {
         let plate = |on: bool| (has_plate && on).then(|| gpui_kit::black().opacity(0.22));
         let (faint, danger) = (palette::faint(cx), palette::danger_ink(cx));
         let status_line: AnyElement = match (server_muted, sharing) {
-            (true, _) => div().truncate().text_color(danger).child("Server muted by a moderator").into_any_element(),
-            (false, true) => div().flex().items_center().gap_1().child(Icon::new(Glyph::ShareScreen).size(ui::ICON_SM).text_color(palette::positive_ink(cx))).child(div().truncate().child("Sharing their screen")).into_any_element(),
+            (true, _) => ui::line("Server muted by a moderator").text_color(danger).into_any_element(),
+            (false, true) => ui::row().gap_1().child(Icon::new(Glyph::ShareScreen).size(ui::ICON_SM).text_color(palette::positive_ink(cx))).child(ui::line("Sharing their screen")).into_any_element(),
             (false, false) => ui::truncating("me-status", self.status_line()).into_any_element(),
         };
         let mic = me_button("mic", if muted { Nav::MicOff } else { Nav::Mic }, muted, if server_muted { "A moderator muted you here. Only they can unmute you." } else if muted { "Unmute" } else { "Mute" }, cx)
@@ -427,14 +419,11 @@ impl Waffle {
         let corners = [top, top, ui::RADIUS_MD, ui::RADIUS_MD];
         let nameplate = me.nameplate.as_ref().map(|plate| nameplate(plate, palette::surface(palette::Level::Sidebar, cx), corners, cx.theme().is_dark(), animate));
         let hover = palette::hover(cx);
-        let who = div()
+        let who = ui::row()
             .id("me")
             .flex_1()
-            .min_w_0()
             .p_1()
             .squircle(ui::RADIUS_SM)
-            .flex()
-            .items_center()
             .gap_2()
             .cursor_pointer()
             .hover(move |s| s.bg(hover))
@@ -446,16 +435,13 @@ impl Waffle {
                 false => decorated_avatar(&me.avatar, me.decoration.as_deref(), 32., Some(self.my_status.into()), ring),
             })
             .child(
-                div()
+                ui::col()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
                     .child(ui::truncating("me-name", me.name.clone()).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
                     .child(div().line_height(ui::LINE_XS).text_size(ui::TEXT_XS).text_color(faint).child(status_line)),
             );
         let voice = self.voice_panel(cx);
-        div()
+        ui::col()
             .absolute()
             .left_2()
             .right_2()
@@ -463,8 +449,6 @@ impl Waffle {
             .squircle(ui::RADIUS_MD)
             .overflow_hidden()
             .bg(card)
-            .flex()
-            .flex_col()
             .text_size(ui::TEXT_SM)
             .children(self.update_row(cx))
             .children(voice)
@@ -475,16 +459,14 @@ impl Waffle {
                     .flex_none()
                     .children(nameplate)
                     .child(
-                        div()
+                        ui::row()
                             .relative()
                             .size_full()
                             // 6px on every side, so a hover fill never meets the card's edge.
                             .p_1p5()
-                            .flex()
-                            .items_center()
                             .gap_1()
                             .child(who)
-                            .child(div().relative().flex().items_center().gap_2().child(split_control(mic, mic_options)).child(split_control(headphones, output_options)).child(settings)),
+                            .child(ui::row().relative().gap_2().child(split_control(mic, mic_options)).child(split_control(headphones, output_options)).child(settings)),
                     ),
             )
             .into_any_element()
@@ -493,14 +475,12 @@ impl Waffle {
     // The rail and the channel list, with the user area floating across the foot of both.
     pub(crate) fn render_nav(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let user_panel = self.me.clone().map(|me| self.user_panel(me, window, cx));
-        div()
+        ui::col()
             .relative()
             .h_full()
             .flex_none()
-            .flex()
-            .flex_col()
             .bg(crate::material::sidebar_fill(cx))
-            .child(div().flex_1().min_h_0().flex().child(self.render_rail_column(window, cx)).child(self.render_channels(window, cx)))
+            .child(ui::row().items_stretch().flex_1().min_h_0().child(self.render_rail_column(window, cx)).child(self.render_channels(window, cx)))
             .children(user_panel)
     }
 
@@ -527,18 +507,16 @@ impl Waffle {
             .child("Restart")
             .tooltip(|window, cx| ui::tip("Installs the update and reopens Waffle", window, cx))
             .on_click(cx.listener(|this, _, _, cx| this.request_restart(this.updates.staged().cloned(), cx)));
-        let row = div()
+        let row = ui::row()
             .h(px(UPDATE_HEIGHT))
             .flex_none()
             .pl_3()
             .pr_1p5()
-            .flex()
-            .items_center()
             .gap_2()
             .relative()
             .child(ui::inset_rule(crate::call::PANEL_PAD, cx))
             .child(Icon::new(Glyph::Download).size(ui::ICON_MD).flex_none().text_color(palette::accent_ink(cx)))
-            .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(format!("Waffle {} is ready", staged.version)))
+            .child(ui::line(format!("Waffle {} is ready", staged.version)).flex_1().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
             .child(restart);
         Some(row.into_any_element())
     }
@@ -709,9 +687,7 @@ fn history_step(keystroke: &gpui_kit::Keystroke) -> Option<bool> {
 // every flip, keyed by state.
 // A control and its chevron as one split pill: round on the outside, square where they meet, 1px apart.
 fn split_control(button: Stateful<Div>, chevron: Stateful<Div>) -> Div {
-    div()
-        .flex()
-        .items_center()
+    ui::row()
         .gap_px()
         .child(button.rounded_tr_none().rounded_br_none())
         .child(chevron.rounded_tl_none().rounded_bl_none())
@@ -721,14 +697,12 @@ fn split_control(button: Stateful<Div>, chevron: Stateful<Div>) -> Div {
 // control, so it is quieter and half as wide.
 fn me_chevron(id: &'static str, label: &'static str, open: bool, cx: &App) -> Stateful<Div> {
     let (hover, strong, selected) = (palette::hover(cx), palette::strong(cx), palette::selected(cx));
-    div()
+    ui::row()
         .id(id)
         .w_4()
         .h(px(30.))
         .flex_none()
         .squircle(ui::RADIUS_XS)
-        .flex()
-        .items_center()
         .justify_center()
         .cursor_pointer()
         .text_color(if open { strong } else { palette::faint(cx) })
@@ -741,13 +715,11 @@ fn me_chevron(id: &'static str, label: &'static str, open: bool, cx: &App) -> St
 fn me_button(id: &'static str, glyph: Nav, on: bool, label: &'static str, cx: &App) -> Stateful<Div> {
     let (hover, strong) = (palette::hover(cx), palette::strong(cx));
     let icon = glyph.icon().size_5().with_animation(SharedString::from(format!("{id}-{on}")), Animation::new(ui::DUR_POP).with_easing(crate::motion::back_out), |icon, t| icon.size(px(20. * (0.7 + 0.3 * t))));
-    div()
+    ui::row()
         .id(id)
         .size(px(30.))
         .flex_none()
         .squircle(ui::RADIUS_SM)
-        .flex()
-        .items_center()
         .justify_center()
         .cursor_pointer()
         .text_color(if on { palette::danger_ink(cx) } else { strong })

@@ -246,7 +246,7 @@ impl Waffle {
             }
             None => {}
         }
-        let list = div().id("launcher-list").flex().flex_col().p(px(SURFACE_INSET)).gap_0p5().children(rows);
+        let list = ui::col().id("launcher-list").p(px(SURFACE_INSET)).gap_0p5().children(rows);
         ui::col()
             .size_full()
             .child(ui::row().flex_none().px_3().pt_3().pb_2().child(div().flex_1().child(ui::search_field("launcher-search", &launcher.search, cx))))
@@ -256,7 +256,7 @@ impl Waffle {
 
     fn card_grid(&self, apps: Vec<&ShelfApp>, cx: &mut Context<Self>) -> AnyElement {
         // Rows of two, built as rows: wrapping inside the scroll area laid them one a row.
-        let rows: Vec<AnyElement> = apps.chunks(2).map(|pair| div().flex().gap(px(GRID_GAP)).children(pair.iter().map(|app| self.launcher_card(app, cx))).into_any_element()).collect();
+        let rows: Vec<AnyElement> = apps.chunks(2).map(|pair| ui::row().items_stretch().gap(px(GRID_GAP)).children(pair.iter().map(|app| self.launcher_card(app, cx))).into_any_element()).collect();
         ui::col().gap(px(GRID_GAP)).px(px(GRID_GAP / 2.)).pb_2().children(rows).into_any_element()
     }
 
@@ -296,7 +296,7 @@ impl Waffle {
         let width = ((WIDTH - SURFACE_INSET * 2. - GRID_GAP * 2.) / 2. - GRID_SLACK).floor();
         let art: AnyElement = match &app.cover {
             Some(url) => img(url.clone()).size_full().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
-            None => div().size_full().flex().items_center().justify_center().bg(palette::selected(cx)).child(Icon::new(Glyph::Image).size(ICON_XL).text_color(palette::faint(cx))).into_any_element(),
+            None => ui::row().size_full().justify_center().bg(palette::selected(cx)).child(Icon::new(Glyph::Image).size(ICON_XL).text_color(palette::faint(cx))).into_any_element(),
         };
         let marks = ui::row()
             .absolute()

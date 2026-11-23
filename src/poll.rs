@@ -399,16 +399,12 @@ impl Waffle {
     pub(crate) fn poll_creator_overlay(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let creator = self.poll_creator.as_ref()?;
         let subtitle = creator.channel.as_ref().map_or("Posts to this conversation".to_owned(), |c| format!("Posts to {c}"));
-        let head = div()
-            .flex()
+        let head = ui::row()
             .items_start()
             .gap_3()
             .child(
-                div()
+                ui::col()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
                     .gap_1()
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Create a poll"))
                     .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(subtitle)),
@@ -420,9 +416,7 @@ impl Waffle {
             .child(ui::text_field("poll-question", Input::new(&creator.question).appearance(false), &question_focus).error(creator.problems.question.is_some()))
             .child(under_field(creator.problems.question, Some(format!("{length} / {QUESTION_MAX}")), length > QUESTION_MAX, cx));
         let full = creator.answers.len() >= ANSWERS_MAX;
-        let add = div()
-            .flex()
-            .items_center()
+        let add = ui::row()
             .gap_2()
             .child(
                 ui::button("poll-add", Tone::Ghost, cx)
@@ -448,8 +442,7 @@ impl Waffle {
             }
             cx.notify();
         }));
-        let footer = div()
-            .flex()
+        let footer = ui::row().items_stretch()
             .justify_end()
             .gap_2()
             .child(ui::button("poll-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_poll_creator(cx))))
@@ -462,12 +455,10 @@ impl Waffle {
 
 // One answer: its emoji button inside the field, the text, and the way to remove it.
 fn answer_row(i: usize, row: &AnswerRow, removable: bool, cx: &mut Context<Waffle>) -> impl IntoElement {
-    let emoji = div()
+    let emoji = ui::row()
         .id(SharedString::from(format!("poll-emoji-{i}")))
         .size_6()
         .flex_none()
-        .flex()
-        .items_center()
         .justify_center()
         .cursor_pointer()
         .text_color(palette::muted(cx))
@@ -479,9 +470,7 @@ fn answer_row(i: usize, row: &AnswerRow, removable: bool, cx: &mut Context<Waffl
     let focus = row.input.read(cx).focus_handle(cx);
     let field = ui::text_field(SharedString::from(format!("poll-answer-{i}")), Input::new(&row.input).appearance(false), &focus).leading(emoji);
     let length = row.input.read(cx).value().chars().count();
-    div()
-        .flex()
-        .items_center()
+    ui::row()
         .gap_1()
         .child(div().flex_1().min_w_0().child(field.error(length > ANSWER_MAX)))
         .child(ui::icon_button(SharedString::from(format!("poll-remove-{i}")), Glyph::Trash, "Remove answer", cx).disabled(!removable).on_click(cx.listener(move |this, _, _, cx| this.remove_poll_answer(i, cx))))
@@ -489,9 +478,7 @@ fn answer_row(i: usize, row: &AnswerRow, removable: bool, cx: &mut Context<Waffl
 
 // The line under a field: what's wrong (if anything) at the start, the running count at the end.
 fn under_field(problem: Option<&'static str>, count: Option<String>, over: bool, cx: &mut Context<Waffle>) -> impl IntoElement {
-    div()
-        .flex()
-        .items_center()
+    ui::row()
         .gap_2()
         .text_size(ui::TEXT_XS)
         .child(div().flex_1().min_w_0().children(problem.map(|p| ui::field_error(p, cx))))

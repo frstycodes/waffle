@@ -494,7 +494,7 @@ impl Render for VideoPlayer {
         );
         let painted = self.unpainted_since.clone();
         // The centring lives on the full-size layer: the motion wrapper doesn't take the layer's size.
-        let center = center.render(|f| div().absolute().inset_0().flex().items_center().justify_center().child(f.apply(div().child(self.center_button(window, cx)))));
+        let center = center.render(|f| ui::row().absolute().inset_0().justify_center().child(f.apply(div().child(self.center_button(window, cx)))));
         let failed = match &self.stage {
             Stage::Failed(error) => Some(error.clone()),
             _ => None,
@@ -541,14 +541,12 @@ impl VideoPlayer {
         let size = self.press_frame(Control::Center, CENTER, window, cx);
         let lift = size.target().y_px();
         let side = size.target().width_px().unwrap_or(CENTER);
-        let face = div()
+        let face = ui::row()
             .relative()
             .top(px(lift))
             .size(px(side))
             .rounded_full()
             .bg(gpui_kit::black().opacity(0.6))
-            .flex()
-            .items_center()
             .justify_center()
             .text_color(gpui_kit::white())
             .child(match loading {
@@ -556,7 +554,7 @@ impl VideoPlayer {
                 false => Icon::new(Glyph::Play).size(px(side / 2.)).into_any_element(),
             });
         let ended = matches!(&self.stage, Stage::Ready(p) if !p.is_playing() && p.is_ended());
-        self.control(Control::Center, if ended { "Play Again" } else { "Play" }, div().size(px(CENTER)).flex().items_center().justify_center().child(face), |this, _, cx| this.toggle(cx), cx)
+        self.control(Control::Center, if ended { "Play Again" } else { "Play" }, ui::row().size(px(CENTER)).justify_center().child(face), |this, _, cx| this.toggle(cx), cx)
     }
 
     // Discord's bar on a gradient: play/pause, then time and scrubber, then volume and fullscreen.
@@ -570,9 +568,8 @@ impl VideoPlayer {
         let play = self.icon_button(Control::Play, if playing { Glyph::Pause } else { Glyph::Play }, if playing { "Pause" } else { "Play" }, |this, _, cx| this.toggle(cx), window, cx);
         let scrubber = self.scrubber(if duration.is_zero() { 0. } else { position.as_secs_f32() / duration.as_secs_f32() }, window, cx);
         let tabular = FontFeatures(Arc::new(vec![("tnum".into(), 1)]));
-        let time = div()
+        let time = ui::row().items_stretch()
             .flex_none()
-            .flex()
             .gap_1()
             .text_size(ui::TEXT_XS)
             .font_features(tabular)
@@ -593,18 +590,16 @@ impl VideoPlayer {
             .child(div().absolute().top_0().left_0().right_0().h(relative(0.45)).bg(shade(0., 0.68)))
             .child(div().absolute().top(relative(0.45)).bottom_0().left_0().right_0().bg(shade(0.68, 0.92)).when(!self.fullscreen, |d| d.rounded_b(px(RADIUS))))
             .child(
-                div()
+                ui::row()
                     .relative()
                     .pt_7()
                     .pb_2p5()
                     .px_3()
-                    .flex()
-                    .items_center()
                     .gap_4()
                     .child(play)
                     // The time sits above the scrubber so even a narrow video shows it whole; volume
                     // and full screen live in the top corners (see `corners`).
-                    .child(div().flex_1().min_w_0().flex().flex_col().gap_0p5().child(time).child(scrubber)),
+                    .child(ui::col().flex_1().gap_0p5().child(time).child(scrubber)),
             )
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_click(|_, _, cx| cx.stop_propagation())
@@ -635,7 +630,7 @@ impl VideoPlayer {
             .text_color(gpui_kit::white())
             .opacity(if self.hot == Some(control) { 1. } else { 0.86 })
             .child(Icon::new(glyph).size(px(ICON * scale)));
-        let slot = div().size(px(SLOT)).flex_none().flex().items_center().justify_center().child(face);
+        let slot = ui::row().size(px(SLOT)).flex_none().justify_center().child(face);
         self.control(control, label, slot, action, cx)
     }
 
@@ -762,14 +757,13 @@ impl VideoPlayer {
         let panel = self.motions.frame_one(Control::VolumePanel, Motion::new(Target::default()).initial(hidden).exit(hidden).present(open).transition(pop()), window, cx);
         let level = relative(self.level.heard());
         let record = self.volume_bounds.clone();
-        let slider = div()
+        let slider = ui::row().items_stretch()
             .id("video-volume-panel")
             .w_8()
             .h_24()
             .py_3()
             .rounded(px(RADIUS))
             .bg(gpui_kit::black().opacity(0.8))
-            .flex()
             .justify_center()
             .cursor_pointer()
             .child(
@@ -827,8 +821,7 @@ impl VideoPlayer {
 }
 
 fn loading_dots() -> AnyElement {
-    div()
-        .flex()
+    ui::row().items_stretch()
         .gap(px(3.))
         .children((0..3).map(|i| {
             div().size_1p5().rounded_full().bg(gpui_kit::white()).with_animation(

@@ -305,21 +305,16 @@ impl Waffle {
                     .with_animation("ringing-pulse", Animation::new(Duration::from_millis(1400)).repeat(), |d, t| d.opacity(0.6 + 0.4 * (t * std::f32::consts::TAU).cos().abs())),
             )
             .child(
-                div()
+                ui::col()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
                     .gap_0p5()
-                    .child(div().truncate().text_size(ui::TEXT_LEAD).font_weight(FontWeight::SEMIBOLD).child(self.dm_caller(channel_id)))
-                    .child(div().truncate().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::accent()).child(line)),
+                    .child(ui::line(self.dm_caller(channel_id)).text_size(ui::TEXT_LEAD).font_weight(FontWeight::SEMIBOLD))
+                    .child(ui::line(line).text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::accent())),
             )
             .child(
-                div()
+                ui::col()
                     .w(px(112.))
                     .flex_none()
-                    .flex()
-                    .flex_col()
                     .gap_1p5()
                     .child(
                         ui::button("ringing-join", Tone::Primary, cx)
@@ -393,7 +388,7 @@ impl Waffle {
             .into_any_element(),
         });
         let note = note.map(|note| {
-            let row = div().h(px(NOTE)).flex_none().flex().items_center().justify_center();
+            let row = ui::row().h(px(NOTE)).flex_none().justify_center();
             match note {
                 Note::RingAgain => {
                     let id = channel.id.clone();
@@ -487,8 +482,8 @@ impl Waffle {
             .child(Icon::new(Glyph::CallEnd).size(px(19.)))
             .tooltip(|window, cx| ui::tip("Leave call", window, cx))
             .on_click(cx.listener(|this, _, _, cx| this.leave_call_asking(cx)));
-        let group = div().p_0p5().flex().gap_0p5().squircle(12.).bg(stage::wash(0.06)).child(mic).child(camera).child(share);
-        div().h(px(BAR)).flex_none().pb_1().flex().items_center().justify_center().gap_1p5().child(group).child(leave)
+        let group = ui::row().items_stretch().p_0p5().gap_0p5().squircle(12.).bg(stage::wash(0.06)).child(mic).child(camera).child(share);
+        ui::row().h(px(BAR)).flex_none().pb_1().justify_center().gap_1p5().child(group).child(leave)
     }
 
     // A call going on in this DM that isn't ringing us: who's in, a camera mark if anyone's on video, and Join.
@@ -502,7 +497,7 @@ impl Waffle {
         let id = channel.id.clone();
         let names = others.iter().map(|v| v.user.as_ref().map_or_else(|| self.user_name(&v.user_id), |u| u.name.clone())).collect::<Vec<_>>().join(", ");
         Some(
-            div()
+            ui::row()
                 .id("dm-join-pill")
                 .occlude()
                 .h_8()
@@ -510,8 +505,6 @@ impl Waffle {
                 .pr(px(3.))
                 .mr_1()
                 .flex_none()
-                .flex()
-                .items_center()
                 .gap_2()
                 .squircle(RADIUS_MD)
                 .bg(palette::hover(cx))
@@ -547,33 +540,26 @@ impl Waffle {
 
 // The window's head: title over the timer; it carries the window when dragged.
 fn window_head(title: String, sub: String) -> Div {
-    div()
+    ui::row()
         .h(px(HEAD))
         .flex_none()
         .pl_3()
         .pr_1p5()
-        .flex()
-        .items_center()
         .gap_1p5()
         .child(
-            div()
+            ui::col()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .child(div().truncate().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).child(title))
-                .child(div().truncate().text_size(ui::TEXT_XS).text_color(stage::muted()).font_features(crate::call::tabular()).child(sub)),
+                .child(ui::line(title).text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD))
+                .child(ui::line(sub).text_size(ui::TEXT_XS).text_color(stage::muted()).font_features(crate::call::tabular())),
         )
 }
 
 fn window_icon_button(id: &'static str, glyph: Glyph, tip: &'static str) -> Stateful<Div> {
-    div()
+    ui::row()
         .id(id)
         .size_8()
         .flex_none()
         .squircle(11.)
-        .flex()
-        .items_center()
         .justify_center()
         .cursor_pointer()
         .text_color(stage::muted())
@@ -583,12 +569,10 @@ fn window_icon_button(id: &'static str, glyph: Glyph, tip: &'static str) -> Stat
 }
 
 fn stage_wash_button(id: &'static str, glyph: Glyph, label: SharedString) -> Stateful<Div> {
-    div()
+    ui::row()
         .id(id)
         .h(px(30.))
         .px_3()
-        .flex()
-        .items_center()
         .gap_1p5()
         .squircle(11.)
         .cursor_pointer()
@@ -647,20 +631,18 @@ fn faces_grid(faces: Vec<Face>, duo: bool) -> AnyElement {
             (_, true) => avatar.opacity(0.35).into_any_element(),
             _ => avatar.into_any_element(),
         };
-        let name = div()
+        let name = ui::row()
             .h(px(NAME_LINE))
             .max_w_full()
-            .flex()
-            .items_center()
             .gap_1()
             .text_size(px(if duo { 13. } else { 11. }))
             .text_color(stage::muted())
             .when(f.muted, |d| d.child(Icon::new(Glyph::MicOff).size(ui::ICON_XS).text_color(stage::off_ink())))
-            .child(div().min_w_0().truncate().child(f.name));
-        div().min_w_0().flex().flex_col().items_center().gap(px(if duo { 6. } else { 4. })).child(avatar).child(name)
+            .child(ui::line(f.name));
+        ui::col().items_center().gap(px(if duo { 6. } else { 4. })).child(avatar).child(name)
     });
     match duo {
-        true => div().size_full().pt_3p5().pb_2p5().px_3().flex().flex_col().items_center().gap_4().children(cells).into_any_element(),
+        true => ui::col().size_full().pt_3p5().pb_2p5().px_3().items_center().gap_4().children(cells).into_any_element(),
         false => div().size_full().pt_3().pb_2().px_3().grid().grid_cols(2).gap_x_2().gap_y_3p5().children(cells).into_any_element(),
     }
 }
