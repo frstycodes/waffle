@@ -6,7 +6,7 @@
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use gpui_kit::{
-    Animation, AnimationExt, AnyElement, App, Bounds, BoxShadow, Context, Div, Entity, FocusHandle, Focusable, FontWeight, Hsla, KeyDownEvent, MouseButton, Pixels, Point, SharedString, Stateful, Window,
+    AnyElement, App, Bounds, BoxShadow, Context, Div, Entity, FocusHandle, Focusable, FontWeight, Hsla, KeyDownEvent, MouseButton, Pixels, Point, SharedString, Stateful, Window,
     component::{
         Icon,
         input::{Input, InputState},
@@ -18,9 +18,9 @@ use crate::{
     Waffle,
     discord::{Emoji, Status},
     icons::Glyph,
-    motion, palette,
+    palette,
     settings::Fill,
-    ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, SURFACE_INSET, Squircle},
+    ui::{self, RADIUS_MD, RADIUS_SM, SURFACE_INSET, Squircle},
 };
 
 pub type Act = Rc<dyn Fn(&mut Waffle, &mut Window, &mut Context<Waffle>)>;
@@ -1016,54 +1016,8 @@ impl Waffle {
         })
         .detach();
     }
-
-    pub(crate) fn show_toast(&mut self, text: impl Into<SharedString>, cx: &mut Context<Self>) {
-        let text = text.into();
-        self.toast = Some(text.clone());
-        // Settings › Accessibility's minimum lengthens a toast, never shortens it.
-        let shown = std::time::Duration::from_secs(u64::from(self.prefs.min_toast_secs.max(4)));
-        cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(shown).await;
-            this.update(cx, |this, cx| {
-                if this.toast.as_ref() == Some(&text) {
-                    this.toast = None;
-                    cx.notify();
-                }
-            })
-            .ok();
-        })
-        .detach();
-        cx.notify();
-    }
-
-    pub(crate) fn render_toast(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let text = self.toast.clone()?;
-        // GAP: the design leads a toast with its tone's icon and can carry one action; `show_toast`
-        // carries only text, so neither shows yet.
-        let toast = div()
-            .max_w(px(380.))
-            .min_h_10()
-            .py_2p5()
-            .pl_3p5()
-            .pr_2p5()
-            .squircle(RADIUS_LG)
-            .bg(palette::surface(palette::Level::Overlay, cx))
-            .shadow(ui::shadow_pop(cx))
-            .flex()
-            .items_center()
-            .text_size(ui::TEXT_SM)
-            .line_height(ui::LINE_SM)
-            .font_weight(FontWeight::NORMAL)
-            .text_color(palette::strong(cx))
-            .child(text.clone());
-        // Rises 8px into place from scale 0.97 with its fade (CSS `toast-in`, 240ms).
-        // GAP: and from blur(4px); gpui has no filter blur on an element's own painting.
-        let toast = toast.with_animation(SharedString::from(format!("toast-{text}")), Animation::new(Duration::from_millis(240)).with_easing(|t| motion::ease_out().sample(t)), |toast, t| {
-            toast.translate_y(px(8. * (1. - t))).scale(0.97 + 0.03 * t).opacity(t)
-        });
-        Some(div().absolute().left_0().right_0().bottom_6().flex().justify_center().child(toast).into_any_element())
-    }
 }
+
 
 #[cfg(test)]
 mod tests {

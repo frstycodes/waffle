@@ -1,6 +1,6 @@
-// Checks the vendored gpui patch that lets a cached view replay when a cached view around it re-renders
-// (part.rs relies on it: the app re-renders as the parent of whichever column changed, and the others
-// must replay). Drop with the vendored gpui once upstream does the same.
+// Checks that a cached view replays when a cached view around it re-renders (part.rs relies on it: the
+// app re-renders as the parent of whichever column changed, and the others must replay), and that a
+// notified view re-renders alone, without the views around it (gpui-fast's retained views).
 use gpui_kit::prelude::*;
 use gpui_kit::{AnyView, Context, Entity, StyleRefinement, TestAppContext, Window, div};
 
@@ -54,7 +54,7 @@ fn a_cached_view_replays_when_the_one_around_it_re_renders(cx: &mut TestAppConte
 
     inner.update(cx, |_, cx| cx.notify());
     cx.run_until_parked();
-    assert_eq!(counts(cx), (3, 2), "a notified inner view re-renders, and the views around it with it");
+    assert_eq!(counts(cx), (2, 2), "a notified inner view re-renders alone");
 }
 
 // What the app's shell looks like when memory is released: something drawn before the app view (there,
@@ -120,15 +120,15 @@ fn a_nested_view_re_renders_when_the_view_around_it_replayed_last_frame(cx: &mut
     cx.run_until_parked();
     assert_eq!(counts(cx), (1, 1), "the outer view replays whole");
 
-    // The outer view re-renders; the column can't trust ranges from two frames ago, so it renders once.
+    // The outer view re-renders; the whole-view replay shifted the column's ranges with it, so the
+    // column replays them without indexing an older frame.
     outer.update(cx, |_, cx| cx.notify());
     cx.run_until_parked();
-    assert_eq!(counts(cx), (2, 2), "the column re-renders instead of replaying stale ranges");
+    assert_eq!(counts(cx), (2, 1), "the column replays its shifted ranges");
 
-    // Its ranges are fresh again, so it goes back to replaying.
     outer.update(cx, |_, cx| cx.notify());
     cx.run_until_parked();
-    assert_eq!(counts(cx), (3, 2), "and replays again from the next frame");
+    assert_eq!(counts(cx), (3, 1), "and keeps replaying");
 }
 
 // A view nested in one that fades or scales (a popover animating in) inherits the opacity and transform

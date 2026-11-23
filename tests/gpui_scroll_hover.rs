@@ -1,10 +1,10 @@
-// Checks the vendored gpui patch that holds hover, as browsers do, while the wheel scrolls under a still pointer.
-// Drop with the vendored gpui once upstream ships the same behaviour.
+// Checks that hover holds, as browsers do, while the wheel scrolls under a still pointer (gpui-fast's hover
+// freeze), and that a click under it still lands.
 use std::time::Duration;
 
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    Context, Entity, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollDelta, ScrollWheelEvent,
+    Context, Entity, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollDelta, ScrollEvent,
     TestAppContext, TouchPhase, VisualTestContext, Window, div, point, px,
 };
 
@@ -108,7 +108,10 @@ fn a_wheel_event_between_press_and_release_keeps_the_click(cx: &mut TestAppConte
     assert_eq!(button.read_with(cx, |b, _| b.clicks), 1);
 }
 
+// gpui-fast holds hover for 100ms of wall-clock time after the last wheel event, then redraws on a timer:
+// let that time pass for real, then fire the timer.
 fn wait(cx: &mut VisualTestContext) {
+    std::thread::sleep(Duration::from_millis(120));
     cx.executor().advance_clock(Duration::from_millis(200));
     cx.run_until_parked();
 }
@@ -131,11 +134,12 @@ fn wheel_by(cx: &mut VisualTestContext, dy: Pixels) {
 }
 
 fn scroll(cx: &mut VisualTestContext, dy: Pixels, touch_phase: TouchPhase) {
-    cx.simulate_event(ScrollWheelEvent {
+    cx.simulate_event(ScrollEvent {
         position: point(px(50.), px(25.)),
         delta: ScrollDelta::Pixels(point(px(0.), dy)),
         modifiers: Default::default(),
         touch_phase,
+        source: Default::default(),
     });
     cx.run_until_parked();
 }

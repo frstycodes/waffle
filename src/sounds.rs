@@ -29,6 +29,10 @@ pub enum Cue {
     PttStop,
     CallCalling,
     CallRinging,
+    ActivityLaunch,
+    ActivityEnd,
+    ActivityUserJoin,
+    ActivityUserLeft,
 }
 
 impl Cue {
@@ -52,6 +56,10 @@ impl Cue {
             Cue::PttStop => include_bytes!("../assets/sounds/ptt_stop.mp3"),
             Cue::CallCalling => include_bytes!("../assets/sounds/call_calling.mp3"),
             Cue::CallRinging => include_bytes!("../assets/sounds/call_ringing.mp3"),
+            Cue::ActivityLaunch => include_bytes!("../assets/sounds/activity_launch.mp3"),
+            Cue::ActivityEnd => include_bytes!("../assets/sounds/activity_end.mp3"),
+            Cue::ActivityUserJoin => include_bytes!("../assets/sounds/activity_user_join.mp3"),
+            Cue::ActivityUserLeft => include_bytes!("../assets/sounds/activity_user_left.mp3"),
         }
     }
 }
@@ -252,5 +260,55 @@ mod tests {
     #[test]
     fn non_opus_isnt_taken_for_opus() {
         assert!(super::ogg_opus(include_bytes!("../assets/sounds/mute.mp3")).is_none());
+    }
+}
+
+// The cue for someone's voice state changing, seen from our call. Others arriving or going sound as
+// a join or a leave, from or to another channel too. Our own come from the call: a join when it
+// connects, or a move when it switched channels in the same server (see `connected_cue`).
+pub(crate) fn member_cue(mine: bool, was_here: bool, is_here: bool) -> Option<Cue> {
+    match (mine, was_here, is_here) {
+        (true, ..) => None,
+        (false, false, true) => Some(Cue::UserJoin),
+        (false, true, false) => Some(Cue::UserLeave),
+        _ => None,
+    }
+}
+
+pub(crate) fn connected_cue(switched: bool) -> Cue {
+    if switched { Cue::UserMoved } else { Cue::UserJoin }
+}
+
+// Discord's cue when the viewer count of the stream we're in changes (it stays quiet past 25).
+pub(crate) fn viewer_cue(before: usize, after: usize) -> Option<Cue> {
+    match () {
+        _ if before > 25 => None,
+        _ if after > before => Some(Cue::StreamUserJoined),
+        _ if after < before => Some(Cue::StreamUserLeft),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod viewer_tests {
+    use super::*;
+
+    #[test]
+    fn viewer_cues() {
+        assert_eq!(viewer_cue(0, 1), Some(Cue::StreamUserJoined));
+        assert_eq!(viewer_cue(2, 1), Some(Cue::StreamUserLeft));
+        assert_eq!(viewer_cue(1, 1), None);
+        assert_eq!(viewer_cue(30, 31), None);
+    }
+
+    // A channel hop is one move for us, and a join or leave for whoever we're in the call with.
+    #[test]
+    fn voice_state_cues() {
+        assert_eq!(member_cue(false, false, true), Some(Cue::UserJoin), "someone hops in from another channel");
+        assert_eq!(member_cue(false, true, false), Some(Cue::UserLeave), "someone hops out to another channel");
+        assert_eq!(member_cue(false, true, true), None);
+        assert_eq!(member_cue(true, true, false), None, "our own hop sounds once, from the call");
+        assert_eq!(connected_cue(true), Cue::UserMoved);
+        assert_eq!(connected_cue(false), Cue::UserJoin);
     }
 }

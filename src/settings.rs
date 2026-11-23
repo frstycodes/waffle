@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 mod accessibility;
 mod activity;
 mod advanced;
+mod mini;
+use mini::{MINI_DARK, MINI_LIGHT, mini_sync, mini_window};
 mod games;
 pub(crate) mod profile;
 mod profile_draft;
@@ -227,6 +229,10 @@ pub struct Prefs {
     // Per-user listening volume (0..=2) and local mutes, kept across calls as Discord does.
     pub user_volumes: HashMap<String, f32>,
     pub local_mutes: Vec<String>,
+    // Activities you started, newest first: the launcher's Recent.
+    pub recent_activities: Vec<String>,
+    // Sites whose links activities may open without asking (Waffle's "Trust this domain").
+    pub trusted_link_domains: Vec<String>,
     // Discord's per-user "Mute Soundboard" and "Disable Video", kept locally like the volume.
     pub soundboard_mutes: Vec<String>,
     pub hidden_video: Vec<String>,
@@ -343,6 +349,8 @@ impl Default for Prefs {
             keybinds: vec![Keybind { action: Action::PushToTalk, keys: Some("`".into()) }, share_keybind()],
             user_volumes: HashMap::new(),
             local_mutes: Vec::new(),
+            recent_activities: Vec::new(),
+            trusted_link_domains: Vec::new(),
             soundboard_mutes: Vec::new(),
             hidden_video: Vec::new(),
             soundboard_volume: 100.,
@@ -2126,7 +2134,7 @@ const BANNER: (u32, u32) = (0x8E6AC7, 0x88296F);
 
 const NOTIFY_CUES: [(&str, &str, Cue); 2] = [("cue-message", "Message", Cue::Message), ("cue-mention", "Mention", Cue::Mention)];
 const VOICE_CUES: [(&str, &str, Cue); 4] = [("cue-deafen", "Deafen", Cue::Deafen), ("cue-undeafen", "Undeafen", Cue::Undeafen), ("cue-mute", "Mute", Cue::Mute), ("cue-unmute", "Unmute", Cue::Unmute)];
-const MORE_CUES: [(&str, &str, Cue); 12] = [
+const MORE_CUES: [(&str, &str, Cue); 16] = [
     ("cue-disconnect", "Voice disconnected", Cue::Disconnect),
     ("cue-ptt-start", "PTT activate", Cue::PttStart),
     ("cue-ptt-stop", "PTT deactivate", Cue::PttStop),
@@ -2137,6 +2145,10 @@ const MORE_CUES: [(&str, &str, Cue); 12] = [
     ("cue-stream-stopped", "Stream stopped", Cue::StreamEnded),
     ("cue-viewer-join", "Viewer join", Cue::StreamUserJoined),
     ("cue-viewer-leave", "Viewer leave", Cue::StreamUserLeft),
+    ("cue-activity-launch", "Activity started", Cue::ActivityLaunch),
+    ("cue-activity-end", "Activity ended", Cue::ActivityEnd),
+    ("cue-activity-join", "Activity player join", Cue::ActivityUserJoin),
+    ("cue-activity-leave", "Activity player leave", Cue::ActivityUserLeft),
     ("cue-outgoing-ring", "Outgoing ring", Cue::CallCalling),
     // GAP: nothing plays this yet; incoming DM calls (CALL_CREATE) aren't handled.
     ("cue-incoming-ring", "Incoming ring", Cue::CallRinging),
@@ -2375,70 +2387,6 @@ fn sentence(label: &str) -> String {
 }
 
 // A small window in each theme, on fixed colours, so a light preview reads light in the dark theme.
-struct Mini {
-    rail: u32,
-    side: u32,
-    page: u32,
-    ink: u32,
-    faint: u32,
-}
-
-const MINI_DARK: Mini = Mini { rail: 0x0A0B0D, side: 0x111213, page: 0x17181A, ink: 0xD6D7DA, faint: 0x4C4D4F };
-const MINI_LIGHT: Mini = Mini { rail: 0xDEE0E3, side: 0xECEEF0, page: 0xF8F9FB, ink: 0x2D2E30, faint: 0xBCBEC0 };
-
-fn mini_window(m: &Mini) -> Div {
-    let bar = |color: u32, width: f32| div().h_1().w(relative(width)).rounded_full().bg(palette::data_color(color));
-    // The rail runs along the window's rounded left edge, so it takes those corners: gpui clips only to
-    // rectangles, and a square rail poked out past them.
-    let rail = ui::edge(div(), ui::left(ui::RADIUS_MD))
-        .w(relative(0.12))
-        .h_full()
-        .bg(palette::data_color(m.rail))
-        .pt_1p5()
-        .flex()
-        .flex_col()
-        .items_center()
-        .gap_1()
-        .child(div().w(relative(0.6)).h_3p5().squircle(4.).bg(palette::accent()))
-        .child(div().w(relative(0.6)).h_3p5().squircle(4.).bg(palette::data_color(m.faint)));
-    let side = div().w(relative(0.28)).h_full().bg(palette::data_color(m.side)).py_2().px_1p5().flex().flex_col().gap(px(5.)).child(bar(m.faint, 1.)).child(bar(m.ink, 0.8)).child(bar(m.faint, 0.6)).child(bar(m.faint, 1.));
-    let content = div()
-        .flex_1()
-        .h_full()
-        .py_2p5()
-        .px_2()
-        .flex()
-        .flex_col()
-        .justify_end()
-        .gap(px(5.))
-        .child(bar(m.ink, 0.4))
-        .child(bar(m.faint, 0.85))
-        .child(bar(m.ink, 0.4))
-        .child(bar(m.faint, 0.85))
-        .child(div().mt_1().h_3().w_full().squircle(4.).bg(palette::data_color(m.faint)));
-    div().w_full().h(px(MINI_HEIGHT)).squircle(ui::RADIUS_MD).bg(palette::data_color(m.page)).flex().child(rail).child(side).child(content)
-}
-
-const MINI_HEIGHT: f32 = 130.;
-
-// Sync with OS: the light window on the left half, the dark one on the right.
-// GAP: the design splits the two along the diagonal (clip-path). gpui clips only to rectangles, and a
-// clip inside a rotated element is its axis-aligned box, so rotation can't cut the diagonal either.
-fn mini_sync() -> AnyElement {
-    let half = |left: bool, m: &Mini| {
-        div()
-            .absolute()
-            .top_0()
-            .bottom_0()
-            .w(relative(0.5))
-            .when(left, |d| d.left_0())
-            .when(!left, |d| d.right_0())
-            .overflow_hidden()
-            .child(div().absolute().top_0().w(relative(2.)).when(left, |d| d.left_0()).when(!left, |d| d.right_0()).child(mini_window(m)))
-    };
-    div().relative().w_full().h(px(MINI_HEIGHT)).child(half(true, &MINI_LIGHT)).child(half(false, &MINI_DARK)).into_any_element()
-}
-
 // Every font family installed on this computer, once per run, alphabetical; names starting with a dot are
 // the system's private UI faces. GAP: a font installed while Waffle runs shows after a restart.
 fn installed_fonts(cx: &App) -> &'static Vec<String> {

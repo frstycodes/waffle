@@ -76,14 +76,7 @@ impl Waffle {
             }))
             .on_mouse_down(MouseButton::Navigate(NavigationDirection::Back), cx.listener(|this, _, window, cx| this.navigate(false, window, cx)))
             .on_mouse_down(MouseButton::Navigate(NavigationDirection::Forward), cx.listener(|this, _, window, cx| this.navigate(true, window, cx)))
-            .on_mouse_move(cx.listener(Self::on_drag_move))
-            .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
-                let Some(drag) = this.drag.take() else { return };
-                if drag.edge == Edge::CallChat {
-                    this.prefs.save();
-                }
-                cx.notify();
-            }));
+            .when(self.drag.is_some(), |root| root.child(window_drag(cx, Self::on_drag_move, Self::end_drag)));
         let root = self.listen_shortcuts(root, cx);
         self.restore_last_channel(window, cx);
         if let Status::SignedOut(login) = &self.status {
@@ -99,6 +92,7 @@ impl Waffle {
             crate::gif::set_covered(true);
             return root.child(video).into_any_element();
         }
+        self.sync_activity_frame(cx);
         if self.call_fullscreen && self.call_view
             && let Some(call) = self.render_call_with_chat(window, cx)
         {
@@ -106,16 +100,8 @@ impl Waffle {
             let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_create_server(window, cx)).or_else(|| self.render_invite(window, cx)).or_else(|| self.render_stage_topic(window, cx)).or_else(|| self.render_modify_attachment(window, cx)).or_else(|| self.render_notification_settings(window, cx)).or_else(|| self.render_new_post(window, cx)));
             let combos = self.render_keyboard_combos(window, cx);
             crate::gif::set_covered(!call_overlays.is_empty() || menu.is_some() || dialog.is_some() || combos.is_some());
-            return root
-                .child(call)
-                .children(self.call_window(cx))
-                .child(overlays)
-                .children(call_overlays)
-                .children(self.render_toast(cx))
-                .children(menu)
-                .children(dialog)
-                .children(combos)
-                .into_any_element();
+            let layer = std::iter::once(overlays).chain(call_overlays).chain(self.render_toast(cx)).chain(menu).chain(dialog).chain(combos);
+            return root.child(call).children(self.call_window(cx)).child(over_the_game(layer)).into_any_element();
         }
         // A settings view covers the whole window and its nav takes the sidebar's place, so the app under it
         // isn't drawn: over the native material its own sidebar would show through the settings nav.
@@ -125,7 +111,7 @@ impl Waffle {
         } else {
             let nav = self.part(Column::Nav, StyleRefinement::default().w(px(sidebar_width)).h_full().flex_none(), cx);
             let main = self.part(Column::Main, StyleRefinement::default().flex_1().min_w_0().h_full(), cx);
-            body.child(nav).child(main)
+            body.child(self.above_game(nav)).child(main)
         };
         // Anything drawn over the chat pauses its GIFs (the GIF layer paints above the whole app).
         let (overlays, call_overlays) = (self.overlays(cx), self.render_call_overlays(window, cx));
@@ -136,21 +122,24 @@ impl Waffle {
         let combos = self.render_keyboard_combos(window, cx);
         crate::gif::set_covered(combos.is_some() || !call_overlays.is_empty() || menu.is_some() || dialog.is_some() || viewer.is_some() || settings.is_some() || channel_settings.is_some() || server_settings.is_some());
         // Over everything but popups: a DM call's window, or, away from a server call, the stream we watch.
-        let pip = self.call_window(cx).or_else(|| (!self.call_view).then(|| self.stream_pip(cx)).flatten());
+        // An activity away from its call outranks the DM call's window (it carries the way back); a ring outranks both.
+        let activity = (!self.call_view && self.ringing_in.is_none()).then(|| self.activity_pip(cx)).flatten();
+        let pip = activity.or_else(|| self.call_window(cx)).or_else(|| (!self.call_view).then(|| self.stream_pip(cx)).flatten());
+        let layer = std::iter::once(overlays)
+            .chain(call_overlays)
+            .chain(viewer)
+            .chain(settings)
+            .chain(channel_settings)
+            .chain(server_settings)
+            // Over the settings views too: their menus, confirms and toasts come from the same places.
+            .chain(self.render_toast(cx))
+            .chain(menu)
+            .chain(dialog)
+            .chain(combos);
         self.pip_drop_zone(root, cx)
             .child(body)
             .children(pip)
-            .child(overlays)
-            .children(call_overlays)
-            .children(viewer)
-            .children(settings)
-            .children(channel_settings)
-            .children(server_settings)
-            // Over the settings views too: their menus, confirms and toasts come from the same places.
-            .children(self.render_toast(cx))
-            .children(menu)
-            .children(dialog)
-            .children(combos)
+            .child(over_the_game(layer))
             .children(crate::window_controls::render(window, cx))
             .children(self.render_landing(window, cx))
             .into_any_element()
@@ -179,7 +168,10 @@ impl Waffle {
                 let forum = self.channel.clone().expect("checked above");
                 self.render_forum(forum, window, cx)
             }
-            None => self.render_chat(window, cx).into_any_element(),
+            None => {
+                let chat = self.render_chat(window, cx).into_any_element();
+                self.chat_with_activity(chat, cx)
+            }
         }
     }
 
@@ -321,14 +313,15 @@ impl Waffle {
         // the close button, which sits below the caption buttons.
         let drag = div().absolute().top_0().left_0().right_0().h(px(TITLE_HEIGHT)).window_control_area(gpui_kit::WindowControlArea::Drag);
         let main = div().relative().flex_1().min_w_0().h_full().flex().child(main).child(drag);
-        ui::settings_window(id, nav, main, cx).on_mouse_move(cx.listener(Self::on_drag_move)).on_mouse_up(
-            MouseButton::Left,
-            cx.listener(|this, _, _, cx| {
-                if this.drag.take().is_some() {
-                    cx.notify();
-                }
-            }),
-        )
+        ui::settings_window(id, nav, main, cx)
+    }
+
+    fn end_drag(&mut self, cx: &mut Context<Self>) {
+        let Some(drag) = self.drag.take() else { return };
+        if drag.edge == Edge::CallChat {
+            self.prefs.save();
+        }
+        cx.notify();
     }
 
     fn on_drag_move(&mut self, event: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -799,4 +792,40 @@ fn me_button(id: &'static str, glyph: Nav, on: bool, label: &'static str, cx: &A
         .hover(move |s| s.bg(hover))
         .child(icon)
         .tooltip(move |window, cx| ui::tip(label, window, cx))
+}
+
+// What draws over the app (dialogs, settings, the viewer, menus, toasts), as one deferred layer after it: an
+// activity's webview sits between the app and its deferred draws (activity_frame.rs), so these show over the game.
+fn over_the_game(layer: impl Iterator<Item = AnyElement>) -> gpui_kit::Deferred {
+    // lint-allow(raw-floating): a transparent full-window layer must not occlude; each overlay in it occludes itself
+    gpui_kit::deferred(div().absolute().inset_0().children(layer))
+}
+
+// A drag's moves and its release, heard by the window wherever the pointer is: element listeners hear only while
+// their element is hovered, and over a native view (an activity's webview) nothing of the app's is, so a drag
+// stalled whenever the pointer crossed onto the game. Rendered only while the drag is on.
+pub(crate) fn window_drag(
+    cx: &mut Context<Waffle>,
+    on_move: impl Fn(&mut Waffle, &MouseMoveEvent, &mut Window, &mut Context<Waffle>) + 'static,
+    on_up: impl Fn(&mut Waffle, &mut Context<Waffle>) + 'static,
+) -> impl IntoElement {
+    let this = cx.weak_entity();
+    gpui_kit::canvas(
+        |_, _, _| {},
+        move |_, _, window, _| {
+            let moved = this.clone();
+            window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                if phase == gpui_kit::DispatchPhase::Bubble {
+                    _ = moved.update(cx, |this, cx| on_move(this, event, window, cx));
+                }
+            });
+            window.on_mouse_event(move |event: &gpui_kit::MouseUpEvent, phase, _, cx| {
+                if phase == gpui_kit::DispatchPhase::Bubble && event.button == MouseButton::Left {
+                    _ = this.update(cx, |this, cx| on_up(this, cx));
+                }
+            });
+        },
+    )
+    .absolute()
+    .size_0()
 }

@@ -383,7 +383,7 @@ impl Waffle {
             .h_full()
             .overflow_y_scroll()
             .track_scroll(&dialog.scroll)
-            .on_scroll_wheel(cx.listener(|this, _, _, cx| this.reactions_scrolled(cx)))
+            .on_scroll(cx.listener(|this, _, _, cx| this.reactions_scrolled(cx)))
             .p_2()
             .flex()
             .flex_col()

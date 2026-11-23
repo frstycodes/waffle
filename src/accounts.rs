@@ -127,6 +127,7 @@ impl Waffle {
         self.prefs.save();
         let (hotkeys, updates) = (self.hotkeys.take(), std::mem::take(&mut self.updates));
         self.call = None;
+        self.end_activities(cx);
         *self = Self::build(window, None, cx);
         self.hotkeys = hotkeys;
         self.updates = updates;

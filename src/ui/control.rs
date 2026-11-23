@@ -527,6 +527,8 @@ fn tone_look(tone: Tone, cx: &App) -> Look {
         Tone::Danger => (palette::danger(), palette::danger_hover(), palette::danger_hover(), white),
         Tone::Positive => (palette::success(), palette::success_hover(), palette::success_hover(), white),
         Tone::OnMedia => (gpui_kit::black().opacity(0.6), gpui_kit::black().opacity(0.75), gpui_kit::black().opacity(0.85), white),
+        // Dark ink on white whatever the theme: the art behind it is what sets the tone.
+        Tone::Overlay => (white, super::mix(white, palette::stage::bg(), 0.12), super::mix(white, palette::stage::bg(), 0.2), palette::stage::bg()),
         Tone::Link => (clear, clear, clear, palette::accent_ink(cx)),
     };
     Look { rest, hover, press, ink, ink_hover: ink, edge: None }

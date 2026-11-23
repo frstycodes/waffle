@@ -1,0 +1,36 @@
+// Discord's permission bits used by the menus.
+pub const CREATE_INSTANT_INVITE: u64 = 1;
+pub const MANAGE_CHANNELS: u64 = 1 << 4;
+pub const KICK_MEMBERS: u64 = 1 << 1;
+pub const BAN_MEMBERS: u64 = 1 << 2;
+pub const ADMINISTRATOR: u64 = 1 << 3;
+pub const MUTE_MEMBERS: u64 = 1 << 22;
+pub const DEAFEN_MEMBERS: u64 = 1 << 23;
+pub const MOVE_MEMBERS: u64 = 1 << 24;
+pub const REQUEST_TO_SPEAK: u64 = 1 << 32;
+// Discord's client calls you a stage moderator only with all three.
+pub const STAGE_MODERATOR: u64 = MANAGE_CHANNELS | MUTE_MEMBERS | MOVE_MEMBERS;
+pub const SEND_MESSAGES: u64 = 1 << 11;
+pub const SEND_MESSAGES_IN_THREADS: u64 = 1 << 38;
+pub const BYPASS_SLOWMODE: u64 = 1 << 52;
+pub const MANAGE_MESSAGES: u64 = 1 << 13;
+pub const CHANGE_NICKNAME: u64 = 1 << 26;
+pub const MANAGE_NICKNAMES: u64 = 1 << 27;
+pub const MANAGE_ROLES: u64 = 1 << 28;
+pub const MANAGE_WEBHOOKS: u64 = 1 << 29;
+pub const MANAGE_THREADS: u64 = 1 << 34;
+pub const CREATE_PUBLIC_THREADS: u64 = 1 << 35;
+pub const MODERATE_MEMBERS: u64 = 1 << 40;
+pub const SEND_POLLS: u64 = 1 << 49;
+pub const SET_VOICE_CHANNEL_STATUS: u64 = 1 << 48;
+pub const PIN_MESSAGES: u64 = 1 << 51;
+pub const CONNECT: u64 = 1 << 20;
+pub const USE_EMBEDDED_ACTIVITIES: u64 = 1 << 39;
+pub const SPEAK: u64 = 1 << 21;
+pub const USE_SOUNDBOARD: u64 = 1 << 42;
+pub const USE_EXTERNAL_SOUNDS: u64 = 1 << 45;
+pub const READ_MESSAGE_HISTORY: u64 = 1 << 16;
+pub const MANAGE_EVENTS: u64 = 1 << 33;
+pub const CREATE_EVENTS: u64 = 1 << 44;
+pub const SEND_TTS_MESSAGES: u64 = 1 << 12;
+pub const MENTION_EVERYONE: u64 = 1 << 17;

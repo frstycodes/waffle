@@ -507,7 +507,7 @@ impl Waffle {
             .bg(ink.tile)
             .child(div().flex().items_center().justify_between().child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(activity_heading(rich.kind))).child(more))
             .child(div().flex().items_center().gap_3().min_w_0().child(art).child(facts))
-            .when(rich.joinable, |c| c.child(ask_to_join(ink)))
+            .when(rich.joinable, |c| c.child(ask_to_join(ink))).children(self.activity_join_button(&card.user.id, rich, cx))
     }
 
     // Their roles, then "Add role" for members who can manage roles.

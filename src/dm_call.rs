@@ -486,7 +486,7 @@ impl Waffle {
             .text_color(gpui_kit::white())
             .child(Icon::new(Glyph::CallEnd).size(px(19.)))
             .tooltip(|window, cx| ui::tip("Leave call", window, cx))
-            .on_click(cx.listener(|this, _, _, cx| this.leave_voice(cx)));
+            .on_click(cx.listener(|this, _, _, cx| this.leave_call_asking(cx)));
         let group = div().p_0p5().flex().gap_0p5().squircle(12.).bg(stage::wash(0.06)).child(mic).child(camera).child(share);
         div().h(px(BAR)).flex_none().pb_1().flex().items_center().justify_center().gap_1p5().child(group).child(leave)
     }

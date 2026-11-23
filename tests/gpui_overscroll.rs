@@ -186,7 +186,7 @@ fn content_that_fits_does_not_stretch() {
 mod headless {
     use gpui_kit::prelude::*;
     use gpui_kit::{
-        Context, ListAlignment, ListState, Pixels, ScrollDelta, ScrollWheelEvent, TestAppContext, TouchPhase,
+        Context, ListAlignment, ListState, Pixels, ScrollDelta, ScrollEvent, TestAppContext, TouchPhase,
         VisualTestContext, Window, div, list, point, px,
     };
 
@@ -205,12 +205,13 @@ mod headless {
         }
     }
 
-    fn wheel(phase: TouchPhase, dy: f32) -> ScrollWheelEvent {
-        ScrollWheelEvent {
+    fn wheel(phase: TouchPhase, dy: f32) -> ScrollEvent {
+        ScrollEvent {
             position: point(px(100.), px(100.)),
             delta: ScrollDelta::Pixels(point(px(0.), px(dy))),
             modifiers: Default::default(),
             touch_phase: phase,
+            source: Default::default(),
         }
     }
 

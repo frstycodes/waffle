@@ -1,4 +1,4 @@
-# Synthesises Waffle's sound cues into assets/sounds/*.mp3 (needs `lame`): python3 tools/sound_cues.py
+# Synthesises Waffle's sound cues into assets/sounds/*.mp3 (needs `lame`): python3 tools/sound_cues.py [names…]
 # Each plays Discord's own notes on Discord's timing (measured from its cues), so they read the same,
 # in Waffle's own voice: every note glides into its pitch (a soft "bloop"), left and right sit a few
 # cents apart, and a small room rings after.
@@ -38,6 +38,12 @@ CUES = {
     "stream_user_left":   (["A3", "A2", "D3"], [0, 0.1, 0.18], 0.50, -1, 0.45, 0.16),
     "message":            (["G4", "G5"], [0, 0.085], 0.26, +1, 0.36, 0.25),
     "mention":            (["D5", "D6"], [0, 0.08], 0.32, +1, 0.42, 0.30),
+    # Activities: a low swell under a rising A minor arpeggio to launch; C-E falling to the octave below to end;
+    # a bright C-E-G for someone joining your game, C dropping an octave for someone leaving it.
+    "activity_launch":    (["A2+E3", "A4", "C5", "G5"], [0, 0.10, 0.17, 0.24], 0.62, +1, 0.45, 0.20),
+    "activity_end":       (["C5", "E5", "C4"], [0, 0.11, 0.22], 0.52, -1, 0.45, 0.18),
+    "activity_user_join": (["C5", "E5", "G5"], [0, 0.08, 0.2], 0.42, +1, 0.40, 0.22),
+    "activity_user_left": (["C5", "C4"], [0, 0.08], 0.38, -1, 0.40, 0.18),
     "ptt_start":          (["G4"], [0], 0.08, +1, 0.40, 0.15),
     "ptt_stop":           (["G4", "F#3"], [0, 0.03], 0.11, -1, 0.40, 0.15),
     # Ringtones, looped while a call rings: octave-stacked chords falling C, C, G twice, out; a plucked
@@ -136,11 +142,16 @@ def room(dry, spread, wet_level):
     return [v + w * wet_level for v, w in zip(dry, wet)]
 
 
+# Names on the command line render only those cues (`python3 tools/sound_cues.py activity_launch`).
 def main():
+    import sys
+    only = set(sys.argv[1:])
     root = os.path.join(os.path.dirname(__file__), "..", "assets", "sounds")
     os.makedirs(root, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         for name, spec in CUES.items():
+            if only and name not in only:
+                continue
             samples = render(*spec, period=LOOPS.get(name))
             path = os.path.join(tmp, name + ".wav")
             with wave.open(path, "wb") as w:

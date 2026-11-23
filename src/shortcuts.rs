@@ -88,11 +88,22 @@ const fn listed(combo: &'static str) -> Key {
 }
 
 fn bind<A: gpui_kit::Action + Default>(combo: &str) -> KeyBinding {
-    KeyBinding::new(&combo.replace('+', "-"), A::default(), None)
+    KeyBinding::new(keystrokes(combo), A::default(), None)
 }
 
 fn jump<const N: usize>(combo: &str) -> KeyBinding {
-    KeyBinding::new(&combo.replace('+', "-"), JumpToServer(N), None)
+    KeyBinding::new(keystrokes(combo), JumpToServer(N), None)
+}
+
+fn keystrokes(combo: &str) -> &'static str {
+    platform_keys(&combo.replace('+', "-"))
+}
+
+// Keys as gpui's static parser reads them: it takes no `secondary`, so that becomes ⌘ on macOS and
+// Ctrl elsewhere. Leaked: each binding is built once at startup.
+pub(crate) fn platform_keys(keys: &str) -> &'static str {
+    let secondary = if cfg!(target_os = "macos") { "cmd" } else { "ctrl" };
+    keys.replace("secondary", secondary).leak()
 }
 
 struct Shortcut {
@@ -495,8 +506,8 @@ mod tests {
             for row in rows(group) {
                 assert!(!row.keys.is_empty(), "{} shows no keys", row.label);
                 for combo in row.keys {
-                    let gpui = if combo == "plus" { "+".to_owned() } else { combo.replace('+', "-") };
-                    assert!(gpui_kit::Keystroke::parse(&gpui).is_ok(), "{combo}");
+                    let gpui = if combo == "plus" { "+" } else { keystrokes(combo) };
+                    assert!(gpui_kit::Keystroke::parse(gpui).is_ok(), "{combo}");
                 }
             }
         }
