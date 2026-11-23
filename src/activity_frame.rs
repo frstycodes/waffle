@@ -18,6 +18,9 @@ const CLOSE: u64 = 2;
 // RPC close code for a handshake from a frame we didn't open.
 const CLOSE_UNSUPPORTED: u64 = 4000;
 const ACTIVITY_HOST: &str = "discordsays.com";
+// How long the slot must hold its size before the page is laid out at it.
+#[cfg(target_os = "macos")]
+const RESIZE_SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
 // Some activities check for a browser they know; WKWebView's own agent names none.
 const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
 
@@ -40,6 +43,9 @@ pub struct ActivityFrame {
     subscriptions: HashSet<String>,
     #[cfg(target_os = "macos")]
     composed: Option<compose::Composed>,
+    // Waits for a resize to pause before the page takes the new size.
+    #[cfg(target_os = "macos")]
+    _settle: Option<Task<()>>,
     _inbox: Task<()>,
 }
 
@@ -81,6 +87,8 @@ impl ActivityFrame {
             subscriptions: HashSet::new(),
             #[cfg(target_os = "macos")]
             composed,
+            #[cfg(target_os = "macos")]
+            _settle: None,
             _inbox: inbox,
         }
     }
@@ -179,7 +187,7 @@ impl ActivityFrame {
         let _ = cx;
     }
 
-    fn place(&mut self, bounds: Bounds<Pixels>, scale: f32) {
+    fn place(&mut self, bounds: Bounds<Pixels>, scale: f32, cx: &mut Context<Self>) {
         if self.placed == Some(bounds) {
             return;
         }
@@ -187,16 +195,31 @@ impl ActivityFrame {
         let Some(webview) = &self.webview else { return };
         #[cfg(target_os = "macos")]
         if let Some(composed) = &self.composed {
-            composed.place(webview, bounds, scale);
+            // While its slot changes size (the sidebar dragged), the page keeps its size and is scaled to fit:
+            // laying the game out again every frame is what made the drag stutter. It takes the new size once
+            // the slot holds still.
+            if composed.place(webview, bounds, scale) {
+                self._settle = Some(cx.spawn(async move |this, cx| {
+                    cx.background_executor().timer(RESIZE_SETTLE).await;
+                    _ = this.update(cx, |frame, _| frame.settle());
+                }));
+            }
             return self.apply_visibility();
         }
-        let _ = scale;
+        let _ = (scale, cx);
         let (origin, size) = (bounds.origin, bounds.size);
         _ = webview.set_bounds(wry::Rect {
             position: wry::dpi::LogicalPosition::new(f32::from(origin.x) as f64, f32::from(origin.y) as f64).into(),
             size: wry::dpi::LogicalSize::new(f32::from(size.width) as f64, f32::from(size.height) as f64).into(),
         });
         self.apply_visibility();
+    }
+
+    #[cfg(target_os = "macos")]
+    fn settle(&mut self) {
+        if let (Some(composed), Some(webview), Some(bounds)) = (&self.composed, &self.webview, self.placed) {
+            composed.resize(webview, bounds.size);
+        }
     }
 
     fn apply_visibility(&self) {
@@ -230,7 +253,7 @@ impl Render for ActivityFrame {
             canvas(
                 move |bounds, window, cx| {
                     let scale = window.scale_factor();
-                    _ = this.update(cx, |frame, _| frame.place(bounds, scale));
+                    _ = this.update(cx, |frame, cx| frame.place(bounds, scale, cx));
                 },
                 |_, _, _, _| {},
             )
@@ -279,13 +302,19 @@ fn move_webview(_: &wry::WebView, _: &Window) {}
 #[cfg(target_os = "macos")]
 mod compose {
     use anyhow::{Context as _, anyhow, ensure};
-    use gpui_kit::{AnyWindowHandle, App, AsyncApp, Bounds, Pixels, Window, WindowCompositionSurface};
+    use std::cell::Cell;
+
+    use gpui_kit::{AnyWindowHandle, App, AsyncApp, Bounds, Pixels, Size, Window, WindowCompositionSurface};
     use objc2::{msg_send, runtime::AnyObject};
     use objc2_foundation::{NSPoint, NSRect, NSSize};
     use wry::WebViewExtMacOS;
 
     pub(super) struct Composed {
         surface: WindowCompositionSurface,
+        // The surface's NSView, holding the WKWebView.
+        container: usize,
+        // The size the page is laid out at; the container scales it to the slot until they match.
+        laid_out: Cell<Option<Size<Pixels>>>,
         window: AnyWindowHandle,
         cx: AsyncApp,
     }
@@ -305,16 +334,18 @@ mod compose {
                 unsafe {
                     let _: () = msg_send![parent as *mut AnyObject, addSubview: &*view];
                 }
-                Ok(())
+                Ok(parent)
             })();
-            if let Err(error) = added {
-                composition.remove_surface(surface.id())?;
-                return Err(error);
+            match added {
+                Ok(container) => anyhow::Ok((surface, container)),
+                Err(error) => {
+                    composition.remove_surface(surface.id())?;
+                    Err(error)
+                }
             }
-            anyhow::Ok(surface)
         })();
         match attached {
-            Ok(surface) => Some(Composed { surface, window: window.window_handle(), cx: cx.to_async() }),
+            Ok((surface, container)) => Some(Composed { surface, container, laid_out: Cell::new(None), window: window.window_handle(), cx: cx.to_async() }),
             Err(error) => {
                 eprintln!("activity frame: no composition, the game covers overlays: {error:#}");
                 None
@@ -323,15 +354,38 @@ mod compose {
     }
 
     impl Composed {
-        // The surface takes the slot's window bounds; the webview fills it.
-        pub(super) fn place(&self, webview: &wry::WebView, bounds: Bounds<Pixels>, scale: f32) {
-            let Ok(surface) = self.surface.platform_surface() else { return };
+        // The surface takes the slot's window bounds. The first time, the page is laid out at its size; after
+        // that a new size only scales the page, and true when it did: `resize` lays it out once it settles.
+        pub(super) fn place(&self, webview: &wry::WebView, bounds: Bounds<Pixels>, scale: f32) -> bool {
+            let Ok(surface) = self.surface.platform_surface() else { return false };
             _ = surface.set_bounds(bounds.to_device_pixels(scale));
-            let size = NSSize::new(f32::from(bounds.size.width) as f64, f32::from(bounds.size.height) as f64);
+            match self.laid_out.get() {
+                None => {
+                    self.resize(webview, bounds.size);
+                    false
+                }
+                Some(laid_out) => {
+                    // The container's frame is the slot; its bounds the page's size, which AppKit scales to it.
+                    self.set_container_bounds(laid_out);
+                    laid_out != bounds.size
+                }
+            }
+        }
+
+        pub(super) fn resize(&self, webview: &wry::WebView, size: Size<Pixels>) {
+            self.laid_out.set(Some(size));
             let view = webview.webview();
             // SAFETY: Wry's live WKWebView, on the main thread; its frame is local to the surface's view.
             unsafe {
-                let _: () = msg_send![&*view, setFrame: NSRect::new(NSPoint::new(0., 0.), size)];
+                let _: () = msg_send![&*view, setFrame: NSRect::new(NSPoint::new(0., 0.), ns_size(size))];
+            }
+            self.set_container_bounds(size);
+        }
+
+        fn set_container_bounds(&self, size: Size<Pixels>) {
+            // SAFETY: the surface's live NSView, on the main thread.
+            unsafe {
+                let _: () = msg_send![self.container as *mut AnyObject, setBoundsSize: ns_size(size)];
             }
         }
 
@@ -355,6 +409,10 @@ mod compose {
                 .spawn(async move |cx| _ = window.update(cx, |_, window, _| remove(window, id)))
                 .detach();
         }
+    }
+
+    fn ns_size(size: Size<Pixels>) -> NSSize {
+        NSSize::new(f32::from(size.width) as f64, f32::from(size.height) as f64)
     }
 
     fn remove(window: &mut Window, id: gpui_kit::CompositionSurfaceId) {
