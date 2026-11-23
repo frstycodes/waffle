@@ -522,7 +522,8 @@ def one_offs(tree, rules):
 
 def duplicates(tree, rules):
     """Allowed one-offs of one component rule that are made of nearly the same methods: one component built twice."""
-    component = {r["name"] for r in rules if r["scope"] == "chain"}
+    # Only the component rules: two lists or margins alike aren't a component built twice.
+    component = {r["name"] for r in rules if r["scope"] == "chain" and needs_reference(r)}
     seen, problems = defaultdict(list), []
     for rel, hits in sorted(tree.items()):
         for n, names, reason, methods in hits.allows:

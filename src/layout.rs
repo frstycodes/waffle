@@ -3,12 +3,14 @@
 use gpui_kit::{
     AnyElement, App, Context, Div, FontWeight, Hsla, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, NavigationDirection,
     Render, SharedString, Stateful, StyleRefinement, Window,
+    AnimationExt as _,
     component::{ActiveTheme, Icon},
     div, img, linear_color_stop, linear_gradient, prelude::*, px,
 };
 
 use crate::{
     Waffle, Drag, Edge, Status,
+    sidebar::Nav,
     discord,
     icons::Glyph,
     login, palette,
@@ -390,11 +392,11 @@ impl Waffle {
             (false, true) => ui::row().gap_1().child(Icon::new(Glyph::ShareScreen).size(ui::ICON_SM).text_color(palette::positive_ink(cx))).child(ui::line("Sharing their screen")).into_any_element(),
             (false, false) => ui::truncating("me-status", self.status_line()).into_any_element(),
         };
-        let mic = me_button("mic", if muted { Glyph::MicOff } else { Glyph::Mic }, muted, if server_muted { "A moderator muted you here. Only they can unmute you." } else if muted { "Unmute" } else { "Mute" }, cx)
+        let mic = me_button("mic", if muted { Nav::MicOff } else { Nav::Mic }, muted, if server_muted { "A moderator muted you here. Only they can unmute you." } else if muted { "Unmute" } else { "Mute" }, cx)
             .when(!server_muted, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_mute(cx))))
             .on_mouse_down(MouseButton::Right, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_device_menu(crate::call::DeviceKind::Input, e.position, cx)))
             .when_some(plate(muted), |b, fill| b.bg(fill));
-        let headphones = me_button("deafen", if deafened { Glyph::HeadphonesOff } else { Glyph::Headphones }, deafened, if deafened { "Undeafen" } else { "Deafen" }, cx)
+        let headphones = me_button("deafen", if deafened { Nav::HeadphonesOff } else { Nav::Headphones }, deafened, if deafened { "Undeafen" } else { "Deafen" }, cx)
             .on_click(cx.listener(|this, _, _, cx| this.toggle_deafen(cx)))
             .on_mouse_down(MouseButton::Right, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_device_menu(crate::call::DeviceKind::Output, e.position, cx)))
             .when_some(plate(deafened), |b, fill| b.bg(fill));
@@ -407,7 +409,7 @@ impl Waffle {
         let output_options = me_chevron("output-options", "Output options", menu_open(crate::call::DeviceKind::Output), cx)
             .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_device_menu(crate::call::DeviceKind::Output, e.position, cx)))
             .when_some(plate(deafened), |b, fill| b.bg(fill));
-        let settings = me_button("settings", Glyph::Settings, false, "User settings", cx).on_click(cx.listener(|this, _, window, cx| this.open_settings(crate::settings::Page::Account, window, cx)));
+        let settings = me_button("settings", Nav::Settings, false, "User settings", cx).on_click(cx.listener(|this, _, window, cx| this.open_settings(crate::settings::Page::Account, window, cx)));
         // The card's bottom corners, and its top ones too when nothing sits above; outside them, the sidebar.
         let stacked = self.panel_stack_height() > PANEL_HEIGHT;
         let top = if stacked { 0. } else { ui::RADIUS_MD };
@@ -710,8 +712,10 @@ fn me_chevron(id: &'static str, label: &'static str, open: bool, cx: &App) -> St
         .tooltip(move |window, cx| ui::tip(label, window, cx))
 }
 
-fn me_button(id: &'static str, glyph: Glyph, on: bool, label: &'static str, cx: &App) -> ui::Control {
-    ui::icon_button(id, glyph, label, cx).sized(ME_CONTROL).text_color(if on { palette::danger_ink(cx) } else { palette::strong(cx) })
+// A user-panel control: Waffle's own mic, headphones and settings icons, popping in when they switch.
+fn me_button(id: &'static str, icon: Nav, on: bool, label: &'static str, cx: &App) -> ui::Control {
+    let face = icon.icon().size(ui::ICON_XL).with_animation(SharedString::from(format!("{id}-{on}")), gpui_kit::Animation::new(ui::DUR_POP).with_easing(crate::motion::back_out), |icon, t| icon.size(ui::ICON_XL * (0.7 + 0.3 * t)));
+    ui::icon_slot(id, label, cx).sized(ME_CONTROL).text_color(if on { palette::danger_ink(cx) } else { palette::strong(cx) }).child(face)
 }
 
 // What draws over the app (dialogs, settings, the viewer, menus, toasts), as one deferred layer after it: an

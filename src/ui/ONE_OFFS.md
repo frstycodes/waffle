@@ -9,6 +9,7 @@ thing: a second copy of a one-off is a missing design-system component or varian
 _Spacing: gpui's scale (gap_2, p_1p5, mt_3 … see ui/tokens.rs). Sizes: a ui token (TEXT_*, ICON_*, AVATAR_*, RADIUS_*, HAIRLINE) or a named const._
 
 - `src/chat/composer.rs` — the entrance slides 8px as it fades, a margin computed from the animation's progress
+- `src/demo.rs` — fixture coordinates for where a demo menu opens, not layout
 - `src/drag.rs` — the slide's distance is computed from the animation's progress.
 - `src/login.rs` — the rise's distance is computed from the animation's progress.
 - `src/settings/accessibility.rs` — the gap before a group is the user's message-spacing setting, a size computed from data
@@ -33,6 +34,9 @@ _Floating surface: ui::floating / ui::floating_at. They occlude, so nothing unde
 
 _App-wide redraw: notifying Waffle re-renders every column. Notify only when what's drawn changed; for state one column draws use self.redraw(Column::X, cx); fast-changing state gets its own entity (CLAUDE.md, Rendering)._
 
+- `src/accounts.rs` — the account list in the status menu (an overlay, which only follows the app) lost a row
+- `src/accounts.rs` — the status menu and the toast are overlays, which only follow the app
+- `src/accounts.rs` — the status menu closing is an overlay, which only follows the app
 - `src/activities.rs` — closes the root-drawn launcher
 - `src/activities.rs` — closes the root-drawn launcher and refocuses the stage
 - `src/activities.rs` — the frame's visibility is decided by the root render
@@ -75,6 +79,10 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/app_modal.rs` — the app modal is drawn by the Overlays view, which re-renders only with the app
 - `src/app_modal.rs` — the app modal is drawn by the Overlays view, which re-renders only with the app
 - `src/app_modal.rs` — the app modal is drawn by the Overlays view, which re-renders only with the app
+- `src/boot.rs` — the Modify Attachment dialog is drawn by the root's overlays, outside the columns
+- `src/boot.rs` — the add-friend dialog is drawn by the root's overlays, outside the columns; the observer ends with the note it watches
+- `src/boot.rs` — the settings view covers the whole window, so a new query redraws every column
+- `src/boot.rs` — window focus restyles carets, focus rings and selections in every column
 - `src/call.rs` — call_view swaps the main column and the nav selection
 - `src/call.rs` — full screen hides the nav and the panel and shows the stage alone
 - `src/call.rs` — the call menus are overlays, which only follow the app
@@ -184,6 +192,12 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/forward.rs` — the forward dialog is drawn by the root's overlays, over every column
 - `src/games.rs` — game icons show in the user panel (nav), the member list and profile cards
 - `src/games.rs` — your game shows in the user panel (nav), the member list and profile cards
+- `src/gateway.rs` — a gateway event can change the servers, channels, feed, members and calls that every column draws
+- `src/gateway.rs` — a sign-in step changes the login screen, which replaces every column
+- `src/gateway.rs` — account settings (developer mode and the rest) change menus and rows in every column
+- `src/gateway.rs` — connecting changes the status every column and the splash draw
+- `src/gateway.rs` — starting a sign-in swaps the whole window to the login screen
+- `src/gateway.rs` — the typing line shows in the main column, the call chat and the sidebar's DM rows
 - `src/go_live.rs` — the share picker is an overlay, which only follows the app
 - `src/go_live.rs` — the share picker is an overlay, which only follows the app
 - `src/go_live.rs` — the share picker is an overlay, which only follows the app
@@ -192,6 +206,15 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/go_live.rs` — the share picker is an overlay, which only follows the app
 - `src/go_live.rs` — the share picker is an overlay, which only follows the app
 - `src/go_live.rs` — the share picker is an overlay, which only follows the app
+- `src/home.rs` — a DM moving between lists changes the DM list (nav) and the open DM's header (main)
+- `src/home.rs` — opening Friends or a server home changes the channel list (nav), the content (main) and the member list (panel)
+- `src/home.rs` — saved marks show in message menus (overlays, which only follow the app) and message rows
+- `src/home.rs` — the GIF picker is a popover, an overlay that only follows the app
+- `src/home.rs` — the inbox page replaces the content (main) and lights the inbox button (nav)
+- `src/home.rs` — the mentions list shows in the inbox popover, an overlay that only follows the app
+- `src/home.rs` — the mentions list shows in the inbox popover, an overlay that only follows the app
+- `src/home.rs` — the saved list shows in the inbox popover, an overlay that only follows the app
+- `src/home.rs` — the saved list shows in the inbox popover, an overlay that only follows the app
 - `src/inbox.rs` — the popover is an overlay, but the rail's Inbox tile also lights while it's open
 - `src/inbox.rs` — the tab draws in the Inbox popover and on its page
 - `src/interactions.rs` — message components, polls and pending commands draw in the feed and the thread panel
@@ -230,6 +253,11 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/launch.rs` — READY changes every column
 - `src/launch.rs` — disk reads land for profiles, icons, previews and feeds across every column
 - `src/launch.rs` — the whole shell appears at once, every column changes
+- `src/layout.rs` — a dragged edge resizes columns the root's layout sizes, so all of them redraw
+- `src/layout.rs` — a dragged edge resizes columns the root's layout sizes, so all of them redraw
+- `src/layout.rs` — shift swaps the actions on message rows (main), menus and popovers (overlays, which only follow the app)
+- `src/layout.rs` — the root's layout sizes every column, so a finished drag redraws them all
+- `src/layout.rs` — the update row (nav) and the Updates settings page (an overlay, which only follows the app) both show the status
 - `src/link_preview.rs` — link previews draw in the feed, the thread panel and the pins popover
 - `src/menu.rs` — `apply` can change what any column draws
 - `src/menu.rs` — `then` can change what any column draws
@@ -251,6 +279,12 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/modify_attachment.rs` — the attachment dialog is drawn by the root's overlays, over every column
 - `src/modify_attachment.rs` — the attachment dialog is drawn by the root's overlays, over every column
 - `src/modify_attachment.rs` — the attachment dialog is drawn by the root's overlays, over every column
+- `src/navigation.rs` — an empty server changes the channel list, the feed and the panel together
+- `src/navigation.rs` — opening a channel changes the channel list, the feed, the composer and the panel together
+- `src/navigation.rs` — opening a forum changes the channel list, the feed and the panel together
+- `src/navigation.rs` — the fullscreen call lays out its chat and tiles outside the columns
+- `src/navigation.rs` — the pins popover is drawn by the overlays, which render with the app
+- `src/navigation.rs` — the pins popover is drawn by the overlays, which render with the app
 - `src/notification_settings.rs` — the dialog is built by render_root, not by a column
 - `src/notification_settings.rs` — the dialog is built by render_root, not by a column
 - `src/notification_settings.rs` — the dialog is built by render_root, not by a column
@@ -314,6 +348,7 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/role_popout.rs` — the role card is drawn by Overlays, which only redraws with the app
 - `src/role_popout.rs` — the role card is drawn by Overlays, which only redraws with the app
 - `src/search_menu.rs` — closes the filters card in the side panel and clears the pick in the header's search menu
+- `src/sending.rs` — a new local message shows in the feed and can reorder the sidebar's DM list
 - `src/server_settings/lists.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
 - `src/server_settings/lists.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
 - `src/server_settings/lists.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
@@ -438,6 +473,26 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/viewer.rs` — the media viewer is drawn by the root, over every column
 - `src/viewer.rs` — the media viewer is drawn by the root, over every column
 - `src/viewer.rs` — the media viewer is drawn by the root, over every column
+- `src/voice_calls.rs` — a failed watch shows on the call tile and in the PiP outside the columns
+- `src/voice_calls.rs` — a missing-picture issue shows on the call tile, the dock and the PiP outside the columns
+- `src/voice_calls.rs` — a reconnecting stream shows on the call tile and in the PiP outside the columns
+- `src/voice_calls.rs` — a rewatched stream shows on the call tile and in the PiP outside the columns
+- `src/voice_calls.rs` — a voice event changes the call tiles, the sidebar's participants and the dock, and the PiP outside the columns
+- `src/voice_calls.rs` — an ended stream leaves the call tiles, the sidebar's participants and the PiP outside the columns
+- `src/voice_calls.rs` — an unwatched stream leaves the call tiles, the sidebar's participants and the PiP outside the columns
+- `src/voice_calls.rs` — dropping every watched stream changes the call tiles, the sidebar's participants and the PiP outside the columns
+- `src/voice_calls.rs` — ending our Go Live changes the call tiles, the dock, the rail and the PiP outside the columns
+- `src/voice_calls.rs` — ending the call changes the dock, the rail and the participant list as well as the main column
+- `src/voice_calls.rs` — focusing a stream changes the call tiles, the sidebar's participants and the PiP outside the columns
+- `src/voice_calls.rs` — joining changes the dock, the rail and the participant list as well as the main column
+- `src/voice_calls.rs` — restarting our Go Live changes the call tiles, the dock and the PiP outside the columns
+- `src/voice_calls.rs` — starting our Go Live changes the call tiles, the dock, the rail and the PiP outside the columns
+- `src/voice_calls.rs` — the Copied label shows on whichever surface holds the button, in any column or the overlays
+- `src/voice_calls.rs` — the Copied label shows on whichever surface holds the button, in any column or the overlays
+- `src/voice_calls.rs` — the self-view frame shows in the call view and in the stream PiP, which is drawn outside the columns
+- `src/voice_calls.rs` — the watch error shows in the dock and on the call tiles, outside the main column
+- `src/voice_calls.rs` — watching a stream changes the call tiles, the sidebar's participants and the PiP outside the columns
+- `src/voice_calls.rs` — watching a stream changes the call tiles, the sidebar's participants and the PiP outside the columns
 - `src/voice_status.rs` — a voice status shows on the channel list (nav) and the call stage (main)
 - `src/voice_status.rs` — a voice status shows on the channel list (nav) and the call stage (main)
 - `src/voice_status.rs` — the status dialog is an overlay, which only follows the app
@@ -445,14 +500,23 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/voice_status.rs` — the status dialog is an overlay, which only follows the app
 - `src/voice_status.rs` — the status dialog is an overlay, which only follows the app
 - `src/voice_status.rs` — the status dialog is an overlay, which only follows the app
+
+## file-lines
+
+_Split it: move a self-contained part (a view, a section, a group of helpers) into its own module, and put new code in a new file rather than a long one. Counts lines of code: blank lines, comments and #[cfg(test)] modules don't count. A file that was already longer when the rule came in may only shrink._
+
+- `src/discord/tests.rs` — the gateway and parser unit tests, one function per payload shape.
 
 ## custom-button
 
 _Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_row, ui::settings_choice or ui::pressable. Missing a look? Give the component a Tone, size or slot (src/ui/control.rs) and use it._
 
+- `src/activities/views.rs` — ui::list_row always inks its title strong, and a playing activity's turns accent
 - `src/audio_player/view.rs` — ui::icon_button lacks a hover that also holds the volume card open
 - `src/audio_player/view.rs` — ui::pressable lacks a bordered pill with a playing tint; this is the voice message's whole pill
 - `src/audio_player/view.rs` — ui::round_button lacks an accent-filled play button that swaps its glyph
+- `src/call.rs` — ui::button with Tone::Stage, whose wash is a step stronger and which wants a cx its callers don't pass
+- `src/call.rs` — ui::icon_button with Tone::Stage fills at rest, and this one is clear until hovered
 - `src/call/dock.rs` — ui::round_button lacks a labelled stage control with a split chevron
 - `src/call/dock.rs` — ui::round_button lacks a stage tone that grows its hit area with negative margins
 - `src/call/header.rs` — ui::round_button lacks a stage toggle with a corner badge
@@ -465,10 +529,13 @@ _Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_ro
 - `src/command_picker/render.rs` — ui::icon_button takes a glyph, and a rail tile's face is an app icon or a section mark
 - `src/create_server.rs` — ui::card has a raised fill; this is a clear bordered row ending in a chevron
 - `src/create_server.rs` — ui::list_row has no top-aligned lead with a body of title, channel chips and a button
+- `src/go_live.rs` — ui::card fills at rest and pads 12px, and this tile is clear until hovered
 - `src/inbox.rs` — ui::list_row titles are one plain line; a message here is an author and time over two lines of its text.
 - `src/joining/browse.rs` — ui::list_row has no held state (dimmed check, no hover or click) or end-of-row note
 - `src/joining/onboarding.rs` — ui::card has no toggled look in the accent tint with a half-accent edge
 - `src/joining/rules.rs` — ui::card has no toggled accent-tint look with a state edge (agreed, nudged)
+- `src/layout.rs` — ui::icon_button is square, and this chevron is a 16px sliver joined to its control
+- `src/layout.rs` — ui::list_row has fixed 36/48/60px heights, none the 40px user-panel row's
 - `src/overlays.rs` — ui::card is a 20px-radius row; a mention card is an 8px-radius column that stacks its place, author and text.
 - `src/overlays/emoji.rs` — ui::icon_button is a square taking a Glyph; an emoji cell is a ninth of the grid's width.
 - `src/overlays/switcher.rs` — ui::list_row titles are plain text; the switcher highlights the part of the name that matched.
@@ -487,6 +554,9 @@ _Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_ro
 - `src/sidebar/channels.rs` — ui::list_row has fixed heights (36/48/60) and no unread pill; a channel row follows UI density.
 - `src/sidebar/tiles.rs` — ui::icon_button(...).sized(44) takes a Glyph and fills on hover; the rail's actions use Nav icons on the lifted raised tone.
 - `src/soundboard/picker.rs` — ui::menu_row lacks a favourite toggle at a tile's corner
+- `src/stage_view.rs` — ui::card fills with the app's raised surface; this face is a bare wash in the stage's ink
+- `src/stage_view.rs` — ui::toggle_row draws in the app's colours, and this row's wash and ink are the stage's
+- `src/viewer.rs` — ui::icon_button takes a glyph and fills on hover; a thumbnail is a picture that dims and brightens
 
 ## custom-surface
 
@@ -494,7 +564,9 @@ _Floating or raised surface: ui::surface, ui::floating, ui::floating_bar, ui::to
 
 - `src/audio_player/view.rs` — ui::surface lacks an in-flow card that holds itself open on hover
 - `src/call/dock.rs` — ui::surface lacks the stage-scoped quality card (stage colours, not palette)
+- `src/call/fit.rs` — ui::surface insets its content and rings it, and this card's own panel fills it and slides in by a computed offset
 - `src/call/menus.rs` — ui::surface lacks the stage-scoped menu card (stage colours, not palette)
+- `src/call_previews.rs` — ui::surface rings and shadows in the app's overlay colours, and this card is the call stage's own dark overlay
 - `src/chat/attachments.rs` — ui::toolbar occludes the wheel too, and this bar must let the feed scroll under it; it also rides above its row's edge
 - `src/chat/composer.rs` — ui::surface has no glass fill (translucent, blurred, saturated) over a scrolling feed
 - `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
@@ -509,6 +581,8 @@ _Floating or raised surface: ui::surface, ui::floating, ui::floating_bar, ui::to
 - `src/settings/profiles.rs` — ui::badged places marks on a face's corner but can't reveal one on hover, and ui::icon_button has no corner placement
 - `src/soundboard/picker.rs` — ui::surface lacks an in-picker popover card anchored under the speaker
 - `src/splash.rs` — ui::surface is the overlay fill with a drop shadow; the splash is a raised fill with an inset hairline in a borderless window.
+- `src/stage_view.rs` — ui::surface is the app's overlay and ring, and this card is the stage's own dark overlay
+- `src/stage_view.rs` — ui::surface is the app's overlay and ring, and this card is the stage's own dark overlay
 - `src/toast.rs` — ui::toast always leads with a glyph; a plain show_toast is one line of text.
 
 ## custom-divider
@@ -524,11 +598,13 @@ _Divider: ui::divider or ui::inset_rule._
 - `src/events/views.rs` — ui::divider is a full-width hairline; this is the short rule joining two steps
 - `src/events/views.rs` — ui::divider is a horizontal rule; this is the vertical one beside Create Event
 - `src/soundboard/picker.rs` — ui::divider lacks a short rule between the unlocked and locked tabs
+- `src/stage_view.rs` — ui::divider has no colour option, and this rule takes the stage's own wash
 
 ## custom-badge
 
 _Label: ui::badge, ui::tag, ui::count_badge, ui::pill or ui::role_chip; add a variant there if none fits._
 
+- `src/activities/bridge.rs` — ui::callout leads with an icon and a title, and this is a plain well for a URL
 - `src/announcements.rs` — ui::callout_with puts its action under the text; this bar keeps Follow at the row's end
 - `src/announcements/views.rs` — ui::callout is a block-width notice; this is a compact strip with inline actions under a message
 - `src/call/dock.rs` — ui::surface lacks the stage-scoped quality card (stage colours, not palette)
@@ -542,11 +618,13 @@ _Label: ui::badge, ui::tag, ui::count_badge, ui::pill or ui::role_chip; add a va
 - `src/chat/embeds.rs` — ui::card is a clickable Control; an embed is a static quote card with a coloured bar down its edge
 - `src/command_picker/render.rs` — ui::surface lacks an anchored composer popup that rises from the field
 - `src/create_channel.rs` — ui::chip's removable look is an outlined chip, not this filled selected-tone pill
+- `src/dm_call.rs` — ui::pill is a label, and this holds a face stack and the Join button
 - `src/drag.rs` — ui::badge is a static label and ui::badged marks a face's corner; this chip hangs off the ghost's right edge.
 - `src/forum/helpers.rs` — ui::badge is a 20px solid label; this is a 32px file row with an icon and its size
 - `src/joining/guide.rs` — ui::callout puts its actions under the text; this bar keeps its button at the row's end
 - `src/joining/mod.rs` — ui::badge has no round numbered mark in the accent tint (ui::pill is a capsule)
 - `src/joining/rules.rs` — ui::surface has no frosted translucent level matching the composer card
+- `src/layout.rs` — ui::surface adds a ring and shadow this docked card doesn't draw
 - `src/panel.rs` — ui::tip is one line of text; this tip lists each thing someone is doing, with its icon.
 - `src/profile.rs` — ui::badge is a 20px solid label in 11px type; the guild tag is 22px in the card's 14px type and ink.
 - `src/profile/activity.rs` — ui::button(...).disabled(true) takes a palette tone; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
@@ -560,7 +638,10 @@ _Label: ui::badge, ui::tag, ui::count_badge, ui::pill or ui::role_chip; add a va
 
 _A mark on a face's or control's corner: ui::badged with a Spot (it places the mark for the face's shape and cuts its ring). Missing a host shape or ring style? Add it to src/ui/face.rs._
 
+- `src/call.rs` — ui::badged marks a face's corner, and this chip pins over a stream tile's corner
+- `src/call.rs` — ui::media places an image against a container's edge, and this is a gradient laid over a tile's ground
 - `src/call/dock.rs` — ui::surface lacks the stage-scoped quality card (stage colours, not palette)
+- `src/call/fit.rs` — ui::surface insets its content and rings it, and this card's own panel fills it and slides in by a computed offset
 - `src/call/header.rs` — ui::badged lacks a stage-ringed corner badge on a control
 - `src/call/menus.rs` — ui::surface lacks the stage-scoped menu card (stage colours, not palette)
 - `src/call/tiles.rs` — ui::media_label lacks a full-tile scrim holding a centred action row
@@ -576,8 +657,12 @@ _A mark on a face's or control's corner: ui::badged with a Spot (it places the m
 - `src/chat/parts.rs` — ui::badged marks a face's corner; this is a connector line drawn from the preview to the avatar
 - `src/command_picker/render.rs` — ui::surface lacks an anchored composer popup that rises from the field
 - `src/design_system.rs` — ui::badged places marks on faces; this is a motion demo's track and moving block
+- `src/dm_call.rs` — ui::badged marks a face's corner, and this is a picture inset in a video's corner
+- `src/dm_call.rs` — ui::speaking_ring is the accent shadow ring, and this one is the stage's presence green
 - `src/drag.rs` — ui::badge is a static label and ui::badged marks a face's corner; this chip hangs off the ghost's right edge.
+- `src/go_live.rs` — ui::speaking_ring is a shadow ring that would paint over the still from above, and this one springs out from its edge
 - `src/group_dm.rs` — ui::badged marks a face's corner with a count or a status; this is the Edit pen, a 28px button ringed in the dialog's surface.
+- `src/layout.rs` — ui::surface adds a ring and shadow this docked card doesn't draw
 - `src/login.rs` — ui::badged marks a corner with a count or a status; this is the 32px phone chip, ringed by a hairline.
 - `src/settings/meter.rs` — ui::badged marks a face's corner, this is a ring around a whole control, which it can't wrap
 - `src/settings/profiles.rs` — ui::badged places marks on a face's corner but can't reveal one on hover, and ui::icon_button has no corner placement
@@ -588,9 +673,13 @@ _A mark on a face's or control's corner: ui::badged with a Spot (it places the m
 - `src/sidebar/voice.rs` — ui::media_label is a label over media; this is a hover scrim over the thumbnail holding the watch button.
 - `src/sidebar/voice.rs` — ui::speaking_ring cuts its gap in the surface colour; this one leaves the gap clear over the sidebar's material.
 - `src/soundboard/picker.rs` — ui::surface lacks an in-picker popover card anchored under the speaker
+- `src/stage_view.rs` — ui::surface is the app's overlay and ring, and this card is the stage's own dark overlay
+- `src/stage_view.rs` — ui::surface is the app's overlay and ring, and this card is the stage's own dark overlay
+- `src/stickers.rs` — ui::badged hangs a mark past a tile's corner; this play mark sits 4px inside the cell's
 - `src/text_file.rs` — ui::more_below follows a scroll handle, and this preview never scrolls while clipped; its fade is always on
 - `src/video/chrome.rs` — ui::slider_live lacks a scrubber with a knob sized by the hover; the margin centres the knob on its point
 - `src/video/chrome.rs` — ui::slider_live lacks a vertical volume slider; the margin centres the knob on its level
+- `src/viewer.rs` — ui::badged marks a face's corner; this is the selection ring sliding along the strip
 
 ## raw-truncate
 
@@ -599,14 +688,17 @@ _One-line text: ui::line(text), or ui::truncating(key, text) when the cut text s
 - `src/chat/format.rs` — ui::line takes plain text, and this label carries bold runs
 - `src/command_picker/render.rs` — ui::line takes plain text; this one is a highlighted StyledText (the match marks)
 - `src/forum/helpers.rs` — ui::line clamps to one line; a post's title clamps to two
+- `src/link_preview.rs` — ui::line is one line; a quote clamps at three lines
 - `src/profile.rs` — ui::line takes plain text; this is the user's name set in their chosen name font and styled runs.
 
 ## raw-margin
 
 _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::row / ui::col / grid; space inside is the parent's padding; pushing to the end is flex_1 or justify_between. Margins stay near 0: an optical nudge carries lint-allow(raw-margin) with why._
 
+- `src/activities/invite.rs` — the card hangs a step under a message's text, which the message's own column doesn't gap
 - `src/audio_player/view.rs` — optical offset from the message text above; the parent is the chat row, outside this file
 - `src/audio_player/view.rs` — optical offset from the message text above; the parent is the chat row, outside this file
+- `src/call.rs` — auto margins centre the strip while it fits and start it at the left edge when wider, which justify_center can't
 - `src/call/dock.rs` — negative margins widen the hit area of a small status mark without moving it
 - `src/call/dock.rs` — negative margins widen the hit area of a small status mark without moving it
 - `src/call/menus.rs` — ui::divider lacks a stage-ink hairline; the margins inset it from the card edge like ui::inset_rule
@@ -631,17 +723,22 @@ _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::r
 - `src/chat/row.rs` — the gap between groups is the reader's setting, and rows are list items with no parent gap to carry it
 - `src/command_picker/render.rs` — lifts the popup clear of the composer by a computed amount, POPUP_RAISE
 - `src/command_picker/render.rs` — ui::divider lacks a short centred rule in a rail; the margin is its optical gap
+- `src/components.rs` — the gap under the message body, whose row is stacked in chat.rs outside this component
 - `src/components/status.rs` — optical gap under the component's body; the parent is a message row in another file
 - `src/components/status.rs` — optical gap under the component's body; the parent is a message row in another file
+- `src/dm_call.rs` — the pill sits a step off the header's next control, which the caller's row doesn't gap
 - `src/drag.rs` — centres the chip on the ghost's edge (half its height up) and sets it 10px off, which padding can't do.
 - `src/drag.rs` — sets the chip 10px clear of the ghost's edge, which padding on the ghost can't do.
 - `src/events/views.rs` — spaces the bar from the channel rows under it, whose list (sidebar.rs) owns no gap
+- `src/go_live.rs` — an optical bleed, so a tile's hover fill and ring aren't clipped by the scroller
+- `src/go_live.rs` — an optical bleed, so the hover fill sits past the still's edge as the ring does
 - `src/invite.rs` — pulls the toggle row's hover fill out to the card's edge, past the card's padding
 - `src/joining/guide.rs` — insets the bar from the composer column it is returned into, which has no padding of its own
 - `src/joining/onboarding.rs` — an optical gap either side of a chip in wrapping running text, which has no flex gap
 - `src/joining/rows.rs` — spaces the card from the neighbouring channel rows, whose list (sidebar.rs) owns no gap
 - `src/joining/rows.rs` — spaces the card from the neighbouring channel rows, whose list (sidebar.rs) owns no gap
 - `src/joining/rules.rs` — optical 1px lift that centres the number on the rule's first line
+- `src/link_preview.rs` — the gap under the message text, whose parent is the feed row in chat.rs outside this module
 - `src/overlays.rs` — the 30px buttons reach past the 24px author row so they don't stretch it, which padding can't do.
 - `src/overlays.rs` — the actions pull into the card's corner past its padding, which padding can't do.
 - `src/profile.rs` — the avatar row pulls up over the banner's foot, which padding can't do.
@@ -671,6 +768,10 @@ _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::r
 
 _A function named like a component builds it from the design system: wrap the ui:: component (a domain wrapper is fine), or add the component to src/ui/ first (src/ui/CATALOG.md lists what exists)._
 
+- `src/audio_player.rs` — ui::pill is a label, not a player; this wraps a cached AudioPlayer entity and builds no design-system piece itself
+- `src/call.rs` — ui::button with Tone::Overlay needs an id and a cx, and its callers in sidebar.rs and call/tiles.rs add their own
+- `src/call.rs` — ui::button with Tone::Stage needs a cx its callers in call/header.rs and call/tiles.rs don't pass
+- `src/call.rs` — ui::icon_button with Tone::Stage fills at rest, and this one is clear until hovered
 - `src/call/header.rs` — ui::icon_button lacks a stage tone with a corner badge; this wraps it for the call header
 - `src/call/header.rs` — ui::icon_button lacks a stage tone with a corner badge; this wraps it for the call header
 - `src/call/tiles.rs` — ui::empty_state lacks a compact stage tile with a close action
@@ -678,6 +779,7 @@ _A function named like a component builds it from the design system: wrap the ui
 - `src/chat/format.rs` — ui::divider takes a 'static label, and a day's label is formatted from the message's date
 - `src/chat/markdown.rs` — ui::badge is a 20px block, and a mention must run inside a line of text at its size
 - `src/command_picker/render.rs` — ui::server_tile lacks a section rail tile with a selected bar
+- `src/components.rs` — ui::select_options is the open list; this builds a modal's select field from app data and wraps the kit's select
 - `src/components/parts.rs` — ui::dropdown lacks an anchor wrapper keyed by a control key
 - `src/components/parts.rs` — ui::select lacks a message component's select bound to a message path
 - `src/create_server.rs` — ui::chip is a pressable filter; this is a static glyph and channel name in a template's list
@@ -686,12 +788,15 @@ _A function named like a component builds it from the design system: wrap the ui
 - `src/drag.rs` — ui::card is a clickable raised card; the ghost is a lifted overlay surface that fades into its row's look as it lands.
 - `src/events/views.rs` — ui::tabs switches between views; this is a numbered progress of steps done, current and next
 - `src/forum/helpers.rs` — ui::chip is a pressable filter; this is a static file label with its size
+- `src/gif.rs` — ui::media rounds an image, but a GIF's slot is a placeholder the layer paints into; there is nothing to wrap
+- `src/gif.rs` — ui::media rounds an image, but a GIF's slot is a placeholder the layer paints into; there is nothing to wrap
 - `src/joining/guide.rs` — ui::icon_tile only holds a glyph, not an emoji's image or text
 - `src/login.rs` — ui::card is a clickable raised card; this is the sign-in QR code painted on white in both themes.
 - `src/profile.rs` — ui::search_button is a search box with a magnifier; this is the card's themed "Message @user" prompt.
 - `src/profile/connections.rs` — ui::chip is a palette-toned filter that toggles; this chip wears the card's themed ink and opens the account.
 - `src/sidebar/tiles.rs` — ui::server_tile sets initials on the selected fill; the rail's letters sit on the lifted raised tone.
 - `src/soundboard/picker.rs` — ui::card lacks a sound tile with a lock and a favourite toggle
+- `src/video.rs` — ui::media is an image, not a player; this wraps a cached VideoPlayer entity and builds no design-system piece itself
 - `src/video/chrome.rs` — ui::icon_button lacks the OnMedia tone with a toggled state
 - `src/video/chrome.rs` — ui::round_button lacks a video-tone centre play button that fades with the chrome
 
@@ -703,23 +808,33 @@ _A scrolling list that builds every row: list/uniform_list with a ListState draw
 - `src/events/views.rs` — one server's scheduled events, at most 100
 - `src/overlays/emoji.rs` — the Unicode groups hold under 2,000 emoji and a server adds a few hundred at most.
 - `src/soundboard/picker.rs` — a guild's soundboard, a few dozen sounds at most (the server's sound slots)
+- `src/stickers.rs` — Discord's packs and yours, a few dozen stickers each, a few hundred cells at most
 
 ## render-work
 
 _Work on the render path runs on every redraw: sort, parse, read files or build entities and subscriptions when their inputs change and keep the result in state (CLAUDE.md, Rendering). cx.new / cx.subscribe in render make a new entity or subscription every frame. A small bounded case carries lint-allow(render-work) saying how small._
 
+- `src/audio_player.rs` — built once per attachment, then every later render takes it from the map above
 - `src/joining/browse.rs` — sorts one server's onboarding questions, a dozen at most
 - `src/part.rs` — made once, on the column's first draw (get_or_insert_with), then kept.
 - `src/part.rs` — made once, on the first draw (get_or_insert_with), then kept.
 - `src/part.rs` — subscribed once with the part, which notifies itself, following the app.
 - `src/profile.rs` — one member's roles in this server, a few dozen at most.
+- `src/reactions.rs` — sorts at most four runs (three names and a link) of one small card
 - `src/server_settings/members.rs` — one member's roles, a few dozen at most, sorted per visible row
 - `src/settings.rs` — one page's groups, a dozen at most
+- `src/video.rs` — built once per attachment, then every later render takes it from the map above
 
 ## main-thread-io
 
 _Blocking I/O on the UI thread stalls every frame: move it into cx.background_spawn (or the background executor) and send the result back._
 
+- `src/demo/scenes_files.rs` — fixture file written while the demo scene builds the window, before its first frame
+- `src/demo/scenes_files.rs` — fixture file written while the demo scene builds the window, before its first frame
+- `src/demo/scenes_files.rs` — fixture file written while the demo scene builds the window, before its first frame
+- `src/demo/scenes_files.rs` — fixture file written while the demo scene builds the window, before its first frame
+- `src/demo/scenes_files.rs` — fixture file written while the demo scene builds the window, before its first frame
+- `src/demo/scenes_files.rs` — fixture file written while the demo scene builds the window, before its first frame
 - `src/name_fonts.rs` — inside the network runtime's own task, never on the UI thread.
 - `src/name_fonts.rs` — runs once at startup, before any window opens, over a few small files.
 - `src/name_fonts.rs` — the same startup read of the fonts already on disk, before any window opens.
@@ -728,20 +843,39 @@ _Blocking I/O on the UI thread stalls every frame: move it into cx.background_sp
 
 _A notify in a pointer-move or scroll handler, or a timer loop, runs dozens of times a second: compare the new value with the old and notify only when what's drawn changed; a fast source gets its own entity (CLAUDE.md, Rendering)._
 
+- `src/demo/scenes_calls.rs` — one step per 1.5 s, and each step changes a rail unread badge
 - `src/forum/composer.rs` — ticks once a second only while a post slowmode runs down, redrawing the app-level dialog's clock, and stops when it ends
 
 ## endless-animation
 
 _A repeating animation redraws every frame while it's on screen: run it only while its state holds (speaking, loading) and say when it stops in lint-allow(endless-animation)._
 
+- `src/dm_call.rs` — pulses only on a face still being rung (pending); it stops when they answer
+- `src/dm_call.rs` — pulses only while the ringing card is up; answering or declining removes it
 - `src/mascot.rs` — plays only while a loader is drawn, and reduce-motion gets the still mark above.
 - `src/mascot.rs` — plays only while the mascot is drawn, and reduce-motion gets the still mark above.
 - `src/settings/meter.rs` — shown only while a keybind is recording; the ring is dropped when recording ends
+- `src/video.rs` — drawn only while the clip loads; the view swaps it out when it is ready or has failed
 
 ## detached-task
 
 _A detached task outlives its view: keep the Task in the view so dropping the view cancels it (CLAUDE.md, Idiomatic Rust). Detach only a task that ends itself, and say how in lint-allow(detached-task); hold a WeakEntity, never an Entity, in it._
 
+- `src/active_now.rs` — ends itself when the panel stops showing, holding a WeakEntity
+- `src/activities.rs` — a one-shot fetch that ends when the request returns, holding a WeakEntity
+- `src/activities.rs` — a one-shot leave request that ends when it returns, holding no entity
+- `src/activities.rs` — a one-shot request that ends when it returns, holding a WeakEntity
+- `src/activities.rs` — a one-shot start that ends when the request returns, holding a WeakEntity
+- `src/activities.rs` — ends after its one timer fires, holding a WeakEntity
+- `src/activities.rs` — ends when the activity starts or the wait times out, holding a WeakEntity
+- `src/activities/bridge.rs` — a one-shot request that ends when it returns, holding a WeakEntity
+- `src/activities/bridge.rs` — a one-shot request that ends when it returns, holding a WeakEntity
+- `src/activities/bridge.rs` — a one-shot request that ends when it returns, holding a WeakEntity
+- `src/activities/bridge.rs` — a one-shot send that ends when the request returns, holding a WeakEntity
+- `src/activities/bridge.rs` — a one-shot upload that ends when the request returns, holding a WeakEntity
+- `src/activities/invite.rs` — a one-shot icon load that ends when it returns, holding a WeakEntity
+- `src/activity_frame.rs` — a one-shot turn of the main thread that ends when it runs, holding no entity
+- `src/activity_launcher.rs` — a one-shot fetch that ends when the request returns, holding a WeakEntity
 - `src/announcements.rs` — ends itself once its request resolves, and holds only a weak handle
 - `src/announcements.rs` — ends itself once its request resolves, and holds only a weak handle
 - `src/announcements.rs` — ends itself once its request resolves, and holds only a weak handle
@@ -751,9 +885,34 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/app_modal.rs` — ends itself once its upload or file prompt resolves, and holds only a weak handle
 - `src/app_modal.rs` — the subscription ends when the editor entity, held in AppModal, drops
 - `src/app_modal.rs` — the subscription ends when the editor entity, held in AppModal, drops
+- `src/audio_player.rs` — a one-shot timer: ends after LINGER, or when the player is dropped
+- `src/audio_player.rs` — a one-shot timer: ends after SETTLE, or when the player is dropped
+- `src/audio_player.rs` — one download: ends when it returns, or when the player is dropped
+- `src/audio_player.rs` — the tick loop ends when tick says stop or the player is dropped
+- `src/boot.rs` — one SPLASH_LIMIT timer, then it ends
+- `src/boot.rs` — the activation observer ends with the window
+- `src/boot.rs` — the add-friend dialog is drawn by the root's overlays, outside the columns; the observer ends with the note it watches
+- `src/boot.rs` — the appearance observer ends with the window
+- `src/boot.rs` — the focus observer ends with the feed's focus handle
+- `src/boot.rs` — the focus observer ends with the window
+- `src/boot.rs` — the observer ends with the composer it watches
+- `src/boot.rs` — the subscription ends with the GIF search it watches
+- `src/boot.rs` — the subscription ends with the add-friend input it watches
+- `src/boot.rs` — the subscription ends with the composer it watches
+- `src/boot.rs` — the subscription ends with the description input it watches
+- `src/boot.rs` — the subscription ends with the dialog input it watches
+- `src/boot.rs` — the subscription ends with the emoji search it watches
+- `src/boot.rs` — the subscription ends with the search input it watches
+- `src/boot.rs` — the subscription ends with the settings search it watches
+- `src/boot.rs` — the subscription ends with the status input it watches
+- `src/boot.rs` — the subscription ends with the sticker search it watches
+- `src/boot.rs` — the subscription ends with the switcher input it watches
+- `src/boot.rs` — two SPLASH_BEAT timers, then it ends
 - `src/call/previews.rs` — a one-shot colour fetch holding a WeakEntity; it ends when the response lands
 - `src/call/previews.rs` — a one-shot fetch holding a WeakEntity; it ends when the response lands or the update fails
 - `src/call/previews.rs` — the preview loop holds a WeakEntity and returns when the generation changes or the share ends
+- `src/call_previews.rs` — ends after its one timer fires, holding a WeakEntity
+- `src/call_previews.rs` — ends after its one timer fires, holding a WeakEntity
 - `src/channel_menu.rs` — ends when Discord answers the request, and holds only a WeakEntity.
 - `src/channel_menu/thread.rs` — ends when Discord answers the request, and holds only a WeakEntity.
 - `src/channel_settings.rs` — one request that ends when Discord answers the save, holding only a WeakEntity
@@ -763,14 +922,32 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/channel_settings.rs` — the input subscription ends with its entity, and the dialog it redraws is built by render_root
 - `src/channel_settings.rs` — the input subscription ends with its entity, and the dialog it redraws is built by render_root
 - `src/chat_guard.rs` — the loop ends itself when tick_slowmode says the countdowns are done, or when the app is gone
+- `src/command_picker.rs` — one index fetch: ends when the request returns, or when Waffle is dropped
+- `src/command_picker.rs` — one sync: ends when the request returns, or when Waffle is dropped
 - `src/command_picker/autocomplete.rs` — a one-shot interact call holding a WeakEntity; it ends when the request returns
 - `src/command_picker/typing.rs` — a one-shot file prompt holding a WeakEntity; it ends when the prompt resolves
 - `src/command_picker/typing.rs` — a one-shot upload holding a WeakEntity; it ends when the staged files return
+- `src/components.rs` — a one-shot debounce timer: ends after SEARCH_DEBOUNCE, or when Waffle is dropped
+- `src/components.rs` — one fetch: ends when the request returns, or when Waffle is dropped
+- `src/components.rs` — the subscription ends when the select's input or Waffle is dropped
 - `src/create_server.rs` — ends itself once its request or file prompt resolves, and holds only a weak handle
 - `src/create_server.rs` — ends itself once its request or file prompt resolves, and holds only a weak handle
 - `src/create_server.rs` — ends itself once its request or file prompt resolves, and holds only a weak handle
 - `src/create_server.rs` — ends itself when the captcha channel closes with its request, and holds no entity
+- `src/demo/scenes_apps.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_apps.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_calls.rs` — the loop returns once the view is gone and the update fails
+- `src/demo/scenes_calls.rs` — the loop returns once the view is gone and the update fails
+- `src/demo/scenes_chat.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_chat.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_chat.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_chat.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_files.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_media.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_panels.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_people.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
 - `src/design_system.rs` — ends itself after the 1.4s timer, and holds only a weak handle
+- `src/dm_call.rs` — ends after its one timer fires, holding a WeakEntity
 - `src/events/manage.rs` — ends itself once its request resolves, and holds only a weak handle
 - `src/events/manage.rs` — ends itself once the file is written, and holds only a weak handle
 - `src/events/schedule.rs` — the subscription ends when the picker entity, held in the wizard, drops
@@ -791,10 +968,31 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/forum/composer.rs` — the subscription ends when the input, held in ForumState, drops; the new post dialog is drawn by the app's own render
 - `src/forum/composer.rs` — the subscription ends when the input, held in ForumState, drops; the new post dialog is drawn by the app's own render
 - `src/forum/tags.rs` — ends itself once its request or timer resolves, and holds only a weak handle
+- `src/forward.rs` — one batch of sends: ends when the last returns, or when Waffle is dropped
+- `src/games.rs` — a one-shot fetch that ends when the request returns, holding a WeakEntity
+- `src/games.rs` — ends when the window is gone, holding a WeakEntity
+- `src/gateway.rs` — one REST check of the token, then it ends
+- `src/gateway.rs` — one TYPING_TTL timer, then it ends
+- `src/gif.rs` — one fetch: ends when the request returns, or when the view is dropped
+- `src/gif.rs` — the tick loop ends when tick says stop or the view is dropped
+- `src/go_live.rs` — a one-shot lookup that ends when it returns, holding a WeakEntity
+- `src/go_live.rs` — ends when the thumbnails are all captured or the picker is closed, holding a WeakEntity
 - `src/group_dm.rs` — ends after the last person is added (or the first refusal), and holds only a WeakEntity.
 - `src/group_dm.rs` — ends when Discord answers the save, and holds only a WeakEntity.
 - `src/group_dm.rs` — ends when the file dialog closes, and holds only a WeakEntity.
 - `src/group_dm.rs` — ends when the group is made, and holds only a WeakEntity.
+- `src/home.rs` — a one-shot debounce that ends after its timer fires, holding a WeakEntity
+- `src/home.rs` — a one-shot fetch that ends when the request returns, holding a WeakEntity
+- `src/home.rs` — a one-shot fetch that ends when the request returns, holding a WeakEntity
+- `src/home.rs` — a one-shot fetch that ends when the request returns, holding a WeakEntity
+- `src/home.rs` — a one-shot fetch that ends when the request returns, holding a WeakEntity
+- `src/home.rs` — a one-shot request that ends when it returns, holding a WeakEntity
+- `src/home.rs` — a one-shot search that ends when the request returns, holding a WeakEntity
+- `src/home.rs` — a one-shot sync that ends when the request returns, holding a WeakEntity
+- `src/home.rs` — ends when the captcha channel closes with the request, holding no entity
+- `src/interactions.rs` — a one-shot timer: ends after MODAL_TIMEOUT, or when Waffle is dropped
+- `src/interactions.rs` — a one-shot timer: ends after the deferred wait, or when Waffle is dropped
+- `src/interactions.rs` — one interaction request: ends when it succeeds or is refused, or when Waffle is dropped
 - `src/invite.rs` — ends itself once its request or timer resolves, and holds only a weak handle
 - `src/invite.rs` — ends itself once its request or timer resolves, and holds only a weak handle
 - `src/invite.rs` — ends itself once its request or timer resolves, and holds only a weak handle
@@ -803,6 +1001,10 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/launch.rs` — holds a WeakEntity and ends when the app's entity is gone or the store's channel closes
 - `src/launch.rs` — one read, applied once through a WeakEntity, then done
 - `src/launch.rs` — the quit hook lives as long as the app, which is what it's for
+- `src/layout.rs` — ends when the updater's status stream closes or the app is gone, holding a WeakEntity
+- `src/link_preview.rs` — ends when the captcha channel closes, which is when the join request finishes
+- `src/link_preview.rs` — one fetch: ends when the request returns, or when Waffle is dropped
+- `src/link_preview.rs` — one join request: ends when it returns, or when Waffle is dropped
 - `src/menu.rs` — ends itself after the one grace timer, and holds only a WeakEntity.
 - `src/menu.rs` — ends when the request returns, and holds only a WeakEntity.
 - `src/menu.rs` — ends when the request returns, and holds only a WeakEntity.
@@ -810,13 +1012,22 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/mod_view.rs` — one request that ends when the reply lands, holding only a WeakEntity
 - `src/mod_view.rs` — the loop breaks once Mod View closes or the member changes, and ends when the app entity drops
 - `src/name_fonts.rs` — ends when the font fetcher drops its sender, and holds no view.
+- `src/navigation.rs` — one 32ms wait, then it ends
+- `src/navigation.rs` — one JUMP_FLASH timer, then it ends
+- `src/navigation.rs` — one request for older messages, then it ends
+- `src/navigation.rs` — one request for the latest messages, then it ends
+- `src/navigation.rs` — one request for the messages around the target, then it ends
+- `src/navigation.rs` — one request for the pins, then it ends
 - `src/notification_settings.rs` — the input subscription ends with its entity, and the dialog it redraws is built by render_root
 - `src/overlays.rs` — ends when the DM request returns, and holds only a WeakEntity.
 - `src/overlays/read.rs` — ends when Discord answers the delete, and holds only a WeakEntity.
 - `src/panel.rs` — ends when the feed request returns, and holds only a WeakEntity.
+- `src/poll.rs` — one send: ends when the request returns, or when Waffle is dropped
+- `src/poll.rs` — the subscription ends when the input or Waffle is dropped
 - `src/profile.rs` — ends itself when the card closes, and holds only a WeakEntity.
 - `src/profile.rs` — ends when the effect request returns, and holds only a WeakEntity.
 - `src/profile.rs` — ends when the profile request returns, and holds only a WeakEntity.
+- `src/reactions.rs` — one page fetch: ends when the request returns, or when Waffle is dropped
 - `src/report.rs` — one request that ends when the menu lands, holding only a WeakEntity
 - `src/report.rs` — one request that ends when the report is sent, holding only a WeakEntity
 - `src/requests.rs` — ends after its last batch (or the first refusal), and holds only a WeakEntity.
@@ -824,6 +1035,16 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/restart.rs` — ends when the app restarts, and holds only a WeakEntity.
 - `src/role_popout.rs` — one request that ends when the counts land, holding only a WeakEntity
 - `src/role_popout.rs` — one request that ends when the member ids land, holding only a WeakEntity
+- `src/search_results.rs` — one search: ends when the request returns, or when Waffle is dropped; a stale page is ignored on arrival
+- `src/sending.rs` — one delete request, then it ends
+- `src/sending.rs` — one edit request, then it ends
+- `src/sending.rs` — one file prompt, then it ends
+- `src/sending.rs` — one reaction request, then it ends
+- `src/sending.rs` — one resend request, then it ends
+- `src/sending.rs` — one send request, then it ends
+- `src/sending.rs` — one thumbnail job, then it ends
+- `src/sending.rs` — settle runs inside that task, so it ends itself
+- `src/sending.rs` — the progress loop stops itself once the upload settles or fails
 - `src/server_settings/lists.rs` — holds a WeakEntity and ends when its work finishes or the update fails
 - `src/server_settings/lists.rs` — the subscription ends when the input entity it watches is dropped with the settings state
 - `src/server_settings/member_bulk.rs` — holds a WeakEntity and ends when its work finishes or the update fails
@@ -854,8 +1075,21 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/settings/view.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
 - `src/settings/voice_pages.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
 - `src/sidebar/voice.rs` — ends itself once the one grace timer fires, and holds only a WeakEntity.
+- `src/soundboard.rs` — a one-shot timer: ends after the clip's length, or when Waffle is dropped
+- `src/soundboard.rs` — a one-shot timer: ends after the effect's life, or when Waffle is dropped
+- `src/soundboard.rs` — one clip fetch: ends when the request returns, or when Waffle is dropped
+- `src/soundboard.rs` — one fetch: ends when the request returns, or when Waffle is dropped (update fails)
+- `src/soundboard.rs` — the demo loop ends when Waffle is dropped (update fails)
+- `src/soundboard.rs` — the subscription ends when the search input or Waffle is dropped
+- `src/startup.rs` — an app-lifetime sweep owned by the process, not a view
+- `src/startup.rs` — an app-lifetime watcher owned by the process; it returns when the presence channel closes
+- `src/startup.rs` — one 100ms wait then a compaction, then the task ends
+- `src/startup.rs` — runs once to install the update, then the app restarts or opens the window
+- `src/startup.rs` — the Dock observer lives as long as the window and ends with it
 - `src/status_menu.rs` — ends itself after the one grace timer, and holds only a WeakEntity.
 - `src/status_menu.rs` — ends itself once the timer fires and `then` has run, and holds only a WeakEntity.
+- `src/stickers.rs` — one fetch: ends when the request returns, or when Waffle is dropped
+- `src/stickers.rs` — one send: ends when the request returns, or when Waffle is dropped
 - `src/system_message.rs` — ends when the greet request answers, or at once if the app is gone
 - `src/text_file.rs` — ends when the fetch finishes, or at once if the app is gone
 - `src/text_file.rs` — ends when the fetch finishes, or at once if the app is gone
@@ -866,27 +1100,70 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/tray.rs` — polls the tray for the life of the process and ends on Quit; there is no view to drop.
 - `src/user_menu.rs` — ends when the DM request returns, and holds only a WeakEntity.
 - `src/user_menu.rs` — ends when the invite request returns, and holds only a WeakEntity.
+- `src/video.rs` — one open: ends when it returns, or when the player is dropped
+- `src/video.rs` — the tick loop ends when tick says stop or the player is dropped
+- `src/viewer.rs` — one count fetch: ends when the request returns, or when Waffle is dropped
+- `src/voice_calls.rs` — one 1.5 second timer, then it ends
+- `src/voice_calls.rs` — one 60 second timer, then it ends
+- `src/voice_calls.rs` — one LIVE_LAPSE timer, then it ends
+- `src/voice_calls.rs` — one READY_TIMEOUT timer, then it ends
+- `src/voice_calls.rs` — one REJOIN_AFTER timer, then it ends
+- `src/voice_calls.rs` — one watch-timeout timer, then it ends
+- `src/voice_calls.rs` — the clock loop stops itself once the call is gone
+- `src/voice_status.rs` — a one-shot request that ends when it returns, holding a WeakEntity
+- `src/voice_status.rs` — a one-shot request that ends when it returns, holding a WeakEntity
 
 ## unbounded-growth
 
 _A collection field that the app grows and never shrinks holds memory for the whole session: cap it (evict, truncate, an LRU), or clear it when what it's for goes away. A bound that holds by nature carries lint-allow(unbounded-growth) saying it ("one per joined server")._
 
+- `src/active_now.rs` — one per member live on Go Live in a party, rebuilt on every render and never kept
+- `src/activities/invite.rs` — a card's players, built from one activity's participants on each render and never kept
 - `src/announcements.rs` — one entry per announcement channel you publish in, a few dozen at most
 - `src/announcements.rs` — one entry per server whose Integrations page was opened, a few dozen at most
+- `src/audio_player.rs` — one small player per audio attachment shown this session, a few hundred at most
 - `src/chat.rs` — a per-frame snapshot of the visible messages' authors
 - `src/chat.rs` — a per-frame snapshot of this server's channels
 - `src/chat.rs` — a per-frame snapshot of this server's roles
 - `src/chat.rs` — a snapshot cloned per frame, one entry per pending upload
+- `src/command_picker.rs` — one index per server or DM the user opened the picker in, a few dozen at most
+- `src/components.rs` — a copy of the picks above for one render, dropped with the frame; it holds the same few dozen at most
+- `src/components.rs` — one entry per select the user changed, a few dozen at most
+- `src/discord/message.rs` — capped at four pictures per embed, as the comment above says.
 - `src/drafts.rs` — one pick per option of one typed command, 25 at most (Discord's cap)
 - `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
 - `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
 - `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
 - `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
+- `src/gif.rs` — one player per GIF slot drawn this session, a few hundred at most, each holding one decoded clip
+- `src/go_live.rs` — one per app with a shareable window, a few dozen at most, dropped with the picker
+- `src/go_live.rs` — one per shareable screen or window, a few dozen at most, dropped with the picker
+- `src/images.rs` — one weak handle per image cache, one for each part of the window that draws apart, a handful at most
 - `src/joining/mod.rs` — one entry per joined server, a few dozen at most
 - `src/joining/onboarding.rs` — the ids of one server's onboarding questions, a dozen at most
+- `src/link_preview.rs` — a borrow of the open server's channel names, which this struct never grows
+- `src/main.rs` — one colour per person seen in a call, a few dozen at most
+- `src/main.rs` — one entry per channel with someone typing; each typer expires after TYPING_TTL, bounded by the user channel count
+- `src/main.rs` — one entry per live stream we have heard of, replaced on every STREAM_UPDATE
+- `src/main.rs` — one entry per mention or emoji picked in the composer this session, a few hundred at most
+- `src/main.rs` — one entry per person who spoke in a call, a few dozen at most; replaced on each speak
+- `src/main.rs` — one entry per profile effect sku seen, a catalogue of a few hundred at most
+- `src/main.rs` — one entry per server visited, bounded by the servers the user is in
+- `src/main.rs` — one entry per server whose member list was opened, bounded by the user's server count
+- `src/main.rs` — one f32 per streamer the user adjusted, a few dozen at most
+- `src/main.rs` — one forum state per forum channel opened, bounded by the user's forum channels
+- `src/main.rs` — one group-count map per server opened, bounded by the user's server count
+- `src/main.rs` — one member list per server opened, bounded by the user's server count
+- `src/main.rs` — one pair per (server, channel) member range asked for, bounded by the user's channel count
+- `src/main.rs` — one thumbnail url per streamer seen, a handful of live streams at a time
+- `src/main.rs` — one u64 per channel the gateway reported, bounded by the user's channel count
+- `src/reactions.rs` — the name spans of one card sentence, three at most, rebuilt for each card
 - `src/report.rs` — one pick per form element of the node on screen, a handful
 - `src/report.rs` — the reasons of one menu node, a few dozen at most
 - `src/role_popout.rs` — one entry per role card opened, a few dozen a session at most
+- `src/search.rs` — the filters of one parsed query, a handful at most, dropped with the query
+- `src/search.rs` — the tokens of one parsed query that named no filter, a handful at most, dropped with the query
+- `src/search_results.rs` — the filters of one search query, a handful at most, replaced with each new search
 - `src/server_settings/audit.rs` — one fetched page of at most 50 entries, replaced by the next fetch
 - `src/server_settings/audit.rs` — the changes of one audit entry, a handful at most
 - `src/server_settings/lists.rs` — pages of 50 loaded on demand while the window is open, dropped when it closes
@@ -896,3 +1173,8 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/settings/prefs.rs` — one entry per distinct sticker you have sent, a few dozen in practice
 - `src/settings/prefs.rs` — one volume per person whose volume you moved, a few dozen at most
 - `src/settings/prefs.rs` — the posts whose bump notice you hid, a few dozen at most
+- `src/soundboard.rs` — one entry per joined server, a few dozen at most
+- `src/soundboard.rs` — one id per joined server, a few dozen at most
+- `src/soundboard.rs` — the files of sounds played this session, a few dozen at most, each a few seconds long
+- `src/video.rs` — one player per video attachment shown this session, a few hundred at most
+- `src/voice/taps.rs` — a developer capture, only built when WAFFLE_VOICE_TAPS names a directory, written out and dropped when the call ends
