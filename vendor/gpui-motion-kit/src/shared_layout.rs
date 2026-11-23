@@ -102,16 +102,6 @@ struct Fade {
     epoch: Instant,
 }
 
-impl<K: Eq + Hash + Clone + 'static, E: IntoElement + Styled + 'static> IntoElement
-    for SharedElement<K, E>
-{
-    type Element = Self;
-
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 impl<K: Eq + Hash + Clone + 'static, E: IntoElement + Styled + 'static> Element
     for SharedElement<K, E>
 {

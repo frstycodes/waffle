@@ -498,16 +498,6 @@ impl<K, E> ReorderElement<K, E> {
     }
 }
 
-impl<K: Clone + Eq + Hash + 'static, E: IntoElement + StatefulInteractiveElement + 'static>
-    IntoElement for ReorderElement<K, E>
-{
-    type Element = Self;
-
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 impl<K: Clone + Eq + Hash + 'static, E: IntoElement + StatefulInteractiveElement + 'static> Element
     for ReorderElement<K, E>
 {

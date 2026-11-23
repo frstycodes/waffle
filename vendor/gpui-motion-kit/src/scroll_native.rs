@@ -87,14 +87,6 @@ struct History {
     progress: f64,
 }
 
-impl<E: IntoElement + Styled + 'static> IntoElement for ScrollMotion<E> {
-    type Element = Self;
-
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 impl<E: IntoElement + Styled + 'static> Element for ScrollMotion<E> {
     type RequestLayoutState = AnyElement;
     type PrepaintState = ();

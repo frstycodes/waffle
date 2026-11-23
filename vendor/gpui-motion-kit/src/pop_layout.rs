@@ -110,14 +110,6 @@ pub struct PopRequest {
     bounds: Option<Bounds<Pixels>>,
 }
 
-impl<E: IntoElement + 'static> IntoElement for PopElement<E> {
-    type Element = Self;
-
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 impl<E: IntoElement + 'static> Element for PopElement<E> {
     type RequestLayoutState = PopRequest;
     type PrepaintState = ();

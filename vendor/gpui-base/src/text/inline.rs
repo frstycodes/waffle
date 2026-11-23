@@ -938,17 +938,18 @@ impl Inline {
         let bounds = hitbox.bounds.intersect(&hitbox.content_mask.bounds);
         let layout = self.styled_text.layout().clone();
         let links = self.links.clone();
+        let still = move |window: &Window| {
+            let position = window.mouse_position();
+            !window.last_input_was_keyboard()
+                && bounds.contains(&position)
+                && Self::link_for_position(&layout, &links, position).is_some()
+        };
         window.set_tooltip(AnyTooltip {
             view: tooltip,
             mouse_position: position,
             anchor: None,
             placement: Default::default(),
-            check_visible_and_update: Rc::new(move |_, _, window, _| {
-                let position = window.mouse_position();
-                !window.last_input_was_keyboard()
-                    && bounds.contains(&position)
-                    && Self::link_for_position(&layout, &links, position).is_some()
-            }),
+            check_visible_and_update: Rc::new(move |_, _, window, _| still(window)),
         });
     }
 

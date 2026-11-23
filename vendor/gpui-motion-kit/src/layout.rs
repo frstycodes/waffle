@@ -92,14 +92,6 @@ impl Drop for AncestorScope {
     }
 }
 
-impl<E: IntoElement + 'static> IntoElement for LayoutPositionElement<E> {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
 impl<E: IntoElement + 'static> Element for LayoutPositionElement<E> {
     type RequestLayoutState = AnyElement;
     type PrepaintState = ();

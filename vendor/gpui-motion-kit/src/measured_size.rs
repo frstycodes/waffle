@@ -102,14 +102,6 @@ fn content_mask(bounds: Bounds<Pixels>) -> ContentMask<Pixels> {
     ContentMask { bounds }
 }
 
-impl<E: IntoElement + 'static> IntoElement for AutoSize<E> {
-    type Element = Self;
-
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 impl<E: IntoElement + 'static> Element for AutoSize<E> {
     type RequestLayoutState = AnyElement;
     type PrepaintState = Bounds<Pixels>;

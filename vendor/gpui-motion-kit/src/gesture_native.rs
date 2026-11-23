@@ -320,16 +320,6 @@ impl<E> GestureElement<E> {
     }
 }
 
-impl<E: IntoElement + StatefulInteractiveElement + Styled + 'static> IntoElement
-    for GestureElement<E>
-{
-    type Element = Self;
-
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 impl<E: IntoElement + StatefulInteractiveElement + Styled + 'static> Element for GestureElement<E> {
     type RequestLayoutState = AnyElement;
     type PrepaintState = Hitbox;

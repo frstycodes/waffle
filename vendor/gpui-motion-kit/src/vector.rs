@@ -4,7 +4,7 @@ use gpui_ce_motion::{
 };
 
 use gpui_kit::{
-    App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement, LayoutId,
+    App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, LayoutId,
     Path, PathBuilder, Pixels, Style, Window, point, px, size,
 };
 
@@ -120,14 +120,6 @@ impl VectorElement {
     pub fn reveal(mut self, reveal: StrokeReveal) -> Self {
         self.reveal = reveal;
 
-        self
-    }
-}
-
-impl IntoElement for VectorElement {
-    type Element = Self;
-
-    fn into_element(self) -> Self {
         self
     }
 }
