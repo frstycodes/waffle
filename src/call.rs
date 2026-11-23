@@ -387,7 +387,7 @@ impl Waffle {
             .when(strip, |d| {
                 // Centred while it fits; wider than the stage, it starts at the left edge and scrolls.
                 let cards: Vec<AnyElement> = others.into_iter().map(|t| self.tile(t, TileSize::Card(STRIP_TILE), cx)).collect();
-                d.child(self.above_game(ui::row().items_stretch().id("filmstrip").flex_none().overflow_x_scroll().pt(px(STRIP_GAP)).px(px(STAGE_PAD)).child(ui::row().items_stretch().mx_auto().flex_none().gap(px(STRIP_GAP)).children(cards))))
+                d.child(self.above_game(ui::row().items_stretch().id("filmstrip").flex_none().overflow_x_scroll().pt(px(STRIP_GAP)).px(px(STAGE_PAD)).child(ui::row().items_stretch().mx_auto().flex_none().gap(px(STRIP_GAP)).children(cards)))) // lint-allow(raw-margin): auto margins centre the strip while it fits and start it at the left edge when wider, which justify_center can't
                     .child(div().h(px(band)).flex_none())
             })
             .children(floating.map(|head| self.above_game(keeps_chrome(div().id("call-head-float"), cx).occlude().absolute().top(px(-drift)).left_0().right_0().h(px(FOCUS_HEAD + 24.)).opacity(shown).bg(scrim(180.)).child(head))))
@@ -616,8 +616,9 @@ impl Inks {
 }
 
 // .iconbtn on the stage: muted until hovered; `pressed` holds the selected fill.
+// lint-allow(custom-component): ui::icon_button with Tone::Stage fills at rest, and this one is clear until hovered
 pub(crate) fn stage_icon_button(id: impl Into<ElementId>, glyph: Glyph, tip: &'static str, pressed: bool) -> Stateful<Div> {
-    ui::row()
+    ui::row() // lint-allow(custom-button): ui::icon_button with Tone::Stage fills at rest, and this one is clear until hovered
         .id(id)
         .size_8()
         .flex_none()
@@ -633,8 +634,9 @@ pub(crate) fn stage_icon_button(id: impl Into<ElementId>, glyph: Glyph, tip: &'s
 }
 
 // .btn.btn--sm on the stage: the quiet fill.
+// lint-allow(custom-component): ui::button with Tone::Stage needs a cx its callers in call/header.rs and call/tiles.rs don't pass
 pub(crate) fn stage_button(id: impl Into<ElementId>, label: &'static str) -> Stateful<Div> {
-    ui::row()
+    ui::row() // lint-allow(custom-button): ui::button with Tone::Stage, whose wash is a step stronger and which wants a cx its callers don't pass
         .id(id)
         .h(px(STAGE_BUTTON_HEIGHT))
         .px_2p5()
@@ -652,6 +654,7 @@ pub(crate) fn stage_button(id: impl Into<ElementId>, label: &'static str) -> Sta
 }
 
 // .preview .watch: the light button over a dimmed stream.
+// lint-allow(custom-component): ui::button with Tone::Overlay needs an id and a cx, and its callers in sidebar.rs and call/tiles.rs add their own
 pub(crate) fn watch_button(label: &'static str) -> Div {
     watch_button_look().px_2p5().gap_2().child(Icon::new(Glyph::Play).size(ui::ICON_MD)).child(label)
 }
@@ -739,6 +742,7 @@ pub(crate) struct Viewer {
 
 pub(crate) fn viewer_chip(viewers: Vec<Viewer>, streamer_id: &str) -> Stateful<Div> {
     let people: Vec<ui::Entry> = viewers.iter().map(|v| ui::Entry::person(v.avatar.clone(), v.name.clone())).collect();
+    // lint-allow(custom-mark): ui::badged marks a face's corner, and this chip pins over a stream tile's corner
     let chip = ui::row()
         .id(SharedString::from(format!("viewers-{streamer_id}")))
         .absolute()
@@ -768,6 +772,7 @@ enum MarkKind {
 // .tile.stream: a stream before its first preview arrives.
 pub(crate) fn stream_fill(radius: f32) -> Div {
     let glow = gpui_kit::linear_gradient(135., gpui_kit::linear_color_stop(palette::stream_glow().0.opacity(0.7), 0.), gpui_kit::linear_color_stop(palette::stream_glow().1.opacity(0.7), 1.));
+    // lint-allow(custom-mark): ui::media places an image against a container's edge, and this is a gradient laid over a tile's ground
     div().relative().squircle(radius).bg(palette::stream_ground()).child(div().absolute().inset_0().squircle(radius).bg(glow))
 }
 

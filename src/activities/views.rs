@@ -418,10 +418,10 @@ impl Waffle {
                     .items_center()
                     .justify_center()
                     .text_center()
-                    .when_some(lead.filter(|_| !small), |d, lead| d.child(div().mb_1().child(lead)))
+                    .when_some(lead.filter(|_| !small), |d, lead| d.child(div().pb_1().child(lead)))
                     .when_some(line.filter(|_| !small), |d, line| d.child(div().max_w_full().text_size(TEXT_SM).line_height(relative(LEADING_BODY)).text_color(palette::stage::text()).child(line)))
                     .child(ui::line(name).max_w_full().text_size(if small { TEXT_SM } else { title }).font_weight(gpui_kit::FontWeight::BOLD))
-                    .when(!actions.is_empty(), |d| d.child(ui::row().flex_none().mt_1p5().gap_2().children(actions))),
+                    .when(!actions.is_empty(), |d| d.child(div().pt_1p5().child(ui::row().flex_none().gap_2().children(actions)))),
             )
             .into_any_element()
     }
@@ -440,6 +440,7 @@ impl Waffle {
                 let faces: Vec<ui::Entry> = instance.participants.iter().map(|p| self.player(&p.user_id)).map(|u| ui::Entry::person(u.avatar, u.name)).collect();
                 let playing = self.in_activity(&app_id, cx);
                 let target = channel.clone();
+                // lint-allow(custom-button): ui::list_row always inks its title strong, and a playing activity's turns accent
                 ui::row()
                     .id(SharedString::from(format!("list-{}-{}", activity_key(&app_id), channel.id)))
                     .h(px(LIST_ROW))

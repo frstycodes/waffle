@@ -42,7 +42,7 @@ pub struct Party {
     // One per application, first come.
     pub activities: Vec<RichPresence>,
     // Members live on Go Live.
-    pub streamers: Vec<String>,
+    pub streamers: Vec<String>, // lint-allow(unbounded-growth): one per member live on Go Live in a party, rebuilt on every render and never kept
 }
 
 impl Party {
@@ -221,7 +221,7 @@ impl Waffle {
             }
             ticking.set(false);
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends itself when the panel stops showing, holding a WeakEntity
     }
 
     fn party_card(&self, party: &Party, cx: &mut Context<Self>) -> AnyElement {
@@ -239,17 +239,12 @@ impl Waffle {
             .children(sub.map(|s| ui::line(s).text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx))));
         let head = ui::row().gap_2p5().child(faces).child(who).children(head_mark(party, cx));
         let first = party.members[0].clone();
-        let hover = palette::line_strong(cx);
-        ui::col()
-            .id(SharedString::from(format!("active-now-{}", party.key)))
-            .p_3()
+        ui::card(SharedString::from(format!("active-now-{}", party.key)), cx)
+            .bordered(cx)
+            .flex_col()
+            .items_stretch()
+            .justify_start()
             .gap_2p5()
-            .squircle(ui::RADIUS_LG)
-            .bg(raised)
-            .border_1()
-            .border_color(palette::line(cx))
-            .cursor_pointer()
-            .hover(move |s| s.border_color(hover))
             .child(head)
             .children(self.voice_section(party, cx))
             .children(party.activities.iter().map(|a| activity_section(a, cx)))
@@ -325,7 +320,7 @@ fn activity_section(rich: &RichPresence, cx: &App) -> Div {
         let artists = rich.state.as_ref().map(|s| format!("by {}", s.replace("; ", ", ")));
         let track = rich.started.zip(rich.ends).map(|(start, end)| {
             let done = progress(start, end, now_ms());
-            div().mt_1p5().h_1().w_full().rounded_xs().bg(palette::line_strong(cx)).overflow_hidden().child(div().h_full().w(gpui_kit::relative(done)).bg(palette::muted(cx)))
+            div().pt_1p5().child(ui::progress_bar(done, cx).fill(palette::muted(cx)).track(palette::line_strong(cx)).thin().joined())
         });
         let meta = meta.child(name(rich.details.clone().unwrap_or_else(|| rich.name.clone()))).children(artists.map(line)).children(track);
         return inner(cx).child(art(rich.image.as_ref(), Nav::MusicFill.icon(), cx)).child(meta);

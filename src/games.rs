@@ -201,7 +201,7 @@ impl Waffle {
                 }
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends when the window is gone, holding a WeakEntity
     }
 
     // Your game as others see it: only while Activity status sharing is on.
@@ -237,7 +237,7 @@ impl Waffle {
             icons.borrow_mut().store(&app_id, url);
             this.update(cx, |_, cx| cx.notify()).ok(); // lint-allow(global-notify): game icons show in the user panel (nav), the member list and profile cards
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot fetch that ends when the request returns, holding a WeakEntity
         cached
     }
 
