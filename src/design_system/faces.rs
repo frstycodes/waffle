@@ -57,7 +57,7 @@ pub(super) fn avatars(cx: &App) -> impl IntoElement {
         };
         row().child(avatar).child(div().text_color(palette::muted(cx)).child(label))
     };
-    let more = ui::row().size_6().rounded_full().bg(palette::surface(Level::Overlay, cx)).text_color(palette::strong(cx)).text_size(ui::TEXT_XXS).font_weight(FontWeight::SEMIBOLD).justify_center().child("+3");
+    let more = ui::badge(palette::surface(Level::Overlay, cx), palette::strong(cx)).size_6().rounded_full().px_0().justify_center().child("+3");
     section("Avatars and status", "Status is never colour alone: online is a dot, idle a moon, do not disturb a bar, offline a ring. Speaking is the accent ring plus the bars.", cx).child(
         board(cx)
             .gap_6()

@@ -40,9 +40,101 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/activity_launcher.rs` — the launcher is drawn by the root, over the columns
 - `src/activity_launcher.rs` — the launcher is drawn by the root, over the columns
 - `src/activity_launcher.rs` — the launcher is drawn by the root, over the columns
+- `src/announcements.rs` — a message's publish bump draws in the main column and a thread's side panel
+- `src/announcements.rs` — a message's publish bump draws in the main column and a thread's side panel
+- `src/announcements.rs` — a message's publish bump draws in the main column and a thread's side panel
+- `src/announcements.rs` — opening a server and channel changes what every column draws
+- `src/announcements.rs` — the Integrations page and the alert dialog are drawn outside the columns, by the settings window and the Overlays view
+- `src/announcements.rs` — the dialog is drawn by the Overlays view and the message's published state in the main column and side panel
+- `src/announcements.rs` — the dialog is drawn by the Overlays view and the message's published state in the main column and side panel
+- `src/announcements.rs` — the dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/announcements.rs` — the dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/announcements.rs` — the dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/announcements.rs` — the dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/announcements.rs` — the dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/announcements.rs` — the dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/announcements.rs` — the dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/announcements.rs` — the dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/announcements.rs` — the dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/announcements.rs` — the dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/announcements.rs` — the follower count draws in the main column's follow bar and in the Overlays view's dialogs
+- `src/app_modal.rs` — the app modal is drawn by the Overlays view, which re-renders only with the app
+- `src/app_modal.rs` — the app modal is drawn by the Overlays view, which re-renders only with the app
+- `src/app_modal.rs` — the app modal is drawn by the Overlays view, which re-renders only with the app
+- `src/app_modal.rs` — the app modal is drawn by the Overlays view, which re-renders only with the app
+- `src/app_modal.rs` — the app modal is drawn by the Overlays view, which re-renders only with the app
+- `src/app_modal.rs` — the app modal is drawn by the Overlays view, which re-renders only with the app
 - `src/call/fit.rs` — the stage is the main column's, or full screen the root's
-- `src/forum.rs` — notifies the measured height's own entity, not Waffle
+- `src/create_channel.rs` — the create-channel dialog is drawn by the app's own render, outside the columns
+- `src/create_channel.rs` — the create-channel dialog is drawn by the app's own render, outside the columns
+- `src/create_channel.rs` — the create-channel dialog is drawn by the app's own render, outside the columns
+- `src/create_channel.rs` — the create-channel dialog is drawn by the app's own render, outside the columns
+- `src/create_channel.rs` — the create-channel dialog is drawn by the app's own render, outside the columns
+- `src/create_channel.rs` — the create-channel dialog is drawn by the app's own render, outside the columns
+- `src/create_channel.rs` — the create-channel dialog is drawn by the app's own render, outside the columns
+- `src/create_channel.rs` — the create-channel dialog is drawn by the app's own render, outside the columns
+- `src/create_channel.rs` — the create-channel dialog is drawn by the app's own render, outside the columns
+- `src/create_server.rs` — the create-server dialog is drawn by the app's own render, outside the columns
+- `src/create_server.rs` — the create-server dialog is drawn by the app's own render, outside the columns
+- `src/create_server.rs` — the create-server dialog is drawn by the app's own render, outside the columns
+- `src/create_server.rs` — the create-server dialog is drawn by the app's own render, outside the columns
+- `src/create_server.rs` — the create-server dialog is drawn by the app's own render, outside the columns
+- `src/create_server.rs` — the create-server dialog is drawn by the app's own render, outside the columns
+- `src/create_server.rs` — the create-server dialog is drawn by the app's own render, outside the columns
+- `src/create_server.rs` — the create-server dialog is drawn by the app's own render, outside the columns
+- `src/create_server.rs` — the create-server dialog is drawn by the app's own render, outside the columns
+- `src/create_server.rs` — the create-server dialog is drawn by the app's own render, outside the columns
+- `src/events/manage.rs` — the callback can change the events dialogs, the nav's Events row and its live bar
+- `src/events/manage.rs` — the events dialogs are drawn by the Overlays view, which re-renders only with the app
+- `src/events/manage.rs` — the events dialogs are drawn by the Overlays view, which re-renders only with the app
+- `src/events/manage.rs` — the events dialogs are drawn by the Overlays view, which re-renders only with the app
+- `src/events/manage.rs` — the events dialogs are drawn by the Overlays view, which re-renders only with the app
+- `src/events/manage.rs` — the events dialogs are drawn by the Overlays view, which re-renders only with the app
+- `src/events/views.rs` — the Start dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/events/wizard.rs` — the events dialogs are drawn by the Overlays view, which re-renders only with the app
+- `src/events/wizard.rs` — the events dialogs are drawn by the Overlays view, which re-renders only with the app
+- `src/events/wizard.rs` — the events dialogs are drawn by the Overlays view, which re-renders only with the app
+- `src/events/wizard.rs` — the events dialogs are drawn by the Overlays view, which re-renders only with the app
+- `src/events/wizard.rs` — the events dialogs are drawn by the Overlays view, which re-renders only with the app
+- `src/events/wizard.rs` — the subscription ends when the input, held in the wizard, drops; the wizard is drawn by the Overlays view, which re-renders only with the app
+- `src/events/wizard.rs` — the subscription ends when the input, held in the wizard, drops; the wizard is drawn by the Overlays view, which re-renders only with the app
 - `src/forum.rs` — notifies the measured width's own entity, not Waffle
+- `src/forum/composer.rs` — notifies the measured height's own entity, not Waffle
+- `src/forum/composer.rs` — the new post dialog is drawn by the app's own render, outside the columns
+- `src/forum/composer.rs` — the new post dialog is drawn by the app's own render, outside the columns
+- `src/forum/composer.rs` — the new post dialog is drawn by the app's own render, outside the columns
+- `src/forum/composer.rs` — the new post dialog is drawn by the app's own render, outside the columns
+- `src/forum/composer.rs` — the subscription ends when the input, held in ForumState, drops; the new post dialog is drawn by the app's own render
+- `src/forum/composer.rs` — the subscription ends when the input, held in ForumState, drops; the new post dialog is drawn by the app's own render
+- `src/forum/composer.rs` — ticks once a second only while a post slowmode runs down, redrawing the app-level dialog's clock, and stops when it ends
+- `src/forum/tags.rs` — a post's tags draw in the forum list and the open post's header, in two columns
+- `src/invite.rs` — the invite dialog is drawn by the app's own render, outside the columns
+- `src/invite.rs` — the invite dialog is drawn by the app's own render, outside the columns
+- `src/invite.rs` — the invite dialog is drawn by the app's own render, outside the columns
+- `src/invite.rs` — the invite dialog is drawn by the app's own render, outside the columns
+- `src/invite.rs` — the invite dialog is drawn by the app's own render, outside the columns
+- `src/invite.rs` — the invite dialog is drawn by the app's own render, outside the columns
+- `src/invite.rs` — the invite dialog is drawn by the app's own render, outside the columns
+- `src/invite.rs` — the invite dialog is drawn by the app's own render, outside the columns
+- `src/invite.rs` — the invite dialog is drawn by the app's own render, outside the columns
+- `src/invite.rs` — the invite dialog is drawn by the app's own render, outside the columns
+- `src/invite.rs` — the invite dialog is drawn by the app's own render, outside the columns
+- `src/joining/guide.rs` — the nav's Get Started row, the guide page and the action bar over the composer all draw the to-do's progress
+- `src/joining/invite.rs` — the invite dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/joining/invite.rs` — the invite dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/joining/invite.rs` — the invite dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/joining/invite.rs` — the invite dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/joining/mod.rs` — the page opens in the main column and its row lights up in the nav's channel list
+- `src/joining/onboarding.rs` — closing the flow redraws the Overlays view and the nav's Finish joining row
+- `src/joining/onboarding.rs` — the onboarding flow is drawn by the Overlays view, which re-renders only with the app
+- `src/joining/onboarding.rs` — the onboarding flow is drawn by the Overlays view, which re-renders only with the app
+- `src/joining/onboarding.rs` — the onboarding flow is drawn by the Overlays view, which re-renders only with the app
+- `src/joining/onboarding.rs` — the onboarding flow is drawn by the Overlays view, which re-renders only with the app
+- `src/joining/onboarding.rs` — the onboarding flow is drawn by the Overlays view, which re-renders only with the app
+- `src/joining/rules.rs` — the rules dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/joining/rules.rs` — the rules dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/joining/rules.rs` — the rules dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/joining/rules.rs` — the rules dialog is drawn by the Overlays view, which re-renders only with the app
 - `src/overlays.rs` — notifies the hovered entry's own entity, not Waffle
 - `src/part.rs` — notifies the part alone
 - `src/part.rs` — notifies this part, following the app
@@ -53,3 +145,148 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
+
+## custom-button
+
+_Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_row, ui::settings_choice or ui::pressable. Missing a look? Give the component a Tone, size or slot (src/ui/control.rs) and use it._
+
+- `src/create_server.rs` — ui::card has a raised fill; this is a clear bordered row ending in a chevron
+- `src/create_server.rs` — ui::list_row has no top-aligned lead with a body of title, channel chips and a button
+- `src/joining/browse.rs` — ui::list_row has no held state (dimmed check, no hover or click) or end-of-row note
+- `src/joining/onboarding.rs` — ui::card has no toggled look in the accent tint with a half-accent edge
+- `src/joining/rules.rs` — ui::card has no toggled accent-tint look with a state edge (agreed, nudged)
+
+## custom-surface
+
+_Floating or raised surface: ui::surface, ui::floating, ui::floating_bar, ui::toast, ui::dialog or ui::settings_card. Missing a level, radius or inset? Add it as an option there._
+
+- `src/joining/rules.rs` — ui::surface has no frosted translucent level matching the composer card
+
+## custom-divider
+
+_Divider: ui::divider or ui::inset_rule._
+
+- `src/events/views.rs` — ui::divider is a full-width hairline; this is the short rule joining two steps
+- `src/events/views.rs` — ui::divider is a horizontal rule; this is the vertical one beside Create Event
+- `src/forum.rs` — ui::divider is a horizontal rule; this is the vertical one between the tag chips and Select Tags
+
+## custom-badge
+
+_Label: ui::badge, ui::tag, ui::count_badge, ui::pill or ui::role_chip; add a variant there if none fits._
+
+- `src/announcements.rs` — ui::callout_with puts its action under the text; this bar keeps Follow at the row's end
+- `src/announcements/views.rs` — ui::callout is a block-width notice; this is a compact strip with inline actions under a message
+- `src/create_channel.rs` — ui::chip's removable look is an outlined chip, not this filled selected-tone pill
+- `src/forum/helpers.rs` — ui::badge is a 20px solid label; this is a 32px file row with an icon and its size
+- `src/joining/guide.rs` — ui::callout puts its actions under the text; this bar keeps its button at the row's end
+- `src/joining/mod.rs` — ui::badge has no round numbered mark in the accent tint (ui::pill is a capsule)
+- `src/joining/rules.rs` — ui::surface has no frosted translucent level matching the composer card
+
+## custom-mark
+
+_A mark on a face's or control's corner: ui::badged with a Spot (it places the mark for the face's shape and cuts its ring). Missing a host shape or ring style? Add it to src/ui/face.rs._
+
+- `src/design_system.rs` — ui::badged places marks on faces; this is a motion demo's track and moving block
+
+## raw-truncate
+
+_One-line text: ui::line(text), or ui::truncating(key, text) when the cut text should show in a tooltip._
+
+- `src/forum/helpers.rs` — ui::line clamps to one line; a post's title clamps to two
+
+## raw-margin
+
+_Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::row / ui::col / grid; space inside is the parent's padding; pushing to the end is flex_1 or justify_between. Margins stay near 0: an optical nudge carries lint-allow(raw-margin) with why._
+
+- `src/events/views.rs` — spaces the bar from the channel rows under it, whose list (sidebar.rs) owns no gap
+- `src/invite.rs` — pulls the toggle row's hover fill out to the card's edge, past the card's padding
+- `src/joining/guide.rs` — insets the bar from the composer column it is returned into, which has no padding of its own
+- `src/joining/onboarding.rs` — an optical gap either side of a chip in wrapping running text, which has no flex gap
+- `src/joining/rows.rs` — spaces the card from the neighbouring channel rows, whose list (sidebar.rs) owns no gap
+- `src/joining/rows.rs` — spaces the card from the neighbouring channel rows, whose list (sidebar.rs) owns no gap
+- `src/joining/rules.rs` — optical 1px lift that centres the number on the rule's first line
+
+## custom-component
+
+_A function named like a component builds it from the design system: wrap the ui:: component (a domain wrapper is fine), or add the component to src/ui/ first (src/ui/CATALOG.md lists what exists)._
+
+- `src/create_server.rs` — ui::chip is a pressable filter; this is a static glyph and channel name in a template's list
+- `src/create_server.rs` — ui::drop_zone is a wide field for dropped files; this is a small tile that opens the picker or shows the icon
+- `src/events/views.rs` — ui::tabs switches between views; this is a numbered progress of steps done, current and next
+- `src/forum/helpers.rs` — ui::chip is a pressable filter; this is a static file label with its size
+- `src/joining/guide.rs` — ui::icon_tile only holds a glyph, not an emoji's image or text
+
+## unvirtualized-list
+
+_A scrolling list that builds every row: list/uniform_list with a ListState draw only the rows on screen (CLAUDE.md, Rendering). A list that stays small carries lint-allow(unvirtualized-list) saying how big it can get ("a server's roles, a few dozen at most"), so whoever grows it knows to virtualize it._
+
+- `src/create_channel.rs` — at most 100 members plus the server's roles, a few hundred rows
+- `src/events/views.rs` — one server's scheduled events, at most 100
+
+## render-work
+
+_Work on the render path runs on every redraw: sort, parse, read files or build entities and subscriptions when their inputs change and keep the result in state (CLAUDE.md, Rendering). cx.new / cx.subscribe in render make a new entity or subscription every frame. A small bounded case carries lint-allow(render-work) saying how small._
+
+- `src/joining/browse.rs` — sorts one server's onboarding questions, a dozen at most
+
+## hot-notify
+
+_A notify in a pointer-move or scroll handler, or a timer loop, runs dozens of times a second: compare the new value with the old and notify only when what's drawn changed; a fast source gets its own entity (CLAUDE.md, Rendering)._
+
+- `src/forum/composer.rs` — ticks once a second only while a post slowmode runs down, redrawing the app-level dialog's clock, and stops when it ends
+
+## detached-task
+
+_A detached task outlives its view: keep the Task in the view so dropping the view cancels it (CLAUDE.md, Idiomatic Rust). Detach only a task that ends itself, and say how in lint-allow(detached-task); hold a WeakEntity, never an Entity, in it._
+
+- `src/announcements.rs` — ends itself once its request resolves, and holds only a weak handle
+- `src/announcements.rs` — ends itself once its request resolves, and holds only a weak handle
+- `src/announcements.rs` — ends itself once its request resolves, and holds only a weak handle
+- `src/announcements.rs` — ends itself once its request resolves, and holds only a weak handle
+- `src/announcements.rs` — ends itself once its request resolves, and holds only a weak handle
+- `src/app_modal.rs` — ends itself once its upload or file prompt resolves, and holds only a weak handle
+- `src/app_modal.rs` — ends itself once its upload or file prompt resolves, and holds only a weak handle
+- `src/app_modal.rs` — the subscription ends when the editor entity, held in AppModal, drops
+- `src/app_modal.rs` — the subscription ends when the editor entity, held in AppModal, drops
+- `src/create_server.rs` — ends itself once its request or file prompt resolves, and holds only a weak handle
+- `src/create_server.rs` — ends itself once its request or file prompt resolves, and holds only a weak handle
+- `src/create_server.rs` — ends itself once its request or file prompt resolves, and holds only a weak handle
+- `src/create_server.rs` — ends itself when the captcha channel closes with its request, and holds no entity
+- `src/design_system.rs` — ends itself after the 1.4s timer, and holds only a weak handle
+- `src/events/manage.rs` — ends itself once its request resolves, and holds only a weak handle
+- `src/events/manage.rs` — ends itself once the file is written, and holds only a weak handle
+- `src/events/schedule.rs` — the subscription ends when the picker entity, held in the wizard, drops
+- `src/events/schedule.rs` — the subscription ends when the picker entity, held in the wizard, drops
+- `src/events/wizard.rs` — ends itself once its request or file prompt resolves, and holds only a weak handle
+- `src/events/wizard.rs` — ends itself once its request or file prompt resolves, and holds only a weak handle
+- `src/events/wizard.rs` — the subscription ends when the input, held in the wizard, drops; the wizard is drawn by the Overlays view, which re-renders only with the app
+- `src/events/wizard.rs` — the subscription ends when the input, held in the wizard, drops; the wizard is drawn by the Overlays view, which re-renders only with the app
+- `src/forum.rs` — ends itself once its request or timer resolves, and holds only a weak handle
+- `src/forum.rs` — ends itself once its request or timer resolves, and holds only a weak handle
+- `src/forum.rs` — ends itself once its request or timer resolves, and holds only a weak handle
+- `src/forum.rs` — ends itself once its request or timer resolves, and holds only a weak handle
+- `src/forum.rs` — the subscription ends when the search entity, held in ForumState, drops
+- `src/forum/composer.rs` — ends itself once its request or timer resolves, and holds only a weak handle
+- `src/forum/composer.rs` — ends itself once the file prompt resolves, and holds only a weak handle
+- `src/forum/composer.rs` — the loop ends itself when the slowmode runs out, and holds only a weak handle
+- `src/forum/composer.rs` — the subscription ends when the input, held in ForumState, drops; the new post dialog is drawn by the app's own render
+- `src/forum/composer.rs` — the subscription ends when the input, held in ForumState, drops; the new post dialog is drawn by the app's own render
+- `src/forum/tags.rs` — ends itself once its request or timer resolves, and holds only a weak handle
+- `src/invite.rs` — ends itself once its request or timer resolves, and holds only a weak handle
+- `src/invite.rs` — ends itself once its request or timer resolves, and holds only a weak handle
+- `src/invite.rs` — ends itself once its request or timer resolves, and holds only a weak handle
+- `src/joining/browse.rs` — the subscription ends when the search entity, held in BrowseView, drops
+- `src/joining/onboarding.rs` — ends itself once the cover's hold timer fires, and holds only a weak handle
+
+## unbounded-growth
+
+_A collection field that the app grows and never shrinks holds memory for the whole session: cap it (evict, truncate, an LRU), or clear it when what it's for goes away. A bound that holds by nature carries lint-allow(unbounded-growth) saying it ("one per joined server")._
+
+- `src/announcements.rs` — one entry per announcement channel you publish in, a few dozen at most
+- `src/announcements.rs` — one entry per server whose Integrations page was opened, a few dozen at most
+- `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
+- `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
+- `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
+- `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
+- `src/joining/mod.rs` — one entry per joined server, a few dozen at most
+- `src/joining/onboarding.rs` — the ids of one server's onboarding questions, a dozen at most

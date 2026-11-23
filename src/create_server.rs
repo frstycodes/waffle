@@ -114,6 +114,15 @@ const SCHOOL_CLUB: usize = 3;
 const CHIPS_SHOWN: usize = 5;
 const NAME_MAX: usize = 100;
 const NEAR_LIMIT: usize = 10;
+// The small gap between a glyph and its name in a channel chip, and in the legal line.
+const INLINE_GAP: f32 = 3.;
+// A clamped channel list shows about two lines.
+const CLAMPED_HEIGHT: f32 = 34.;
+// The upload tile, and the glyph in it.
+const UPLOAD_SIZE: f32 = 80.;
+const UPLOAD_GLYPH: f32 = 22.;
+// The + mark on the upload tile.
+const PLUS_MARK: f32 = 24.;
 const INVITE_EXAMPLES: [&str; 3] = ["hTKzmak", "https://discord.gg/hTKzmak", "https://discord.gg/wumpus-friends"];
 // Not verified: Discord's client-side default role permissions; this is Discord's documented @everyone set
 // (create invite, reactions, stream, view, send, embed, attach, history, mention everyone, external emoji,
@@ -131,17 +140,17 @@ impl Waffle {
         let subscriptions = [
             cx.subscribe_in(&name, window, |this, _, event: &InputEvent, _, cx| match event {
                 InputEvent::PressEnter { .. } => this.submit_create_server(cx),
-                _ => cx.notify(),
+                _ => cx.notify(), // lint-allow(global-notify): the create-server dialog is drawn by the app's own render, outside the columns
             }),
             cx.subscribe_in(&invite, window, |this, _, event: &InputEvent, _, cx| match event {
                 InputEvent::PressEnter { .. } => this.submit_join_server(cx),
-                _ => cx.notify(),
+                _ => cx.notify(), // lint-allow(global-notify): the create-server dialog is drawn by the app's own render, outside the columns
             }),
         ];
         let focus = cx.focus_handle();
         focus.focus(window, cx);
         self.create_server = Some(CreateServer { step: Step::Templates, template: None, expanded: HashSet::new(), name, invite, icon: None, busy: false, error: None, focus, _subscriptions: subscriptions });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the create-server dialog is drawn by the app's own render, outside the columns
     }
 
     // Discord's mod+shift+N: opens the dialog, or jumps to Join when it's already open.
@@ -157,7 +166,7 @@ impl Waffle {
 
     fn close_create_server(&mut self, cx: &mut Context<Self>) {
         self.create_server = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the create-server dialog is drawn by the app's own render, outside the columns
     }
 
     fn default_server_name(&self) -> String {
@@ -176,7 +185,7 @@ impl Waffle {
             Step::Join => form.invite.update(cx, |state, cx| state.focus(window, cx)),
             Step::Templates | Step::Intent => form.focus.focus(window, cx),
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the create-server dialog is drawn by the app's own render, outside the columns
     }
 
     fn pick_create_server_template(&mut self, template: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
@@ -206,7 +215,7 @@ impl Waffle {
         if !form.expanded.remove(&i) {
             form.expanded.insert(i);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the create-server dialog is drawn by the app's own render, outside the columns
     }
 
     // Same as Server settings' icon: the picked file goes out as a base64 data URI.
@@ -215,17 +224,21 @@ impl Waffle {
         cx.spawn(async move |this, cx| {
             let Ok(Ok(Some(paths))) = paths.await else { return };
             let Some(path) = paths.into_iter().next() else { return };
-            let Ok(bytes) = std::fs::read(&path) else { return };
-            let data = image_data(mime_of(&path), &bytes);
+            // Read off the UI thread: an icon can be several megabytes.
+            let read = cx.background_executor().spawn(async move {
+                let bytes = std::fs::read(&path).ok()?;
+                Some((image_data(mime_of(&path), &bytes), path))
+            });
+            let Some((data, path)) = read.await else { return };
             this.update(cx, |this, cx| {
                 if let Some(form) = this.create_server.as_mut() {
                     form.icon = Some(PickedIcon { path, data });
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the create-server dialog is drawn by the app's own render, outside the columns
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends itself once its request or file prompt resolves, and holds only a weak handle
     }
 
     fn submit_create_server(&mut self, cx: &mut Context<Self>) {
@@ -245,8 +258,8 @@ impl Waffle {
             let created = created.map_err(String::from).and_then(|guild| guild["id"].as_str().map(str::to_owned).ok_or_else(|| "Discord didn't send the new server back".to_owned()));
             this.update(cx, |this, cx| this.finish_create_server(created, cx)).ok();
         })
-        .detach();
-        cx.notify();
+        .detach(); // lint-allow(detached-task): ends itself once its request or file prompt resolves, and holds only a weak handle
+        cx.notify(); // lint-allow(global-notify): the create-server dialog is drawn by the app's own render, outside the columns
     }
 
     fn submit_join_server(&mut self, cx: &mut Context<Self>) {
@@ -263,7 +276,7 @@ impl Waffle {
             Some(_) => None,
         };
         form.error = error.map(str::to_owned);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the create-server dialog is drawn by the app's own render, outside the columns
         let (None, Some(code), Some(client)) = (error, invite_code(&input).map(str::to_owned), client) else { return };
         form.busy = true;
         let captcha = captcha_opener(cx);
@@ -271,7 +284,7 @@ impl Waffle {
             let joined = client.join_invite(&code, captcha).await.map_err(|e| join_error(&e));
             this.update(cx, |this, cx| this.finish_create_server(joined, cx)).ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends itself once its request or file prompt resolves, and holds only a weak handle
     }
 
     // Created or joined: the dialog closes and the server opens once its GUILD_CREATE lands.
@@ -288,7 +301,7 @@ impl Waffle {
                 }
             }
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the create-server dialog is drawn by the app's own render, outside the columns
     }
 
     fn server_limit(&self) -> ServerLimit {
@@ -372,7 +385,7 @@ fn customize_step(form: &CreateServer, cx: &mut Context<Waffle>) -> Div {
     let focus = form.name.read(cx).focus_handle(cx);
     let field = ui::text_field("create-server-name", Input::new(&form.name).appearance(false), &focus).error(form.error.is_some());
     let guidelines = ui::button("create-server-guidelines", Tone::Link, cx).text_size(ui::TEXT_XS).child("Community Guidelines").on_click(|_, _, cx| cx.open_url("https://discord.com/guidelines"));
-    let legal = ui::row().flex_wrap().gap(px(3.)).text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("By creating a server, you agree to Discord's").child(ui::row().child(guidelines).child("."));
+    let legal = ui::row().flex_wrap().gap(px(INLINE_GAP)).text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("By creating a server, you agree to Discord's").child(ui::row().child(guidelines).child("."));
     let name_group = ui::col()
         .gap_2()
         .child(required_label("Server name", cx))
@@ -469,6 +482,7 @@ fn card_row(id: &'static str, tile: impl IntoElement, label: &'static str, detai
         .gap_0p5()
         .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(label))
         .children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::muted(cx)).child(d)));
+    // lint-allow(custom-button): ui::card has a raised fill; this is a clear bordered row ending in a chevron
     ui::row()
         .id(id)
         .gap_3()
@@ -500,7 +514,7 @@ fn template_row(i: usize, template: &Template, expanded: bool, off: bool, cx: &m
         .line_height(ui::LINE_XS)
         .text_color(palette::muted(cx))
         .children(chans.into_iter().map(|(glyph, name)| channel_chip(glyph, name, faint)))
-        .when(clamped, |d| d.max_h(px(34.)).overflow_hidden().child(fade(group.clone(), palette::surface(palette::Level::Raised, cx), hover)));
+        .when(clamped, |d| d.max_h(px(CLAMPED_HEIGHT)).overflow_hidden().child(fade(group.clone(), palette::surface(palette::Level::Raised, cx), hover)));
     let count = template.channels.iter().filter(|c| !matches!(c, Chan::Category(_))).count();
     let more = long.then(|| {
         let label: SharedString = if expanded { "Show fewer".into() } else { format!("Show all {count} channels").into() };
@@ -509,6 +523,7 @@ fn template_row(i: usize, template: &Template, expanded: bool, off: bool, cx: &m
             this.toggle_template_channels(i, cx);
         }))
     });
+    // lint-allow(custom-button): ui::list_row has no top-aligned lead with a body of title, channel chips and a button
     ui::row()
         .id(("create-server-template", i))
         .group(group)
@@ -519,7 +534,7 @@ fn template_row(i: usize, template: &Template, expanded: bool, off: bool, cx: &m
         .squircle(ui::RADIUS_LG)
         .child(ui::icon_tile(template.glyph, template_fill(template.hue), gpui_kit::white()))
         .child(ui::col().flex_1().pt_0p5().items_start().gap_1().child(div().font_weight(FontWeight::MEDIUM).text_color(strong).child(template.label)).child(chips).children(more))
-        .child(div().flex_none().mt_2p5().text_color(faint).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)))
+        .child(div().flex_none().pt_2p5().text_color(faint).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)))
         .when(off, |r| r.opacity(0.5).cursor_not_allowed())
         .when(!off, |r| r.cursor_pointer().hover(move |s| s.bg(hover)).on_click(cx.listener(move |this, _, window, cx| this.pick_create_server_template(Some(i), window, cx))))
 }
@@ -536,8 +551,9 @@ fn channel_chips(template: &Template) -> Vec<(Glyph, &'static str)> {
         .collect()
 }
 
+// lint-allow(custom-component): ui::chip is a pressable filter; this is a static glyph and channel name in a template's list
 fn channel_chip(glyph: Glyph, name: &'static str, faint: Hsla) -> impl IntoElement {
-    ui::row().gap(px(3.)).whitespace_nowrap().child(div().text_color(faint).child(Icon::new(glyph).size(ui::ICON_XS))).child(name)
+    ui::row().gap(px(INLINE_GAP)).whitespace_nowrap().child(div().text_color(faint).child(Icon::new(glyph).size(ui::ICON_XS))).child(name)
 }
 
 // The clamped list's last line dissolving into its row: the dialog's surface, or the surface under the row's
@@ -549,6 +565,7 @@ fn fade(group: SharedString, surface: Hsla, hover: Hsla) -> impl IntoElement {
 }
 
 // The dashed squircle that opens the file picker, or the picked image, with the + badge either way.
+// lint-allow(custom-component): ui::drop_zone is a wide field for dropped files; this is a small tile that opens the picker or shows the icon
 fn upload_tile(picked: Option<PathBuf>, cx: &mut Context<Waffle>) -> impl IntoElement {
     let (edge, accent, muted) = (palette::line_strong(cx), palette::accent(), palette::muted(cx));
     let radius = 24.;
@@ -564,27 +581,17 @@ fn upload_tile(picked: Option<PathBuf>, cx: &mut Context<Waffle>) -> impl IntoEl
             .border_dashed()
             .border_color(edge)
             .text_color(muted)
-            .child(Icon::new(Glyph::Upload).size(px(22.)))
+            .child(Icon::new(Glyph::Upload).size(px(UPLOAD_GLYPH)))
             .child(div().text_size(ui::TEXT_XXS).font_weight(FontWeight::BOLD).child("UPLOAD"))
             .into_any_element(),
     };
-    let badge = ui::row()
-        .absolute()
-        .top_neg_1()
-        .right_neg_1()
-        .size_6()
-        .rounded_full()
-        .bg(accent)
-        .text_color(palette::on_accent())
-        .justify_center()
-        .child(Icon::new(Glyph::Plus).size(ui::ICON_SM));
+    let plus = ui::row().size(px(PLUS_MARK)).rounded_full().bg(accent).text_color(palette::on_accent()).justify_center().child(Icon::new(Glyph::Plus).size(ui::ICON_SM));
+    let tile = ui::badged(div().size_full().child(face), UPLOAD_SIZE, ui::Shape::Control, palette::surface(palette::Level::Raised, cx)).mark(ui::Spot::TopRight, ui::badge_of(plus));
     div()
         .id("create-server-upload")
-        .relative()
-        .size_20()
+        .size(px(UPLOAD_SIZE))
         .cursor_pointer()
-        .child(face)
-        .child(badge)
+        .child(tile)
         .tooltip(|window, cx| ui::tip("Upload a server icon", window, cx))
         .on_click(cx.listener(|this, _, _, cx| this.pick_server_icon(cx)))
 }
@@ -621,7 +628,7 @@ fn captcha_opener(cx: &mut Context<Waffle>) -> mpsc::UnboundedSender<String> {
             cx.update(|cx: &mut App| cx.open_url(&url));
         }
     })
-    .detach();
+    .detach(); // lint-allow(detached-task): ends itself when the captcha channel closes with its request, and holds no entity
     captcha_url
 }
 
