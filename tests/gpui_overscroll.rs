@@ -180,6 +180,44 @@ fn content_that_fits_does_not_stretch() {
     assert_eq!(overscroll.offset(), Point::default());
 }
 
+// A mouse wheel's notch eases in, a few pixels a frame. From the end of a bottom-aligned list, as the chat
+// rests, those steps were taken from past the last row and clamped back to the end: the wheel never moved it.
+mod notched {
+    use gpui_kit::prelude::*;
+    use gpui_kit::{Context, ListAlignment, ListState, ScrollDelta, ScrollEvent, TestAppContext, TouchPhase, Window, div, list, point, px};
+
+    struct Messages(ListState);
+
+    impl Render for Messages {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().h(px(200.)).w(px(200.)).child(list(self.0.clone(), |_, _, _| div().h(px(30.)).w_full().into_any_element()).size_full())
+        }
+    }
+
+    #[gpui_kit::test]
+    fn a_notch_scrolls_a_bottom_aligned_list_up_from_its_end(cx: &mut TestAppContext) {
+        let state = ListState::new(40, ListAlignment::Bottom, px(100.));
+        let kept = state.clone();
+        let (_, cx) = cx.add_window_view(move |_, _| Messages(kept));
+        cx.run_until_parked();
+        assert_eq!(state.logical_scroll_top().item_ix, 40, "starts at the end");
+        cx.simulate_event(ScrollEvent {
+            position: point(px(100.), px(100.)),
+            delta: ScrollDelta::Lines(point(0., 3.)),
+            modifiers: Default::default(),
+            touch_phase: TouchPhase::Moved,
+            source: Default::default(),
+        });
+        // The test platform has no display link: deliver frames as it would.
+        for _ in 0..40 {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            cx.update(|window, cx| window.simulate_next_frame(cx));
+            cx.run_until_parked();
+        }
+        let top = state.logical_scroll_top();
+        assert!(top.item_ix < 40, "the notch never left the end: {top:?}");
+    }
+}
 
 // Rubber-banding only runs on macOS, where scroll phases tell the finger from momentum.
 #[cfg(target_os = "macos")]

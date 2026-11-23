@@ -916,10 +916,11 @@ impl StateInner {
             return;
         }
 
-        let padding = self.last_padding.unwrap_or_default();
-        let scroll_max =
-            (self.items.summary().height + padding.top + padding.bottom - height).max(px(0.));
-        let new_scroll_top = (self.scroll_top(scroll_top) - delta.y)
+        let scroll_max = self.scroll_max(height);
+        // Waffle: from where the content really is. At the end of a bottom-aligned list the logical top
+        // is past the last item, a whole content height down; a delta shorter than the viewport taken
+        // from there clamps straight back to the end, so a wheel's eased steps never left the bottom.
+        let new_scroll_top = (self.scroll_top(scroll_top).min(scroll_max) - delta.y)
             .max(px(0.))
             .min(scroll_max);
 
@@ -974,6 +975,12 @@ impl StateInner {
                     offset_in_item: px(0.),
                 },
             })
+    }
+
+    /// Waffle: how far the content can scroll in a viewport `height` tall, as last laid out.
+    fn scroll_max(&self, height: Pixels) -> Pixels {
+        let padding = self.last_padding.unwrap_or_default();
+        (self.items.summary().height + padding.top + padding.bottom - height).max(px(0.))
     }
 
     pub(crate) fn scroll_top(&self, logical_scroll_top: &ListOffset) -> Pixels {
@@ -1708,7 +1715,10 @@ impl Element for List {
             let coasting = state.scroll_motion.is_coasting();
             let (mut delta, more) = state.scroll_motion.step(now);
             let top = state.logical_scroll_top();
-            let before = state.scroll_top(&top);
+            // Where the content is, not the logical top (see `scroll`): momentum measured from past the
+            // end would jump the content into an edge it is nowhere near.
+            let scroll_max = state.scroll_max(bounds.size.height);
+            let before = state.scroll_top(&top).min(scroll_max);
             if coasting && coasts_into_edges(cx) {
                 delta = state.overscroll.scroll(point(px(0.), -before), point(px(0.), delta.y), TouchPhase::Moved, now);
             }
@@ -1716,7 +1726,7 @@ impl Element for List {
                 state.scroll(&top, bounds.size.height, point(px(0.), delta.y), window.current_view(), window, cx);
             }
             // Momentum that has reached an end is spent (the rubber band takes it from there).
-            if coasting && state.scroll_top(&state.logical_scroll_top()) == before {
+            if coasting && state.scroll_top(&state.logical_scroll_top()).min(scroll_max) == before {
                 state.scroll_motion.stop();
             }
             if more {
