@@ -1806,7 +1806,7 @@ impl Element for List {
                 // Waffle: the finger's own movement applies now; momentum and notches are stepped
                 // once per frame at prepaint.
                 let input = if event.delta.precise() { ScrollInput::Precise } else { ScrollInput::Notched };
-                let fed = list_state.0.borrow_mut().scroll_motion.input(event.delta.pixel_delta(px(20.)), input, event.touch_phase, !cx.reduce_motion(), Instant::now());
+                let fed = list_state.0.borrow_mut().scroll_motion.input(event.delta.pixel_delta(super::scroll_motion::WHEEL_LINE), input, event.touch_phase, !cx.reduce_motion(), Instant::now());
                 if list_state.0.borrow().scroll_motion.is_moving() {
                     // A notch moves nothing now: it is stepped at prepaint. Bump the state so a
                     // retained subtree holding the list is prepainted again rather than replayed,
@@ -1831,7 +1831,7 @@ impl Element for List {
                     accumulated_stretch_delta
                 } else {
                     accumulated_scroll_delta = accumulated_scroll_delta.coalesce(ScrollDelta::Pixels(fed));
-                    accumulated_scroll_delta.pixel_delta(px(20.))
+                    accumulated_scroll_delta.pixel_delta(super::scroll_motion::WHEEL_LINE)
                 };
                 list_state.0.borrow_mut().scroll(
                     &scroll_top,
