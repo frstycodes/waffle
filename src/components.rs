@@ -83,6 +83,7 @@ pub(crate) struct ComponentState {
     open: Option<OpenSelect>,
     // A message select's picks as they stand, and what it last sent: closing its menu sends the picks
     // when they differ. Both start at the select's defaults.
+    // lint-allow(unbounded-growth): one entry per select the user changed, a few dozen at most
     picks: HashMap<ControlKey, Vec<String>>,
     sent: HashMap<ControlKey, Vec<String>>,
     // Each select field's bounds as last painted: its menu opens under it.
@@ -139,6 +140,7 @@ const PRODUCT_UNAVAILABLE: &str = "Product Unavailable";
 #[derive(Default)]
 pub(crate) struct ComponentView {
     open: Option<ControlKey>,
+    // lint-allow(unbounded-growth): a copy of the picks above for one render, dropped with the frame; it holds the same few dozen at most
     picks: HashMap<ControlKey, Vec<String>>,
     // User, role, channel and mentionable selects' `default_values` that resolve here.
     defaults: HashMap<ControlKey, Vec<SelectOption>>,
@@ -285,7 +287,7 @@ impl Waffle {
                 this.search_select(input.read(cx).value().to_string(), cx);
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): the subscription ends when the select's input or Waffle is dropped
         self.component_state.search = Some(input.clone());
         input
     }
@@ -305,7 +307,7 @@ impl Waffle {
             cx.background_executor().timer(SEARCH_DEBOUNCE).await;
             this.update(cx, |this, _| this.send_member_search(seq)).ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot debounce timer: ends after SEARCH_DEBOUNCE, or when Waffle is dropped
     }
 
     fn send_member_search(&self, seq: u64) {
@@ -526,10 +528,11 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one fetch: ends when the request returns, or when Waffle is dropped
     }
 
     // A select field in the app form: the same field and menu as a message's, its picks the form's.
+    // lint-allow(custom-component): ui::select_options is the open list; this builds a modal's select field from app data and wraps the kit's select
     pub(crate) fn modal_select(&self, ix: usize, select: &Select, picks: &[String], cx: &mut Context<Self>) -> AnyElement {
         let host = SelectHost::Modal(ix);
         let key = host.key(select);
@@ -580,6 +583,7 @@ pub(crate) fn message_components(message: &Message, ctx: &Rc<RowContext>, cx: &m
     let width = MAX_WIDTH.min(ctx.column());
     let room = Room { width, reduced: false };
     let children: Vec<AnyElement> = message.components.iter().enumerate().map(|(i, c)| component(message, c, i.to_string(), room, ctx, cx)).collect();
+    // lint-allow(raw-margin): the gap under the message body, whose row is stacked in chat.rs outside this component
     Some(ui::col().mt_2().w_full().max_w(px(width)).gap_2().children(children).into_any_element())
 }
 

@@ -88,8 +88,10 @@ impl Key {
 pub struct Query {
     pub content: String,
     // (parameter, value) pairs, in Discord's names, ready for the URL. A name may repeat: Discord takes arrays.
+    // lint-allow(unbounded-growth): the filters of one parsed query, a handful at most, dropped with the query
     pub params: Vec<(String, String)>,
     // Filters we couldn't resolve, e.g. an unknown user, to tell the reader about.
+    // lint-allow(unbounded-growth): the tokens of one parsed query that named no filter, a handful at most, dropped with the query
     pub unresolved: Vec<String>,
 }
 

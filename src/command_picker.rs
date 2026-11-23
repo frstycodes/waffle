@@ -69,6 +69,7 @@ const FILE_TOKEN: &str = "file:";
 #[derive(Default)]
 pub(crate) struct CommandPicker {
     // By server, or by channel in a DM: the index Discord sent for it.
+    // lint-allow(unbounded-growth): one index per server or DM the user opened the picker in, a few dozen at most
     indexes: HashMap<String, IndexState>,
     // Scopes whose index went out of date (a gateway reconnect, a bad-version error): refetched on next use.
     stale: HashSet<String>,
@@ -368,7 +369,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one sync: ends when the request returns, or when Waffle is dropped
     }
 
     fn fetch_command_index(&mut self, cx: &mut Context<Self>) {
@@ -386,7 +387,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one index fetch: ends when the request returns, or when Waffle is dropped
         self.redraw(Column::Main, cx);
     }
 

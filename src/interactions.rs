@@ -87,7 +87,7 @@ impl Waffle {
                 }
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one interaction request: ends when it succeeds or is refused, or when Waffle is dropped
         if modal {
             cx.spawn(async move |this, cx| {
                 cx.background_executor().timer(MODAL_TIMEOUT).await;
@@ -98,7 +98,7 @@ impl Waffle {
                 })
                 .ok();
             })
-            .detach();
+            .detach(); // lint-allow(detached-task): a one-shot timer: ends after MODAL_TIMEOUT, or when Waffle is dropped
         }
         cx.notify(); // lint-allow(global-notify): message components, polls and pending commands draw in the feed and the thread panel
     }
@@ -212,7 +212,7 @@ impl Waffle {
             cx.background_executor().timer(Duration::from_millis(wait + 1000)).await;
             this.update(cx, |_, cx| cx.notify()).ok(); // lint-allow(global-notify): message components, polls and pending commands draw in the feed and the thread panel
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot timer: ends after the deferred wait, or when Waffle is dropped
     }
 }
 

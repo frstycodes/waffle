@@ -55,6 +55,7 @@ const CURVE: f32 = 2.8;
 
 #[derive(Default)]
 struct Players {
+    // lint-allow(unbounded-growth): one small player per audio attachment shown this session, a few hundred at most
     players: HashMap<String, Entity<AudioPlayer>>,
     voice: Option<WeakEntity<AudioPlayer>>,
 }
@@ -62,12 +63,14 @@ struct Players {
 impl Global for Players {}
 
 // The player for one audio file of `message`, kept across renders so it remembers where it was.
+// lint-allow(custom-component): ui::pill is a label, not a player; this wraps a cached AudioPlayer entity and builds no design-system piece itself
 pub fn tile(message: &Message, file: &File, waffle: WeakEntity<Waffle>, cx: &mut App) -> AnyElement {
     let key = format!("{}-{}", message.id, file.url);
     if let Some(player) = cx.try_global::<Players>().and_then(|p| p.players.get(&key)).cloned() {
         return player.into_any_element();
     }
     let (file, voice) = (file.clone(), message.is_voice());
+    // lint-allow(render-work): built once per attachment, then every later render takes it from the map above
     let player = cx.new(|cx| AudioPlayer::new(key.clone(), file, voice, waffle, cx));
     cx.default_global::<Players>().players.insert(key, player.clone());
     player.into_any_element()
@@ -176,7 +179,7 @@ impl AudioPlayer {
             let opened = crate::discord::runtime().spawn(open(url)).await.unwrap_or_else(|e| Err(e.to_string()));
             this.update(cx, |this, cx| this.loaded(opened, cx)).ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one download: ends when it returns, or when the player is dropped
         cx.notify();
     }
 
@@ -253,7 +256,7 @@ impl AudioPlayer {
                 let Ok(true) = this.update(cx, |this, cx| this.tick(cx)) else { break };
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): the tick loop ends when tick says stop or the player is dropped
     }
 
     fn tick(&mut self, cx: &mut Context<Self>) -> bool {
@@ -297,7 +300,7 @@ impl AudioPlayer {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot timer: ends after SETTLE, or when the player is dropped
     }
 
     // Discord keeps a voice message's spot only between half a second in and 95% through.
@@ -359,7 +362,7 @@ impl AudioPlayer {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot timer: ends after LINGER, or when the player is dropped
     }
 
     fn begin_scrub(&mut self, fraction: f32, cx: &mut Context<Self>) {

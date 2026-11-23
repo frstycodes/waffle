@@ -57,10 +57,13 @@ pub const NITRO_LOCKED: &str = "Use custom soundboard sounds across voice channe
 pub struct Soundboard {
     pub(crate) picker: Option<Picker>,
     pub(crate) search: Entity<SearchState>,
+    // lint-allow(unbounded-growth): one entry per joined server, a few dozen at most
     guild_sounds: HashMap<String, Vec<SoundboardSound>>,
     defaults: Vec<SoundboardSound>,
     defaults_requested: bool,
+    // lint-allow(unbounded-growth): one id per joined server, a few dozen at most
     requested: HashSet<String>,
+    // lint-allow(unbounded-growth): the files of sounds played this session, a few dozen at most, each a few seconds long
     clips: HashMap<String, Clip>,
     // Sound id to when it stops playing.
     playing: HashMap<String, Instant>,
@@ -117,7 +120,7 @@ impl Access {
 impl Soundboard {
     pub fn new(window: &mut Window, cx: &mut Context<Waffle>) -> Self {
         let search = cx.new(|cx| SearchState::new(window, cx).placeholder("Find the perfect sound"));
-        cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify()).detach();
+        cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify()).detach(); // lint-allow(detached-task): the subscription ends when the search input or Waffle is dropped
         Soundboard {
             picker: None,
             search,
@@ -282,7 +285,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one fetch: ends when the request returns, or when Waffle is dropped (update fails)
     }
 
     pub(crate) fn toggle_soundboard_key(&mut self, _: &crate::app_keys::ToggleSoundboard, window: &mut Window, cx: &mut Context<Self>) {
@@ -380,7 +383,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one clip fetch: ends when the request returns, or when Waffle is dropped
     }
 
     fn start_clip(&mut self, key: String, sound_id: String, clip: Clip, gain: f32, cx: &mut Context<Self>) {
@@ -394,7 +397,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot timer: ends after the clip's length, or when Waffle is dropped
         cx.notify(); // lint-allow(global-notify): the soundboard's playing sounds and tile effects draw on the call tiles and in its picker
     }
 
@@ -413,7 +416,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot timer: ends after the effect's life, or when Waffle is dropped
         cx.notify(); // lint-allow(global-notify): the soundboard's playing sounds and tile effects draw on the call tiles and in its picker
     }
 
@@ -458,19 +461,11 @@ impl Waffle {
             false => effects.iter().filter_map(|e| Some(effect_scene(e.id, e.family, e.emoji.as_ref()?, tile))).collect(),
         };
         let label = latest.map(|name| {
-            ui::row()
+            ui::media_label()
                 .absolute()
                 .top_2()
                 .left_2()
                 .max_w(gpui_kit::relative(0.6))
-                .h_6()
-                .px_2()
-                .squircle(8.)
-                .bg(gpui_kit::black().opacity(0.6))
-                .gap_1p5()
-                .text_size(ui::TEXT_XS)
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(gpui_kit::white())
                 .child(Icon::new(Glyph::Soundboard).size(ui::ICON_SM))
                 .child(ui::line(name))
         });
@@ -489,14 +484,13 @@ impl Waffle {
             }
             (None, None) => picker.at,
         };
-        let card = ui::col()
+        let card = ui::surface(cx)
+            .p_0()
+            .gap_0()
             .id("soundboard")
             .occlude()
             .w(px(PICKER_SIZE.0))
             .h(px(PICKER_SIZE.1))
-            .squircle(RADIUS_LG)
-            .bg(palette::surface(palette::Level::Overlay, cx))
-            .shadow(ui::shadow_pop(cx))
             .relative()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .children(self.picker_content(picker, cx));
@@ -557,7 +551,7 @@ pub fn demo(waffle: &mut Waffle, open: bool, window: &mut Window, cx: &mut Conte
                 cx.background_executor().timer(family.duration() + Duration::from_millis(500)).await;
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): the demo loop ends when Waffle is dropped (update fails)
     }
 }
 

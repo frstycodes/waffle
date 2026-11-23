@@ -102,6 +102,7 @@ impl Render for ReactorsCard {
         let strong = HighlightStyle { color: Some(palette::strong(cx)), font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() };
         let link = HighlightStyle { color: Some(palette::accent_ink(cx)), font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() };
         let mut runs: Vec<(Range<usize>, HighlightStyle)> = line.strong.iter().map(|r| (r.clone(), strong)).chain(line.link.clone().map(|r| (r, link))).collect();
+        // lint-allow(render-work): sorts at most four runs (three names and a link) of one small card
         runs.sort_by_key(|(r, _)| r.start);
         let (this, channel_id, message_id, emoji) = (self.this.clone(), self.channel_id.clone(), self.message_id.clone(), self.reaction.emoji.clone());
         let text = InteractiveText::new("reactors-text", StyledText::new(line.text).with_highlights(runs)).on_click(line.link.into_iter().collect(), move |_, _, cx| {
@@ -136,6 +137,7 @@ impl Render for ReactorsCard {
 #[derive(Debug, PartialEq)]
 pub(crate) struct Line {
     pub text: String,
+    // lint-allow(unbounded-growth): the name spans of one card sentence, three at most, rebuilt for each card
     pub strong: Vec<Range<usize>>,
     pub link: Option<Range<usize>>,
 }
@@ -231,7 +233,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one page fetch: ends when the request returns, or when Waffle is dropped
     }
 
     /// A reaction changed: someone leaving drops out of the loaded list; someone joining isn't placed

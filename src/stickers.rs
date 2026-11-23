@@ -123,7 +123,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one fetch: ends when the request returns, or when Waffle is dropped
     }
 
     pub(crate) fn on_sticker_search(&mut self, _: &Entity<SearchState>, event: &InputEvent, _: &mut Window, cx: &mut Context<Self>) {
@@ -158,7 +158,7 @@ impl Waffle {
             let result = client.send_sticker(&channel.id, &sticker.id, &nonce, reply.as_ref().map(|r| r.id.as_str()), ping).await;
             this.update(cx, |this, cx| this.settle(&channel.id, &nonce, result, cx)).ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one send: ends when the request returns, or when Waffle is dropped
     }
 
     // Recently used (before you search), this server's, your other servers' (Nitro only, as Discord allows),
@@ -226,21 +226,15 @@ impl Waffle {
             .border_r_1()
             .border_color(palette::line(cx))
             .children(sections.iter().enumerate().flat_map(|(i, section)| {
-                let (selected, hover, strong) = (palette::selected(cx), palette::hover(cx), palette::strong(cx));
                 let scroll = scroll.clone();
                 // A line sets Discord's packs apart from yours.
                 let first_pack = matches!(section.lead, Lead::Pack(_)) && i > 0 && !matches!(sections[i - 1].lead, Lead::Pack(_));
-                let line = first_pack.then(|| div().w_5().h(ui::HAIRLINE).my_1().flex_none().bg(palette::line(cx)).into_any_element());
-                let tab = ui::row()
-                    .id(("sticker-pack", i))
+                let line = first_pack.then(|| div().py_1().flex_none().child(ui::divider(None, cx).w_5()).into_any_element());
+                let tab = ui::card(("sticker-pack", i), cx)
+                    .toggled(i == in_view, cx)
                     .size_9()
-                    .flex_none()
+                    .p_0()
                     .squircle(RADIUS_SM)
-                    .justify_center()
-                    .cursor_pointer()
-                    .text_color(if i == in_view { strong } else { palette::muted(cx) })
-                    .when(i == in_view, |d| d.bg(selected))
-                    .when(i != in_view, |d| d.hover(move |s| s.bg(hover).text_color(strong)))
                     .child(section.lead.render(24., motion, cx))
                     .tooltip({
                         let name = section.name.clone();
@@ -256,6 +250,7 @@ impl Waffle {
 }
 
 fn sticker_grid(sections: Vec<Section>, scroll: &ScrollHandle, hovered: &Entity<Option<(Sticker, SharedString)>>, motion: StickerMotion, cx: &mut Context<Waffle>) -> impl IntoElement {
+    // lint-allow(unvirtualized-list): Discord's packs and yours, a few dozen stickers each, a few hundred cells at most
     div()
         .id("sticker-scroll")
         .flex_1()
@@ -271,7 +266,7 @@ fn sticker_grid(sections: Vec<Section>, scroll: &ScrollHandle, hovered: &Entity<
                 cells.push(sticker_cell(sticker, &section.name, format!("sticker-{}-{i}", section.name), hovered, motion, cx));
             }
             ui::col()
-                .mb_1()
+                .pb_1()
                 .child(ui::row().gap_1p5().py_1p5().px_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(section.lead.render(16., motion, cx)).child(section.name.clone()))
                 .child(ui::row().items_stretch().flex_wrap().children(cells))
         }))
@@ -283,6 +278,7 @@ fn sticker_cell(sticker: &Sticker, pack: &SharedString, key: String, hovered: &E
     let (picked, shown) = (sticker.clone(), (sticker.clone(), pack.clone()));
     let hovered = hovered.clone();
     let mark = sticker.animated().then(|| {
+        // lint-allow(custom-mark): ui::badged hangs a mark past a tile's corner; this play mark sits 4px inside the cell's
         ui::row()
             .absolute()
             .right_1()
@@ -384,7 +380,7 @@ pub(crate) fn in_chat(sticker: &Sticker, animate: bool, cx: &App) -> AnyElement 
         None => missing(),
         Some(url) => crate::chat::moving(img(url).size_full().object_fit(ObjectFit::Contain).with_fallback(missing), animate),
     };
-    div().mt_1().size(px(IN_CHAT)).flex_none().child(picture).into_any_element()
+    div().pt_1().flex_none().child(div().size(px(IN_CHAT)).flex_none().child(picture)).into_any_element()
 }
 
 #[cfg(test)]
