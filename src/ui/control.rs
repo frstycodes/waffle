@@ -126,7 +126,8 @@ pub fn round_button(id: impl Into<ElementId>, glyph: Glyph, tooltip: impl Into<S
 // Keywords: clickable card, choice card, option card, tile button, template, panel, preview card
 pub fn card(id: impl Into<ElementId>, cx: &App) -> Control {
     let look = Look { rest: palette::surface(palette::Level::Raised, cx), hover: palette::hover(cx), press: palette::press(cx), ink: palette::text(cx), ink_hover: palette::text(cx), edge: None };
-    Control::new(id, Kind::Row, look).base_style(|b| b.p_3().rounded(px(super::RADIUS_LG)).corner_shape(SQUIRCLE))
+    // Content-tall: a row's 34px would crush the card's content into the next card.
+    Control::new(id, Kind::Row, look).base_style(|b| b.h_auto().p_3().rounded(px(super::RADIUS_LG)).corner_shape(SQUIRCLE))
 }
 
 impl Control {
