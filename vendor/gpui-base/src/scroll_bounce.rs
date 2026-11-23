@@ -170,11 +170,9 @@ impl ScrollBounce {
     /// Whether scroll areas bounce on this platform unless told otherwise:
     /// on iOS, Android and macOS, whose own scroll views do.
     pub const fn enabled_by_default() -> bool {
-        cfg!(any(
-            target_os = "ios",
-            target_os = "android",
-            target_os = "macos"
-        ))
+        // Waffle patch: gpui's own scroll containers rubber-band (vendor/gpui-fast overscroll.rs), so the
+        // kit's bounce would stretch them twice.
+        false
     }
 
     /// Turn the bounce on or off. Defaults to [`Self::enabled_by_default`].

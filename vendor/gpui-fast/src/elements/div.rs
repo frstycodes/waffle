@@ -40,10 +40,12 @@ use std::{
     mem,
     rc::Rc,
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use super::ImageCacheProvider;
+use super::overscroll::{Overscroll, coasts_into_edges, rubber_bands};
+use super::scroll_motion::{ScrollInput, ScrollMotion};
 
 #[cfg(feature = "stacker")]
 type StackSafe<T> = stacksafe::StackSafe<T>;
@@ -1869,6 +1871,7 @@ pub fn div() -> Div {
     {
         interactivity.source_location = Some(core::panic::Location::caller());
     }
+    interactivity.rubber_band = true;
     Div {
         interactivity,
         children: SmallVec::default(),
@@ -2287,6 +2290,12 @@ pub struct Interactivity {
     pub(crate) scroll_anchor: crate::fast::interactivity::Rare<ScrollAnchor>,
     pub(crate) scroll_offset: Option<Rc<RefCell<Point<Pixels>>>>,
     pub(crate) ongoing_scroll: Option<Rc<RefCell<OngoingScroll>>>,
+    /// Waffle: on for divs, off for elements that position children from the scroll offset themselves
+    /// (`uniform_list`), which would read the stretch as a real offset.
+    pub(crate) rubber_band: bool,
+    pub(crate) overscroll: Option<Rc<RefCell<Overscroll>>>,
+    /// Waffle: momentum and wheel easing, stepped once per frame.
+    pub(crate) scroll_motion: Option<Rc<RefCell<ScrollMotion>>>,
     pub(crate) group: Option<SharedString>,
     /// The base style of the element, before any modifications are applied
     /// by focus, active, etc.
@@ -2421,6 +2430,10 @@ impl Interactivity {
                     crate::fast::dependencies::note_state_read(cx, &scroll_handle_state.version);
                     self.scroll_offset = Some(scroll_handle_state.offset.clone());
                     self.ongoing_scroll = Some(scroll_handle_state.ongoing_scroll.clone());
+                    self.scroll_motion = Some(scroll_handle_state.scroll_motion.clone());
+                    if self.rubber_band {
+                        self.overscroll = Some(scroll_handle_state.overscroll.clone());
+                    }
                 } else if (self.base_style.overflow.x == Some(Overflow::Scroll)
                     || self.base_style.overflow.y == Some(Overflow::Scroll))
                     && let Some(element_state) = element_state.as_mut()
@@ -2437,6 +2450,10 @@ impl Interactivity {
                             .get_or_insert_with(|| Rc::new(RefCell::new(OngoingScroll::default())))
                             .clone(),
                     );
+                    self.scroll_motion = Some(element_state.scroll_motion.get_or_insert_with(Rc::default).clone());
+                    if self.rubber_band {
+                        self.overscroll = Some(element_state.overscroll.get_or_insert_with(Rc::default).clone());
+                    }
                 }
 
                 let style = self.compute_style_internal(None, element_state.as_mut(), window, cx);
@@ -2595,7 +2612,7 @@ impl Interactivity {
         bounds: Bounds<Pixels>,
         style: &Style,
         window: &mut Window,
-        _cx: &mut App,
+        cx: &mut App,
     ) -> Point<Pixels> {
         fn round_to_two_decimals(pixels: Pixels) -> Pixels {
             const ROUNDING_FACTOR: f32 = 100.0;
@@ -2637,6 +2654,39 @@ impl Interactivity {
             // were removed or the bounds became larger).
             let mut scroll_offset = scroll_offset.borrow_mut();
 
+            // Waffle: this frame's share of momentum or a notch's ease, sampled at draw time. A container in
+            // motion asks for frames, which keeps it off its scroll layer: its content is laid out again
+            // each frame, as the stretch and the stepping need.
+            if let Some(motion) = self.scroll_motion.as_ref() {
+                let mut motion = motion.borrow_mut();
+                if motion.is_moving() {
+                    let now = Instant::now();
+                    let coasting = motion.is_coasting();
+                    let (mut delta, more) = motion.step(now);
+                    if coasting
+                        && coasts_into_edges(cx)
+                        && let Some(overscroll) = self.overscroll.as_ref()
+                    {
+                        let mut overscroll = overscroll.borrow_mut();
+                        overscroll.set_extent(scroll_max, bounds.size);
+                        delta = overscroll.scroll(*scroll_offset, delta, TouchPhase::Moved, now);
+                    }
+                    let before = *scroll_offset;
+                    let moved = point(
+                        (scroll_offset.x + delta.x).clamp(-scroll_max.x, px(0.)),
+                        (scroll_offset.y + delta.y).clamp(-scroll_max.y, px(0.)),
+                    );
+                    *scroll_offset = *scroll_offset + delta;
+                    // Momentum that has reached an edge is spent (the rubber band takes it from there).
+                    if coasting && moved == before {
+                        motion.stop();
+                    }
+                    if more {
+                        window.request_animation_frame();
+                    }
+                }
+            }
+
             scroll_offset.x = scroll_offset.x.clamp(-scroll_max.x, px(0.));
             if scroll_to_bottom {
                 scroll_offset.y = -scroll_max.y;
@@ -2649,7 +2699,17 @@ impl Interactivity {
                 scroll_handle_state.bounds = bounds;
             }
 
-            *scroll_offset
+            let Some(overscroll) = self.overscroll.as_ref() else {
+                return *scroll_offset;
+            };
+            let mut overscroll = overscroll.borrow_mut();
+            overscroll.set_extent(scroll_max, bounds.size);
+            // A stretch, held or rebounding, is drawn by laying the content out again; asking for frames
+            // keeps the container off its scroll layer until it lands.
+            if overscroll.tick(Instant::now()) || overscroll.offset() != Point::default() {
+                window.request_animation_frame();
+            }
+            *scroll_offset + overscroll.offset()
         } else {
             Point::default()
         }
@@ -3516,6 +3576,8 @@ impl Interactivity {
     ) {
         if let Some(scroll_offset) = self.scroll_offset.clone() {
             let ongoing_scroll = self.ongoing_scroll.clone();
+            let overscroll = self.overscroll.clone();
+            let scroll_motion = self.scroll_motion.clone();
             let overflow = style.overflow;
             let allow_concurrent_scroll = style.allow_concurrent_scroll;
             let restrict_scroll_to_axis = style.restrict_scroll_to_axis;
@@ -3566,18 +3628,37 @@ impl Interactivity {
                             delta_x = Pixels::ZERO;
                         }
                     }
-                    if !crate::fast::layers::wheel::moves(
-                        old_scroll_offset,
-                        point(delta_x, delta_y),
-                        fast_scroll_max,
-                    ) {
+                    let mut delta = point(delta_x, delta_y);
+                    // Waffle: the finger's own movement applies now; momentum and notches are stepped
+                    // once per frame at prepaint.
+                    let mut motion_started = false;
+                    if let Some(motion) = scroll_motion.as_ref() {
+                        let mut motion = motion.borrow_mut();
+                        let input = if event.delta.precise() { ScrollInput::Precise } else { ScrollInput::Notched };
+                        delta = motion.input(delta, input, event.touch_phase, !cx.reduce_motion(), Instant::now());
+                        motion_started = motion.is_moving();
+                    }
+                    let mut overscroll_changed = false;
+                    if let Some(overscroll) = overscroll.as_ref()
+                        && rubber_bands(event, cx)
+                    {
+                        let mut overscroll = overscroll.borrow_mut();
+                        let old_overscroll = overscroll.offset();
+                        delta = overscroll.scroll(*scroll_offset, delta, event.touch_phase, Instant::now());
+                        overscroll_changed = overscroll.offset() != old_overscroll || overscroll.is_rebounding();
+                    }
+                    let ours = overscroll_changed || motion_started;
+                    if !ours && !crate::fast::layers::wheel::moves(old_scroll_offset, delta, fast_scroll_max) {
                         return;
                     }
-                    scroll_offset.y += delta_y;
-                    scroll_offset.x += delta_x;
-                    if *scroll_offset != old_scroll_offset {
+                    *scroll_offset = *scroll_offset + delta;
+                    if ours || *scroll_offset != old_scroll_offset {
                         crate::fast::retained::invalidate_retained_subtrees(window, &subtrees);
-                        crate::fast::layers::invalidate::note_scrolled(window, &fast_container);
+                        // A plain scroll can be composited from the layer; a stretch or our stepping lays
+                        // the content out again (see `clamp_scroll_position`).
+                        if !ours {
+                            crate::fast::layers::invalidate::note_scrolled(window, &fast_container);
+                        }
                         cx.notify(current_view);
                     }
                 }
@@ -3821,6 +3902,8 @@ pub struct InteractiveElementState {
     pub(crate) pending_keyboard_down: Option<Rc<RefCell<Option<u64>>>>,
     pub(crate) scroll_offset: Option<Rc<RefCell<Point<Pixels>>>>,
     ongoing_scroll: Option<Rc<RefCell<OngoingScroll>>>,
+    overscroll: Option<Rc<RefCell<Overscroll>>>,
+    scroll_motion: Option<Rc<RefCell<ScrollMotion>>>,
     pub(crate) active_tooltip: Option<Rc<RefCell<Option<ActiveTooltip>>>>,
     long_press_tooltip_active: Option<Rc<Cell<bool>>>,
 }
@@ -4482,6 +4565,8 @@ impl ScrollAnchor {
 pub(crate) struct ScrollHandleState {
     pub(crate) offset: Rc<RefCell<Point<Pixels>>>,
     ongoing_scroll: Rc<RefCell<OngoingScroll>>,
+    overscroll: Rc<RefCell<Overscroll>>,
+    scroll_motion: Rc<RefCell<ScrollMotion>>,
     bounds: Bounds<Pixels>,
     pub(crate) max_offset: Point<Pixels>,
     child_bounds: Vec<Bounds<Pixels>>,

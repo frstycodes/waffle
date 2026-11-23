@@ -158,16 +158,14 @@ pub fn more_below(scroll: &gpui_kit::ScrollHandle, fill: Hsla) -> Div {
     div().absolute().left_0().right_0().bottom_0().h(px(32.)).child(fade.size_full())
 }
 
-/// A vertical scroll area moving `list` on `scroll`, with the kit's scrollbar over it and its rubber band at the
-/// ends. Not `overflow_y_scrollbar`: that tracks a handle of its own, which nothing outside can read.
-pub fn scroll_area(mut list: Stateful<Div>, scroll: &gpui_kit::ScrollHandle) -> Div {
-    let id = list.interactivity().element_id.clone().expect("a stateful div has an id");
-    let list = list.size_full().overflow_y_scroll().lock_scroll_axis().track_scroll(scroll);
+/// A vertical scroll area moving `list` on `scroll`, with the kit's scrollbar over it. Not `overflow_y_scrollbar`: that
+/// tracks a handle of its own, which nothing outside can read.
+pub fn scroll_area(list: Stateful<Div>, scroll: &gpui_kit::ScrollHandle) -> Div {
     div()
         .relative()
         .flex_1()
         .min_h_0()
-        .child(gpui_kit::base::ScrollBounce::new((id, "bounce"), scroll, list))
+        .child(list.size_full().overflow_y_scroll().lock_scroll_axis().track_scroll(scroll))
         .vertical_scrollbar(scroll)
 }
 

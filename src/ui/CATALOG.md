@@ -14,7 +14,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::scrolled` — Whether a list has scrolled down from its top.
 - `ui::hard_edge` — A header with a hard edge over the list below it: a faint hairline along that edge shows once the list has scrolled under it.
 - `ui::more_below` — A fade over the foot of a scrolling list while more of it lies below, dissolving into `fill` (the surface under the list); it goes once the 
-- `ui::scroll_area` — A vertical scroll area moving `list` on `scroll`, with the kit's scrollbar over it and its rubber band at the ends.
+- `ui::scroll_area` — A vertical scroll area moving `list` on `scroll`, with the kit's scrollbar over it.
 - `ui::scroll_fade` — A list that scrolls inside a fixed box, its top and bottom edges fading into `surface` wherever there is more to scroll to: a short box of r
 - `ui::truncating` — A one-line label that truncates with an ellipsis and, when it does, shows its full text in a tooltip.
 - `ui::live_badge`

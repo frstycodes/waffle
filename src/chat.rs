@@ -413,7 +413,7 @@ impl Waffle {
             .on_key_down(cx.listener(Self::on_feed_key))
             .relative()
             .size_full()
-            .child(gpui_kit::base::ScrollBounce::new("feed-bounce", &self.list, messages))
+            .child(messages)
             .child(gpui_kit::component::scroll::Scrollbar::vertical(&self.list))
             .child(
                 gpui_kit::canvas(|_, _, _| {}, move |bounds, _, _, _| {

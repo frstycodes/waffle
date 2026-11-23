@@ -16,7 +16,10 @@ use crate::{
 };
 use collections::VecDeque;
 use refineable::Refineable as _;
-use std::{cell::RefCell, ops::Range, rc::Rc};
+use super::overscroll::{Overscroll, coasts_into_edges, rubber_bands};
+use super::scroll_motion::{ScrollInput, ScrollMotion};
+use crate::TouchPhase;
+use std::{cell::RefCell, ops::Range, rc::Rc, time::Instant};
 use sum_tree::{Bias, Dimensions, SumTree};
 
 pub(crate) type RenderItemFn = dyn FnMut(usize, &mut Window, &mut App) -> AnyElement + 'static;
@@ -75,6 +78,9 @@ pub(crate) struct StateInner {
     pub(crate) measuring_behavior: ListMeasuringBehavior,
     item_measurement_ready: Option<Box<dyn Fn(usize, &App) -> bool>>,
     pub(crate) follow_state: FollowState,
+    overscroll: Overscroll,
+    /// Waffle: momentum and wheel easing, stepped once per frame.
+    scroll_motion: ScrollMotion,
     pub(crate) version: crate::fast::dependencies::StateVersion,
     pub(crate) fast_measure: crate::fast::list_measure::DeferredMeasure,
 }
@@ -329,6 +335,8 @@ impl ListState {
             measuring_behavior: ListMeasuringBehavior::default(),
             item_measurement_ready: None,
             follow_state: FollowState::default(),
+            overscroll: Overscroll::default(),
+            scroll_motion: ScrollMotion::default(),
             version: crate::fast::dependencies::StateVersion::default(),
             fast_measure: crate::fast::list_measure::DeferredMeasure::default(),
         })));
@@ -1365,6 +1373,16 @@ impl StateInner {
             // Avoid honoring autoscroll requests from elements other than our children.
             window.take_autoscroll();
 
+            let scroll_max = (self.items.summary().height + padding.top + padding.bottom
+                - bounds.size.height)
+                .max(px(0.));
+            self.overscroll
+                .set_extent(point(px(0.), scroll_max), bounds.size);
+            // A stretch, held or rebounding, is drawn by laying the rows out again; asking for frames keeps
+            // the list off its scroll layer until it lands.
+            if self.overscroll.tick(Instant::now()) || self.overscroll.offset() != Point::default() {
+                window.request_animation_frame();
+            }
 
             // Only paint the visible items, if there is actually any space for them (taking padding into account)
             if bounds.size.height > padding.top + padding.bottom {
@@ -1375,6 +1393,7 @@ impl StateInner {
                     &layout_response.scroll_top,
                     &mut item_origin,
                 );
+                item_origin.y += self.overscroll.offset().y;
                 for item in &mut layout_response.item_layouts {
                     crate::fast::layers::lists::place_list_item(
                         window,
@@ -1683,6 +1702,28 @@ impl Element for List {
             state.measuring_behavior.reset();
         }
 
+        // Waffle: this frame's share of momentum or a notch's ease, sampled at draw time.
+        if state.scroll_motion.is_moving() && !state.reset {
+            let now = Instant::now();
+            let coasting = state.scroll_motion.is_coasting();
+            let (mut delta, more) = state.scroll_motion.step(now);
+            let top = state.logical_scroll_top();
+            let before = state.scroll_top(&top);
+            if coasting && coasts_into_edges(cx) {
+                delta = state.overscroll.scroll(point(px(0.), -before), point(px(0.), delta.y), TouchPhase::Moved, now);
+            }
+            if delta.y != px(0.) {
+                state.scroll(&top, bounds.size.height, point(px(0.), delta.y), window.current_view(), window, cx);
+            }
+            // Momentum that has reached an end is spent (the rubber band takes it from there).
+            if coasting && state.scroll_top(&state.logical_scroll_top()) == before {
+                state.scroll_motion.stop();
+            }
+            if more {
+                window.request_animation_frame();
+            }
+        }
+
         crate::fast::layers::lists::begin_list(window, cx, state, bounds);
         let mut autoscroll = true;
         crate::fast::list_measure::begin_prepaint(
@@ -1745,11 +1786,37 @@ impl Element for List {
         let height = bounds.size.height;
         let scroll_top = prepaint.layout.scroll_top;
         let hitbox_id = prepaint.hitbox.id;
+        let scroll_top_px = self.state.0.borrow().scroll_top(&scroll_top);
         let mut accumulated_scroll_delta = ScrollDelta::default();
+        let mut accumulated_stretch_delta = Point::<Pixels>::default();
         window.on_mouse_event(move |event: &ScrollEvent, phase, window, cx| {
             if phase == DispatchPhase::Bubble && hitbox_id.should_handle_scroll(window) {
-                accumulated_scroll_delta = accumulated_scroll_delta.coalesce(event.delta);
-                let pixel_delta = accumulated_scroll_delta.pixel_delta(px(20.));
+                // Waffle: the finger's own movement applies now; momentum and notches are stepped
+                // once per frame at prepaint.
+                let input = if event.delta.precise() { ScrollInput::Precise } else { ScrollInput::Notched };
+                let fed = list_state.0.borrow_mut().scroll_motion.input(event.delta.pixel_delta(px(20.)), input, event.touch_phase, !cx.reduce_motion(), Instant::now());
+                if list_state.0.borrow().scroll_motion.is_moving() {
+                    cx.notify(current_view);
+                }
+                let pixel_delta = if rubber_bands(event, cx) {
+                    let position = point(px(0.), accumulated_stretch_delta.y - scroll_top_px);
+                    let applied = list_state.0.borrow_mut().overscroll.scroll(
+                        position,
+                        point(px(0.), fed.y),
+                        event.touch_phase,
+                        Instant::now(),
+                    );
+                    accumulated_stretch_delta = accumulated_stretch_delta + applied;
+                    // A pull past an edge moves no content, and `scroll` skips a zero delta, so
+                    // the stretch draws only if notified here.
+                    if list_state.0.borrow().overscroll.offset() != Point::default() {
+                        cx.notify(current_view);
+                    }
+                    accumulated_stretch_delta
+                } else {
+                    accumulated_scroll_delta = accumulated_scroll_delta.coalesce(ScrollDelta::Pixels(fed));
+                    accumulated_scroll_delta.pixel_delta(px(20.))
+                };
                 list_state.0.borrow_mut().scroll(
                     &scroll_top,
                     height,
