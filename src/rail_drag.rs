@@ -27,13 +27,13 @@ impl Waffle {
     pub(crate) fn drop_on_rail(&mut self, moved: &str, target: &str, drop: Place, cx: &mut Context<Self>) {
         let mut folders = normalize(&self.folders, self.guilds.iter().map(|g| g.id.as_str()));
         if !apply(&mut folders, moved, target, drop, &new_folder_id) {
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the landing ghost is drawn by the root over the rail, whose tile was held as a hole under it
         }
         self.folders = folders.clone();
         if let Some(client) = self.client.clone() {
             crate::discord::runtime().spawn(async move { client.set_guild_folders(folders).await });
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): folders show in the rail and in the server menus, and the root draws the landing ghost
     }
 }
 

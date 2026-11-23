@@ -65,7 +65,7 @@ const SECTION_GAP: f32 = 16.;
 // The channel header's left inset, before the traffic lights' overhang.
 const HEADER_PAD: f32 = 8.;
 // A category's fold chevron.
-const CARET_SIZE: f32 = 11.;
+pub(crate) const CARET_SIZE: f32 = 11.;
 // The server name button that heads the channel list.
 const HEADER_BUTTON: f32 = 34.;
 // A folder's glyph when it is open, and the LIVE mark beside a voice person.

@@ -160,8 +160,7 @@ impl Waffle {
             .when(active, |r| r.bg(palette::selected(cx)))
             .when(!active, |r| r.hover(move |s| s.bg(hover)))
             .child(lead)
-            // lint-allow(raw-truncate): ui::line takes plain text; this label carries the match highlight.
-            .child(div().flex_1().min_w_0().truncate().child(label))
+            .child(rich_line(label).flex_1())
             .child(div().pl_3().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(place))
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.switcher = None;

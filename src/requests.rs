@@ -78,7 +78,7 @@ impl Waffle {
         for person in people {
             self.fetch_profile(person, None, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): opening the page changes the rail, the channel list and the main column
     }
 
     // One tab's DMs, newest message first.
@@ -123,7 +123,7 @@ impl Waffle {
                     .child("Message Requests"),
             )
             .child(div().min_w_0().overflow_hidden().occlude().child(tabs))
-            .child(div().ml_auto().child(self.caption_clearance(true)));
+            .child(ui::row().flex_1().justify_end().child(self.caption_clearance(true)));
         let dms = self.requests_in(tab);
         let body = match (dms.is_empty(), tab) {
             (true, RequestsTab::Requests) => ui::empty_state("requests-empty", Mood::Idle, "No pending requests", "There are no pending message requests.", cx).into_any_element(),
@@ -162,6 +162,7 @@ impl Waffle {
         let when = (last > 0).then(|| crate::panel::ago(chrono::Utc::now().timestamp_millis() - snowflake_ms(last) as i64));
         let hover = palette::hover(cx);
         let id = dm.id.clone();
+        // lint-allow(custom-button): ui::list_row is 48px with one title line; a request is 64px with the time beside the name and two buttons.
         ui::row()
             .id(SharedString::from(format!("request-{}", dm.id)))
             .min_h_16()
@@ -230,7 +231,7 @@ impl Waffle {
                 .text_size(ui::TEXT_SM)
                 .text_color(palette::muted(cx))
                 .child(Icon::new(if dm.props.spam { Glyph::Shield } else { Glyph::Envelope }).size(ui::ICON_MD).text_color(palette::faint(cx)))
-                .child(div().min_w_0().truncate().child(label).flex_1())
+                .child(crate::overlays::rich_line(label).flex_1())
                 .children(self.request_actions(&dm.id, tab, cx)),
         )
     }
@@ -264,7 +265,7 @@ impl Waffle {
         if self.channel.as_ref().is_some_and(|c| c.id == id) {
             self.open_requests(if dm.props.spam { RequestsTab::Spam } else { RequestsTab::Requests }, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the requests count shows on the rail, in the channel list and on the page
         Some(dm)
     }
 
@@ -282,6 +283,7 @@ impl Waffle {
             })
             .ok();
         })
+        // lint-allow(detached-task): ends when Discord answers the request, and holds only a WeakEntity.
         .detach();
     }
 
@@ -291,7 +293,7 @@ impl Waffle {
         let cleared = self.requests_in(tab);
         let ids: HashSet<&str> = cleared.iter().map(|d| d.id.as_str()).collect();
         self.dm_requests.retain(|d| !ids.contains(d.id.as_str()));
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the requests count shows on the rail, in the channel list and on the page
         let Some(client) = self.client.clone() else { return };
         cx.spawn(async move |this, cx| {
             for (i, batch) in cleared.chunks(BATCH).enumerate() {
@@ -310,6 +312,7 @@ impl Waffle {
                 return;
             }
         })
+        // lint-allow(detached-task): ends after its last batch (or the first refusal), and holds only a WeakEntity.
         .detach();
     }
 }

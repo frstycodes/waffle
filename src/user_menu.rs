@@ -611,6 +611,7 @@ impl Waffle {
             })
             .ok();
         })
+        // lint-allow(detached-task): ends when the DM request returns, and holds only a WeakEntity.
         .detach();
     }
 
@@ -634,6 +635,7 @@ impl Waffle {
             })
             .ok();
         })
+        // lint-allow(detached-task): ends when the invite request returns, and holds only a WeakEntity.
         .detach();
     }
 }

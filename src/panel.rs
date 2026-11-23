@@ -99,7 +99,7 @@ impl Waffle {
         ui::row()
             .h(px(crate::layout::HEADER_HEIGHT))
             .pl_4()
-            .pr(px(8. + crate::window_controls::WIDTH))
+            .pr(px(PANEL_END_INSET + crate::window_controls::WIDTH))
             .gap_2()
             .window_control_area(gpui_kit::WindowControlArea::Drag)
             .text_color(palette::strong(cx))
@@ -108,7 +108,7 @@ impl Waffle {
     fn back_button(&self, cx: &mut Context<Self>) -> ui::Control {
         ui::icon_button("close-panel", Glyph::X, "Back to members", cx).occlude().on_click(cx.listener(|this, _, _, cx| {
             this.right_panel = RightPanel::Members;
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the panel's width and header follow which panel is open
         }))
     }
 
@@ -185,7 +185,7 @@ impl Waffle {
         });
         let spacer = |height: f32| (height > 0.).then(|| div().flex_none().h(px(height)));
         let rows = entries[range].iter().map(|(_, entry)| match entry {
-            Entry::Group(label, spaced) => group_label(label.clone(), cx).when(*spaced, |l| l.mt_3()).into_any_element(),
+            Entry::Group(label, spaced) => div().when(*spaced, |d| d.pt_3()).child(group_label(label.clone(), cx)).into_any_element(),
             Entry::Member(member) => self.member_row(member, spot, cx),
         });
         let block = ui::col().relative().gap(px(gap)).child(measure.absolute().size_0()).children(spacer(before)).children(rows.collect::<Vec<_>>()).children(spacer(after));
@@ -199,10 +199,11 @@ impl Waffle {
             let Ok(feed) = client.activity_feed().await else { return };
             this.update(cx, |this, cx| {
                 this.activity_feed = feed;
-                cx.notify();
+                this.redraw(crate::part::Column::Panel, cx);
             })
             .ok();
         })
+        // lint-allow(detached-task): ends when the feed request returns, and holds only a WeakEntity.
         .detach();
     }
 
@@ -239,7 +240,7 @@ impl Waffle {
         );
         let label = div()
             .id("activity-section")
-            .child(Nav::Caret.icon().size(px(11.)).rotate(Radians(chevron.target().x_px().to_radians())))
+            .child(Nav::Caret.icon().size(px(crate::sidebar::CARET_SIZE)).rotate(Radians(chevron.target().x_px().to_radians())))
             .child(format!("Activity · {count}"))
             .on_click(cx.listener(move |this, _, _, cx| {
                 if !this.folded.remove(&key) {
@@ -249,7 +250,7 @@ impl Waffle {
             }));
         let all = category_action("activity-all", Icon::new(Glyph::ChevronRight), None, "Show all activity", cx).on_click(cx.listener(|this, _, _, cx| {
             this.right_panel = RightPanel::Activity;
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the panel's width and header follow which panel is open
         }));
         let alpha = fold.target().alpha();
         let cards = (!folded || alpha > 0.05).then(|| div().opacity(alpha).child(self.activity_cards(ACTIVITY_SHOWN, cx)));
@@ -290,6 +291,7 @@ impl Waffle {
                 .children(activity_glyph(entry.kind).or_else(|| activity_glyph(ActivityKind::Playing)).map(|icon| icon.size(ui::ICON_XL)))
                 .into_any_element(),
         };
+        // lint-allow(custom-button): ui::card is a raised fill with 12px padding; a feed card sits on the page fill with a hairline edge and art at its end.
         ui::row()
             .id(SharedString::from(format!("activity-{i}")))
             .gap_2p5()
@@ -312,7 +314,7 @@ impl Waffle {
             .child(art)
             .on_click({
                 let user = member.user.clone();
-                cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_profile(user.clone(), event.position() - gpui_kit::point(px(320.), px(0.)), cx))
+                cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_profile(user.clone(), beside_panel(event.position()), cx))
             })
             .into_any_element()
     }
@@ -366,6 +368,7 @@ impl Waffle {
         let plate = member.user.nameplate.as_ref().map(|plate| row_nameplate(plate, names(format!("member-name-mask-{}", member.user.id)), row));
         let plated = plate.is_some();
         let hover_id = member.user.id.clone();
+        // lint-allow(custom-button): ui::list_row is a flat 48px row; a member row also carries a nameplate, its fade and a per-row hover plate.
         ui::row()
             .id(SharedString::from(format!("member-{}", member.user.id)))
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
@@ -388,13 +391,13 @@ impl Waffle {
             .when(selected, |r| r.bg(palette::selected(cx)))
             .when(!selected, |r| r.hover(move |s| s.bg(hover)))
             .children(plate)
-            .child(div().when(offline, |a| a.opacity(0.5)).child(member_avatar(member, animate, surface)))
+            .child(div().when(offline, |a| a.opacity(0.5)).child(member_face(member, animate, surface)))
             .child(names(format!("member-name-{}", member.user.id)).relative().flex_1())
             .on_click({
                 let user = member.user.clone();
                 cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| {
                     let at = event.position();
-                    let at = spot.profile_x.map_or(at - gpui_kit::point(px(320.), px(0.)), |x| gpui_kit::point(x, at.y));
+                    let at = spot.profile_x.map_or_else(|| beside_panel(at), |x| gpui_kit::point(x, at.y));
                     this.open_profile(user.clone(), at, cx)
                 })
             })
@@ -531,8 +534,9 @@ impl Render for ActivityTip {
             });
             ui::row().gap_1p5().children(item.icon.icon(green)).child(div().flex_none().child(item.text.clone())).children(channel)
         });
+        // lint-allow(custom-badge): ui::tip is one line of text; this tip lists each thing someone is doing, with its icon.
         ui::col()
-            .max_w(px(280.))
+            .max_w(px(ACTIVITY_TIP_WIDTH))
             .px_2p5()
             .py_2()
             .gap_1p5()
@@ -548,6 +552,12 @@ impl Render for ActivityTip {
 // A 32px avatar plus padding that follows UI density: 44px at Default.
 // A group's label, and the space above every label after the first (`mt_3`).
 const GROUP_LABEL: f32 = 28.;
+// The side panel's gap past its header controls, and how far its profile card opens beside it.
+const PANEL_END_INSET: f32 = 8.;
+// The hover list over a member's activity, a nameplate's fade at its end, and the avatar's slot before the names.
+const ACTIVITY_TIP_WIDTH: f32 = 280.;
+const NAMEPLATE_FADE: f32 = 50.;
+const NAMEPLATE_LEAD: f32 = 42.;
 const GROUP_SPACE: f32 = 12.;
 // How far past the view's edges member rows are built, and how much is built before the list's place is known.
 const ROWS_OVERSCAN: f32 = 400.;
@@ -612,7 +622,7 @@ pub(crate) fn row_nameplate(plate: &crate::discord::Nameplate, names: Div, row: 
         .top_0()
         .bottom_0()
         .left(relative(1.))
-        .w(px(50.))
+        .w(px(NAMEPLATE_FADE))
         .bg(fade(rest))
         .when_some(hovered, |d, h| d.group_hover(group.clone(), move |s| s.bg(fade(h))));
     // The mask ends where the names do: an invisible copy of them, laid out as the row lays out the real
@@ -626,7 +636,7 @@ pub(crate) fn row_nameplate(plate: &crate::discord::Nameplate, names: Div, row: 
         .pl_2()
         .child(backdrop)
         // The avatar and the gap after it.
-        .child(div().w(px(42.)).flex_none())
+        .child(div().w(px(NAMEPLATE_LEAD)).flex_none())
         .child(names.opacity(0.))
         .child(div().w_0p5().flex_none());
     div()
@@ -682,12 +692,17 @@ pub(crate) fn ago(ms: i64) -> String {
 }
 
 // Discord's gem tooltip date, from `premium_since`.
+// Where a profile opens for a click in the panel: its card's width to the left, so it sits beside the panel.
+fn beside_panel(click: gpui_kit::Point<gpui_kit::Pixels>) -> gpui_kit::Point<gpui_kit::Pixels> {
+    gpui_kit::point(click.x - px(crate::profile::WIDTH), click.y)
+}
+
 fn boost_date(iso: &str) -> Option<String> {
     let day = chrono::NaiveDate::parse_from_str(iso.get(..10)?, "%Y-%m-%d").ok()?;
     Some(crate::search::day_label(day))
 }
 
-fn member_avatar(member: &Member, animate: bool, surface: gpui_kit::Hsla) -> AnyElement {
+fn member_face(member: &Member, animate: bool, surface: gpui_kit::Hsla) -> AnyElement {
     let (avatar, decoration, mark) = (&member.user.avatar, member.user.decoration.as_deref(), Some(member.presence.mark()));
     match animate {
         true => playing_avatar(&format!("member-{}", member.user.id), avatar, decoration, 32., mark, surface),

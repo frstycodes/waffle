@@ -106,7 +106,7 @@ impl Waffle {
         if tab == InboxTab::Saved && self.saved.is_none() {
             self.fetch_saved(cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the tab draws in the Inbox popover and on its page
     }
 
     fn set_mention_filters(&mut self, change: impl FnOnce(&mut MentionFilters), cx: &mut Context<Self>) {
@@ -121,7 +121,7 @@ impl Waffle {
         } else {
             self.open_inbox(cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the popover is an overlay, but the rail's Inbox tile also lights while it's open
     }
 
     /// ⌘⇧E / Ctrl+Shift+E: reads the channel at the top of Unreads, as its own Mark read does.
@@ -203,22 +203,10 @@ impl Waffle {
         let new = whats_new(unread.messages.len(), unread.mentions);
         let channel_id = unread.channel.id.clone();
         let (open_guild, open_channel) = (unread.guild_id.clone(), unread.channel.clone());
-        let head = ui::row()
-            .id(SharedString::from(format!("unread-{}", unread.channel.id)))
-            .px_2()
-            .py_1()
-            .squircle(RADIUS_SM)
-            .gap_2()
-            .cursor_pointer()
-            .hover(|s| s.bg(palette::hover(cx)))
-            .child(ui::server_tile(unread.guild_icon.as_deref(), &unread.guild_name, 24., cx))
-            .child(
-                ui::col()
-                    .flex_1()
-                    .child(ui::line(format!("#{}", unread.channel.name)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
-                    .child(ui::line(format!("{} · {new}", unread.guild_name)).text_size(ui::TEXT_XS).text_color(palette::muted(cx))),
-            )
-            .child(ui::button(SharedString::from(format!("unread-read-{}", unread.channel.id)), ui::Tone::Ghost, cx).small().child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD)).child("Mark read").on_click(cx.listener(move |this, _, _, cx| {
+        let head = ui::list_row(SharedString::from(format!("unread-{}", unread.channel.id)), format!("#{}", unread.channel.name), cx)
+            .lead(ui::server_tile(unread.guild_icon.as_deref(), &unread.guild_name, 24., cx))
+            .subtitle(format!("{} · {new}", unread.guild_name))
+            .trailing(ui::button(SharedString::from(format!("unread-read-{}", unread.channel.id)), ui::Tone::Ghost, cx).small().child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD)).child("Mark read").on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 this.mark_channel_read(&channel_id, cx);
             })))
@@ -237,9 +225,9 @@ impl Waffle {
     fn unread_message(&self, m: Message, guild_id: &str, ctx: &std::rc::Rc<crate::chat::RowContext>, cx: &mut Context<Self>) -> AnyElement {
         let (guild_id, channel_id, message_id) = (guild_id.to_owned(), m.channel_id.clone(), m.id.clone());
         let text = crate::chat::content(&m, ctx, cx).unwrap_or_else(|| div().text_color(palette::muted(cx)).child("Attachment").into_any_element());
-        ui::row().items_stretch()
+        // lint-allow(custom-button): ui::list_row titles are one plain line; a message here is an author and time over two lines of its text.
+        let row = ui::row().items_stretch()
             .id(SharedString::from(format!("unread-msg-{}", m.id)))
-            .ml_8()
             .px_2()
             .py_1()
             .squircle(RADIUS_SM)
@@ -253,8 +241,9 @@ impl Waffle {
                     .child(ui::row().items_baseline().gap_2().child(ui::line(m.author.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx))).child(div().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(crate::chat::format_stamp(&m.timestamp))))
                     .child(div().text_size(ui::TEXT_SM).line_clamp(2).text_color(palette::text(cx)).child(text)),
             )
-            .on_click(cx.listener(move |this, _, window, cx| this.open_message(Some(guild_id.clone()), &channel_id, message_id.clone(), window, cx)))
-            .into_any_element()
+            .on_click(cx.listener(move |this, _, window, cx| this.open_message(Some(guild_id.clone()), &channel_id, message_id.clone(), window, cx)));
+        // Indented under its channel's head.
+        div().pl_8().child(row).into_any_element()
     }
 }
 

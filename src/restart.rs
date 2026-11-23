@@ -36,7 +36,7 @@ impl Waffle {
         // Hides the row, so a second click can't install twice; a failed install leaves nothing to retry.
         if update.is_some() {
             self.updates.status = crate::updater::Status::Idle;
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the update row draws in the user panel and in settings
         }
         self.prefs.save();
         cx.spawn(async move |this, cx| {
@@ -62,6 +62,7 @@ impl Waffle {
             }
             cx.update(|cx| cx.restart());
         })
+        // lint-allow(detached-task): ends when the app restarts, and holds only a WeakEntity.
         .detach();
     }
 }

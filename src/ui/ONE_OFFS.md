@@ -4,6 +4,13 @@
 Every place app code was let off a rule, and why. Before writing an exception, look here for the same kind of
 thing: a second copy of a one-off is a missing design-system component or variant, and belongs in src/ui/.
 
+## raw-px
+
+_Spacing: gpui's scale (gap_2, p_1p5, mt_3 … see ui/tokens.rs). Sizes: a ui token (TEXT_*, ICON_*, AVATAR_*, RADIUS_*, HAIRLINE) or a named const._
+
+- `src/drag.rs` — the slide's distance is computed from the animation's progress.
+- `src/login.rs` — the rise's distance is computed from the animation's progress.
+
 ## raw-floating
 
 _Floating surface: ui::floating / ui::floating_at. They occlude, so nothing under them takes the pointer._
@@ -41,15 +48,216 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/activity_launcher.rs` — the launcher is drawn by the root, over the columns
 - `src/activity_launcher.rs` — the launcher is drawn by the root, over the columns
 - `src/call/fit.rs` — the stage is the main column's, or full screen the root's
+- `src/channel_menu.rs` — mute and notification settings show in the rail, the channel list and the chat
+- `src/channel_menu.rs` — mute and notification settings show in the rail, the channel list and the chat
+- `src/drag.rs` — the landing ghost is drawn by the root over the columns, whose rows were held as holes under it
+- `src/favorites.rs` — favorites show in the rail's tile, the channel list and the feed
+- `src/favorites.rs` — favorites show in the rail's tile, the channel list and the feed
+- `src/favorites.rs` — opening Favorites changes the rail's selection, the channel list and the main column
 - `src/forum.rs` — notifies the measured height's own entity, not Waffle
 - `src/forum.rs` — notifies the measured width's own entity, not Waffle
-- `src/overlays.rs` — notifies the hovered entry's own entity, not Waffle
+- `src/inbox.rs` — the popover is an overlay, but the rail's Inbox tile also lights while it's open
+- `src/inbox.rs` — the tab draws in the Inbox popover and on its page
+- `src/menu.rs` — `apply` can change what any column draws
+- `src/menu.rs` — `then` can change what any column draws
+- `src/menu.rs` — a menu row can run any action, which changes what any column draws
+- `src/menu.rs` — the menu and its dialogs are drawn by the root, over the columns
+- `src/menu.rs` — the menu and its dialogs are drawn by the root, over the columns
+- `src/menu.rs` — the menu and its dialogs are drawn by the root, over the columns
+- `src/menu.rs` — the menu and its dialogs are drawn by the root, over the columns
+- `src/menu/dialog.rs` — a confirmed dialog can run any action, which changes what any column draws
+- `src/menu/dialog.rs` — the dialog's second action can change what any column draws
+- `src/menu/dialog.rs` — the menu and its dialogs are drawn by the root, over the columns
+- `src/menu/dialog.rs` — the menu and its dialogs are drawn by the root, over the columns
+- `src/menu/dialog.rs` — the menu and its dialogs are drawn by the root, over the columns
+- `src/menu/dialog.rs` — the menu and its dialogs are drawn by the root, over the columns
+- `src/overlays.rs` — closes whichever of many surfaces was open, some drawn in the columns
+- `src/overlays.rs` — the draft shows in the chat column and the closed profile card in the overlay layer
+- `src/overlays/emoji.rs` — a pick closes the picker and changes the chat's reactions, draft or poll
+- `src/overlays/emoji.rs` — notifies the hovered entry's own entity, not Waffle
+- `src/overlays/read.rs` — the mention list draws in the Inbox popover and on the Inbox page
+- `src/overlays/read.rs` — the unread marks draw in the rail, the channel list and the chat
+- `src/overlays/read.rs` — the unread marks draw in the rail, the channel list and the chat
+- `src/overlays/read.rs` — the unread marks draw in the rail, the channel list and the chat
+- `src/panel.rs` — the panel's width and header follow which panel is open
+- `src/panel.rs` — the panel's width and header follow which panel is open
+- `src/part.rs` — notifies the overlay layer alone
 - `src/part.rs` — notifies the part alone
-- `src/part.rs` — notifies this part, following the app
+- `src/part.rs` — subscribed once with the part, which notifies itself, following the app.
+- `src/part.rs` — the overlay layer doesn't exist yet
 - `src/part.rs` — the part doesn't exist yet
+- `src/profile.rs` — the effect draws on the popout and on the DM panel's card
+- `src/profile.rs` — the profile draws in the popout and in the DM panel
+- `src/profile/activity.rs` — joining a call changes the rail, the channel list and the call stage
 - `src/profile/dm_panel.rs` — showing or hiding the side panel resizes the main column beside it
+- `src/rail_drag.rs` — folders show in the rail and in the server menus, and the root draws the landing ghost
+- `src/rail_drag.rs` — the landing ghost is drawn by the root over the rail, whose tile was held as a hole under it
+- `src/requests.rs` — opening the page changes the rail, the channel list and the main column
+- `src/requests.rs` — the requests count shows on the rail, in the channel list and on the page
+- `src/requests.rs` — the requests count shows on the rail, in the channel list and on the page
+- `src/restart.rs` — the update row draws in the user panel and in settings
+- `src/status_menu.rs` — closes the menu, which the root draws over the columns
+- `src/status_menu.rs` — the editor is an overlay, but closing the menu also unlights the user panel
+- `src/status_menu.rs` — the menu is an overlay, but the user panel under it also lights while it's open
+- `src/status_menu.rs` — your custom status draws in the user panel and the member list
+- `src/status_menu.rs` — your presence draws in the user panel, the member list and the status menu
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
+
+## custom-button
+
+_Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_row, ui::settings_choice or ui::pressable. Missing a look? Give the component a Tone, size or slot (src/ui/control.rs) and use it._
+
+- `src/inbox.rs` — ui::list_row titles are one plain line; a message here is an author and time over two lines of its text.
+- `src/overlays.rs` — ui::card is a 20px-radius row; a mention card is an 8px-radius column that stacks its place, author and text.
+- `src/overlays/emoji.rs` — ui::icon_button is a square taking a Glyph; an emoji cell is a ninth of the grid's width.
+- `src/overlays/emoji.rs` — ui::icon_button takes a Glyph; a category tab shows a server's tile or a glyph, and marks the one in view.
+- `src/overlays/switcher.rs` — ui::list_row titles are plain text; the switcher highlights the part of the name that matched.
+- `src/panel.rs` — ui::card is a raised fill with 12px padding; a feed card sits on the page fill with a hairline edge and art at its end.
+- `src/panel.rs` — ui::list_row is a flat 48px row; a member row also carries a nameplate, its fade and a per-row hover plate.
+- `src/profile.rs` — ui::chip is a palette-toned filter; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
+- `src/profile/activity.rs` — ui::button takes a palette tone; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
+- `src/profile/activity.rs` — ui::icon_button fills from palette tones; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
+- `src/profile/connections.rs` — ui::chip is a palette-toned filter that toggles; this one wears the card's themed ink and opens the account.
+- `src/requests.rs` — ui::list_row is 48px with one title line; a request is 64px with the time beside the name and two buttons.
+- `src/sidebar/channels.rs` — ui::button(Tone::Ghost) is 36px with a 14px label; this one is the header's full-width name button, 16px semibold.
+- `src/sidebar/channels.rs` — ui::icon_button fills on hover and takes a Glyph; a row's action only strengthens its ink.
+- `src/sidebar/channels.rs` — ui::icon_button fills on hover and takes a Glyph; this action only strengthens its ink and sits at the head's end.
+- `src/sidebar/channels.rs` — ui::list_row has fixed heights (36/48/60) and no unread pill; a channel row follows UI density.
+- `src/sidebar/tiles.rs` — ui::icon_button(...).sized(44) takes a Glyph and fills on hover; the rail's actions use Nav icons on the lifted raised tone.
+
+## custom-surface
+
+_Floating or raised surface: ui::surface, ui::floating, ui::floating_bar, ui::toast, ui::dialog or ui::settings_card. Missing a level, radius or inset? Add it as an option there._
+
+- `src/drag.rs` — ui::surface has a fixed fill and shadow; this one's fill and shadow fade with the lift.
+- `src/login.rs` — ui::badged marks a corner with a count or a status; this is the 32px phone chip, ringed by a hairline.
+- `src/login.rs` — ui::surface is the theme's overlay fill; the code sits on white in both themes so phones can read it.
+- `src/profile.rs` — ui::surface is a flat overlay fill; this card is the user's gradient inside a gradient border.
+- `src/splash.rs` — ui::surface is the overlay fill with a drop shadow; the splash is a raised fill with an inset hairline in a borderless window.
+- `src/toast.rs` — ui::toast always leads with a glyph; a plain show_toast is one line of text.
+
+## custom-badge
+
+_Label: ui::badge, ui::tag, ui::count_badge, ui::pill or ui::role_chip; add a variant there if none fits._
+
+- `src/drag.rs` — ui::badge is a static label and ui::badged marks a face's corner; this chip hangs off the ghost's right edge.
+- `src/panel.rs` — ui::tip is one line of text; this tip lists each thing someone is doing, with its icon.
+- `src/profile.rs` — ui::badge is a 20px solid label in 11px type; the guild tag is 22px in the card's 14px type and ink.
+- `src/profile/activity.rs` — ui::button(...).disabled(true) takes a palette tone; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
+- `src/sidebar/channels.rs` — ui::callout leads with an icon and a title; this banner is a dot and one line, slid in by its motion frame.
+- `src/sidebar/tiles.rs` — ui::badge is a label; this is a server's letter tile, scaled with the rail tile.
+- `src/toast.rs` — ui::toast always leads with a glyph; a plain show_toast is one line of text.
+
+## custom-mark
+
+_A mark on a face's or control's corner: ui::badged with a Spot (it places the mark for the face's shape and cuts its ring). Missing a host shape or ring style? Add it to src/ui/face.rs._
+
+- `src/drag.rs` — ui::badge is a static label and ui::badged marks a face's corner; this chip hangs off the ghost's right edge.
+- `src/group_dm.rs` — ui::badged marks a face's corner with a count or a status; this is the Edit pen, a 28px button ringed in the dialog's surface.
+- `src/login.rs` — ui::badged marks a corner with a count or a status; this is the 32px phone chip, ringed by a hairline.
+- `src/sidebar/channels.rs` — ui::divider draws straight rules; this is an elbow that joins the thread to its channel.
+- `src/sidebar/channels.rs` — ui::icon_button fills on hover and takes a Glyph; this action only strengthens its ink and sits at the head's end.
+- `src/sidebar/rail.rs` — ui::badged marks a face's corner; this is the folder's tinted backdrop behind its servers.
+- `src/sidebar/tiles.rs` — ui::badged marks a face's corner; this ring surrounds the whole tile.
+- `src/sidebar/voice.rs` — ui::media_label is a label over media; this is a hover scrim over the thumbnail holding the watch button.
+- `src/sidebar/voice.rs` — ui::speaking_ring cuts its gap in the surface colour; this one leaves the gap clear over the sidebar's material.
+
+## raw-truncate
+
+_One-line text: ui::line(text), or ui::truncating(key, text) when the cut text should show in a tooltip._
+
+- `src/overlays.rs` — ui::line takes plain text only; this one takes styled runs, so ui::line could take any element.
+- `src/profile.rs` — ui::line takes plain text; this is the user's name set in their chosen name font and styled runs.
+
+## raw-margin
+
+_Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::row / ui::col / grid; space inside is the parent's padding; pushing to the end is flex_1 or justify_between. Margins stay near 0: an optical nudge carries lint-allow(raw-margin) with why._
+
+- `src/drag.rs` — centres the chip on the ghost's edge (half its height up) and sets it 10px off, which padding can't do.
+- `src/drag.rs` — sets the chip 10px clear of the ghost's edge, which padding on the ghost can't do.
+- `src/overlays.rs` — the 30px buttons reach past the 24px author row so they don't stretch it, which padding can't do.
+- `src/overlays.rs` — the actions pull into the card's corner past its padding, which padding can't do.
+- `src/profile.rs` — the avatar row pulls up over the banner's foot, which padding can't do.
+- `src/sidebar/rail.rs` — cancels the rail's own gap above the first slot, as each slot carries the gap above it; padding can't be negative.
+- `src/status_menu.rs` — sits past its row's right edge by the card's inset and a gap, which left_full can't add to.
+- `src/status_menu.rs` — the avatar row pulls up over the banner's foot, which padding can't do.
+
+## custom-component
+
+_A function named like a component builds it from the design system: wrap the ui:: component (a domain wrapper is fine), or add the component to src/ui/ first (src/ui/CATALOG.md lists what exists)._
+
+- `src/drag.rs` — ui::badge is a static label; this chip hangs off the ghost's edge, led by a glyph, and eases in each time it changes.
+- `src/drag.rs` — ui::card is a clickable raised card; the ghost is a lifted overlay surface that fades into its row's look as it lands.
+- `src/login.rs` — ui::card is a clickable raised card; this is the sign-in QR code painted on white in both themes.
+- `src/profile.rs` — ui::search_button is a search box with a magnifier; this is the card's themed "Message @user" prompt.
+- `src/profile/connections.rs` — ui::chip is a palette-toned filter that toggles; this chip wears the card's themed ink and opens the account.
+- `src/sidebar/tiles.rs` — ui::server_tile sets initials on the selected fill; the rail's letters sit on the lifted raised tone.
+
+## unvirtualized-list
+
+_A scrolling list that builds every row: list/uniform_list with a ListState draw only the rows on screen (CLAUDE.md, Rendering). A list that stays small carries lint-allow(unvirtualized-list) saying how big it can get ("a server's roles, a few dozen at most"), so whoever grows it knows to virtualize it._
+
+- `src/overlays/emoji.rs` — the Unicode groups hold under 2,000 emoji and a server adds a few hundred at most.
+
+## render-work
+
+_Work on the render path runs on every redraw: sort, parse, read files or build entities and subscriptions when their inputs change and keep the result in state (CLAUDE.md, Rendering). cx.new / cx.subscribe in render make a new entity or subscription every frame. A small bounded case carries lint-allow(render-work) saying how small._
+
+- `src/part.rs` — made once, on the column's first draw (get_or_insert_with), then kept.
+- `src/part.rs` — made once, on the first draw (get_or_insert_with), then kept.
+- `src/part.rs` — subscribed once with the part, which notifies itself, following the app.
+- `src/profile.rs` — one member's roles in this server, a few dozen at most.
+
+## main-thread-io
+
+_Blocking I/O on the UI thread stalls every frame: move it into cx.background_spawn (or the background executor) and send the result back._
+
+- `src/name_fonts.rs` — inside the network runtime's own task, never on the UI thread.
+- `src/name_fonts.rs` — runs once at startup, before any window opens, over a few small files.
+- `src/name_fonts.rs` — the same startup read of the fonts already on disk, before any window opens.
+
+## endless-animation
+
+_A repeating animation redraws every frame while it's on screen: run it only while its state holds (speaking, loading) and say when it stops in lint-allow(endless-animation)._
+
+- `src/mascot.rs` — plays only while a loader is drawn, and reduce-motion gets the still mark above.
+- `src/mascot.rs` — plays only while the mascot is drawn, and reduce-motion gets the still mark above.
+
+## detached-task
+
+_A detached task outlives its view: keep the Task in the view so dropping the view cancels it (CLAUDE.md, Idiomatic Rust). Detach only a task that ends itself, and say how in lint-allow(detached-task); hold a WeakEntity, never an Entity, in it._
+
+- `src/channel_menu.rs` — ends when Discord answers the request, and holds only a WeakEntity.
+- `src/channel_menu/thread.rs` — ends when Discord answers the request, and holds only a WeakEntity.
+- `src/favorites.rs` — ends when the settings request returns, and holds only a WeakEntity.
+- `src/group_dm.rs` — ends after the last person is added (or the first refusal), and holds only a WeakEntity.
+- `src/group_dm.rs` — ends when Discord answers the save, and holds only a WeakEntity.
+- `src/group_dm.rs` — ends when the file dialog closes, and holds only a WeakEntity.
+- `src/group_dm.rs` — ends when the group is made, and holds only a WeakEntity.
+- `src/menu.rs` — ends itself after the one grace timer, and holds only a WeakEntity.
+- `src/menu.rs` — ends when the request returns, and holds only a WeakEntity.
+- `src/menu.rs` — ends when the request returns, and holds only a WeakEntity.
+- `src/name_fonts.rs` — ends when the font fetcher drops its sender, and holds no view.
+- `src/overlays.rs` — ends when the DM request returns, and holds only a WeakEntity.
+- `src/overlays/read.rs` — ends when Discord answers the delete, and holds only a WeakEntity.
+- `src/panel.rs` — ends when the feed request returns, and holds only a WeakEntity.
+- `src/profile.rs` — ends itself when the card closes, and holds only a WeakEntity.
+- `src/profile.rs` — ends when the effect request returns, and holds only a WeakEntity.
+- `src/profile.rs` — ends when the profile request returns, and holds only a WeakEntity.
+- `src/requests.rs` — ends after its last batch (or the first refusal), and holds only a WeakEntity.
+- `src/requests.rs` — ends when Discord answers the request, and holds only a WeakEntity.
+- `src/restart.rs` — ends when the app restarts, and holds only a WeakEntity.
+- `src/sidebar/voice.rs` — ends itself once the one grace timer fires, and holds only a WeakEntity.
+- `src/status_menu.rs` — ends itself after the one grace timer, and holds only a WeakEntity.
+- `src/status_menu.rs` — ends itself once the timer fires and `then` has run, and holds only a WeakEntity.
+- `src/toast.rs` — ends after the one timer, and holds only a WeakEntity.
+- `src/toast.rs` — ends after the one timer, and holds only a WeakEntity.
+- `src/tray.rs` — an app-quit subscription, with no view to drop; it lives as long as the process.
+- `src/tray.rs` — polls for a second launch for the life of the process; there is no view to drop.
+- `src/tray.rs` — polls the tray for the life of the process and ends on Quit; there is no view to drop.
+- `src/user_menu.rs` — ends when the DM request returns, and holds only a WeakEntity.
+- `src/user_menu.rs` — ends when the invite request returns, and holds only a WeakEntity.

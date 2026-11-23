@@ -34,6 +34,8 @@ const TEXT_WARN: usize = 110;
 const MENU_WIDTH: f32 = 288.;
 const DIALOG_WIDTH: f32 = 480.;
 const FLYOUT_WIDTH: f32 = 200.;
+// The corner radius of the editor's thought bubble.
+const BUBBLE_RADIUS: f32 = 18.;
 const PRESENCES: [(Status, &str, &str); 4] = [
     (Status::Online, "Online", ""),
     (Status::Idle, "Idle", ""),
@@ -145,7 +147,7 @@ impl Waffle {
     pub(crate) fn toggle_status_menu(&mut self, cx: &mut Context<Self>) {
         self.status_menu = !self.status_menu;
         self.status_flyout = Flyout::default();
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the menu is an overlay, but the user panel under it also lights while it's open
     }
 
     // Hovering a row opens its durations (`target`), or closes them for a row without any.
@@ -163,17 +165,18 @@ impl Waffle {
                     if this.status_flyout.pending == Some(target) {
                         this.status_flyout.pending = None;
                         this.status_flyout.open = target;
-                        cx.notify();
+                        this.redraw_overlays(cx);
                     }
                 })
                 .ok();
             })
+            // lint-allow(detached-task): ends itself after the one grace timer, and holds only a WeakEntity.
             .detach();
             return;
         }
         flyout.pending = None;
         flyout.open = target;
-        cx.notify();
+        self.redraw_overlays(cx);
     }
 
     fn row_hover(&self, target: Option<Status>, cx: &mut Context<Self>) -> impl Fn(&bool, &mut Window, &mut App) + 'static {
@@ -203,7 +206,7 @@ impl Waffle {
                 }
             }, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): your presence draws in the user panel, the member list and the status menu
     }
 
     pub(crate) fn set_custom_status(&mut self, custom: Option<CustomStatus>, cx: &mut Context<Self>) {
@@ -234,7 +237,7 @@ impl Waffle {
             if this.custom_status.as_ref().and_then(|c| c.expires_at) == Some(at) {
                 this.custom_status = None;
                 this.publish_presence();
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): your custom status draws in the user panel and the member list
             }
         }, cx);
     }
@@ -251,6 +254,7 @@ impl Waffle {
             cx.background_executor().timer(wait).await;
             this.update(cx, |this, cx| then(this, cx)).ok();
         })
+        // lint-allow(detached-task): ends itself once the timer fires and `then` has run, and holds only a WeakEntity.
         .detach();
     }
 
@@ -273,13 +277,13 @@ impl Waffle {
         if let Some(me) = self.me.clone() {
             self.fetch_profile(me, None, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the editor is an overlay, but closing the menu also unlights the user panel
     }
 
     pub(crate) fn on_status_input(&mut self, _: &Entity<SearchState>, event: &InputEvent, _: &mut Window, cx: &mut Context<Self>) {
         match event {
             InputEvent::PressEnter { .. } => self.save_status(cx),
-            InputEvent::Change => cx.notify(),
+            InputEvent::Change => self.redraw_overlays(cx),
             _ => {}
         }
     }
@@ -297,7 +301,7 @@ impl Waffle {
 
     fn close_status_editor(&mut self, cx: &mut Context<Self>) {
         self.status_editor = None;
-        cx.notify();
+        self.redraw_overlays(cx);
     }
 
     fn clear_after_entries(&self) -> Vec<Entry> {
@@ -308,7 +312,7 @@ impl Waffle {
                 let row = menu::item(choice.name(), move |this, _, cx| {
                     this.clear_after = choice;
                     this.menu = None;
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): closes the menu, which the root draws over the columns
                 })
                 .icon(choice.glyph())
                 .radio(self.clear_after == choice);
@@ -381,6 +385,7 @@ impl Waffle {
         };
         let chevron = timed.then(|| div().flex_none().text_color(palette::muted(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)));
         let flyout = open.then(|| {
+            // lint-allow(raw-margin): sits past its row's right edge by the card's inset and a gap, which left_full can't add to.
             div().absolute().top(px(-ui::SURFACE_INSET)).left_full().ml(px(ui::SURFACE_INSET + 4.)).child(ui::floating("status-duration-float", self.duration_flyout(status, cx)).with_priority(1))
         });
         menu::menu_item_row(SharedString::from(format!("status-{label}")), &row, open, true, cx)
@@ -500,6 +505,7 @@ impl Waffle {
         let header = ui::col()
             .relative()
             .child(banner)
+            // lint-allow(raw-margin): the avatar row pulls up over the banner's foot, which padding can't do.
             .child(ui::row().items_stretch().px(px(inset - AVATAR_RING)).mt(px(-(AVATAR / 2. + AVATAR_RING))).mb_2().child(avatar))
             .child(ui::row().items_stretch().absolute().top(px(banner_height - 20.)).left(px(inset + AVATAR + AVATAR_RING + 6.)).right_3().child(bubble(face, ink, cx)));
         let (outer, inner) = profile::themed_card(ink, f32::MAX, cx);
@@ -533,7 +539,7 @@ impl Waffle {
         }
         field.trailing(ui::icon_button("status-clear-text", Glyph::XCircle, "Clear text", cx).small().on_click(cx.listener(|this, _, window, cx| {
             this.status_input.update(cx, |state, cx| state.set_value("", window, cx));
-            cx.notify();
+            this.redraw_overlays(cx);
         })))
         .into_any_element()
     }
@@ -577,7 +583,7 @@ fn bubble(content: Div, ink: Ink, cx: &App) -> Stateful<Div> {
         .min_w_0()
         .child(dot(8.).left_neg_2().top_neg_3p5())
         .child(dot(16.).left_1().top_neg_2())
-        .child(ui::row().relative().min_h_9().px_3().py_2().rounded(px(18.)).bg(fill).border_1().border_color(edge).text_size(ui::TEXT_SM).line_height(ui::LINE_DETAIL).child(content))
+        .child(ui::row().relative().min_h_9().px_3().py_2().rounded(px(BUBBLE_RADIUS)).bg(fill).border_1().border_color(edge).text_size(ui::TEXT_SM).line_height(ui::LINE_DETAIL).child(content))
 }
 
 #[cfg(test)]

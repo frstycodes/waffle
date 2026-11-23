@@ -25,6 +25,7 @@ impl Waffle {
             })
             .ok();
         })
+        // lint-allow(detached-task): ends after the one timer, and holds only a WeakEntity.
         .detach();
         cx.notify(); // lint-allow(global-notify): the toast is drawn by the root, over every column
     }
@@ -45,6 +46,7 @@ impl Waffle {
             })
             .ok();
         })
+        // lint-allow(detached-task): ends after the one timer, and holds only a WeakEntity.
         .detach();
         cx.notify(); // lint-allow(global-notify): the toast is drawn by the root, over every column
     }
@@ -64,6 +66,7 @@ impl Waffle {
         }
         // GAP: the design leads a toast with its tone's icon and can carry one action; `show_toast`
         // carries only text, so neither shows yet.
+        // lint-allow(custom-surface, custom-badge): ui::toast always leads with a glyph; a plain show_toast is one line of text.
         let toast = ui::row()
             .max_w(px(TOAST_MAX))
             .min_h_10()
