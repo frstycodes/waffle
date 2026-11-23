@@ -211,7 +211,7 @@ pub(super) fn reaction_pill(id: SharedString, mine: bool, cx: &App) -> ui::Press
 pub(super) fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
     use crate::message_menu::MessageAction as A;
     let (hover, line) = (palette::hover(cx), palette::line(cx));
-    let sep = || div().w(ui::HAIRLINE).h_5().mx_0p5().bg(line); // lint-allow(custom-divider, raw-margin): ui::divider is a horizontal rule, and this vertical seam sits 2px clear of the buttons beside it
+    let sep = || ui::seam(cx).bg(line);
     let sent = message.state == SendState::Sent;
     let facts = crate::message_menu::Facts { mine, saved: ctx.saved_ids.contains(&message.id), ..ctx.facts };
     // lint-allow(custom-mark, custom-surface): ui::toolbar occludes the wheel too, and this bar must let the feed scroll under it; it also rides above its row's edge

@@ -67,7 +67,7 @@ pub(super) fn kit_variants(cx: &App) -> impl IntoElement {
             .child(
                 row()
                     .gap_3()
-                    .child(ui::toolbar("ds-toolbar", cx).child(ui::icon_button("ds-tb-1", Glyph::EmojiAdd, "React", cx).small()).child(ui::icon_button("ds-tb-2", Glyph::Reply, "Reply", cx).small()))
+                    .child(ui::toolbar("ds-toolbar", cx).child(ui::icon_button("ds-tb-1", Glyph::EmojiAdd, "React", cx).small()).child(ui::seam(cx)).child(ui::icon_button("ds-tb-2", Glyph::Reply, "Reply", cx).small()))
                     .child(div().p_2().bg(palette::stage::bg()).child(row().gap_2().child(ui::icon_button("ds-stage", Glyph::Settings, "Settings", cx).tone(Tone::Stage, cx).round()).child(ui::button("ds-stage-b", Tone::Stage, cx).child("Watch"))))
                     .child(ui::icon_button("ds-rail", Glyph::Plus, "Add a server", cx).tone(Tone::Secondary, cx).sized(44.))
                     .child(ui::icon_button("ds-copied", Glyph::Checkmark, "Copied", cx).succeeded(true, cx))

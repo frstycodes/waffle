@@ -788,6 +788,13 @@ pub fn divider(label: Option<&'static str>, cx: &App) -> Div {
         .when_some(label, |d, label| d.child(div().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(label)).child(line()))
 }
 
+// A vertical hairline between groups in a row (toolbar sections, a header's controls), 20px tall with 2px
+// clear either side; `.bg(..)` takes another line colour (the call stage's wash).
+// Keywords: vertical divider, separator, seam, vertical rule, toolbar separator, pipe
+pub fn seam(cx: &App) -> Div {
+    div().flex_none().w(HAIRLINE).h_5().mx_0p5().bg(palette::line(cx))
+}
+
 // The hairline along a stacked section's foot, held in from the card's edges by `inset`. The section
 // must be `relative`.
 pub fn inset_rule(inset: f32, cx: &App) -> Div {

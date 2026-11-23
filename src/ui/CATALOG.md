@@ -61,6 +61,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::empty_state` — An empty or waiting state: spot art (the mascot, or an illustration where Discord leads with one), what's missing, and room for one action.
 - `ui::Art`
 - `ui::divider` — A divider, with an optional label naming what follows.
+- `ui::seam` — A vertical hairline between groups in a row (toolbar sections, a header's controls), 20px tall with 2px clear either side; `.bg(..)` takes a
 - `ui::inset_rule` — The hairline along a stacked section's foot, held in from the card's edges by `inset`.
 - `ui::icon_tile` — A squircle holding an icon, for row leads and settings.
 - `ui::bars` — The mini wave: three bars, the mark for speaking, typing, loading and live.

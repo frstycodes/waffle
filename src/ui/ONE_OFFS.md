@@ -444,16 +444,13 @@ _Floating or raised surface: ui::surface, ui::floating, ui::floating_bar, ui::to
 _Divider: ui::divider or ui::inset_rule._
 
 - `src/call/dock.rs` — ui::progress_bar lacks a ping graph; these are data-sized bars, not dividers
-- `src/call/header.rs` — ui::divider lacks a vertical stage-washed rule; the margin is the optical gap between two groups
 - `src/call/menus.rs` — ui::divider lacks a stage-ink hairline; the margins inset it from the card edge like ui::inset_rule
-- `src/chat/attachments.rs` — ui::divider is a horizontal rule, and this vertical seam sits 2px clear of the buttons beside it
 - `src/chat/format.rs` — ui::divider takes a 'static label in the neutral line colour, and these two take a formatted date or the alert colour
 - `src/chat/format.rs` — ui::inset_rule runs along an edge in the neutral line colour; this stub carries the alert rule on under the NEW tag
 - `src/command_picker/render.rs` — ui::divider lacks a short centred rule in a rail; the margin is its optical gap
 - `src/components/parts.rs` — ui::divider lacks a bare hairline with its own padding that follows a component's size
 - `src/events/views.rs` — ui::divider is a full-width hairline; this is the short rule joining two steps
 - `src/events/views.rs` — ui::divider is a horizontal rule; this is the vertical one beside Create Event
-- `src/forum.rs` — ui::divider is a horizontal rule; this is the vertical one between the tag chips and Select Tags
 - `src/soundboard/picker.rs` — ui::divider lacks a short rule between the unlocked and locked tabs
 
 ## custom-badge
@@ -524,14 +521,12 @@ _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::r
 - `src/audio_player/view.rs` — optical offset from the message text above; the parent is the chat row, outside this file
 - `src/call/dock.rs` — negative margins widen the hit area of a small status mark without moving it
 - `src/call/dock.rs` — negative margins widen the hit area of a small status mark without moving it
-- `src/call/header.rs` — ui::divider lacks a vertical stage-washed rule; the margin is the optical gap between two groups
 - `src/call/menus.rs` — ui::divider lacks a stage-ink hairline; the margins inset it from the card edge like ui::inset_rule
 - `src/call/tiles.rs` — optical gap under a tile's message before its action; the column is built by the caller
 - `src/channel_settings.rs` — optical space around the inline ask in the nav list, whose column sets no gap
 - `src/channel_settings/pages.rs` — centres the 12px role dot on the 16px icon column, an optical nudge
 - `src/chat.rs` — an optical 4px past the tool buttons, which the row's own gap_0p5 can't give one child
 - `src/chat.rs` — optical, pulls the jump button's wash to the bar's edge past its pl_3
-- `src/chat/attachments.rs` — ui::divider is a horizontal rule, and this vertical seam sits 2px clear of the buttons beside it
 - `src/chat/composer.rs` — `bottom` is a fraction of the card's height, which can't also take a pixel lift
 - `src/chat/composer.rs` — `bottom` is a fraction of the card's height, which can't also take a pixel lift
 - `src/chat/composer.rs` — the entrance slides 8px as it fades, a margin computed from the animation's progress

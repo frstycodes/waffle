@@ -194,7 +194,7 @@ impl Waffle {
             .children(back)
             .children(stop)
             .child(who)
-            .child(div().w(ui::HAIRLINE).h_5().mx_0p5().flex_none().bg(stage::wash(0.14))) // lint-allow(custom-divider, raw-margin): ui::divider lacks a vertical stage-washed rule; the margin is the optical gap between two groups
+            .child(ui::seam(cx).bg(stage::wash(0.14)))
             .child(self.chat_toggle(cx))
             .into_any_element()
     }

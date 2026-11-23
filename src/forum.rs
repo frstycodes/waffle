@@ -562,8 +562,7 @@ impl Waffle {
         ui::row()
             .gap_2()
             .child(ui::row().items_stretch().gap_1p5().overflow_hidden().children(chips))
-            // lint-allow(custom-divider): ui::divider is a horizontal rule; this is the vertical one between the tag chips and Select Tags
-            .child(div().flex_none().w(ui::HAIRLINE).h_5().bg(palette::line_strong(cx)))
+            .child(ui::seam(cx).bg(palette::line_strong(cx)))
             .child(all)
     }
 
