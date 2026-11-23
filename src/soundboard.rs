@@ -22,7 +22,7 @@ use crate::{
     overlays::backdrop,
     palette,
     settings::Fill,
-    ui::{self, RADIUS_LG, RADIUS_SM, Squircle},
+    ui::{self, RADIUS_SM, Squircle},
 };
 
 mod picker;

@@ -5,12 +5,12 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
-    f32::consts::TAU,
+
     rc::Rc,
     time::Duration,
 };
 
-use gpui_kit::{Animation, AnimationExt, AnyElement, App, Context, FontWeight, SharedString, Stateful, WeakEntity, Window, component::Icon, div, img, prelude::*, px};
+use gpui_kit::{AnyElement, App, Context, FontWeight, SharedString, Stateful, WeakEntity, Window, component::Icon, div, img, prelude::*, px};
 
 use crate::{
     Waffle,

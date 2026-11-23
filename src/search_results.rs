@@ -10,7 +10,7 @@ use crate::{
     menu, palette,
     search::{self, Key, Sort},
     search_menu::token_chip,
-    ui::{self, RADIUS_MD, Squircle},
+    ui::{self},
 };
 use crate::part::Column;
 
