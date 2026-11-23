@@ -535,6 +535,16 @@ impl Waffle {
         .detach();
     }
 
+    // What the app draws beside or over a game, lifted over its webview while one is open: the webview sits on
+    // the app's base layer and trails it a frame on a resize, so only the stage itself stays under it.
+    pub(crate) fn above_game(&self, element: impl IntoElement) -> AnyElement {
+        match self.activities.frame.is_some() {
+            // lint-allow(raw-floating): drawn in its own place; its elements take the pointer themselves
+            true => gpui_kit::deferred(element).into_any_element(),
+            false => element.into_any_element(),
+        }
+    }
+
     // The demo scenes' game: `url` playing on the call's stage, as an activity of our own would.
     pub(crate) fn demo_activity(&mut self, url: &str, window: &mut Window, cx: &mut Context<Self>) {
         let Some(call) = self.call.as_ref() else { return };

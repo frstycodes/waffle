@@ -660,10 +660,10 @@ impl Waffle {
         let drawer = (reveal > 0.001 && on_call_channel).then(|| {
             let width = self.call_chat_width(window);
             let panel = self.call_chat_drawer(&call_channel, window, cx);
-            div().w(px(width * reveal)).flex_none().h_full().overflow_hidden().child(div().w(px(width)).h_full().child(panel))
+            self.above_game(div().w(px(width * reveal)).flex_none().h_full().overflow_hidden().child(div().w(px(width)).h_full().child(panel)))
         });
         let call = self.render_call(window, cx)?;
-        let previews = self.render_call_previews(cx);
+        let previews = self.render_call_previews(cx).map(|p| self.above_game(p));
         Some(div().size_full().flex().child(div().relative().flex_1().min_w_0().h_full().child(call).children(previews)).children(drawer).into_any_element())
     }
 
@@ -757,8 +757,8 @@ impl Waffle {
             self.stage_root(cx)
                 .flex()
                 .flex_col()
-                .child(self.stage_head(self.call_header(cx)).opacity(shown))
-                .child(stage.child(div().flex_1().min_h_0().child(body)).child(div().opacity(shown).child(self.call_controls(cx))))
+                .child(self.above_game(self.stage_head(self.call_header(cx)).opacity(shown)))
+                .child(stage.child(div().flex_1().min_h_0().child(body)).child(self.above_game(div().opacity(shown).child(self.call_controls(cx)))))
                 .into_any_element(),
         )
     }
@@ -812,11 +812,11 @@ impl Waffle {
         let overlay_head = self.call_fullscreen;
         let drift = 6. * (1. - shown);
         let band = CONTROLS_HEIGHT + STAGE_PAD * 2.;
-        let head = self.stage_head(self.call_header(cx));
+        let head = self.above_game(self.stage_head(self.call_header(cx)));
         let (in_flow, floating) = if overlay_head { (None, Some(head)) } else { (Some(head), None) };
         let toggle_bottom = if strip { STRIP_GAP } else { band + STRIP_GAP };
-        // The activity's webview covers whatever is drawn over it, so it keeps clear of the pill, the floating
-        // controls and, in full screen, the header.
+        // The game keeps clear of the pill, the floating controls and, in full screen, the header, so none of them
+        // covers it (they draw over its webview, see `above_game`).
         let clear = matches!(big, Tile::Activity(_)).then(|| {
             let foot = crate::activities::TIP_ROOM + if others.is_empty() { band } else { toggle_bottom + STRIP_TOGGLE + STRIP_GAP };
             (if overlay_head { FOCUS_HEAD } else { 0. }, foot)
@@ -828,7 +828,7 @@ impl Waffle {
             .bg(gpui_kit::black())
             .when_some(clear, |d, (top, foot)| d.pt(px(top)).pb(px(foot)))
             .child(self.tile(big, TileSize::Fill, cx))
-            .when(!others.is_empty(), |d| d.child(div().absolute().left_0().right_0().bottom(px(toggle_bottom)).flex().justify_center().opacity(shown).child(self.strip_toggle(strip, cx))));
+            .when(!others.is_empty(), |d| d.child(self.above_game(div().absolute().left_0().right_0().bottom(px(toggle_bottom)).flex().justify_center().opacity(shown).child(self.strip_toggle(strip, cx)))));
         self.stage_root(cx)
             .flex()
             .flex_col()
@@ -837,11 +837,11 @@ impl Waffle {
             .when(strip, |d| {
                 // Centred while it fits; wider than the stage, it starts at the left edge and scrolls.
                 let cards: Vec<AnyElement> = others.into_iter().map(|t| self.tile(t, TileSize::Card(STRIP_TILE), cx)).collect();
-                d.child(div().id("filmstrip").flex_none().flex().overflow_x_scroll().pt(px(STRIP_GAP)).px(px(STAGE_PAD)).child(div().mx_auto().flex_none().flex().gap(px(STRIP_GAP)).children(cards)))
+                d.child(self.above_game(div().id("filmstrip").flex_none().flex().overflow_x_scroll().pt(px(STRIP_GAP)).px(px(STAGE_PAD)).child(div().mx_auto().flex_none().flex().gap(px(STRIP_GAP)).children(cards))))
                     .child(div().h(px(band)).flex_none())
             })
-            .children(floating.map(|head| keeps_chrome(div().id("call-head-float"), cx).occlude().absolute().top(px(-drift)).left_0().right_0().h(px(FOCUS_HEAD + 24.)).opacity(shown).bg(scrim(180.)).child(head)))
-            .child(
+            .children(floating.map(|head| self.above_game(keeps_chrome(div().id("call-head-float"), cx).occlude().absolute().top(px(-drift)).left_0().right_0().h(px(FOCUS_HEAD + 24.)).opacity(shown).bg(scrim(180.)).child(head))))
+            .child(self.above_game(
                 div()
                     .absolute()
                     .left_0()
@@ -853,7 +853,7 @@ impl Waffle {
                     .opacity(shown)
                     .when(!strip, |d| d.bg(scrim(0.)))
                     .child(self.call_controls(cx)),
-            )
+            ))
             .into_any_element()
     }
 

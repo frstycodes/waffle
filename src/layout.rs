@@ -111,15 +111,7 @@ impl Waffle {
         } else {
             let nav = self.part(Column::Nav, StyleRefinement::default().w(px(sidebar_width)).h_full().flex_none(), cx);
             let main = self.part(Column::Main, StyleRefinement::default().flex_1().min_w_0().h_full(), cx);
-            // With a game open, the sidebar draws after the app, over the game's webview: the webview moves a
-            // frame behind on a quick resize, and covered the sidebar's edge. Deferred content isn't drawn from a
-            // scroll layer, so only then.
-            let nav = match self.activities.frame.is_some() {
-                // lint-allow(raw-floating): the sidebar in its own place; its elements take the pointer themselves
-                true => gpui_kit::deferred(nav).into_any_element(),
-                false => nav,
-            };
-            body.child(nav).child(main)
+            body.child(self.above_game(nav)).child(main)
         };
         // Anything drawn over the chat pauses its GIFs (the GIF layer paints above the whole app).
         let (overlays, call_overlays) = (self.overlays(cx), self.render_call_overlays(window, cx));
