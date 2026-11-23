@@ -11,6 +11,7 @@ use crate::motion;
 const TRAVEL: f32 = 1.07;
 
 // One line swapped for another on hover: `rest` rolls up and fades as `rolled` rises in from below, over 220ms.
+// Keywords: hover roll, swap line, reveal on hover, username, details, subtitle
 pub fn hover_roll(id: impl Into<TransitionId>, rest: impl IntoElement, rolled: impl IntoElement, hovered: bool, height: Pixels, window: &mut Window, cx: &mut App) -> Div {
     let t = transition(id, if hovered { 1. } else { 0. }, Transition::new(DUR_ROLL).easing(motion::ease_out()), window, cx);
     let slot = |offset: f32, opacity: f32| div().absolute().left_0().right_0().min_w_0().top(height * offset).opacity(opacity);
