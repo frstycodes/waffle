@@ -137,15 +137,12 @@ impl Waffle {
             // lint-allow(raw-floating): hangs at absolute offsets under the header, not anchored; the card occludes itself.
             gpui_kit::deferred(ui::rise(card.transform_origin(ui::corner(true, false)), "search-filters-in", std::time::Duration::ZERO)).with_priority(2)
         });
-        div()
+        ui::row()
             .relative()
             .flex_1()
-            .min_w_0()
-            .flex()
-            .items_center()
             .gap_1p5()
             .children(popover)
-            .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
+            .child(ui::line(title).flex_1().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
             .child(filters)
             .child(sort)
             .child(close)
@@ -154,7 +151,7 @@ impl Waffle {
     pub(crate) fn search_body(&self, results: &Results, cx: &mut Context<Self>) -> AnyElement {
         let muted = palette::muted(cx);
         let page = match &results.hits {
-            None => return div().min_h_8().px_2().flex().items_center().gap_2().text_color(muted).child(ui::bars("search-wait", muted, 12.)).child("Searching…").into_any_element(),
+            None => return ui::row().min_h_8().px_2().gap_2().text_color(muted).child(ui::bars("search-wait", muted, 12.)).child("Searching…").into_any_element(),
             Some(Err(error)) => return div().px_2().text_color(palette::danger_ink(cx)).child(error.clone()).into_any_element(),
             Some(Ok(page)) if page.messages.is_empty() => return ui::empty_state("search-empty", crate::illustration::Illustration::SearchEmpty, "We searched far and wide.", "Unfortunately, no results were found.", cx).into_any_element(),
             Some(Ok(page)) => page,
@@ -169,7 +166,7 @@ impl Waffle {
             out.push(self.hit_card(hit, &ctx, cx));
         }
         // flex_none: in the panel's scrolling column, cards would otherwise shrink to fit and clip their pictures.
-        div().flex_none().flex().flex_col().gap_2().children(out.into_iter().map(|el| div().flex_none().child(el))).into_any_element()
+        ui::col().flex_none().gap_2().children(out.into_iter().map(|el| div().flex_none().child(el))).into_any_element()
     }
 
     // A run of hits from one channel opens with its name, and its category at the right.
@@ -178,17 +175,15 @@ impl Waffle {
         let channel = guild.and_then(|g| g.channels.iter().find(|c| c.id == hit.channel_id));
         let category = channel.and_then(|c| c.parent_id.as_ref()).and_then(|p| guild?.channels.iter().find(|c| &c.id == p));
         let muted = palette::muted(cx);
-        div()
+        ui::row()
             .pt_2()
             .px_1()
-            .flex()
-            .items_center()
             .gap_1p5()
             .text_color(palette::strong(cx))
             .font_weight(FontWeight::SEMIBOLD)
             .child(div().text_color(muted).child(Icon::new(Glyph::Hashtag).size(ui::ICON_MD)))
-            .child(div().flex_1().min_w_0().truncate().child(channel.map_or_else(|| "unknown channel".to_owned(), |c| c.name.clone())))
-            .children(category.map(|c| div().flex_none().flex().items_center().gap_1().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(muted).child(Icon::new(Glyph::Folder).size(ui::ICON_SM)).child(c.name.clone())))
+            .child(ui::line(channel.map_or_else(|| "unknown channel".to_owned(), |c| c.name.clone())).flex_1())
+            .children(category.map(|c| ui::row().flex_none().gap_1().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(muted).child(Icon::new(Glyph::Folder).size(ui::ICON_SM)).child(c.name.clone())))
             .into_any_element()
     }
 
@@ -199,7 +194,7 @@ impl Waffle {
             None => self.channel.clone().filter(|c| c.id == hit.channel_id),
         };
         let message_id = hit.id.clone();
-        div()
+        ui::col()
             .id(SharedString::from(format!("hit-{}", hit.id)))
             .p_3()
             .squircle(RADIUS_MD)
@@ -208,8 +203,6 @@ impl Waffle {
             .border_color(palette::line(cx))
             .cursor_pointer()
             .hover(move |s| s.bg(ui::mix(page, hover, 1.)))
-            .flex()
-            .flex_col()
             .child(crate::chat::search_hit(hit, ctx, cx).flex_none())
             .on_click(cx.listener(move |this, _, window, cx| {
                 let Some(channel) = channel.clone() else { return };
@@ -241,7 +234,7 @@ impl Waffle {
         };
         let (accent, hover, text, faint) = (palette::accent(), palette::hover(cx), palette::text(cx), palette::faint(cx));
         let numbers = search::pages(current, count).into_iter().enumerate().map(|(i, page)| {
-            let cell = div().min_w_7().h_7().px_1().flex().items_center().justify_center().rounded_full().text_size(ui::TEXT_SM);
+            let cell = ui::row().min_w_7().h_7().px_1().justify_center().rounded_full().text_size(ui::TEXT_SM);
             match page {
                 None => cell.id(("search-gap", i)).text_color(faint).child("…").into_any_element(),
                 Some(page) if page == current => cell.id(("search-page", page)).bg(accent).text_color(gpui_kit::white()).font_weight(FontWeight::SEMIBOLD).child(page.to_string()).into_any_element(),
@@ -250,9 +243,7 @@ impl Waffle {
         }).collect::<Vec<_>>();
         let (previous, next) = (step("search-previous", "Previous", true, current.saturating_sub(1), current > 1, cx), step("search-next", "Next", false, current + 1, current < count, cx));
         Some(
-            div()
-                .flex()
-                .items_center()
+            ui::row()
                 .justify_center()
                 .gap_0p5()
                 .child(previous)
@@ -298,14 +289,12 @@ impl Waffle {
                     .chain(std::iter::once(ui::chip(SharedString::from(format!("filter-add-{word}")), Some(Glyph::Plus), "Add", false, cx).small().on_click(cx.listener(move |this, _, window, cx| this.type_search_filter(key, window, cx))).into_any_element()))
                     .collect(),
             };
-            div()
+            ui::col()
                 .px_2p5()
                 .py_2()
-                .flex()
-                .flex_col()
                 .gap_1p5()
-                .child(div().flex().items_center().gap_2().text_color(strong).child(div().text_color(muted).child(Icon::new(crate::search_menu::key_glyph(key)).size(ui::ICON_MD))).child(key.title()))
-                .child(div().flex().flex_wrap().gap_1p5().children(values))
+                .child(ui::row().gap_2().text_color(strong).child(div().text_color(muted).child(Icon::new(crate::search_menu::key_glyph(key)).size(ui::ICON_MD))).child(key.title()))
+                .child(ui::row().items_stretch().flex_wrap().gap_1p5().children(values))
         });
         ui::surface(cx)
             .id("search-filters-card")

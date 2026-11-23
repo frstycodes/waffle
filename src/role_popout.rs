@@ -150,9 +150,7 @@ impl Waffle {
             self.member_row(&member, spot, cx)
         });
         let rows: Vec<AnyElement> = rows.collect();
-        let head = div()
-            .flex()
-            .items_center()
+        let head = ui::row()
             .gap_1p5()
             .px_2()
             .pt_1p5()
@@ -160,7 +158,7 @@ impl Waffle {
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(palette::strong(cx))
             .children(role.and_then(|r| r.icon.clone()).map(|icon| img(icon).size_4().flex_none()))
-            .child(div().min_w_0().truncate().child(title.to_owned()))
+            .child(ui::line(title.to_owned()))
             .children(count.map(|n| div().flex_none().font_weight(FontWeight::NORMAL).text_color(palette::faint(cx)).child(format!("\u{a0}— {}", crate::link_preview::grouped(n.into())))));
         let top = crate::layout::TITLE_HEIGHT + 8.;
         let max_height = f32::from(window.viewport_size().height) - top - 8.;
@@ -172,7 +170,7 @@ impl Waffle {
             .gap_0p5()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(head)
-            .child(div().id("role-popout-rows").flex_shrink(1.).min_h_0().overflow_y_scroll().flex().flex_col().gap_0p5().children(rows))
+            .child(ui::col().id("role-popout-rows").flex_shrink(1.).overflow_y_scroll().gap_0p5().children(rows))
             .children(more.map(|n| div().px_2().py_1p5().text_size(ui::TEXT_SM).text_color(palette::faint(cx)).child(format!("+{} more", crate::link_preview::grouped(n.into())))));
         let key = SharedString::from(format!("role-popout-{}", open.role_id.as_deref().unwrap_or("everyone")));
         // lint-allow(raw-floating): placed inside the overlay backdrop, with a measured top margin floating_at can't take.

@@ -545,9 +545,7 @@ impl Waffle {
             };
             ui::select_options("ss-member-sort-menu", &options, &(filter.sort as u8).to_string(), 30., pick, self.member_dismiss(cx), cx)
         });
-        div()
-            .flex()
-            .items_center()
+        ui::row()
             .gap_2()
             .child(div().flex_1().min_w_0().child(ui::search_field("ss-member-search-field", &m.search, cx)))
             .child(div().relative().flex_none().child(signals_chip).children(signals_menu))
@@ -567,7 +565,7 @@ impl Waffle {
         let selecting = bulk.any();
         let page_ids: Vec<&str> = shown.iter().map(|r| r.id.as_str()).collect();
         let check_all = selecting.then(|| self.member_select_box("ss-member-check-all".into(), member_bulk::page_check(&m.selected, &page_ids), |this, cx| this.toggle_page_selected(cx), cx));
-        let label = |text: &'static str| div().truncate().child(text).into_any_element();
+        let label = |text: &'static str| ui::line(text).into_any_element();
         // Discord hides how members joined from anyone without Manage server, and only they can filter by date.
         let columns: Vec<(Col, AnyElement)> = [
             check_all.map(|b| (CHECK_COL, b)),
@@ -639,7 +637,7 @@ impl Waffle {
                 this.open_mod_view(guild_id.clone(), user_id.clone(), window, cx);
             }
         }));
-        let mut cell = div().flex().items_center().gap_1().child(mod_view);
+        let mut cell = ui::row().gap_1().child(mod_view);
         if !powers.any() {
             return cell.into_any_element();
         }
@@ -654,7 +652,7 @@ impl Waffle {
     fn member_menu_rows(&self, member: &Member, powers: Powers, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let (id, name) = (member.id.clone(), member.name.clone());
         let mut rows = Vec::new();
-        let row = |key: &str, glyph: Glyph, label: String, cx: &mut Context<Self>| ui::menu_row(SharedString::from(format!("ss-member-{key}-{id}")), cx).child(Icon::new(glyph).size(ui::ICON_MD)).child(div().flex_1().min_w_0().truncate().child(label));
+        let row = |key: &str, glyph: Glyph, label: String, cx: &mut Context<Self>| ui::menu_row(SharedString::from(format!("ss-member-{key}-{id}")), cx).child(Icon::new(glyph).size(ui::ICON_MD)).child(ui::line(label).flex_1());
         if powers.timeout {
             let lift = member.timed_out_until.is_some_and(|t| t > Utc::now());
             let label = if lift { "Remove time out" } else { "Time out for 1 hour" };
@@ -714,9 +712,7 @@ impl Waffle {
         });
         let prev = ui::icon_button("ss-member-prev", Glyph::ChevronLeft, "Previous page", cx).small().disabled(page == 0).on_click(cx.listener(move |this, _, _, cx| this.show_members_page(page.saturating_sub(1), cx)));
         let next = ui::icon_button("ss-member-next", Glyph::ChevronRight, "Next page", cx).small().disabled(((page + 1) * size) as u64 >= total).on_click(cx.listener(move |this, _, _, cx| this.show_members_page(page + 1, cx)));
-        div()
-            .flex()
-            .items_center()
+        ui::row()
             .gap_2()
             .px_1()
             .text_color(palette::muted(cx))
@@ -733,15 +729,12 @@ impl Waffle {
 
 // Avatar, then the name with the username muted beside it; the username gives way first.
 fn name_cell(member: &Member, cx: &App) -> AnyElement {
-    div()
-        .flex()
-        .items_center()
+    ui::row()
         .gap_2()
-        .min_w_0()
         .child(ui::avatar(member.avatar.clone(), 28.))
         .child(ui::truncating(format!("ss-mn-{}", member.id), member.name.clone()).text_color(palette::strong(cx)))
         .when(member.bot, |d| d.child(ui::tag("App", cx).flex_none()))
-        .child(div().flex_1().flex_basis(gpui_kit::Pixels::ZERO).min_w_0().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(member.username.clone()))
+        .child(ui::line(member.username.clone()).flex_1().flex_basis(gpui_kit::Pixels::ZERO).text_size(ui::TEXT_XS).text_color(palette::muted(cx)))
         .into_any_element()
 }
 
@@ -757,12 +750,9 @@ fn roles_cell(member: &Member, guild_roles: &[Role], cx: &App) -> AnyElement {
     let dark = cx.theme().is_dark();
     let color = if top.color == 0 { palette::faint(cx) } else { palette::role_ink(top.color, dark) };
     let names: SharedString = roles.iter().map(|r| r.name.as_str()).collect::<Vec<_>>().join(", ").into();
-    div()
+    ui::row()
         .id(SharedString::from(format!("ss-roles-{}", member.id)))
-        .flex()
-        .items_center()
         .gap_1()
-        .min_w_0()
         .child(ui::role_chip(top.name.clone(), color, cx).flex_shrink(1.).min_w_0().overflow_hidden())
         .when(roles.len() > 1, |d| d.child(div().flex_none().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(format!("+{}", roles.len() - 1))))
         .tooltip(move |window, cx| ui::tip(names.clone(), window, cx))
@@ -771,9 +761,7 @@ fn roles_cell(member: &Member, guild_roles: &[Role], cx: &App) -> AnyElement {
 
 fn signals_cell(member: &Member, now: DateTime<Utc>, cx: &App) -> AnyElement {
     let (danger, muted) = (palette::danger_ink(cx), palette::muted(cx));
-    div()
-        .flex()
-        .items_center()
+    ui::row()
         .gap_0p5()
         .children(signals(member, now).into_iter().map(|signal| {
             let (glyph, red, tip) = signal_mark(signal, member, now);

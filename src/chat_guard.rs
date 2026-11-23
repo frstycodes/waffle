@@ -192,22 +192,17 @@ impl Waffle {
                 (Glyph::HashtagLock, format!("You can't send messages in #{channel}"), role_line(&parts, |color| role_color(color, strong, dark)), None)
             }
         };
-        let row = div()
+        let row = ui::row()
             .min_h_12()
             .pl_3p5()
             .pr_2()
-            .flex()
-            .items_center()
             .gap_2p5()
             .text_color(muted)
             .child(div().flex_none().child(Icon::new(glyph).size(ui::ICON_XL)))
             .child(
-                div()
+                ui::col()
                     .flex_1()
-                    .min_w_0()
                     .py(px(9.))
-                    .flex()
-                    .flex_col()
                     .gap_0p5()
                     .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(title))
                     .child(div().text_size(ui::TEXT_XS).line_height(px(17.)).child(detail)),
@@ -225,13 +220,11 @@ impl Waffle {
             Slowmode::Immune(_) => (palette::faint(cx), "Immune".into()),
             Slowmode::Counting { left, .. } => (palette::muted(cx), crate::call::clock(ceil_secs(left)).into()),
         };
-        let chip = div()
+        let chip = ui::row()
             .id("slowmode")
             .flex_none()
             .h_8()
             .px_1p5()
-            .flex()
-            .items_center()
             .gap_1()
             .whitespace_nowrap()
             .text_size(ui::TEXT_XS)
@@ -244,7 +237,7 @@ impl Waffle {
                 Tooltip::element(move |_, cx| {
                     let left = ready_at.map(|at| at.saturating_duration_since(Instant::now()));
                     let (title, detail) = slowmode_tip(state, left);
-                    div().flex().flex_col().child(title).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail))
+                    ui::col().child(title).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail))
                 })
                 .build(window, cx)
             });
@@ -266,7 +259,7 @@ impl Waffle {
         )]);
         let bar = crate::chat::bar_row(cx)
             .child(div().flex_none().text_color(accent).child(Icon::new(Glyph::Clock).size(ui::ICON_MD)))
-            .child(div().flex_1().min_w_0().truncate().font_features(crate::call::tabular()).child(label))
+            .child(div().min_w_0().truncate().child(label).flex_1().font_features(crate::call::tabular()))
             .child(ui::icon_button("cancel-queued", Glyph::X, "Cancel", cx).small().on_click(cx.listener(|this, _, _, cx| this.cancel_queued(cx))));
         Some(bar)
     }

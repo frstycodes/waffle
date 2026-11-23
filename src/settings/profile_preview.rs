@@ -1,4 +1,5 @@
 // The Profiles page's preview: your popout built from the same pieces as the real one, fed the draft.
+use crate::ui;
 use std::path::PathBuf;
 
 use gpui_kit::{App, Div, IntoElement, ParentElement, Styled, div, img, prelude::FluentBuilder, px};
@@ -23,17 +24,13 @@ pub(super) fn profile_preview(user: &User, profile: &Profile, avatar: PreviewAva
         PreviewAvatar::Url(url) => decorated_avatar(&url, user.decoration.as_deref(), AVATAR, status, ink.top),
         PreviewAvatar::File(path) => img(path).size(px(AVATAR)).flex_none().rounded_full().into_any_element(),
     };
-    let header = div()
+    let header = ui::col()
         .flex_none()
-        .flex()
-        .flex_col()
         .child(banner)
-        .child(div().px(px(16. - AVATAR_RING)).mt(px(-(AVATAR / 2. + AVATAR_RING))).mb_2().flex().child(div().p(px(AVATAR_RING)).rounded_full().bg(ink.top).child(face)));
-    let body = div()
+        .child(ui::row().items_stretch().px(px(16. - AVATAR_RING)).mt(px(-(AVATAR / 2. + AVATAR_RING))).mb_2().child(div().p(px(AVATAR_RING)).rounded_full().bg(ink.top).child(face)));
+    let body = ui::col()
         .px_4()
         .pb_4()
-        .flex()
-        .flex_col()
         .gap_3()
         .child(name_block(user, profile, ink))
         .children(badges(&profile.badges, ink))

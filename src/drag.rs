@@ -289,6 +289,7 @@ pub struct Ghost {
 
 impl Render for Ghost {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("Ghost");
         let mut held = self.hand.borrow_mut();
         let anchor = window.mouse_position() - held.offset;
         let target = held.lock_x.map_or(anchor, |x| point(x, anchor.y));
@@ -311,7 +312,7 @@ fn ghost(held: &Held, origin: Point<Pixels>, settle: f32, cx: &App) -> Div {
         Look::Channel { channel, people } => row_card(ui::RADIUS_MD, lifted, cx)
             .flex_col()
             .gap_px()
-            .child(div().h_8().px_2().flex().items_center().gap_2().child(channel_glyph(channel).size(ui::ICON_LG).flex_none().text_color(palette::faint(cx))).child(div().flex_1().min_w_0().truncate().child(channel.name.clone())))
+            .child(ui::row().h_8().px_2().gap_2().child(channel_glyph(channel).size(ui::ICON_LG).flex_none().text_color(palette::faint(cx))).child(ui::line(channel.name.clone()).flex_1()))
             .children(people.iter().map(|(avatar, name)| person(avatar, name).text_color(palette::muted(cx)))),
         Look::Label { dot, text } => row_card(ui::RADIUS_MD, lifted, cx)
             .h(held.size.y)
@@ -320,7 +321,7 @@ fn ghost(held: &Held, origin: Point<Pixels>, settle: f32, cx: &App) -> Div {
             .gap_3()
             .text_size(ui::TEXT_SM)
             .child(div().size_3().flex_none().rounded_full().bg(*dot))
-            .child(div().flex_1().min_w_0().truncate().child(text.clone())),
+            .child(ui::line(text.clone()).flex_1()),
         Look::Category(name) => row_card(ui::RADIUS_SM, lifted, cx)
             .h(held.size.y)
             .px_1p5()
@@ -329,7 +330,7 @@ fn ghost(held: &Held, origin: Point<Pixels>, settle: f32, cx: &App) -> Div {
             .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::MEDIUM)
             .child(crate::sidebar::Nav::Caret.icon().size(px(11.)))
-            .child(div().flex_1().min_w_0().truncate().child(name.clone())),
+            .child(ui::line(name.clone()).flex_1()),
     };
     let (sx, sy) = held.carry.scale();
     let grab = point(relative(f32::from(held.offset.x) / f32::from(held.size.x)), relative(f32::from(held.offset.y) / f32::from(held.size.y)));
@@ -349,11 +350,11 @@ fn ghost(held: &Held, origin: Point<Pixels>, settle: f32, cx: &App) -> Div {
 
 // .vd-ghost: the overlay surface under --lift, with the row's own layout inside.
 fn row_card(radius: f32, lifted: f32, cx: &App) -> Div {
-    div().w_full().flex().squircle(radius).bg(palette::surface(palette::Level::Overlay, cx).opacity(lifted)).shadow(lift_shadow(lifted, cx)).text_color(palette::strong(cx))
+    ui::row().items_stretch().w_full().squircle(radius).bg(palette::surface(palette::Level::Overlay, cx).opacity(lifted)).shadow(lift_shadow(lifted, cx)).text_color(palette::strong(cx))
 }
 
 fn person(avatar: &str, name: &SharedString) -> Div {
-    div().h(px(30.)).w_full().pl_8().pr_2().flex().items_center().gap_2().child(ui::avatar(avatar.to_owned(), 22.)).child(div().flex_1().min_w_0().truncate().child(name.clone()))
+    ui::row().h(px(30.)).w_full().pl_8().pr_2().gap_2().child(ui::avatar(avatar.to_owned(), 22.)).child(ui::line(name.clone()).flex_1())
 }
 
 // --lift: 0 10px 28px black at 32% over a 1px line_strong ring, both fading as it lands.
@@ -366,7 +367,7 @@ fn lift_shadow(lifted: f32, cx: &App) -> Vec<BoxShadow> {
 
 // .vd-tag: a dark chip 10px off the ghost's right edge, easing in from the left each time it changes.
 fn tag_chip(tag: SharedString, cx: &App) -> AnyElement {
-    div()
+    ui::row()
         .absolute()
         .left(relative(1.))
         .top(relative(0.5))
@@ -375,8 +376,6 @@ fn tag_chip(tag: SharedString, cx: &App) -> AnyElement {
         .h(px(22.))
         .px_2()
         .squircle(ui::RADIUS_XS)
-        .flex()
-        .items_center()
         .gap_1()
         .whitespace_nowrap()
         .text_size(ui::TEXT_XS)

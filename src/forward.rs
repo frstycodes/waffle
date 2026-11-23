@@ -149,16 +149,12 @@ impl Waffle {
         let dialog = self.forward_dialog.as_ref()?;
         let query = dialog.search.read(cx).value().trim().to_owned();
         let full = dialog.picked.len() >= MAX_PLACES;
-        let head = div()
-            .flex()
+        let head = ui::row()
             .items_start()
             .gap_3()
             .child(
-                div()
+                ui::col()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
                     .gap_1()
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Forward message"))
                     .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(format!("{} · {}", self.forward_subtitle(&dialog.message), picked_count(dialog.picked.len())))),
@@ -175,7 +171,7 @@ impl Waffle {
                     self.place_row(place, on, full && !on, window, cx)
                 })
                 .collect();
-            div().id("forward-places").flex().flex_col().gap_0p5().max_h(px(LIST_HEIGHT)).overflow_y_scroll().children(rows).into_any_element()
+            ui::col().id("forward-places").gap_0p5().max_h(px(LIST_HEIGHT)).overflow_y_scroll().children(rows).into_any_element()
         };
         let body = ui::dialog_body()
             .child(head)
@@ -198,13 +194,10 @@ impl Waffle {
     // The place's mark, name and where it is, then its check, or a lock where you can't post.
     fn place_row(&self, place: Place, on: bool, full: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let id = place.channel.id.clone();
-        let text = div()
+        let text = ui::col()
             .flex_1()
-            .min_w_0()
-            .flex()
-            .flex_col()
-            .child(div().truncate().child(place.channel.name.clone()))
-            .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(place.detail.clone()));
+            .child(ui::line(place.channel.name.clone()))
+            .child(ui::line(place.detail.clone()).text_size(ui::TEXT_XS).text_color(palette::muted(cx)));
         let mark = match place.locked {
             true => div().text_color(palette::faint(cx)).child(Icon::new(Glyph::HashtagLock).size(ui::ICON_LG)).into_any_element(),
             false => ui::check_live(SharedString::from(format!("forward-check-{id}")), if on { Check::On } else { Check::Off }, window, cx).into_any_element(),
@@ -234,7 +227,9 @@ impl Waffle {
             _ if place.channel.private || place.locked => Glyph::HashtagLock,
             _ => Glyph::Hashtag,
         };
-        ui::server_tile_badged(guild.icon.as_deref(), &guild.name, LEAD, glyph, surface, cx).into_any_element()
+        ui::badged(ui::server_tile(guild.icon.as_deref(), &guild.name, LEAD, cx), LEAD, ui::Shape::Tile, surface)
+            .icon(ui::Spot::BottomRight, Icon::new(glyph), ui::MarkFill::Surface)
+            .into_any_element()
     }
 
     // What goes out: the text, two lines at most, or what it carries, with the first picture at the right.
@@ -244,13 +239,11 @@ impl Waffle {
         let text = crate::chat::content(shown, &ctx, cx).map(|t| div().line_clamp(2).child(t).into_any_element());
         let text = text.or_else(|| {
             let (glyph, label) = attachment_summary(shown)?;
-            Some(div().flex().items_center().gap_1p5().text_color(palette::muted(cx)).child(Icon::new(glyph).size(ui::ICON_MD)).child(label).into_any_element())
+            Some(ui::row().gap_1p5().text_color(palette::muted(cx)).child(Icon::new(glyph).size(ui::ICON_MD)).child(label).into_any_element())
         })?;
         let thumb = shown.media.first().map(|m| ui::media(crate::discord::thumb_url(m, THUMB * 2.), ui::all(RADIUS_XS)).size(px(THUMB)).flex_none().object_fit(gpui_kit::ObjectFit::Cover));
         Some(
-            div()
-                .flex()
-                .items_center()
+            ui::row()
                 .gap_3()
                 .pl_3()
                 .border_l_2()
@@ -275,7 +268,7 @@ impl Waffle {
             .child(Icon::new(Glyph::PaperPlane).size(ui::ICON_LG))
             .child("Send")
             .on_click(cx.listener(|this, _, _, cx| this.send_forward(cx)));
-        div().flex().items_center().gap_2().child(div().flex_1().min_w_0().child(note)).child(send).into_any_element()
+        ui::row().gap_2().child(div().flex_1().min_w_0().child(note)).child(send).into_any_element()
     }
 }
 

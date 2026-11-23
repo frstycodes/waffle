@@ -126,15 +126,12 @@ impl Waffle {
         let count = div().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(format!("{length}/{TOPIC_MAX}"));
         let focus = gpui_kit::Focusable::focus_handle(self.dialog_input.read(cx), cx);
         let topic = ui::field("Stage Topic", cx).child(ui::text_field("stage-topic-field", Input::new(&self.dialog_input).appearance(false), &focus).trailing(count));
-        let head = div()
-            .flex()
+        let head = ui::row()
             .items_start()
             .gap_2()
             .child(
-                div()
+                ui::col()
                     .flex_1()
-                    .flex()
-                    .flex_col()
                     .gap_1()
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(strong).child(title))
                     .child(div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(muted).child(subtitle)),
@@ -150,8 +147,7 @@ impl Waffle {
                 cx.notify();
             }))
         });
-        let actions = div()
-            .flex()
+        let actions = ui::row().items_stretch()
             .gap_2()
             .child(ui::button("stage-topic-cancel", Tone::Secondary, cx).flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_stage_topic(cx))))
             .child(ui::button("stage-topic-submit", Tone::Primary, cx).flex_1().child(submit).disabled(empty).on_click(cx.listener(|this, _, window, cx| this.submit_stage_topic(window, cx))));

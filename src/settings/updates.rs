@@ -34,13 +34,10 @@ impl Waffle {
             Status::Downloading { total: None, .. } => Some(ui::progress_indeterminate("update-progress", cx)),
             _ => None,
         };
-        let text = div()
+        let text = ui::col()
             .flex_1()
-            .min_w_0()
-            .flex()
-            .flex_col()
             .gap_0p5()
-            .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(format!("Waffle {CURRENT}")))
+            .child(ui::line(format!("Waffle {CURRENT}")).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
             .child(div().text_size(ui::TEXT_XS).line_height(px(17.)).text_color(palette::muted(cx)).child(status_line(status, self.updates.updater.is_some())))
             .children(progress.map(|bar| div().mt_1p5().child(bar)));
         ui::settings_row("update-status", false, cx).child(img(self.prefs.app_icon.asset()).size_12().flex_none()).child(text).child(self.update_action(cx)).into_any_element()

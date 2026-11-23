@@ -70,7 +70,7 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Win
         Login::Captcha(url) => {
             let url = url.clone();
             let open = ui::button("open-captcha", Tone::Primary, cx).child(Icon::new(Glyph::Open).size(ui::ICON_MD)).child("Open captcha again").on_click(move |_, _, cx| cx.open_url(&url));
-            Some(arrive("card-captcha", div().flex().flex_col().items_center().gap_3().child(waiting("captcha-wait", "Waiting for the captcha\u{2026}", cx)).child(open)))
+            Some(arrive("card-captcha", ui::col().items_center().gap_3().child(waiting("captcha-wait", "Waiting for the captcha\u{2026}", cx)).child(open)))
         }
         Login::Failed(_) => Some(arrive(
             "card-failed",
@@ -82,9 +82,7 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Win
     let after = match login {
         Login::Qr(_) => Some(steps(cx).into_any_element()),
         Login::Scanned(_) => Some(
-            div()
-                .flex()
-                .flex_col()
+            ui::col()
                 .items_center()
                 .gap_5()
                 .child(waiting("scanned-wait", "Check your phone", cx))
@@ -104,11 +102,9 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Win
         ),
         _ => None,
     };
-    div()
+    ui::col()
         .id(SharedString::from(format!("login-{phase}")))
         .size_full()
-        .flex()
-        .flex_col()
         .items_center()
         .gap_3()
         .pt_6()
@@ -119,7 +115,7 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Win
         .window_control_area(gpui_kit::WindowControlArea::Drag)
         .child(div().flex_1())
         .children(lead)
-        .child(div().max_w_full().truncate().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
+        .child(ui::line(title).max_w_full().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
         .child(div().max_w(px(TEXT_WIDTH)).text_color(muted).child(detail))
         .children(reason)
         .children(card.map(|card| div().mt_1().child(card)))
@@ -130,9 +126,7 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Win
         }))
         .child(div().flex_1())
         .child(
-            div()
-                .flex()
-                .items_center()
+            ui::row()
                 .gap_1p5()
                 .text_size(ui::TEXT_XS)
                 .text_color(muted)
@@ -215,7 +209,7 @@ fn qr_card(modules: Rc<Modules>, cx: &App) -> AnyElement {
         .bg(gpui_kit::white())
         .shadow(shadow)
         .child(code)
-        .child(div().absolute().inset_0().flex().items_center().justify_center().child(svg().path(icons::MARK).size(px(mark)).text_color(palette::logo_on_light())))
+        .child(ui::row().absolute().inset_0().justify_center().child(svg().path(icons::MARK).size(px(mark)).text_color(palette::logo_on_light())))
         .into_any_element()
 }
 
@@ -238,17 +232,13 @@ fn steps(cx: &App) -> Div {
     let step = |n: &'static str, before: &'static str, bold: &'static str, after: &'static str| {
         let text = format!("{before}{bold}{after}");
         let range = before.len()..before.len() + bold.len();
-        div()
-            .flex()
-            .items_center()
+        ui::row()
             .gap_2()
-            .child(div().size_5().flex_none().squircle(ui::RADIUS_XS).bg(palette::selected(cx)).text_color(strong).text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).flex().items_center().justify_center().child(n))
+            .child(ui::row().size_5().flex_none().squircle(ui::RADIUS_XS).bg(palette::selected(cx)).text_color(strong).text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).justify_center().child(n))
             .child(StyledText::new(text).with_highlights([(range, HighlightStyle { color: Some(strong), font_weight: Some(FontWeight::MEDIUM), ..Default::default() })]))
     };
-    div()
+    ui::col()
         .mt_1()
-        .flex()
-        .flex_col()
         .gap_1p5()
         .text_color(palette::text(cx))
         .child(step("1", "In Discord, open ", "Settings", ""))
@@ -259,12 +249,12 @@ fn steps(cx: &App) -> Div {
 
 // The mini wave and what it waits on.
 fn waiting(id: &'static str, text: &'static str, cx: &App) -> Div {
-    div().flex().items_center().gap_2().font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child(ui::bars(id, palette::accent(), 12.)).child(text)
+    ui::row().gap_2().font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child(ui::bars(id, palette::accent(), 12.)).child(text)
 }
 
 // The account that scanned springs in from half size, the phone it's approving on badged at its foot.
 fn avatar_pop(user: &User, cx: &App) -> AnyElement {
-    let badge = div()
+    let badge = ui::row()
         .absolute()
         .right_neg_0p5()
         .bottom_neg_0p5()
@@ -273,8 +263,6 @@ fn avatar_pop(user: &User, cx: &App) -> AnyElement {
         .bg(palette::surface(palette::Level::Page, cx))
         .text_color(palette::strong(cx))
         .shadow(vec![BoxShadow { color: palette::line_strong(cx), offset: point(px(0.), px(0.)), blur_radius: px(0.), spread_radius: px(1.), inset: false }])
-        .flex()
-        .items_center()
         .justify_center()
         .child(Icon::new(Glyph::DeviceMobile).size(ui::ICON_LG));
     let spring = motion::ease_spring();

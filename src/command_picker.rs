@@ -1372,7 +1372,7 @@ impl Waffle {
             Some(IndexState::Ready(index)) => self.command_picker_body(index, cx),
         };
         let foot = popup_foot(cx)
-            .child(ui::key_hint(div().flex().gap_1().child(ui::kbd_glyph(Glyph::ArrowUp, cx)).child(ui::kbd_glyph(Glyph::ArrowDown, cx)), "Move", cx))
+            .child(ui::key_hint(ui::row().items_stretch().gap_1().child(ui::kbd_glyph(Glyph::ArrowUp, cx)).child(ui::kbd_glyph(Glyph::ArrowDown, cx)), "Move", cx))
             .child(ui::key_hint(ui::kbd("Tab", cx), "Pick", cx))
             .child(ui::key_hint(ui::kbd("Esc", cx), "Close", cx));
         popup("command-picker", [body, foot.into_any_element()], cx)
@@ -1398,7 +1398,7 @@ impl Waffle {
                 self.tts_row(name.clone(), chosen == Some(row), pick, cx).into_any_element()
             }
         });
-        let list = div().id("command-list").flex_1().min_w_0().max_h(px(LIST_HEIGHT)).p_1p5().flex().flex_col().gap_0p5().overflow_y_scroll().track_scroll(&self.command_picker.scroll).children(list);
+        let list = ui::col().id("command-list").flex_1().max_h(px(LIST_HEIGHT)).p_1p5().gap_0p5().overflow_y_scroll().track_scroll(&self.command_picker.scroll).children(list);
         if !query.is_empty() {
             return list.into_any_element();
         }
@@ -1412,10 +1412,9 @@ impl Waffle {
                 rail.push(div().w_6().h(ui::HAIRLINE).my_0p5().bg(palette::line(cx)).into_any_element());
             }
         }
-        div()
-            .flex()
+        ui::row().items_stretch()
             .min_h_0()
-            .child(div().w(px(52.)).flex_none().py_2().flex().flex_col().items_center().gap_1().border_r_1().border_color(palette::line(cx)).children(rail))
+            .child(ui::col().w(px(52.)).flex_none().py_2().items_center().gap_1().border_r_1().border_color(palette::line(cx)).children(rail))
             .child(list)
             .into_any_element()
     }
@@ -1432,12 +1431,10 @@ impl Waffle {
             Section::App(a) => format!("command-rail-{a}"),
             _ => "command-rail-recent".into(),
         };
-        div()
+        ui::row()
             .id(SharedString::from(id))
             .size_9()
             .flex_none()
-            .flex()
-            .items_center()
             .justify_center()
             .squircle(RADIUS_SM)
             .cursor_pointer()
@@ -1466,20 +1463,15 @@ impl Waffle {
         let (strong, muted, faint, accent) = (palette::strong(cx), palette::muted(cx), palette::faint(cx), palette::accent_ink(cx));
         let mark = |range: Option<Range<usize>>, shift: usize| range.map(|r| (r.start + shift..r.end + shift, HighlightStyle { color: Some(accent), ..Default::default() }));
         let args: Vec<&str> = c.options.iter().filter(|o| o.required).map(CommandOption::display_name).collect();
-        let title = div()
-            .flex()
+        let title = ui::row()
             .items_baseline()
             .gap_1p5()
-            .min_w_0()
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(StyledText::new(format!("/{}", c.display_name())).with_highlights(mark(name, 1))))
-            .when(!args.is_empty(), |d| d.child(div().min_w_0().truncate().text_size(ui::TEXT_DETAIL).text_color(faint).child(args.join(" "))));
-        let what = div()
+            .when(!args.is_empty(), |d| d.child(ui::line(args.join(" ")).text_size(ui::TEXT_DETAIL).text_color(faint)));
+        let what = ui::col()
             .flex_1()
-            .min_w_0()
-            .flex()
-            .flex_col()
             .child(title)
-            .child(div().truncate().text_size(ui::TEXT_DETAIL).text_color(muted).child(StyledText::new(c.description.clone()).with_highlights(mark(description, 0))));
+            .child(div().min_w_0().truncate().child(StyledText::new(c.description.clone()).with_highlights(mark(description, 0))).text_size(ui::TEXT_DETAIL).text_color(muted));
         let app = app.cloned().unwrap_or_else(|| app_commands::App { id: c.application_id.clone(), name: String::new(), icon: None });
         ui::menu_row(SharedString::from(format!("command-{command}")), cx)
             .highlighted(on)
@@ -1498,19 +1490,17 @@ impl Waffle {
     fn tts_row(&self, name: Option<Range<usize>>, on: bool, pick: usize, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let (strong, muted, faint, accent) = (palette::strong(cx), palette::muted(cx), palette::faint(cx), palette::accent_ink(cx));
         let name = name.map(|r| (r.start + 1..r.end + 1, HighlightStyle { color: Some(accent), ..Default::default() }));
-        let title = div()
-            .flex()
+        let title = ui::row()
             .items_baseline()
             .gap_1p5()
-            .min_w_0()
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(StyledText::new(send_options::TTS).with_highlights(name)))
-            .child(div().min_w_0().truncate().text_size(ui::TEXT_DETAIL).text_color(faint).child("message"));
-        let what = div().flex_1().min_w_0().flex().flex_col().child(title).child(div().truncate().text_size(ui::TEXT_DETAIL).text_color(muted).child(send_options::TTS_DESCRIPTION));
+            .child(ui::line("message").text_size(ui::TEXT_DETAIL).text_color(faint));
+        let what = ui::col().flex_1().child(title).child(ui::line(send_options::TTS_DESCRIPTION).text_size(ui::TEXT_DETAIL).text_color(muted));
         ui::menu_row("command-tts", cx)
             .highlighted(on)
             .min_h_11()
             .gap_3()
-            .child(div().size_8().flex_none().flex().items_center().justify_center().child(crate::chat::suggest_lead(&SuggestLead::Command(Glyph::VolumeHigh), cx)))
+            .child(ui::row().size_8().flex_none().justify_center().child(crate::chat::suggest_lead(&SuggestLead::Command(Glyph::VolumeHigh), cx)))
             .child(what)
             .child(div().flex_none().text_size(ui::TEXT_XS).text_color(faint).child(BUILT_IN))
             .on_click(cx.listener(move |this, _, window, cx| {
@@ -1520,20 +1510,15 @@ impl Waffle {
     }
 
     fn index_error(&self, error: &str, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        div()
+        ui::row()
             .p_3p5()
-            .flex()
-            .items_center()
             .gap_3()
             .child(div().text_color(palette::danger_ink(cx)).child(Icon::new(Glyph::WarningCircle).size(ui::ICON_XL)))
             .child(
-                div()
+                ui::col()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
                     .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Couldn't load this server's commands"))
-                    .child(div().truncate().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(error.to_owned())),
+                    .child(ui::line(error.to_owned()).text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx))),
             )
             .child(ui::button("command-index-retry", ui::Tone::Secondary, cx).small().child("Try again").on_click(cx.listener(|this, _, _, cx| this.fetch_command_index(cx))))
     }
@@ -1554,13 +1539,13 @@ impl Waffle {
                 let choices = self.option_choices(typed);
                 (!choices.is_empty()).then(|| {
                     let rows = choices.into_iter().enumerate().map(|(i, choice)| self.choice_row(i, choice, i == highlighted, cx));
-                    div().id("command-choices").max_h(px(240.)).p_1p5().flex().flex_col().gap_0p5().overflow_y_scroll().children(rows).into_any_element()
+                    ui::col().id("command-choices").max_h(px(240.)).p_1p5().gap_0p5().overflow_y_scroll().children(rows).into_any_element()
                 })
             }
         };
         let app = typed.index.apps.iter().find(|a| a.id == typed.command().application_id).map(|a| a.name.clone()).unwrap_or_default();
         let suggesting = matches!(self.suggestions(typed), Some(Suggestions::Ready([_, ..])));
-        let from = suggesting.then(|| div().flex_1().truncate().child(format!("Suggestions from {app}")));
+        let from = suggesting.then(|| ui::line(format!("Suggestions from {app}")).flex_1());
         let pick = self.wants_pick(typed);
         let foot = popup_foot(cx)
             .children(from)
@@ -1589,9 +1574,9 @@ impl Waffle {
             let on = self.names_on(query) && i == self.command_picker.highlighted;
             rows.push(self.name_row(&command.options[option], option, on, cx).into_any_element());
         }
-        let body = div().id("command-option-names").max_h(px(240.)).p_1p5().flex().flex_col().gap_0p5().overflow_y_scroll().children(rows);
+        let body = ui::col().id("command-option-names").max_h(px(240.)).p_1p5().gap_0p5().overflow_y_scroll().children(rows);
         let foot = popup_foot(cx)
-            .child(ui::key_hint(div().flex().gap_1().child(ui::kbd_glyph(Glyph::ArrowUp, cx)).child(ui::kbd_glyph(Glyph::ArrowDown, cx)), "Move", cx))
+            .child(ui::key_hint(ui::row().items_stretch().gap_1().child(ui::kbd_glyph(Glyph::ArrowUp, cx)).child(ui::kbd_glyph(Glyph::ArrowDown, cx)), "Move", cx))
             .child(div().flex_1())
             .child(ui::key_hint(ui::kbd("Tab", cx), "Add", cx))
             .child(ui::key_hint(ui::kbd("Esc", cx), "Close", cx));
@@ -1603,7 +1588,7 @@ impl Waffle {
             .highlighted(on)
             .gap_2p5()
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(option.display_name().to_owned()))
-            .child(div().flex_1().min_w_0().truncate().text_color(palette::muted(cx)).child(option.description.clone()))
+            .child(ui::line(option.description.clone()).flex_1().text_color(palette::muted(cx)))
             .on_click(cx.listener(move |this, _, window, cx| this.pick_name(i, window, cx)))
     }
 
@@ -1615,7 +1600,7 @@ impl Waffle {
         let optional: Vec<(usize, String)> = command.options.iter().enumerate().filter(|(i, o)| !o.required && !typed.line.has(*i)).map(|(i, o)| (i, o.display_name().to_owned())).collect();
         let add = (!optional.is_empty()).then(|| {
             let count = format!("+{} optional", optional.len());
-            div().flex_none().flex().items_center().gap_1p5().text_size(ui::TEXT_XS).text_color(faint).child(count).children(optional.into_iter().map(|(i, name)| {
+            ui::row().flex_none().gap_1p5().text_size(ui::TEXT_XS).text_color(faint).child(count).children(optional.into_iter().map(|(i, name)| {
                 ui::chip(SharedString::from(format!("add-option-{i}")), Some(Glyph::Plus), name, false, cx)
                     .h_6()
                     .px_2()
@@ -1624,11 +1609,8 @@ impl Waffle {
             }))
         });
         let app = typed.index.apps.iter().find(|a| a.id == command.application_id).cloned();
-        let head = div()
-            .flex()
-            .items_center()
+        let head = ui::row()
             .gap_2p5()
-            .min_w_0()
             .children(app.map(|a| app_tile(&a, 20., cx)))
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("/{}", command.display_name())));
         let head = match typed.arg() {
@@ -1636,27 +1618,27 @@ impl Waffle {
                 let option = typed.option(arg);
                 let problem = self.box_problem(typed, arg);
                 let detail = match &problem {
-                    Some(why) => div().flex_1().min_w_0().flex().items_center().gap_1p5().text_color(danger).child(Icon::new(Glyph::WarningCircle).size(ui::ICON_MD)).child(div().min_w_0().truncate().child(why.clone())),
-                    None => div().flex_1().min_w_0().truncate().text_color(muted).child(option.description.clone()),
+                    Some(why) => ui::row().flex_1().gap_1p5().text_color(danger).child(Icon::new(Glyph::WarningCircle).size(ui::ICON_MD)).child(ui::line(why.clone())),
+                    None => ui::line(option.description.clone()).flex_1().text_color(muted),
                 };
                 head.child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(option.display_name().to_owned())).child(detail).when(option.required && problem.is_none(), |d| d.child(required_mark(cx)))
             }
-            None => head.child(div().flex_1().min_w_0().truncate().text_color(muted).child(command.description.clone())),
+            None => head.child(ui::line(command.description.clone()).flex_1().text_color(muted)),
         };
-        div().px_3p5().py_2p5().flex().flex_col().gap_1p5().border_b_1().border_color(palette::line(cx)).text_size(ui::TEXT_SM).child(head.children(add))
+        ui::col().px_3p5().py_2p5().gap_1p5().border_b_1().border_color(palette::line(cx)).text_size(ui::TEXT_SM).child(head.children(add))
     }
 
     fn choice_row(&self, i: usize, choice: OptionChoice, on: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let lead = match &choice.lead {
             ChoiceLead::None => None,
             ChoiceLead::Suggest(lead) => Some(crate::chat::suggest_lead(lead, cx)),
-            ChoiceLead::Role(color) => Some(div().size_7().flex_none().flex().items_center().justify_center().child(div().size_3().rounded_full().bg(role_dot(*color, cx))).into_any_element()),
-            ChoiceLead::Glyph(glyph) => Some(div().size_7().flex_none().flex().items_center().justify_center().text_color(palette::muted(cx)).child(Icon::new(*glyph).size(ui::ICON_LG)).into_any_element()),
+            ChoiceLead::Role(color) => Some(ui::row().size_7().flex_none().justify_center().child(div().size_3().rounded_full().bg(role_dot(*color, cx))).into_any_element()),
+            ChoiceLead::Glyph(glyph) => Some(ui::row().size_7().flex_none().justify_center().text_color(palette::muted(cx)).child(Icon::new(*glyph).size(ui::ICON_LG)).into_any_element()),
         };
         ui::menu_row(SharedString::from(format!("command-choice-{i}")), cx)
             .highlighted(on)
             .children(lead)
-            .child(div().flex_1().min_w_0().truncate().text_color(palette::strong(cx)).child(choice.label))
+            .child(ui::line(choice.label).flex_1().text_color(palette::strong(cx)))
             .on_click(cx.listener(move |this, _, window, cx| this.pick_choice(i, window, cx)))
     }
 }
@@ -1790,7 +1772,7 @@ fn role_dot(color: u32, cx: &App) -> gpui_kit::Hsla {
 
 // The surface both popups share: the composer's width, 8px above it, rising from its foot.
 fn popup(id: &'static str, content: impl IntoIterator<Item = AnyElement>, cx: &App) -> AnyElement {
-    div()
+    ui::col()
         .id(id)
         .occlude()
         .absolute()
@@ -1798,8 +1780,6 @@ fn popup(id: &'static str, content: impl IntoIterator<Item = AnyElement>, cx: &A
         .right_neg_px()
         .bottom(relative(1.))
         .mb(px(9.))
-        .flex()
-        .flex_col()
         .squircle(RADIUS_LG)
         .bg(palette::surface(Level::Overlay, cx))
         .shadow(ui::shadow_pop(cx))
@@ -1811,7 +1791,7 @@ fn popup(id: &'static str, content: impl IntoIterator<Item = AnyElement>, cx: &A
 }
 
 fn popup_foot(cx: &App) -> Div {
-    div().flex().items_center().gap_3p5().px_3p5().py_2().border_t_1().border_color(palette::line(cx)).text_size(ui::TEXT_XS).text_color(palette::faint(cx))
+    ui::row().gap_3p5().px_3p5().py_2().border_t_1().border_color(palette::line(cx)).text_size(ui::TEXT_XS).text_color(palette::faint(cx))
 }
 
 fn list_header(title: &'static str, cx: &App) -> Div {
@@ -1823,7 +1803,7 @@ fn list_note(text: &'static str, cx: &App) -> Div {
 }
 
 fn section_header(index: &CommandIndex, section: Section, query: &str, cx: &App) -> Div {
-    let header = div().flex_none().flex().items_center().gap_2().pt_2().px_2p5().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx));
+    let header = ui::row().flex_none().gap_2().pt_2().px_2p5().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx));
     match section {
         Section::Frecency => header.child(Icon::new(Glyph::Recent).size(ui::ICON_SM)).child("Recent"),
         Section::App(a) => header.child(app_tile(&index.apps[a], 16., cx)).child(index.apps[a].name.clone()),
@@ -1837,31 +1817,25 @@ fn loading_rows(count: usize, cx: &App) -> Div {
     let widths = [260., 200., 230., 180., 240.];
     let row = |n: usize| {
         let width = widths[n % widths.len()];
-        div()
+        ui::row()
             .min_h_11()
             .px_2p5()
-            .flex()
-            .items_center()
             .gap_3()
             .child(ui::skeleton(SharedString::from(format!("command-skeleton-tile-{n}")), RADIUS_SM, cx).size_8().flex_none())
             .child(
-                div()
-                    .flex()
-                    .flex_col()
+                ui::col()
                     .gap_1p5()
                     .child(ui::skeleton(SharedString::from(format!("command-skeleton-name-{n}")), 4., cx).w(px(width * 0.4)).h_3())
                     .child(ui::skeleton(SharedString::from(format!("command-skeleton-desc-{n}")), 4., cx).w(px(width)).h_2p5()),
             )
     };
-    div().p_1p5().flex().flex_col().gap_0p5().children((0..count).map(row))
+    ui::col().p_1p5().gap_0p5().children((0..count).map(row))
 }
 
 fn picker_note(title: impl Into<SharedString>, body: impl Into<SharedString>, cx: &App) -> Div {
-    div()
+    ui::col()
         .px_4()
         .py_3p5()
-        .flex()
-        .flex_col()
         .gap_0p5()
         .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title.into()))
         .child(div().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(body.into()))

@@ -61,15 +61,13 @@ impl Waffle {
 fn get_started(done: usize, total: usize, cx: &mut Context<Waffle>) -> AnyElement {
     let fraction = done as f32 / total as f32;
     let (line, hover) = (palette::line(cx), palette::hover(cx));
-    div()
+    ui::col()
         .id("get-started")
         .flex_none()
         .mt_0p5()
         .mb_1p5()
         .px_3()
         .py_2p5()
-        .flex()
-        .flex_col()
         .gap_2()
         .squircle(ui::RADIUS_MD)
         .bg(palette::surface(palette::Level::Raised, cx))
@@ -78,9 +76,7 @@ fn get_started(done: usize, total: usize, cx: &mut Context<Waffle>) -> AnyElemen
         .cursor_pointer()
         .hover(move |s| s.bg(hover))
         .child(
-            div()
-                .flex()
-                .items_center()
+            ui::row()
                 .justify_between()
                 .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Get Started"))
                 .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(format!("{done} of {total}"))),
@@ -92,5 +88,5 @@ fn get_started(done: usize, total: usize, cx: &mut Context<Waffle>) -> AnyElemen
 
 fn progress_dots(answered: usize, total: usize, cx: &mut Context<Waffle>) -> Div {
     let (accent, rest) = (palette::accent(), palette::line_strong(cx));
-    div().flex_none().flex().gap_1().children((0..total).map(|i| div().size_1p5().rounded_full().bg(if i < answered { accent } else { rest })))
+    ui::row().items_stretch().flex_none().gap_1().children((0..total).map(|i| div().size_1p5().rounded_full().bg(if i < answered { accent } else { rest })))
 }

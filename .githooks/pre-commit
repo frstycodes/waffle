@@ -1,0 +1,19 @@
+#!/bin/sh
+# Waffle's pre-commit: the design-system and performance rules (tools/ui_lint.py) on the tree being committed, and
+# the ratchet against HEAD (no rule dropped, no baseline total raised, new components described and searchable).
+# Seconds, no Rust build. Install once with `make hooks`. CI runs the same checks, so skipping this only delays them.
+for py in python3 "py -3" python; do
+    if $py -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >/dev/null 2>&1; then
+        PY=$py
+        break
+    fi
+done
+if [ -z "$PY" ]; then
+    echo "pre-commit: no Python 3.10+ found (tried python3, py -3, python); the UI rules didn't run." >&2
+    exit 1
+fi
+$PY tools/ui_lint.py --check || {
+    echo "pre-commit: tools/ui_lint.py --check failed (above). Fix it, or for counts that only fell, run: $PY tools/ui_lint.py --update" >&2
+    exit 1
+}
+$PY tools/ui_lint.py --against HEAD || exit 1

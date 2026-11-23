@@ -301,25 +301,22 @@ impl Sentence {
 /// The one-line notice every system line shares: its icon in the avatar column, the sentence and its time,
 /// then anything that hangs under it (a button, a card).
 pub(crate) fn notice_line(id: &str, glyph: Glyph, ink: Hsla, sentence: Sentence, stamp: Option<String>, under: Vec<AnyElement>, cx: &App) -> AnyElement {
-    let row = div()
+    let row = ui::row().items_stretch()
         .id(SharedString::from(format!("msg-{id}")))
         .w_full()
         .px_4()
         .mt_0p5()
         .py_1()
-        .flex()
         .gap_4()
         .text_size(ui::TEXT_SM)
-        .child(div().w(px(AVATAR)).h(px(22.)).flex_none().flex().items_center().justify_center().child(Icon::new(glyph).size(ui::ICON_LG).text_color(ink)))
-        .child(div().flex_1().min_w_0().flex().flex_col().child(sentence_line(sentence, stamp, cx)).children(under));
+        .child(ui::row().w(px(AVATAR)).h(px(22.)).flex_none().justify_center().child(Icon::new(glyph).size(ui::ICON_LG).text_color(ink)))
+        .child(ui::col().flex_1().child(sentence_line(sentence, stamp, cx)).children(under));
     chat::inset(row.into_any_element(), false)
 }
 
 fn sentence_line(sentence: Sentence, stamp: Option<String>, cx: &App) -> Div {
-    div()
-        .flex()
+    ui::row()
         .flex_wrap()
-        .items_center()
         .gap_x(px(WORD_GAP))
         .line_height(ui::LINE_LEAD)
         .text_color(palette::muted(cx))
@@ -328,7 +325,7 @@ fn sentence_line(sentence: Sentence, stamp: Option<String>, cx: &App) -> Div {
 }
 
 fn under_row(child: impl IntoElement) -> AnyElement {
-    div().mt_2().flex().flex_wrap().gap_2().child(child).into_any_element()
+    ui::row().items_stretch().mt_2().flex_wrap().gap_2().child(child).into_any_element()
 }
 
 fn line(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
@@ -489,7 +486,7 @@ fn bot_join_sentence(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Sente
     let app = |s: Sentence| {
         let name = chat::profile_trigger(format!("app-{}", message.id), &message.author, ctx).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).hover(|s| s.underline()).child(ctx.name_of(&message.author));
         let badge = ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px_1p5().gap(px(3.)).child(Icon::new(Glyph::Checkmark).size(px(11.))).child("APP");
-        s.part(div().flex().items_center().gap(px(WORD_GAP)).child(name).child(badge))
+        s.part(ui::row().gap(px(WORD_GAP)).child(name).child(badge))
     };
     match &message.actor {
         Some(actor) => app(s.name(actor, ctx).text(" has added ")).text(" to the server."),
@@ -528,14 +525,14 @@ fn fold_line(run: &[Message], ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement 
     let sentence = s.part(toggle).text(" joined the server.");
     let under = match open {
         false => Vec::new(),
-        true => vec![div().mt_1().flex().flex_col().gap_0p5().children(run[2..].iter().map(|m| folded_join(m, ctx, cx))).into_any_element()],
+        true => vec![ui::col().mt_1().gap_0p5().children(run[2..].iter().map(|m| folded_join(m, ctx, cx))).into_any_element()],
     };
     notice_line(&first.id, Glyph::ArrowRight, palette::positive_ink(cx), sentence, Some(chat::format_stamp(&first.timestamp)), under, cx)
 }
 
 fn folded_join(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
     let wave = wave_button(message, ctx, cx).map(|b| div().mt_1().mb_1().child(b));
-    div().flex().flex_col().child(sentence_line(join_sentence(message, ctx, cx), Some(chat::clock(&message.timestamp)), cx)).children(wave).into_any_element()
+    ui::col().child(sentence_line(join_sentence(message, ctx, cx), Some(chat::clock(&message.timestamp)), cx)).children(wave).into_any_element()
 }
 
 // A thread's first item: the message it was started from, whole, with Jump to go back to it.
@@ -577,38 +574,33 @@ fn automod_row(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElem
         }
         _ => vec![sentence_line(s.name(&message.author, ctx).text(" resolved an Activity Alert."), None, cx).into_any_element()],
     };
-    let head = div()
-        .flex()
-        .items_center()
+    let head = ui::row()
         .gap_2()
         .line_height(ui::LINE_LEAD)
         .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("AutoMod"))
         .child(ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px_1p5().child("SYSTEM"))
         .child(div().relative().top_px().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(chat::format_stamp(&message.timestamp)));
-    let avatar = div()
+    let avatar = ui::row()
         .size(px(AVATAR))
         .flex_none()
         .mt_0p5()
         .rounded_full()
         .bg(palette::oklch(0.5, 0.13, 245.))
-        .flex()
-        .items_center()
         .justify_center()
         .text_color(gpui_kit::white())
         .child(Icon::new(Glyph::Shield).size(ui::ICON_XL));
-    let row = div()
+    let row = ui::row().items_stretch()
         .id(SharedString::from(format!("msg-{}", message.id)))
         .w_full()
         .px_4()
         .mt_3()
         .pt_1()
         .pb_0p5()
-        .flex()
         .gap_4()
         .text_size(ui::TEXT_SM)
         .text_color(muted)
         .child(avatar)
-        .child(div().flex_1().min_w_0().flex().flex_col().child(head).children(body));
+        .child(ui::col().flex_1().child(head).children(body));
     chat::inset(row.into_any_element(), false)
 }
 
@@ -652,21 +644,17 @@ fn flagged_card(message: &Message, text: &str, matched: Option<&str>, ctx: &Rc<R
     let strong = palette::strong(cx);
     let mark = HighlightStyle { background_color: Some(palette::warning_ink(cx).opacity(0.26)), color: Some(strong), ..Default::default() };
     let highlights = matched.and_then(|m| keyword_range(text, m)).map(|r| vec![(r, mark)]).unwrap_or_default();
-    div()
+    ui::row().items_stretch()
         .mt_1p5()
         .py_2p5()
         .px_3()
         .squircle(RADIUS_MD)
         .bg(strong.opacity(0.05))
-        .flex()
         .gap_2p5()
         .child(ui::avatar(message.author.avatar.clone(), 24.).flex_none())
         .child(
-            div()
+            ui::col()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .child(div().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(ctx.name_of(&message.author)))
                 .child(div().text_color(palette::text(cx)).child(StyledText::new(text.to_owned()).with_highlights(highlights))),
         )
@@ -716,7 +704,7 @@ fn automod_actions(message: &Message, channel_id: Option<String>, flagged_id: Op
             this.update(cx, |this, cx| this.delete(flagged, cx)).ok();
         })
     });
-    div().mt_2().flex().flex_wrap().gap_2().child(actions).children(jump).children(delete).into_any_element()
+    ui::row().items_stretch().mt_2().flex_wrap().gap_2().child(actions).children(jump).children(delete).into_any_element()
 }
 
 #[cfg(test)]

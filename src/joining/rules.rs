@@ -46,7 +46,7 @@ impl Waffle {
         let guild_id = guild.id.clone();
         let complete = ui::button("rules-complete", Tone::Primary, cx).child("Complete").on_click(cx.listener(move |this, _, _, cx| this.open_rules(&guild_id, cx)));
         // The composer card's shape and glass (chat.rs render_composer), so swapping one for the other doesn't jump.
-        let bar = div()
+        let bar = ui::row()
             .id("rules-gate")
             .occlude()
             .mx_4()
@@ -54,8 +54,6 @@ impl Waffle {
             .py_1p5()
             .pl_4()
             .pr_1p5()
-            .flex()
-            .items_center()
             .gap_3()
             .squircle(RADIUS_LG)
             .bg(palette::surface(Level::Raised, cx).opacity(0.72))
@@ -69,7 +67,7 @@ impl Waffle {
             .child(Icon::new(Glyph::BookOpen).size(ui::ICON_XL))
             .child(div().flex_1().min_w_0().child("You must complete a few more steps before you can talk."))
             .child(complete);
-        Some(div().absolute().left_0().right_0().bottom_0().flex().flex_col().child(self.composer_measure(cx)).child(bar).child(div().h_2()).into_any_element())
+        Some(ui::col().absolute().left_0().right_0().bottom_0().child(self.composer_measure(cx)).child(bar).child(div().h_2()).into_any_element())
     }
 
     // Keeps the feed's foot padding in step with the bar, as the composer does with its own height.
@@ -110,7 +108,7 @@ impl Waffle {
             // GAP: apply-to-join forms (questions beyond the rules) aren't filled in here yet; Discord takes them.
             _ if applies => body.child(apply_in_discord(&guild.id, cx)),
             Some(Load::Ready(form)) => body.child(rules_list(form, &view.rules_scroll, cx)).child(agree_row(view, window, cx)).children(view.refusal.as_ref().map(|r| ui::callout(Notice::Danger, Glyph::WarningCircle, r.title.clone(), r.detail.unwrap_or_default(), cx))).child(
-                div().flex().justify_end().child(ui::button("rules-submit", Tone::Primary, cx).large().loading(view.submitting.then_some("Submitting")).child("Submit").on_click(cx.listener(|this, _, _, cx| this.submit_rules(cx)))),
+                ui::row().items_stretch().justify_end().child(ui::button("rules-submit", Tone::Primary, cx).large().loading(view.submitting.then_some("Submitting")).child("Submit").on_click(cx.listener(|this, _, _, cx| this.submit_rules(cx)))),
             ),
             Some(Load::Failed(error)) => body.child(load_failed(&guild.id, error, cx)),
             _ => body.child(rules_skeleton(cx)),
@@ -201,17 +199,12 @@ fn rules_head(guild: &Guild, applies: bool, cx: &mut Context<Waffle>) -> impl In
     } else {
         ("Before you can talk here...".into(), "You’ll need to complete the required steps below.")
     };
-    div()
-        .flex()
-        .items_center()
+    ui::row()
         .gap_3()
         .child(ui::server_tile(guild.icon.as_deref(), &guild.name, 48., cx))
         .child(
-            div()
+            ui::col()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .gap_0p5()
                 .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
                 .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(subtitle)),
@@ -231,25 +224,20 @@ fn rules_list(form: &Form, scroll: &gpui_kit::ScrollHandle, cx: &mut Context<Waf
     // GAP: rules render as plain text; Discord parses them as markdown (channel links, bold).
     let (line, strong) = (palette::line(cx), palette::strong(cx));
     let rows: Vec<_> = form.rules.iter().enumerate().map(|(i, rule)| {
-        div()
+        ui::row()
             .relative()
             .p_3()
-            .flex()
             .items_start()
             .gap_3()
             .when(i > 0, |row| row.child(div().absolute().top_0().left_12().right_3().h(ui::HAIRLINE).bg(line)))
             .child(number(i + 1, cx))
             .child(div().flex_1().min_w_0().text_size(ui::TEXT_LEAD).line_height(ui::LINE_LEAD).text_color(strong).child(rule.clone()))
     }).collect();
-    div()
-        .flex()
-        .flex_col()
+    ui::col()
         .child(
-            div()
+            ui::row()
                 .mx_1()
                 .mb_2()
-                .flex()
-                .items_center()
                 .justify_between()
                 .text_size(ui::TEXT_SM)
                 .font_weight(FontWeight::SEMIBOLD)
@@ -258,12 +246,12 @@ fn rules_list(form: &Form, scroll: &gpui_kit::ScrollHandle, cx: &mut Context<Waf
                 .child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(count)),
         )
         .children(form.description.clone().map(|d| div().mx_1().mb_2().text_size(ui::TEXT_SM).text_color(palette::text(cx)).child(d)))
-        .child(div().p_1().squircle(RADIUS_LG).bg(palette::surface(Level::Group, cx)).child(ui::scroll_fade(div().id("rules-list").max_h(px(RULES_HEIGHT)).flex().flex_col().children(rows), scroll, palette::surface(Level::Group, cx))))
+        .child(div().p_1().squircle(RADIUS_LG).bg(palette::surface(Level::Group, cx)).child(ui::scroll_fade(ui::col().id("rules-list").max_h(px(RULES_HEIGHT)).children(rows), scroll, palette::surface(Level::Group, cx))))
 }
 
 // A rule's number: an accent-soft disc in the 24px column the agree row's checkbox shares.
 fn number(n: usize, cx: &gpui_kit::App) -> impl IntoElement + use<> {
-    div()
+    ui::row()
         .size_6()
         .mt_neg_px()
         .flex_none()
@@ -272,8 +260,6 @@ fn number(n: usize, cx: &gpui_kit::App) -> impl IntoElement + use<> {
         .text_color(palette::accent_ink(cx))
         .text_size(ui::TEXT_XS)
         .font_weight(FontWeight::BOLD)
-        .flex()
-        .items_center()
         .justify_center()
         .child(n.to_string())
 }
@@ -289,13 +275,11 @@ fn agree_row(view: &RulesView, window: &mut Window, cx: &mut Context<Waffle>) ->
     };
     let hover = if view.agreed { fill } else { ui::mix(group, palette::strong(cx), 0.04) };
     let check = ui::check_live("rules-agree-check", if view.agreed { Check::On } else { Check::Off }, window, cx);
-    let row = div()
+    let row = ui::row()
         .id("rules-agree")
         .w_full()
         .py_3p5()
         .px_4()
-        .flex()
-        .items_center()
         .gap_3()
         .squircle(RADIUS_LG)
         .bg(fill)
@@ -306,35 +290,30 @@ fn agree_row(view: &RulesView, window: &mut Window, cx: &mut Context<Waffle>) ->
         .text_size(ui::TEXT_LEAD)
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(palette::strong(cx))
-        .child(div().w_6().flex_none().flex().justify_center().child(check))
+        .child(ui::row().items_stretch().w_6().flex_none().justify_center().child(check))
         .child("I have read and agree to the rules")
         .on_click(cx.listener(|this, _, _, cx| this.toggle_agree(cx)));
     let warning = view.nudged.then(|| {
-        div()
+        ui::row()
             .mt_2()
             .mx_1()
-            .flex()
-            .items_center()
             .gap_1p5()
             .text_size(ui::TEXT_SM)
             .text_color(palette::danger_ink(cx))
             .child(Icon::new(Glyph::WarningCircle).size(ui::ICON_MD))
             .child("Tick the box to agree to the rules first.")
     });
-    div().flex().flex_col().child(row).children(warning)
+    ui::col().child(row).children(warning)
 }
 
 // Apply to join: the questions are Discord's to show, so the dialog sends you there.
 fn apply_in_discord(guild_id: &str, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
     let url = format!("https://discord.com/channels/{guild_id}");
-    div()
-        .flex()
-        .flex_col()
+    ui::col()
         .gap_5()
         .child(ui::callout(Notice::Info, Glyph::InfoFill, "This server asks a few questions Waffle can't show yet.", "Answer them in Discord to apply.", cx))
         .child(
-            div()
-                .flex()
+            ui::row().items_stretch()
                 .justify_end()
                 .child(ui::button("rules-open-discord", Tone::Primary, cx).large().child(Icon::new(Glyph::Open).size(ui::ICON_MD)).child("Open in Discord").on_click(move |_, _, cx| cx.open_url(&url))),
         )
@@ -349,17 +328,13 @@ fn load_failed(guild_id: &str, error: &str, cx: &mut Context<Waffle>) -> impl In
 // The form on its way: the head, numbered rows of shimmer, and the agree card's place.
 fn rules_skeleton(cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
     let rows = [0.9, 0.7, 0.8].into_iter().enumerate().map(|(i, width)| {
-        div()
+        ui::row()
             .p_3()
-            .flex()
-            .items_center()
             .gap_3()
             .child(ui::skeleton_circle(SharedString::from(format!("rules-skeleton-n{i}")), 24., cx))
             .child(ui::skeleton(SharedString::from(format!("rules-skeleton-{i}")), 6., cx).h_3p5().w(relative(width)))
     });
-    div()
-        .flex()
-        .flex_col()
+    ui::col()
         .gap_5()
         .child(div().p_1().squircle(RADIUS_LG).bg(palette::surface(Level::Group, cx)).children(rows))
         .child(ui::skeleton("rules-skeleton-agree", RADIUS_LG, cx).w_full().h(px(52.)))
