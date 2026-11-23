@@ -109,6 +109,14 @@ impl LayerInput {
                 .intersect(&viewport),
             },
             behavior: hitbox.behavior,
+            // Moved by `delta`, a point maps back as `inverse(p - delta) + delta`.
+            inverse_transformation: hitbox.inverse_transformation.map(|mut inverse| {
+                let r = inverse.rotation_scale;
+                let (dx, dy) = (delta.x.as_f32(), delta.y.as_f32());
+                inverse.translation[0] += dx - (r[0][0] * dx + r[0][1] * dy);
+                inverse.translation[1] += dy - (r[1][0] * dx + r[1][1] * dy);
+                inverse
+            }),
         })
     }
 }

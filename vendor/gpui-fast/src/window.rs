@@ -855,6 +855,10 @@ pub struct Hitbox {
     pub content_mask: ContentMask<Pixels>,
     /// Flags that specify hitbox behavior.
     pub behavior: HitboxBehavior,
+    /// Waffle patch: for a hitbox inserted under an element transformation, the transformation from window
+    /// space into its own space, so it is hit-tested untransformed. Carried by every copy of the hitbox (a
+    /// replayed view, a scroll layer), unlike a list beside them.
+    pub(crate) inverse_transformation: Option<TransformationMatrix>,
 }
 
 impl Hitbox {
@@ -1080,9 +1084,6 @@ pub(crate) struct Frame {
     #[cfg(any(feature = "inspector", debug_assertions))]
     pub(crate) inspector_hitboxes: FxHashMap<HitboxId, crate::InspectorElementId>,
     pub(crate) tab_stops: TabStopMap,
-    /// Parallel to `hitboxes`: for each hitbox inserted under an element transformation, the
-    /// transformation from window space into its own space, so it is hit-tested untransformed.
-    hitbox_inverse_transformations: Vec<Option<TransformationMatrix>>,
     pub(crate) retained: crate::fast::retained::RetainedSubtrees,
 }
 
@@ -1147,7 +1148,6 @@ impl Frame {
             #[cfg(any(feature = "inspector", debug_assertions))]
             inspector_hitboxes: FxHashMap::default(),
             tab_stops: TabStopMap::default(),
-            hitbox_inverse_transformations: Vec::new(),
             retained: crate::fast::retained::RetainedSubtrees::default(),
         }
     }
@@ -1163,7 +1163,6 @@ impl Frame {
         self.tooltip_requests.clear();
         self.cursor_styles.clear();
         self.hitboxes.clear();
-        self.hitbox_inverse_transformations.clear();
         crate::fast::composition::SurfaceInput::clear(&mut self.fast_composition_input);
         self.window_control_hitboxes.clear();
         self.deferred_draws.clear();
@@ -1205,13 +1204,8 @@ impl Frame {
         }
         let mut set_hover_hitbox_count = false;
         let mut hit_test = HitTest::default();
-        for (hitbox, inverse_transformation) in self
-            .hitboxes
-            .iter()
-            .zip(&self.hitbox_inverse_transformations)
-            .rev()
-        {
-            let is_hit = match inverse_transformation {
+        for hitbox in self.hitboxes.iter().rev() {
+            let is_hit = match &hitbox.inverse_transformation {
                 None => hitbox
                     .bounds
                     .intersect(&hitbox.content_mask.bounds)
@@ -4568,12 +4562,6 @@ impl Window {
                 .iter()
                 .cloned(),
         );
-        self.next_frame
-            .hitbox_inverse_transformations
-            .extend_from_slice(
-                &self.rendered_frame.hitbox_inverse_transformations
-                    [range.start.hitboxes_index..range.end.hitboxes_index],
-            );
         self.next_frame.tooltip_requests.extend(
             self.rendered_frame.tooltip_requests
                 [range.start.tooltips_index..range.end.tooltips_index]
@@ -4895,9 +4883,6 @@ impl Window {
         let result = f(self);
         if result.is_err() {
             self.next_frame.hitboxes.truncate(index.hitboxes_index);
-            self.next_frame
-                .hitbox_inverse_transformations
-                .truncate(index.hitboxes_index);
             self.next_frame
                 .tooltip_requests
                 .truncate(index.tooltips_index);
@@ -6024,11 +6009,9 @@ impl Window {
             bounds,
             content_mask,
             behavior,
+            inverse_transformation: self.hitbox_inverse_transformation(),
         };
         self.next_frame.hitboxes.push(hitbox.clone());
-        self.next_frame
-            .hitbox_inverse_transformations
-            .push(self.hitbox_inverse_transformation());
         crate::fast::composition::record_input(self, id);
         hitbox
     }
