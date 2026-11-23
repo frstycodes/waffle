@@ -234,7 +234,7 @@ impl Waffle {
 
     // A mention, opening its message on click; on hover Jump and Discord's checkmark, Mark As Read, sit in a
     // slot of their own beside the author.
-    fn mention_card(&self, m: &Message, ctx: &std::rc::Rc<crate::chat::RowContext>, revealed: bool, cx: &mut Context<Self>) -> gpui_kit::Stateful<gpui_kit::Div> {
+    fn mention_card(&self, m: &Message, ctx: &std::rc::Rc<crate::chat::RowContext>, revealed: bool, cx: &mut Context<Self>) -> ui::Control {
         let place = match self.place_of(m.guild_id.as_deref(), &m.channel_id) {
             Some((Some(guild_id), channel)) => self.guilds.iter().find(|g| g.id == guild_id).map(|g| format!("#{} · {}", channel.name, g.name)).unwrap_or_default(),
             Some((None, channel)) => channel.name.clone(),
@@ -259,15 +259,10 @@ impl Waffle {
         let actions = ui::row().flex_none().my(px(-ACTION_BLEED)).gap_0p5().child(jump).child(read);
         let actions = if revealed { actions } else { actions.opacity(0.).group_hover(group.clone(), |s| s.opacity(1.)) };
         let author = ui::row().gap_2().child(ui::avatar(m.author.avatar.clone(), 24.)).child(ui::line(m.author.name.clone()).flex_1().font_weight(FontWeight::NORMAL)).child(actions);
-        // lint-allow(custom-button): ui::card is a 20px-radius row; a mention card is an 8px-radius column that stacks its place, author and text.
-        ui::col()
-            .id(group.clone())
+        ui::card(group.clone(), cx)
             .group(group)
-            .p_3()
+            .stacked()
             .squircle(RADIUS_XS)
-            .bg(palette::surface(palette::Level::Raised, cx))
-            .cursor_pointer()
-            .hover(|s| s.bg(palette::hover(cx)))
             .gap_1()
             .child(div().text_size(ui::TEXT_XS).text_color(cx.theme().muted_foreground).child(place))
             .child(author)

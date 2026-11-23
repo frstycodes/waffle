@@ -32,6 +32,9 @@ const WHEEL_TIME_CONSTANT: f32 = 0.035;
 /// Motion ends once less than this is left to travel.
 const REST_DISTANCE: f32 = 0.5;
 const SAMPLE_LIMIT: usize = 9;
+/// Waffle: how far one wheel line scrolls, for lists and scroll containers alike. Windows reports a notch as
+/// its lines-per-notch setting (3 by default), so a notch travels 100 px, as Chromium (and Discord) scroll.
+pub(crate) const WHEEL_LINE: crate::Pixels = crate::Pixels(100. / 3.);
 
 #[derive(Clone, Copy, Debug)]
 struct Momentum {

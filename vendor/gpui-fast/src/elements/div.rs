@@ -3592,7 +3592,9 @@ impl Interactivity {
                 if phase == DispatchPhase::Bubble && hitbox.should_handle_scroll(window) {
                     let mut scroll_offset = scroll_offset.borrow_mut();
                     let old_scroll_offset = *scroll_offset;
-                    let mut delta = event.delta.pixel_delta(line_height);
+                    // Waffle: a wheel line is a fixed distance, not the text's line height (see WHEEL_LINE).
+                    let _ = line_height;
+                    let mut delta = event.delta.pixel_delta(super::scroll_motion::WHEEL_LINE);
 
                     if restrict_scroll_to_axis
                         && event.delta.precise()

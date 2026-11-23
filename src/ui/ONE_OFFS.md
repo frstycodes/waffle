@@ -511,41 +511,23 @@ _Split it: move a self-contained part (a view, a section, a group of helpers) in
 
 _Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_row, ui::settings_choice or ui::pressable. Missing a look? Give the component a Tone, size or slot (src/ui/control.rs) and use it._
 
-- `src/activities/views.rs` — ui::list_row always inks its title strong, and a playing activity's turns accent
 - `src/audio_player/view.rs` — ui::icon_button lacks a hover that also holds the volume card open
 - `src/audio_player/view.rs` — ui::pressable lacks a bordered pill with a playing tint; this is the voice message's whole pill
 - `src/audio_player/view.rs` — ui::round_button lacks an accent-filled play button that swaps its glyph
-- `src/call.rs` — ui::button with Tone::Stage, whose wash is a step stronger and which wants a cx its callers don't pass
-- `src/call.rs` — ui::icon_button with Tone::Stage fills at rest, and this one is clear until hovered
 - `src/call/dock.rs` — ui::round_button lacks a labelled stage control with a split chevron
 - `src/call/dock.rs` — ui::round_button lacks a stage tone that grows its hit area with negative margins
 - `src/call/header.rs` — ui::round_button lacks a stage toggle with a corner badge
-- `src/call/menus.rs` — ui::menu_row lacks the stage ink and a trailing choice mark
 - `src/chat.rs` — ui::button has no tone that washes the accent over a tinted bar
 - `src/chat/composer.rs` — ui::button's Ghost tone is 30px at its smallest, this one sits in a 28px bar and takes the accent ink when on
 - `src/chat/composer.rs` — ui::menu_row fills on hover but has no persistent selected state driven by the arrow keys
 - `src/chat/embeds.rs` — ui::button's smallest Ghost is 30px with the muted ink; this is a 26px toggle in the accent ink that hangs 6px left under the text
 - `src/chat/format.rs` — ui::button has no breadcrumb look, muted ink that strengthens on hover and takes the surrounding type
 - `src/command_picker/render.rs` — ui::icon_button takes a glyph, and a rail tile's face is an app icon or a section mark
-- `src/create_server.rs` — ui::card has a raised fill; this is a clear bordered row ending in a chevron
-- `src/create_server.rs` — ui::list_row has no top-aligned lead with a body of title, channel chips and a button
-- `src/go_live.rs` — ui::card fills at rest and pads 12px, and this tile is clear until hovered
-- `src/inbox.rs` — ui::list_row titles are one plain line; a message here is an author and time over two lines of its text.
 - `src/joining/browse.rs` — ui::list_row has no held state (dimmed check, no hover or click) or end-of-row note
-- `src/joining/onboarding.rs` — ui::card has no toggled look in the accent tint with a half-accent edge
-- `src/joining/rules.rs` — ui::card has no toggled accent-tint look with a state edge (agreed, nudged)
 - `src/layout.rs` — ui::icon_button is square, and this chevron is a 16px sliver joined to its control
-- `src/layout.rs` — ui::list_row has fixed 36/48/60px heights, none the 40px user-panel row's
-- `src/overlays.rs` — ui::card is a 20px-radius row; a mention card is an 8px-radius column that stacks its place, author and text.
 - `src/overlays/emoji.rs` — ui::icon_button is a square taking a Glyph; an emoji cell is a ninth of the grid's width.
-- `src/overlays/switcher.rs` — ui::list_row titles are plain text; the switcher highlights the part of the name that matched.
-- `src/panel.rs` — ui::card is a raised fill with 12px padding; a feed card sits on the page fill with a hairline edge and art at its end.
 - `src/panel.rs` — ui::list_row is a flat 48px row; a member row also carries a nameplate, its fade and a per-row hover plate.
-- `src/profile.rs` — ui::chip is a palette-toned filter; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
-- `src/profile/activity.rs` — ui::button takes a palette tone; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
-- `src/profile/activity.rs` — ui::icon_button fills from palette tones; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
 - `src/profile/connections.rs` — ui::chip is a palette-toned filter that toggles; this one wears the card's themed ink and opens the account.
-- `src/requests.rs` — ui::list_row is 48px with one title line; a request is 64px with the time beside the name and two buttons.
 - `src/settings.rs` — ui::settings_nav_item has no icon-less, indented sub-entry
 - `src/settings/voice_pages.rs` — ui::icon_button has no hover to the danger ink without the danger fill, which this quiet remove must not take
 - `src/sidebar/channels.rs` — ui::button(Tone::Ghost) is 36px with a 14px label; this one is the header's full-width name button, 16px semibold.
@@ -554,8 +536,6 @@ _Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_ro
 - `src/sidebar/channels.rs` — ui::list_row has fixed heights (36/48/60) and no unread pill; a channel row follows UI density.
 - `src/sidebar/tiles.rs` — ui::icon_button(...).sized(44) takes a Glyph and fills on hover; the rail's actions use Nav icons on the lifted raised tone.
 - `src/soundboard/picker.rs` — ui::menu_row lacks a favourite toggle at a tile's corner
-- `src/stage_view.rs` — ui::card fills with the app's raised surface; this face is a bare wash in the stage's ink
-- `src/stage_view.rs` — ui::toggle_row draws in the app's colours, and this row's wash and ink are the stage's
 - `src/viewer.rs` — ui::icon_button takes a glyph and fills on hover; a thumbnail is a picture that dims and brightens
 
 ## custom-surface
@@ -565,7 +545,6 @@ _Floating or raised surface: ui::surface, ui::floating, ui::floating_bar, ui::to
 - `src/audio_player/view.rs` — ui::surface lacks an in-flow card that holds itself open on hover
 - `src/call/dock.rs` — ui::surface lacks the stage-scoped quality card (stage colours, not palette)
 - `src/call/fit.rs` — ui::surface insets its content and rings it, and this card's own panel fills it and slides in by a computed offset
-- `src/call/menus.rs` — ui::surface lacks the stage-scoped menu card (stage colours, not palette)
 - `src/call_previews.rs` — ui::surface rings and shadows in the app's overlay colours, and this card is the call stage's own dark overlay
 - `src/chat/attachments.rs` — ui::toolbar occludes the wheel too, and this bar must let the feed scroll under it; it also rides above its row's edge
 - `src/chat/composer.rs` — ui::surface has no glass fill (translucent, blurred, saturated) over a scrolling feed
@@ -581,48 +560,33 @@ _Floating or raised surface: ui::surface, ui::floating, ui::floating_bar, ui::to
 - `src/settings/profiles.rs` — ui::badged places marks on a face's corner but can't reveal one on hover, and ui::icon_button has no corner placement
 - `src/soundboard/picker.rs` — ui::surface lacks an in-picker popover card anchored under the speaker
 - `src/splash.rs` — ui::surface is the overlay fill with a drop shadow; the splash is a raised fill with an inset hairline in a borderless window.
-- `src/stage_view.rs` — ui::surface is the app's overlay and ring, and this card is the stage's own dark overlay
-- `src/stage_view.rs` — ui::surface is the app's overlay and ring, and this card is the stage's own dark overlay
-- `src/toast.rs` — ui::toast always leads with a glyph; a plain show_toast is one line of text.
 
 ## custom-divider
 
 _Divider: ui::divider or ui::inset_rule._
 
 - `src/call/dock.rs` — ui::progress_bar lacks a ping graph; these are data-sized bars, not dividers
-- `src/call/menus.rs` — ui::divider lacks a stage-ink hairline; the margins inset it from the card edge like ui::inset_rule
-- `src/chat/format.rs` — ui::divider takes a 'static label in the neutral line colour, and these two take a formatted date or the alert colour
-- `src/chat/format.rs` — ui::inset_rule runs along an edge in the neutral line colour; this stub carries the alert rule on under the NEW tag
 - `src/command_picker/render.rs` — ui::divider lacks a short centred rule in a rail; the margin is its optical gap
 - `src/components/parts.rs` — ui::divider lacks a bare hairline with its own padding that follows a component's size
-- `src/events/views.rs` — ui::divider is a full-width hairline; this is the short rule joining two steps
-- `src/events/views.rs` — ui::divider is a horizontal rule; this is the vertical one beside Create Event
 - `src/soundboard/picker.rs` — ui::divider lacks a short rule between the unlocked and locked tabs
-- `src/stage_view.rs` — ui::divider has no colour option, and this rule takes the stage's own wash
 
 ## custom-badge
 
 _Label: ui::badge, ui::tag, ui::count_badge, ui::pill or ui::role_chip; add a variant there if none fits._
 
 - `src/activities/bridge.rs` — ui::callout leads with an icon and a title, and this is a plain well for a URL
-- `src/announcements.rs` — ui::callout_with puts its action under the text; this bar keeps Follow at the row's end
-- `src/announcements/views.rs` — ui::callout is a block-width notice; this is a compact strip with inline actions under a message
 - `src/call/dock.rs` — ui::surface lacks the stage-scoped quality card (stage colours, not palette)
 - `src/call/header.rs` — ui::badge lacks a stage tone for the live timer
-- `src/call/menus.rs` — ui::surface lacks the stage-scoped menu card (stage colours, not palette)
 - `src/chat.rs` — ui::callout is inline, not floating over a list; ui::floating_bar docks at the foot, this one hangs from the feed's top
 - `src/chat/composer.rs` — ui::pill is in the flow and solid; this one floats out of it over the feed with a blurred glass fill
 - `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
 - `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
 - `src/chat/embeds.rs` — ui::badge is a small solid label; this is a result row with its share drawn as a fill behind the text
-- `src/chat/embeds.rs` — ui::card is a clickable Control; an embed is a static quote card with a coloured bar down its edge
 - `src/command_picker/render.rs` — ui::surface lacks an anchored composer popup that rises from the field
 - `src/create_channel.rs` — ui::chip's removable look is an outlined chip, not this filled selected-tone pill
 - `src/dm_call.rs` — ui::pill is a label, and this holds a face stack and the Join button
 - `src/drag.rs` — ui::badge is a static label and ui::badged marks a face's corner; this chip hangs off the ghost's right edge.
 - `src/forum/helpers.rs` — ui::badge is a 20px solid label; this is a 32px file row with an icon and its size
-- `src/joining/guide.rs` — ui::callout puts its actions under the text; this bar keeps its button at the row's end
-- `src/joining/mod.rs` — ui::badge has no round numbered mark in the accent tint (ui::pill is a capsule)
 - `src/joining/rules.rs` — ui::surface has no frosted translucent level matching the composer card
 - `src/layout.rs` — ui::surface adds a ring and shadow this docked card doesn't draw
 - `src/panel.rs` — ui::tip is one line of text; this tip lists each thing someone is doing, with its icon.
@@ -632,7 +596,6 @@ _Label: ui::badge, ui::tag, ui::count_badge, ui::pill or ui::role_chip; add a va
 - `src/sidebar/channels.rs` — ui::callout leads with an icon and a title; this banner is a dot and one line, slid in by its motion frame.
 - `src/sidebar/tiles.rs` — ui::badge is a label; this is a server's letter tile, scaled with the rail tile.
 - `src/soundboard/picker.rs` — ui::badged lacks a sound tile with a lock mark and a name
-- `src/toast.rs` — ui::toast always leads with a glyph; a plain show_toast is one line of text.
 
 ## custom-mark
 
@@ -643,7 +606,6 @@ _A mark on a face's or control's corner: ui::badged with a Spot (it places the m
 - `src/call/dock.rs` — ui::surface lacks the stage-scoped quality card (stage colours, not palette)
 - `src/call/fit.rs` — ui::surface insets its content and rings it, and this card's own panel fills it and slides in by a computed offset
 - `src/call/header.rs` — ui::badged lacks a stage-ringed corner badge on a control
-- `src/call/menus.rs` — ui::surface lacks the stage-scoped menu card (stage colours, not palette)
 - `src/call/tiles.rs` — ui::media_label lacks a full-tile scrim holding a centred action row
 - `src/call/tiles.rs` — ui::media_label lacks a stage-tinted caption pinned over a tile
 - `src/call/tiles.rs` — ui::speaking_ring lacks a double ring sized by the tile's computed radius
@@ -673,12 +635,8 @@ _A mark on a face's or control's corner: ui::badged with a Spot (it places the m
 - `src/sidebar/voice.rs` — ui::media_label is a label over media; this is a hover scrim over the thumbnail holding the watch button.
 - `src/sidebar/voice.rs` — ui::speaking_ring cuts its gap in the surface colour; this one leaves the gap clear over the sidebar's material.
 - `src/soundboard/picker.rs` — ui::surface lacks an in-picker popover card anchored under the speaker
-- `src/stage_view.rs` — ui::surface is the app's overlay and ring, and this card is the stage's own dark overlay
-- `src/stage_view.rs` — ui::surface is the app's overlay and ring, and this card is the stage's own dark overlay
 - `src/stickers.rs` — ui::badged hangs a mark past a tile's corner; this play mark sits 4px inside the cell's
 - `src/text_file.rs` — ui::more_below follows a scroll handle, and this preview never scrolls while clipped; its fade is always on
-- `src/video/chrome.rs` — ui::slider_live lacks a scrubber with a knob sized by the hover; the margin centres the knob on its point
-- `src/video/chrome.rs` — ui::slider_live lacks a vertical volume slider; the margin centres the knob on its level
 - `src/viewer.rs` — ui::badged marks a face's corner; this is the selection ring sliding along the strip
 
 ## raw-truncate
@@ -701,7 +659,6 @@ _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::r
 - `src/call.rs` — auto margins centre the strip while it fits and start it at the left edge when wider, which justify_center can't
 - `src/call/dock.rs` — negative margins widen the hit area of a small status mark without moving it
 - `src/call/dock.rs` — negative margins widen the hit area of a small status mark without moving it
-- `src/call/menus.rs` — ui::divider lacks a stage-ink hairline; the margins inset it from the card edge like ui::inset_rule
 - `src/call/tiles.rs` — optical gap under a tile's message before its action; the column is built by the caller
 - `src/channel_settings.rs` — optical space around the inline ask in the nav list, whose column sets no gap
 - `src/channel_settings/pages.rs` — centres the 12px role dot on the 16px icon column, an optical nudge
@@ -761,8 +718,6 @@ _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::r
 - `src/system_message.rs` — optical, sets the time 2px clear of the sentence beyond the row's word gap
 - `src/system_message.rs` — pulls a glued word back over the row's gap_x, which a gap can't take away from one child
 - `src/system_message/automod.rs` — optical, lines the shield's top with the name's cap height
-- `src/video/chrome.rs` — ui::slider_live lacks a scrubber with a knob sized by the hover; the margin centres the knob on its point
-- `src/video/chrome.rs` — ui::slider_live lacks a vertical volume slider; the margin centres the knob on its level
 
 ## custom-component
 
@@ -770,13 +725,9 @@ _A function named like a component builds it from the design system: wrap the ui
 
 - `src/audio_player.rs` — ui::pill is a label, not a player; this wraps a cached AudioPlayer entity and builds no design-system piece itself
 - `src/call.rs` — ui::button with Tone::Overlay needs an id and a cx, and its callers in sidebar.rs and call/tiles.rs add their own
-- `src/call.rs` — ui::button with Tone::Stage needs a cx its callers in call/header.rs and call/tiles.rs don't pass
-- `src/call.rs` — ui::icon_button with Tone::Stage fills at rest, and this one is clear until hovered
-- `src/call/header.rs` — ui::icon_button lacks a stage tone with a corner badge; this wraps it for the call header
 - `src/call/header.rs` — ui::icon_button lacks a stage tone with a corner badge; this wraps it for the call header
 - `src/call/tiles.rs` — ui::empty_state lacks a compact stage tile with a close action
 - `src/call/tiles.rs` — ui::empty_state lacks a compact stage tile with a close action
-- `src/chat/format.rs` — ui::divider takes a 'static label, and a day's label is formatted from the message's date
 - `src/chat/markdown.rs` — ui::badge is a 20px block, and a mention must run inside a line of text at its size
 - `src/command_picker/render.rs` — ui::server_tile lacks a section rail tile with a selected bar
 - `src/components.rs` — ui::select_options is the open list; this builds a modal's select field from app data and wraps the kit's select

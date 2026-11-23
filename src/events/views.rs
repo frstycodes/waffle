@@ -94,8 +94,7 @@ impl Waffle {
         let title = events_title(upcoming_count(guild, me));
         let gid = guild_id.to_owned();
         let create = can_create(guild, me).then(|| {
-            // lint-allow(custom-divider): ui::divider is a horizontal rule; this is the vertical one beside Create Event
-            ui::row().gap_3().child(div().w(ui::HAIRLINE).h_5().bg(palette::line(cx))).child(
+            ui::row().gap_3().child(ui::seam(cx)).child(
                 ui::button("events-create", Tone::Primary, cx).small().child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("Create Event").on_click(cx.listener(move |this, _, window, cx| this.open_event_wizard(gid.clone(), None, window, cx))),
             )
         });
@@ -702,8 +701,7 @@ pub(super) fn stepper(step: Step, cx: &gpui_kit::App) -> AnyElement {
             .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(ink)
-            // lint-allow(custom-divider): ui::divider is a full-width hairline; this is the short rule joining two steps
-            .when(i > 0, |d| d.child(div().w_5().h(px(STEP_LINE)).bg(palette::line_strong(cx))))
+            .when(i > 0, |d| d.child(ui::rule(palette::line_strong(cx)).w_5()))
             .child(mark)
             .child(label)
     });

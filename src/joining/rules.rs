@@ -258,33 +258,24 @@ fn rules_list(form: &Form, scroll: &gpui_kit::ScrollHandle, cx: &mut Context<Waf
 // A rule's number: an accent-soft disc in the 24px column the agree row's checkbox shares.
 fn number(n: usize, cx: &gpui_kit::App) -> impl IntoElement + use<> {
     // lint-allow(raw-margin): optical 1px lift that centres the number on the rule's first line
-    super::numbered_mark(n, cx).mt_neg_px()
+    crate::ui::number_mark(n, cx).mt_neg_px()
 }
 
 // The full-width agree card: ticked takes the accent tint and edge; Submit pressed unticked gives it a danger
 // edge and says why under it.
 fn agree_row(view: &RulesView, window: &mut Window, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
     let group = palette::surface(Level::Group, cx);
-    let (fill, edge) = match (view.agreed, view.nudged) {
-        (true, _) => (palette::accent_soft(cx), palette::accent().opacity(0.55)),
-        (false, true) => (group, palette::danger()),
-        (false, false) => (group, gpui_kit::transparent_black()),
-    };
-    let hover = if view.agreed { fill } else { ui::mix(group, palette::strong(cx), 0.04) };
+    let edge = if view.nudged { palette::danger() } else { gpui_kit::transparent_black() };
     let check = ui::check_live("rules-agree-check", if view.agreed { Check::On } else { Check::Off }, window, cx);
-    // lint-allow(custom-button): ui::card has no toggled accent-tint look with a state edge (agreed, nudged)
-    let row = ui::row()
-        .id("rules-agree")
+    let row = ui::card("rules-agree", cx)
+        .fill(group, cx)
+        .edged(edge)
+        .selected(view.agreed, cx)
         .w_full()
         .py_3p5()
         .px_4()
         .gap_3()
-        .squircle(RADIUS_LG)
-        .bg(fill)
-        .hover(move |s| s.bg(hover))
-        .border_1()
-        .border_color(edge)
-        .cursor_pointer()
+        .justify_start()
         .text_size(ui::TEXT_LEAD)
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(palette::strong(cx))

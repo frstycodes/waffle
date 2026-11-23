@@ -7,7 +7,7 @@ use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, AppContext, Bounds, BoxShadow, Div, ElementId, Empty, FocusHandle, Hsla, InteractiveElement, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, ParentElement,
     PathBuilder, Pixels, Render, Stateful, StatefulInteractiveElement, Styled, Window,
     base::{Easing, Transition, transition},
-    canvas, div, fill, point, prelude::FluentBuilder, px, size,
+    canvas, div, fill, point, prelude::FluentBuilder, px, relative, size,
 };
 
 use super::{DUR_PANEL, DUR_PRESS, SQUIRCLE, Squircle, control::part, stretch};
@@ -152,6 +152,23 @@ fn thumb_track(f: f32, thumb: Thumb, cx: &App) -> Div {
         .when(f > 0., |d| d.child(piece(f, palette::accent()).rounded_l(px(4.)).rounded_r(px(2.5))))
         .child(div().w(px(6.)).h(px(24.)).flex_none().flex().items_center().justify_center().child(bar))
         .when(f < 1., |d| d.child(piece(1. - f, palette::line_strong(cx)).rounded_r(px(4.)).rounded_l(px(2.5))))
+}
+
+// The track of a scrubber or volume slider over video: a 4px wash of white, the accent filled to `fraction`
+// and a white knob `knob` wide centred on that point (0 hides it). Horizontal it fills left to right,
+// `vertical` fills from the foot up and takes the height it is given. Callers add the id, the bounds canvas
+// and the drag events.
+// Keywords: vertical slider, volume slider, scrubber, seek bar, video progress, knob
+pub fn media_track(fraction: f32, knob: f32, vertical: bool) -> Div {
+    let f = relative(fraction.clamp(0., 1.));
+    let fill = div().flex_none().rounded_xs().bg(palette::accent());
+    // A zero-length stop that centres the knob on the end of the fill, whatever the fill's length.
+    let stop = div().flex_none().flex().items_center().justify_center().child(div().flex_none().size(px(knob)).rounded_full().bg(gpui_kit::white()));
+    let track = div().flex().rounded_xs().bg(gpui_kit::white().opacity(0.24));
+    match vertical {
+        true => track.flex_col_reverse().w_1().child(fill.w_full().h(f)).child(stop.h_0().w_full()),
+        false => track.h_1().child(fill.h_full().w(f)).child(stop.w_0().h_full()),
+    }
 }
 
 // A draggable slider for a 0..1 value: press anywhere on the track to jump there, drag to follow,

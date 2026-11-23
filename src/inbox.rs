@@ -8,7 +8,7 @@ use crate::{
     icons::Glyph,
     illustration::Illustration,
     palette,
-    ui::{self, RADIUS_SM, Squircle},
+    ui::{self},
 };
 
 // Cached messages shown under each unread channel; the channel opens on the rest.
@@ -225,22 +225,15 @@ impl Waffle {
     fn unread_message(&self, m: Message, guild_id: &str, ctx: &std::rc::Rc<crate::chat::RowContext>, cx: &mut Context<Self>) -> AnyElement {
         let (guild_id, channel_id, message_id) = (guild_id.to_owned(), m.channel_id.clone(), m.id.clone());
         let text = crate::chat::content(&m, ctx, cx).unwrap_or_else(|| div().text_color(palette::muted(cx)).child("Attachment").into_any_element());
-        // lint-allow(custom-button): ui::list_row titles are one plain line; a message here is an author and time over two lines of its text.
-        let row = ui::row().items_stretch()
-            .id(SharedString::from(format!("unread-msg-{}", m.id)))
+        let row = ui::list_row(SharedString::from(format!("unread-msg-{}", m.id)), m.author.name.clone(), cx)
+            .height(ui::RowHeight::Fit)
+            .top()
             .px_2()
             .py_1()
-            .squircle(RADIUS_SM)
             .gap_2()
-            .cursor_pointer()
-            .hover(|s| s.bg(palette::hover(cx)))
-            .child(ui::avatar(m.author.avatar.clone(), 24.))
-            .child(
-                ui::col().min_h_0()
-                    .flex_1()
-                    .child(ui::row().items_baseline().gap_2().child(ui::line(m.author.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx))).child(div().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(crate::chat::format_stamp(&m.timestamp))))
-                    .child(div().text_size(ui::TEXT_SM).line_clamp(2).text_color(palette::text(cx)).child(text)),
-            )
+            .lead(ui::avatar(m.author.avatar.clone(), 24.))
+            .stamp(crate::chat::format_stamp(&m.timestamp))
+            .body(div().text_size(ui::TEXT_SM).line_clamp(2).text_color(palette::text(cx)).child(text))
             .on_click(cx.listener(move |this, _, window, cx| this.open_message(Some(guild_id.clone()), &channel_id, message_id.clone(), window, cx)));
         // Indented under its channel's head.
         div().pl_8().child(row).into_any_element()

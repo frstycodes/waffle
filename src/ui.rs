@@ -47,12 +47,13 @@ mod tokens;
 mod layout;
 mod face;
 mod kit;
+mod notice;
 pub mod prelude;
 
 pub use control::{Control, Pressable, button, card, icon_slot, chip, chip_lead, hover_fade, hover_state, icon_button, menu_row, pressable, round_button, swatch, tip};
 pub use date::{date_field, time_field};
 pub use dialog::{dialog, dialog_body, dialog_scroll, modal};
-pub use feedback::{progress_bar, meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
+pub use feedback::{media_track, progress_bar, meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
 pub use field::{Align, check_options, code_cell, drop_zone, dropdown, field, field_error, field_marked, field_frame, field_hint, menu_dropdown, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
 pub use group::{settings_caption, settings_card, settings_choice, settings_close, settings_column, settings_group, SettingsHighlight, settings_warning, settings_nav_item, settings_page, SETTINGS_NAV_WIDTH, SETTINGS_WIDTH, settings_row, settings_nav_edge, settings_sidebar, settings_switch, settings_text, settings_title, settings_window};
 pub use overflow::{Entry, overflow_list};
@@ -61,6 +62,7 @@ pub use tabs::{Tab, pill_tabs, segmented_live, tabs};
 pub use tri::{Tri, tri_state};
 pub use tunnel::{TUNNEL_GRACE, Tunnel};
 pub use tokens::*;
+pub use notice::{StripFill, divider_with, number_mark, panel, rule, strip, surface_in, toast_text};
 pub use kit::{Heading, RowHeight, dialog_header, list_row, media_label, section_label, toolbar};
 pub use face::{Badge, MarkFill, Shape, Spot, app_tile, avatar, badge_of, badged, dm_face, gap, monogram, name_hue, server_tile, status_mark};
 pub use layout::{rich_line, col, floating, floating_at, line, row, sized, visible_rows};
@@ -166,17 +168,15 @@ pub fn more_below(scroll: &gpui_kit::ScrollHandle, fill: Hsla) -> Div {
 
 /// A vertical scroll area moving `list` on `scroll`, with the kit's scrollbar over it. Not `overflow_y_scrollbar`: that
 /// tracks a handle of its own, which nothing outside can read.
-/// The list sits in a block that scrolls rather than scrolling itself: a flex column that scrolls lays its items
-/// out to its own height, so items that may shrink (`ui::col`, `min_h_0`) squeeze together and overlap instead of
-/// overflowing, and nothing scrolls. In a block the list keeps its content's height.
-pub fn scroll_area(mut list: Stateful<Div>, scroll: &gpui_kit::ScrollHandle) -> Div {
-    let id = list.interactivity().element_id.clone().unwrap_or_else(|| "scroll-area".into());
-    let scroller = div().id(ElementId::NamedChild(std::sync::Arc::new(id), "scroller".into()));
+pub fn scroll_area(list: Stateful<Div>, scroll: &gpui_kit::ScrollHandle) -> Div {
+    // The list scrolls itself, so the handle sees its rows (`bounds_for_item`, which the DM list's virtualizer
+    // reads). Its items keep their height because `ui::col` does; a column item that may shrink (`min_h_0`)
+    // would squeeze inside it.
     div()
         .relative()
         .flex_1()
         .min_h_0()
-        .child(scroller.size_full().overflow_y_scroll().lock_scroll_axis().track_scroll(scroll).child(list.w_full()))
+        .child(list.size_full().overflow_y_scroll().lock_scroll_axis().track_scroll(scroll))
         .vertical_scrollbar(scroll)
 }
 

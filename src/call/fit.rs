@@ -104,11 +104,11 @@ impl Waffle {
         let leave = self.leave_control(cx);
         // Full screen at the bar's right end, as Discord's.
         let fullscreen = self.call_fullscreen;
-        let fullscreen = stage_icon_button("call-fullscreen", if fullscreen { Glyph::FullscreenExit } else { Glyph::Fullscreen }, if fullscreen { "Exit full screen (Esc)" } else { "Full screen" }, false)
+        let fullscreen = stage_icon_button("call-fullscreen", if fullscreen { Glyph::FullscreenExit } else { Glyph::Fullscreen }, if fullscreen { "Exit full screen (Esc)" } else { "Full screen" }, false, cx)
             .on_click(cx.listener(move |this, _, window, cx| this.set_call_fullscreen(!fullscreen, window, cx)));
         // A focused stream's volume sits beside it, as Discord's.
         let volume = self.focused_stream().filter(|id| call.watched(id).is_some()).map(|id| {
-            stage_icon_button("call-stream-volume", Glyph::VolumeHigh, "Stream volume", false).on_mouse_down(MouseButton::Left, cx.listener(move |this, e: &MouseDownEvent, _, cx| this.open_stream_volume(id.clone(), e.position, cx)))
+            stage_icon_button("call-stream-volume", Glyph::VolumeHigh, "Stream volume", false, cx).on_mouse_down(MouseButton::Left, cx.listener(move |this, e: &MouseDownEvent, _, cx| this.open_stream_volume(id.clone(), e.position, cx)))
         });
         // Floats over the focused card in Focus layout: without occluding, a press on any control
         // also reached the card under it, whose toggle re-focused (and re-watched) what Stop watching ended.

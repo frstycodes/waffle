@@ -144,7 +144,6 @@ impl VideoPlayer {
         let active = self.hot == Some(Control::Scrubber) || self.scrub.is_some();
         let knob = self.motions.frame_one(Control::Knob, Motion::new(Target::default().width(if active { 12. } else { 0. })).transition(pop()), window, cx);
         let knob_side = knob.target().width_px().unwrap_or(0.).max(0.);
-        let played = relative(fraction_played.clamp(0., 1.));
         let record = self.scrub_bounds.clone();
         div()
             .id("video-scrubber")
@@ -154,18 +153,7 @@ impl VideoPlayer {
             .h_4()
             .cursor_pointer()
             .child(canvas(move |bounds, _, _| record.set(bounds), |_, _, _, _| {}).absolute().size_full())
-            .child(
-                div()
-                    .absolute()
-                    .left_0()
-                    .right_0()
-                    .top_1p5()
-                    .h_1()
-                    .rounded_xs()
-                    .bg(gpui_kit::white().opacity(0.24))
-                    .child(div().h_full().w(played).rounded_xs().bg(palette::accent())),
-            )
-            .child(div().absolute().top(px(KNOB_TOP - knob_side / 2.)).left(played).ml(px(-knob_side / 2.)).size(px(knob_side)).rounded_full().bg(gpui_kit::white())) // lint-allow(custom-mark, raw-margin): ui::slider_live lacks a scrubber with a knob sized by the hover; the margin centres the knob on its point
+            .child(ui::media_track(fraction_played, knob_side, false).absolute().left_0().right_0().top_1p5())
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
                 match *hovered {
                     true => this.hot = Some(Control::Scrubber),
@@ -224,7 +212,6 @@ impl VideoPlayer {
         let open = matches!(self.hot, Some(Control::Volume | Control::VolumePanel)) || self.adjusting_volume;
         let hidden = Target::default().opacity(0.).y(-6.);
         let panel = self.motions.frame_one(Control::VolumePanel, Motion::new(Target::default()).initial(hidden).exit(hidden).present(open).transition(pop()), window, cx);
-        let level = relative(self.level.heard());
         let record = self.volume_bounds.clone();
         let slider = ui::row().items_stretch()
             .id("video-volume-panel")
@@ -235,17 +222,7 @@ impl VideoPlayer {
             .bg(gpui_kit::black().opacity(0.8))
             .justify_center()
             .cursor_pointer()
-            .child(
-                div()
-                    .relative()
-                    .w_1()
-                    .h_full()
-                    .rounded_xs()
-                    .bg(gpui_kit::white().opacity(0.24))
-                    .child(canvas(move |bounds, _, _| record.set(bounds), |_, _, _, _| {}).absolute().size_full())
-                    .child(div().absolute().bottom_0().left_0().right_0().h(level).rounded_xs().bg(palette::accent()))
-                    .child(div().absolute().bottom(level).left_neg_1().mb_neg_1p5().size_3().rounded_full().bg(gpui_kit::white())), // lint-allow(custom-mark, raw-margin): ui::slider_live lacks a vertical volume slider; the margin centres the knob on its level
-            )
+            .child(div().relative().w_1().h_full().child(canvas(move |bounds, _, _| record.set(bounds), |_, _, _, _| {}).absolute().size_full()).child(ui::media_track(self.level.heard(), VOLUME_KNOB, true).size_full()))
             .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &gpui_kit::MouseDownEvent, _, cx| {
                 cx.stop_propagation();
                 this.adjusting_volume = true;

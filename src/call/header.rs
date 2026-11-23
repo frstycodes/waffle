@@ -179,9 +179,9 @@ impl Waffle {
                     ui::tip(tip, window, cx)
                 })
         });
-        let stop = watching.map(|_| keeps_chrome(stage_button("stop-watching", if several { "Stop all" } else { "Stop watching" }), cx).occlude().on_click(cx.listener(|this, _, _, cx| this.stop_watching(cx))));
+        let stop = watching.map(|_| keeps_chrome(stage_button("stop-watching", if several { "Stop all" } else { "Stop watching" }, cx), cx).occlude().on_click(cx.listener(|this, _, _, cx| this.stop_watching(cx))));
         // A DM call's stage is opened from its window; this is the way back to the chat (Esc too).
-        let back = call.guild_id.is_none().then(|| keeps_chrome(stage_button("back-to-chat", "Back to chat"), cx).occlude().on_click(cx.listener(|this, _, window, cx| this.back_to_chat(window, cx))));
+        let back = call.guild_id.is_none().then(|| keeps_chrome(stage_button("back-to-chat", "Back to chat", cx), cx).occlude().on_click(cx.listener(|this, _, window, cx| this.back_to_chat(window, cx))));
         ui::row()
             .h(px(HEAD_HEIGHT))
             .gap_2()
@@ -201,9 +201,9 @@ impl Waffle {
 
     // The voice channel's chat: "Show Chat" / "Hide Chat", highlighted while mentions wait or for a
     // while after new messages, with the count on its corner (mentions, else unread).
-    pub(crate) fn chat_toggle(&self, cx: &mut Context<Self>) -> Stateful<Div> { // lint-allow(custom-component): ui::icon_button lacks a stage tone with a corner badge; this wraps it for the call header
+    pub(crate) fn chat_toggle(&self, cx: &mut Context<Self>) -> ui::Control {
         let open = self.call_chat_shown();
-        keeps_chrome(stage_icon_button("call-chat", Glyph::ChatRound, if open { "Hide Chat" } else { "Show Chat" }, open || self.call_chat_highlighted()), cx)
+        keeps_chrome(stage_icon_button("call-chat", Glyph::ChatRound, if open { "Hide Chat" } else { "Show Chat" }, open || self.call_chat_highlighted(), cx), cx)
             .relative()
             .children(self.call_chat_badge())
             .occlude()

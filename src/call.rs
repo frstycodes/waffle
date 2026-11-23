@@ -560,7 +560,7 @@ impl Waffle {
 
 // Chrome that occludes takes the pointer from the stage under it, whose hover and moves drive the
 // autohide; it reports them itself so the chrome stays up while the pointer is on it.
-fn keeps_chrome(surface: Stateful<Div>, cx: &mut Context<Waffle>) -> Stateful<Div> {
+fn keeps_chrome<E: StatefulInteractiveElement>(surface: E, cx: &mut Context<Waffle>) -> E {
     surface
         .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
             this.call_pointer_on_chrome = *hovered;
@@ -616,41 +616,15 @@ impl Inks {
 }
 
 // .iconbtn on the stage: muted until hovered; `pressed` holds the selected fill.
-// lint-allow(custom-component): ui::icon_button with Tone::Stage fills at rest, and this one is clear until hovered
-pub(crate) fn stage_icon_button(id: impl Into<ElementId>, glyph: Glyph, tip: &'static str, pressed: bool) -> Stateful<Div> {
-    ui::row() // lint-allow(custom-button): ui::icon_button with Tone::Stage fills at rest, and this one is clear until hovered
-        .id(id)
-        .size_8()
-        .flex_none()
-        .squircle(RADIUS_SM)
-        .justify_center()
-        .cursor_pointer()
-        .text_color(if pressed { stage::strong() } else { stage::muted() })
-        .when(pressed, |b| b.bg(stage::wash(0.08)))
-        .hover(|s| s.bg(stage::wash(0.05)).text_color(stage::strong()))
-        .active(|s| s.bg(stage::wash(0.09)))
-        .child(Icon::new(glyph).size(ui::ICON_XL))
-        .tooltip(move |window, cx| ui::tip(tip, window, cx))
+pub(crate) fn stage_icon_button(id: impl Into<ElementId>, glyph: Glyph, tip: &'static str, pressed: bool, cx: &App) -> ui::Control {
+    let clear = gpui_kit::transparent_black();
+    let (rest, hover, ink) = if pressed { (stage::wash(0.08), stage::wash(0.09), stage::strong()) } else { (clear, stage::wash(0.05), stage::muted()) };
+    ui::icon_button(id, glyph, tip, cx).scoped(rest, hover, ink, stage::strong())
 }
 
 // .btn.btn--sm on the stage: the quiet fill.
-// lint-allow(custom-component): ui::button with Tone::Stage needs a cx its callers in call/header.rs and call/tiles.rs don't pass
-pub(crate) fn stage_button(id: impl Into<ElementId>, label: &'static str) -> Stateful<Div> {
-    ui::row() // lint-allow(custom-button): ui::button with Tone::Stage, whose wash is a step stronger and which wants a cx its callers don't pass
-        .id(id)
-        .h(px(STAGE_BUTTON_HEIGHT))
-        .px_2p5()
-        .flex_none()
-        .squircle(RADIUS_SM)
-        .gap_2()
-        .cursor_pointer()
-        .bg(stage::wash(0.08))
-        .hover(|s| s.bg(stage::wash(0.09)))
-        .text_color(stage::strong())
-        .text_size(ui::TEXT_SM)
-        .font_weight(FontWeight::MEDIUM)
-        .whitespace_nowrap()
-        .child(label)
+pub(crate) fn stage_button(id: impl Into<ElementId>, label: &'static str, cx: &App) -> ui::Control {
+    ui::button(id, ui::Tone::Stage, cx).h(px(STAGE_BUTTON_HEIGHT)).child(label)
 }
 
 // .preview .watch: the light button over a dimmed stream.

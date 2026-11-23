@@ -134,7 +134,6 @@ wasapi = "0.27"
 tray-icon = "0.26"
 raw-window-handle = "0.6"
 windows = { version = "0.62", features = [
-    "Wdk_System_SystemServices",
     "Win32_Foundation",
     "Win32_Media_Audio",
     "Win32_Graphics_Dwm",

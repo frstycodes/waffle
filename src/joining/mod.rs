@@ -16,22 +16,6 @@ use gpui_kit::{AnyElement, Context, IntoElement, Window};
 use reqwest::Method;
 use serde_json::{Map, Value, json};
 
-// A numbered disc in the accent tint, 24px: one rule's number in the rules list and the onboarding rules step.
-pub(super) fn numbered_mark(n: usize, cx: &gpui_kit::App) -> gpui_kit::Div {
-    use gpui_kit::{FontWeight, prelude::*};
-    // lint-allow(custom-badge): ui::badge has no round numbered mark in the accent tint (ui::pill is a capsule)
-    crate::ui::row()
-        .size_6()
-        .flex_none()
-        .rounded_full()
-        .bg(crate::palette::accent_soft(cx))
-        .text_color(crate::palette::accent_ink(cx))
-        .text_size(crate::ui::TEXT_XS)
-        .font_weight(FontWeight::BOLD)
-        .justify_center()
-        .child(n.to_string())
-}
-
 pub use browse::BrowseView;
 pub use guide::GuideView;
 pub use invite::InviteView;

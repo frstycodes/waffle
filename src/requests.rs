@@ -19,7 +19,7 @@ use crate::{
     palette,
     profile::profile_key,
     sidebar::{RowState, channel_row},
-    ui::{self, Squircle, Tone},
+    ui::{self, Tone},
 };
 
 const REQUEST_ERROR: &str = "Uh oh! Something went wrong while updating this message request. Please wait a moment and try again.";
@@ -160,32 +160,16 @@ impl Waffle {
         let line: Vec<String> = [profile.as_ref().map(|p| p.username.clone()).filter(|u| !u.is_empty()), profile.as_ref().map(|p| mutual_servers(p.mutual_server_count))].into_iter().flatten().collect();
         let last = self.last_message_of(dm);
         let when = (last > 0).then(|| crate::panel::ago(chrono::Utc::now().timestamp_millis() - snowflake_ms(last) as i64));
-        let hover = palette::hover(cx);
         let id = dm.id.clone();
-        // lint-allow(custom-button): ui::list_row is 48px with one title line; a request is 64px with the time beside the name and two buttons.
-        ui::row()
-            .id(SharedString::from(format!("request-{}", dm.id)))
+        ui::list_row(SharedString::from(format!("request-{}", dm.id)), name, cx)
+            .height(ui::RowHeight::Fit)
             .min_h_16()
             .px_2()
             .py_2()
-            .gap_3()
-            .squircle(ui::RADIUS_MD)
-            .cursor_pointer()
-            .hover(move |s| s.bg(hover))
-            .child(ui::dm_face(&dm.face(), 40., page))
-            .child(
-                ui::col().min_h_0()
-                    .flex_1()
-                    .child(
-                        ui::row()
-                            .items_baseline()
-                            .gap_2()
-                            .child(ui::line(name).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
-                            .children(when.map(|w| div().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(w))),
-                    )
-                    .child(ui::line(line.join(" · ")).text_size(ui::TEXT_XS).text_color(palette::muted(cx))),
-            )
-            .child(ui::row().items_stretch().flex_none().gap_2().on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| cx.stop_propagation()).children(self.request_actions(&dm.id, tab, cx)))
+            .lead(ui::dm_face(&dm.face(), 40., page))
+            .subtitle(line.join(" · "))
+            .trailing(ui::row().items_stretch().gap_2().on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| cx.stop_propagation()).children(self.request_actions(&dm.id, tab, cx)))
+            .when_some(when, |row, when| row.stamp(when))
             .on_click(cx.listener(move |this, _, window, cx| this.open_request(&id, window, cx)))
             .into_any_element()
     }
