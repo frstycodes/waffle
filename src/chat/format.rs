@@ -272,7 +272,7 @@ pub(super) fn unread_line() -> AnyElement {
 // Between dates, inside the feed's gutters, never edge to edge.
 pub(super) fn day_divider(timestamp: &str, cx: &App) -> AnyElement {
     let label = day(timestamp).map(|d| d.format("%A, %B %-d, %Y").to_string()).unwrap_or_default();
-    div().pt_6().pb_2().px_4().child(ui::divider_with(label, palette::faint(cx), palette::line(cx))).into_any_element()
+    div().pt(px(DIVIDER_PAD.0)).pb(px(DIVIDER_PAD.1)).px(px(GUTTER)).child(ui::divider_with(label, palette::faint(cx), palette::line(cx))).into_any_element()
 }
 
 pub(super) fn empty_state(id: &'static str, art: impl Into<ui::Art>, title: &'static str, detail: impl Into<SharedString>, cx: &App) -> AnyElement {

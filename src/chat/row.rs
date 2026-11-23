@@ -1,7 +1,7 @@
 use super::*;
 
 // The fold line's left inset: the row's own side padding plus the content column's.
-const FOLD_INSET: f32 = 16. + CONTENT_INSET;
+const FOLD_INSET: f32 = GUTTER + CONTENT_INSET;
 
 // An avatar column and a content column; a continuation shows its time in the gutter on hover, and the
 // toolbar floats at the row's top right. Compact display puts each message on one line after its time.
@@ -70,10 +70,10 @@ pub(super) fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowCon
         .relative()
         .w_full()
         // A mention runs to the feed's edges, so its rim meets the sidebar; its content keeps its place.
-        .px(px(if mention { 24. } else { 16. }))
-        .py_0p5()
+        .px(px(if mention { GUTTER + 8. } else { GUTTER }))
+        .py(px(ROW_PAD))
         .squircle(RADIUS_SM)
-        .line_height(gpui_kit::relative(1.375))
+        .line_height(gpui_kit::relative(1.45))
         // Ephemeral: Discord's tint with a 2px bar, in Waffle's info ink so it never reads as a mention.
         .when(ephemeral && !mention, |r| r.rounded_none().bg(components::ephemeral_tint(cx)).child(div().absolute().left_0().top_0().bottom_0().w_0p5().bg(palette::info_ink(cx))))
         // Mentioning you: the tint and a 2px accent bar down the left edge, square like Discord's.
@@ -102,7 +102,7 @@ pub(super) fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowCon
                 SendState::Sending => g.child(Icon::new(Glyph::Clock).size(ui::ICON_SM).mt_1()),
                 _ => g.when(hovered, |g| g.child(gutter_clock(&message.timestamp))),
             });
-        return inset(with_message_menu(row.child(ui::row().items_stretch().gap_4().child(gutter).child(body)).children(toolbar), message, ctx), mention);
+        return inset(with_message_menu(row.child(ui::row().items_stretch().gap(px(GUTTER)).child(gutter).child(body)).children(toolbar), message, ctx), mention);
     }
     let row = row
         // lint-allow(raw-margin): the gap between groups is the reader's setting, and rows are list items with no parent gap to carry it
@@ -112,7 +112,7 @@ pub(super) fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowCon
         .children(components::used_command(message, ctx, cx))
         .child(
             ui::row().items_stretch()
-                .gap_4()
+                .gap(px(GUTTER))
                 // lint-allow(raw-margin): optical, lines the avatar's top with the name's cap height
                 .child(author_trigger(format!("avatar-{}", message.id), message, ctx).flex_none().mt_0p5().child(crate::layout::decorated_avatar(
                     &message.author.avatar,
@@ -171,12 +171,13 @@ pub(super) fn fold_line(first_id: &str, run: &Run, ctx: &Rc<RowContext>, cx: &Ap
         .pl(px(FOLD_INSET))
         .pr_4()
         .gap_2()
-        .text_size(ui::TEXT_SM)
+        .text_size(ui::TEXT_MD)
         .text_color(palette::faint(cx))
         .child(Icon::new(glyph).size(ui::ICON_MD))
         .child(label)
         .child(toggle);
-    inset(div().pt_1p5().child(line).into_any_element(), false)
+    // A blocked run starts its own group, as Discord's.
+    inset(div().pt(px(group_gap(ctx))).child(line).into_any_element(), false)
 }
 
 // A search result: the message as the feed draws it (head, text, media, embeds, files), without the
@@ -220,7 +221,7 @@ pub(super) fn hit_media(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -
             div().flex_none().w(px(w)).h(px(h)).child(media_tile(message, i, (w, h), ui::all(RADIUS_MD), Paging::Feed, ctx, cx)).into_any_element()
         })
         .collect();
-    Some(ui::row().items_stretch().pt_1().flex_wrap().gap_1().children(tiles).into_any_element())
+    Some(ui::row().items_stretch().pt(px(ACCESSORY_GAP)).flex_wrap().gap_1().children(tiles).into_any_element())
 }
 
 // The frame for a picture of `size` within `max`: its own shape, never larger than it is, with the shape
@@ -409,7 +410,17 @@ pub(super) fn plain_click(event: &gpui_kit::ClickEvent) -> bool {
     click.up.click_count == 1 && f32::from(moved.x).abs() < 4. && f32::from(moved.y).abs() < 4.
 }
 
-// Discord's gap above a group: the reader's group spacing plus 1px (1.0625rem at the default 16).
+// Waffle's message spacing is Discord's Spacious density: Discord's spacing (16px margins, 2px row padding, 4px
+// between a message's attachments and cards, reactions 2px lower, a date divider 24px above and 8px below)
+// scaled by Spacious's 20/16 and rounded to even whole pixels, so every kind of message keeps Discord's
+// proportions and none sits closer than the rest.
+pub(crate) const GUTTER: f32 = 20.;
+pub(crate) const ROW_PAD: f32 = 2.;
+pub(crate) const ACCESSORY_GAP: f32 = 6.;
+pub(crate) const REACTIONS_GAP: f32 = 8.;
+pub(crate) const DIVIDER_PAD: (f32, f32) = (32., 12.);
+
+// The gap above a group: the reader's group spacing (Discord adds an odd 1px; even pixels here).
 pub(crate) fn group_gap(ctx: &RowContext) -> f32 {
-    ctx.group_spacing + 1.
+    ctx.group_spacing
 }

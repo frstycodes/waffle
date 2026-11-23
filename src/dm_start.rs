@@ -3,7 +3,7 @@
 // scrolls away with the history, as Discord's does.
 //
 // GAP: a group gets no actions: Invite to group and Edit group aren't built. Report spam isn't either.
-use gpui_kit::{AnyElement, App, Context, FontWeight, SharedString, WeakEntity, div, prelude::*, relative};
+use gpui_kit::{AnyElement, App, Context, FontWeight, SharedString, WeakEntity, div, prelude::*, px, relative};
 
 use crate::{
     Waffle,
@@ -121,7 +121,7 @@ pub(crate) fn dm_start_header(start: &DmStart, this: WeakEntity<Waffle>, cx: &Ap
     };
     ui::col()
         .w_full()
-        .px_4()
+        .px(px(crate::chat::GUTTER))
         .pt_2()
         .pb_4()
         .items_start()

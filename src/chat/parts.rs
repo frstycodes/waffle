@@ -44,7 +44,7 @@ pub(super) fn reply_preview(reply: &Message, target: Option<String>, ctx: &Rc<Ro
             let Some(id) = target.clone() else { return };
             this.update(cx, |this, cx| this.jump_to(id, cx)).ok();
         });
-    div().pb_1().child(preview).into_any_element()
+    div().pb(px(ACCESSORY_GAP)).child(preview).into_any_element()
 }
 
 // Discord's quote of an original with no text: "Click to see attachment" (or sticker, or voice message) in
@@ -83,7 +83,7 @@ pub(super) fn deleted_reply_preview(ctx: &Rc<RowContext>, cx: &App) -> AnyElemen
         .text_color(palette::faint(cx))
         .child(badge)
         .child(div().italic().child("Original message was deleted"));
-    div().pb_1().child(preview).into_any_element()
+    div().pb(px(ACCESSORY_GAP)).child(preview).into_any_element()
 }
 
 // A forwarded copy, as Discord draws it: the label, then behind a quote bar the original's text, media and
@@ -129,7 +129,7 @@ pub(super) fn forward_quote(original: &Message, ctx: &Rc<RowContext>, cx: &mut A
         .child(source);
     let bar = div().w_1().flex_none().rounded_full().bg(palette::line_strong(cx));
     let card = ui::col().max_w(px(FORWARD_WIDTH)).gap_1().child(label.italic()).child(ui::row().items_stretch().gap_3().child(bar).child(quoted));
-    div().pt_1().child(card).into_any_element()
+    div().pt(px(ACCESSORY_GAP)).child(card).into_any_element()
 }
 
 // What a reply without text quotes instead: the kind of attachment it carries.
@@ -221,7 +221,7 @@ pub(crate) fn starter_message(parent: &Message, ctx: &Rc<RowContext>, cx: &mut A
         .children(parent.reply.as_ref().map(|reply| reply_preview(reply, parent.reply_to.clone(), ctx, cx)))
         .child(
             ui::row().items_stretch()
-                .gap_4()
+                .gap(px(GUTTER))
                 // lint-allow(raw-margin): optical, lines the avatar's top with the name's cap height
                 .child(profile_trigger(format!("starter-avatar-{}", parent.id), &parent.author, ctx).flex_none().mt_0p5().child(ui::avatar(parent.author.avatar.clone(), AVATAR)))
                 .child(body),
@@ -271,7 +271,7 @@ pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Opti
             })
             .children(blocks)
             .when(message.edited, |c| {
-                c.child(ui::row().flex_wrap().items_baseline().gap_x_1().children(last).child(div().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(faint).child("(edited)")))
+                c.child(ui::row().flex_wrap().items_baseline().gap_x_1().children(last).child(div().whitespace_nowrap().text_size(ui::TEXT_XXS).text_color(faint).child("(edited)")))
             })
             .into_any_element(),
     )
@@ -300,7 +300,7 @@ pub(super) fn send_failure(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
         .child(action(format!("discard-{}", message.id), "Delete message").on_click(move |_, _, cx| { cx.stop_propagation();
             delete_this.update(cx, |this, cx| this.delete(delete.clone(), cx)).ok();
         }));
-    div().pt_1().child(line).into_any_element()
+    div().pt(px(ACCESSORY_GAP)).child(line).into_any_element()
 }
 
 // The card under the message that started a thread: its name and how many messages it holds.
@@ -340,5 +340,5 @@ pub(super) fn thread_card(thread: &Channel, ctx: &Rc<RowContext>, cx: &App) -> A
             this.update(cx, |this, cx| this.open_channel(open.clone(), window, cx)).ok();
         })
         .into_any_element();
-    div().pt_1().child(card).into_any_element()
+    div().pt(px(ACCESSORY_GAP)).child(card).into_any_element()
 }

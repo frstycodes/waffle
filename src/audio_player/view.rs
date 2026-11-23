@@ -14,7 +14,7 @@ impl AudioPlayer {
         let needs_length = duration.is_none() && matches!(self.stage, Stage::Idle);
         ui::row()
             .id(SharedString::from(format!("voice-{}", self.key)))
-            .mt_1() // lint-allow(raw-margin): optical offset from the message text above; the parent is the chat row, outside this file
+            .mt(px(crate::chat::ACCESSORY_GAP)) // lint-allow(raw-margin): optical offset from the message text above; the parent is the chat row, outside this file
             .self_start()
             .max_w_full()
             .gap_3()
@@ -71,7 +71,7 @@ impl AudioPlayer {
             .id(SharedString::from(format!("audio-{}", self.key)))
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| this.key_down(e, cx)))
-            .mt_1() // lint-allow(raw-margin): optical offset from the message text above; the parent is the chat row, outside this file
+            .mt(px(crate::chat::ACCESSORY_GAP)) // lint-allow(raw-margin): optical offset from the message text above; the parent is the chat row, outside this file
             .w_full()
             .max_w(px(PLAYER_MAX))
             .p_3()

@@ -76,7 +76,7 @@ pub(crate) enum Paging {
 
 // The message's media, then its uploads as file rows where the setting keeps them out of line.
 pub(super) fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<AnyElement> {
-    let gallery = media_layout(message, &inline_media(message, &ctx.media), ctx.column.min(COLUMN), Paging::Feed, ctx, cx).map(|g| div().pt_1().child(g).into_any_element());
+    let gallery = media_layout(message, &inline_media(message, &ctx.media), ctx.column.min(COLUMN), Paging::Feed, ctx, cx).map(|g| div().pt(px(ACCESSORY_GAP)).child(g).into_any_element());
     if ctx.media.attachments || message.media_files.is_empty() {
         return gallery;
     }

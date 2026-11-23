@@ -680,6 +680,7 @@ _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::r
 - `src/command_picker/render.rs` — lifts the popup clear of the composer by a computed amount, POPUP_RAISE
 - `src/command_picker/render.rs` — ui::divider lacks a short centred rule in a rail; the margin is its optical gap
 - `src/components.rs` — the gap under the message body, whose row is stacked in chat.rs outside this component
+- `src/components/status.rs` — Discord's gap under the command line, as under a reply; the row's children have no parent gap
 - `src/components/status.rs` — optical gap under the component's body; the parent is a message row in another file
 - `src/components/status.rs` — optical gap under the component's body; the parent is a message row in another file
 - `src/dm_call.rs` — the pill sits a step off the header's next control, which the caller's row doesn't gap

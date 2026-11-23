@@ -18,6 +18,7 @@ pub(crate) fn used_command(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
             .child(chat::reply_spine(cx))
             .h(px(CAPTION_HEIGHT))
             .gap_1p5()
+            .mb(px(chat::ACCESSORY_GAP)) // lint-allow(raw-margin): Discord's gap under the command line, as under a reply; the row's children have no parent gap
             .text_size(ui::TEXT_SM)
             .text_color(palette::muted(cx))
             .child(ui::avatar(meta.user.avatar.clone(), 16.))
@@ -86,7 +87,7 @@ pub(crate) fn only_you(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Any
         None => line("Only you can see this"),
     };
     ui::row()
-        .mt_1() // lint-allow(raw-margin): optical gap under the component's body; the parent is a message row in another file
+        .mt(px(chat::ACCESSORY_GAP)) // lint-allow(raw-margin): optical gap under the component's body; the parent is a message row in another file
         .items_start()
         .gap_1p5()
         .text_size(ui::TEXT_XS)
@@ -125,7 +126,7 @@ pub(super) fn ephemerality_reason(reason: u64) -> &'static str {
 // Discord's red failure line: an error icon and what went wrong. No retry.
 pub(super) fn failure_line(text: String, cx: &App) -> AnyElement {
     ui::row()
-        .mt_1() // lint-allow(raw-margin): optical gap under the component's body; the parent is a message row in another file
+        .mt(px(chat::ACCESSORY_GAP)) // lint-allow(raw-margin): optical gap under the component's body; the parent is a message row in another file
         .gap_1p5()
         .text_color(palette::danger_ink(cx))
         .child(Icon::new(Glyph::WarningCircle).size(ui::ICON_MD).flex_none())

@@ -60,7 +60,7 @@ const MAX_IMAGE: (f32, f32) = (400., 320.);
 const COLUMN: f32 = 432.;
 // Text sizes: a message's body, Discord's "-# " subtext, an embed's text.
 pub(crate) const BODY_TEXT: f32 = 16.;
-const SUBTEXT: f32 = 13.;
+const SUBTEXT: f32 = 14.;
 const EMBED_TEXT: f32 = 14.;
 const GALLERY_GAP: f32 = 4.;
 // A Components V2 gallery's lone item spans its container, up to this tall.
@@ -68,11 +68,11 @@ const GALLERY_MAX_H: f32 = 360.;
 
 pub(crate) const AVATAR: f32 = 40.;
 // The avatar column plus the gap to the content column: where replies and continuations line up.
-pub(crate) const CONTENT_INSET: f32 = AVATAR + 16.;
+pub(crate) const CONTENT_INSET: f32 = AVATAR + GUTTER;
 // The unread bar's room at the feed's top: 8 above it, its 36, 8 below.
 const UNREAD_BAR_SPACE: f32 = 52.;
 // A reply preview's line, above the message it answers.
-const REPLY_HEIGHT: f32 = 18.;
+const REPLY_HEIGHT: f32 = 20.;
 // A forwarded copy's card, as the design's `.fwd`.
 const FORWARD_WIDTH: f32 = 520.;
 
@@ -567,7 +567,7 @@ impl RowContext {
 
     // The body's first line box (the row's 1.45 line height), which the time beside it centres in.
     pub(crate) fn body_line(&self) -> f32 {
-        (self.font_size * 1.375).round()
+        (self.font_size * 1.45).round()
     }
 
     fn role_marks(&self, user_id: &str) -> (Option<Hsla>, Option<Hsla>) {

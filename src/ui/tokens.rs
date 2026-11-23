@@ -10,7 +10,7 @@ use std::time::Duration;
 use gpui_kit::{CornerShape, Pixels, px};
 
 // Type sizes. Xxs is the uppercase tag and badge size; the rest are tokens.css `--text-*`.
-pub const TEXT_XXS: Pixels = px(11.);
+pub const TEXT_XXS: Pixels = px(10.);
 pub const TEXT_XS: Pixels = px(12.);
 // A row's second line: descriptions, hints, topics.
 pub const TEXT_DETAIL: Pixels = px(13.);

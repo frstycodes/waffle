@@ -73,7 +73,7 @@ fn channel_start_header(start: &ChannelStart, this: WeakEntity<Waffle>, cx: &App
     });
     ui::col()
         .w_full()
-        .px_4()
+        .px(px(crate::chat::GUTTER))
         .pt_4()
         .pb_4()
         .items_start()

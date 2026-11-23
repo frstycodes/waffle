@@ -75,7 +75,7 @@ impl MarkdownPlugin for MentionBadges {
 }
 
 // Inline marks: a mention's side padding, an option key's side padding and rounded edge, a server tag's height and gap.
-const MENTION_PAD: f32 = 3.;
+const MENTION_PAD: f32 = 2.;
 const OPTION_KEY_PAD: f32 = 7.;
 const OPTION_EDGE: f32 = 5.;
 const TAG_HEIGHT: f32 = 16.;

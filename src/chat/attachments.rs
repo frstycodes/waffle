@@ -6,7 +6,7 @@ const SPOILER_BLUR: f32 = 8.;
 // Discord's reaction: 20px emoji, 2px above and below, 6px each side, inside a 1px border.
 const REACTION_PAD: f32 = 6.;
 const REACTION_HEIGHT: f32 = 26.;
-const REACTION_ADD_PAD: f32 = 7.;
+const REACTION_ADD_PAD: f32 = 6.;
 const COPY_BUTTON: f32 = 28.;
 const ACTIONS_LIFT: f32 = 18.;
 
@@ -82,7 +82,7 @@ pub(super) fn upload_cards(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
                         this.update(cx, |this, cx| this.delete(cancel.clone(), cx)).ok();
                     }))
                 });
-            div().pt_1().child(card).into_any_element()
+            div().pt(px(ACCESSORY_GAP)).child(card).into_any_element()
         })
         .collect()
 }
@@ -133,7 +133,7 @@ pub(crate) fn file_card(message: &Message, file: &crate::discord::File, cx: &App
                 .child(ui::row().gap_1p5().text_size(ui::TEXT_XS).text_color(faint).when(file.size > 0, |d| d.child(format_size(file.size))).when(file.spoiler, |d| d.child(ui::tag("Spoiler", cx)))),
         )
         .child(ui::icon_button(SharedString::from(format!("download-{}-{}", message.id, file.name)), Glyph::Download, "Download", cx).on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&download) }));
-    div().pt_1().child(card).into_any_element()
+    div().pt(px(ACCESSORY_GAP)).child(card).into_any_element()
 }
 
 // Sits in the corner of every code block; it turns to a check, in the online ink, for a moment after.
@@ -181,7 +181,7 @@ pub(super) fn reactions(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Op
         .on_click(move |_, window, cx| { cx.stop_propagation();
             this.update(cx, |this, cx| this.open_emoji_picker(EmojiTarget::Reaction(Box::new(msg.clone())), window, cx)).ok();
         });
-    Some(div().pt_1p5().child(ui::row().items_stretch().flex_wrap().gap_1().children(pills).child(add)).into_any_element())
+    Some(div().pt(px(REACTIONS_GAP)).child(ui::row().items_stretch().flex_wrap().gap(px(ACCESSORY_GAP)).children(pills).child(add)).into_any_element())
 }
 
 // A custom emoji's picture, or a unicode one drawn as text.

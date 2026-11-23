@@ -86,7 +86,7 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
             .id(SharedString::from(format!("{key}-title")))
             .text_size(ui::TEXT_MD)
             .line_height(gpui_kit::relative(1.2))
-            .font_weight(FontWeight::BOLD)
+            .font_weight(FontWeight::SEMIBOLD)
             .text_color(if embed.url.is_some() { palette::accent_ink(cx) } else { strong })
             .when_some(embed.url.clone(), |t, url| t.cursor_pointer().hover(|s| s.underline()).on_click(open(url)))
             .child(title)
@@ -200,14 +200,14 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
         .pr(px(EMBED_PAD.1))
         .pb(px(EMBED_PAD.2))
         .pl(px(EMBED_PAD.3 + EMBED_BAR))
-        .gap_2()
+        .gap(px(EMBED_GAP))
         .bg(fill)
         .text_size(ui::TEXT_SM)
-        .line_height(px(EMBED_LINE))
+        .line_height(gpui_kit::relative(1.45))
         .child(strip)
         .children(sections.into_iter().flatten())
         .children(row.filter(|m| !embed.inline() && remove_embeds_shown(m, ctx)).map(|m| remove_embeds_button(m, &key, ctx, cx)));
-    div().pt_1().child(card).into_any_element()
+    div().pt(px(ACCESSORY_GAP)).child(card).into_any_element()
 }
 
 // While the row is hovered or keyboard-focused.
@@ -236,10 +236,10 @@ pub(super) fn remove_embeds_button(message: &Message, key: &str, ctx: &RowContex
 
 pub(super) const EMBED_WIDTH: f32 = 516.;
 pub(super) const EMBED_MIN: f32 = 240.;
-// Discord's embed: top, right, bottom, left (its 2px grid padding plus the first section's 8px margin on top),
-// sections 8px apart, 14px text on an 18px line.
-pub(super) const EMBED_PAD: (f32, f32, f32, f32) = (10., 16., 16., 12.);
-pub(super) const EMBED_LINE: f32 = 18.;
+// Discord's embed padding, top, right, bottom, left (its 2px grid padding plus the first section's 8px margin
+// on top), and its 8px between sections, in the feed's Spacious proportions rounded to even pixels.
+pub(super) const EMBED_PAD: (f32, f32, f32, f32) = (12., 20., 20., 16.);
+pub(super) const EMBED_GAP: f32 = 12.;
 pub(super) const EMBED_BAR: f32 = 4.;
 // Wide enough to hold both left corners, so the bar's shape is the card's.
 pub(super) const EMBED_BAR_STRIP: f32 = 2. * RADIUS_LG;
@@ -395,7 +395,7 @@ pub(super) fn poll_result(poll: &crate::discord::PollResult, poll_message: Optio
                 this.update(cx, |this, cx| this.jump_to(id.clone(), cx)).ok();
             }))
         });
-    div().pt_1().child(card).into_any_element()
+    div().pt(px(ACCESSORY_GAP)).child(card).into_any_element()
 }
 
 // A live poll (design/messages.html `.poll`): pick and Vote, or its results once you've voted, peeked or it closed.
@@ -448,7 +448,7 @@ pub(super) fn poll_card(message: &Message, poll: &Poll, ctx: &RowContext, cx: &A
         )
         .child(ui::col().gap_1p5().children(options))
         .child(ui::row().flex_wrap().gap_2().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(poll.foot(now)).child(actions));
-    div().pt_1().child(card).into_any_element()
+    div().pt(px(ACCESSORY_GAP)).child(card).into_any_element()
 }
 
 // An answer to pick before voting: its radio (a check where several may be picked), emoji and text.
