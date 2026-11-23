@@ -19,6 +19,13 @@ use crate::{
     ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, RADIUS_XS, Squircle},
 };
 
+// A sticker tile's height.
+const TILE_HEIGHT: f32 = 84.;
+// The preview foot's least height.
+const FOOT_HEIGHT: f32 = 60.;
+// The dashed empty-slot edge.
+const DASH_WIDTH: f32 = 1.5;
+
 const IN_CHAT: f32 = 160.;
 // Fetched at twice the drawn size so they stay sharp on Retina.
 const FETCH: u32 = 320;
@@ -102,7 +109,7 @@ impl Waffle {
         if tab == PickerTab::Stickers && self.sticker_packs.as_ref().is_none_or(|packs| packs.is_err()) {
             self.fetch_sticker_packs(cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the sticker picker is drawn by the root's overlays, over every column
     }
 
     fn fetch_sticker_packs(&mut self, cx: &mut Context<Self>) {
@@ -112,7 +119,7 @@ impl Waffle {
             let result = client.sticker_packs().await;
             this.update(cx, |this, cx| {
                 this.sticker_packs = Some(result.map_err(Into::into));
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the sticker picker is drawn by the root's overlays, over every column
             })
             .ok();
         })
@@ -121,7 +128,7 @@ impl Waffle {
 
     pub(crate) fn on_sticker_search(&mut self, _: &Entity<SearchState>, event: &InputEvent, _: &mut Window, cx: &mut Context<Self>) {
         if let InputEvent::Change = event {
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the sticker picker is drawn by the root's overlays, over every column
         }
     }
 
@@ -241,7 +248,7 @@ impl Waffle {
                     })
                     .on_click(cx.listener(move |_, _, _, cx| {
                         scroll.scroll_to_top_of_item(i);
-                        cx.notify();
+                        cx.notify(); // lint-allow(global-notify): the sticker picker is drawn by the root's overlays, over every column
                     }));
                 line.into_iter().chain([tab.into_any_element()])
             }))
@@ -292,7 +299,7 @@ fn sticker_cell(sticker: &Sticker, pack: &SharedString, key: String, hovered: &E
     ui::pressable(div().id(SharedString::from(key)), 0.95)
         .relative()
         .w(relative(0.25))
-        .h(px(84.))
+        .h(px(TILE_HEIGHT))
         .p_2()
         .squircle(RADIUS_MD)
         .cursor_pointer()
@@ -313,7 +320,7 @@ fn sticker_cell(sticker: &Sticker, pack: &SharedString, key: String, hovered: &E
 
 fn sticker_foot(preview: Option<(Sticker, SharedString)>, motion: StickerMotion, cx: &App) -> Div {
     ui::row()
-        .min_h(px(60.))
+        .min_h(px(FOOT_HEIGHT))
         .flex_none()
         .py_1p5()
         .px_3()
@@ -364,7 +371,7 @@ pub(crate) fn in_chat(sticker: &Sticker, animate: bool, cx: &App) -> AnyElement 
             .justify_center()
             .gap_1()
             .squircle(RADIUS_LG)
-            .border(px(1.5))
+            .border(px(DASH_WIDTH))
             .border_dashed()
             .border_color(line)
             .text_size(ui::TEXT_XS)

@@ -22,6 +22,12 @@ use crate::{
     search::{self, Key, Saved},
     ui::{self, RADIUS_XS, Squircle},
 };
+use crate::part::Column;
+
+// The tallest the search popover grows.
+const POPOVER_MAX: f32 = 520.;
+// A filter chip's height.
+const CHIP_HEIGHT: f32 = 22.;
 
 pub(crate) const WIDTH: f32 = 360.;
 const VALUES_SHOWN: usize = 10;
@@ -136,7 +142,7 @@ impl Waffle {
             InputEvent::Change => {
                 self.search_pick = None;
                 self.chip_search_filters(false, window, cx);
-                cx.notify();
+                self.redraw(Column::Main, cx);
             }
             InputEvent::PressEnter { .. } => {
                 let menu = self.search_menu(cx);
@@ -166,7 +172,7 @@ impl Waffle {
                 _ => return,
             };
             self.search_day = (self.search_day + chrono::Duration::days(days)).min(today());
-            cx.notify();
+            self.redraw(Column::Main, cx);
             return cx.stop_propagation();
         }
         let count = menu.rows().len();
@@ -179,7 +185,7 @@ impl Waffle {
             _ => return,
         };
         self.search_pick = Some(self.search_pick(&menu).map_or(if step == 1 { 0 } else { count - 1 }, |i| (i + step) % count));
-        cx.notify();
+        self.redraw(Column::Main, cx);
         cx.stop_propagation();
     }
 
@@ -221,7 +227,7 @@ impl Waffle {
             results.close_filters();
         }
         self.search_pick = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): closes the filters card in the side panel and clears the pick in the header's search menu
     }
 
     fn accept_search_row(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -231,7 +237,7 @@ impl Waffle {
             Row::Filter(key) => self.replace_search_word(&format!("{}:", key.word()), None, window, cx),
             Row::More => {
                 self.search_more = !self.search_more;
-                cx.notify();
+                self.redraw(Column::Main, cx);
             }
             Row::Value(pick) => {
                 let pick = pick.clone();
@@ -273,7 +279,7 @@ impl Waffle {
         });
         self.search_pick = None;
         self.search_day = today();
-        cx.notify();
+        self.redraw(Column::Main, cx);
     }
 
     pub(crate) fn run_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -373,7 +379,7 @@ impl Waffle {
         let card = ui::surface(cx)
             .id("search-popover")
             .w(px(WIDTH))
-            .max_h(px(520.))
+            .max_h(px(POPOVER_MAX))
             .overflow_y_scroll()
             .occlude()
             // Clicks inside keep the field focused; the field's own mouse-down-out closes it.
@@ -452,7 +458,7 @@ impl Waffle {
             ui::icon_button(id, glyph, tip, cx).small().on_click(cx.listener(move |this, _, _, cx| {
                 let moved = if months < 0 { this.search_day.checked_sub_months(Months::new(1)) } else { this.search_day.checked_add_months(Months::new(1)) };
                 this.search_day = moved.unwrap_or(this.search_day).min(today());
-                cx.notify();
+                this.redraw(Column::Main, cx);
             }))
         };
         ui::col()
@@ -472,7 +478,7 @@ pub(crate) fn token_chip(key: &str, label: &str, avatar: Option<String>, in_fiel
     let (fill, word) = if in_field { (palette::accent_soft(cx), palette::accent_ink(cx)) } else { (palette::selected(cx), palette::muted(cx)) };
     ui::row()
         .flex_none()
-        .h(px(22.))
+        .h(px(CHIP_HEIGHT))
         .px_1p5()
         .gap_1()
         .squircle(RADIUS_XS)

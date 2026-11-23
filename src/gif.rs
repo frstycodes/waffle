@@ -317,12 +317,12 @@ fn plays(slot: &Slot, layout: &Layout) -> bool {
     }
     let visible = slot.bounds.intersect(&layout.clip(slot));
     if forced() {
-        return visible.size.width > px(0.) && visible.size.height > px(0.);
+        return visible.size.width > Pixels::ZERO && visible.size.height > Pixels::ZERO;
     }
     crate::presence::may_animate()
         && (!layout.covered || slot.top)
-        && visible.size.width > px(0.)
-        && visible.size.height > px(0.)
+        && visible.size.width > Pixels::ZERO
+        && visible.size.height > Pixels::ZERO
         && crate::presence::is_visible(visible)
 }
 
@@ -442,7 +442,6 @@ impl Render for GifLayer {
     // Paints the current frame of every playing GIF over its slot, clipped like the slot. Paint runs
     // after the app has placed this frame's slots, so positions are always current.
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        crate::perf::probe("GifLayer");
         let players = self.players.clone();
         canvas(
             |_, _, _| {},
@@ -496,7 +495,7 @@ fn subtract(area: Bounds<Pixels>, holes: &[Bounds<Pixels>]) -> Vec<Bounds<Pixels
                     Bounds::from_corners(point(hole.right().min(r.right()), top), point(r.right(), bottom)),
                 ]
                 .into_iter()
-                .filter(|b| b.size.width > px(0.) && b.size.height > px(0.))
+                .filter(|b| b.size.width > Pixels::ZERO && b.size.height > Pixels::ZERO)
                 .collect()
             })
             .collect();

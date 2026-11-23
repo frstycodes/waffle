@@ -21,6 +21,9 @@ use crate::{
     ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, Squircle, Tone},
 };
 
+// The mark in a dead invite's tile.
+const DEAD_ICON: f32 = 22.;
+
 // Previews for the first few Discord links in a message; any more stay plain links.
 const MAX_PREVIEWS: usize = 3;
 const MESSAGE_WIDTH: f32 = 432.;
@@ -160,7 +163,7 @@ impl Waffle {
                     Ok(preview) => previews.store(&key, preview),
                     Err(_) => previews.failed(&key),
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): link previews draw in the feed, the thread panel and the pins popover
             })
             .ok();
         })
@@ -375,7 +378,7 @@ fn invite_card(id: String, code: &str, invite: &Invite, ctx: &CardContext, cx: &
 }
 
 fn invalid_invite(id: String, cx: &App) -> AnyElement {
-    let tile = ui::row().size(px(INVITE_ICON)).flex_none().squircle(RADIUS_MD).bg(palette::selected(cx)).justify_center().text_color(palette::faint(cx)).child(Icon::new(Glyph::Prohibit).size(px(22.)));
+    let tile = ui::row().size(px(INVITE_ICON)).flex_none().squircle(RADIUS_MD).bg(palette::selected(cx)).justify_center().text_color(palette::faint(cx)).child(Icon::new(Glyph::Prohibit).size(px(DEAD_ICON)));
     let row = div().child(tile).child(
             ui::col()
                 .flex_1()

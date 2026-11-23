@@ -59,16 +59,16 @@ impl Waffle {
         let search = cx.new(|cx| SearchState::new(window, cx).placeholder("Search channels and people"));
         let note = cx.new(|cx| SearchState::new(window, cx).placeholder("Add a note (optional)"));
         let subscriptions = [
-            cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify()),
+            cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify()), // lint-allow(global-notify): the forward dialog is drawn by the root's overlays, over every column
             cx.subscribe_in(&note, window, |this, _, event: &InputEvent, _, cx| match event {
                 InputEvent::PressEnter { .. } => this.send_forward(cx),
-                _ => cx.notify(),
+                _ => cx.notify(), // lint-allow(global-notify): the forward dialog is drawn by the root's overlays, over every column
             }),
         ];
         search.update(cx, |state, cx| state.focus(window, cx));
         let guild_id = message.guild_id.clone().or_else(|| self.place_of(None, &message.channel_id).and_then(|(guild, _)| guild));
         self.forward_dialog = Some(ForwardDialog { message, guild_id, search, note, picked: Vec::new(), _subscriptions: subscriptions });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the forward dialog is drawn by the root's overlays, over every column
     }
 
     /// Names for the channels forwarded messages came from, for their source lines.
@@ -109,12 +109,12 @@ impl Waffle {
             None if dialog.picked.len() < MAX_PLACES => dialog.picked.push((id, label)),
             None => {}
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the forward dialog is drawn by the root's overlays, over every column
     }
 
     fn close_forward(&mut self, cx: &mut Context<Self>) {
         self.forward_dialog = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the forward dialog is drawn by the root's overlays, over every column
     }
 
     // Closes at once; each place's outcome comes back as one toast when all have gone.
@@ -142,7 +142,7 @@ impl Waffle {
             this.update(cx, |this, cx| this.show_toast(forward_outcome(&labels, &failed), cx)).ok();
         })
         .detach();
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the forward dialog is drawn by the root's overlays, over every column
     }
 
     pub(crate) fn forward_overlay(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -227,9 +227,7 @@ impl Waffle {
             _ if place.channel.private || place.locked => Glyph::HashtagLock,
             _ => Glyph::Hashtag,
         };
-        ui::badged(ui::server_tile(guild.icon.as_deref(), &guild.name, LEAD, cx), LEAD, ui::Shape::Tile, surface)
-            .icon(ui::Spot::BottomRight, Icon::new(glyph), ui::MarkFill::Surface)
-            .into_any_element()
+        ui::badged(ui::server_tile(guild.icon.as_deref(), &guild.name, LEAD, cx), LEAD, ui::Shape::Tile, surface).icon(ui::Spot::BottomRight, Icon::new(glyph), ui::MarkFill::Surface).into_any_element()
     }
 
     // What goes out: the text, two lines at most, or what it carries, with the first picture at the right.

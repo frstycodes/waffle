@@ -20,6 +20,13 @@ use crate::{
     ui::{self, RADIUS_MD, Squircle},
 };
 
+// The least height of a reactor row.
+const REACTOR_ROW: f32 = 52.;
+// The emoji column of a reaction tab.
+const TAB_EMOJI: f32 = 26.;
+// A loading reactor's name bar.
+const SKELETON_NAME: f32 = 140.;
+
 const PAGE: usize = 100;
 const DIALOG_WIDTH: f32 = 560.;
 const DIALOG_HEIGHT: f32 = 600.;
@@ -82,7 +89,6 @@ impl ReactorsCard {
 
 impl Render for ReactorsCard {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        crate::perf::probe("ReactorsCard");
         let Some(waffle) = self.this.upgrade() else { return div().into_any_element() };
         let waffle = waffle.read(cx);
         // Its link opened the dialog; a hoverable tooltip stays up while the pointer rests on it, so it steps aside.
@@ -220,7 +226,7 @@ impl Waffle {
                     }
                     Err(_) => entry.failed = true,
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the reactions dialog is drawn by the root's overlays, over every column
             })
             .ok();
         })
@@ -252,7 +258,7 @@ impl Waffle {
             hovered: None,
             scroll: ScrollHandle::new(),
         });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the reactions dialog is drawn by the root's overlays, over every column
     }
 
     fn select_reaction(&mut self, emoji: Emoji, cx: &mut Context<Self>) {
@@ -261,12 +267,12 @@ impl Waffle {
         dialog.scroll = ScrollHandle::new();
         let (channel_id, message_id) = (dialog.channel_id.clone(), dialog.message_id.clone());
         self.load_reactors(&channel_id, &message_id, &emoji, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the reactions dialog is drawn by the root's overlays, over every column
     }
 
     fn close_reactions(&mut self, cx: &mut Context<Self>) {
         self.reactions_dialog = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the reactions dialog is drawn by the root's overlays, over every column
     }
 
     fn reactions_scrolled(&mut self, cx: &mut Context<Self>) {
@@ -326,7 +332,7 @@ impl Waffle {
         } else if dialog.hovered.as_deref() == Some(user_id) {
             dialog.hovered = None;
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the reactions dialog is drawn by the root's overlays, over every column
     }
 
     // Header, then the reactions down the left by count and the selected one's people on the right.
@@ -433,7 +439,7 @@ impl Waffle {
             .id(SharedString::from(format!("reactor-{}", user.id)))
             .flex_none()
             .gap_3()
-            .min_h(px(52.))
+            .min_h(px(REACTOR_ROW))
             .px_2p5()
             .py_1p5()
             .squircle(RADIUS_MD)
@@ -455,7 +461,7 @@ fn reaction_tab(reaction: &Reaction, on: bool, cx: &mut Context<Waffle>) -> AnyE
         .h_10()
         .text_size(ui::TEXT_LEAD)
         .font_weight(FontWeight::SEMIBOLD)
-        .child(ui::row().items_stretch().w(px(26.)).flex_none().justify_center().child(emoji_face(&emoji, 22.)))
+        .child(ui::row().items_stretch().w(px(TAB_EMOJI)).flex_none().justify_center().child(emoji_face(&emoji, 22.)))
         .child(div().font_features(tabular()).when(reaction.me, |d| d.text_color(palette::accent_ink(cx))).child(grouped(reaction.count.into())))
         .tooltip(move |window, cx| ui::tip(code.clone(), window, cx))
         .on_click(cx.listener(move |this, _, _, cx| this.select_reaction(emoji.clone(), cx)))
@@ -466,10 +472,10 @@ fn skeleton_row(i: usize, cx: &mut Context<Waffle>) -> AnyElement {
     ui::row()
         .flex_none()
         .gap_3()
-        .min_h(px(52.))
+        .min_h(px(REACTOR_ROW))
         .px_2p5()
         .child(ui::skeleton_circle(("reactor-skeleton-face", i), AVATAR, cx))
-        .child(ui::skeleton(("reactor-skeleton-name", i), 6., cx).w(px(140.)).h_3())
+        .child(ui::skeleton(("reactor-skeleton-name", i), 6., cx).w(px(SKELETON_NAME)).h_3())
         .into_any_element()
 }
 
@@ -477,7 +483,7 @@ fn failed_row(cx: &mut Context<Waffle>) -> AnyElement {
     ui::row()
         .flex_none()
         .gap_2()
-        .min_h(px(52.))
+        .min_h(px(REACTOR_ROW))
         .px_2p5()
         .text_color(palette::muted(cx))
         .child("Couldn't load everyone who reacted.")

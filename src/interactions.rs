@@ -100,7 +100,7 @@ impl Waffle {
             })
             .detach();
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): message components, polls and pending commands draw in the feed and the thread panel
     }
 
     // Discord writes the interaction's id into the stand-in, which turns "Sending command..." into
@@ -112,7 +112,7 @@ impl Waffle {
         if let Some(meta) = self.stand_in_mut(&channel_id, &nonce).and_then(|m| m.interaction.as_mut()) {
             meta.id = id;
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): message components, polls and pending commands draw in the feed and the thread panel
     }
 
     // A command's reply arrives as its own message, so a success only ends a component's spinner or a
@@ -121,7 +121,7 @@ impl Waffle {
         if self.interactions.get(&nonce).is_some_and(|p| p.kind != InteractionKind::Command) {
             self.interactions.remove(&nonce);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): message components, polls and pending commands draw in the feed and the thread panel
     }
 
     /// INTERACTION_FAILURE from the gateway.
@@ -155,7 +155,7 @@ impl Waffle {
             InteractionKind::Component { .. } => p.failure = Some(component_failure(&refusal, &p.app.name)),
             InteractionKind::Modal => p.failure = Some(MODAL_FAILED.to_owned()),
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): message components, polls and pending commands draw in the feed and the thread panel
     }
 
     fn stand_in_mut(&mut self, channel_id: &str, nonce: &str) -> Option<&mut Message> {
@@ -179,7 +179,7 @@ impl Waffle {
         if p.kind == InteractionKind::Command {
             self.remove_message(&p.channel_id, &format!("pending-{nonce}"));
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): message components, polls and pending commands draw in the feed and the thread panel
     }
 
     /// Discord clears failed component interactions (and their red lines) on a channel switch.
@@ -210,7 +210,7 @@ impl Waffle {
         }
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(Duration::from_millis(wait + 1000)).await;
-            this.update(cx, |_, cx| cx.notify()).ok();
+            this.update(cx, |_, cx| cx.notify()).ok(); // lint-allow(global-notify): message components, polls and pending commands draw in the feed and the thread panel
         })
         .detach();
     }

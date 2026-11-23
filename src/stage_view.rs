@@ -19,6 +19,15 @@ use crate::{
     stage::{STAGE, hand_queue, ordinal, requests_allowed},
     ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, Squircle, Tone},
 };
+use crate::part::Column;
+
+// Where the requests badge sits on its button, the empty stage's art, an option row, and the hand badge.
+const REQUEST_BADGE_TOP: f32 = 3.;
+const REQUEST_BADGE_RIGHT: f32 = 5.;
+const EMPTY_ART: f32 = 56.;
+const OPTION_ROW: f32 = 34.;
+const HAND_BADGE_RIGHT: f32 = 9.;
+const HAND_BADGE_PAD: f32 = 5.;
 
 // The foot bar: 12px over its 48px controls, 16px under.
 const FOOT_HEIGHT: f32 = 12. + CONTROLS_HEIGHT + 16.;
@@ -136,11 +145,11 @@ impl Waffle {
         let requests = div()
             .relative()
             .flex_none()
-            .child(stage_icon_button("stage-requests-toggle", Glyph::Hand, if open { "Hide Requests" } else { "Show Requests" }, open).occlude().on_click(cx.listener(move |_, _, _, cx| {
+            .child(stage_icon_button("stage-requests-toggle", Glyph::Hand, if open { "Hide Requests" } else { "Show Requests" }, open).occlude().on_click(cx.listener(move |this, _, _, cx| {
                 cx.set_global(StageRequests((!open).then(|| channel_id.clone())));
-                cx.notify();
+                this.redraw(Column::Main, cx);
             })))
-            .when(room.hands > 0, |d| d.child(ui::count_badge(room.hands as u32).absolute().top(px(-3.)).right(px(-5.))));
+            .when(room.hands > 0, |d| d.child(ui::count_badge(room.hands as u32).absolute().top(px(-REQUEST_BADGE_TOP)).right(px(-REQUEST_BADGE_RIGHT))));
         ui::row()
             .h_10()
             .gap_2p5()
@@ -216,7 +225,7 @@ impl Waffle {
             .items_center()
             .justify_center()
             .gap_2()
-            .child(ui::icon_tile(Glyph::Stage, stage::wash(0.08), stage::strong()).size(px(56.)).mb_1())
+            .child(ui::icon_tile(Glyph::Stage, stage::wash(0.08), stage::strong()).size(px(EMPTY_ART)).mb_1())
             .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(title))
             .child(div().text_size(ui::TEXT_DETAIL).text_color(stage::muted()).child(body))
             .when(room.moderator, |d| {
@@ -301,7 +310,7 @@ impl Waffle {
         let (guild_id, channel_id) = (room.guild.id.clone(), room.channel.id.clone());
         let allow = ui::row()
             .id("stage-allow-requests")
-            .min_h(px(34.))
+            .min_h(px(OPTION_ROW))
             .px_2p5()
             .py_2()
             .squircle(RADIUS_SM)
@@ -465,10 +474,10 @@ fn hand_badge(place: usize) -> Div {
     ui::row()
         .absolute()
         .top_neg_1()
-        .right(px(-9.))
-        .h(px(22.))
-        .min_w(px(22.))
-        .pl(px(5.))
+        .right(px(-HAND_BADGE_RIGHT))
+        .h(ui::LINE_LEAD)
+        .min_w(ui::LINE_LEAD)
+        .pl(px(HAND_BADGE_PAD))
         .pr_1p5()
         .rounded_full()
         .gap_0p5()

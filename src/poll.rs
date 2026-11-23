@@ -201,14 +201,14 @@ impl Waffle {
             None if multiselect => picks.push(answer_id),
             None => *picks = vec![answer_id],
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): message components, polls and pending commands draw in the feed and the thread panel
     }
 
     pub(crate) fn toggle_poll_results(&mut self, message_id: String, cx: &mut Context<Self>) {
         if !self.poll_peek.remove(&message_id) {
             self.poll_peek.insert(message_id);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): message components, polls and pending commands draw in the feed and the thread panel
     }
 
     /// Votes for `picks`, or removes your vote when empty; shown at once, put back if Discord refuses.
@@ -248,7 +248,7 @@ impl Waffle {
         question.update(cx, |state, cx| state.focus(window, cx));
         self.menu = None;
         self.poll_creator = Some(PollCreator { question, answers, duration: DEFAULT_DURATION, multiselect: false, problems: Problems::default(), channel: label });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the poll creator is drawn by the root's overlays, over every column
     }
 
     fn poll_input(&self, placeholder: &'static str, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
@@ -276,7 +276,7 @@ impl Waffle {
                         creator.problems = problems;
                     }
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the poll creator is drawn by the root's overlays, over every column
             }
             _ => {}
         }
@@ -293,7 +293,7 @@ impl Waffle {
         }
         let Some(row) = self.poll_creator.as_ref().and_then(|c| c.answers.get(ix)) else { return };
         row.input.clone().update(cx, |state, cx| state.focus(window, cx));
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the poll creator is drawn by the root's overlays, over every column
     }
 
     // Demo scenes fill the creator as if typed; the last row keeps focus.
@@ -313,7 +313,7 @@ impl Waffle {
     fn remove_poll_answer(&mut self, ix: usize, cx: &mut Context<Self>) {
         let Some(creator) = self.poll_creator.as_mut().filter(|c| c.answers.len() > ANSWERS_MIN) else { return };
         creator.answers.remove(ix);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the poll creator is drawn by the root's overlays, over every column
     }
 
     pub(crate) fn set_poll_emoji(&mut self, ix: usize, emoji: Emoji) {
@@ -324,7 +324,7 @@ impl Waffle {
 
     fn close_poll_creator(&mut self, cx: &mut Context<Self>) {
         self.poll_creator = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the poll creator is drawn by the root's overlays, over every column
     }
 
     // The draft as typed: the question and the filled-in answers, trimmed.
@@ -345,7 +345,7 @@ impl Waffle {
             if let Some(creator) = self.poll_creator.as_mut() {
                 creator.problems = problems;
             }
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the poll creator is drawn by the root's overlays, over every column
         }
         let Some(draft) = self.poll_draft(cx) else { return };
         self.poll_creator = None;
@@ -388,7 +388,7 @@ impl Waffle {
                         creator.duration = i;
                     }
                     this.menu = None;
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the poll creator is drawn by the root's overlays, over every column
                 })
                 .radio(i == current)
                 .entry()
@@ -440,7 +440,7 @@ impl Waffle {
             if let Some(creator) = this.poll_creator.as_mut() {
                 creator.multiselect = !creator.multiselect;
             }
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the poll creator is drawn by the root's overlays, over every column
         }));
         let footer = ui::row().items_stretch()
             .justify_end()

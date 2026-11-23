@@ -1,5 +1,6 @@
 // What a game looks like around it: its card on the stage, the bar over it, the corner window and pop-out away from
 // its place, over a chat, as a line in the channel list, and as a live card in chats.
+use crate::ui;
 use super::*;
 
 pub(super) const FACES_SHOWN: usize = 4;
@@ -8,6 +9,7 @@ pub(super) const PIP_WIDTH: f32 = 400.;
 pub(super) const PIP_BAR: f32 = 40.;
 // The bar over a focused activity: the app, who's in it, and its actions.
 pub(super) const STAGE_BAR: f32 = 48.;
+#[cfg(target_os = "macos")]
 pub(super) const POPOUT_WIDTH: f32 = 960.;
 // A game over a chat starts at this share of it, top down, and the split stays within these.
 pub(super) const CHAT_SPLIT: f32 = 0.6;
@@ -19,10 +21,12 @@ pub(super) const LIST_ROW: f32 = 30.;
 pub(super) const LIST_INDENT: f32 = 32.;
 pub(super) const LIST_FACES: usize = 3;
 // A popped-out game's window: the game, edge to edge.
+#[cfg(target_os = "macos")]
 pub(super) struct ActivityPopout {
     frame: Entity<ActivityFrame>,
 }
 
+#[cfg(target_os = "macos")]
 impl gpui_kit::Render for ActivityPopout {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div().size_full().bg(gpui_kit::black()).child(self.frame.clone())

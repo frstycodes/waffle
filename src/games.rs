@@ -194,7 +194,7 @@ impl Waffle {
                     }
                     this.games.mine = game;
                     this.publish_presence();
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): your game shows in the user panel (nav), the member list and profile cards
                 });
                 if alive.is_err() {
                     break;
@@ -235,7 +235,7 @@ impl Waffle {
             // rows redrawing don't ask again every frame.
             let url = icon.ok().flatten().map(|hash| crate::discord::app_icon_url(&app_id, &hash));
             icons.borrow_mut().store(&app_id, url);
-            this.update(cx, |_, cx| cx.notify()).ok();
+            this.update(cx, |_, cx| cx.notify()).ok(); // lint-allow(global-notify): game icons show in the user panel (nav), the member list and profile cards
         })
         .detach();
         cached

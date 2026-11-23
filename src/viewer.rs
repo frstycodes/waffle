@@ -16,6 +16,9 @@ use crate::{
     ui::{self, Squircle},
 };
 
+// The viewer's previous and next arrows.
+const ARROW_ICON: f32 = 26.;
+
 const THUMB: f32 = 56.;
 const GAP: f32 = 8.;
 const STRIDE: f32 = THUMB + GAP;
@@ -58,7 +61,7 @@ impl Waffle {
     pub(crate) fn open_viewer_on(&mut self, items: Vec<Media>, index: usize, channel_id: String, window: &mut Window, cx: &mut Context<Self>) {
         self.viewer = Some(Viewer { items, index, from: index, strip: ScrollHandle::new(), reveal: Cell::new(true), loaded: Cell::new(0..0), channel_id, channel_total: None });
         window.focus(&self.focus, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the media viewer is drawn by the root, over every column
     }
 
     // Asks Discord's search how many messages in the channel carry an image and a video, for the counter.
@@ -83,7 +86,7 @@ impl Waffle {
             this.update(cx, |this, cx| {
                 let Some(viewer) = this.viewer.as_mut().filter(|v| v.channel_id == channel_id) else { return };
                 viewer.channel_total = Some((images.total + videos.total) as usize);
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the media viewer is drawn by the root, over every column
             })
             .ok();
         })
@@ -101,7 +104,7 @@ impl Waffle {
         viewer.index = index;
         viewer.items = items;
         viewer.reveal.set(true);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the media viewer is drawn by the root, over every column
     }
 
     pub(crate) fn close_viewer(&mut self, cx: &mut Context<Self>) {
@@ -109,7 +112,7 @@ impl Waffle {
             crate::video::pause(&key, cx);
         }
         self.viewer = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the media viewer is drawn by the root, over every column
     }
 
     pub(crate) fn step_viewer(&mut self, delta: isize, cx: &mut Context<Self>) {
@@ -135,7 +138,7 @@ impl Waffle {
         if let Some(key) = leaving {
             crate::video::pause(&key, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the media viewer is drawn by the root, over every column
     }
 
     // ←/→ step, Space plays or pauses a video, Shift+←/→ skip it 5s, M mutes it, Esc closes. True if handled.
@@ -186,7 +189,7 @@ impl Waffle {
                 .bg(gpui_kit::white().opacity(if enabled { 0.12 } else { 0.04 }))
                 .text_color(gpui_kit::white().opacity(if enabled { 1. } else { 0.3 }))
                 .when(enabled, |b| b.cursor_pointer().hover(|s| s.bg(gpui_kit::white().opacity(0.2))))
-                .child(Icon::new(glyph).size(px(26.)))
+                .child(Icon::new(glyph).size(px(ARROW_ICON)))
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_click(cx.listener(move |this, _, _, cx| this.step_viewer(delta, cx)))
         };
@@ -247,7 +250,7 @@ impl Waffle {
             viewer.reveal.set(false);
             let scroll = -f32::from(viewer.strip.offset().x);
             if let Some(to) = reveal_offset(viewer.index, scroll, view, content) {
-                viewer.strip.set_offset(point(px(-to), px(0.)));
+                viewer.strip.set_offset(point(px(-to), gpui_kit::Pixels::ZERO));
             }
         }
         let scroll = -f32::from(viewer.strip.offset().x);

@@ -309,12 +309,12 @@ mod tests {
     #[test]
     fn downscale_averages_blocks() {
         // 4x2 → 2x1: each output pixel is the mean of a 2x2 block.
-        let px = |v: u8| [v, v, v, 255];
-        let src: Vec<u8> = [px(0), px(100), px(200), px(40), px(100), px(200), px(0), px(40)].concat();
+        let gray = |v: u8| [v, v, v, 255];
+        let src: Vec<u8> = [gray(0), gray(100), gray(200), gray(40), gray(100), gray(200), gray(0), gray(40)].concat();
         assert_eq!(downscale(&src, 4, 2, 2, 1), [100, 100, 100, 255, 70, 70, 70, 255]);
         // An odd edge is trimmed, not resampled.
-        let odd: Vec<u8> = (0..3 * 3).flat_map(|i| px(i as u8)).collect();
-        assert_eq!(downscale(&odd, 3, 3, 2, 2), [px(0), px(1), px(3), px(4)].concat());
+        let odd: Vec<u8> = (0..3 * 3).flat_map(|i| gray(i as u8)).collect();
+        assert_eq!(downscale(&odd, 3, 3, 2, 2), [gray(0), gray(1), gray(3), gray(4)].concat());
     }
 
     // Live: captures the primary monitor for a moment. `cargo test --example voice_join -- --ignored capture_windows`
@@ -323,7 +323,7 @@ mod tests {
     fn captures_primary_monitor_and_lists_windows() {
         let captured = start(ShareSource::Screen(0), 30, 1280, 720, true).unwrap();
         let frame = captured.frames.recv_timeout(Duration::from_secs(5)).expect("a frame within 5 s");
-        assert!(frame.width <= 1280 && frame.height <= 720 && frame.width % 2 == 0);
+        assert!(frame.width <= 1280 && frame.height <= 720 && frame.width.is_multiple_of(2));
         assert_eq!(frame.bgra.len(), (frame.width * frame.height * 4) as usize);
         eprintln!("captured {}x{}", frame.width, frame.height);
         let screens = screens().unwrap();

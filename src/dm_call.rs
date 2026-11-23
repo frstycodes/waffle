@@ -28,6 +28,13 @@ const LANDSCAPE: f32 = 440.;
 const RING: (f32, f32) = (340., 102.);
 const HEAD: f32 = 52.;
 const BAR: f32 = 52.;
+// The ringing card: the caller's face, the width of the Join and Decline column, and the button heights.
+const RING_FACE: f32 = 52.;
+const RING_ACTIONS: f32 = 112.;
+const END_ICON: f32 = 19.;
+const CHEVRON_PAD: f32 = 3.;
+const WASH_BUTTON: f32 = 30.;
+const WASH_ICON: f32 = 17.;
 const INSET: f32 = 8.;
 // A face in a two-person call, and in a group's two-column grid; each over a name line.
 const DUO_FACE: f32 = 72.;
@@ -123,7 +130,7 @@ impl Waffle {
             self.stop_ringing_in();
         }
         self.dm_calls.insert(channel_id, ringing);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the ringing card is an overlay and the DM list marks the call in the nav
     }
 
     pub(crate) fn on_dm_call_ended(&mut self, channel_id: &str) {
@@ -170,7 +177,7 @@ impl Waffle {
         crate::discord::runtime().spawn(async move {
             let _ = client.call(reqwest::Method::POST, format!("/channels/{channel_id}/call/stop-ringing"), Some(serde_json::json!({ "recipients": [me] }))).await;
         });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the ringing card is an overlay and the DM list marks the call in the nav
     }
 
     // Rings everyone in the DM who isn't in its call, with our ringtone until one joins.
@@ -220,7 +227,7 @@ impl Waffle {
             this.update(cx, |this, cx| {
                 if this.dm_call_ended.as_ref().is_some_and(|(_, _, shown)| *shown == at) {
                     this.dm_call_ended = None;
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the call-ended toast is an overlay, which only follows the app
                 }
             })
             .ok();
@@ -235,7 +242,7 @@ impl Waffle {
             self.open_channel(channel, window, cx);
         }
         self.call_view = true;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): call_view swaps the main column and the nav selection
     }
 
     // The stage's way back to the DM's chat; the call goes on in its window.
@@ -244,7 +251,7 @@ impl Waffle {
             self.set_call_fullscreen(false, window, cx);
         }
         self.call_view = false;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): call_view swaps the main column and the nav selection
     }
 
     // The floating call window: ringing, the call while we're off its stage, or its last word.
@@ -298,7 +305,7 @@ impl Waffle {
             .p_3p5()
             .child(
                 div()
-                    .size(px(52.))
+                    .size(px(RING_FACE))
                     .flex_none()
                     .rounded_full()
                     .child(face)
@@ -313,7 +320,7 @@ impl Waffle {
             )
             .child(
                 ui::col()
-                    .w(px(112.))
+                    .w(px(RING_ACTIONS))
                     .flex_none()
                     .gap_1p5()
                     .child(
@@ -479,7 +486,7 @@ impl Waffle {
             .bg(palette::danger())
             .hover(|s| s.bg(palette::danger_hover()))
             .text_color(gpui_kit::white())
-            .child(Icon::new(Glyph::CallEnd).size(px(19.)))
+            .child(Icon::new(Glyph::CallEnd).size(px(END_ICON)))
             .tooltip(|window, cx| ui::tip("Leave call", window, cx))
             .on_click(cx.listener(|this, _, _, cx| this.leave_call_asking(cx)));
         let group = ui::row().items_stretch().p_0p5().gap_0p5().squircle(12.).bg(stage::wash(0.06)).child(mic).child(camera).child(share);
@@ -502,7 +509,7 @@ impl Waffle {
                 .occlude()
                 .h_8()
                 .pl_1p5()
-                .pr(px(3.))
+                .pr(px(CHEVRON_PAD))
                 .mr_1()
                 .flex_none()
                 .gap_2()
@@ -571,7 +578,7 @@ fn window_icon_button(id: &'static str, glyph: Glyph, tip: &'static str) -> Stat
 fn stage_wash_button(id: &'static str, glyph: Glyph, label: SharedString) -> Stateful<Div> {
     ui::row()
         .id(id)
-        .h(px(30.))
+        .h(px(WASH_BUTTON))
         .px_3()
         .gap_1p5()
         .squircle(11.)
@@ -611,7 +618,7 @@ fn window_control(id: &'static str, glyph: Glyph, tip: &'static str, look: Look,
         .justify_center()
         .bg(fill)
         .text_color(ink)
-        .child(Icon::new(glyph).size(px(17.)))
+        .child(Icon::new(glyph).size(px(WASH_ICON)))
         .when(enabled, |b| b.cursor_pointer().hover(move |s| s.bg(hover)))
         .when(!enabled, |b| b.opacity(0.4).cursor(gpui_kit::CursorStyle::OperationNotAllowed))
         .tooltip(move |window, cx| ui::tip(tip, window, cx))

@@ -32,6 +32,25 @@ use crate::{
     ui::{self, RADIUS_LG, RADIUS_MD, Squircle},
 };
 
+mod parts;
+
+use self::parts::*;
+
+mod status;
+
+pub(crate) use self::status::*;
+
+// A select's list opens this far under its anchor.
+const SELECT_GAP: f32 = 4.;
+// Where the demo scene opens a select.
+const DEMO_SELECT_X: f32 = 80.;
+// Where the demo scene opens a select.
+const DEMO_SELECT_Y: f32 = 400.;
+// The height of the line naming who used a component.
+const CAPTION_HEIGHT: f32 = 22.;
+// The row the eye mark sits in, one text line.
+const SEEN_ICON_HEIGHT: f32 = 18.;
+
 // The prototype's `.comps`: components never run wider than this.
 const MAX_WIDTH: f32 = 520.;
 // Discord fits a thumbnail inside 170×170 at its own shape, no side under 85.
@@ -219,7 +238,7 @@ impl Waffle {
         self.settle_select(cx);
         let key = host.key(&select);
         let anchor = self.component_state.anchors.borrow().get(&key).copied();
-        let at = anchor.map_or(fallback, |b| point(b.left(), b.bottom() + px(4.)));
+        let at = anchor.map_or(fallback, |b| point(b.left(), b.bottom() + px(SELECT_GAP)));
         self.component_state.open = Some(OpenSelect { host: host.clone(), select: select.clone() });
         let search = (select.kind != SelectKind::String).then(|| self.reset_select_search(&host, &select, window, cx));
         self.open_live_menu(at, move |this| this.select_entries(&host, &select, search.clone()), cx);
@@ -240,7 +259,7 @@ impl Waffle {
         let picks = self.component_state.picks.get(&key).cloned().unwrap_or_else(|| defaults.clone());
         let sent = self.component_state.sent.get(&key).cloned().unwrap_or(defaults);
         if !should_send(&picks, &sent, &select) {
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): a message's select draws in the feed, the thread panel and the pins popover
         }
         self.component_state.sent.insert(key, picks.clone());
         self.use_component(&message, &Component::Select(select), picks, cx);
@@ -277,7 +296,7 @@ impl Waffle {
         let state = &mut self.component_state;
         state.query = query.trim().to_owned();
         state.search_seq += 1;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the open select's list is drawn by the root's overlays, over every column
         if state.query.is_empty() || state.search_guild.is_none() {
             return;
         }
@@ -458,7 +477,7 @@ impl Waffle {
         if !picks.is_empty() {
             self.component_state.picks.insert((message.id.clone(), custom_id.to_owned()), picks.iter().map(|p| (*p).to_owned()).collect());
         }
-        self.open_select(SelectHost::Message(Box::new(message)), select, point(px(80.), px(400.)), window, cx);
+        self.open_select(SelectHost::Message(Box::new(message)), select, point(px(DEMO_SELECT_X), px(DEMO_SELECT_Y)), window, cx);
     }
 
     // Demo scenes: a premium button's SKU as if it had loaded.
@@ -482,7 +501,7 @@ impl Waffle {
         let picks = if multi { toggle_pick(&self.host_picks(host, select), value, select.max) } else { vec![value.to_owned()] };
         self.component_state.picks.insert(key, picks);
         if multi {
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the open select's list is drawn by the root's overlays, over every column
         }
         self.menu = None;
         self.settle_select(cx);
@@ -503,7 +522,7 @@ impl Waffle {
                 if let Some(sku) = body.ok().and_then(|b| premium_sku(&b, &sku_id)) {
                     this.component_state.skus.borrow_mut().insert(sku_id, sku);
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): a message's price tag draws in the feed, the thread panel and the pins popover
             })
             .ok();
         })
@@ -543,139 +562,6 @@ fn channel_listed(channel: &Channel, types: &[u8]) -> bool {
         return channel.kind != ChannelKind::Category;
     }
     types.contains(&channel.raw_type)
-}
-
-// The line above an app's reply: "[avatar] Mira used /play". A component's reply names no command.
-pub(crate) fn used_command(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyElement> {
-    let meta = message.interaction.as_ref()?;
-    let command = meta.command.as_ref()?;
-    let you = ctx.me.as_ref().is_some_and(|me| me.id == meta.user.id);
-    let name = if you { "You".to_owned() } else { ctx.name_of(&meta.user) };
-    let strong = palette::strong(cx);
-    Some(
-        ui::row()
-            .pl(px(chat::CONTENT_INSET))
-            .h(px(22.))
-            .gap_1p5()
-            .text_size(ui::TEXT_DETAIL)
-            .text_color(palette::muted(cx))
-            .child(ui::avatar(meta.user.avatar.clone(), 16.))
-            .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(name))
-            .child(div().flex_none().child("used"))
-            .child(ui::line(format!("/{command}")).font_weight(FontWeight::SEMIBOLD).text_color(palette::accent_ink(cx)))
-            .into_any_element(),
-    )
-}
-
-// The line under a command's stand-in or a deferred reply: Discord's "Sending command...", "{app} is
-// thinking...", or why it never answered.
-pub(crate) fn interaction_status(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyElement> {
-    let waiting = |text: String| {
-        ui::row()
-            .gap_2()
-            .italic()
-            .text_color(palette::muted(cx))
-            .child(ui::bars(SharedString::from(format!("thinking-{}", message.id)), palette::accent_ink(cx), 14.))
-            .child(text)
-            .into_any_element()
-    };
-    // Discord names the app by its bot's username.
-    let app = Some(message.author.username.clone()).filter(|u| !u.is_empty()).unwrap_or_else(|| ctx.name_of(&message.author));
-    Some(match interactions::command_status(message, interactions::now_ms())? {
-        CommandStatus::Sending => waiting("Sending command...".into()),
-        CommandStatus::Thinking => waiting(format!("{app} is thinking...")),
-        CommandStatus::TimedOut => failure_line(interactions::DID_NOT_RESPOND.into(), cx),
-        CommandStatus::Failed(why) => failure_line(why, cx),
-    })
-}
-
-pub(crate) fn is_ephemeral(message: &Message) -> bool {
-    message.flags & app_commands::EPHEMERAL != 0 || is_failed_stand_in(message)
-}
-
-// Our command's local stand-in, which the app never answered: only we ever saw it.
-pub(crate) fn is_failed_stand_in(message: &Message) -> bool {
-    message.state == SendState::Failed && interactions::is_stand_in(message)
-}
-
-// An ephemeral reply's tint: a 4% wash of the strong ink.
-pub(crate) fn ephemeral_tint(cx: &App) -> Hsla {
-    palette::strong(cx).opacity(0.04)
-}
-
-// Discord's footer: "Only you can see this • Dismiss message", or with `ephemerality_reason` "Only you
-// can see this message." over "{reason} • Dismiss". Dismissing drops it here, as Discord's does.
-pub(crate) fn only_you(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
-    let (this, channel_id, id) = (ctx.this(), message.channel_id.clone(), message.id.clone());
-    let reason = message.interaction.as_ref().and_then(|m| m.ephemerality_reason).map(ephemerality_reason);
-    let dismiss = ui::button(SharedString::from(format!("dismiss-{}", message.id)), ui::Tone::Link, cx)
-        .text_size(ui::TEXT_XS)
-        .child(if reason.is_some() { "Dismiss" } else { "Dismiss message" })
-        .on_click(move |_, _, cx| {
-            cx.stop_propagation();
-            this.update(cx, |this, cx| {
-                this.remove_message(&channel_id, &id);
-                cx.notify();
-            })
-            .ok();
-        });
-    let line = |lead: &str| ui::row().flex_wrap().gap_1().child(lead.to_owned()).child("•").child(dismiss);
-    let text = match reason {
-        Some(reason) => ui::col().child("Only you can see this message.").child(line(reason)),
-        None => line("Only you can see this"),
-    };
-    ui::row()
-        .mt_1p5()
-        .items_start()
-        .gap_1p5()
-        .text_size(ui::TEXT_XS)
-        .text_color(palette::muted(cx))
-        .child(ui::row().flex_none().h(px(18.)).child(Icon::new(Glyph::Eye).size(ui::ICON_SM)))
-        .child(text)
-        .into_any_element()
-}
-
-// `interaction_metadata.ephemerality_reason` in Discord's words; an unknown one (0 included, as
-// Discord's switch has no case for NONE) reads as its default.
-fn ephemerality_reason(reason: u64) -> &'static str {
-    match reason {
-        1 => "This feature is temporarily limited",
-        2 => "This feature is temporarily limited for this server",
-        3 => "This feature is temporarily limited for you",
-        4 => "You are sending messages too quickly",
-        5 => "You are being rate limited",
-        6 => "You cannot message this user",
-        7 => "You do not meet this server's verification level",
-        8 => "You cannot unarchive this thread",
-        9 => "You cannot join this thread",
-        10 => "You cannot send messages in this channel",
-        11 => "You cannot send attachments in this channel",
-        12 => "You cannot send embeds in this channel",
-        13 => "You cannot send stickers in this channel",
-        14 => "This message was blocked by AutoMod. The message may also be viewed by the community owners.",
-        15 => "This message contains a link blocked by Discord.",
-        16 => "You cannot use this command in this channel",
-        17 => "Only you can see this message during beta",
-        18 => "You cannot use external apps in this channel",
-        _ => "An unknown error occurred",
-    }
-}
-
-// Discord's red failure line: an error icon and what went wrong. No retry.
-fn failure_line(text: String, cx: &App) -> AnyElement {
-    ui::row()
-        .mt_1()
-        .gap_1p5()
-        .text_color(palette::danger_ink(cx))
-        .child(Icon::new(Glyph::WarningCircle).size(ui::ICON_MD).flex_none())
-        .child(div().min_w_0().child(text))
-        .into_any_element()
-}
-
-// Under a row or section: the line for the failed interaction on one of its controls.
-fn failed_line<'a>(message: &Message, controls: impl IntoIterator<Item = &'a Component>, ctx: &RowContext, cx: &App) -> Option<AnyElement> {
-    let failure = controls.into_iter().filter_map(custom_id).find_map(|id| ctx.components.calls.get(&(message.id.clone(), id)).and_then(|c| c.failure.clone()))?;
-    Some(failure_line(failure, cx))
 }
 
 // The room a component has: its width (a gallery fills it) and whether it sits in a container, where
@@ -764,196 +650,6 @@ fn button(message: &Message, b: &Button, path: &str, ctx: &Rc<RowContext>, cx: &
             this.update(cx, |this, cx| this.use_component(&m, &Component::Button(press.clone()), Vec::new(), cx)).ok();
         })
         .into_any_element()
-}
-
-// The SKU as fetched so far; drawing a button the first time asks for it.
-fn sku_state(sku_id: &str, ctx: &RowContext, cx: &mut App) -> Sku {
-    if let Some(sku) = ctx.components.skus.borrow().get(sku_id) {
-        return sku.clone();
-    }
-    let (this, id) = (ctx.this(), sku_id.to_owned());
-    cx.defer(move |cx| {
-        this.update(cx, |this, cx| this.load_sku(id, cx)).ok();
-    });
-    Sku::Loading
-}
-
-// GET /applications/storefront/interactions/premium-button/{sku}, read as Discord's premium button
-// does: an unavailable SKU, a subscription with no plan, or a SKU with no price is "Product
-// Unavailable"; otherwise "{name} - {price}" (a subscription priced by its first plan).
-// Not verified: the response's field shapes (`skus[].price.{amount,currency}`, `available`,
-// `subscription_plans[].{price,currency}`); Discord reads them through its stores. Discord also waits
-// for the SKU's store listing (and a subscription's parent SKU); Waffle doesn't.
-fn premium_sku(body: &Value, sku_id: &str) -> Option<Sku> {
-    let sku = body["skus"].as_array()?.iter().find(|s| s["id"].as_str() == Some(sku_id))?;
-    let name = sku["name"].as_str()?;
-    if sku["available"].as_bool() == Some(false) {
-        return Some(Sku::Unavailable);
-    }
-    let price = if sku["type"].as_u64() == Some(SKU_SUBSCRIPTION) {
-        body["subscription_plans"].as_array().and_then(|p| p.first()).and_then(|p| Some((p["price"].as_u64()?, p["currency"].as_str()?)))
-    } else {
-        Some((sku["price"]["amount"].as_u64(), sku["price"]["currency"].as_str())).and_then(|(a, c)| Some((a?, c?)))
-    };
-    Some(price.map_or(Sku::Unavailable, |(amount, currency)| Sku::Ready(format!("{name} - {}", format_price(amount, currency)))))
-}
-
-// An amount in the currency's minor units as en-US formats it.
-// Not verified: Discord formats with Intl.NumberFormat; this covers the common symbols and the
-// zero-decimal currencies, and falls back to the ISO code.
-fn format_price(amount: u64, currency: &str) -> String {
-    let currency = currency.to_lowercase();
-    let decimals = if matches!(currency.as_str(), "jpy" | "krw" | "vnd" | "clp" | "isk") { 0 } else { 2 };
-    let value = amount as f64 / 10f64.powi(decimals);
-    let number = format!("{value:.0$}", decimals as usize);
-    match currency.as_str() {
-        "usd" => format!("${number}"),
-        "eur" => format!("€{number}"),
-        "gbp" => format!("£{number}"),
-        "jpy" => format!("¥{number}"),
-        other => format!("{} {number}", other.to_uppercase()),
-    }
-}
-
-// A field with the placeholder or the picks; clicking opens the options as a menu under it.
-fn select_field(message: &Message, s: &Select, path: &str, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
-    let key = (message.id.clone(), s.custom_id.clone());
-    let open = ctx.components.open.as_ref() == Some(&key);
-    let busy = ctx.components.calls.get(&key).is_some_and(|c| c.failure.is_none());
-    let blocked = !busy && ctx.components.busy.contains(&message.id);
-    let defaults = ctx.components.defaults.get(&key).cloned().unwrap_or_else(|| s.options.iter().filter(|o| o.default).cloned().collect());
-    let values = ctx.components.picks.get(&key).cloned().unwrap_or_else(|| defaults.iter().map(|o| o.value.clone()).collect());
-    let known: Vec<SelectOption> = s.options.iter().cloned().chain(defaults).collect();
-    let picked = labels(&values, &known, |v| ctx.name_for_id(v));
-    let (this, m, select) = (ctx.this(), message.clone(), s.clone());
-    let field = select_trigger(SharedString::from(format!("component-{}-{path}", message.id)), s, picked.clone(), open, cx)
-        .disabled(s.disabled || blocked || message.state != SendState::Sent)
-        .when(busy, |f| f.loading(Some(picked.unwrap_or_else(|| placeholder(s)))))
-        .on_click(move |event, window, cx| {
-            cx.stop_propagation();
-            this.update(cx, |this, cx| this.open_select(SelectHost::Message(Box::new(m.clone())), select.clone(), event.position(), window, cx)).ok();
-        });
-    anchored_field(ctx.components.anchors.clone(), key, field.into_any_element())
-}
-
-// The select field: its picks, else its placeholder in the faint ink.
-fn select_trigger(id: SharedString, s: &Select, picked: Option<String>, open: bool, cx: &App) -> ui::Control {
-    let empty = picked.is_none();
-    ui::select(id, None, picked.unwrap_or_else(|| placeholder(s)), open, cx).when(empty, |f| f.text_color(palette::faint(cx)))
-}
-
-fn placeholder(s: &Select) -> String {
-    s.placeholder.clone().unwrap_or_else(|| "Make a selection".into())
-}
-
-// The field with a canvas recording where it painted, so its menu opens under it.
-fn anchored_field(anchors: Anchors, key: ControlKey, field: AnyElement) -> AnyElement {
-    let canvas = gpui_kit::canvas(
-        move |b, _, _| {
-            anchors.borrow_mut().insert(key.clone(), b);
-        },
-        |_, _, _, _| {},
-    );
-    div().relative().w_full().child(canvas.absolute().size_full()).child(field).into_any_element()
-}
-
-// The labels behind `values`: from `known` options, then `fallback`, else the raw id.
-fn labels(values: &[String], known: &[SelectOption], fallback: impl Fn(&str) -> Option<String>) -> Option<String> {
-    let labels: Vec<String> = values.iter().map(|v| known.iter().find(|o| &o.value == v).map(|o| o.label.clone()).or_else(|| fallback(v)).unwrap_or_else(|| v.clone())).collect();
-    (!labels.is_empty()).then(|| labels.join(", "))
-}
-
-// Text on the left; a thumbnail or a button beside it on the right.
-fn section(message: &Message, children: &[Component], accessory: Option<&Component>, path: &str, room: Room, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
-    let text: Vec<AnyElement> = children.iter().enumerate().map(|(i, c)| component(message, c, format!("{path}-{i}"), room, ctx, cx)).collect();
-    let failed = failed_line(message, accessory, ctx, cx);
-    let accessory = accessory.map(|a| component(message, a, format!("{path}-a"), room, ctx, cx));
-    let row = ui::row()
-        .items_start()
-        .gap_3p5()
-        .child(ui::col().flex_1().gap_1().text_color(palette::strong(cx)).children(text))
-        .children(accessory.map(|a| div().flex_none().child(a)));
-    ui::col().child(row).children(failed).into_any_element()
-}
-
-fn thumbnail(message: &Message, url: &str, spoiler: bool, size: (Option<u32>, Option<u32>), path: &str, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
-    let (w, h) = thumbnail_size(size.0, size.1);
-    let corners = ui::all(RADIUS_MD);
-    div()
-        .relative()
-        .flex_none()
-        .w(px(w))
-        .h(px(h))
-        .child(ui::media(resolve(message, url), corners).size_full().object_fit(gpui_kit::ObjectFit::Cover).bg(palette::selected(cx)))
-        .when(spoiler, |d| d.children(chat::veil(format!("thumb-{}-{path}", message.id), "Spoiler", corners, ctx)))
-        .into_any_element()
-}
-
-// Discord's fit: the media's shape inside 170×170 without growing it, each side at least 85 (the
-// picture covers the rest). One without a size takes the 85 square.
-// Not verified: the size Discord gives a thumbnail whose media came without one.
-fn thumbnail_size(width: Option<u32>, height: Option<u32>) -> (f32, f32) {
-    let (Some(w), Some(h)) = (width.filter(|w| *w > 0), height.filter(|h| *h > 0)) else { return (THUMBNAIL_MIN, THUMBNAIL_MIN) };
-    let (w, h) = (w as f32, h as f32);
-    let scale = (THUMBNAIL_MAX / w).min(THUMBNAIL_MAX / h).min(1.);
-    ((w * scale).max(THUMBNAIL_MIN), (h * scale).max(THUMBNAIL_MIN))
-}
-
-// The feed's media grid over the gallery's items at their own sizes, `width` wide; the viewer pages
-// through these alone.
-fn gallery(message: &Message, items: &[GalleryItem], path: &str, width: f32, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
-    let media = items
-        .iter()
-        .map(|i| {
-            let (w, h) = match (i.width, i.height) {
-                (Some(w), Some(h)) if w > 0 && h > 0 => (w as f32, h as f32),
-                _ => GALLERY_ITEM,
-            };
-            Media { url: resolve(message, &i.url), width: w, height: h, kind: MediaKind::Image, id: None, description: i.description.clone(), spoiler: i.spoiler }
-        })
-        .collect();
-    let grid = Message { id: format!("{}-gallery-{path}", message.id), channel_id: message.channel_id.clone(), media, ..Default::default() };
-    let shown: Vec<usize> = (0..grid.media.len()).collect();
-    chat::media_layout(&grid, &shown, width, Paging::Gallery, ctx, cx).map_or_else(|| div().into_any_element(), IntoElement::into_any_element)
-}
-
-// The file card, sized from the attachment it points at, else from the component's own `size`; a
-// spoiler covers it until clicked.
-#[allow(clippy::too_many_arguments)]
-fn file(message: &Message, url: &str, name: Option<&str>, size: Option<u64>, spoiler: bool, path: &str, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
-    let attached = attachment_name(url).and_then(|n| message.files.iter().find(|f| f.name == n)).cloned();
-    let file = attached.unwrap_or_else(|| File {
-        name: name.map(str::to_owned).or_else(|| url.rsplit('/').next().map(str::to_owned)).unwrap_or_default(),
-        url: url.to_owned(),
-        size: size.unwrap_or(0),
-        spoiler,
-        ..Default::default()
-    });
-    let card = chat::file_card(message, &file, cx);
-    if !spoiler {
-        return card;
-    }
-    div().relative().child(card).children(chat::veil(format!("file-{}-{path}", message.id), "Spoiler", ui::all(RADIUS_LG), ctx).map(|v| v.top_2())).into_any_element()
-}
-
-fn separator(divider: bool, large: bool, cx: &App) -> AnyElement {
-    div().py(px(if large { 8. } else { 2. })).when(divider, |d| d.child(div().h(ui::HAIRLINE).bg(palette::line(cx)))).into_any_element()
-}
-
-// A raised card at Discord's padding and gap; the app's accent colour becomes a light tint and a tinted
-// hairline, never a stripe.
-fn container(message: &Message, accent: Option<u32>, children: &[Component], path: &str, width: f32, ctx: &Rc<RowContext>, cx: &mut App) -> Div {
-    let raised = palette::surface(Level::Raised, cx);
-    let (fill, edge) = match accent {
-        Some(color) => {
-            let tint = palette::data_color(color);
-            (ui::mix(raised, tint, 0.07), tint.opacity(0.35))
-        }
-        None => (raised, palette::line(cx)),
-    };
-    let room = Room { width: width - 2. * CONTAINER_INSET, reduced: true };
-    let children: Vec<AnyElement> = children.iter().enumerate().map(|(i, c)| component(message, c, format!("{path}-{i}"), room, ctx, cx)).collect();
-    ui::col().relative().w_full().p(px(CONTAINER_PAD)).gap(px(CONTAINER_GAP)).squircle(RADIUS_LG).bg(fill).border_1().border_color(edge).children(children)
 }
 
 // Every select in a component tree, depth first.

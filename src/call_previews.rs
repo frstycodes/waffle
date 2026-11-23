@@ -12,6 +12,9 @@ use crate::{
     ui::{self, RADIUS_MD, Squircle},
 };
 
+// How far a preview card starts to the right of its place, in px, before sliding in.
+const SLIDE_IN: f32 = 12.;
+
 // Discord's toasts: three at most, one shared 10 s timer, 8px apart.
 const CAP: usize = 3;
 const LINGER: Duration = Duration::from_secs(10);
@@ -108,7 +111,7 @@ impl Waffle {
             this.update(cx, |this, cx| {
                 if this.call_previews.expire(timer, Instant::now()) {
                     this.after_preview_exit(cx);
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the call preview cards are an overlay, which only follows the app
                 }
             })
             .ok();
@@ -125,7 +128,7 @@ impl Waffle {
             cx.background_executor().timer(EXIT).await;
             this.update(cx, |this, cx| {
                 this.call_previews.prune(Instant::now());
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the call preview cards are an overlay, which only follows the app
             })
             .ok();
         })
@@ -146,7 +149,7 @@ impl Waffle {
             self.call_view = true;
             self.composer.update(cx, |state, cx| state.focus(window, cx));
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): opening the call chat swaps the main column and shows its panel
     }
 
     // The Toggle Voice Channel Chat keybind: only in a server voice channel. Hotkeys come without a
@@ -215,7 +218,7 @@ impl Waffle {
                 .cursor_pointer()
                 .hover(|s| s.bg(palette::oklch(0.30, 0.005, 260.)))
                 .on_click(cx.listener(move |this, _, window, cx| this.open_preview(&channel, id.clone(), window, cx)))
-                .with_animation(SharedString::from(format!("call-preview-in-{}", p.message.id)), Animation::new(ui::DUR_PANEL), |card, t| card.opacity(t).left(px(12. * (1. - crate::motion::back_out(t)))))
+                .with_animation(SharedString::from(format!("call-preview-in-{}", p.message.id)), Animation::new(ui::DUR_PANEL), |card, t| card.opacity(t).left(px(SLIDE_IN * (1. - crate::motion::back_out(t)))))
                 .into_any_element()
         });
         let stack = ui::col()
@@ -234,7 +237,7 @@ impl Waffle {
                 if !*hovered {
                     this.after_preview_exit(cx);
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the call preview cards are an overlay, which only follows the app
             }));
         Some(stack.into_any_element())
     }

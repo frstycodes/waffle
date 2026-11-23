@@ -17,6 +17,7 @@ use crate::{
     sidebar::Nav,
     ui::{self, Squircle, Tone},
 };
+use crate::part::Column;
 
 // Discord hides the column at this window width and below.
 const BREAKPOINT: f32 = 1200.;
@@ -209,7 +210,7 @@ impl Waffle {
                     .update(cx, |this, cx| {
                         let showing = this.guild_id.is_none() && this.channel.is_none() && !this.inbox_page && this.friends_tab != FriendsTab::AddFriend;
                         if showing {
-                            cx.notify();
+                            this.redraw(Column::Main, cx);
                         }
                         showing
                     })

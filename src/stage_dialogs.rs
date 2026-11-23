@@ -43,7 +43,7 @@ impl Waffle {
             state.focus(window, cx);
         });
         self.stage_topic = Some(form);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the topic dialog is an overlay, which only follows the app
     }
 
     // "End Stage for Everyone": confirm, then end_stage.
@@ -77,7 +77,7 @@ impl Waffle {
 
     fn close_stage_topic(&mut self, cx: &mut Context<Self>) {
         self.stage_topic = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the topic dialog is an overlay, which only follows the app
     }
 
     // The topic field's events while the dialog is open: Enter submits, and the topic stops at Discord's 120.
@@ -99,7 +99,7 @@ impl Waffle {
             return;
         }
         let Some(form) = self.stage_topic.take() else { return };
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the topic dialog is an overlay, which only follows the app
         if form.editing {
             return self.edit_stage(&form.channel_id, topic, cx);
         }
@@ -144,7 +144,7 @@ impl Waffle {
                 if let Some(form) = this.stage_topic.as_mut() {
                     form.notify = !form.notify;
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the topic dialog is an overlay, which only follows the app
             }))
         });
         let actions = ui::row().items_stretch()

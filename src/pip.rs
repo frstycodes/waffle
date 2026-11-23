@@ -187,7 +187,7 @@ impl Waffle {
             // Never over the header and the window's own buttons.
             let top = crate::layout::HEADER_HEIGHT;
             this.pip.carried = Some((f32::from(at.x).clamp(0., (area.0 - size.0).max(0.)), f32::from(at.y).clamp(top, (area.1 - size.1).max(top))));
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the PiP floats over every column
         }))
         .on_drop(cx.listener(|this, _: &PipDrag, _, cx| this.land_pip(cx)))
         .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, _, cx| this.land_pip(cx)))
@@ -198,7 +198,7 @@ impl Waffle {
         self.pip.corner = nearest(at, self.pip.size.get(), self.pip.area);
         let n = self.pip.landed.map_or(0, |(_, n)| n + 1);
         self.pip.landed = Some((at, n));
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the PiP floats over every column
     }
 }
 

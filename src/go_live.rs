@@ -193,7 +193,7 @@ impl Waffle {
             let kept = this.update(cx, |this, cx| {
                 let Some(picker) = &mut this.share_picker else { return false };
                 picker.icons.extend(icons.iter().cloned());
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
                 true
             });
             if !kept.unwrap_or(false) {
@@ -206,7 +206,7 @@ impl Waffle {
                 let kept = this.update(cx, |this, cx| {
                     let Some(picker) = &mut this.share_picker else { return false };
                     picker.thumbs.push((source, image.clone()));
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
                     true
                 });
                 if !kept.unwrap_or(false) {
@@ -223,7 +223,7 @@ impl Waffle {
         self.share_picker = Some(SharePicker { tab: ShareTab::Windows, windows: None, screens: None, thumbs: Vec::new(), icons: Vec::new(), picked: false });
         self.share_choice = None;
         self.share_choice_label = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
     }
 
     // Fills the open picker's lists and preselects; the selection, or None once the picker has closed.
@@ -239,7 +239,7 @@ impl Waffle {
             self.share_choice = Some(source);
             self.share_choice_label = Some(label);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
         Some(self.share_choice)
     }
 
@@ -260,7 +260,7 @@ impl Waffle {
         picker.picked = true;
         self.share_choice = Some(source);
         self.share_choice_label = Some(label);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
     }
 
     fn go_live_from_picker(&mut self, cx: &mut Context<Self>) {
@@ -300,7 +300,7 @@ impl Waffle {
             .child(self.share_footer(cx));
         let backdrop = div().id("share-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
             this.close_share_picker(cx);
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
         }));
         let dialog = ui::dialog("share-picker", DIALOG_WIDTH, body, window, cx);
         Some(ui::modal(backdrop, dialog, cx))
@@ -316,7 +316,7 @@ impl Waffle {
                 if let Some(picker) = &mut this.share_picker {
                     picker.tab = TABS[i];
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
             })
             .ok();
         }, window, cx)
@@ -449,7 +449,7 @@ impl Waffle {
             .when(ready, |b| b.on_click(cx.listener(|this, _, _, cx| this.go_live_from_picker(cx))));
         let cancel = ui::button("go-live-cancel", ui::Tone::Ghost, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| {
             this.close_share_picker(cx);
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
         }));
         ui::row()
             .gap_2()

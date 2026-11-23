@@ -12,6 +12,12 @@ use crate::{
     search_menu::token_chip,
     ui::{self, RADIUS_MD, Squircle},
 };
+use crate::part::Column;
+
+// The filters card's width.
+const FILTER_WIDTH: f32 = 360.;
+// The tallest the filters card grows.
+const FILTER_MAX: f32 = 560.;
 
 // Wider than the member list: results carry pictures.
 pub(crate) const PANEL_WIDTH: f32 = 420.;
@@ -79,7 +85,7 @@ impl Waffle {
             params.push(("offset".into(), search::offset(page).to_string()));
         }
         let (scope, content) = (results.scope.clone(), results.content.clone());
-        cx.notify();
+        self.redraw(Column::Panel, cx);
         cx.spawn(async move |this, cx| {
             let result = client.search(&scope, &content, &params).await;
             this.update(cx, |this, cx| {
@@ -87,7 +93,7 @@ impl Waffle {
                 if let Some(results) = this.results().filter(|r| r.page == page && r.sort == sort && r.scope == scope) {
                     results.hits = Some(result.map_err(Into::into));
                 }
-                cx.notify();
+                this.redraw(Column::Panel, cx);
             })
             .ok();
         })
@@ -124,7 +130,7 @@ impl Waffle {
                 if let Some(results) = this.results() {
                     results.filters_open = !results.filters_open;
                 }
-                cx.notify();
+                this.redraw(Column::Panel, cx);
             }));
         let sort = ui::button("search-sort", ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::ArrowDown).size(ui::ICON_SM)).child(results.sort.label()).on_click(cx.listener(|this, event: &gpui_kit::ClickEvent, _, cx| {
             let current = this.results().map(|r| r.sort).unwrap_or_default();
@@ -298,8 +304,8 @@ impl Waffle {
         });
         ui::surface(cx)
             .id("search-filters-card")
-            .w(px(360.))
-            .max_h(px(560.))
+            .w(px(FILTER_WIDTH))
+            .max_h(px(FILTER_MAX))
             .overflow_y_scroll()
             .occlude()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
@@ -307,7 +313,7 @@ impl Waffle {
                 if let Some(results) = this.results() {
                     results.filters_open = false;
                 }
-                cx.notify();
+                this.redraw(Column::Panel, cx);
             }))
             .children(rows)
             .into_any_element()

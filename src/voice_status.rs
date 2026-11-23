@@ -22,6 +22,10 @@ use crate::{
     ui::{self, Tone},
 };
 
+// The line heights of the status line under a channel and of the dialog's prompt.
+const STATUS_LINE: f32 = 14.;
+const PROMPT_LINE: f32 = 26.;
+
 pub(crate) const ART: &str = "illustrations/voice-status.png";
 // Discord's modal: Set Status is disabled past 500 characters, and the remaining count shows past 250.
 const MAX_CHARS: usize = 500;
@@ -53,7 +57,7 @@ impl Waffle {
         for (channel, status) in statuses {
             self.set_voice_status(channel, status);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): a voice status shows on the channel list (nav) and the call stage (main)
     }
 
     fn set_voice_status(&mut self, channel_id: String, status: String) {
@@ -99,17 +103,17 @@ impl Waffle {
         let input = cx.new(|cx| SearchState::new(window, cx).placeholder(placeholder).default_value(shown));
         let subscription = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, _, cx| match event {
             InputEvent::PressEnter { .. } => this.submit_voice_status(cx),
-            _ => cx.notify(),
+            _ => cx.notify(), // lint-allow(global-notify): the status dialog is an overlay, which only follows the app
         });
         input.update(cx, |state, cx| state.focus(window, cx));
         self.menu = None;
         self.voice_status_dialog = Some(VoiceStatusDialog { channel_id: channel.id.clone(), current, input, sending: false, error: None, _subscription: subscription });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the status dialog is an overlay, which only follows the app
     }
 
     fn close_voice_status(&mut self, cx: &mut Context<Self>) {
         self.voice_status_dialog = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the status dialog is an overlay, which only follows the app
     }
 
     // The field's text as Discord takes it: picked custom emoji back to `<:name:id>`.
@@ -142,7 +146,7 @@ impl Waffle {
             dialog.sending = true;
             dialog.error = None;
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the status dialog is an overlay, which only follows the app
         let Some(client) = self.client.clone() else { return };
         cx.spawn(async move |this, cx| {
             let result = client.set_voice_channel_status(&channel_id, &status).await;
@@ -159,7 +163,7 @@ impl Waffle {
                         }
                     }
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the status dialog is an overlay, which only follows the app
             })
             .ok();
         })
@@ -174,7 +178,7 @@ impl Waffle {
             this.update(cx, |this, cx| match result {
                 Ok(()) => {
                     this.set_voice_status(channel_id, String::new());
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): a voice status shows on the channel list (nav) and the call stage (main)
                 }
                 Err(error) => this.show_toast(error, cx),
             })
@@ -219,7 +223,7 @@ impl Waffle {
     // Under the call's title: the status while it has one, opening the dialog for those who may change it.
     pub(crate) fn call_status_line(&self, channel: &Channel, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
         let status = self.voice_status_of(&channel.id).filter(|_| guild_voice(channel))?;
-        let line = ui::line(plain_status(status)).id("call-status").text_size(ui::TEXT_XS).line_height(px(14.)).font_weight(FontWeight::NORMAL).text_color(palette::stage::muted());
+        let line = ui::line(plain_status(status)).id("call-status").text_size(ui::TEXT_XS).line_height(px(STATUS_LINE)).font_weight(FontWeight::NORMAL).text_color(palette::stage::muted());
         if !self.can_edit_voice_status(channel) {
             return Some(line);
         }
@@ -288,7 +292,7 @@ impl Waffle {
                     this.close_voice_status(cx);
                 }
             }))
-            .child(div().text_center().text_size(ui::TEXT_LG).line_height(px(26.)).font_weight(FontWeight::BOLD).text_color(strong).child("What are we chatting about?"))
+            .child(div().text_center().text_size(ui::TEXT_LG).line_height(px(PROMPT_LINE)).font_weight(FontWeight::BOLD).text_color(strong).child("What are we chatting about?"))
             .child(div().mb_3().text_center().text_color(muted).child("Let others know what you're up to in the voice channel!"))
             .child(div().font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Status"))
             .child(field)
