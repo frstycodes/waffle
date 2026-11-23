@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::{
-    AnyElement, App, Context, Div, Entity, Focusable, FontWeight, Hsla, SharedString, Stateful, Window, WindowControlArea,
+    AnyElement, App, Context, Entity, Focusable, FontWeight, Hsla, SharedString, Window, WindowControlArea,
     component::{
         Icon,
         input::{Input, InputEvent, Textarea},
@@ -16,6 +16,7 @@ use serde_json::json;
 
 use crate::{
     Waffle, SearchState,
+    part::Column,
     discord::{ApiError, Channel, Relation, Relationship, Status},
     icons::Glyph,
     illustration::Illustration,
@@ -27,6 +28,10 @@ use crate::{
 };
 
 pub(crate) const MASCOT: &str = "add-friend-mascot-hit";
+
+// The Inbox page's column and the Add Friend page's column.
+const INBOX_WIDTH: f32 = 760.;
+const ADD_FRIEND_WIDTH: f32 = 560.;
 
 // Discord's cap on a friend request's note.
 const NOTE_MAX: usize = 120;
@@ -145,7 +150,7 @@ impl Waffle {
         self.guild_id = guild_id;
         self.channel = None;
         self.call_view = false;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): opening Friends or a server home changes the channel list (nav), the content (main) and the member list (panel)
     }
 
     pub(crate) fn here(&self) -> Stop {
@@ -173,7 +178,7 @@ impl Waffle {
             (false, Some(at)) => self.dms.insert(at, dm),
             (false, None) => self.dms.insert(0, dm),
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): a DM moving between lists changes the DM list (nav) and the open DM's header (main)
     }
 
     pub(crate) fn open_inbox(&mut self, cx: &mut Context<Self>) {
@@ -189,13 +194,13 @@ impl Waffle {
         if self.inbox.is_none() {
             self.fetch_mentions(cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the inbox page replaces the content (main) and lights the inbox button (nav)
     }
 
     pub(crate) fn fetch_saved(&mut self, cx: &mut Context<Self>) {
         let Some(client) = self.client.clone() else { return };
         self.saved = Some(None);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the saved list shows in the inbox popover, an overlay that only follows the app
         cx.spawn(async move |this, cx| {
             let result = client.saved_messages().await;
             this.update(cx, |this, cx| {
@@ -203,11 +208,11 @@ impl Waffle {
                     std::rc::Rc::make_mut(&mut this.saved_ids).extend(list.iter().map(|m| m.id.clone()));
                 }
                 this.saved = Some(Some(result.map_err(Into::into)));
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the saved list shows in the inbox popover, an overlay that only follows the app
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot fetch that ends when the request returns, holding a WeakEntity
     }
 
     // Your reaction frecency from Discord, merged into this device's.
@@ -228,7 +233,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot fetch that ends when the request returns, holding a WeakEntity
     }
 
     // Sends this device's reaction frecency to Discord a moment after the last reaction.
@@ -258,7 +263,7 @@ impl Waffle {
                 eprintln!("frecency: save failed: {e}");
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot sync that ends when the request returns, holding a WeakEntity
     }
 
     pub(crate) fn fetch_saved_ids(&mut self, cx: &mut Context<Self>) {
@@ -267,28 +272,28 @@ impl Waffle {
             let Ok(ids) = client.saved_message_ids().await else { return };
             this.update(cx, |this, cx| {
                 this.saved_ids = std::rc::Rc::new(ids.into_iter().collect());
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): saved marks show in message menus (overlays, which only follow the app) and message rows
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot fetch that ends when the request returns, holding a WeakEntity
     }
 
     pub(crate) fn fetch_mentions(&mut self, cx: &mut Context<Self>) {
         let Some(client) = self.client.clone() else { return };
         self.inbox = Some(None);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the mentions list shows in the inbox popover, an overlay that only follows the app
         let filters = self.prefs.mention_filters;
         let guild = self.guild_id.clone().filter(|_| filters.this_server);
         cx.spawn(async move |this, cx| {
             let result = client.mentions(filters.everyone, filters.roles, guild.as_deref()).await;
             this.update(cx, |this, cx| {
                 this.inbox = Some(Some(result.map_err(Into::into)));
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the mentions list shows in the inbox popover, an overlay that only follows the app
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot fetch that ends when the request returns, holding a WeakEntity
     }
 
     pub(crate) fn open_gifs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -315,7 +320,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot debounce that ends after its timer fires, holding a WeakEntity
     }
 
     fn search_gifs(&mut self, query: String, cx: &mut Context<Self>) {
@@ -326,11 +331,11 @@ impl Waffle {
                 if this.gif_picker.is_some() {
                     this.gif_picker = Some(Some(result.map_err(Into::into)));
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the GIF picker is a popover, an overlay that only follows the app
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot search that ends when the request returns, holding a WeakEntity
     }
 
     /// Sends the GIF the way Discord does: its Tenor link, which Discord embeds.
@@ -349,7 +354,7 @@ impl Waffle {
             .h_10()
             .gap_3()
             .child(Icon::new(Glyph::Users).size(ui::ICON_XL).flex_none())
-            .child(div().flex_1().min_w_0().truncate().child("Friends"))
+            .child(ui::line("Friends").flex_1())
             .when(pending > 0, |r| r.child(ui::count_badge(pending)))
             .on_click(cx.listener(|this, _, _, cx| this.open_home(cx)))
             .into_any_element()
@@ -359,13 +364,11 @@ impl Waffle {
     // The Inbox page: every recent mention, under a header like a channel's.
     pub(crate) fn render_inbox_page(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let page = palette::surface(palette::Level::Page, cx);
-        let header = div()
+        let header = ui::row()
             .occlude()
             .h(px(crate::layout::HEADER_HEIGHT))
             .pl_4()
             .pr_3()
-            .flex()
-            .items_center()
             .gap_2()
             .window_control_area(WindowControlArea::Drag)
             .text_size(ui::TEXT_MD)
@@ -373,14 +376,11 @@ impl Waffle {
             .text_color(palette::strong(cx))
             .child(Icon::new(Glyph::Inbox).size(ui::ICON_XL).text_color(palette::faint(cx)))
             .child("Inbox")
-            .child(div().ml_auto().child(self.caption_clearance(true)));
-        div()
+            .child(ui::row().flex_1().justify_end().child(self.caption_clearance(true)));
+        ui::col().min_h_0()
             .relative()
             .flex_1()
-            .min_w_0()
             .h_full()
-            .flex()
-            .flex_col()
             .bg(page)
             .text_color(palette::text(cx))
             .text_size(ui::TEXT_SM)
@@ -388,7 +388,7 @@ impl Waffle {
             .child(ui::hard_edge(|| false, cx).child(header))
             .child(
                 div().id("inbox-page").flex_1().min_h_0().overflow_y_scrollbar().pt_4().px_4().pb_6().child(
-                    div().w_full().max_w(px(760.)).mx_auto().flex().flex_col().gap_3().child(self.inbox_head(false, window, cx)).child(self.inbox_body(None, cx)),
+                    ui::row().w_full().justify_center().child(ui::col().w_full().max_w(px(INBOX_WIDTH)).gap_3().child(self.inbox_head(false, window, cx)).child(self.inbox_body(None, cx))),
                 ),
             )
             .into_any_element()
@@ -418,24 +418,21 @@ impl Waffle {
             this.update(cx, |this, cx| {
                 this.friends_tab = TABS[i];
                 this.add_friend_result = None;
-                cx.notify();
+                this.redraw(Column::Main, cx);
+                this.redraw(Column::Panel, cx);
             })
             .ok();
         }, window, cx);
         let new_group = ui::icon_button("new-group-dm", Glyph::ThreadNew, "New Group DM", cx).occlude().on_click(cx.listener(|this, _, window, cx| this.open_group_picker(None, window, cx)));
-        let header = div()
+        let header = ui::row()
             .occlude()
             .h(px(crate::layout::HEADER_HEIGHT))
             .pl_4()
             .pr_3()
-            .flex()
-            .items_center()
             .gap_3()
             .window_control_area(WindowControlArea::Drag)
             .child(
-                div()
-                    .flex()
-                    .items_center()
+                ui::row()
                     .gap_2()
                     .pr_3()
                     .border_r_1()
@@ -448,7 +445,7 @@ impl Waffle {
                     .child("Friends"),
             )
             .child(div().min_w_0().overflow_hidden().occlude().child(tabs))
-            .child(div().ml_auto().flex().items_center().child(new_group).child(self.caption_clearance(true)));
+            .child(ui::row().flex_1().justify_end().child(new_group).child(self.caption_clearance(true)));
         let heading = match tab {
             FriendsTab::Online => "Online",
             FriendsTab::All => "All friends",
@@ -459,43 +456,41 @@ impl Waffle {
         let body = match (people.is_empty(), tab) {
             (_, FriendsTab::AddFriend) => self.add_friend_page(cx),
             (true, FriendsTab::Online) => ui::empty_state("friends-empty", Illustration::FriendsOnline, "No one's around to play with Waffle.", "Your friends are offline. Say hi anyway, they'll see it when they're back.", cx)
-                .child(ui::button("show-all-friends", Tone::Secondary, cx).mt_2().child("Show all friends").on_click(cx.listener(|this, _, _, cx| {
+                .child(div().pt_2().child(ui::button("show-all-friends", Tone::Secondary, cx).child("Show all friends").on_click(cx.listener(|this, _, _, cx| {
                     this.friends_tab = FriendsTab::All;
-                    cx.notify();
-                })))
+                    this.redraw(Column::Main, cx);
+                    this.redraw(Column::Panel, cx);
+                }))))
                 .into_any_element(),
             (true, FriendsTab::All) => ui::empty_state("friends-empty", Illustration::FriendsAll, "Waffle is waiting on friends. You don't have to though!", "Add someone by their username to start chatting.", cx)
-                .child(ui::button("empty-add-friend", Tone::Primary, cx).mt_2().child("Add friend").on_click(cx.listener(|this, _, _, cx| {
+                .child(div().pt_2().child(ui::button("empty-add-friend", Tone::Primary, cx).child("Add friend").on_click(cx.listener(|this, _, _, cx| {
                     this.friends_tab = FriendsTab::AddFriend;
-                    cx.notify();
-                })))
+                    this.redraw(Column::Main, cx);
+                    this.redraw(Column::Panel, cx);
+                }))))
                 .into_any_element(),
             (true, FriendsTab::Pending) => ui::empty_state("friends-empty", Illustration::FriendsPending, "There are no pending friend requests. Here's Waffle for now.", "Requests you send and receive show up here.", cx).into_any_element(),
             (true, FriendsTab::Blocked) => ui::empty_state("friends-empty", Illustration::FriendsBlocked, "You can't unblock Waffle.", "People you block show up here.", cx).into_any_element(),
             (false, _) => {
                 let label = div().pt_2().px_2().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(format!("{heading} · {}", people.len()));
                 let rows: Vec<AnyElement> = people.iter().map(|r| self.friend_row(r, cx)).collect();
-                div().flex().flex_col().gap_0p5().child(label).children(rows).into_any_element()
+                ui::col().gap_0p5().child(label).children(rows).into_any_element()
             }
         };
         // The list stops under the header, a hard edge (the main view's never takes a hairline).
         let page = palette::surface(palette::Level::Page, cx);
-        div()
+        ui::col().min_h_0()
             .relative()
             .flex_1()
-            .min_w_0()
             .h_full()
-            .flex()
-            .flex_col()
             .bg(page)
             .text_color(palette::text(cx))
             .text_size(ui::TEXT_SM)
             .child(ui::hard_edge(|| false, cx).child(header))
             .child(
-                div()
+                ui::row().items_stretch()
                     .flex_1()
                     .min_h_0()
-                    .flex()
                     .child(div().id("friends-list").flex_1().min_w_0().h_full().overflow_y_scrollbar().pt_4().px_4().pb_6().child(body))
                     .children(self.active_now_column(window, cx)),
             )
@@ -524,9 +519,7 @@ impl Waffle {
             .on_click(cx.listener(|this, _, _, cx| this.send_friend_request(cx)));
         let username_focus = self.add_friend_input.read(cx).focus_handle(cx);
         let note_focus = self.add_friend_note.read(cx).focus_handle(cx);
-        let username = div()
-            .flex()
-            .items_center()
+        let username = ui::row()
             .gap_2()
             .child(div().flex_1().min_w_0().child(ui::text_field("add-friend-name", Input::new(&self.add_friend_input).appearance(false), &username_focus).leading(Icon::new(Glyph::At).size(ui::ICON_MD))))
             .child(send);
@@ -542,41 +535,30 @@ impl Waffle {
         let sent: Vec<AnyElement> = self.relationships.iter().filter(|r| r.kind == Relation::Outgoing).map(|r| self.friend_row(r, cx)).collect();
         let sent = (!sent.is_empty()).then(|| {
             let label = div().px_2().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(format!("Sent requests · {}", sent.len()));
-            div().flex().flex_col().gap_0p5().child(label).children(sent)
+            ui::col().gap_0p5().child(label).children(sent)
         });
-        let explore = div()
-            .id("add-friend-explore")
-            .flex()
-            .items_center()
-            .gap_3()
-            .p_2p5()
-            .squircle(ui::RADIUS_LG)
-            .cursor_pointer()
-            .hover(|s| s.bg(palette::hover(cx)))
-            .child(div().size_9().flex_none().squircle(ui::RADIUS_MD).bg(palette::positive_ink(cx)).text_color(gpui_kit::white()).flex().items_center().justify_center().child(Nav::Compass.icon().size_5()))
-            .child(ui::settings_text("Explore public servers", Some("No username handy? Meet people around gaming, music, anime and more."), cx))
-            .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)))
+        let explore = ui::list_row("add-friend-explore", "Explore public servers", cx)
+            .height(ui::RowHeight::Tall)
+            .lead(ui::row().size_9().flex_none().squircle(ui::RADIUS_MD).bg(palette::positive_ink(cx)).text_color(gpui_kit::white()).justify_center().child(Nav::Compass.icon().size_5()))
+            .subtitle("No username handy? Meet people around gaming, music, anime and more.")
+            .trailing(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)))
             .on_click(|_, _, cx| cx.open_url("https://discord.com/servers"));
-        let column = div()
+        let column = ui::col()
             .w_full()
-            .max_w(px(560.))
-            .flex()
-            .flex_col()
+            .max_w(px(ADD_FRIEND_WIDTH))
             .gap_6()
             .child(
-                div()
-                    .flex()
-                    .flex_col()
+                ui::col()
                     .items_center()
                     .gap_2()
                     .child(mascot)
                     .child(div().text_size(ui::TEXT_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Add a friend"))
                     .child(div().text_color(muted).child("Send a request with their Discord username.")),
             )
-            .child(div().flex().flex_col().gap_2().child(ui::settings_card(cx).p_4().gap_3().child(username).child(note).child(hint)).children(result))
+            .child(ui::col().gap_2().child(ui::settings_card(cx).p_4().gap_3().child(username).child(note).child(hint)).children(result))
             .children(sent)
             .child(explore);
-        div().w_full().flex().justify_center().pt_6().child(column).into_any_element()
+        ui::row().items_stretch().w_full().justify_center().pt_6().child(column).into_any_element()
     }
 
     pub(crate) fn on_add_friend_input(&mut self, _: &Entity<SearchState>, event: &InputEvent, _: &mut Window, cx: &mut Context<Self>) {
@@ -584,7 +566,7 @@ impl Waffle {
             InputEvent::PressEnter { .. } => self.send_friend_request(cx),
             InputEvent::Change => {
                 self.add_friend_result = None;
-                cx.notify();
+                self.redraw(Column::Main, cx);
             }
             _ => {}
         }
@@ -605,7 +587,7 @@ impl Waffle {
                 cx.update(|cx: &mut App| cx.open_url(&url));
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends when the captcha channel closes with the request, holding no entity
         cx.spawn(async move |this, cx| {
             let mut body = json!({ "username": username, "discriminator": null });
             if !note.is_empty() {
@@ -617,11 +599,11 @@ impl Waffle {
                     Ok(_) => Ok(format!("Success! Your friend request to {username} was sent.").into()),
                     Err(error) => Err(add_friend_error(&error, &username).into()),
                 });
-                cx.notify();
+                this.redraw(Column::Main, cx);
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot request that ends when it returns, holding a WeakEntity
     }
 
     // A person in the list (.friend): who they are, what they're up to, and the actions that fit.
@@ -637,61 +619,45 @@ impl Waffle {
         let page = palette::surface(palette::Level::Page, cx);
         let status = (relation.kind == Relation::Friend).then_some(presence.mark());
         let id = user.id.clone();
-        let acts: Vec<Stateful<Div>> = match relation.kind {
+        let acts: Vec<ui::Control> = match relation.kind {
             Relation::Friend => vec![
-                friend_action(("message", &id), Icon::new(Glyph::ChatRound), "Message", None, cx).on_click(cx.listener({
+                friend_action(("message", &id), Glyph::ChatRound, "Message", None, cx).on_click(cx.listener({
                     let id = id.clone();
                     move |this, _, window, cx| this.message_user(id.clone(), window, cx)
                 })),
-                friend_action(("more", &id), Nav::MoreVertical.icon(), "More", None, cx).on_mouse_down(gpui_kit::MouseButton::Left, {
+                friend_action(("more", &id), Glyph::MoreVertical, "More", None, cx).on_mouse_down(gpui_kit::MouseButton::Left, {
                     let user = user.clone();
                     cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_user_menu(user.clone(), None, crate::user_menu::Surface::Generic, e.position, cx))
                 }),
             ],
             Relation::Incoming => vec![
-                friend_action(("accept", &id), Icon::new(Glyph::Checkmark), "Accept", Some(palette::positive_ink(cx)), cx).on_click(cx.listener({
+                friend_action(("accept", &id), Glyph::Checkmark, "Accept", Some(palette::positive_ink(cx)), cx).on_click(cx.listener({
                     let user = user.clone();
                     move |this, _, _, cx| this.relation_optimistic(&user.id, Some((user.clone(), Relation::Friend)), Method::PUT, Some(json!({})), cx)
                 })),
-                friend_action(("ignore", &id), Nav::Close.icon(), "Ignore", Some(palette::danger_ink(cx)), cx).on_click(cx.listener({
+                friend_action(("ignore", &id), Glyph::X, "Ignore", Some(palette::danger_ink(cx)), cx).on_click(cx.listener({
                     let id = id.clone();
                     move |this, _, _, cx| this.relation_optimistic(&id, None, Method::DELETE, None, cx)
                 })),
             ],
-            Relation::Outgoing => vec![friend_action(("cancel", &id), Nav::Close.icon(), "Cancel request", Some(palette::danger_ink(cx)), cx).on_click(cx.listener({
+            Relation::Outgoing => vec![friend_action(("cancel", &id), Glyph::X, "Cancel request", Some(palette::danger_ink(cx)), cx).on_click(cx.listener({
                 let id = id.clone();
                 move |this, _, _, cx| this.relation_optimistic(&id, None, Method::DELETE, None, cx)
             }))],
-            Relation::Blocked => vec![friend_action(("unblock", &id), Nav::Close.icon(), "Unblock", None, cx).on_click(cx.listener({
+            Relation::Blocked => vec![friend_action(("unblock", &id), Glyph::X, "Unblock", None, cx).on_click(cx.listener({
                 let id = id.clone();
                 move |this, _, _, cx| this.relation_optimistic(&id, None, Method::DELETE, None, cx)
             }))],
         };
-        let hover = palette::hover(cx);
-        div()
-            .id(SharedString::from(format!("friend-{}", user.id)))
-            .min_h(px(60.))
-            .px_2()
-            .flex()
-            .items_center()
-            .gap_3()
-            .squircle(ui::RADIUS_MD)
-            .hover(move |s| s.bg(hover))
-            .child(avatar_with_status(&user.avatar, 32., status, page))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(user.name.clone()))
-                    .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(subtitle)),
-            )
+        ui::list_row(SharedString::from(format!("friend-{}", user.id)), user.name.clone(), cx)
+            .height(ui::RowHeight::Tall)
+            .lead(avatar_with_status(&user.avatar, 32., status, page))
+            .subtitle(ui::line(subtitle))
             // The buttons keep their press to themselves, so the row's own click (open the DM) never fires with them.
-            .child(div().flex_none().flex().gap_2().on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| cx.stop_propagation()).children(acts))
+            .trailing(ui::row().items_stretch().flex_none().gap_2().on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| cx.stop_propagation()).children(acts))
             .when(relation.kind == Relation::Friend, |row| {
                 let id = user.id.clone();
-                row.cursor_pointer().on_click(cx.listener(move |this, _, window, cx| this.message_user(id.clone(), window, cx)))
+                row.on_click(cx.listener(move |this, _, window, cx| this.message_user(id.clone(), window, cx)))
             })
             .on_mouse_down(gpui_kit::MouseButton::Right, {
                 let user = user.clone();
@@ -718,24 +684,9 @@ fn add_friend_error(error: &ApiError, username: &str) -> String {
 
 // A friend row's action (.friend .acts .iconbtn): a raised 36px tile with a hairline; `tone` is the
 // ink it hovers to (accept green, ignore coral).
-fn friend_action(id: (&'static str, &str), icon: Icon, tooltip: &'static str, tone: Option<Hsla>, cx: &App) -> Stateful<Div> {
+fn friend_action(id: (&'static str, &str), glyph: Glyph, tooltip: &'static str, tone: Option<Hsla>, cx: &App) -> ui::Control {
     let ink = tone.unwrap_or(palette::strong(cx));
-    div()
-        .id(SharedString::from(format!("{}-{}", id.0, id.1)))
-        .size_9()
-        .flex_none()
-        .squircle(ui::RADIUS_MD)
-        .border_1()
-        .border_color(palette::line(cx))
-        .bg(palette::surface(palette::Level::Raised, cx))
-        .flex()
-        .items_center()
-        .justify_center()
-        .cursor_pointer()
-        .text_color(palette::muted(cx))
-        .hover(move |s| s.text_color(ink))
-        .child(icon.size(ui::ICON_XL))
-        .tooltip(move |window, cx| ui::tip(tooltip, window, cx))
+    ui::icon_button(SharedString::from(format!("{}-{}", id.0, id.1)), glyph, tooltip, cx).sized(36.).tone(Tone::Secondary, cx).bordered(cx).hover(move |s| s.text_color(ink))
 }
 
 #[cfg(test)]

@@ -21,6 +21,7 @@ use crate::{
     icons::Glyph,
     mascot::Mood,
     palette,
+    part::Column,
     sidebar::{channel_glyph, channel_groups},
     ui::{self, Check, Squircle},
 };
@@ -28,6 +29,8 @@ use crate::{
 // channel_overrides[].flags: Discord clears it with OPT_IN_ENABLED when you unfollow.
 const FAVORITED: u64 = 1 << 11;
 const SAVE_AFTER: Duration = Duration::from_secs(1);
+// The widest the Channels & Roles page grows before it centres.
+const PAGE_WIDTH: f32 = 760.;
 const UNDER_FOLLOWED: &str = "You must unfollow this category to add or remove specific channels.";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -55,19 +58,16 @@ impl Waffle {
             BrowseTab::Customize => self.customize_tab(guild, cx),
             BrowseTab::Browse => self.browse_tab(guild, window, cx),
         };
-        div()
+        ui::col().min_h_0()
             .relative()
             .flex_1()
-            .min_w_0()
             .h_full()
-            .flex()
-            .flex_col()
             .bg(palette::surface(palette::Level::Page, cx))
             .text_color(palette::text(cx))
             .text_size(ui::TEXT_SM)
             // The main view's header: a hard edge, never a hairline.
             .child(ui::hard_edge(|| false, cx).child(self.channels_roles_header(has_prompts, tab, window, cx)))
-            .child(div().id("channels-roles").flex_1().min_h_0().overflow_y_scrollbar().pt_4().px_4().pb_6().child(div().w_full().max_w(px(760.)).mx_auto().child(body)))
+            .child(div().id("channels-roles").flex_1().min_h_0().overflow_y_scrollbar().pt_4().px_4().pb_6().child(ui::col().w_full().items_center().child(div().w_full().max_w(px(PAGE_WIDTH)).child(body))))
             .into_any_element()
     }
 
@@ -79,23 +79,19 @@ impl Waffle {
         let strip = ui::pill_tabs("channels-roles-tabs", &items, selected, move |i, _, cx| {
             this.update(cx, |this, cx| {
                 this.join.browse.tab = tabs[i];
-                cx.notify();
+                this.redraw(Column::Main, cx);
             })
             .ok();
         }, window, cx);
-        div()
+        ui::row()
             .occlude()
             .h(px(crate::layout::HEADER_HEIGHT))
             .pl_4()
             .pr_3()
-            .flex()
-            .items_center()
             .gap_3()
             .window_control_area(WindowControlArea::Drag)
             .child(
-                div()
-                    .flex()
-                    .items_center()
+                ui::row()
                     .gap_2()
                     .pr_3()
                     .border_r_1()
@@ -108,7 +104,8 @@ impl Waffle {
                     .child(page_title(has_prompts)),
             )
             .child(div().min_w_0().overflow_hidden().occlude().child(strip))
-            .child(div().ml_auto().child(self.caption_clearance(true)))
+            .child(div().flex_1())
+            .child(self.caption_clearance(true))
     }
 
     // CUSTOMIZE
@@ -130,22 +127,18 @@ impl Waffle {
         let picked: HashSet<&str> = onboarding.responses.iter().map(String::as_str).collect();
         // Discord lists the questions asked only here before the ones onboarding asked.
         let mut prompts: Vec<&Prompt> = onboarding.prompts.iter().collect();
-        prompts.sort_by_key(|p| p.in_onboarding);
+        prompts.sort_by_key(|p| p.in_onboarding); // lint-allow(render-work): sorts one server's onboarding questions, a dozen at most
         let saved = self.join.browse.saved.as_deref() == Some(guild.id.as_str());
-        div()
-            .flex()
-            .flex_col()
+        ui::col()
             .gap_3()
             .child(
-                div()
-                    .flex()
-                    .flex_col()
+                ui::col()
                     .gap_1()
                     .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
                     .child(div().text_color(palette::muted(cx)).child("Answer questions to get access to more channels and roles.")),
             )
             .children(prompts.into_iter().map(|prompt| self.prompt_card(&guild.id, prompt, &picked, cx)))
-            .when(saved, |d| d.child(div().flex().items_center().gap_1p5().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(Icon::new(Glyph::Checkmark).size(ui::ICON_SM)).child("Saved")))
+            .when(saved, |d| d.child(ui::row().gap_1p5().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(Icon::new(Glyph::Checkmark).size(ui::ICON_SM)).child("Saved")))
             .into_any_element()
     }
 
@@ -160,25 +153,21 @@ impl Waffle {
             let custom = option.emoji.as_ref().and_then(|e| e.url());
             let (guild_id, prompt_id, option_id) = (guild_id.to_owned(), prompt.id.clone(), option.id.clone());
             ui::chip(SharedString::from(format!("pick-{}", option.id)), None, label, on, cx)
-                .when_some(custom, |c, url| c.child(img(url).size(px(18.)).flex_none()))
+                .when_some(custom, |c, url| c.child(img(url).size(ui::ICON_LG).flex_none()))
                 .on_click(cx.listener(move |this, _, _, cx| this.pick_option(&guild_id, &prompt_id, &option_id, cx)))
         }).collect();
-        div()
+        ui::col()
             .p_4()
             .squircle(ui::RADIUS_LG)
             .bg(palette::surface(palette::Level::Group, cx))
-            .flex()
-            .flex_col()
             .gap_3()
             .child(
-                div()
-                    .flex()
-                    .flex_col()
+                ui::col()
                     .gap_0p5()
                     .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(prompt.title.clone()))
                     .child(div().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(if prompt.single_select { "Pick one" } else { "Choose all that apply." })),
             )
-            .child(div().flex().flex_wrap().gap_2().children(chips))
+            .child(ui::row().items_stretch().flex_wrap().gap_2().children(chips))
             .into_any_element()
     }
 
@@ -187,7 +176,7 @@ impl Waffle {
         let Some(prompt) = onboarding.prompts.iter().find(|p| p.id == prompt_id) else { return };
         toggle_pick(prompt, &mut onboarding.responses, option_id);
         self.join.browse.saved = None;
-        cx.notify();
+        self.redraw(Column::Main, cx);
         let guild_id = guild_id.to_owned();
         self.join.browse.save = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(SAVE_AFTER).await;
@@ -204,7 +193,7 @@ impl Waffle {
                 Ok(_) => this.join.browse.saved = Some(guild_id),
                 Err(error) => this.show_toast(error, cx),
             }
-            cx.notify();
+            this.redraw(Column::Main, cx);
         }, cx);
     }
 
@@ -217,9 +206,8 @@ impl Waffle {
         let sections = channel_groups(guild, self.my_id());
         let all: Vec<&Channel> = sections.iter().flat_map(|(_, channels)| channels).collect();
         let shown = all.iter().filter(|c| self.shows_in_list(guild, c)).count();
-        let tally = div()
+        let tally = ui::row().items_stretch()
             .flex_none()
-            .flex()
             .gap_1()
             .whitespace_nowrap()
             .text_color(palette::muted(cx))
@@ -233,11 +221,9 @@ impl Waffle {
                 cards.push(self.category_card(guild, &settings, category.as_ref(), &matches, window, cx));
             }
         }
-        div()
-            .flex()
-            .flex_col()
+        ui::col()
             .gap_3()
-            .child(div().flex().items_center().gap_3().child(div().flex_1().min_w_0().child(ui::search_field("browse-search", &search, cx))).child(tally))
+            .child(ui::row().gap_3().child(div().flex_1().min_w_0().child(ui::search_field("browse-search", &search, cx))).child(tally))
             .children(cards)
             .child(div().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child("Tip: Channels with mentions will always appear on your channel list, even if you hide them."))
             .into_any_element()
@@ -248,7 +234,8 @@ impl Waffle {
             return search.clone();
         }
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search Channels"));
-        cx.subscribe(&search, |_, _, _: &InputEvent, cx| cx.notify()).detach();
+        // lint-allow(detached-task): the subscription ends when the search entity, held in BrowseView, drops
+        cx.subscribe(&search, |this, _, _: &InputEvent, cx| this.redraw(Column::Main, cx)).detach();
         self.join.browse.search = Some(search.clone());
         search
     }
@@ -262,19 +249,15 @@ impl Waffle {
                 (false, false) => Check::Off,
             };
             let (guild_id, id) = (guild.id.clone(), category.id.clone());
-            div()
-                .flex()
-                .items_center()
+            ui::row()
                 .gap_2p5()
                 .pt_2p5()
                 .px_3()
                 .pb_1p5()
-                .child(div().flex_1().min_w_0().truncate().text_size(ui::TEXT_DETAIL).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(category.name.clone()))
+                .child(ui::line(category.name.clone()).flex_1().text_size(ui::TEXT_DETAIL).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)))
                 .child(
-                    div()
+                    ui::row()
                         .id(SharedString::from(format!("follow-category-{}", category.id)))
-                        .flex()
-                        .items_center()
                         .gap_2()
                         .cursor_pointer()
                         .text_size(ui::TEXT_DETAIL)
@@ -285,12 +268,10 @@ impl Waffle {
                         .on_click(cx.listener(move |this, _, _, cx| this.set_followed(&guild_id, &id, !category_followed, cx))),
                 )
         });
-        div()
+        ui::col()
             .p(px(ui::SURFACE_INSET))
             .squircle(ui::RADIUS_LG)
             .bg(palette::surface(palette::Level::Group, cx))
-            .flex()
-            .flex_col()
             .children(head)
             .children(channels.iter().map(|channel| self.browse_row(guild, settings, channel, category_followed, window, cx)))
             .into_any_element()
@@ -305,21 +286,17 @@ impl Waffle {
         let hover = palette::hover(cx);
         let why = if rules { Some("Everyone sees this channel.") } else if under_followed { Some(UNDER_FOLLOWED) } else { None };
         let (guild_id, id) = (guild.id.clone(), channel.id.clone());
-        let text = div()
+        let text = ui::col().min_h_0()
             .flex_1()
-            .min_w_0()
-            .flex()
-            .flex_col()
-            .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(channel.name.clone()))
-            .when_some(channel.topic.clone().filter(|t| !t.is_empty()), |d, topic| d.child(div().truncate().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(topic)));
-        div()
+            .child(ui::line(channel.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
+            .when_some(channel.topic.clone().filter(|t| !t.is_empty()), |d, topic| d.child(ui::line(topic).text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx))));
+        // lint-allow(custom-button): ui::list_row has no held state (dimmed check, no hover or click) or end-of-row note
+        ui::row()
             .id(SharedString::from(format!("browse-{}", channel.id)))
             .w_full()
             .min_h_11()
             .px_3()
             .py_2()
-            .flex()
-            .items_center()
             .gap_3()
             .squircle(ui::RADIUS_MD)
             .child(channel_glyph(channel).size_5().flex_none().text_color(palette::faint(cx)))

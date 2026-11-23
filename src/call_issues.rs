@@ -1,10 +1,10 @@
 // What went wrong with a stream or camera, in Waffle's words: Discord's AV error codes as a tile's line or tooltip.
-use gpui_kit::{Div, InteractiveElement, ParentElement, SharedString, StatefulInteractiveElement, Styled, component::Icon, div};
+use gpui_kit::{Div, InteractiveElement, ParentElement, SharedString, StatefulInteractiveElement, Styled, component::Icon};
 
 use crate::{
     icons::Glyph,
     palette::stage,
-    ui::{self, RADIUS_XS, Squircle},
+    ui::{self},
     voice,
 };
 
@@ -35,14 +35,11 @@ pub(crate) fn issue_line(code: u16) -> &'static str {
 
 // A warning mark for a tile's corner; hovering lists each issue with its code.
 pub(crate) fn issue_chip(id: SharedString, codes: Vec<u16>) -> gpui_kit::Stateful<Div> {
-    div()
+    ui::media_label()
         .id(id)
         .size_6()
-        .squircle(RADIUS_XS)
-        .flex()
-        .items_center()
+        .px_0()
         .justify_center()
-        .bg(gpui_kit::black().opacity(0.6))
         .child(Icon::new(Glyph::Warning).size(ui::ICON_SM).text_color(stage::idle()))
         .tooltip(move |window, cx| {
             let tip = codes.iter().map(|code| format!("{} Error code: {code}", issue_line(*code))).collect::<Vec<_>>().join("\n");

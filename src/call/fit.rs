@@ -53,6 +53,7 @@ impl Waffle {
     pub(super) fn floating_chat(&self, panel: AnyElement, width: f32, reveal: f32, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let width = width.min(self.call_stage_room(window) - FLOAT_INSET * 2.);
         self.above_game(
+            // lint-allow(custom-surface, custom-mark): ui::surface insets its content and rings it, and this card's own panel fills it and slides in by a computed offset
             div()
                 .id("call-chat-float")
                 .occlude()
@@ -125,7 +126,7 @@ impl Waffle {
                 Dock::Compact | Dock::Tight => control_group().child(more),
             })
             .child(leave)
-            .when(fold != Dock::Tight, |bar| bar.child(div().absolute().right_0().top_0().h(px(CONTROLS_HEIGHT)).flex().items_center().gap_1().children(volume).child(fullscreen)))
+            .when(fold != Dock::Tight, |bar| bar.child(ui::row().absolute().right_0().top_0().h(px(CONTROLS_HEIGHT)).gap_1().children(volume).child(fullscreen)))
     }
 
     // The one red button. Watching the stream shown big, it stops watching it rather than leaving, as

@@ -106,7 +106,7 @@ impl Waffle {
         if tab == InboxTab::Saved && self.saved.is_none() {
             self.fetch_saved(cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the tab draws in the Inbox popover and on its page
     }
 
     fn set_mention_filters(&mut self, change: impl FnOnce(&mut MentionFilters), cx: &mut Context<Self>) {
@@ -121,7 +121,7 @@ impl Waffle {
         } else {
             self.open_inbox(cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the popover is an overlay, but the rail's Inbox tile also lights while it's open
     }
 
     /// ⌘⇧E / Ctrl+Shift+E: reads the channel at the top of Unreads, as its own Mark read does.
@@ -147,10 +147,8 @@ impl Waffle {
                 .child("Mark all read")
                 .on_click(cx.listener(|this, _, _, cx| this.mark_all_unreads(cx)))
         });
-        let title = div()
+        let title = ui::row()
             .h_8()
-            .flex()
-            .items_center()
             .gap_2()
             .when(titled, |t| t.child(Icon::new(Glyph::Inbox).size(ui::ICON_XL).text_color(palette::faint(cx))).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Inbox")))
             .child(div().flex_1())
@@ -162,13 +160,13 @@ impl Waffle {
         let tabs = ui::tabs("inbox-tabs", &items, selected, move |i, _, cx| {
             this.update(cx, |this, cx| this.set_inbox_tab(TABS[i], cx)).ok();
         }, window, cx);
-        div().flex().flex_col().gap_1().child(title).child(tabs)
+        ui::col().gap_1().child(title).child(tabs)
     }
 
     /// The open tab's list: Mentions under its filter chips (at most `limit`), or the unread channels.
     pub(crate) fn inbox_body(&self, limit: Option<usize>, cx: &mut Context<Self>) -> AnyElement {
         match self.inbox_tab {
-            InboxTab::Mentions => div().flex().flex_col().gap_2().child(self.mention_filters(cx)).child(self.message_cards(&self.inbox, limit, ("You're all caught up!", "Mentions of you and your roles land here."), cx)).into_any_element(),
+            InboxTab::Mentions => ui::col().gap_2().child(self.mention_filters(cx)).child(self.message_cards(&self.inbox, limit, ("You're all caught up!", "Mentions of you and your roles land here."), cx)).into_any_element(),
             InboxTab::Saved => self.message_cards(&self.saved, limit, ("No saved messages", "Save a message from its menu to find it here later."), cx),
             InboxTab::Unreads => self.unread_list(cx),
         }
@@ -183,7 +181,7 @@ impl Waffle {
         let here = self.guild_id.is_some().then(|| {
             ui::chip("mentions-here", Some(Glyph::Filter), "This server only", filters.this_server, cx).on_click(cx.listener(|this, _, _, cx| this.set_mention_filters(|f| f.this_server = !f.this_server, cx)))
         });
-        div().flex().flex_wrap().gap_1p5().child(everyone).child(roles).children(here)
+        ui::row().items_stretch().flex_wrap().gap_1p5().child(everyone).child(roles).children(here)
     }
 
     fn unread_list(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -197,7 +195,7 @@ impl Waffle {
         for unread in unreads {
             groups.push(self.unread_group(unread, &ctx, cx));
         }
-        div().flex().flex_col().gap_3().children(groups).into_any_element()
+        ui::col().gap_3().children(groups).into_any_element()
     }
 
     // The channel's row (server, name, what's new, Mark read), then its newest cached messages.
@@ -205,27 +203,10 @@ impl Waffle {
         let new = whats_new(unread.messages.len(), unread.mentions);
         let channel_id = unread.channel.id.clone();
         let (open_guild, open_channel) = (unread.guild_id.clone(), unread.channel.clone());
-        let head = div()
-            .id(SharedString::from(format!("unread-{}", unread.channel.id)))
-            .px_2()
-            .py_1()
-            .squircle(RADIUS_SM)
-            .flex()
-            .items_center()
-            .gap_2()
-            .cursor_pointer()
-            .hover(|s| s.bg(palette::hover(cx)))
-            .child(ui::server_tile(unread.guild_icon.as_deref(), &unread.guild_name, 24., cx))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(format!("#{}", unread.channel.name)))
-                    .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(format!("{} · {new}", unread.guild_name))),
-            )
-            .child(ui::button(SharedString::from(format!("unread-read-{}", unread.channel.id)), ui::Tone::Ghost, cx).small().child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD)).child("Mark read").on_click(cx.listener(move |this, _, _, cx| {
+        let head = ui::list_row(SharedString::from(format!("unread-{}", unread.channel.id)), format!("#{}", unread.channel.name), cx)
+            .lead(ui::server_tile(unread.guild_icon.as_deref(), &unread.guild_name, 24., cx))
+            .subtitle(format!("{} · {new}", unread.guild_name))
+            .trailing(ui::button(SharedString::from(format!("unread-read-{}", unread.channel.id)), ui::Tone::Ghost, cx).small().child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD)).child("Mark read").on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 this.mark_channel_read(&channel_id, cx);
             })))
@@ -238,34 +219,31 @@ impl Waffle {
         for m in unread.messages {
             rows.push(self.unread_message(m, &unread.guild_id, ctx, cx));
         }
-        div().flex().flex_col().gap_1().child(head).children(rows)
+        ui::col().gap_1().child(head).children(rows)
     }
 
     fn unread_message(&self, m: Message, guild_id: &str, ctx: &std::rc::Rc<crate::chat::RowContext>, cx: &mut Context<Self>) -> AnyElement {
         let (guild_id, channel_id, message_id) = (guild_id.to_owned(), m.channel_id.clone(), m.id.clone());
         let text = crate::chat::content(&m, ctx, cx).unwrap_or_else(|| div().text_color(palette::muted(cx)).child("Attachment").into_any_element());
-        div()
+        // lint-allow(custom-button): ui::list_row titles are one plain line; a message here is an author and time over two lines of its text.
+        let row = ui::row().items_stretch()
             .id(SharedString::from(format!("unread-msg-{}", m.id)))
-            .ml_8()
             .px_2()
             .py_1()
             .squircle(RADIUS_SM)
-            .flex()
             .gap_2()
             .cursor_pointer()
             .hover(|s| s.bg(palette::hover(cx)))
             .child(ui::avatar(m.author.avatar.clone(), 24.))
             .child(
-                div()
+                ui::col().min_h_0()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .child(div().flex().items_baseline().gap_2().child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(m.author.name.clone())).child(div().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(crate::chat::format_stamp(&m.timestamp))))
+                    .child(ui::row().items_baseline().gap_2().child(ui::line(m.author.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx))).child(div().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(crate::chat::format_stamp(&m.timestamp))))
                     .child(div().text_size(ui::TEXT_SM).line_clamp(2).text_color(palette::text(cx)).child(text)),
             )
-            .on_click(cx.listener(move |this, _, window, cx| this.open_message(Some(guild_id.clone()), &channel_id, message_id.clone(), window, cx)))
-            .into_any_element()
+            .on_click(cx.listener(move |this, _, window, cx| this.open_message(Some(guild_id.clone()), &channel_id, message_id.clone(), window, cx)));
+        // Indented under its channel's head.
+        div().pl_8().child(row).into_any_element()
     }
 }
 

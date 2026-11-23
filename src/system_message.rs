@@ -15,8 +15,12 @@ use crate::{
     discord::{Channel, ChannelKind, Message, SendState, Sticker, StickerFormat, User, perm},
     icons::Glyph,
     palette,
+    part::Column,
     ui::{self, RADIUS_MD, Squircle},
 };
+
+mod automod;
+use automod::*;
 
 // Discord's USER_MESSAGE types: every other type is a system notice.
 const USER_KINDS: [u8; 9] = [0, 19, 20, 23, 26, 41, 45, 47, 68];
@@ -170,7 +174,7 @@ impl Waffle {
         if !self.open_join_runs.remove(&first_id) {
             self.open_join_runs.insert(first_id);
         }
-        cx.notify();
+        self.redraw(Column::Main, cx);
     }
 
     /// Discord's "Wave to say hi!": a wave sticker in reply to a join, shown at once like a sent sticker.
@@ -197,6 +201,7 @@ impl Waffle {
             let result = client.greet(&join.channel_id, &guild_id, &join.id, &sticker.id).await;
             this.update(cx, |this, cx| this.settle_greet(&join.channel_id, &nonce, result, cx)).ok();
         })
+        // lint-allow(detached-task): ends when the greet request answers, or at once if the app is gone
         .detach();
     }
 
@@ -208,7 +213,7 @@ impl Waffle {
             return self.settle(channel_id, nonce, result, cx);
         }
         self.remove_message(channel_id, &format!("pending-{nonce}"));
-        cx.notify();
+        self.redraw(Column::Main, cx);
     }
 }
 
@@ -294,6 +299,7 @@ impl Sentence {
 
     fn push(&mut self, part: AnyElement, spaced: bool) {
         let glued = !spaced && !self.parts.is_empty();
+        // lint-allow(raw-margin): pulls a glued word back over the row's gap_x, which a gap can't take away from one child
         self.parts.push(if glued { div().ml(px(-WORD_GAP)).child(part).into_any_element() } else { part });
     }
 }
@@ -301,34 +307,32 @@ impl Sentence {
 /// The one-line notice every system line shares: its icon in the avatar column, the sentence and its time,
 /// then anything that hangs under it (a button, a card).
 pub(crate) fn notice_line(id: &str, glyph: Glyph, ink: Hsla, sentence: Sentence, stamp: Option<String>, under: Vec<AnyElement>, cx: &App) -> AnyElement {
-    let row = div()
+    let row = ui::row().items_stretch()
         .id(SharedString::from(format!("msg-{id}")))
         .w_full()
         .px_4()
-        .mt_0p5()
-        .py_1()
-        .flex()
+        .pt_1p5()
+        .pb_1()
         .gap_4()
         .text_size(ui::TEXT_SM)
-        .child(div().w(px(AVATAR)).h(px(22.)).flex_none().flex().items_center().justify_center().child(Icon::new(glyph).size(ui::ICON_LG).text_color(ink)))
-        .child(div().flex_1().min_w_0().flex().flex_col().child(sentence_line(sentence, stamp, cx)).children(under));
+        .child(ui::row().w(px(AVATAR)).h(ui::LINE_LEAD).flex_none().justify_center().child(Icon::new(glyph).size(ui::ICON_LG).text_color(ink)))
+        .child(ui::col().min_h_0().flex_1().child(sentence_line(sentence, stamp, cx)).children(under));
     chat::inset(row.into_any_element(), false)
 }
 
 fn sentence_line(sentence: Sentence, stamp: Option<String>, cx: &App) -> Div {
-    div()
-        .flex()
+    ui::row()
         .flex_wrap()
-        .items_center()
         .gap_x(px(WORD_GAP))
         .line_height(ui::LINE_LEAD)
         .text_color(palette::muted(cx))
         .children(sentence.parts)
+        // lint-allow(raw-margin): optical, sets the time 2px clear of the sentence beyond the row's word gap
         .children(stamp.map(|s| div().ml_0p5().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(s)))
 }
 
 fn under_row(child: impl IntoElement) -> AnyElement {
-    div().mt_2().flex().flex_wrap().gap_2().child(child).into_any_element()
+    ui::row().items_stretch().pt_2().flex_wrap().gap_2().child(child).into_any_element()
 }
 
 fn line(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
@@ -488,8 +492,8 @@ fn bot_join_sentence(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Sente
     let s = Sentence::new(&message.id, cx);
     let app = |s: Sentence| {
         let name = chat::profile_trigger(format!("app-{}", message.id), &message.author, ctx).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).hover(|s| s.underline()).child(ctx.name_of(&message.author));
-        let badge = ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px_1p5().gap(px(3.)).child(Icon::new(Glyph::Checkmark).size(px(11.))).child("APP");
-        s.part(div().flex().items_center().gap(px(WORD_GAP)).child(name).child(badge))
+        let badge = ui::tag_with(Glyph::Checkmark, "APP", cx);
+        s.part(ui::row().gap(px(WORD_GAP)).child(name).child(badge))
     };
     match &message.actor {
         Some(actor) => app(s.name(actor, ctx).text(" has added ")).text(" to the server."),
@@ -528,14 +532,14 @@ fn fold_line(run: &[Message], ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement 
     let sentence = s.part(toggle).text(" joined the server.");
     let under = match open {
         false => Vec::new(),
-        true => vec![div().mt_1().flex().flex_col().gap_0p5().children(run[2..].iter().map(|m| folded_join(m, ctx, cx))).into_any_element()],
+        true => vec![ui::col().pt_1().gap_0p5().children(run[2..].iter().map(|m| folded_join(m, ctx, cx))).into_any_element()],
     };
     notice_line(&first.id, Glyph::ArrowRight, palette::positive_ink(cx), sentence, Some(chat::format_stamp(&first.timestamp)), under, cx)
 }
 
 fn folded_join(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
-    let wave = wave_button(message, ctx, cx).map(|b| div().mt_1().mb_1().child(b));
-    div().flex().flex_col().child(sentence_line(join_sentence(message, ctx, cx), Some(chat::clock(&message.timestamp)), cx)).children(wave).into_any_element()
+    let wave = wave_button(message, ctx, cx).map(|b| div().py_1().child(b));
+    ui::col().child(sentence_line(join_sentence(message, ctx, cx), Some(chat::clock(&message.timestamp)), cx)).children(wave).into_any_element()
 }
 
 // A thread's first item: the message it was started from, whole, with Jump to go back to it.
@@ -554,169 +558,11 @@ fn starter_row(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElem
         .relative()
         .w_full()
         .px_4()
-        .mt_3()
-        .pt_1()
+        .pt_4()
         .pb_0p5()
         .child(chat::starter_message(parent, ctx, cx))
-        .child(div().absolute().top_1().right_3().child(jump));
+        .child(div().absolute().top_4().right_3().child(jump));
     chat::inset(row.into_any_element(), false)
-}
-
-// AutoMod's notices look like messages (types 24 and 36 to 39): its shield, its name and a SYSTEM tag, then
-// what happened.
-fn automod_row(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
-    let muted = palette::muted(cx);
-    let s = Sentence::new(&message.id, cx);
-    let body: Vec<AnyElement> = match message.kind {
-        24 => automod_action(message, ctx, cx),
-        36 => vec![sentence_line(s.name(&message.author, ctx).text(&format!(" enabled security actions until {}.", security_until(&message.content))), None, cx).into_any_element()],
-        37 => vec![sentence_line(s.name(&message.author, ctx).text(" disabled security actions."), None, cx).into_any_element()],
-        38 => {
-            let guild = ctx.notices.guild_name.clone().unwrap_or_default();
-            vec![sentence_line(s.name(&message.author, ctx).text(&format!(" reported a raid in {guild}.")), None, cx).into_any_element()]
-        }
-        _ => vec![sentence_line(s.name(&message.author, ctx).text(" resolved an Activity Alert."), None, cx).into_any_element()],
-    };
-    let head = div()
-        .flex()
-        .items_center()
-        .gap_2()
-        .line_height(ui::LINE_LEAD)
-        .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("AutoMod"))
-        .child(ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px_1p5().child("SYSTEM"))
-        .child(div().relative().top_px().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(chat::format_stamp(&message.timestamp)));
-    let avatar = div()
-        .size(px(AVATAR))
-        .flex_none()
-        .mt_0p5()
-        .rounded_full()
-        .bg(palette::oklch(0.5, 0.13, 245.))
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_color(gpui_kit::white())
-        .child(Icon::new(Glyph::Shield).size(ui::ICON_XL));
-    let row = div()
-        .id(SharedString::from(format!("msg-{}", message.id)))
-        .w_full()
-        .px_4()
-        .mt_3()
-        .pt_1()
-        .pb_0p5()
-        .flex()
-        .gap_4()
-        .text_size(ui::TEXT_SM)
-        .text_color(muted)
-        .child(avatar)
-        .child(div().flex_1().min_w_0().flex().flex_col().child(head).children(body));
-    chat::inset(row.into_any_element(), false)
-}
-
-// Not verified: the format of `content`. Discord passes it to `new Date()`; read here as RFC 3339.
-fn security_until(content: &str) -> String {
-    chrono::DateTime::parse_from_rfc3339(content).map(|t| t.with_timezone(&chrono::Local).format("%b %-d, %Y, %-I:%M %p").to_string()).unwrap_or_else(|_| content.to_owned())
-}
-
-fn automod_field<'a>(message: &'a Message, name: &str) -> Option<&'a str> {
-    message.embeds.first()?.fields.iter().find(|(n, _, _)| n == name).map(|(_, v, _)| v.as_str()).filter(|v| !v.is_empty())
-}
-
-// A blocked or flagged message: where, what was said with the keyword marked, which rule, and what a
-// moderator can do about it.
-fn automod_action(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Vec<AnyElement> {
-    // GAP: safety alerts (raids, mention raids, activity alerts) get only AutoMod's header; their cards aren't drawn yet.
-    if message.embeds.first().is_some_and(|e| e.safety_alert) {
-        return Vec::new();
-    }
-    let field = |name: &str| automod_field(message, name);
-    let channel_id = field("channel_id").map(str::to_owned);
-    let channel = channel_id.as_ref().and_then(|id| ctx.channel_names.get(id)).map_or("unknown-channel".to_owned(), |name| name.clone());
-    // Not verified: the outcome's values; anything but "flagged" reads as blocked.
-    let verb = if field("decision_outcome") == Some("flagged") { "has flagged a message in" } else { "has blocked a message in" };
-    // GAP: app messages, modals, voice channel statuses, nicknames, quarantines and guests have their own headers.
-    let header = sentence_line(Sentence::new(&message.id, cx).text(verb).strong(&format!("#{channel}")), None, cx);
-    let flagged = message.embeds.first().and_then(|e| e.description.clone()).unwrap_or_default();
-    let meta: Vec<String> = [("Keyword", field("keyword").map(str::to_owned)), ("Rule", field("rule_name").map(str::to_owned)), ("Timeout", field("timeout_duration").and_then(timeout_label)), ("Reason", field("decision_reason").map(str::to_owned))]
-        .into_iter()
-        .filter_map(|(label, value)| Some(format!("{label}: {}", value?)))
-        .collect();
-    let mut out = vec![header.into_any_element(), flagged_card(message, &flagged, field("keyword_matched_content"), ctx, cx)];
-    if !meta.is_empty() {
-        out.push(div().mt_1p5().text_size(ui::TEXT_XS).child(meta.join(" · ")).into_any_element());
-    }
-    out.push(automod_actions(message, channel_id, field("flagged_message_id").map(str::to_owned), ctx, cx));
-    out
-}
-
-fn flagged_card(message: &Message, text: &str, matched: Option<&str>, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
-    let strong = palette::strong(cx);
-    let mark = HighlightStyle { background_color: Some(palette::warning_ink(cx).opacity(0.26)), color: Some(strong), ..Default::default() };
-    let highlights = matched.and_then(|m| keyword_range(text, m)).map(|r| vec![(r, mark)]).unwrap_or_default();
-    div()
-        .mt_1p5()
-        .py_2p5()
-        .px_3()
-        .squircle(RADIUS_MD)
-        .bg(strong.opacity(0.05))
-        .flex()
-        .gap_2p5()
-        .child(ui::avatar(message.author.avatar.clone(), 24.).flex_none())
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .child(div().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(ctx.name_of(&message.author)))
-                .child(div().text_color(palette::text(cx)).child(StyledText::new(text.to_owned()).with_highlights(highlights))),
-        )
-        .into_any_element()
-}
-
-// Where the matched words sit in the flagged text, ignoring case.
-fn keyword_range(text: &str, matched: &str) -> Option<std::ops::Range<usize>> {
-    let at = text.to_ascii_lowercase().find(&matched.to_ascii_lowercase())?;
-    Some(at..at + matched.len())
-}
-
-// Not verified: the unit. Discord's `timeout_duration` field is read as seconds.
-fn timeout_label(seconds: &str) -> Option<String> {
-    let seconds: u64 = seconds.parse().ok()?;
-    let (n, unit) = match seconds {
-        0..60 => (seconds, "sec"),
-        60..3600 => (seconds / 60, "min"),
-        3600..86400 => (seconds / 3600, "hour"),
-        _ => (seconds / 86400, "day"),
-    };
-    Some(format!("{n} {unit}{}", if n == 1 { "" } else { "s" }))
-}
-
-fn automod_actions(message: &Message, channel_id: Option<String>, flagged_id: Option<String>, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
-    let key = &message.id;
-    let (this, author) = (ctx.this(), message.author.clone());
-    let actions = ui::button(SharedString::from(format!("automod-actions-{key}")), ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::Shield).size(ui::ICON_MD)).child("Actions").on_click(move |event, _, cx| {
-        cx.stop_propagation();
-        let at = event.position();
-        this.update(cx, |this, cx| this.open_author_menu(author.clone(), at, cx)).ok();
-    });
-    let target = channel_id.zip(flagged_id);
-    let jump = target.clone().map(|(channel_id, id)| {
-        let (this, guild_id) = (ctx.this(), message.guild_id.clone());
-        ui::button(SharedString::from(format!("automod-jump-{key}")), ui::Tone::Secondary, cx).small().child("Jump to Surrounding").on_click(move |_, window, cx| {
-            cx.stop_propagation();
-            this.update(cx, |this, cx| this.open_message(guild_id.clone(), &channel_id, id.clone(), window, cx)).ok();
-        })
-    });
-    // GAP: Discord hides Delete once `alert_actions_execution` says the message is gone; that field isn't read yet.
-    let delete = target.filter(|(channel_id, _)| ctx.notices.moderated.contains(channel_id)).map(|(channel_id, id)| {
-        let this = ctx.this();
-        ui::button(SharedString::from(format!("automod-delete-{key}")), ui::Tone::Secondary, cx).small().child("Delete User's Message").on_click(move |_, _, cx| {
-            cx.stop_propagation();
-            let flagged = Message { id: id.clone(), channel_id: channel_id.clone(), ..Default::default() };
-            this.update(cx, |this, cx| this.delete(flagged, cx)).ok();
-        })
-    });
-    div().mt_2().flex().flex_wrap().gap_2().child(actions).children(jump).children(delete).into_any_element()
 }
 
 #[cfg(test)]

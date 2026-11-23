@@ -286,13 +286,15 @@ mod tests {
 
     #[test]
     fn region_overlap() {
+        const CELL: f32 = 20.;
+        const SMALL: f32 = 10.;
         // Visible: a strip across the top and a block on the right; the rest is covered.
         let visible = [[0., 0., 100., 50.], [80., 50., 100., 200.]];
-        let at = |x: f32, y: f32| overlaps(&visible, Bounds { origin: point(px(x), px(y)), size: size(px(20.), px(20.)) });
+        let at = |x: f32, y: f32| overlaps(&visible, Bounds { origin: point(px(x), px(y)), size: size(px(CELL), px(CELL)) });
         assert!(at(10., 10.));
         assert!(at(90., 40.), "partly visible counts");
         assert!(!at(10., 60.), "under the covering window");
         assert!(at(70., 120.), "touches the visible block");
-        assert!(!overlaps(&[], Bounds { origin: point(px(0.), px(0.)), size: size(px(10.), px(10.)) }), "fully covered");
+        assert!(!overlaps(&[], Bounds { origin: Default::default(), size: size(px(SMALL), px(SMALL)) }), "fully covered");
     }
 }

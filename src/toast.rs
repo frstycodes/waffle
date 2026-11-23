@@ -25,6 +25,7 @@ impl Waffle {
             })
             .ok();
         })
+        // lint-allow(detached-task): ends after the one timer, and holds only a WeakEntity.
         .detach();
         cx.notify(); // lint-allow(global-notify): the toast is drawn by the root, over every column
     }
@@ -45,6 +46,7 @@ impl Waffle {
             })
             .ok();
         })
+        // lint-allow(detached-task): ends after the one timer, and holds only a WeakEntity.
         .detach();
         cx.notify(); // lint-allow(global-notify): the toast is drawn by the root, over every column
     }
@@ -60,11 +62,12 @@ impl Waffle {
                 cx.notify(); // lint-allow(global-notify): the toast is drawn by the root, over every column
             }));
             let toast = ui::toast_with(SharedString::from(format!("toast-{text}")), action.glyph, palette::muted(cx), text, action.detail.clone(), Some(button.into_any_element()), cx);
-            return Some(div().absolute().left_0().right_0().bottom_6().flex().justify_center().child(div().occlude().child(toast)).into_any_element());
+            return Some(ui::row().items_stretch().absolute().left_0().right_0().bottom_6().justify_center().child(div().occlude().child(toast)).into_any_element());
         }
         // GAP: the design leads a toast with its tone's icon and can carry one action; `show_toast`
         // carries only text, so neither shows yet.
-        let toast = div()
+        // lint-allow(custom-surface, custom-badge): ui::toast always leads with a glyph; a plain show_toast is one line of text.
+        let toast = ui::row()
             .max_w(px(TOAST_MAX))
             .min_h_10()
             .py_2p5()
@@ -73,8 +76,6 @@ impl Waffle {
             .squircle(RADIUS_LG)
             .bg(palette::surface(palette::Level::Overlay, cx))
             .shadow(ui::shadow_pop(cx))
-            .flex()
-            .items_center()
             .text_size(ui::TEXT_SM)
             .line_height(ui::LINE_SM)
             .font_weight(FontWeight::NORMAL)
@@ -85,7 +86,7 @@ impl Waffle {
         let toast = toast.with_animation(SharedString::from(format!("toast-{text}")), Animation::new(Duration::from_millis(240)).with_easing(|t| motion::ease_out().sample(t)), |toast, t| {
             toast.translate_y(px(TOAST_RISE * (1. - t))).scale(0.97 + 0.03 * t).opacity(t)
         });
-        Some(div().absolute().left_0().right_0().bottom_6().flex().justify_center().child(toast).into_any_element())
+        Some(ui::row().items_stretch().absolute().left_0().right_0().bottom_6().justify_center().child(toast).into_any_element())
     }
 }
 

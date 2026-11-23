@@ -6,7 +6,7 @@
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use gpui_kit::{
-    AnyElement, App, Bounds, BoxShadow, Context, Div, Entity, FocusHandle, Focusable, FontWeight, Hsla, KeyDownEvent, MouseButton, Pixels, Point, SharedString, Stateful, Window,
+    AnyElement, App, Bounds, Context, Div, Entity, FocusHandle, Focusable, FontWeight, Hsla, KeyDownEvent, MouseButton, Pixels, Point, SharedString, Stateful, Window,
     component::{
         Icon,
         input::{Input, InputState},
@@ -24,6 +24,9 @@ use crate::{
 };
 
 pub type Act = Rc<dyn Fn(&mut Waffle, &mut Window, &mut Context<Waffle>)>;
+mod dialog;
+pub use dialog::Dialog;
+
 type Build = Rc<dyn Fn(&Waffle) -> Vec<Entry>>;
 type OnConfirm = Rc<dyn Fn(&mut Waffle, String, &mut Window, &mut Context<Waffle>)>;
 type SetValue = Rc<dyn Fn(&mut Waffle, f32, &mut Context<Waffle>)>;
@@ -39,6 +42,9 @@ const ROW: f32 = 34.;
 const HINT_ROW: f32 = 48.;
 const SEPARATOR: f32 = 9.;
 const SLIDER_ROW: f32 = 68.;
+// A quick reaction's cell in a message menu, and the warning mark that leads a dialog's title.
+const QUICK_CELL: f32 = 38.;
+const WARN_MARK: f32 = 22.;
 const EMOJI_ROW: f32 = 44.;
 const HEADER: f32 = 52.;
 // The search field's 40px and the 4px under it.
@@ -320,39 +326,6 @@ pub struct OpenMenu {
     width: Option<f32>,
 }
 
-// A dialog's 420px less its padding, the well's and the hit's avatar column.
-const PREVIEW_COLUMN: f32 = 420. - 48. - 24. - 48.;
-
-// A one-field dialog (nickname, note) or a confirmation (kick, ban, remove friend).
-pub struct Dialog {
-    title: SharedString,
-    body: SharedString,
-    confirm: SharedString,
-    pub(crate) danger: bool,
-    // Leads the title with the warning mark: for what can't be undone.
-    warn: bool,
-    pub(crate) input: bool,
-    // A key that confirms it from anywhere, drawn on the confirm button (D for a message's delete).
-    key: Option<&'static str>,
-    // The message it acts on, drawn as search draws a hit (Discord's unpin confirm).
-    preview: Option<Box<crate::discord::Message>>,
-    // Discord's "Protip:" under the preview.
-    tip: Option<SharedString>,
-    // A muted line under the body.
-    note: Option<SharedString>,
-    other: Other,
-    on_confirm: OnConfirm,
-}
-
-// The button beside the confirm: Cancel, none (a notice the confirm only closes), or a second way through
-// (Discord's "No, just disconnect quietly").
-enum Other {
-    Cancel,
-    CancelAs(SharedString),
-    None,
-    Instead(SharedString, OnConfirm),
-}
-
 impl Waffle {
     pub(crate) fn open_menu(&mut self, at: Point<Pixels>, entries: Vec<Entry>, cx: &mut Context<Self>) {
         self.open_live_menu(at, move |_| entries.clone(), cx);
@@ -361,7 +334,7 @@ impl Waffle {
     // A menu built from state each time it's drawn, e.g. one whose checkboxes change.
     pub(crate) fn open_live_menu(&mut self, at: Point<Pixels>, build: impl Fn(&Waffle) -> Vec<Entry> + 'static, cx: &mut Context<Self>) {
         self.menu = Some(OpenMenu { at, build: Rc::new(move |this| tidy(build(this))), sub: Vec::new(), cursor: None, focus: cx.focus_handle(), restore: RefCell::new(None), cards: RefCell::default(), tunnel: ui::Tunnel::default(), pending: None, width: None });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the menu and its dialogs are drawn by the root, over the columns
     }
 
     // The open menu's top card at `width` instead of the standard 248px.
@@ -397,6 +370,7 @@ impl Waffle {
                 })
                 .ok();
             })
+            // lint-allow(detached-task): ends itself after the one grace timer, and holds only a WeakEntity.
             .detach();
             return;
         }
@@ -409,7 +383,7 @@ impl Waffle {
         if menu.sub != next || menu.cursor.is_some() {
             menu.sub = next;
             menu.cursor = None;
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the menu and its dialogs are drawn by the root, over the columns
         }
     }
 
@@ -430,98 +404,11 @@ impl Waffle {
         if let Some(previous) = menu.restore.take() {
             window.focus(&previous, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the menu and its dialogs are drawn by the root, over the columns
     }
 
     pub(crate) fn close_menu(&mut self) -> bool {
         self.menu.take().is_some() | self.dialog.take().is_some()
-    }
-
-    // gpui's window and context ride along with the dialog's five fields.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn prompt(
-        &mut self,
-        title: impl Into<SharedString>,
-        body: impl Into<SharedString>,
-        value: &str,
-        confirm: impl Into<SharedString>,
-        on_confirm: impl Fn(&mut Waffle, String, &mut Window, &mut Context<Waffle>) + 'static,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.menu = None;
-        self.dialog_input.update(cx, |state, cx| {
-            state.set_value(value.to_owned(), window, cx);
-            state.focus(window, cx);
-        });
-        self.dialog = Some(Dialog { title: title.into(), body: body.into(), confirm: confirm.into(), danger: false, warn: false, input: true, key: None, preview: None, tip: None, note: None, other: Other::Cancel, on_confirm: Rc::new(on_confirm) });
-        cx.notify();
-    }
-
-    pub(crate) fn confirm(
-        &mut self,
-        title: impl Into<SharedString>,
-        body: impl Into<SharedString>,
-        confirm: impl Into<SharedString>,
-        on_confirm: impl Fn(&mut Waffle, &mut Window, &mut Context<Waffle>) + 'static,
-        cx: &mut Context<Self>,
-    ) {
-        self.menu = None;
-        let on_confirm = Rc::new(on_confirm);
-        self.dialog = Some(Dialog {
-            title: title.into(),
-            body: body.into(),
-            confirm: confirm.into(),
-            danger: true,
-            warn: false,
-            input: false,
-            key: None,
-            preview: None,
-            tip: None,
-            note: None,
-            other: Other::Cancel,
-            on_confirm: Rc::new(move |this, _, window, cx| on_confirm(this, window, cx)),
-        });
-        cx.notify();
-    }
-
-    pub(crate) fn alert(&mut self, title: impl Into<SharedString>, body: impl Into<SharedString>, cx: &mut Context<Self>) {
-        self.confirm(title, body, "Okay", |_, _, _| {}, cx);
-        if let Some(dialog) = &mut self.dialog {
-            dialog.danger = false;
-            dialog.other = Other::None;
-        }
-    }
-
-    // A confirm for a deletion that can't be undone: the title leads with the warning mark.
-    pub(crate) fn confirm_delete(
-        &mut self,
-        title: impl Into<SharedString>,
-        body: impl Into<SharedString>,
-        confirm: impl Into<SharedString>,
-        on_confirm: impl Fn(&mut Waffle, &mut Window, &mut Context<Waffle>) + 'static,
-        cx: &mut Context<Self>,
-    ) {
-        self.confirm(title, body, confirm, on_confirm, cx);
-        if let Some(dialog) = &mut self.dialog {
-            dialog.warn = true;
-        }
-    }
-
-    // A confirm whose other button acts too, in place of Cancel.
-    pub(crate) fn set_dialog_instead(&mut self, label: impl Into<SharedString>, action: impl Fn(&mut Waffle, &mut Window, &mut Context<Waffle>) + 'static) {
-        if let Some(dialog) = &mut self.dialog {
-            dialog.other = Other::Instead(label.into(), Rc::new(move |this, _, window, cx| action(this, window, cx)));
-        }
-    }
-
-    // A notice: one button, which only closes it.
-    pub(crate) fn notice(&mut self, title: impl Into<SharedString>, body: impl Into<SharedString>, button: impl Into<SharedString>, cx: &mut Context<Self>) {
-        self.confirm(title, body, button, |_, _, _| {}, cx);
-        if let Some(dialog) = &mut self.dialog {
-            dialog.danger = false;
-            dialog.other = Other::None;
-        }
     }
 
     fn run_menu_item(&mut self, path: &[usize], window: &mut Window, cx: &mut Context<Self>) {
@@ -542,7 +429,7 @@ impl Waffle {
             self.shut_menu(window, cx);
         }
         act(self, window, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): a menu row can run any action, which changes what any column draws
     }
 
     // Arrows move through the deepest open card, Right or Enter opens a submenu, Left closes it,
@@ -580,7 +467,7 @@ impl Waffle {
             menu.cursor = next_cursor;
         }
         cx.stop_propagation();
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the menu and its dialogs are drawn by the root, over the columns
     }
 
     pub(crate) fn render_menu(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -656,7 +543,7 @@ impl Waffle {
             .map(|(i, entry)| match entry {
                 Entry::Separator => separator(cx).into_any_element(),
                 Entry::Header { lead, title, subtitle } => menu_header(lead, title.clone(), subtitle.clone(), cx).into_any_element(),
-                Entry::Slider { label, key, value, on_set } => self.menu_slider(label.clone(), key.clone(), *value, on_set.clone(), cx).into_any_element(),
+                Entry::Slider { label, key, value, on_set } => self.menu_range(label.clone(), key.clone(), *value, on_set.clone(), cx).into_any_element(),
                 Entry::Emojis { quick, more } => quick_reactions(quick, more.clone(), cx).into_any_element(),
                 Entry::Label(text) => menu_label(text.clone(), cx).into_any_element(),
                 Entry::Search(input) => div().h(px(SEARCH_ROW)).pb_1().child(ui::search_field(SharedString::from(format!("menu-search-{path:?}")), input, cx)).into_any_element(),
@@ -670,18 +557,15 @@ impl Waffle {
         ui::surface(cx).w(px(width)).id(SharedString::from(format!("menu-{path:?}"))).absolute().on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()).children(rows)
     }
 
-    fn menu_slider(&self, label: SharedString, key: SharedString, value: f32, on_set: SetValue, cx: &mut Context<Self>) -> Div {
-        div()
+    fn menu_range(&self, label: SharedString, key: SharedString, value: f32, on_set: SetValue, cx: &mut Context<Self>) -> Div {
+        ui::col()
             .h(px(SLIDER_ROW))
             .pt_1p5()
             .pb_2p5()
             .px_2p5()
-            .flex()
-            .flex_col()
             .gap_2()
             .child(
-                div()
-                    .flex()
+                ui::row().items_stretch()
                     .justify_between()
                     .text_size(ui::TEXT_SM)
                     .line_height(ui::LINE_SM)
@@ -697,7 +581,7 @@ impl Waffle {
         let has_sub = !item.sub.is_empty();
         let run_path = path.clone();
         // Keyboard focus: the hover fill and a 2px accent ring inside the row.
-        let ring = BoxShadow { color: palette::accent_ink(cx), offset: point(px(0.), px(0.)), blur_radius: px(0.), spread_radius: px(2.), inset: true };
+        let ring = ui::shadow(palette::accent_ink(cx), 0., 0., 0., 2., true);
         menu_item_row(SharedString::from(format!("menu-item-{path:?}")), item, sub_open || keyboard, lead_slot, cx)
             .when(keyboard, |row| row.shadow(vec![ring]))
             // Hovering a row opens its submenu and closes any deeper one from a sibling.
@@ -710,105 +594,6 @@ impl Waffle {
             .on_click(cx.listener(move |this, _, window, cx| this.run_menu_item(&run_path, window, cx)))
     }
 
-    pub(crate) fn confirm_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(dialog) = self.dialog.take() else { return };
-        let value = self.dialog_input.read(cx).value().to_string();
-        (dialog.on_confirm)(self, value, window, cx);
-        cx.notify();
-    }
-
-    pub(crate) fn set_dialog_key(&mut self, key: &'static str) {
-        if let Some(dialog) = &mut self.dialog {
-            dialog.key = Some(key);
-        }
-    }
-
-    pub(crate) fn set_dialog_preview(&mut self, message: crate::discord::Message, tip: impl Into<SharedString>) {
-        if let Some(dialog) = &mut self.dialog {
-            dialog.preview = Some(Box::new(message));
-            dialog.tip = Some(tip.into());
-        }
-    }
-
-    // The dismiss button's label when it isn't "Cancel" (Discord's "Never Mind").
-    pub(crate) fn set_dialog_cancel(&mut self, label: impl Into<SharedString>) {
-        if let Some(dialog) = &mut self.dialog {
-            dialog.other = Other::CancelAs(label.into());
-        }
-    }
-
-    pub(crate) fn set_dialog_note(&mut self, note: impl Into<SharedString>) {
-        if let Some(dialog) = &mut self.dialog {
-            dialog.note = Some(note.into());
-        }
-    }
-
-    pub(crate) fn dialog_key(&self) -> Option<&'static str> {
-        self.dialog.as_ref().and_then(|d| d.key)
-    }
-
-    fn dialog_other(&self, cx: &mut Context<Self>) -> Option<ui::Control> {
-        let button = |label: SharedString| ui::button("dialog-cancel", ui::Tone::Secondary, cx).child(label);
-        let dismiss = |label: SharedString| {
-            button(label).on_click(cx.listener(|this, _, _, cx| {
-                this.dialog = None;
-                cx.notify();
-            }))
-        };
-        match &self.dialog.as_ref()?.other {
-            Other::None => None,
-            Other::Cancel => Some(dismiss("Cancel".into())),
-            Other::CancelAs(label) => Some(dismiss(label.clone())),
-            Other::Instead(label, _) => Some(button(label.clone()).on_click(cx.listener(|this, _, window, cx| {
-                let Some(Dialog { other: Other::Instead(_, action), .. }) = this.dialog.take() else { return };
-                action(this, String::new(), window, cx);
-                cx.notify();
-            }))),
-        }
-    }
-
-    pub(crate) fn render_dialog(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let dialog = self.dialog.as_ref()?;
-        let submit = cx.listener(|this, _, window, cx| this.confirm_dialog(window, cx));
-        let tone = if dialog.danger { ui::Tone::Danger } else { ui::Tone::Primary };
-        let preview = dialog.preview.as_deref().map(|m| {
-            let ctx = self.row_context(std::slice::from_ref(m), None, false, PREVIEW_COLUMN, cx);
-            div().p_3().squircle(RADIUS_MD).bg(palette::surface(palette::Level::Page, cx)).child(crate::chat::search_hit(m, &ctx, cx))
-        });
-        let body = ui::dialog_body()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2p5()
-                    .text_size(ui::TEXT_LG)
-                    .line_height(ui::LINE_LG)
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(palette::strong(cx))
-                    .when(dialog.warn, |d| d.child(div().text_color(palette::danger_ink(cx)).child(Icon::new(Glyph::Warning).size(px(22.)))))
-                    .child(dialog.title.clone()),
-            )
-            .child(div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(palette::muted(cx)).child(dialog.body.clone()))
-            .children(dialog.note.clone().map(|note| div().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::faint(cx)).child(note)))
-            .children(preview)
-            .children(dialog.tip.clone().map(|tip| {
-                div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(palette::text(cx)).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::positive_ink(cx)).child("Protip:")).child(tip)
-            }))
-            .when(dialog.input, |d| d.child(field(cx).child(div().flex_1().min_w_0().child(Input::new(&self.dialog_input).appearance(false)))))
-            .child(
-                div()
-                    .flex()
-                    .justify_end()
-                    .gap_2()
-                    .children(self.dialog_other(cx))
-                    .child(ui::button("dialog-confirm", tone, cx).child(dialog.confirm.clone()).when_some(dialog.key, |b, key| b.children(key.split('+').map(|k| ui::kbd_translucent(crate::settings::key_name(k), gpui_kit::white())))).on_click(submit)),
-            );
-        let backdrop = div().id("dialog-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
-            this.dialog = None;
-            cx.notify();
-        }));
-        Some(ui::modal(backdrop, ui::dialog("dialog", 420., body, window, cx), cx))
-    }
 }
 
 // One menu row built on `ui::menu_row`, styled by the item's tone, mark and lead; callers add `.on_click`
@@ -836,14 +621,11 @@ pub(crate) fn menu_item_row(id: SharedString, item: &Item, sub_open: bool, lead_
         .line_height(ui::LINE_SM)
         .highlighted(sub_open)
         .disabled(item.disabled)
-        .children(lead.map(|lead| div().size(px(LEAD)).flex_none().flex().items_center().justify_center().child(lead)))
+        .children(lead.map(|lead| ui::row().size(px(LEAD)).flex_none().justify_center().child(lead)))
         .child(
-            div()
+            ui::col().min_h_0()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .child(div().truncate().child(item.label.clone()))
+                .child(ui::line(item.label.clone()))
                 .children(item.hint.clone().map(|text| {
                     div()
                         .text_size(ui::TEXT_XS)
@@ -856,7 +638,7 @@ pub(crate) fn menu_item_row(id: SharedString, item: &Item, sub_open: bool, lead_
         )
         .when_some(item.shortcut, |d, combo| d.child(crate::settings::key_caps(&crate::feed_keys::platform_combo(combo), cx)))
         .when_some(item.mark, |d, mark| match mark {
-            Mark::Check(on) => d.child(ui::check(if on { ui::Check::On } else { ui::Check::Off }, cx).size(px(18.))),
+            Mark::Check(on) => d.child(ui::check(if on { ui::Check::On } else { ui::Check::Off }, cx).size(ui::ICON_LG)),
             Mark::Radio(_) => d,
         })
         .when(has_sub, |d| d.child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_SM))))
@@ -888,7 +670,7 @@ fn hint_inks(item: &Item, cx: &App) -> (Hsla, Hsla) {
 }
 
 pub(crate) fn separator(cx: &App) -> Div {
-    div().h(px(SEPARATOR)).flex_none().py_1().px_2().child(div().h(ui::HAIRLINE).bg(palette::line(cx)))
+    div().h(px(SEPARATOR)).flex_none().py_1().px_2().child(ui::divider(None, cx))
 }
 
 fn menu_label(text: SharedString, cx: &App) -> Div {
@@ -900,26 +682,21 @@ fn menu_header(lead: &HeadLead, title: SharedString, subtitle: Option<SharedStri
     let lead = match lead {
         HeadLead::Avatar { url, status } => crate::layout::avatar_with_status(url, 32., *status, overlay),
         HeadLead::Server { icon, name } => ui::server_tile(icon.as_deref(), name, 32., cx),
-        HeadLead::Tile(glyph) => div().size_8().squircle(RADIUS_SM).bg(palette::selected(cx)).text_color(palette::strong(cx)).flex().items_center().justify_center().child(Icon::new(*glyph).size(ui::ICON_LG)).into_any_element(),
+        HeadLead::Tile(glyph) => ui::row().size_8().squircle(RADIUS_SM).bg(palette::selected(cx)).text_color(palette::strong(cx)).justify_center().child(Icon::new(*glyph).size(ui::ICON_LG)).into_any_element(),
     };
-    div()
+    ui::row()
         .h(px(HEADER))
         .flex_none()
         .pt_2()
         .pb_2p5()
         .px_2p5()
-        .flex()
-        .items_center()
         .gap_2p5()
         .child(div().flex_none().child(lead))
         .child(
-            div()
+            ui::col().min_h_0()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .child(div().truncate().text_size(ui::TEXT_SM).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title))
-                .children(subtitle.map(|s| div().truncate().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::muted(cx)).child(s))),
+                .child(ui::line(title).text_size(ui::TEXT_SM).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
+                .children(subtitle.map(|s| ui::line(s).text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::muted(cx)))),
         )
 }
 
@@ -928,7 +705,7 @@ fn quick_reactions(quick: &[(Emoji, Act)], more: Act, cx: &mut Context<Waffle>) 
     let cell = |id: SharedString, ink: Hsla| {
         ui::pressable(div().id(id), 0.97)
             .flex_1()
-            .h(px(38.))
+            .h(px(QUICK_CELL))
             .squircle(RADIUS_SM)
             .flex()
             .items_center()
@@ -951,7 +728,7 @@ fn quick_reactions(quick: &[(Emoji, Act)], more: Act, cx: &mut Context<Waffle>) 
             this.shut_menu(window, cx);
             more(this, window, cx);
         }));
-    div().h(px(EMOJI_ROW)).flex_none().pt_0p5().px_0p5().pb_1().flex().gap_1().children(faces).child(picker)
+    ui::row().items_stretch().h(px(EMOJI_ROW)).flex_none().pt_0p5().px_0p5().pb_1().gap_1().children(faces).child(picker)
 }
 
 pub(crate) fn emoji_face(emoji: &Emoji, size: f32) -> AnyElement {
@@ -959,12 +736,6 @@ pub(crate) fn emoji_face(emoji: &Emoji, size: f32) -> AnyElement {
         Some(url) => img(url).size(px(size)).into_any_element(),
         None => div().text_size(px(size)).line_height(px(size)).child(emoji.name.clone()).into_any_element(),
     }
-}
-
-// The field with its focus ring, which it holds while its dialog is open: the dialog focuses it on open.
-fn field(cx: &App) -> Div {
-    let ring = BoxShadow { color: palette::accent_soft(cx), offset: point(px(0.), px(0.)), blur_radius: px(0.), spread_radius: px(3.), inset: false };
-    ui::field_frame(cx).border_color(palette::accent()).shadow(vec![ring])
 }
 
 impl Waffle {
@@ -985,10 +756,11 @@ impl Waffle {
                     Ok(_) => then(this, cx),
                     Err(error) => this.show_toast(error, cx),
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): `then` can change what any column draws
             })
             .ok();
         })
+        // lint-allow(detached-task): ends when the request returns, and holds only a WeakEntity.
         .detach();
     }
 
@@ -1004,7 +776,7 @@ impl Waffle {
         cx: &mut Context<Self>,
     ) {
         apply(self);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): `apply` can change what any column draws
         let Some(client) = self.client.clone() else { return };
         cx.spawn(async move |this, cx| {
             let Err(error) = client.call(method, path, body).await else { return };
@@ -1014,10 +786,10 @@ impl Waffle {
             })
             .ok();
         })
+        // lint-allow(detached-task): ends when the request returns, and holds only a WeakEntity.
         .detach();
     }
 }
-
 
 #[cfg(test)]
 mod tests {

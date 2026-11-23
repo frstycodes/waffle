@@ -2,7 +2,7 @@
 // moves it on (check, download, restart), the release notes, and whether downloads start by themselves.
 use std::time::SystemTime;
 
-use gpui_kit::{AnyElement, App, Context, FontWeight, IntoElement, Window, ParentElement, StatefulInteractiveElement, Styled, component::Icon, div, img, px};
+use gpui_kit::{AnyElement, App, Context, FontWeight, IntoElement, Window, ParentElement, StatefulInteractiveElement, Styled, component::Icon, div, img};
 
 use super::Section;
 use crate::{
@@ -34,15 +34,12 @@ impl Waffle {
             Status::Downloading { total: None, .. } => Some(ui::progress_indeterminate("update-progress", cx)),
             _ => None,
         };
-        let text = div()
+        let text = ui::col().min_h_0()
             .flex_1()
-            .min_w_0()
-            .flex()
-            .flex_col()
             .gap_0p5()
-            .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(format!("Waffle {CURRENT}")))
-            .child(div().text_size(ui::TEXT_XS).line_height(px(17.)).text_color(palette::muted(cx)).child(status_line(status, self.updates.updater.is_some())))
-            .children(progress.map(|bar| div().mt_1p5().child(bar)));
+            .child(ui::line(format!("Waffle {CURRENT}")).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
+            .child(div().text_size(ui::TEXT_XS).line_height(ui::LINE_DETAIL).text_color(palette::muted(cx)).child(status_line(status, self.updates.updater.is_some())))
+            .children(progress.map(|bar| div().pt_1p5().child(bar)));
         ui::settings_row("update-status", false, cx).child(img(self.prefs.app_icon.asset()).size_12().flex_none()).child(text).child(self.update_action(cx)).into_any_element()
     }
 

@@ -14,6 +14,7 @@ use super::{DUR_PANEL, DUR_PRESS, SQUIRCLE, Squircle, control::part, stretch};
 use crate::{motion, palette};
 
 // Progress: the done part, a 4px gap, then what's left.
+// Keywords: progress bar, loading, upload, meter, track
 pub fn progress(fraction: f32, cx: &App) -> Div {
     let f = fraction.clamp(0., 1.);
     split_track(f, 6., 3., 2., cx).gap(px(4.))
@@ -58,13 +59,67 @@ fn travel(t: f32) -> (f32, f32) {
 
 // Done and remaining as two flex pieces, ends facing the gap at `inner` radius.
 fn split_track(f: f32, height: f32, outer: f32, inner: f32, cx: &App) -> Div {
+    track_in(f, height, outer, inner, palette::accent(), palette::line_strong(cx))
+}
+
+fn track_in(f: f32, height: f32, outer: f32, inner: f32, fill: Hsla, track: Hsla) -> Div {
     let piece = |grow: f32, color: Hsla| div().h(px(height)).flex_basis(px(0.)).flex_grow(grow).corner_shape(SQUIRCLE).bg(color);
     div()
         .w_full()
         .flex()
         .items_center()
-        .when(f > 0., |d| d.child(piece(f, palette::accent()).rounded_l(px(outer)).rounded_r(px(if f < 1. { inner } else { outer }))))
-        .when(f < 1., |d| d.child(piece(1. - f, palette::line_strong(cx)).rounded_r(px(outer)).rounded_l(px(if f > 0. { inner } else { outer }))))
+        .when(f > 0., |d| d.child(piece(f, fill).rounded_l(px(outer)).rounded_r(px(if f < 1. { inner } else { outer }))))
+        .when(f < 1., |d| d.child(piece(1. - f, track).rounded_r(px(outer)).rounded_l(px(if f > 0. { inner } else { outer }))))
+}
+
+// Progress in other colours or a lighter weight (an upload's positive fill, a poll's share, a splash's thin
+// bar): `ui::progress_bar(f, cx).fill(palette::positive_ink(cx)).thin()`. `.joined()` drops the gap.
+// Keywords: progress bar, meter, upload, share, percentage, track, loading bar
+#[derive(gpui_kit::IntoElement)]
+pub struct ProgressBar {
+    fraction: f32,
+    fill: Hsla,
+    track: Hsla,
+    height: f32,
+    gap: bool,
+}
+
+// Progress with options for its colours and weight; see `ProgressBar`.
+// Keywords: progress bar, meter, upload, share, percentage, track, loading bar
+pub fn progress_bar(fraction: f32, cx: &App) -> ProgressBar {
+    ProgressBar { fraction: fraction.clamp(0., 1.), fill: palette::accent(), track: palette::line_strong(cx), height: 6., gap: true }
+}
+
+impl ProgressBar {
+    pub fn fill(mut self, fill: Hsla) -> Self {
+        self.fill = fill;
+        self
+    }
+
+    pub fn track(mut self, track: Hsla) -> Self {
+        self.track = track;
+        self
+    }
+
+    // 4px instead of 6.
+    pub fn thin(mut self) -> Self {
+        self.height = 4.;
+        self
+    }
+
+    // The done part runs straight into what's left, with no gap.
+    pub fn joined(mut self) -> Self {
+        self.gap = false;
+        self
+    }
+}
+
+impl gpui_kit::RenderOnce for ProgressBar {
+    fn render(self, _: &mut gpui_kit::Window, _: &mut App) -> impl gpui_kit::IntoElement {
+        let outer = self.height / 2.;
+        let bar = track_in(self.fraction, self.height, outer, if self.gap { 2. } else { 0. }, self.fill, self.track);
+        if self.gap { bar.gap(px(4.)) } else { bar }
+    }
 }
 
 #[derive(Clone, Copy)]

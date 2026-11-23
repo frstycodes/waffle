@@ -8,7 +8,7 @@ use super::audio::SAMPLE_RATE;
 
 pub struct Taps {
     dir: PathBuf,
-    stages: BTreeMap<&'static str, Vec<f32>>,
+    stages: BTreeMap<&'static str, Vec<f32>>, // lint-allow(unbounded-growth): a developer capture, only built when WAFFLE_VOICE_TAPS names a directory, written out and dropped when the call ends
 }
 
 impl Taps {

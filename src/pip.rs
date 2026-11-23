@@ -105,19 +105,17 @@ impl Waffle {
             Some(frame) => ui::media(gpui_kit::ImageSource::Render(frame.clone()), ui::all(0.)).absolute().inset_0().size_full().object_fit(gpui_kit::ObjectFit::Contain).into_any_element(),
             None => crate::call::stream_fill(0.).absolute().inset_0().flex().items_center().justify_center().text_size(ui::TEXT_XS).text_color(white.opacity(0.7)).child(format!("Joining {name}'s stream…")).into_any_element(),
         };
-        let bar = div()
+        let bar = ui::row()
             .absolute()
             .left_0()
             .right_0()
             .bottom_0()
             .p_2()
-            .flex()
-            .items_center()
             .gap_2()
             .bg(gpui_kit::linear_gradient(180., gpui_kit::linear_color_stop(gpui_kit::transparent_black(), 0.), gpui_kit::linear_color_stop(gpui_kit::black().opacity(0.6), 1.)))
             .opacity(0.)
             .group_hover("stream-pip", |s| s.opacity(1.))
-            .child(div().flex_1().min_w_0().truncate().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(white).child(format!("{name}'s screen")))
+            .child(ui::line(format!("{name}'s screen")).flex_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(white))
             .child(ui::button("pip-stop", ui::Tone::OnMedia, cx).small().child("Stop watching").on_click(cx.listener(|this, _, _, cx| {
                 cx.stop_propagation();
                 this.stop_watching(cx);
@@ -189,7 +187,7 @@ impl Waffle {
             // Never over the header and the window's own buttons.
             let top = crate::layout::HEADER_HEIGHT;
             this.pip.carried = Some((f32::from(at.x).clamp(0., (area.0 - size.0).max(0.)), f32::from(at.y).clamp(top, (area.1 - size.1).max(top))));
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the PiP floats over every column
         }))
         .on_drop(cx.listener(|this, _: &PipDrag, _, cx| this.land_pip(cx)))
         .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, _, cx| this.land_pip(cx)))
@@ -200,7 +198,7 @@ impl Waffle {
         self.pip.corner = nearest(at, self.pip.size.get(), self.pip.area);
         let n = self.pip.landed.map_or(0, |(_, n)| n + 1);
         self.pip.landed = Some((at, n));
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the PiP floats over every column
     }
 }
 

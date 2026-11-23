@@ -16,6 +16,22 @@ use gpui_kit::{AnyElement, Context, IntoElement, Window};
 use reqwest::Method;
 use serde_json::{Map, Value, json};
 
+// A numbered disc in the accent tint, 24px: one rule's number in the rules list and the onboarding rules step.
+pub(super) fn numbered_mark(n: usize, cx: &gpui_kit::App) -> gpui_kit::Div {
+    use gpui_kit::{FontWeight, prelude::*};
+    // lint-allow(custom-badge): ui::badge has no round numbered mark in the accent tint (ui::pill is a capsule)
+    crate::ui::row()
+        .size_6()
+        .flex_none()
+        .rounded_full()
+        .bg(crate::palette::accent_soft(cx))
+        .text_color(crate::palette::accent_ink(cx))
+        .text_size(crate::ui::TEXT_XS)
+        .font_weight(FontWeight::BOLD)
+        .justify_center()
+        .child(n.to_string())
+}
+
 pub use browse::BrowseView;
 pub use guide::GuideView;
 pub use invite::InviteView;
@@ -63,7 +79,7 @@ pub struct Join {
     pub forms: HashMap<String, Load<Form>>,
     pub welcome: HashMap<String, Load<Welcome>>,
     // Server → the to-do channels done (GET new-member-actions, then each completion).
-    pub done_actions: HashMap<String, HashSet<String>>,
+    pub done_actions: HashMap<String, HashSet<String>>, // lint-allow(unbounded-growth): one entry per joined server, a few dozen at most
     pub invite: Option<InviteView>,
     // Server → the nickname picked on its invite screen, set once the join goes through.
     pub invite_settings: HashMap<String, invite::Picked>,
@@ -412,7 +428,7 @@ impl Waffle {
     pub(crate) fn open_guild_page(&mut self, page: GuildPage, cx: &mut Context<Self>) {
         self.guild_page = Some(page);
         self.inbox_page = false;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the page opens in the main column and its row lights up in the nav's channel list
     }
 
     pub(crate) fn render_guild_page(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {

@@ -17,6 +17,9 @@ pub const STAGES: usize = 3;
 
 const MARK: f32 = 56.;
 const TRACK: f32 = 120.;
+// The splash window's size.
+const WINDOW_WIDTH: f32 = 220.;
+const WINDOW_HEIGHT: f32 = 248.;
 
 pub struct Splash {
     stage: SharedString,
@@ -34,7 +37,7 @@ impl Splash {
 pub fn open(stage: impl Into<SharedString>, cx: &mut App) -> Option<WindowHandle<Splash>> {
     let stage = stage.into();
     let options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(220.), px(248.)), cx))),
+        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)), cx))),
         titlebar: None,
         kind: WindowKind::PopUp,
         focus: true,
@@ -53,31 +56,27 @@ pub fn open(stage: impl Into<SharedString>, cx: &mut App) -> Option<WindowHandle
 
 impl Render for Splash {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("Splash");
         let bg = palette::surface(Level::Raised, cx);
         // Opened without gpui-kit's root view, so the app font is set here.
         // GAP: the design's 0 18 40 drop shadow falls outside this borderless window's bounds.
         div().size_full().font_family(cx.theme().font_family.clone()).child(
-            div()
+            // lint-allow(custom-surface): ui::surface is the overlay fill with a drop shadow; the splash is a raised fill with an inset hairline in a borderless window.
+            ui::col()
                 .size_full()
                 .px_4()
                 .squircle(ui::RADIUS_MD)
                 .bg(bg)
                 // One inset hairline: a border on a squircle in a transparent window doubled up at the corners.
                 .shadow(vec![shadow(palette::line_strong(cx), 0., 0., 0., 1., true)])
-                .flex()
-                .flex_col()
                 .items_center()
                 .justify_center()
                 .gap_2p5()
                 .child(mascot::loader("splash-loader", MARK, palette::logo_ink(cx), cx))
-                .child(div().mt_1().text_size(ui::TEXT_LG).line_height(ui::LINE_SM).font_weight(FontWeight::BOLD).text_color(palette::strong(cx)).child("Waffle"))
-                .child(div().max_w_full().truncate().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(self.stage.clone()))
-                .child(progress_bar(self.progress, cx)),
+                .child(div().pt_1().text_size(ui::TEXT_LG).line_height(ui::LINE_SM).font_weight(FontWeight::BOLD).text_color(palette::strong(cx)).child("Waffle"))
+                .child(ui::line(self.stage.clone()).max_w_full().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)))
+                .child(div().w(px(TRACK)).child(ui::progress_bar(self.progress, cx).joined().track(palette::track(cx)))),
         )
     }
-}
-
-fn progress_bar(progress: f32, cx: &App) -> gpui_kit::Div {
-    div().w(px(TRACK)).h_1p5().rounded(px(3.)).bg(palette::track(cx)).child(div().h_full().w(px(TRACK * progress)).rounded(px(3.)).bg(palette::accent()))
 }
 

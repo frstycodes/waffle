@@ -1,5 +1,5 @@
 // A 1:1 DM's side panel: the person's profile, as Discord shows it beside the conversation.
-use gpui_kit::{AnyElement, Context, SharedString, Window, div, linear_color_stop, linear_gradient, prelude::*};
+use gpui_kit::{AnyElement, Context, SharedString, Window, linear_color_stop, linear_gradient, prelude::*};
 
 use super::{Ink, profile_key};
 use crate::{Edge, ProfileCard, RightPanel, Waffle, discord::{Channel, User}, icons::Glyph, palette, ui::{self, Squircle}};
@@ -22,14 +22,14 @@ impl Waffle {
         let card = ProfileCard { user, guild_id: None, at: Default::default(), profile, all_activity: false, avatar_full: false };
         let profile = card.profile.clone().unwrap_or_default();
         let ink = Ink::new(profile.theme, cx);
-        let content = div().id("dm-profile").flex().flex_col().child(self.profile_header(&card, &profile, ui::RADIUS_LG, hovered, ink, cx)).child(self.profile_sections(&card, &profile, ink, cx));
-        let panel = div().id("dm-profile-panel").flex_1().min_h_0().flex().flex_col().squircle(ui::RADIUS_LG).on_hover(on_hover);
+        let content = ui::col().id("dm-profile").child(self.profile_header(&card, &profile, ui::RADIUS_LG, hovered, ink, cx)).child(self.profile_sections(&card, &profile, ink, cx));
+        let panel = ui::col().min_h_0().id("dm-profile-panel").flex_1().squircle(ui::RADIUS_LG).on_hover(on_hover);
         let panel = match ink.border {
             Some(_) => panel.bg(linear_gradient(180., linear_color_stop(ink.top, 0.), linear_color_stop(ink.bottom, 1.))),
             None => panel.bg(palette::surface(palette::Level::Sidebar, cx)),
         };
         let panel = panel.child(ui::scroll_area(content, &self.panel_scroll));
-        let column = div().relative().size_full().flex().flex_col().pt_2().pr_2().pb_2().bg(palette::surface(palette::Level::Page, cx));
+        let column = ui::col().relative().size_full().pt_2().pr_2().pb_2().bg(palette::surface(palette::Level::Page, cx));
         Some(column.child(panel).child(self.resize_handle(Edge::Panel, cx)).into_any_element())
     }
 

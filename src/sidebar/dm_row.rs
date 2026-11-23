@@ -64,7 +64,7 @@ impl Waffle {
             let line = match (typing, presence.clone()) {
                 (true, _) => Some(div().child(ui::bars(SharedString::from(format!("dm-typing-{}{key}", channel.id)), faint, 10.)).child("Typing…")),
                 (false, Some(p)) => match (p.activity, p.status) {
-                    (Some(a), _) => Some(div().children(activity_glyph(a.kind).map(|i| i.size(ui::ICON_XS).flex_none())).child(div().truncate().child(a.text))),
+                    (Some(a), _) => Some(div().children(activity_glyph(a.kind).map(|i| i.size(ui::ICON_XS).flex_none())).child(ui::line(a.text))),
                     (None, Status_::Offline) => None,
                     (None, s) => Some(div().child(s.label())),
                 },
@@ -74,12 +74,9 @@ impl Waffle {
             call_line.map(|(glyph, label, ink)| div().child(Icon::new(glyph).size(ui::ICON_SM).flex_none().text_color(ink)).child(div().text_color(ink).child(label))).or(line)
         };
         let names = |key: &str| {
-            div()
+            ui::col().min_h_0()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .child(div().truncate().font_weight(if unread { FontWeight::MEDIUM } else { FontWeight::NORMAL }).child(channel.name.clone()))
+                .child(ui::line(channel.name.clone()).font_weight(if unread { FontWeight::MEDIUM } else { FontWeight::NORMAL }))
                 .children(line(key).map(|l| l.flex().items_center().gap_1().min_w_0().text_size(ui::TEXT_XS).text_color(faint)))
         };
         // Only while hovered, so the list stays quiet at rest.
@@ -111,8 +108,8 @@ impl Waffle {
             .child(div().relative().when(offline, |a| a.opacity(0.5)).child(face))
             .child(names("").relative())
             .when(mentions > 0 && !hovered, |r| r.child(ui::count_badge(mentions)))
-            .when(mentions == 0 && !selected && !hovered && self.drafts.has(&channel.id), |r| r.child(div().flex_none().flex().text_color(faint).child(draft_mark())))
-            .when(pinned && !hovered, |r| r.child(div().flex_none().flex().text_color(faint).child(Icon::new(Glyph::Pin).size(ui::ICON_SM))))
+            .when(mentions == 0 && !selected && !hovered && self.drafts.has(&channel.id), |r| r.child(ui::row().items_stretch().flex_none().text_color(faint).child(draft_mark())))
+            .when(pinned && !hovered, |r| r.child(ui::row().items_stretch().flex_none().text_color(faint).child(Icon::new(Glyph::Pin).size(ui::ICON_SM))))
             .when(hovered, |r| r.child(close))
             .on_click(cx.listener(move |this, _, window, cx| this.open_channel(open.clone(), window, cx)))
             .on_mouse_down(gpui_kit::MouseButton::Right, {

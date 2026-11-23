@@ -1,19 +1,20 @@
 // Waffle's frame (design/navigation.html): the rail, channel list, chat and side panel run to the window's
 // top, each column's own header doubling as the title bar; the user area sits at the foot of the channel list.
 use gpui_kit::{
-    Animation, AnimationExt, AnyElement, App, Context, Div, FontWeight, Hsla, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, NavigationDirection,
+    AnyElement, App, Context, Div, FontWeight, Hsla, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, NavigationDirection,
     Render, SharedString, Stateful, StyleRefinement, Window,
+    AnimationExt as _,
     component::{ActiveTheme, Icon},
     div, img, linear_color_stop, linear_gradient, prelude::*, px,
 };
 
 use crate::{
     Waffle, Drag, Edge, Status,
+    sidebar::Nav,
     discord,
     icons::Glyph,
     login, palette,
     part::Column,
-    sidebar::Nav,
     ui::{self, Squircle},
 };
 
@@ -38,6 +39,7 @@ impl Render for Waffle {
     // The shell (shell.rs) caches this view's drawing, so this runs only when the app changed; GIFs
     // placed while it runs are played by the GIF layer beside it.
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("Waffle");
         crate::gif::begin_layout();
         let images = crate::images::cache(cx);
         images.update(cx, |images, cx| images.next_frame(cx));
@@ -56,12 +58,10 @@ impl Waffle {
         let sidebar_width = if self.settings_open() { self.settings_width } else { RAIL_WIDTH + self.channels_width };
         crate::material::sync_sidebar_material(window, sidebar_width, cx.theme().is_dark(), self.prefs.native_sidebar);
         let theme = cx.theme().clone();
-        let root = div()
+        let root = ui::col()
             .id("waffle")
             .track_focus(&self.focus)
             .size_full()
-            .flex()
-            .flex_col()
             .when(!crate::material::active(), |d| d.bg(theme.title_bar))
             .text_color(theme.foreground)
             .text_size(ui::TEXT_MD)
@@ -71,7 +71,7 @@ impl Waffle {
             .on_modifiers_changed(cx.listener(|this, e: &gpui_kit::ModifiersChangedEvent, _, cx| {
                 if this.shift_held != e.modifiers.shift {
                     this.shift_held = e.modifiers.shift;
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): shift swaps the actions on message rows (main), menus and popovers (overlays, which only follow the app)
                 }
             }))
             .on_mouse_down(MouseButton::Navigate(NavigationDirection::Back), cx.listener(|this, _, window, cx| this.navigate(false, window, cx)))
@@ -105,7 +105,7 @@ impl Waffle {
         }
         // A settings view covers the whole window and its nav takes the sidebar's place, so the app under it
         // isn't drawn: over the native material its own sidebar would show through the settings nav.
-        let body = div().relative().flex_1().min_h_0().flex();
+        let body = ui::row().items_stretch().relative().flex_1().min_h_0();
         let body = if self.settings_open() {
             body
         } else {
@@ -152,7 +152,7 @@ impl Waffle {
         crate::gif::begin_inline_layout();
         let content = self.render_main_content(window, cx);
         match self.voice_notice_bar(cx) {
-            Some(bar) => div().size_full().flex().flex_col().child(bar).child(div().flex_1().min_h_0().flex().child(content)).into_any_element(),
+            Some(bar) => ui::col().size_full().child(bar).child(ui::row().items_stretch().flex_1().min_h_0().child(content)).into_any_element(),
             None => content,
         }
     }
@@ -184,48 +184,37 @@ impl Waffle {
             crate::NoticeWhy::Elsewhere => (palette::danger(), gpui_kit::white(), "Your voice has been disconnected because you connected at another location.".to_owned()),
             crate::NoticeWhy::Restarted => (palette::accent(), palette::on_accent(), format!("You left {} when Waffle restarted.", notice.channel.name)),
         };
-        let reconnect = div()
-            .id("voice-notice-reconnect")
+        let reconnect = ui::button("voice-notice-reconnect", ui::Tone::Ghost, cx)
+            .small()
             .h_6()
             .px_2p5()
-            .flex()
-            .items_center()
-            .squircle(crate::ui::RADIUS_XS)
             .border_1()
             .border_color(ink.opacity(0.6))
+            .text_size(ui::TEXT_SM)
+            .text_color(ink)
             .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-            .cursor_pointer()
             .hover(move |s| s.bg(ink.opacity(0.12)))
             .child("Reconnect")
             .on_click(cx.listener(|this, _, _, cx| this.reconnect_voice(cx)));
-        let close = div()
-            .id("voice-notice-close")
-            .size_6()
-            .flex()
-            .items_center()
-            .justify_center()
-            .squircle(crate::ui::RADIUS_XS)
-            .cursor_pointer()
+        let close = ui::icon_button("voice-notice-close", crate::icons::Glyph::X, "Dismiss", cx)
+            .small()
+            .text_color(ink)
             .hover(move |s| s.bg(ink.opacity(0.12)))
-            .child(gpui_kit::component::Icon::new(crate::icons::Glyph::X).size(ui::ICON_MD))
-            .tooltip(|window, cx| ui::tip("Dismiss", window, cx))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.voice_notice = None;
-                cx.notify();
+                this.redraw(Column::Main, cx);
             }));
         Some(
-            div()
+            ui::row()
                 .flex_none()
                 .h_9()
                 .pl_4()
                 .pr_2()
-                .flex()
-                .items_center()
                 .gap_3()
                 .bg(fill)
                 .text_color(ink)
                 .text_size(ui::TEXT_SM)
-                .child(div().flex_1().min_w_0().flex().items_center().justify_center().gap_3().child(div().truncate().child(text)).child(reconnect))
+                .child(ui::row().flex_1().justify_center().gap_3().child(ui::line(text)).child(reconnect))
                 .child(close)
                 .child(self.caption_clearance(cfg!(target_os = "windows"))),
         )
@@ -284,7 +273,7 @@ impl Waffle {
         // Esc closes the voice channel's chat once its messages are scrolled to the bottom, as Discord's.
         if keystroke.key == "escape" && self.call_view && self.call_chat_shown() && !self.scrolled_up {
             self.call_chat = false;
-            cx.notify();
+            self.redraw(Column::Main, cx);
             return cx.stop_propagation();
         }
         // Esc with nothing else to close marks the channel read and returns to the newest message, as Discord does.
@@ -308,11 +297,11 @@ impl Waffle {
     // A settings view: its nav with a resize handle on the edge, then the page. It covers the window, so it
     // tracks a drag of that handle itself.
     pub(crate) fn settings_frame(&self, id: &'static str, nav: AnyElement, main: impl IntoElement, cx: &mut Context<Self>) -> gpui_kit::Stateful<Div> {
-        let nav = div().relative().flex_none().h_full().w(px(self.settings_width)).flex().flex_col().child(ui::settings_nav_edge(cx)).child(nav).child(self.resize_handle(Edge::Settings, cx));
+        let nav = ui::col().relative().flex_none().h_full().w(px(self.settings_width)).child(ui::settings_nav_edge(cx)).child(nav).child(self.resize_handle(Edge::Settings, cx));
         // The page's top band drags the window too, as every other column's header does; it stops above
         // the close button, which sits below the caption buttons.
         let drag = div().absolute().top_0().left_0().right_0().h(px(TITLE_HEIGHT)).window_control_area(gpui_kit::WindowControlArea::Drag);
-        let main = div().relative().flex_1().min_w_0().h_full().flex().child(main).child(drag);
+        let main = ui::row().items_stretch().relative().flex_1().h_full().child(main).child(drag);
         ui::settings_window(id, nav, main, cx)
     }
 
@@ -321,7 +310,7 @@ impl Waffle {
         if drag.edge == Edge::CallChat {
             self.prefs.save();
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the root's layout sizes every column, so a finished drag redraws them all
     }
 
     fn on_drag_move(&mut self, event: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -334,7 +323,7 @@ impl Waffle {
             Edge::Settings => self.settings_width = (drag.start_width + dx).clamp(SETTINGS_RANGE.0, SETTINGS_RANGE.1),
             Edge::CallChat => self.prefs.call_chat_width = crate::call::chat_width(drag.start_width - dx, f32::from(window.viewport_size().width)),
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): a dragged edge resizes columns the root's layout sizes, so all of them redraw
     }
 
     /// An 8px grab strip over a column's edge drawing a 2px line: accent at 60% on hover, full while
@@ -343,7 +332,7 @@ impl Waffle {
         let active = self.drag.as_ref().is_some_and(|d| d.edge == edge);
         let grows_left = matches!(edge, Edge::Panel | Edge::CallChat);
         let accent = palette::accent();
-        div()
+        ui::row()
             .id(match edge {
                 Edge::Channels => "resize-channels",
                 Edge::Panel => "resize-panel",
@@ -358,7 +347,8 @@ impl Waffle {
             .when(grows_left, |h| h.left_neg_1())
             .group("resize-grip")
             .cursor_col_resize()
-            .child(div().ml(px(3.)).w_0p5().h_full().rounded_xs().when(active, |l| l.bg(accent)).when(!active, |l| l.group_hover("resize-grip", |l| l.bg(accent.opacity(0.6)))))
+            .justify_center()
+            .child(div().w_0p5().h_full().rounded_xs().when(active, |l| l.bg(accent)).when(!active, |l| l.group_hover("resize-grip", |l| l.bg(accent.opacity(0.6)))))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, event: &MouseDownEvent, window, cx| {
@@ -370,7 +360,7 @@ impl Waffle {
                     };
                     this.drag = Some(Drag { edge, start_x: f32::from(event.position.x), start_width });
                     cx.stop_propagation();
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): a dragged edge resizes columns the root's layout sizes, so all of them redraw
                 }),
             )
     }
@@ -398,8 +388,8 @@ impl Waffle {
         let plate = |on: bool| (has_plate && on).then(|| gpui_kit::black().opacity(0.22));
         let (faint, danger) = (palette::faint(cx), palette::danger_ink(cx));
         let status_line: AnyElement = match (server_muted, sharing) {
-            (true, _) => div().truncate().text_color(danger).child("Server muted by a moderator").into_any_element(),
-            (false, true) => div().flex().items_center().gap_1().child(Icon::new(Glyph::ShareScreen).size(ui::ICON_SM).text_color(palette::positive_ink(cx))).child(div().truncate().child("Sharing their screen")).into_any_element(),
+            (true, _) => ui::line("Server muted by a moderator").text_color(danger).into_any_element(),
+            (false, true) => ui::row().gap_1().child(Icon::new(Glyph::ShareScreen).size(ui::ICON_SM).text_color(palette::positive_ink(cx))).child(ui::line("Sharing their screen")).into_any_element(),
             (false, false) => ui::truncating("me-status", self.status_line()).into_any_element(),
         };
         let mic = me_button("mic", if muted { Nav::MicOff } else { Nav::Mic }, muted, if server_muted { "A moderator muted you here. Only they can unmute you." } else if muted { "Unmute" } else { "Mute" }, cx)
@@ -426,14 +416,12 @@ impl Waffle {
         let corners = [top, top, ui::RADIUS_MD, ui::RADIUS_MD];
         let nameplate = me.nameplate.as_ref().map(|plate| nameplate(plate, palette::surface(palette::Level::Sidebar, cx), corners, cx.theme().is_dark(), animate));
         let hover = palette::hover(cx);
-        let who = div()
+        // lint-allow(custom-button): ui::list_row has fixed 36/48/60px heights, none the 40px user-panel row's
+        let who = ui::row()
             .id("me")
             .flex_1()
-            .min_w_0()
             .p_1()
             .squircle(ui::RADIUS_SM)
-            .flex()
-            .items_center()
             .gap_2()
             .cursor_pointer()
             .hover(move |s| s.bg(hover))
@@ -445,16 +433,13 @@ impl Waffle {
                 false => decorated_avatar(&me.avatar, me.decoration.as_deref(), 32., self.my_mark().map(Into::into), ring),
             })
             .child(
-                div()
+                ui::col().min_h_0()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
                     .child(ui::truncating("me-name", me.name.clone()).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
                     .child(div().line_height(ui::LINE_XS).text_size(ui::TEXT_XS).text_color(faint).child(status_line)),
             );
         let voice = self.voice_panel(cx);
-        div()
+        ui::col() // lint-allow(custom-badge, custom-mark): ui::surface adds a ring and shadow this docked card doesn't draw
             .absolute()
             .left_2()
             .right_2()
@@ -462,8 +447,6 @@ impl Waffle {
             .squircle(ui::RADIUS_MD)
             .overflow_hidden()
             .bg(card)
-            .flex()
-            .flex_col()
             .text_size(ui::TEXT_SM)
             .children(self.update_row(cx))
             .children(voice)
@@ -474,16 +457,14 @@ impl Waffle {
                     .flex_none()
                     .children(nameplate)
                     .child(
-                        div()
+                        ui::row()
                             .relative()
                             .size_full()
                             // 6px on every side, so a hover fill never meets the card's edge.
                             .p_1p5()
-                            .flex()
-                            .items_center()
                             .gap_1()
                             .child(who)
-                            .child(div().relative().flex().items_center().gap_2().child(split_control(mic, mic_options)).child(split_control(headphones, output_options)).child(settings)),
+                            .child(ui::row().relative().gap_2().child(split_control(mic, mic_options)).child(split_control(headphones, output_options)).child(settings)),
                     ),
             )
             .into_any_element()
@@ -492,14 +473,12 @@ impl Waffle {
     // The rail and the channel list, with the user area floating across the foot of both.
     pub(crate) fn render_nav(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let user_panel = self.me.clone().map(|me| self.user_panel(me, window, cx));
-        div()
+        ui::col()
             .relative()
             .h_full()
             .flex_none()
-            .flex()
-            .flex_col()
             .bg(crate::material::sidebar_fill(cx))
-            .child(div().flex_1().min_h_0().flex().child(self.render_rail_column(window, cx)).child(self.render_channels(window, cx)))
+            .child(ui::row().items_stretch().flex_1().min_h_0().child(self.render_rail_column(window, cx)).child(self.render_channels(window, cx)))
             .children(user_panel)
     }
 
@@ -507,7 +486,7 @@ impl Waffle {
     pub(crate) fn user_panel_clearance(&self) -> gpui_kit::Pixels {
         match self.me.is_some() {
             true => px(self.panel_stack_height() + 16.),
-            false => px(0.),
+            false => gpui_kit::Pixels::ZERO,
         }
     }
 
@@ -526,18 +505,16 @@ impl Waffle {
             .child("Restart")
             .tooltip(|window, cx| ui::tip("Installs the update and reopens Waffle", window, cx))
             .on_click(cx.listener(|this, _, _, cx| this.request_restart(this.updates.staged().cloned(), cx)));
-        let row = div()
+        let row = ui::row()
             .h(px(UPDATE_HEIGHT))
             .flex_none()
             .pl_3()
             .pr_1p5()
-            .flex()
-            .items_center()
             .gap_2()
             .relative()
             .child(ui::inset_rule(crate::call::PANEL_PAD, cx))
             .child(Icon::new(Glyph::Download).size(ui::ICON_MD).flex_none().text_color(palette::accent_ink(cx)))
-            .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(format!("Waffle {} is ready", staged.version)))
+            .child(ui::line(format!("Waffle {} is ready", staged.version)).flex_1().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
             .child(restart);
         Some(row.into_any_element())
     }
@@ -552,14 +529,14 @@ impl Waffle {
             while let Some(status) = futures::StreamExt::next(&mut statuses).await {
                 let shown = this.update(cx, |this, cx| {
                     this.updates.apply(status, std::time::SystemTime::now());
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the update row (nav) and the Updates settings page (an overlay, which only follows the app) both show the status
                 });
                 if shown.is_err() {
                     return;
                 }
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends when the updater's status stream closes or the app is gone, holding a WeakEntity
     }
 }
 
@@ -587,7 +564,7 @@ pub fn nameplate_tint(plate: &discord::Nameplate, dark: bool) -> Hsla {
 // `animate` swaps in the moving art while it loads and plays, the still standing in until then.
 // It carries an id either way, since gpui animates only an image with one; the still has one frame.
 pub fn nameplate_art(plate: &discord::Nameplate, height: f32, top_right: gpui_kit::Pixels, bottom_right: gpui_kit::Pixels, animate: bool) -> Stateful<gpui_kit::Img> {
-    let corners = gpui_kit::Corners { top_left: px(0.), top_right, bottom_right, bottom_left: px(0.) };
+    let corners = gpui_kit::Corners { top_left: gpui_kit::Pixels::ZERO, top_right, bottom_right, bottom_left: gpui_kit::Pixels::ZERO };
     let still = plate.art.clone();
     let Some(animated) = plate.animated.clone().filter(|_| animate) else {
         return ui::edge(img(still).absolute().top_0().right_0().h(px(height)), corners).id("nameplate-art");
@@ -610,24 +587,21 @@ pub fn avatar_with_status(url: &str, size: f32, status: Option<discord::Mark>, s
 /// The same, with the user's avatar decoration framing it (drawn at 1.2× the avatar, as Discord does).
 /// An animated avatar or decoration holds its first frame; `playing_avatar` moves them.
 pub fn decorated_avatar(url: &str, decoration: Option<&str>, size: f32, status: Option<discord::Mark>, surface: Hsla) -> AnyElement {
-    avatar_frame(url, decoration, size, status, surface, None)
+    ui::badged(avatar_frame(url, decoration, size, None), size, ui::Shape::Round, surface).status(status).into_any_element()
 }
 
 /// `decorated_avatar` with its avatar and decoration swapped for their animated versions, playing, keyed
 /// by `key` (gpui animates only an image with an id). `url` and `decoration` are the stills, which stay
 /// up until the animated ones have loaded, so starting to play never flashes.
 pub fn playing_avatar(key: &str, url: &str, decoration: Option<&str>, size: f32, status: Option<discord::Mark>, surface: Hsla) -> AnyElement {
-    avatar_frame(url, decoration, size, status, surface, Some(key))
+    ui::badged(avatar_frame(url, decoration, size, Some(key)), size, ui::Shape::Round, surface).status(status).into_any_element()
 }
 
-fn avatar_frame(url: &str, decoration: Option<&str>, size: f32, status: Option<discord::Mark>, surface: Hsla, key: Option<&str>) -> AnyElement {
+fn avatar_frame(url: &str, decoration: Option<&str>, size: f32, key: Option<&str>) -> Div {
     let picture = |still: &str, part: &str, look: fn(gpui_kit::Img) -> gpui_kit::Img| match key {
         Some(key) => playing_image(still, SharedString::from(format!("{key}-{part}")), look).into_any_element(),
         None => look(img(still.to_owned())).into_any_element(),
     };
-    // .status: 30% of the avatar (9..16px), ringed 2px in the surface, its corner just past the avatar's.
-    let dot = (size * 0.3).clamp(9., 16.).round();
-    let inset = size * 0.04 - 2. - STATUS_RING;
     let frame = size * 1.2;
     div()
         .relative()
@@ -635,16 +609,6 @@ fn avatar_frame(url: &str, decoration: Option<&str>, size: f32, status: Option<d
         .flex_none()
         .child(picture(url, "avatar", |i| i.size_full().rounded_full()))
         .children(decoration.map(|d| div().absolute().size(px(frame)).left(px((size - frame) / 2.)).top(px((size - frame) / 2.)).child(picture(d, "decoration", |i| i.size_full()))))
-        .children(status.map(|status| {
-            // The phone stands taller than the dot, growing upward from the same corner.
-            let tall = if status == discord::Mark::Mobile { dot * PHONE_ASPECT } else { dot };
-            ui::cut_out(div().absolute().right(px(inset)).bottom(px(inset)).w(px(dot + 2. * STATUS_RING)).h(px(tall + 2. * STATUS_RING)).rounded(px(if tall > dot { dot * 0.28 + STATUS_RING } else { dot })), surface)
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(status_mark(status, dot, surface))
-        }))
-        .into_any_element()
 }
 
 // The animated version of `still`, playing, with `still` standing in from the first frame until it has
@@ -662,36 +626,12 @@ fn playing_image(still: &str, key: SharedString, look: fn(gpui_kit::Img) -> gpui
         .id(key)
 }
 
-const STATUS_RING: f32 = 2.;
-
-const PHONE_ASPECT: f32 = 1.5;
-
-pub fn status_mark(status: discord::Mark, dot: f32, surface: Hsla) -> AnyElement {
-    use discord::{Mark, Status};
-    let color = match status {
-        Mark::Status(status) => palette::status(status),
-        Mark::Mobile => palette::status(Status::Online),
-        Mark::Streaming => palette::streaming(),
-    };
-    let mark = div().relative().size(px(dot)).rounded_full().bg(color).overflow_hidden();
-    let cut = |w: f32, h: f32| ui::cut_out(div().absolute().w(px(w)).h(px(h)), surface);
-    match status {
-        Mark::Status(Status::Online) => mark,
-        Mark::Status(Status::Idle) => mark.child(cut(dot * 0.62, dot * 0.62).rounded_full().left(px(-dot * 0.12)).top(px(-dot * 0.12))),
-        Mark::Status(Status::Dnd) => mark.flex().items_center().justify_center().child(cut(dot * 0.62, (dot * 0.24).max(2.)).relative().rounded(px(dot))),
-        Mark::Status(Status::Offline) => mark.flex().items_center().justify_center().child(cut(dot * 0.46, dot * 0.46).relative().rounded_full()),
-        // A handset: a screen cut out of the body, a chin below it for the home bar.
-        Mark::Mobile => {
-            let side = (dot * 0.18).max(1.5);
-            mark.h(px(dot * PHONE_ASPECT)).rounded(px(dot * 0.28)).child(cut(dot - 2. * side, dot * PHONE_ASPECT - side - dot * 0.42).left(px(side)).top(px(side)).rounded(px(dot * 0.08)))
-        }
-        Mark::Streaming => mark.flex().items_center().justify_center().text_color(gpui_kit::white()).child(Icon::new(Glyph::Play).size(px((dot * 0.62).round()))),
-    }
-    .into_any_element()
-}
-
 /// Where the traffic lights sit at 100%: centred in the 36px title strip, leaving the first 72px to them.
-pub const TRAFFIC_LIGHTS: gpui_kit::Point<gpui_kit::Pixels> = gpui_kit::point(px(12.), px(18.));
+pub const TRAFFIC_LIGHTS: gpui_kit::Point<gpui_kit::Pixels> = gpui_kit::point(px(TRAFFIC_LIGHTS_X), px(TRAFFIC_LIGHTS_Y));
+const TRAFFIC_LIGHTS_X: f32 = 12.;
+const TRAFFIC_LIGHTS_Y: f32 = 18.;
+// The user area's narrow controls: its chevrons' and buttons' height.
+const ME_CONTROL: f32 = 30.;
 
 /// The traffic lights at `zoom`. They are AppKit's and never scale, so their offset follows the zoomed
 /// header instead: down by half the header's growth so they stay centred on it, across by half the
@@ -746,10 +686,8 @@ fn history_step(keystroke: &gpui_kit::Keystroke) -> Option<bool> {
 // A user area control (.me .iconbtn): 30px; `on` (muted, deafened) turns it coral. The glyph pops in on
 // every flip, keyed by state.
 // A control and its chevron as one split pill: round on the outside, square where they meet, 1px apart.
-fn split_control(button: Stateful<Div>, chevron: Stateful<Div>) -> Div {
-    div()
-        .flex()
-        .items_center()
+fn split_control(button: impl Styled + IntoElement, chevron: impl Styled + IntoElement) -> Div {
+    ui::row()
         .gap_px()
         .child(button.rounded_tr_none().rounded_br_none())
         .child(chevron.rounded_tl_none().rounded_bl_none())
@@ -759,14 +697,12 @@ fn split_control(button: Stateful<Div>, chevron: Stateful<Div>) -> Div {
 // control, so it is quieter and half as wide.
 fn me_chevron(id: &'static str, label: &'static str, open: bool, cx: &App) -> Stateful<Div> {
     let (hover, strong, selected) = (palette::hover(cx), palette::strong(cx), palette::selected(cx));
-    div()
+    ui::row() // lint-allow(custom-button): ui::icon_button is square, and this chevron is a 16px sliver joined to its control
         .id(id)
         .w_4()
-        .h(px(30.))
+        .h(px(ME_CONTROL))
         .flex_none()
         .squircle(ui::RADIUS_XS)
-        .flex()
-        .items_center()
         .justify_center()
         .cursor_pointer()
         .text_color(if open { strong } else { palette::faint(cx) })
@@ -776,22 +712,10 @@ fn me_chevron(id: &'static str, label: &'static str, open: bool, cx: &App) -> St
         .tooltip(move |window, cx| ui::tip(label, window, cx))
 }
 
-fn me_button(id: &'static str, glyph: Nav, on: bool, label: &'static str, cx: &App) -> Stateful<Div> {
-    let (hover, strong) = (palette::hover(cx), palette::strong(cx));
-    let icon = glyph.icon().size_5().with_animation(SharedString::from(format!("{id}-{on}")), Animation::new(ui::DUR_POP).with_easing(crate::motion::back_out), |icon, t| icon.size(px(20. * (0.7 + 0.3 * t))));
-    div()
-        .id(id)
-        .size(px(30.))
-        .flex_none()
-        .squircle(ui::RADIUS_SM)
-        .flex()
-        .items_center()
-        .justify_center()
-        .cursor_pointer()
-        .text_color(if on { palette::danger_ink(cx) } else { strong })
-        .hover(move |s| s.bg(hover))
-        .child(icon)
-        .tooltip(move |window, cx| ui::tip(label, window, cx))
+// A user-panel control: Waffle's own mic, headphones and settings icons, popping in when they switch.
+fn me_button(id: &'static str, icon: Nav, on: bool, label: &'static str, cx: &App) -> ui::Control {
+    let face = icon.icon().size(ui::ICON_XL).with_animation(SharedString::from(format!("{id}-{on}")), gpui_kit::Animation::new(ui::DUR_POP).with_easing(crate::motion::back_out), |icon, t| icon.size(ui::ICON_XL * (0.7 + 0.3 * t)));
+    ui::icon_slot(id, label, cx).sized(ME_CONTROL).text_color(if on { palette::danger_ink(cx) } else { palette::strong(cx) }).child(face)
 }
 
 // What draws over the app (dialogs, settings, the viewer, menus, toasts), as one deferred layer after it: an

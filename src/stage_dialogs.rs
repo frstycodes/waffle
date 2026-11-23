@@ -43,7 +43,7 @@ impl Waffle {
             state.focus(window, cx);
         });
         self.stage_topic = Some(form);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the topic dialog is an overlay, which only follows the app
     }
 
     // "End Stage for Everyone": confirm, then end_stage.
@@ -77,7 +77,7 @@ impl Waffle {
 
     fn close_stage_topic(&mut self, cx: &mut Context<Self>) {
         self.stage_topic = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the topic dialog is an overlay, which only follows the app
     }
 
     // The topic field's events while the dialog is open: Enter submits, and the topic stops at Discord's 120.
@@ -99,7 +99,7 @@ impl Waffle {
             return;
         }
         let Some(form) = self.stage_topic.take() else { return };
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the topic dialog is an overlay, which only follows the app
         if form.editing {
             return self.edit_stage(&form.channel_id, topic, cx);
         }
@@ -126,15 +126,12 @@ impl Waffle {
         let count = div().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(format!("{length}/{TOPIC_MAX}"));
         let focus = gpui_kit::Focusable::focus_handle(self.dialog_input.read(cx), cx);
         let topic = ui::field("Stage Topic", cx).child(ui::text_field("stage-topic-field", Input::new(&self.dialog_input).appearance(false), &focus).trailing(count));
-        let head = div()
-            .flex()
+        let head = ui::row()
             .items_start()
             .gap_2()
             .child(
-                div()
+                ui::col().min_h_0()
                     .flex_1()
-                    .flex()
-                    .flex_col()
                     .gap_1()
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(strong).child(title))
                     .child(div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(muted).child(subtitle)),
@@ -147,11 +144,10 @@ impl Waffle {
                 if let Some(form) = this.stage_topic.as_mut() {
                     form.notify = !form.notify;
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the topic dialog is an overlay, which only follows the app
             }))
         });
-        let actions = div()
-            .flex()
+        let actions = ui::row().items_stretch()
             .gap_2()
             .child(ui::button("stage-topic-cancel", Tone::Secondary, cx).flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_stage_topic(cx))))
             .child(ui::button("stage-topic-submit", Tone::Primary, cx).flex_1().child(submit).disabled(empty).on_click(cx.listener(|this, _, window, cx| this.submit_stage_topic(window, cx))));

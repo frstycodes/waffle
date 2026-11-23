@@ -14,6 +14,7 @@ use crate::{
     icons::Glyph,
     message_menu::MessageAction,
     overlays::ComposerPicker,
+    part::Column,
     palette,
     settings::key_caps,
     ui::{self, Tone},
@@ -198,7 +199,7 @@ pub(crate) fn rows(group: Group) -> Vec<Row> {
 // Combos read "or", each in this platform's order and caps.
 pub(crate) fn caps(keys: &[&str], cx: &App) -> Div {
     let muted = palette::muted(cx);
-    div().flex().items_center().gap_1().flex_none().children(keys.iter().enumerate().flat_map(|(i, combo)| {
+    ui::row().gap_1().flex_none().children(keys.iter().enumerate().flat_map(|(i, combo)| {
         let or = (i > 0).then(|| div().px_0p5().text_size(ui::TEXT_XS).text_color(muted).child("or").into_any_element());
         or.into_iter().chain([key_caps(&platform_combo(combo), cx).into_any_element()])
     }))
@@ -247,7 +248,7 @@ impl Waffle {
 
     pub(crate) fn set_keyboard_combos(&mut self, open: bool, cx: &mut Context<Self>) {
         self.keyboard_combos = open;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the Keyboard combos dialog is built by render_root, not by a column
     }
 
     // Something over the app that a shortcut mustn't reach under.
@@ -340,9 +341,9 @@ impl Waffle {
             return;
         }
         if self.pins.take().is_some() {
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the pins popover is drawn by Overlays, which only redraws with the app
         }
-        self.popover_at = point(px(self.pins_button_x.get()), px(0.));
+        self.popover_at = point(px(self.pins_button_x.get()), Default::default());
         self.open_pins(cx);
     }
 
@@ -351,7 +352,7 @@ impl Waffle {
             return;
         }
         self.right_panel = if matches!(self.right_panel, RightPanel::Members) { RightPanel::Hidden } else { RightPanel::Members };
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the right panel's width is laid out by every column
     }
 
     fn toggle_picker(&mut self, picker: ComposerPicker, window: &mut Window, cx: &mut Context<Self>) {
@@ -369,7 +370,7 @@ impl Waffle {
         }
         let page = f32::from(self.list.viewport_bounds().size.height) * 0.8;
         self.list.scroll_by(px(page * direction));
-        cx.notify();
+        self.redraw(Column::Main, cx);
     }
 
     fn jump_to_unread(&mut self, _: &JumpToUnread, _: &mut Window, cx: &mut Context<Self>) {
@@ -420,9 +421,7 @@ impl Waffle {
         }
         let viewport = window.viewport_size();
         let wide = f32::from(viewport.width) >= WIDE_DIALOG + 64.;
-        let head = div()
-            .flex()
-            .items_center()
+        let head = ui::row()
             .gap_3()
             .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Keyboard combos"))
             .child(key_caps(&platform_combo(COMBOS_KEY), cx))
@@ -430,9 +429,9 @@ impl Waffle {
             .child(ui::icon_button("combos-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.set_keyboard_combos(false, cx))));
         let blurb = div().text_color(palette::muted(cx)).child("Master these to be the greatest Waffle Waffle Revolution player");
         let app: &App = cx;
-        let column = |groups: &[Group]| div().flex_1().min_w_0().flex().flex_col().gap_5().children(groups.iter().map(|&g| dialog_group(g, app)));
+        let column = |groups: &[Group]| ui::col().min_h_0().flex_1().gap_5().children(groups.iter().map(|&g| dialog_group(g, app)));
         let columns = match wide {
-            true => div().flex().items_start().gap_6().child(column(&Group::ALL[..2])).child(column(&Group::ALL[2..])),
+            true => ui::row().items_start().gap_6().child(column(&Group::ALL[..2])).child(column(&Group::ALL[2..])),
             false => column(&Group::ALL),
         };
         // Room under the cap for the head and blurb; the groups scroll in the rest.
@@ -456,16 +455,14 @@ impl Waffle {
             .child("Keyboard combos")
             .child(key_caps(&platform_combo(COMBOS_KEY), cx))
             .on_click(cx.listener(|this, _, _, cx| this.set_keyboard_combos(true, cx)));
-        ui::settings_group("Default keybinds", cx).child(card).child(div().flex().child(open))
+        ui::settings_group("Default keybinds", cx).child(card).child(ui::row().items_stretch().child(open))
     }
 }
 
 fn dialog_group(group: Group, cx: &App) -> Div {
     let rows = rows(group);
     let note = group.note().map(|n| div().px_1().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(n));
-    div()
-        .flex()
-        .flex_col()
+    ui::col()
         .gap_1p5()
         .child(div().px_1().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(group.title()))
         .children(note)

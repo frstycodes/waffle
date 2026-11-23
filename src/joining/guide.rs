@@ -20,6 +20,18 @@ use crate::{
 };
 
 const BANNER_HEIGHT: f32 = 140.;
+// The widest the guide's column grows before it centres.
+const PAGE_WIDTH: f32 = 720.;
+// The banner's title size, between the type scale's 20 and 28.
+const BANNER_TITLE: f32 = 24.;
+// A to-do's state mark (a ring, or a tick on green), and the ring's width.
+const STATE_MARK: f32 = 22.;
+const STATE_RING: f32 = 1.5;
+// A to-do row's minimum height.
+const TODO_HEIGHT: f32 = 56.;
+// The skeleton's welcome and to-do blocks.
+const SKELETON_WELCOME: f32 = 88.;
+const SKELETON_TODOS: f32 = 180.;
 
 #[derive(Default)]
 pub struct GuideView {
@@ -37,29 +49,25 @@ impl Waffle {
             _ => guide_skeleton(cx).into_any_element(),
         };
         let scroll = self.join.guide.scroll.clone();
-        let header = div()
+        let header = ui::row()
             .occlude()
             .h(px(crate::layout::HEADER_HEIGHT))
             .pl_4()
             .pr_3()
-            .flex()
-            .items_center()
             .gap_2()
             .window_control_area(WindowControlArea::Drag)
             .text_size(ui::TEXT_MD)
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(palette::strong(cx))
             .child(Icon::new(Glyph::Signature).size(ui::ICON_XL).text_color(palette::faint(cx)))
-            .child(div().min_w_0().truncate().child(format!("{} Server Guide", guild.name)))
-            .child(div().ml_auto().child(self.caption_clearance(true)));
-        let column = div().w_full().max_w(px(720.)).mx_auto().flex().flex_col().gap_6().child(banner(guild)).child(body);
-        div()
+            .child(ui::line(format!("{} Server Guide", guild.name)))
+            .child(div().flex_1())
+            .child(self.caption_clearance(true));
+        let column = ui::col().w_full().items_center().child(ui::col().w_full().max_w(px(PAGE_WIDTH)).gap_6().child(banner(guild)).child(body));
+        ui::col().min_h_0()
             .relative()
             .flex_1()
-            .min_w_0()
             .h_full()
-            .flex()
-            .flex_col()
             .bg(palette::surface(Level::Page, cx))
             .text_color(palette::text(cx))
             .text_size(ui::TEXT_SM)
@@ -75,14 +83,14 @@ impl Waffle {
         let all_set = !new_member && welcome.resources.is_empty();
         let get_started = new_member.then(|| {
             let rows = todos.iter().map(|todo| todo_row(guild, todo, done.contains(&todo.channel_id), cx)).collect::<Vec<_>>();
-            section("Get Started", cx).child(div().flex().flex_col().p_1p5().squircle(RADIUS_LG).bg(palette::surface(Level::Group, cx)).children(rows))
+            section("Get Started", cx).child(ui::col().p_1p5().squircle(RADIUS_LG).bg(palette::surface(Level::Group, cx)).children(rows))
         });
         let resources = (!welcome.resources.is_empty()).then(|| {
             let cards = welcome.resources.iter().enumerate().filter_map(|(ix, r)| Some(resource_card(ix, find_channel(guild, &r.channel_id)?, &r.title, r.description.clone(), cx))).collect::<Vec<_>>();
             section("Resources", cx).child(div().grid().grid_cols(2).gap_2().children(cards))
         });
         let explore = all_set.then(|| self.all_set(guild, cx));
-        div().flex().flex_col().gap_6().children(self.welcome_card(guild, welcome, cx)).children(get_started).children(resources).children(explore)
+        ui::col().gap_6().children(self.welcome_card(guild, welcome, cx)).children(get_started).children(resources).children(explore)
     }
 
     fn welcome_card(&self, guild: &Guild, welcome: &Welcome, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
@@ -91,19 +99,15 @@ impl Waffle {
         let (name, avatar) = self.guide_author(&guild.id, author);
         // Not the chat's markdown: that renderer needs a message row's context. Mentions and formatting show raw.
         Some(
-            div()
-                .flex()
+            ui::row().items_stretch()
                 .gap_3()
                 .p_4()
                 .squircle(RADIUS_LG)
                 .bg(palette::surface(Level::Group, cx))
                 .child(ui::avatar(avatar, 40.))
                 .child(
-                    div()
+                    ui::col().min_h_0()
                         .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
                         .gap_1()
                         .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(name))
                         .child(div().text_size(ui::TEXT_LEAD).line_height(ui::LINE_LEAD).text_color(palette::text(cx)).child(message)),
@@ -122,9 +126,7 @@ impl Waffle {
 
     fn all_set(&self, guild: &Guild, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let first = crate::sidebar::channel_groups(guild, self.my_id()).into_iter().flat_map(|(_, c)| c).find(|c| c.kind == ChannelKind::Text);
-        div()
-            .flex()
-            .flex_col()
+        ui::col()
             .items_center()
             .gap_3()
             .py_6()
@@ -144,15 +146,15 @@ impl Waffle {
         let empty = HashSet::new();
         let done = self.join.done_actions.get(&guild.id).unwrap_or(&empty);
         let (strong, ink) = (palette::strong(cx), palette::accent_ink(cx));
-        let bar = div()
+        // lint-allow(custom-badge): ui::callout puts its actions under the text; this bar keeps its button at the row's end
+        let bar = ui::row()
             .id("guide-action-bar")
+            // lint-allow(raw-margin): insets the bar from the composer column it is returned into, which has no padding of its own
             .mx_4()
             .min_h_11()
             .pl_3p5()
             .pr_1p5()
             .py_1p5()
-            .flex()
-            .items_center()
             .gap_2p5()
             .squircle(RADIUS_SM)
             .bg(ui::mix(palette::surface(Level::Page, cx), palette::accent(), 0.16))
@@ -164,7 +166,7 @@ impl Waffle {
             });
             return Some(
                 bar.child(Icon::new(Glyph::ChatRound).size(ui::ICON_LG).text_color(ink))
-                    .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).child(todo.title.clone()))
+                    .child(ui::line(todo.title.clone()).flex_1().font_weight(FontWeight::SEMIBOLD))
                     .children(send)
                     .into_any_element(),
             );
@@ -173,7 +175,7 @@ impl Waffle {
         let target = find_channel(guild, &next.channel_id)?.clone();
         Some(
             bar.child(Icon::new(Glyph::CheckCircle).size(ui::ICON_LG).text_color(ink))
-                .child(div().flex_1().min_w_0().flex().gap_1().child("Next:").child(div().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).child(next.title.clone())))
+                .child(ui::row().items_stretch().flex_1().gap_1().child("Next:").child(ui::line(next.title.clone()).font_weight(FontWeight::SEMIBOLD)))
                 .child(ui::button("guide-go", Tone::Secondary, cx).small().child("Go").on_click(cx.listener(move |this, _, window, cx| this.open_channel(target.clone(), window, cx))))
                 .into_any_element(),
         )
@@ -247,7 +249,7 @@ impl Waffle {
             return;
         }
         self.server_call(api::complete_action(guild_id, channel_id), |_, _, _| {}, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the nav's Get Started row, the guide page and the action bar over the composer all draw the to-do's progress
     }
 }
 
@@ -287,21 +289,20 @@ fn banner(guild: &Guild) -> impl IntoElement + use<> {
         .children(cover)
         .child(scrim)
         .child(
-            div()
+            ui::line(format!("Welcome to {}", guild.name))
                 .absolute()
                 .left_5()
                 .right_5()
                 .bottom_4()
-                .truncate()
-                .text_size(px(24.))
+                .text_size(px(BANNER_TITLE))
                 .font_weight(FontWeight::BOLD)
                 .text_color(gpui_kit::white())
-                .child(format!("Welcome to {}", guild.name)),
+                ,
         )
 }
 
 fn section(title: &'static str, cx: &mut Context<Waffle>) -> gpui_kit::Div {
-    div().flex().flex_col().gap_2().child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
+    ui::col().gap_2().child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
 }
 
 fn todo_row(guild: &Guild, todo: &MemberAction, done: bool, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
@@ -309,13 +310,13 @@ fn todo_row(guild: &Guild, todo: &MemberAction, done: bool, cx: &mut Context<Waf
     let name = channel.as_ref().map(|c| format!("#{}", c.name)).unwrap_or_default();
     let status = if done { "completed" } else { "not completed" };
     let title_ink = if done { palette::muted(cx) } else { palette::strong(cx) };
-    let state = div().size(px(22.)).flex_none().rounded_full().flex().items_center().justify_center();
+    let state = ui::row().size(px(STATE_MARK)).flex_none().rounded_full().justify_center();
     let state = match done {
         true => state.bg(cx.theme().success).text_color(gpui_kit::white()).child(Icon::new(Glyph::Checkmark).size(ui::ICON_SM)),
-        false => state.border(px(1.5)).border_color(palette::line_strong(cx)),
+        false => state.border(px(STATE_RING)).border_color(palette::line_strong(cx)),
     };
     ui::menu_row(SharedString::from(format!("guide-todo-{}", todo.channel_id)), cx)
-        .min_h(px(56.))
+        .min_h(px(TODO_HEIGHT))
         .px_3()
         .py_2()
         .gap_3()
@@ -323,23 +324,21 @@ fn todo_row(guild: &Guild, todo: &MemberAction, done: bool, cx: &mut Context<Waf
         .aria_label(format!("{}, {status}", todo.title))
         .child(emoji_tile(todo.emoji.as_ref(), cx))
         .child(
-            div()
+            ui::col().min_h_0()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(title_ink).child(todo.title.clone()))
-                .child(div().truncate().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(name)),
+                .child(ui::line(todo.title.clone()).font_weight(FontWeight::SEMIBOLD).text_color(title_ink))
+                .child(ui::line(name).text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx))),
         )
         .child(state)
         .when_some(channel, |row, channel| row.on_click(cx.listener(move |this, _, window, cx| this.open_channel(channel.clone(), window, cx))))
 }
 
+// lint-allow(custom-component): ui::icon_tile only holds a glyph, not an emoji's image or text
 fn emoji_tile(emoji: Option<&OptionEmoji>, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
-    let tile = div().size_9().flex_none().squircle(RADIUS_SM).bg(palette::surface(Level::Raised, cx)).flex().items_center().justify_center();
+    let tile = ui::row().size_9().flex_none().squircle(RADIUS_SM).bg(palette::surface(Level::Raised, cx)).justify_center();
     match (emoji.and_then(OptionEmoji::url), emoji.and_then(|e| e.name.clone())) {
         (Some(url), _) => tile.child(img(url).size_5()),
-        (None, Some(name)) => tile.text_size(px(18.)).child(name),
+        (None, Some(name)) => tile.text_size(ui::TEXT_LG).child(name),
         (None, None) => tile.text_color(palette::faint(cx)).child(Icon::new(Glyph::Hashtag).size(ui::ICON_LG)),
     }
 }
@@ -362,12 +361,10 @@ fn resource_card(ix: usize, channel: &Channel, title: &str, description: Option<
 }
 
 fn guide_skeleton(cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
-    div()
-        .flex()
-        .flex_col()
+    ui::col()
         .gap_3()
-        .child(ui::skeleton("guide-skeleton-welcome", RADIUS_LG, cx).h(px(88.)).w_full())
-        .child(ui::skeleton("guide-skeleton-todos", RADIUS_LG, cx).h(px(180.)).w_full())
+        .child(ui::skeleton("guide-skeleton-welcome", RADIUS_LG, cx).h(px(SKELETON_WELCOME)).w_full())
+        .child(ui::skeleton("guide-skeleton-todos", RADIUS_LG, cx).h(px(SKELETON_TODOS)).w_full())
 }
 
 fn guide_failed(guild_id: String, error: String, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {

@@ -85,7 +85,7 @@ impl Waffle {
         }
         if self.prefs.account.as_deref() == Some(id.as_str()) && self.me.is_some() {
             self.status_menu = false;
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the status menu closing is an overlay, which only follows the app
         }
         let Some(token) = auth::stored_token(&id) else {
             self.toast = Some("That account needs signing in again.".into());
@@ -113,7 +113,7 @@ impl Waffle {
         let next = remove(&mut self.prefs.accounts, &id);
         if self.prefs.account.as_deref() != Some(id.as_str()) {
             self.prefs.save();
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the account list in the status menu (an overlay, which only follows the app) lost a row
         }
         self.prefs.account = next.clone();
         let token = next.as_deref().and_then(auth::stored_token);
@@ -159,7 +159,7 @@ impl Waffle {
         }
         self.status_menu = false;
         self.toast = Some("Demo accounts can't be switched.".into());
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the status menu and the toast are overlays, which only follow the app
         true
     }
 

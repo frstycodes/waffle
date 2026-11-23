@@ -27,13 +27,16 @@ use crate::{
     icons::Glyph,
     motion,
     palette::{self, Level},
-    ui::{self, Notice, Squircle, Tone},
+    ui::{self, Notice, Tone},
 };
 
 const DISCORD: &str = "https://discord.com/app";
 const UNDO_FOR: Duration = Duration::from_secs(6);
 const SHAKE: Duration = Duration::from_millis(360);
 const SLOT: f32 = 56.;
+// The empty recent-avatar slot's dashed edge, and the width of the avatar-removed toast.
+const SLOT_DASH: f32 = 1.5;
+const UNDO_WIDTH: f32 = 380.;
 // The page holds the editor and the preview side by side, so it runs wider than other settings pages.
 pub(super) const PAGE_WIDTH: f32 = 960.;
 pub(super) const MAIN_GROUP: &str = "Main Profile";
@@ -99,6 +102,7 @@ impl ProfileEditor {
             }
             cx.notify();
         })
+        // lint-allow(detached-task): the subscription ends with the entity it watches, which the view owns
         .detach();
         Self {
             tab: ProfileTab::Main,
@@ -167,6 +171,7 @@ impl ProfileEditor {
 
 fn limited_input(max: usize, placeholder: &'static str, window: &mut Window, cx: &mut Context<Waffle>) -> Entity<InputState> {
     let input = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder).validate(move |t, _| t.chars().count() <= max));
+    // lint-allow(detached-task): the subscription ends with the entity it watches, which the view owns
     cx.subscribe(&input, |_, _, _: &InputEvent, cx| cx.notify()).detach();
     input
 }
@@ -220,9 +225,11 @@ impl Waffle {
                     }
                     Err(error) => editor.load_error = Some(error),
                 }
+                // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
                 cx.notify();
             });
         })
+        // lint-allow(detached-task): a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
         .detach();
     }
 
@@ -234,6 +241,7 @@ impl Waffle {
         editor.pronouns.update(cx, |s, cx| s.set_value(saved.pronouns.clone(), window, cx));
         editor.bio.update(cx, |s, cx| s.set_value(saved.bio.clone(), window, cx));
         (editor.avatar, editor.accent, editor.tag_guild, editor.error) = (AvatarChoice::Current, saved.accent, saved.tag_guild, None);
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 
@@ -248,6 +256,7 @@ impl Waffle {
         });
         editor.server_pronouns.update(cx, |s, cx| s.set_value(saved.pronouns.clone(), window, cx));
         editor.error = None;
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 
@@ -266,6 +275,7 @@ impl Waffle {
             return false;
         }
         editor.shakes += 1;
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
         true
     }
@@ -280,6 +290,7 @@ impl Waffle {
         if tab == ProfileTab::Server && editor.guild_id.is_none() && let Some(first) = first {
             self.choose_profile_server(first, window, cx);
         }
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 
@@ -288,6 +299,7 @@ impl Waffle {
             editor.menu = None;
         }
         if self.profile_editor_ref().is_none_or(|e| e.guild_id.as_ref() == Some(&guild_id)) || self.refuse_if_unsaved(cx) {
+            // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
             return cx.notify();
         }
         let Some(editor) = self.profile_editor() else { return };
@@ -305,9 +317,11 @@ impl Waffle {
                     }
                     Err(error) => editor.error = Some(error),
                 }
+                // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
                 cx.notify();
             });
         })
+        // lint-allow(detached-task): a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
         .detach();
     }
 
@@ -315,6 +329,7 @@ impl Waffle {
         if let Some(editor) = self.profile_editor() {
             change(editor);
         }
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 
@@ -327,6 +342,7 @@ impl Waffle {
         }
         let Some(client) = client else { return };
         (editor.saving, editor.error) = (true, None);
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
         cx.spawn_in(window, async move |this, cx| {
             let mut user = None;
@@ -342,6 +358,7 @@ impl Waffle {
             }
             let _ = this.update_in(cx, |this, window, cx| this.profile_saved(result, user, window, cx));
         })
+        // lint-allow(detached-task): a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
         .detach();
     }
 
@@ -359,6 +376,7 @@ impl Waffle {
         editor.saving = false;
         if let Err(error) = result {
             editor.error = Some(error);
+            // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
             return cx.notify();
         }
         let avatar_changed = editor.avatar != AvatarChoice::Current;
@@ -377,6 +395,7 @@ impl Waffle {
         if avatar_changed {
             self.reload_recent_avatars(window, cx);
         }
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 
@@ -388,9 +407,11 @@ impl Waffle {
                 if let Some(editor) = this.profile_editor() {
                     editor.recent = draft::recent_from(&body, &me.id);
                 }
+                // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
                 cx.notify();
             });
         })
+        // lint-allow(detached-task): a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
         .detach();
     }
 
@@ -407,6 +428,7 @@ impl Waffle {
         }
         let undone = Rc::new(Cell::new(false));
         editor.removing = Some(Removal { avatar: avatar.clone(), index, undone: undone.clone() });
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(UNDO_FOR).await;
@@ -424,9 +446,11 @@ impl Waffle {
                 if let Err(error) = result {
                     this.show_toast(error, cx);
                 }
+                // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
                 cx.notify();
             });
         })
+        // lint-allow(detached-task): a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
         .detach();
     }
 
@@ -436,6 +460,7 @@ impl Waffle {
         removal.undone.set(true);
         let at = removal.index.min(editor.recent.len());
         editor.recent.insert(at, removal.avatar);
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 
@@ -456,8 +481,8 @@ impl Waffle {
             (Some(_), None) if editor.tab == ProfileTab::Main => (self.main_profile_groups(editor, cx), MAIN_GROUP),
             (Some(_), None) => (self.server_profile_groups(editor, cx), SERVER_GROUP),
         };
-        let fields = div().flex_1().min_w_0().flex().flex_col().gap_6().child(tabs).children(groups);
-        let body = div().flex().items_start().gap_8().child(fields).children(editor.saved.is_some().then(|| self.profile_preview_column(editor, cx)));
+        let fields = ui::col().min_h_0().flex_1().gap_6().child(tabs).children(groups);
+        let body = ui::row().items_start().gap_8().child(fields).children(editor.saved.is_some().then(|| self.profile_preview_column(editor, cx)));
         vec![Section::keyed(group, body)]
     }
 
@@ -504,9 +529,9 @@ impl Waffle {
     fn recent_avatars_row(&self, editor: &ProfileEditor, cx: &mut Context<Self>) -> Stateful<Div> {
         let slots = (0..draft::RECENT_AVATARS).map(|i| match editor.recent.get(i) {
             Some(avatar) => self.recent_slot(i, avatar, editor.avatar == AvatarChoice::Recent(avatar.id.clone()), cx).into_any_element(),
-            None => div().size(px(SLOT)).flex_none().rounded_full().border(px(1.5)).border_dashed().border_color(palette::line_strong(cx)).into_any_element(),
+            None => div().size(px(SLOT)).flex_none().rounded_full().border(px(SLOT_DASH)).border_dashed().border_color(palette::line_strong(cx)).into_any_element(),
         }).collect::<Vec<_>>();
-        let field = ui::field("Recent avatars", cx).flex_1().child(div().flex().flex_wrap().gap_3().py_1().children(slots)).child(ui::field_hint("Your last 6 avatars. Pick one to use it again; no new upload.", None, cx));
+        let field = ui::field("Recent avatars", cx).flex_1().child(ui::row().items_stretch().flex_wrap().gap_3().py_1().children(slots)).child(ui::field_hint("Your last 6 avatars. Pick one to use it again; no new upload.", None, cx));
         ui::settings_row("pf-recent", true, cx).child(field)
     }
 
@@ -514,7 +539,8 @@ impl Waffle {
         let group = SharedString::from(format!("pf-recent-{i}"));
         let id = avatar.id.clone();
         let surface = palette::surface(Level::Overlay, cx);
-        let remove = div()
+        // lint-allow(custom-mark, custom-surface): ui::badged places marks on a face's corner but can't reveal one on hover, and ui::icon_button has no corner placement
+        let remove = ui::row()
             .id(SharedString::from(format!("pf-recent-{i}-remove")))
             .absolute()
             .top_0()
@@ -523,8 +549,6 @@ impl Waffle {
             .rounded_full()
             .bg(surface)
             .shadow(ui::shadow_pop(cx))
-            .flex()
-            .items_center()
             .justify_center()
             .cursor_pointer()
             .text_color(palette::strong(cx))
@@ -560,7 +584,7 @@ impl Waffle {
         let swatches = colours.into_iter().map(|colour| {
             ui::swatch(SharedString::from(format!("pf-accent-{colour:06x}")), palette::data_color(colour), editor.accent == Some(colour), ring).on_click(cx.listener(move |this, _, _, cx| this.edit_profile(cx, |e| e.accent = Some(colour))))
         });
-        ui::settings_row("pf-accent", false, cx).child(div().flex().flex_wrap().items_center().gap_2().child(none).children(swatches))
+        ui::settings_row("pf-accent", false, cx).child(ui::row().flex_wrap().gap_2().child(none).children(swatches))
     }
 
     fn server_tag_row(&self, editor: &ProfileEditor, cx: &mut Context<Self>) -> Stateful<Div> {
@@ -691,23 +715,11 @@ impl Waffle {
         };
         let reset = ui::button("pf-reset", Tone::Link, cx).disabled(editor.saving).child("Reset").on_click(cx.listener(|this, _, window, cx| this.reset_profile(window, cx)));
         let save = ui::button("pf-save", Tone::Primary, cx).loading(editor.saving.then_some("Saving…")).child("Save changes").on_click(cx.listener(|this, _, window, cx| this.save_profile(window, cx)));
-        let bar = div()
-            .id("pf-savebar")
-            .occlude()
-            .w_full()
-            .max_w(px(ui::SETTINGS_WIDTH))
-            .py_2p5()
-            .pl_4()
-            .pr_2p5()
-            .squircle(ui::RADIUS_LG)
-            .bg(palette::surface(Level::Overlay, cx))
-            .shadow(ui::shadow_pop(cx))
-            .flex()
-            .items_center()
-            .gap_3()
+        let bar = ui::floating_bar("pf-savebar", cx)
             .child(div().flex_1().min_w_0().text_color(ink).child(message))
-            .child(div().flex().flex_none().items_center().gap_2().child(reset).child(save));
-        let shaken = div().w_full().flex().justify_center().child(bar).with_animation(SharedString::from(format!("pf-shake-{}", editor.shakes)), Animation::new(SHAKE), |el, t| el.translate_x(px(shake_offset(t))));
+            .child(ui::row().flex_none().gap_2().child(reset).child(save));
+        let shaken = ui::row().items_stretch().w_full().justify_center().child(bar).with_animation(SharedString::from(format!("pf-shake-{}", editor.shakes)), Animation::new(SHAKE), |el, t| el.translate_x(px(shake_offset(t))));
+        // lint-allow(raw-px): the slide-in distance is computed from the animation progress
         let slid = div().w_full().child(shaken).with_animation("pf-savebar-in", Animation::new(ui::DUR_PANEL).with_easing(|t| motion::ease_out().sample(t)), |el, t| el.opacity(t).translate_y(px(16. * (1. - t))));
         Some(div().absolute().bottom_4().left_10().right_10().child(slid).into_any_element())
     }
@@ -719,8 +731,8 @@ impl Waffle {
         let undo = ui::button("pf-undo", Tone::Secondary, cx).small().child("Undo").on_click(cx.listener(|this, _, _, cx| this.undo_avatar_removal(cx)));
         let toast = ui::toast_with(SharedString::from(format!("pf-undo-{}", removal.avatar.id)), Glyph::Trash, palette::muted(cx), "Avatar removed", None, Some(undo.into_any_element()), cx);
         let bar_shows = !editor.changes(cx).is_empty() || editor.saving;
-        let surface = div().id("pf-undo-toast").occlude().w(px(380.)).child(toast);
-        Some(div().absolute().bottom(px(if bar_shows { 84. } else { 16. })).left_0().right_0().flex().justify_center().child(surface).into_any_element())
+        let surface = div().id("pf-undo-toast").occlude().w(px(UNDO_WIDTH)).child(toast);
+        Some(ui::row().items_stretch().absolute().bottom(px(if bar_shows { 84. } else { 16. })).left_0().right_0().justify_center().child(surface).into_any_element())
     }
 }
 
@@ -752,6 +764,7 @@ impl Waffle {
                 self.reset_server_profile(window, cx);
             }
         }
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 }
@@ -768,7 +781,7 @@ fn text_input(id: &'static str, state: &Entity<InputState>, cx: &App) -> impl In
 // Help under a field with its count, which turns red only at the limit.
 fn count_hint(text: impl Into<SharedString>, count: usize, max: usize, cx: &App) -> Div {
     let ink = if count >= max { palette::danger_ink(cx) } else { palette::faint(cx) };
-    div().flex().justify_between().gap_2().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(text.into()).child(div().flex_none().text_color(ink).child(format!("{count}/{max}")))
+    ui::row().items_stretch().justify_between().gap_2().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(text.into()).child(div().flex_none().text_color(ink).child(format!("{count}/{max}")))
 }
 
 fn nitro_row(id: &'static str, title: &'static str, caption: &'static str, cx: &mut Context<Waffle>) -> Stateful<Div> {

@@ -2,7 +2,11 @@
 // both themes. Open it with `WAVE_DESIGN=1 cargo run`; `WAVE_DESIGN=buttons,choices` shows only those
 // sections. Sections, their order and their contents mirror design/foundations.html and
 // design/primitives.html (section ids as there), so a drift between the two shows up side by side.
+mod faces;
 mod foundations;
+mod kit;
+use faces::{avatars, badged_faces};
+use kit::{badges, kit_variants};
 use foundations::{space, type_scale};
 use std::time::{Duration, Instant};
 
@@ -26,9 +30,26 @@ use crate::{
     ui::{self, Check, Notice, Squircle, Tone},
 };
 
+// The design page's window, and the widest its content grows before it centres, and the room under it.
+const WINDOW_SIZE: (f32, f32) = (1180., 860.);
+const PAGE_WIDTH: f32 = 1032.;
+const PAGE_FOOT: f32 = 120.;
+// The logo in the header, and the glyphs on the icon board.
+const MARK_SIZE: f32 = 22.;
+// The password field's toggle slot.
+const TOGGLE_SLOT: f32 = 22.;
+// The skeleton's block placeholder.
+const SKELETON_BLOCK: (f32, f32) = (240., 140.);
+// An illustration's size on the empty-state board.
+const ART_SIZE: (f32, f32) = (200., 150.);
+// A lede's widest line, a surface swatch's height and the demo menus' width.
+const LEDE_WIDTH: f32 = 520.;
+const SWATCH_HEIGHT: f32 = 92.;
+const MENU_WIDTH: f32 = 248.;
+
 pub fn open(cx: &mut App) {
     let options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(gpui_kit::Bounds::centered(None, size(px(1180.), px(860.)), cx))),
+        window_bounds: Some(WindowBounds::Windowed(gpui_kit::Bounds::centered(None, size(px(WINDOW_SIZE.0), px(WINDOW_SIZE.1)), cx))),
         titlebar: Some(gpui_kit::TitlebarOptions { title: Some("Waffle Design System".into()), ..Default::default() }),
         ..Default::default()
     };
@@ -138,6 +159,7 @@ impl DesignSystem {
 
 impl Render for DesignSystem {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("DesignSystem");
         let dark = cx.theme().is_dark();
         let header = self.header(dark, window, cx).into_any_element();
         let mut sections: Vec<gpui_kit::AnyElement> = Vec::new();
@@ -171,9 +193,11 @@ impl Render for DesignSystem {
         }
         if self.shows("badges") {
             add("badges", badges(cx).into_any_element());
+            add("kit variants", kit_variants(cx).into_any_element());
         }
         if self.shows("avatars") {
             add("avatars", avatars(cx).into_any_element());
+            add("badged faces", badged_faces(cx).into_any_element());
         }
         if self.shows("feedback") {
             add("feedback", self.feedback(window, cx).into_any_element());
@@ -191,22 +215,20 @@ impl Render for DesignSystem {
             .text_size(ui::TEXT_SM)
             .line_height(relative(1.45))
             .child(header)
-            .child(div().max_w(px(1032.)).mx_auto().px_6().pb(px(120.)).flex().flex_col().children(sections))
+            .child(ui::col().w_full().items_center().child(ui::col().w_full().max_w(px(PAGE_WIDTH)).px_6().pb(px(PAGE_FOOT)).children(sections)))
     }
 }
 
 impl DesignSystem {
     fn header(&self, dark: bool, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let this = cx.entity().downgrade();
-        div()
-            .flex()
-            .items_center()
+        ui::row()
             .gap_2p5()
             .px_6()
             .py_2p5()
             .border_b_1()
             .border_color(palette::line(cx))
-            .child(svg().path(MARK).size(px(22.)).text_color(palette::logo_ink(cx)))
+            .child(svg().path(MARK).size(px(MARK_SIZE)).text_color(palette::logo_ink(cx)))
             .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Waffle"))
             .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::NORMAL).text_color(palette::faint(cx)).child("Design system"))
             .child(div().flex_1())
@@ -232,12 +254,13 @@ impl DesignSystem {
                     })
                     .ok();
                 })
+                // lint-allow(detached-task): ends itself after the 1.4s timer, and holds only a weak handle
                 .detach();
             })
         };
         div()
             .child(div().pt_8().text_size(ui::TEXT_XL).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Primitives"))
-            .child(lede("The small parts every screen is built from. Everything here is live: hover, press, Tab to focus, toggle.", cx).mt_1().mb_4())
+            .child(lede("The small parts every screen is built from. Everything here is live: hover, press, Tab to focus, toggle.", cx).pt_1().pb_4())
             .child(
                 section("Buttons", "Verb plus object, sentence case. One primary per surface; secondary is the quiet fill, ghost for low-stakes actions in dense rows, danger only for the destructive step itself.", cx)
                     .pt_0()
@@ -346,7 +369,7 @@ impl DesignSystem {
                             .child(ui::text_area("f-about", Textarea::new(&f.about).appearance(false).px_0().text_size(ui::TEXT_MD), &f.about.read(cx).focus_handle(cx)))
                             .child(ui::field_hint("Markdown and emoji work here", Some("0/190".into()), cx)),
                     )
-                    .child(ui::field("Input device", cx).child(div().flex_1().flex().items_center().child(ui::select("f-device", Some(Glyph::Mic), "MacBook Pro Microphone (Built-in)", self.device_open, cx).on_click(cx.listener(|this, _, _, cx| {
+                    .child(ui::field("Input device", cx).child(ui::row().flex_1().child(ui::select("f-device", Some(Glyph::Mic), "MacBook Pro Microphone (Built-in)", self.device_open, cx).on_click(cx.listener(|this, _, _, cx| {
                         this.device_open = !this.device_open;
                         cx.notify();
                     })))))
@@ -363,8 +386,8 @@ impl DesignSystem {
                         }),
                         cx,
                     )))
-                    .child(ui::field("Two-factor code", cx).child(div().flex().gap_2().children([Some('4'), Some('8'), Some('1'), None, None, None].into_iter().map(|digit| ui::code_cell(digit, false, cx)))))
-                    .child(ui::field("Role colour", cx).child(div().flex().flex_wrap().gap_2().children(swatches.into_iter().enumerate().map(|(i, (l, c, h))| {
+                    .child(ui::field("Two-factor code", cx).child(ui::row().items_stretch().gap_2().children([Some('4'), Some('8'), Some('1'), None, None, None].into_iter().map(|digit| ui::code_cell(digit, false, cx)))))
+                    .child(ui::field("Role colour", cx).child(ui::row().items_stretch().flex_wrap().gap_2().children(swatches.into_iter().enumerate().map(|(i, (l, c, h))| {
                         ui::swatch(("swatch", i), palette::oklch(l, c, h), i == self.role_colour, sidebar).on_click(cx.listener(move |this, _, _, cx| {
                             this.role_colour = i;
                             cx.notify();
@@ -379,7 +402,7 @@ impl DesignSystem {
                                     cx.notify();
                                 }))
                                 .child(ui::drop_zone(self.drop_over, Glyph::Upload, "Drop files to upload", cx).child(
-                                    div().flex().items_center().gap_1().child("Up to 25 MB each, or").child(ui::button("f-browse", Tone::Link, cx).child("browse files")),
+                                    ui::row().gap_1().child("Up to 25 MB each, or").child(ui::button("f-browse", Tone::Link, cx).child("browse files")),
                                 )),
                         ),
                     ),
@@ -397,7 +420,7 @@ impl DesignSystem {
             this.fields.password.update(cx, |state, cx| state.set_masked(masked, window, cx));
             cx.notify();
         }));
-        div().w(px(22.)).h_7().child(toggle)
+        div().w(px(TOGGLE_SLOT)).h_7().child(toggle)
     }
 
     fn choices(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -469,7 +492,7 @@ impl DesignSystem {
                             .child(quality)
                             .child(
                                 ui::field("Mira's volume", cx).child(
-                                    div().flex().items_center().gap_2().child(div().flex_1().min_w_0().child(volume)).child(
+                                    ui::row().gap_2().child(div().flex_1().min_w_0().child(volume)).child(
                                         div().min_w_11().text_right().text_color(palette::strong(cx)).child(format!("{}%", (self.volume * 200.).round())),
                                     ),
                                 ),
@@ -512,9 +535,7 @@ impl DesignSystem {
         let level = self.meter_level();
         window.request_animation_frame();
         let skeleton_row = |id: &'static str, widths: (f32, f32), block: bool, cx: &App| {
-            div()
-                .flex()
-                .items_center()
+            ui::row()
                 .gap_2()
                 .child(ui::skeleton_circle((id, 0usize), 40., cx))
                 .child(
@@ -522,7 +543,7 @@ impl DesignSystem {
                         .flex_1()
                         .child(ui::skeleton((id, 1usize), ui::RADIUS_XS, cx).h_3().w(px(widths.0)))
                         .child(ui::skeleton((id, 2usize), ui::RADIUS_XS, cx).h_3().w(relative(widths.1)))
-                        .when(block, |d| d.child(ui::skeleton((id, 3usize), ui::RADIUS_LG, cx).w(px(240.)).h(px(140.)))),
+                        .when(block, |d| d.child(ui::skeleton((id, 3usize), ui::RADIUS_LG, cx).w(px(SKELETON_BLOCK.0)).h(px(SKELETON_BLOCK.1)))),
                 )
         };
         let strong = |text: &'static str, cx: &App| div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(text);
@@ -534,7 +555,7 @@ impl DesignSystem {
                         .grid()
                         .grid_cols(4)
                         .gap_4()
-                        .child(stack().child(div().flex().justify_between().child(strong("clip.mp4", cx)).child(div().text_color(palette::faint(cx)).child("12.4 / 31 MB"))).child(ui::progress_live("p-clip", 0.4, window, cx)))
+                        .child(stack().child(ui::row().items_stretch().justify_between().child(strong("clip.mp4", cx)).child(div().text_color(palette::faint(cx)).child("12.4 / 31 MB"))).child(ui::progress_live("p-clip", 0.4, window, cx)))
                         .child(stack().child(strong("Connecting to Lounge…", cx)).child(ui::progress_indeterminate("p-connect", cx)))
                         .child(stack().child(strong("Mic level", cx)).child(ui::meter(level, 24, cx)))
                         .child(row().child(ui::ring(0.72, cx)).child(div().text_color(palette::muted(cx)).child("18 of 25 uploaded"))),
@@ -553,11 +574,11 @@ impl DesignSystem {
                         .grid()
                         .grid_cols(3)
                         .gap_4()
-                        .child(div().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Page, cx)).child(ui::empty_state("empty-idle", Mood::Idle, "No one's around", "None of your friends are online. Invite someone to play.", cx).child(ui::button("e-add", Tone::Primary, cx).mt_2().child("Add friend"))))
+                        .child(div().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Page, cx)).child(ui::empty_state("empty-idle", Mood::Idle, "No one's around", "None of your friends are online. Invite someone to play.", cx).child(div().pt_2().child(ui::button("e-add", Tone::Primary, cx).child("Add friend")))))
                         .child(div().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Page, cx)).child(ui::empty_state("empty-wait", Mood::Waiting, "Loading messages…", "Fetching the last 50 messages in #general.", cx))),
                 )
-                .child(div().flex().flex_wrap().gap_4().children(crate::illustration::Illustration::ALL.map(|art| div().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Page, cx)).child(gpui_kit::img(art.path()).w(px(200.)).h(px(150.))))))
-                .child(div().flex().flex_col().items_center().gap_2().child(ui::toast("toast", Glyph::Checkmark, palette::positive_ink(cx), "Invite link copied", None, cx))),
+                .child(ui::row().items_stretch().flex_wrap().gap_4().children(crate::illustration::Illustration::ALL.map(|art| div().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Page, cx)).child(gpui_kit::img(art.path()).w(px(ART_SIZE.0)).h(px(ART_SIZE.1))))))
+                .child(ui::col().items_center().gap_2().child(ui::toast("toast", Glyph::Checkmark, palette::positive_ink(cx), "Invite link copied", None, cx))),
         )
     }
 
@@ -591,6 +612,7 @@ impl DesignSystem {
                 .child(note(detail, cx))
                 .child(
                     div().relative().h_10().squircle(ui::RADIUS_MD).bg(palette::surface(Level::Page, cx)).child(
+                        // lint-allow(custom-mark): ui::badged places marks on faces; this is a motion demo's track and moving block
                         div().absolute().top_2().left_2().right_8().h_6().child(div().absolute().top_0().left(relative(at)).size_6().squircle(8.).bg(palette::accent())),
                     ),
                 )
@@ -605,23 +627,21 @@ impl DesignSystem {
 }
 
 fn section(title: &'static str, lede_text: &'static str, cx: &App) -> gpui_kit::Div {
-    div()
+    ui::col()
         .py_8()
         .border_b_1()
         .border_color(palette::line(cx))
-        .flex()
-        .flex_col()
-        .child(div().text_size(ui::TEXT_LG).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).mb_1().child(title))
-        .child(lede(lede_text, cx).mb_4())
+        .child(div().text_size(ui::TEXT_LG).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).pb_1().child(title))
+        .child(lede(lede_text, cx).pb_4())
 }
 
 fn lede(text: &'static str, cx: &App) -> gpui_kit::Div {
-    div().max_w(px(520.)).text_color(palette::muted(cx)).child(text)
+    div().max_w(px(LEDE_WIDTH)).text_color(palette::muted(cx)).child(text)
 }
 
 // The design page's board: the sidebar fill, a hairline, the card radius, 24px in.
 fn board(cx: &App) -> gpui_kit::Div {
-    div().p_6().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Sidebar, cx)).border_1().border_color(palette::line(cx)).flex().flex_col().gap_4()
+    ui::col().p_6().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Sidebar, cx)).border_1().border_color(palette::line(cx)).gap_4()
 }
 
 // A titled group inside a board.
@@ -630,11 +650,11 @@ fn group(title: &'static str, cx: &App) -> gpui_kit::Div {
 }
 
 fn row() -> gpui_kit::Div {
-    div().flex().items_center().gap_2().flex_wrap()
+    ui::row().gap_2().flex_wrap()
 }
 
 fn stack() -> gpui_kit::Div {
-    div().flex().flex_col().gap_2().min_w_0()
+    ui::col().gap_2()
 }
 
 fn note(text: &'static str, cx: &App) -> gpui_kit::Div {
@@ -648,11 +668,10 @@ fn glyph(glyph: Glyph) -> impl IntoElement {
 fn colour(cx: &App) -> impl IntoElement {
     let page = palette::surface(Level::Page, cx);
     let surface = |name: &'static str, token: &'static str, level: Level| {
-        div().flex_1().h(px(92.)).p_2p5().bg(palette::surface(level, cx)).flex().flex_col().justify_end().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(name)).child(token)
+        ui::col().min_h_0().flex_1().h(px(SWATCH_HEIGHT)).p_2p5().bg(palette::surface(level, cx)).justify_end().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(name)).child(token)
     };
     let ink = |name: &'static str, color: Hsla, use_: &'static str| {
-        div()
-            .flex()
+        ui::row()
             .justify_between()
             .items_baseline()
             .gap_4()
@@ -660,7 +679,7 @@ fn colour(cx: &App) -> impl IntoElement {
             .py_2()
             .squircle(ui::RADIUS_SM)
             .bg(page)
-            .child(div().flex().gap_1().child(div().font_weight(FontWeight::MEDIUM).text_color(color).child(name)).child(div().text_color(palette::faint(cx)).child(format!("· {use_}"))))
+            .child(ui::row().items_stretch().gap_1().child(div().font_weight(FontWeight::MEDIUM).text_color(color).child(name)).child(div().text_color(palette::faint(cx)).child(format!("· {use_}"))))
             .child(pass(color, page, cx))
     };
     let swatch = |token: &'static str, name: &'static str, color: Hsla, white_text: bool| {
@@ -669,14 +688,13 @@ fn colour(cx: &App) -> impl IntoElement {
             .border_1()
             .border_color(palette::line(cx))
             .bg(palette::surface(Level::Raised, cx))
-            .child(edge_top(div().h_16().p_2().bg(color).flex().items_end().justify_end().when(white_text, |d| d.child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(gpui_kit::white()).child(ratio(gpui_kit::white(), color))))))
+            .child(edge_top(ui::row().h_16().p_2().bg(color).items_end().justify_end().when(white_text, |d| d.child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(gpui_kit::white()).child(ratio(gpui_kit::white(), color))))))
             .child(div().px_2p5().py_2().text_size(ui::TEXT_XS).child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(token)).child(div().text_color(palette::faint(cx)).child(name)))
     };
     section("Colour", "Restrained: Graphite neutrals plus one honey. Depth in the dark theme comes from lighter surfaces, never shadows. Contrast figures are measured live against the page.", cx)
         .child(h3("Surfaces, deepest to highest", cx))
         .child(
-            div()
-                .flex()
+            ui::row().items_stretch()
                 .squircle(ui::RADIUS_LG)
                 .border_1()
                 .border_color(palette::line(cx))
@@ -720,7 +738,7 @@ fn edge_top(el: gpui_kit::Div) -> gpui_kit::Div {
 }
 
 fn h3(text: &'static str, cx: &App) -> gpui_kit::Div {
-    div().mt_6().mb_3().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(text)
+    div().pt_6().pb_3().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(text)
 }
 
 // "4.62:1 AA", the way the page labels each ink against what it sits on.
@@ -762,83 +780,10 @@ fn icons(cx: &App) -> impl IntoElement {
         Glyph::Crown,
     ];
     section("Icons", "Reicon's filled weight, like Discord; line-only glyphs (#, +, arrows) stay lines. The full set is design/icons.html.", cx)
-        .child(board(cx).child(row().gap_4().text_color(palette::text(cx)).children(set.map(|g| Icon::new(g).size(px(22.))))))
+        .child(board(cx).child(row().gap_4().text_color(palette::text(cx)).children(set.map(|g| Icon::new(g).size(px(MARK_SIZE))))))
 }
 
-fn badges(cx: &App) -> impl IntoElement {
-    let muted = |text: &'static str| div().text_color(palette::muted(cx)).child(text);
-    section("Badges and keys", "A count asks for you, so it takes the accent. Tags label what something is; roles carry their colour as a dot, never as text colour.", cx).child(
-        board(cx)
-            .child(
-                row()
-                    .gap_4()
-                    .child(ui::count_badge(3))
-                    .child(ui::count_badge(42))
-                    .child(ui::count_badge(120))
-                    .child(ui::unread_dot())
-                    .child(ui::tag("App", cx))
-                    .child(ui::tag_with(Glyph::Crown, "Host", cx))
-                    .child(ui::tag("New", cx))
-                    .child(ui::live_badge()),
-            )
-            .child(
-                row()
-                    .child(ui::role_chip("Moderators", palette::oklch(0.65, 0.2, 5.), cx))
-                    .child(ui::role_chip("Raid team", palette::oklch(0.7, 0.14, 155.), cx))
-                    .child(ui::role_chip("Night owls", palette::oklch(0.75, 0.14, 80.), cx))
-                    .child(ui::role_chip("Members", palette::status_in(Status::Offline, cx), cx)),
-            )
-            .child(
-                row()
-                    .child(ui::keys(["⌘", "K"], cx))
-                    .child(muted("Quick switcher"))
-                    .child(ui::keys(["=", "Backspace"], cx).ml_4())
-                    .child(muted("Mute"))
-                    .child(ui::keys(["Esc"], cx).ml_4())
-                    .child(muted("Close")),
-            ),
-    )
-}
 
-fn avatars(cx: &App) -> impl IntoElement {
-    let ring = palette::surface(Level::Sidebar, cx);
-    let page = palette::surface(Level::Page, cx);
-    let sized = |size: f32| {
-        let mark = ui::monogram("Mira", size);
-        if size < 32. {
-            return div().child(mark);
-        }
-        ui::with_status(mark, Status::Online, size, page, cx)
-    };
-    let person = |name: &'static str, label: &'static str, status: Option<Status>| {
-        let avatar = match status {
-            Some(status) => ui::with_status(ui::monogram(name, 40.), status, 40., ring, cx),
-            None => ui::monogram(name, 40.).shadow(ui::speaking_ring(ring)),
-        };
-        row().child(avatar).child(div().text_color(palette::muted(cx)).child(label))
-    };
-    let more = div().size_6().rounded_full().bg(palette::surface(Level::Overlay, cx)).text_color(palette::strong(cx)).text_size(ui::TEXT_XXS).font_weight(FontWeight::SEMIBOLD).flex().items_center().justify_center().child("+3");
-    section("Avatars and status", "Status is never colour alone: online is a dot, idle a moon, do not disturb a bar, offline a ring. Speaking is the accent ring plus the bars.", cx).child(
-        board(cx)
-            .gap_6()
-            .child(row().gap_4().items_end().children([16., 20., 24., 32., 40., 56., 80.].map(sized)).child(note("16 20 24 32 40 56 80 · below 24 no initials, no status", cx)))
-            .child(
-                row()
-                    .gap_6()
-                    .child(person("Mira", "Online", Some(Status::Online)))
-                    .child(person("Ana", "Idle", Some(Status::Idle)))
-                    .child(person("Theo", "Do not disturb", Some(Status::Dnd)))
-                    .child(person("Jun", "Offline", Some(Status::Offline)))
-                    .child(person("Rosa", "Speaking", None)),
-            )
-            .child(
-                row()
-                    .gap_3()
-                    .child(ui::stacked([ui::monogram("Mira", 24.).into_any_element(), ui::monogram("Theo", 24.).into_any_element(), ui::monogram("Ana", 24.).into_any_element(), more.into_any_element()], 24., ring))
-                    .child(div().text_color(palette::muted(cx)).child("6 watching")),
-            ),
-    )
-}
 
 fn layout(cx: &App) -> impl IntoElement {
     section("Dividers and tiles", "Dividers separate groups; a label on a divider names what follows. Icon tiles lead rows that need more presence than a bare icon.", cx).child(
@@ -855,13 +800,13 @@ fn layout(cx: &App) -> impl IntoElement {
             )
             .child(
                 ui::surface(cx)
-                    .w(px(248.))
+                    .w(px(MENU_WIDTH))
                     .child(ui::menu_row("m-reply", cx).child(div().text_color(palette::muted(cx)).child(glyph(Glyph::Reply))).child(div().flex_1().child("Reply")))
                     .child(ui::menu_row("m-react", cx).child(div().text_color(palette::muted(cx)).child(glyph(Glyph::EmojiAdd))).child(div().flex_1().child("Add reaction")))
                     .child(ui::menu_row("m-copy", cx).child(div().text_color(palette::muted(cx)).child(glyph(Glyph::Copy))).child(div().flex_1().child("Copy text")))
-                    .child(ui::menu_row("m-mark", cx).child(div().flex_1().child("Mark as unread")).child(ui::check(Check::On, cx).size(px(18.))))
+                    .child(ui::menu_row("m-mark", cx).child(div().flex_1().child("Mark as unread")).child(ui::check(Check::On, cx).size(ui::ICON_LG)))
                     .child(ui::menu_row("m-mode", cx).child(div().flex_1().child("Push to talk")).child(ui::radio_with(false, 18., palette::line_strong(cx))))
-                    .child(div().my_1().mx_2().h(ui::HAIRLINE).bg(palette::line(cx)))
+                    .child(div().px_2().py_1().child(ui::divider(None, cx)))
                     .child(ui::menu_row("m-delete", cx).danger(cx).child(glyph(Glyph::Trash)).child("Delete message")),
             )
             .child(overflow(cx)),
@@ -873,7 +818,7 @@ fn layout(cx: &App) -> impl IntoElement {
 fn overflow(cx: &App) -> impl IntoElement {
     let name = "an unreasonably long display name that never fits in a sidebar row";
     ui::col()
-        .w(px(248.))
+        .w(px(MENU_WIDTH))
         .gap_1()
         .p_2()
         .border_1()

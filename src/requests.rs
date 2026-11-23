@@ -59,7 +59,7 @@ impl Waffle {
                 .h_10()
                 .gap_3()
                 .child(Icon::new(Glyph::Envelope).size(ui::ICON_XL).flex_none())
-                .child(div().flex_1().min_w_0().truncate().child("Message Requests"))
+                .child(ui::line("Message Requests").flex_1())
                 .when(pending > 0, |r| r.child(ui::count_badge(pending)))
                 .on_click(cx.listener(|this, _, _, cx| this.open_requests(RequestsTab::Requests, cx)))
                 .into_any_element(),
@@ -78,7 +78,7 @@ impl Waffle {
         for person in people {
             self.fetch_profile(person, None, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): opening the page changes the rail, the channel list and the main column
     }
 
     // One tab's DMs, newest message first.
@@ -102,19 +102,15 @@ impl Waffle {
         let tabs = ui::pill_tabs("requests-tabs", &items, TABS.iter().position(|t| *t == tab).unwrap_or_default(), move |i, _, cx| {
             this.update(cx, |this, cx| this.open_requests(TABS[i], cx)).ok();
         }, window, cx);
-        let header = div()
+        let header = ui::row()
             .occlude()
             .h(px(crate::layout::HEADER_HEIGHT))
             .pl_4()
             .pr_3()
-            .flex()
-            .items_center()
             .gap_3()
             .window_control_area(WindowControlArea::Drag)
             .child(
-                div()
-                    .flex()
-                    .items_center()
+                ui::row()
                     .gap_2()
                     .pr_3()
                     .border_r_1()
@@ -127,7 +123,7 @@ impl Waffle {
                     .child("Message Requests"),
             )
             .child(div().min_w_0().overflow_hidden().occlude().child(tabs))
-            .child(div().ml_auto().child(self.caption_clearance(true)));
+            .child(ui::row().flex_1().justify_end().child(self.caption_clearance(true)));
         let dms = self.requests_in(tab);
         let body = match (dms.is_empty(), tab) {
             (true, RequestsTab::Requests) => ui::empty_state("requests-empty", Mood::Idle, "No pending requests", "There are no pending message requests.", cx).into_any_element(),
@@ -138,18 +134,15 @@ impl Waffle {
                     RequestsTab::Spam => format!("Spam · {}", dms.len()),
                 };
                 let clear = ui::button("requests-clear", Tone::Link, cx).text_size(ui::TEXT_XS).child("Clear All").on_click(cx.listener(move |this, _, _, cx| this.clear_requests(tab, cx)));
-                let label = div().pt_2().px_2().pb_1().flex().items_center().justify_between().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(heading).child(clear);
+                let label = ui::row().pt_2().px_2().pb_1().justify_between().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(heading).child(clear);
                 let rows: Vec<AnyElement> = dms.iter().map(|dm| self.message_request_row(dm, tab, cx)).collect();
-                div().flex().flex_col().gap_0p5().child(label).children(rows).into_any_element()
+                ui::col().gap_0p5().child(label).children(rows).into_any_element()
             }
         };
-        div()
+        ui::col().min_h_0()
             .relative()
             .flex_1()
-            .min_w_0()
             .h_full()
-            .flex()
-            .flex_col()
             .bg(palette::surface(palette::Level::Page, cx))
             .text_color(palette::text(cx))
             .text_size(ui::TEXT_SM)
@@ -169,36 +162,30 @@ impl Waffle {
         let when = (last > 0).then(|| crate::panel::ago(chrono::Utc::now().timestamp_millis() - snowflake_ms(last) as i64));
         let hover = palette::hover(cx);
         let id = dm.id.clone();
-        div()
+        // lint-allow(custom-button): ui::list_row is 48px with one title line; a request is 64px with the time beside the name and two buttons.
+        ui::row()
             .id(SharedString::from(format!("request-{}", dm.id)))
             .min_h_16()
             .px_2()
             .py_2()
-            .flex()
-            .items_center()
             .gap_3()
             .squircle(ui::RADIUS_MD)
             .cursor_pointer()
             .hover(move |s| s.bg(hover))
             .child(ui::dm_face(&dm.face(), 40., page))
             .child(
-                div()
+                ui::col().min_h_0()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
                     .child(
-                        div()
-                            .flex()
+                        ui::row()
                             .items_baseline()
                             .gap_2()
-                            .min_w_0()
-                            .child(div().min_w_0().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(name))
+                            .child(ui::line(name).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
                             .children(when.map(|w| div().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(w))),
                     )
-                    .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(line.join(" · "))),
+                    .child(ui::line(line.join(" · ")).text_size(ui::TEXT_XS).text_color(palette::muted(cx))),
             )
-            .child(div().flex_none().flex().gap_2().on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| cx.stop_propagation()).children(self.request_actions(&dm.id, tab, cx)))
+            .child(ui::row().items_stretch().flex_none().gap_2().on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| cx.stop_propagation()).children(self.request_actions(&dm.id, tab, cx)))
             .on_click(cx.listener(move |this, _, window, cx| this.open_request(&id, window, cx)))
             .into_any_element()
     }
@@ -233,20 +220,18 @@ impl Waffle {
             RequestsTab::Spam => emphasised(&[("This might be spam".into(), true)], strong),
         };
         Some(
-            div()
+            ui::row()
                 .min_h_11()
                 .py_1p5()
                 .pl_3p5()
                 .pr_2()
-                .flex()
-                .items_center()
                 .gap_2()
                 .border_b_1()
                 .border_color(palette::line(cx))
                 .text_size(ui::TEXT_SM)
                 .text_color(palette::muted(cx))
                 .child(Icon::new(if dm.props.spam { Glyph::Shield } else { Glyph::Envelope }).size(ui::ICON_MD).text_color(palette::faint(cx)))
-                .child(div().flex_1().min_w_0().truncate().child(label))
+                .child(crate::overlays::rich_line(label).flex_1())
                 .children(self.request_actions(&dm.id, tab, cx)),
         )
     }
@@ -280,7 +265,7 @@ impl Waffle {
         if self.channel.as_ref().is_some_and(|c| c.id == id) {
             self.open_requests(if dm.props.spam { RequestsTab::Spam } else { RequestsTab::Requests }, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the requests count shows on the rail, in the channel list and on the page
         Some(dm)
     }
 
@@ -298,6 +283,7 @@ impl Waffle {
             })
             .ok();
         })
+        // lint-allow(detached-task): ends when Discord answers the request, and holds only a WeakEntity.
         .detach();
     }
 
@@ -307,7 +293,7 @@ impl Waffle {
         let cleared = self.requests_in(tab);
         let ids: HashSet<&str> = cleared.iter().map(|d| d.id.as_str()).collect();
         self.dm_requests.retain(|d| !ids.contains(d.id.as_str()));
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the requests count shows on the rail, in the channel list and on the page
         let Some(client) = self.client.clone() else { return };
         cx.spawn(async move |this, cx| {
             for (i, batch) in cleared.chunks(BATCH).enumerate() {
@@ -326,6 +312,7 @@ impl Waffle {
                 return;
             }
         })
+        // lint-allow(detached-task): ends after its last batch (or the first refusal), and holds only a WeakEntity.
         .detach();
     }
 }

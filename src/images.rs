@@ -41,6 +41,7 @@ struct Item {
 #[derive(Default)]
 struct Shared {
     app: Option<Entity<Images>>,
+    // lint-allow(unbounded-growth): one weak handle per image cache, one for each part of the window that draws apart, a handful at most
     all: Vec<WeakEntity<Images>>,
 }
 

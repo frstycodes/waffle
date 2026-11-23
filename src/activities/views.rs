@@ -1,5 +1,6 @@
 // What a game looks like around it: its card on the stage, the bar over it, the corner window and pop-out away from
 // its place, over a chat, as a line in the channel list, and as a live card in chats.
+use crate::ui;
 use super::*;
 
 pub(super) const FACES_SHOWN: usize = 4;
@@ -8,6 +9,7 @@ pub(super) const PIP_WIDTH: f32 = 400.;
 pub(super) const PIP_BAR: f32 = 40.;
 // The bar over a focused activity: the app, who's in it, and its actions.
 pub(super) const STAGE_BAR: f32 = 48.;
+#[cfg(target_os = "macos")]
 pub(super) const POPOUT_WIDTH: f32 = 960.;
 // A game over a chat starts at this share of it, top down, and the split stays within these.
 pub(super) const CHAT_SPLIT: f32 = 0.6;
@@ -19,10 +21,12 @@ pub(super) const LIST_ROW: f32 = 30.;
 pub(super) const LIST_INDENT: f32 = 32.;
 pub(super) const LIST_FACES: usize = 3;
 // A popped-out game's window: the game, edge to edge.
+#[cfg(target_os = "macos")]
 pub(super) struct ActivityPopout {
     frame: Entity<ActivityFrame>,
 }
 
+#[cfg(target_os = "macos")]
 impl gpui_kit::Render for ActivityPopout {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div().size_full().bg(gpui_kit::black()).child(self.frame.clone())
@@ -214,12 +218,10 @@ impl Waffle {
         let app_id = frame.read(cx).app_id.clone();
         let split = self.activities.chat_split.unwrap_or(CHAT_SPLIT);
         let bounds = self.activities.split_bounds.clone();
-        let handle = div()
+        let handle = ui::row()
             .id("activity-split")
             .h(px(SPLIT_HANDLE))
             .flex_none()
-            .flex()
-            .items_center()
             .justify_center()
             .cursor_row_resize()
             .bg(palette::surface(palette::Level::Raised, cx))
@@ -243,7 +245,7 @@ impl Waffle {
             .child(gpui_kit::canvas(move |b, _, _| bounds.set(Some(b)), |_, _, _, _| ()).absolute().inset_0())
             .child(ui::col().h(relative(split)).flex_none().child(self.activity_bar(&app_id, cx)).child(div().flex_1().min_h_0().child(game)))
             .child(handle)
-            .child(div().flex_1().min_h_0().flex().child(chat))
+            .child(ui::row().items_stretch().flex_1().min_h_0().child(chat))
             // The split follows the pointer over the game too, which the window hears and the elements don't.
             .when(self.activities.splitting, |d| {
                 d.child(crate::layout::window_drag(
@@ -334,7 +336,7 @@ impl Waffle {
                 None => base.bg(gpui_kit::black()).child(ui::sized(move |size, _, _| {
                     let (w, h) = (f32::from(size.width), f32::from(size.height));
                     let (w, h) = (w.min(h * GAME_ASPECT), h.min(w / GAME_ASPECT));
-                    div().size_full().flex().items_center().justify_center().child(div().w(px(w)).h(px(h)).flex_none().child(frame)).into_any_element()
+                    ui::row().size_full().justify_center().child(div().w(px(w)).h(px(h)).flex_none().child(frame)).into_any_element()
                 })).into_any_element(),
             };
         }
@@ -416,10 +418,10 @@ impl Waffle {
                     .items_center()
                     .justify_center()
                     .text_center()
-                    .when_some(lead.filter(|_| !small), |d, lead| d.child(div().mb_1().child(lead)))
+                    .when_some(lead.filter(|_| !small), |d, lead| d.child(div().pb_1().child(lead)))
                     .when_some(line.filter(|_| !small), |d, line| d.child(div().max_w_full().text_size(TEXT_SM).line_height(relative(LEADING_BODY)).text_color(palette::stage::text()).child(line)))
                     .child(ui::line(name).max_w_full().text_size(if small { TEXT_SM } else { title }).font_weight(gpui_kit::FontWeight::BOLD))
-                    .when(!actions.is_empty(), |d| d.child(ui::row().flex_none().mt_1p5().gap_2().children(actions))),
+                    .when(!actions.is_empty(), |d| d.child(div().pt_1p5().child(ui::row().flex_none().gap_2().children(actions)))),
             )
             .into_any_element()
     }
@@ -438,6 +440,7 @@ impl Waffle {
                 let faces: Vec<ui::Entry> = instance.participants.iter().map(|p| self.player(&p.user_id)).map(|u| ui::Entry::person(u.avatar, u.name)).collect();
                 let playing = self.in_activity(&app_id, cx);
                 let target = channel.clone();
+                // lint-allow(custom-button): ui::list_row always inks its title strong, and a playing activity's turns accent
                 ui::row()
                     .id(SharedString::from(format!("list-{}-{}", activity_key(&app_id), channel.id)))
                     .h(px(LIST_ROW))
@@ -541,7 +544,7 @@ impl Waffle {
                 .flex_none()
                 .gap_2p5()
                 .child(ui::server_tile(app.and_then(|a| a.icon.as_deref()), &name, AVATAR_XL, cx))
-                .child(ui::col().flex_1().child(ui::line(name).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(palette::strong(cx))).child(ui::line(elapsed).text_size(TEXT_XS).text_color(palette::muted(cx))))
+                .child(ui::col().min_h_0().flex_1().child(ui::line(name).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(palette::strong(cx))).child(ui::line(elapsed).text_size(TEXT_XS).text_color(palette::muted(cx))))
                 .child(ui::icon_button("panel-leave-activity", Glyph::DoorExit, "Leave Activity", cx).flex_none().on_click(cx.listener(|this, _, _, cx| this.leave_with_rejoin(cx))))
                 .into_any_element(),
         )

@@ -19,6 +19,7 @@ pub struct Entry {
     pub action: u16,
     pub user_id: Option<String>,
     pub target_id: Option<String>,
+    // lint-allow(unbounded-growth): the changes of one audit entry, a handful at most
     pub changes: Vec<Change>,
     pub options: Value,
     pub reason: Option<String>,
@@ -37,6 +38,7 @@ pub struct Directory {
 }
 
 pub struct Page {
+    // lint-allow(unbounded-growth): one fetched page of at most 50 entries, replaced by the next fetch
     pub entries: Vec<Entry>,
     pub names: Directory,
 }

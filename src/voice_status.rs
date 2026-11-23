@@ -22,6 +22,10 @@ use crate::{
     ui::{self, Tone},
 };
 
+// The line heights of the status line under a channel and of the dialog's prompt.
+const STATUS_LINE: f32 = 14.;
+const PROMPT_LINE: f32 = 26.;
+
 pub(crate) const ART: &str = "illustrations/voice-status.png";
 // Discord's modal: Set Status is disabled past 500 characters, and the remaining count shows past 250.
 const MAX_CHARS: usize = 500;
@@ -53,7 +57,7 @@ impl Waffle {
         for (channel, status) in statuses {
             self.set_voice_status(channel, status);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): a voice status shows on the channel list (nav) and the call stage (main)
     }
 
     fn set_voice_status(&mut self, channel_id: String, status: String) {
@@ -99,17 +103,17 @@ impl Waffle {
         let input = cx.new(|cx| SearchState::new(window, cx).placeholder(placeholder).default_value(shown));
         let subscription = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, _, cx| match event {
             InputEvent::PressEnter { .. } => this.submit_voice_status(cx),
-            _ => cx.notify(),
+            _ => cx.notify(), // lint-allow(global-notify): the status dialog is an overlay, which only follows the app
         });
         input.update(cx, |state, cx| state.focus(window, cx));
         self.menu = None;
         self.voice_status_dialog = Some(VoiceStatusDialog { channel_id: channel.id.clone(), current, input, sending: false, error: None, _subscription: subscription });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the status dialog is an overlay, which only follows the app
     }
 
     fn close_voice_status(&mut self, cx: &mut Context<Self>) {
         self.voice_status_dialog = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the status dialog is an overlay, which only follows the app
     }
 
     // The field's text as Discord takes it: picked custom emoji back to `<:name:id>`.
@@ -142,7 +146,7 @@ impl Waffle {
             dialog.sending = true;
             dialog.error = None;
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the status dialog is an overlay, which only follows the app
         let Some(client) = self.client.clone() else { return };
         cx.spawn(async move |this, cx| {
             let result = client.set_voice_channel_status(&channel_id, &status).await;
@@ -159,11 +163,11 @@ impl Waffle {
                         }
                     }
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the status dialog is an overlay, which only follows the app
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot request that ends when it returns, holding a WeakEntity
     }
 
     // The menu's Clear Channel Status: an empty status, with Discord's refusal as a toast.
@@ -174,13 +178,13 @@ impl Waffle {
             this.update(cx, |this, cx| match result {
                 Ok(()) => {
                     this.set_voice_status(channel_id, String::new());
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): a voice status shows on the channel list (nav) and the call stage (main)
                 }
                 Err(error) => this.show_toast(error, cx),
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot request that ends when it returns, holding a WeakEntity
     }
 
     // The emoji picker's pick, at the caret.
@@ -197,9 +201,9 @@ impl Waffle {
     pub(crate) fn voice_row_status(&self, channel: &Channel, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
         let status = self.voice_status_of(&channel.id).filter(|_| guild_voice(channel));
         let editable = self.can_edit_voice_status(channel);
-        let line = div().id(SharedString::from(format!("voice-status-{}", channel.id))).pl(px(LINE_INDENT)).min_w_0().flex().items_center().gap_1p5().text_size(ui::TEXT_XS).line_height(ui::LINE_XS);
+        let line = ui::row().id(SharedString::from(format!("voice-status-{}", channel.id))).pl(px(LINE_INDENT)).gap_1p5().text_size(ui::TEXT_XS).line_height(ui::LINE_XS);
         let line = match status {
-            Some(status) => line.text_color(palette::muted(cx)).font_weight(FontWeight::NORMAL).child(div().min_w_0().truncate().child(plain_status(status))),
+            Some(status) => line.text_color(palette::muted(cx)).font_weight(FontWeight::NORMAL).child(ui::line(plain_status(status))),
             None if editable => {
                 let strong = palette::strong(cx);
                 line.text_color(palette::text(cx)).font_weight(FontWeight::MEDIUM).hover(move |s| s.text_color(strong)).child("Set a channel status").child(Icon::new(Glyph::Pen).size(ui::ICON_SM))
@@ -219,7 +223,7 @@ impl Waffle {
     // Under the call's title: the status while it has one, opening the dialog for those who may change it.
     pub(crate) fn call_status_line(&self, channel: &Channel, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
         let status = self.voice_status_of(&channel.id).filter(|_| guild_voice(channel))?;
-        let line = div().id("call-status").min_w_0().truncate().text_size(ui::TEXT_XS).line_height(px(14.)).font_weight(FontWeight::NORMAL).text_color(palette::stage::muted()).child(plain_status(status));
+        let line = ui::line(plain_status(status)).id("call-status").text_size(ui::TEXT_XS).line_height(px(STATUS_LINE)).font_weight(FontWeight::NORMAL).text_color(palette::stage::muted());
         if !self.can_edit_voice_status(channel) {
             return Some(line);
         }
@@ -258,19 +262,16 @@ impl Waffle {
         let remaining = (typed > SHOW_REMAINING_AFTER).then(|| {
             div().flex_none().font_features(crate::call::tabular()).text_color(if over { palette::danger_ink(cx) } else { palette::faint(cx) }).child((MAX_CHARS as i64 - typed as i64).to_string())
         });
-        let meta = div()
+        let meta = ui::row()
             .min_h_4()
-            .flex()
             .items_start()
             .justify_between()
             .gap_2()
             .text_size(ui::TEXT_XS)
             .child(div().min_w_0().children(dialog.error.clone().map(|e| ui::field_error(e, cx))))
             .children(remaining);
-        let actions = div()
-            .flex()
+        let actions = ui::row().items_stretch()
             .gap_2()
-            .mt_1()
             .child(ui::button("voice-status-cancel", Tone::Secondary, cx).flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_voice_status(cx))))
             .child(
                 ui::button("voice-status-submit", Tone::Primary, cx)
@@ -280,25 +281,23 @@ impl Waffle {
                     .child("Set status")
                     .on_click(cx.listener(|this, _, _, cx| this.submit_voice_status(cx))),
             );
-        let body = div()
+        let body = ui::col()
             .pt_4()
             .px_6()
             .pb_6()
-            .flex()
-            .flex_col()
             .gap_2()
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
                 if e.keystroke.key == "escape" {
                     this.close_voice_status(cx);
                 }
             }))
-            .child(div().text_center().text_size(ui::TEXT_LG).line_height(px(26.)).font_weight(FontWeight::BOLD).text_color(strong).child("What are we chatting about?"))
-            .child(div().mb_3().text_center().text_color(muted).child("Let others know what you're up to in the voice channel!"))
+            .child(div().text_center().text_size(ui::TEXT_LG).line_height(px(PROMPT_LINE)).font_weight(FontWeight::BOLD).text_color(strong).child("What are we chatting about?"))
+            .child(div().pb_3().text_center().text_color(muted).child("Let others know what you're up to in the voice channel!"))
             .child(div().font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Status"))
             .child(field)
             .child(meta)
-            .child(actions);
-        let card = div().flex().flex_col().child(hero).child(body);
+            .child(div().pt_1().child(actions));
+        let card = ui::col().child(hero).child(body);
         let card = div().id("voice-status").occlude().child(ui::dialog("voice-status-dialog", WIDTH, card, window, cx));
         Some(ui::modal(backdrop("voice-status-backdrop", cx), card, cx))
     }

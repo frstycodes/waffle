@@ -194,14 +194,14 @@ impl Waffle {
                     }
                     this.games.mine = game;
                     this.publish_presence();
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): your game shows in the user panel (nav), the member list and profile cards
                 });
                 if alive.is_err() {
                     break;
                 }
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends when the window is gone, holding a WeakEntity
     }
 
     // Your game as others see it: only while Activity status sharing is on.
@@ -235,9 +235,9 @@ impl Waffle {
             // rows redrawing don't ask again every frame.
             let url = icon.ok().flatten().map(|hash| crate::discord::app_icon_url(&app_id, &hash));
             icons.borrow_mut().store(&app_id, url);
-            this.update(cx, |_, cx| cx.notify()).ok();
+            this.update(cx, |_, cx| cx.notify()).ok(); // lint-allow(global-notify): game icons show in the user panel (nav), the member list and profile cards
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot fetch that ends when the request returns, holding a WeakEntity
         cached
     }
 

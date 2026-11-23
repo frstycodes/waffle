@@ -22,8 +22,23 @@ use crate::{
     overlays::backdrop,
     palette,
     settings::Fill,
-    ui::{self, RADIUS_LG, RADIUS_SM, Squircle},
+    ui::{self, RADIUS_SM, Squircle},
 };
+
+mod picker;
+
+use self::picker::*;
+
+// The category rail's width.
+const RAIL_WIDTH: f32 = 52.;
+// The volume card hangs this far from the top.
+const VOLUME_TOP: f32 = 56.;
+// The volume card's width.
+const VOLUME_WIDTH: f32 = 240.;
+// The buttons over a hovered sound.
+const TOOL_SIZE: f32 = 22.;
+// Where the demo scene opens the picker.
+const DEMO_AT: f32 = 640.;
 
 const FAVORITES_LIMIT: usize = 250;
 const FREQUENT_COUNT: usize = 6;
@@ -42,10 +57,13 @@ pub const NITRO_LOCKED: &str = "Use custom soundboard sounds across voice channe
 pub struct Soundboard {
     pub(crate) picker: Option<Picker>,
     pub(crate) search: Entity<SearchState>,
+    // lint-allow(unbounded-growth): one entry per joined server, a few dozen at most
     guild_sounds: HashMap<String, Vec<SoundboardSound>>,
     defaults: Vec<SoundboardSound>,
     defaults_requested: bool,
+    // lint-allow(unbounded-growth): one id per joined server, a few dozen at most
     requested: HashSet<String>,
+    // lint-allow(unbounded-growth): the files of sounds played this session, a few dozen at most, each a few seconds long
     clips: HashMap<String, Clip>,
     // Sound id to when it stops playing.
     playing: HashMap<String, Instant>,
@@ -102,7 +120,7 @@ impl Access {
 impl Soundboard {
     pub fn new(window: &mut Window, cx: &mut Context<Waffle>) -> Self {
         let search = cx.new(|cx| SearchState::new(window, cx).placeholder("Find the perfect sound"));
-        cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify()).detach();
+        cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify()).detach(); // lint-allow(detached-task): the subscription ends when the search input or Waffle is dropped
         Soundboard {
             picker: None,
             search,
@@ -260,19 +278,19 @@ impl Waffle {
             this.update(cx, |this, cx| match result {
                 Ok(sounds) => {
                     this.soundboard.defaults = sounds;
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the soundboard picker is drawn by the root's overlays, over every column
                 }
                 // Asked again next time the picker opens.
                 Err(_) => this.soundboard.defaults_requested = false,
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one fetch: ends when the request returns, or when Waffle is dropped (update fails)
     }
 
     pub(crate) fn toggle_soundboard_key(&mut self, _: &crate::app_keys::ToggleSoundboard, window: &mut Window, cx: &mut Context<Self>) {
         if self.soundboard.close_picker() {
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the soundboard picker is drawn by the root's overlays, over every column
         }
         self.open_soundboard(None, window, cx);
     }
@@ -289,7 +307,7 @@ impl Waffle {
             state.focus(window, cx);
         });
         self.fetch_soundboard(cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the soundboard picker is drawn by the root's overlays, over every column
     }
 
     // Click: plays to everyone in the call, here at once (Discord doesn't wait for its echo), then tells Discord.
@@ -365,7 +383,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one clip fetch: ends when the request returns, or when Waffle is dropped
     }
 
     fn start_clip(&mut self, key: String, sound_id: String, clip: Clip, gain: f32, cx: &mut Context<Self>) {
@@ -375,12 +393,12 @@ impl Waffle {
             cx.background_executor().timer(clip.length).await;
             this.update(cx, |this, cx| {
                 this.soundboard.playing.retain(|_, until| *until > Instant::now());
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the soundboard's playing sounds and tile effects draw on the call tiles and in its picker
             })
             .ok();
         })
-        .detach();
-        cx.notify();
+        .detach(); // lint-allow(detached-task): a one-shot timer: ends after the clip's length, or when Waffle is dropped
+        cx.notify(); // lint-allow(global-notify): the soundboard's playing sounds and tile effects draw on the call tiles and in its picker
     }
 
     fn add_tile_effect(&mut self, user_id: String, emoji: Option<Emoji>, family: Family, playing: Option<String>, cx: &mut Context<Self>) {
@@ -394,12 +412,12 @@ impl Waffle {
             cx.background_executor().timer(life).await;
             this.update(cx, |this, cx| {
                 this.soundboard.effects.retain(|e| e.id != id);
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the soundboard's playing sounds and tile effects draw on the call tiles and in its picker
             })
             .ok();
         })
-        .detach();
-        cx.notify();
+        .detach(); // lint-allow(detached-task): a one-shot timer: ends after the effect's life, or when Waffle is dropped
+        cx.notify(); // lint-allow(global-notify): the soundboard's playing sounds and tile effects draw on the call tiles and in its picker
     }
 
     fn toggle_favorite(&mut self, sound_id: String, cx: &mut Context<Self>) {
@@ -408,7 +426,7 @@ impl Waffle {
             if let Some(picker) = &mut self.soundboard.picker {
                 picker.over_limit = true;
             }
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the soundboard picker is drawn by the root's overlays, over every column
         }
         self.update_prefs(cx, |p| match favorite {
             true => p.soundboard_favorites.retain(|id| *id != sound_id),
@@ -443,23 +461,13 @@ impl Waffle {
             false => effects.iter().filter_map(|e| Some(effect_scene(e.id, e.family, e.emoji.as_ref()?, tile))).collect(),
         };
         let label = latest.map(|name| {
-            div()
+            ui::media_label()
                 .absolute()
                 .top_2()
                 .left_2()
                 .max_w(gpui_kit::relative(0.6))
-                .h_6()
-                .px_2()
-                .squircle(8.)
-                .bg(gpui_kit::black().opacity(0.6))
-                .flex()
-                .items_center()
-                .gap_1p5()
-                .text_size(ui::TEXT_XS)
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(gpui_kit::white())
                 .child(Icon::new(Glyph::Soundboard).size(ui::ICON_SM))
-                .child(div().min_w_0().truncate().child(name))
+                .child(ui::line(name))
         });
         Some(div().absolute().inset_0().overflow_hidden().children(bursts).children(label).into_any_element())
     }
@@ -468,7 +476,7 @@ impl Waffle {
         let picker = self.soundboard.picker.as_ref()?;
         let anchored = picker.from.and_then(|key| self.soundboard.anchors.borrow().get(key).copied());
         let at = match (picker.from, anchored) {
-            (_, Some(b)) => point(b.center().x, b.top() - px(8.)),
+            (_, Some(b)) => point(b.center().x, b.top() - ui::WINDOW_MARGIN),
             // The control hasn't painted yet: place it once it has.
             (Some(_), None) => {
                 window.request_animation_frame();
@@ -476,344 +484,31 @@ impl Waffle {
             }
             (None, None) => picker.at,
         };
-        let card = div()
+        let card = ui::surface(cx)
+            .p_0()
+            .gap_0()
             .id("soundboard")
             .occlude()
             .w(px(PICKER_SIZE.0))
             .h(px(PICKER_SIZE.1))
-            .squircle(RADIUS_LG)
-            .bg(palette::surface(palette::Level::Overlay, cx))
-            .shadow(ui::shadow_pop(cx))
             .relative()
-            .flex()
-            .flex_col()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .children(self.picker_content(picker, cx));
         let card = ui::rise(card.transform_origin(gpui_kit::point(gpui_kit::relative(0.5), gpui_kit::relative(1.))), "soundboard", Duration::ZERO);
         Some(backdrop("soundboard-backdrop", cx).child(ui::floating_at("soundboard-float", at, Anchor::BottomCenter, card)).into_any_element())
     }
-
-    fn picker_content(&self, picker: &Picker, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let sections = self.sound_sections(cx);
-        let muted = self.prefs.soundboard_volume <= 0.;
-        let volume = div()
-            .id("soundboard-volume")
-            .size_7()
-            .flex_none()
-            .squircle(8.)
-            .flex()
-            .items_center()
-            .justify_center()
-            .cursor_pointer()
-            .text_color(palette::muted(cx))
-            .hover(|s| s.bg(palette::hover(cx)).text_color(palette::strong(cx)))
-            .when(picker.volume_open, |b| b.bg(palette::selected(cx)).text_color(palette::strong(cx)))
-            .child(Icon::new(if muted { Glyph::VolumeOff } else { Glyph::VolumeHigh }).size(ui::ICON_MD))
-            .tooltip(|window, cx| ui::tip("Control volume", window, cx))
-            .on_click(cx.listener(|this, _, _, cx| {
-                if let Some(picker) = &mut this.soundboard.picker {
-                    picker.volume_open = !picker.volume_open;
-                }
-                cx.notify();
-            }));
-        let head = div().flex_none().pt_3().px_3().pb_2().child(ui::search_field("soundboard-search", &self.soundboard.search, cx).trailing(volume));
-        let in_view = picker.scroll.top_item();
-        let rail = div()
-            .id("soundboard-rail")
-            .w(px(52.))
-            .flex_none()
-            .px_2()
-            .pt_1()
-            .pb_2()
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap_1p5()
-            .overflow_y_scroll()
-            .border_r_1()
-            .border_color(palette::line(cx))
-            .children(sections.iter().enumerate().flat_map(|(i, section)| {
-                let line = section.first_locked.then(|| div().w_5().h(ui::HAIRLINE).flex_none().bg(palette::line(cx)).into_any_element());
-                let scroll = picker.scroll.clone();
-                let (selected, hover) = (palette::accent_soft(cx), palette::hover(cx));
-                let tip: SharedString = if section.locked { NITRO_LOCKED.into() } else { section.name.clone() };
-                let tab = div()
-                    .id(("soundboard-tab", i))
-                    .size_9()
-                    .flex_none()
-                    .squircle(RADIUS_SM)
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .text_color(if i == in_view { palette::accent_ink(cx) } else { palette::muted(cx) })
-                    .when(i == in_view, |d| d.bg(selected))
-                    .when(i != in_view, |d| d.bg(palette::selected(cx)).hover(move |s| s.bg(hover)))
-                    .when(section.locked, |d| d.opacity(0.5))
-                    .child(section.lead.render(cx))
-                    .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        scroll.scroll_to_top_of_item(i);
-                        cx.notify();
-                    }));
-                line.into_iter().chain([tab.into_any_element()])
-            }));
-        let over_limit = picker.over_limit.then(|| ui::callout(ui::Notice::Warning, Glyph::Star, "Oh no!", format!("You cannot have more than {FAVORITES_LIMIT} favorites."), cx).mt_2());
-        let list = div()
-            .id("soundboard-list")
-            .flex_1()
-            .min_w_0()
-            .h_full()
-            .overflow_y_scroll()
-            .track_scroll(&picker.scroll)
-            .px_3()
-            .pb_3()
-            .children(sections.into_iter().map(|section| self.sound_section(section, cx)));
-        let volume_card = picker.volume_open.then(|| self.volume_card(cx).into_any_element());
-        let mut content = vec![
-            head.into_any_element(),
-            div()
-                .flex_1()
-                .min_h_0()
-                .flex()
-                .child(rail)
-                .child(div().flex_1().min_w_0().h_full().flex().flex_col().relative().children(over_limit).child(list).child(gpui_kit::component::scroll::Scrollbar::vertical(&picker.scroll)))
-                .into_any_element(),
-        ];
-        content.extend(volume_card);
-        content
-    }
-
-    // "Soundboard Volume" under the search field's speaker: the same value as Settings › Voice & Video.
-    fn volume_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let value = format!("{}%", perceptual(self.prefs.soundboard_volume).round() as i32);
-        let slider = self.range("soundboard-picker-volume".into(), slider_fraction(self.prefs.soundboard_volume), Fill::Accent, |this, f, cx| this.update_prefs(cx, |p| p.soundboard_volume = amplitude(f * 100.)), cx);
-        div()
-            .id("soundboard-volume-card")
-            .occlude()
-            .absolute()
-            .top(px(56.))
-            .right_3()
-            .w(px(240.))
-            .p_3()
-            .squircle(RADIUS_SM + 4.)
-            .bg(palette::surface(palette::Level::Overlay, cx))
-            .shadow(ui::shadow_pop(cx))
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(div().flex().justify_between().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child("Soundboard Volume").child(div().text_color(palette::strong(cx)).child(value)))
-            .child(slider)
-    }
-
-    fn sound_section(&self, section: Section, cx: &mut Context<Self>) -> AnyElement {
-        let header = div()
-            .flex()
-            .items_center()
-            .gap_1p5()
-            .pt_2p5()
-            .pb_1p5()
-            .px_0p5()
-            .text_size(ui::TEXT_XS)
-            .font_weight(FontWeight::SEMIBOLD)
-            .text_color(palette::muted(cx))
-            .child(section.lead.small(cx))
-            .child(section.name.clone());
-        let rows = section.sounds.chunks(3).map(|row| {
-            let tiles = row.iter().map(|s| self.sound_tile(&section.key, s, section.locked, cx).into_any_element());
-            let fillers = (row.len()..3).map(|_| div().flex_1().into_any_element());
-            div().flex().gap_1p5().children(tiles.chain(fillers).collect::<Vec<_>>())
-        }).collect::<Vec<_>>();
-        div()
-            .when(section.first_locked, |d| d.mt_3().border_t_1().border_color(palette::line(cx)))
-            .when(section.locked, |d| d.opacity(0.5))
-            .child(header)
-            .child(div().flex().flex_col().gap_1p5().children(rows))
-            .into_any_element()
-    }
-
-    // .snd: emoji and name; hovered, Preview and the star over its right end on a fade into its fill. Playing
-    // draws the accent edge. A locked sound only says why.
-    fn sound_tile(&self, section: &str, sound: &SoundboardSound, locked: bool, cx: &mut Context<Self>) -> impl IntoElement {
-        let group = SharedString::from(format!("snd-{section}-{}", sound.id));
-        let overlay = palette::surface(palette::Level::Overlay, cx);
-        let strong = palette::strong(cx);
-        let (rest, hover) = (ui::mix(overlay, strong, 0.08), ui::mix(overlay, strong, 0.14));
-        let edge = if self.soundboard.is_playing(&sound.id) { palette::accent() } else { gpui_kit::transparent_black() };
-        let tile = div()
-            .id(group.clone())
-            .group(group.clone())
-            .relative()
-            .flex_1()
-            .min_w_0()
-            .h_9()
-            .px_2()
-            .squircle(RADIUS_SM)
-            .border_1()
-            .border_color(edge)
-            .bg(rest)
-            .flex()
-            .items_center()
-            .gap_1p5()
-            .text_size(ui::TEXT_XS)
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(strong)
-            .child(div().flex_none().child(emoji_face(sound.emoji.as_ref(), 16.)))
-            .child(div().flex_1().min_w_0().truncate().child(sound.name.clone()));
-        if locked {
-            return tile.cursor(gpui_kit::CursorStyle::OperationNotAllowed).tooltip(|window, cx| ui::tip(NITRO_LOCKED, window, cx));
-        }
-        let favorite = self.prefs.soundboard_favorites.contains(&sound.id);
-        let silent = self.prefs.soundboard_volume <= 0.;
-        let preview_tip = if silent { "Increase your Soundboard volume setting to preview" } else { "Preview" };
-        let previewed = sound.clone();
-        let preview = tool(format!("{group}-preview"), Glyph::VolumeHigh, preview_tip, None, cx).when(!silent, |b| {
-            b.on_click(cx.listener(move |this, _, _, cx| {
-                cx.stop_propagation();
-                this.preview_sound(&previewed, cx);
-            }))
-        });
-        let starred = sound.id.clone();
-        let star = tool(format!("{group}-star"), Glyph::Star, if favorite { "Unfavorite" } else { "Favorite" }, favorite.then(|| palette::accent_ink(cx)), cx).on_click(cx.listener(move |this, _, _, cx| {
-            cx.stop_propagation();
-            this.toggle_favorite(starred.clone(), cx);
-        }));
-        let tools = div()
-            .absolute()
-            .top_0()
-            .bottom_0()
-            .right_0()
-            .pl_4()
-            .pr_1()
-            .flex()
-            .items_center()
-            .gap_0p5()
-            .bg(linear_gradient(90., linear_color_stop(hover.opacity(0.), 0.), linear_color_stop(hover, 0.25)))
-            .opacity(0.)
-            .group_hover(group.clone(), |s| s.opacity(1.))
-            .child(preview)
-            .child(star);
-        let played = sound.clone();
-        tile.cursor_pointer().hover(move |s| s.bg(hover)).child(tools).on_click(cx.listener(move |this, _, _, cx| this.play_soundboard_sound(played.clone(), cx)))
-    }
-
-    // Favorites, Frequently Used, each server's sounds we may play, the servers we can't below a line, then
-    // Discord's own. A search filters them all by name or emoji, without the first two.
-    fn sound_sections(&self, cx: &App) -> Vec<Section> {
-        let query = self.soundboard.search.read(cx).value().trim().to_lowercase();
-        let matches = |s: &&SoundboardSound| query.is_empty() || s.name.to_lowercase().contains(&query) || s.emoji.as_ref().is_some_and(|e| e.name.to_lowercase().contains(&query));
-        let known = |id: &String| self.soundboard.sound(id).filter(|s| self.sound_usable(s)).cloned();
-        let mut sections = Vec::new();
-        if query.is_empty() {
-            let favorites: Vec<SoundboardSound> = self.prefs.soundboard_favorites.iter().filter_map(known).collect();
-            sections.push(Section::new("favorites", Lead::Glyph(Glyph::Star), "Favorites", favorites));
-            let mut uses = self.prefs.soundboard_uses.clone();
-            uses.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
-            let frequent: Vec<SoundboardSound> = uses.iter().filter_map(|(id, _)| known(id)).take(FREQUENT_COUNT).collect();
-            sections.push(Section::new("frequent", Lead::Glyph(Glyph::Clock), "Frequently Used", frequent));
-        }
-        let call_guild = self.call.as_ref().and_then(|c| c.guild_id.clone());
-        // The call's own server first, then the rest in rail order.
-        let mut guilds: Vec<_> = self.guilds.iter().collect();
-        guilds.sort_by_key(|g| Some(&g.id) != call_guild.as_ref());
-        let (mut open, mut locked) = (Vec::new(), Vec::new());
-        for guild in guilds {
-            let sounds: Vec<SoundboardSound> = self.soundboard.guild_sounds.get(&guild.id).into_iter().flatten().filter(|s| s.available).filter(matches).cloned().collect();
-            if sounds.is_empty() {
-                continue;
-            }
-            let usable = sounds.iter().all(|s| self.sound_usable(s));
-            let section = Section::new(&guild.id, Lead::Server { icon: guild.icon.clone(), name: guild.name.clone() }, &guild.name, sounds);
-            if usable { open.push(section) } else { locked.push(section) }
-        }
-        sections.extend(open);
-        if let Some(first) = locked.first_mut() {
-            first.first_locked = true;
-        }
-        sections.extend(locked.into_iter().map(|s| Section { locked: true, ..s }));
-        let defaults: Vec<SoundboardSound> = self.soundboard.defaults.iter().filter(matches).cloned().collect();
-        sections.push(Section::new("defaults", Lead::Glyph(Glyph::Soundboard), "Discord Sounds", defaults));
-        sections.retain(|s| !s.sounds.is_empty());
-        sections
-    }
 }
 
-struct Section {
-    key: String,
-    lead: Lead,
-    name: SharedString,
-    sounds: Vec<SoundboardSound>,
-    locked: bool,
-    first_locked: bool,
-}
-
-impl Section {
-    fn new(key: &str, lead: Lead, name: &str, sounds: Vec<SoundboardSound>) -> Self {
-        Section { key: key.into(), lead, name: name.to_owned().into(), sounds, locked: false, first_locked: false }
-    }
-}
-
-enum Lead {
-    Glyph(Glyph),
-    Server { icon: Option<String>, name: String },
-}
-
-impl Lead {
-    fn render(&self, cx: &App) -> AnyElement {
-        match self {
-            Lead::Glyph(glyph) => Icon::new(*glyph).size(ui::ICON_LG).into_any_element(),
-            Lead::Server { icon, name } => ui::server_tile(icon.as_deref(), name, 36., cx),
-        }
-    }
-
-    fn small(&self, cx: &App) -> AnyElement {
-        match self {
-            Lead::Glyph(glyph) => Icon::new(*glyph).size(ui::ICON_SM).into_any_element(),
-            Lead::Server { icon, name } => ui::server_tile(icon.as_deref(), name, 16., cx),
-        }
-    }
-}
-
-// A server's emoji as its image, a Unicode one as text.
-fn emoji_face(emoji: Option<&Emoji>, size: f32) -> AnyElement {
-    match emoji {
-        Some(e) if e.id.is_some() => img(e.url().unwrap_or_default()).size(px(size)).into_any_element(),
-        Some(e) => div().text_size(px(size)).line_height(px(size)).child(e.name.clone()).into_any_element(),
-        None => Icon::new(Glyph::Soundboard).size(px(size)).into_any_element(),
-    }
-}
-
-// The 22px buttons over a hovered sound.
-fn tool(id: String, glyph: Glyph, tip: &'static str, ink: Option<Hsla>, cx: &App) -> gpui_kit::Stateful<gpui_kit::Div> {
-    let strong = palette::strong(cx);
-    div()
-        .id(SharedString::from(id))
-        .size(px(22.))
-        .squircle(6.)
-        .flex()
-        .items_center()
-        .justify_center()
-        .cursor_pointer()
-        .text_color(ink.unwrap_or_else(|| palette::muted(cx)))
-        .hover(move |s| s.bg(palette::hover(cx)).text_color(ink.unwrap_or(strong)))
-        .child(Icon::new(glyph).size(ui::ICON_SM))
-        .tooltip(move |window, cx| ui::tip(tip, window, cx))
-}
-
-// Copies of the emoji rising from the tile's foot, staggered, each easing out as it fades (design §3 `.burst`).
-// One effect over a tile: every copy of the emoji follows its family's keyframes (`soundboard_fx`),
 // sized and placed against the tile so it reads the same on a small card and a focused one.
 fn effect_scene(effect: u64, family: Family, emoji: &Emoji, (width, height): (f32, f32)) -> AnyElement {
     let total = family.duration();
     let copies = (0..family.copies()).map(|i| {
         let size = height * 0.34;
-        div()
+        ui::row()
             .absolute()
             .left_0()
             .top_0()
             .size(px(size))
-            .flex()
-            .items_center()
             .justify_center()
             .child(emoji_face(Some(emoji), size * 0.9))
             .with_animation(("soundboard-fx", (effect as usize) * 64 + i), Animation::new(total), move |el, t| {
@@ -843,7 +538,7 @@ pub fn demo(waffle: &mut Waffle, open: bool, window: &mut Window, cx: &mut Conte
     waffle.prefs.soundboard_uses = vec![("101".into(), 9), ("103".into(), 4)];
     waffle.soundboard.playing.insert("1".into(), Instant::now() + Duration::from_secs(3600));
     if open {
-        waffle.soundboard.picker = Some(Picker { from: Some(CALL_CONTROL), at: point(px(640.), px(640.)), volume_open: false, over_limit: false, scroll: ScrollHandle::new() });
+        waffle.soundboard.picker = Some(Picker { from: Some(CALL_CONTROL), at: point(px(DEMO_AT), px(DEMO_AT)), volume_open: false, over_limit: false, scroll: ScrollHandle::new() });
         waffle.soundboard.search.update(cx, |state, cx| state.focus(window, cx));
     } else {
         // Each family in turn, on a loop, so the scene shows them all.
@@ -856,7 +551,7 @@ pub fn demo(waffle: &mut Waffle, open: bool, window: &mut Window, cx: &mut Conte
                 cx.background_executor().timer(family.duration() + Duration::from_millis(500)).await;
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): the demo loop ends when Waffle is dropped (update fails)
     }
 }
 

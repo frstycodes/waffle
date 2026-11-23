@@ -79,9 +79,11 @@ pub(crate) fn styled<E: Styled>(element: E, style: Option<&NameStyle>) -> E {
 // download or a new font can cause it.
 pub(crate) fn start(cx: &mut App) {
     let Some(dir) = crate::data_dir().map(|d| d.join("name-fonts")) else { return };
+    // lint-allow(main-thread-io): runs once at startup, before any window opens, over a few small files.
     let cached = std::fs::read(dir.join("table.json")).ok().and_then(|b| serde_json::from_slice::<Cached>(&b).ok());
     let table = cached.as_ref().map_or_else(builtin, |c| c.fonts.clone());
     let (on_disk, missing): (Vec<Entry>, Vec<Entry>) = table.iter().cloned().partition(|e| ttf_path(&dir, e).exists());
+    // lint-allow(main-thread-io): the same startup read of the fonts already on disk, before any window opens.
     register(on_disk.iter().filter_map(|e| loaded(e, std::fs::read(ttf_path(&dir, e)).ok()?)).collect(), cx);
     let (sender, mut batches) = futures::channel::mpsc::unbounded::<Vec<Loaded>>();
     crate::discord::runtime().spawn(async move {
@@ -98,6 +100,7 @@ pub(crate) fn start(cx: &mut App) {
             // Tried again next launch; the table in hand stays.
             Err(e) => return eprintln!("[name fonts] reading Discord's font table: {e}"),
         };
+        // lint-allow(main-thread-io): inside the network runtime's own task, never on the UI thread.
         let _ = std::fs::write(dir.join("table.json"), serde_json::to_vec(&Cached { build, checked: now, fonts: fonts.clone() }).unwrap_or_default());
         let new: Vec<Entry> = fonts.into_iter().filter(|f| !table.contains(f)).collect();
         let _ = sender.unbounded_send(fetch(&http, &dir, &new).await);
@@ -111,6 +114,7 @@ pub(crate) fn start(cx: &mut App) {
             });
         }
     })
+    // lint-allow(detached-task): ends when the font fetcher drops its sender, and holds no view.
     .detach();
 }
 

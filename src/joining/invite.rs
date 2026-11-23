@@ -1,6 +1,6 @@
 // The invite screen: what you see before joining from an invite link (design/explore-joining.html §0).
 use gpui_kit::{
-    Animation, AnimationExt, AnyElement, App, AppContext, Context, Corners, Div, Entity, Focusable, FontWeight, InteractiveElement, IntoElement, MouseButton, ParentElement, Stateful, StatefulInteractiveElement, Styled, StyledImage, Window,
+    AnyElement, App, AppContext, Context, Corners, Div, Entity, Focusable, FontWeight, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, Stateful, StatefulInteractiveElement, Styled, StyledImage, Window,
     base::{Transition, transition},
     component::{
         Icon,
@@ -30,6 +30,17 @@ const NARROW: f32 = 440.;
 const LEFT: f32 = 420.;
 // Below this window width the splash column drops and the card goes to one column.
 const TWO_COLUMNS_FROM: f32 = 700.;
+// A card beside a splash is at least this tall, so the image has height to fill.
+const SPLASH_MIN_HEIGHT: f32 = 420.;
+// The server's tile, its loading stand-in and the invalid mark, all one size.
+const TILE: f32 = 72.;
+// The server name's size and leading, and its verified mark.
+const NAME_SIZE: f32 = 24.;
+const NAME_LEADING: f32 = 30.;
+const VERIFIED_MARK: f32 = 22.;
+// The loading skeleton's label, name (width, height) bars.
+const SKELETON_LABEL: f32 = 180.;
+const SKELETON_NAME: (f32, f32) = (220., 26.);
 
 pub struct InviteView {
     code: String,
@@ -57,7 +68,7 @@ impl Waffle {
     // An invite link was opened: show the server before joining.
     pub(crate) fn open_invite(&mut self, code: String, cx: &mut Context<Self>) {
         self.join.invite = Some(InviteView::new(code.clone(), Preview::Loading, &self.account_settings));
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the invite dialog is drawn by the Overlays view, which re-renders only with the app
         self.server_call(api::invite(&code), move |this, result, _| {
             let Some(view) = this.join.invite.as_mut().filter(|v| v.code == code) else { return };
             view.preview = preview(result);
@@ -89,19 +100,19 @@ impl Waffle {
         let typed = view.nickname.map(|n| n.read(cx).value().to_string()).unwrap_or_default();
         self.join.invite_settings.insert(invite.guild_id, Picked { nickname: picked_nickname(&typed), allow_dms: view.allow_dms, show_activity: view.show_activity });
         self.join_invite(view.code, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the invite dialog is drawn by the Overlays view, which re-renders only with the app
     }
 
     fn close_invite(&mut self, cx: &mut Context<Self>) {
         self.join.invite = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the invite dialog is drawn by the Overlays view, which re-renders only with the app
     }
 
     fn edit_invite(&mut self, cx: &mut Context<Self>, f: impl FnOnce(&mut InviteView)) {
         if let Some(view) = self.join.invite.as_mut() {
             f(view);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the invite dialog is drawn by the Overlays view, which re-renders only with the app
     }
 
     pub(crate) fn invite_overlay(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -149,27 +160,18 @@ impl Waffle {
     fn invite_settings(&self, view: &InviteView, window: &mut Window, cx: &mut Context<Self>) -> Div {
         let open = view.settings_open;
         let angle = transition("invite-settings-chevron", if open { 90. } else { 0. }, Transition::new(ui::DUR_POP).easing(motion::ease_out()), window, cx);
-        let (strong, muted, hover) = (palette::strong(cx), palette::muted(cx), palette::hover(cx));
-        let head = div()
-            .id("invite-settings")
-            .w_full()
-            .flex()
-            .items_center()
+        let (strong, muted) = (palette::strong(cx), palette::muted(cx));
+        let head = ui::menu_row("invite-settings", cx)
             .gap_3()
             .px_3p5()
             .py_3()
-            .squircle(16.)
-            .cursor_pointer()
-            .hover(move |s| s.bg(hover))
+            .squircle(ui::RADIUS_MD)
             .text_color(strong)
-            .child(Icon::new(Glyph::Settings).size(ui::ICON_XL))
+            .child(Icon::new(Glyph::Settings).size(ui::ICON_XL).text_color(strong))
             .child(
-                div()
+                ui::col().min_h_0()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .child(div().font_weight(FontWeight::SEMIBOLD).child("Server Settings"))
+                    .child(div().font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Server Settings"))
                     .child(div().text_size(ui::TEXT_DETAIL).text_color(muted).child("You can customize these at any time")),
             )
             .child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD).text_color(muted).rotate(gpui_kit::Radians(angle.to_radians())))
@@ -183,18 +185,19 @@ impl Waffle {
         let activity = self.account_settings.show_current_game.then(|| {
             ui::toggle_row("invite-activity", "Show your activity status", None, view.show_activity, window, cx).on_click(cx.listener(|this, _, _, cx| this.edit_invite(cx, |v| v.show_activity = !v.show_activity)))
         });
-        let body = div().px_3p5().pt_1().pb_3p5().flex().flex_col().gap_3().children(nickname).child(dms).children(activity);
-        div().w_full().mt_5().squircle(16.).bg(palette::surface(palette::Level::Group, cx)).text_left().child(head).children(unfold("invite-settings-body", open, body, window, cx))
+        let body = ui::col().px_3p5().pt_1().pb_3p5().gap_3().children(nickname).child(dms).children(activity);
+        let card = div().w_full().squircle(ui::RADIUS_MD).bg(palette::surface(palette::Level::Group, cx)).text_left().child(head).children(unfold("invite-settings-body", open, body, window, cx));
+        ui::col().w_full().pt_5().child(card)
     }
 }
 
 // The card over the scrim, popping in from its centre: the column, and the splash beside it when the
 // server has one and the window is wide enough.
-fn shell(splash: Option<(&str, &str)>, wide: bool, left: Div, window: &mut Window, cx: &App) -> AnyElement {
+fn shell(splash: Option<(&str, &str)>, wide: bool, left: Div, window: &mut Window, cx: &mut App) -> AnyElement {
     let two_columns = wide && splash.is_some();
     let room = f32::from(window.viewport_size().width) - 32.;
     let width = if two_columns { WIDE } else { NARROW }.min(room);
-    let right_corners = Corners { top_left: px(0.), top_right: px(RADIUS_XL), bottom_right: px(RADIUS_XL), bottom_left: px(0.) };
+    let right_corners = Corners { top_left: Pixels::ZERO, top_right: px(RADIUS_XL), bottom_right: px(RADIUS_XL), bottom_left: Pixels::ZERO };
     let panel = splash.filter(|_| two_columns).map(|(url, name)| {
         // Under the image while it loads, and in its place if it fails: the server name's hue, as the
         // Server Guide banner does, so the column is never a blank hole.
@@ -203,58 +206,44 @@ fn shell(splash: Option<(&str, &str)>, wide: bool, left: Div, window: &mut Windo
         ui::edge(div().flex_1().relative().bg(fallback), right_corners)
             .child(ui::media(url.to_owned(), right_corners).absolute().inset_0().size_full().object_fit(gpui_kit::ObjectFit::Cover))
     });
-    div()
-        .id("invite-card")
-        .w(px(width))
+    let body = ui::row()
+        .items_stretch()
+        .w_full()
         // Only beside a splash: the image wants the height. Alone, a card is as tall as what it says.
-        .when(two_columns, |card| card.min_h(px(420.)))
-        .flex()
-        .squircle(RADIUS_XL)
-        .overflow_hidden()
-        .bg(palette::surface(palette::Level::Raised, cx))
-        .shadow(ui::shadow_pop(cx))
-        .text_size(ui::TEXT_SM)
-        .text_color(palette::text(cx))
-        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .when(two_columns, |body| body.min_h(px(SPLASH_MIN_HEIGHT)))
         .child(left.when(two_columns, |l| l.w(px(LEFT)).flex_none()).when(!two_columns, |l| l.flex_1()))
-        .children(panel)
-        .with_animation("invite-pop", Animation::new(ui::DUR_PANEL), |card, t| {
-            let t = motion::ease_out().sample(t);
-            card.opacity(t).scale(0.95 + 0.05 * t)
-        })
-        .into_any_element()
+        .children(panel);
+    ui::dialog("invite-card", width, body, window, cx).into_any_element()
 }
 
 fn column() -> Div {
-    div().min_w_0().pt_10().px_7().pb_7().flex().flex_col().items_center().text_center().gap_1p5()
+    ui::col().pt_10().px_7().pb_7().items_center().text_center().gap_1p5()
 }
 
 fn actions() -> Div {
-    div().w_full().mt_auto().pt_6().flex().flex_col().gap_2()
+    // Grows to fill the column and sits its buttons at the foot.
+    ui::col().w_full().flex_grow(1.).justify_end().pt_6().gap_2()
 }
 
 // The server's tile, `label`, its name (with the verified mark) and its counts.
 fn heading(invite: &Invite, label: &'static str, cx: &App) -> Div {
     let verified = invite.features.iter().any(|f| f == features::VERIFIED || f == features::PARTNERED);
-    let count = |n: Option<u64>, label: &'static str, dot| n.map(|n| div().flex().items_center().gap_1p5().child(div().size_2().rounded_full().bg(dot)).child(format!("{} {label}", grouped(n))));
-    let name = div()
-        .flex()
-        .items_center()
+    let count = |n: Option<u64>, label: &'static str, dot| n.map(|n| ui::row().gap_1p5().child(div().size_2().rounded_full().bg(dot)).child(format!("{} {label}", grouped(n))));
+    let name = ui::row()
         .justify_center()
         .gap_2()
-        .text_size(px(24.))
-        .line_height(px(30.))
+        .text_size(px(NAME_SIZE))
+        .line_height(px(NAME_LEADING))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(palette::strong(cx))
-        .when(verified, |d| d.child(Icon::new(Glyph::CheckCircle).size(px(22.)).flex_none().text_color(palette::positive_ink(cx))))
+        .when(verified, |d| d.child(Icon::new(Glyph::CheckCircle).size(px(VERIFIED_MARK)).flex_none().text_color(palette::positive_ink(cx))))
         .child(div().min_w_0().child(invite.name.clone()));
     column()
-        .child(div().mb_2p5().child(ui::server_tile(invite.icon.as_deref(), &invite.name, 72., cx)))
+        .child(div().pb_2p5().child(ui::server_tile(invite.icon.as_deref(), &invite.name, TILE, cx)))
         .child(div().text_color(palette::muted(cx)).child(label))
         .child(name)
         .child(
-            div()
-                .flex()
+            ui::row().items_stretch()
                 .flex_wrap()
                 .justify_center()
                 .gap_x_3p5()
@@ -266,20 +255,20 @@ fn heading(invite: &Invite, label: &'static str, cx: &App) -> Div {
 
 fn loading(cx: &App) -> Div {
     column()
-        .child(ui::skeleton("invite-loading-tile", 22., cx).size(px(72.)).mb_2p5())
-        .child(ui::skeleton("invite-loading-label", 7., cx).w(px(180.)).h_3p5())
-        .child(ui::skeleton("invite-loading-name", 10., cx).w(px(220.)).h(px(26.)))
+        .child(div().pb_2p5().child(ui::skeleton("invite-loading-tile", 22., cx).size(px(TILE))))
+        .child(ui::skeleton("invite-loading-label", 7., cx).w(px(SKELETON_LABEL)).h_3p5())
+        .child(ui::skeleton("invite-loading-name", 10., cx).w(px(SKELETON_NAME.0)).h(px(SKELETON_NAME.1)))
         .child(ui::skeleton("invite-loading-counts", 7., cx).w_40().h_3p5())
         .child(actions().child(ui::skeleton("invite-loading-accept", ui::RADIUS_MD, cx).w_full().h_11()))
 }
 
 fn invalid(cx: &mut Context<Waffle>) -> Div {
-    let tile = div().size(px(72.)).mb_2p5().squircle(22.).bg(palette::selected(cx)).flex().items_center().justify_center().text_color(palette::faint(cx)).child(Icon::new(Glyph::Prohibit).size_8());
+    let tile = div().pb_2p5().child(ui::row().size(px(TILE)).squircle(22.).bg(palette::selected(cx)).justify_center().text_color(palette::faint(cx)).child(Icon::new(Glyph::Prohibit).size_8()));
     // Not verified: the button label on Discord's invalid-invite screen.
     let okay = ui::button("invite-okay", Tone::Secondary, cx).large().w_full().child("Okay").on_click(cx.listener(|this, _, _, cx| this.close_invite(cx)));
     column()
         .child(tile)
-        .child(div().text_size(px(24.)).line_height(px(30.)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Invite Invalid"))
+        .child(div().text_size(px(NAME_SIZE)).line_height(px(NAME_LEADING)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Invite Invalid"))
         .child(div().text_color(palette::muted(cx)).child("This invite may be expired, or you might not have permission to join."))
         .child(actions().child(okay))
 }
@@ -303,11 +292,9 @@ fn unfold(id: &'static str, open: bool, body: Div, window: &mut Window, cx: &mut
         return None;
     }
     Some(
-        div()
+        ui::col()
             .h(px(height))
             .overflow_hidden()
-            .flex()
-            .flex_col()
             .child(body.flex_none())
             .on_children_prepainted(move |bounds, _, cx| {
                 let Some(body) = bounds.first() else { return };

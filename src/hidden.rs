@@ -45,7 +45,7 @@ impl Waffle {
         if !self.shown_folds.remove(&first_id) {
             self.shown_folds.insert(first_id);
         }
-        cx.notify();
+        self.redraw(crate::part::Column::Main, cx);
     }
 
     /// gpui's list keeps each row's measured height, so rows whose fold changed since the last frame (a block,

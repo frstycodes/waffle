@@ -5,7 +5,7 @@ use std::{collections::HashMap, time::Duration};
 use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, BoxShadow, Context, Div, ElementId, FontWeight, Hsla, MouseButton, Pixels, Radians, ScrollHandle, SharedString, Stateful, Task, Window, canvas,
     component::Icon,
-    div, img, point, prelude::*, px, relative,
+    div, img, prelude::*, px, relative,
 };
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +23,14 @@ pub(crate) mod proto;
 pub(crate) mod registry;
 mod updates;
 mod view;
+mod meter;
+mod page;
+mod prefs;
+mod voice_pages;
+use meter::*;
+use page::NAV;
+pub use page::Page;
+pub use prefs::*;
 
 #[cfg(debug_assertions)]
 pub(crate) use profiles::ProfileTab;
@@ -37,584 +45,6 @@ use crate::{
     ui::{self, Squircle, Tone},
     voice,
 };
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Page {
-    Account,
-    Profiles,
-    ContentSocial,
-    Appearance,
-    Accessibility,
-    VoiceVideo,
-    Chat,
-    Notifications,
-    Keybinds,
-    Advanced,
-    Updates,
-    ActivityPrivacy,
-}
-
-impl Page {
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            Page::Account => "My account",
-            Page::Profiles => "Profiles",
-            Page::ContentSocial => "Content and social",
-            Page::Appearance => "Appearance",
-            Page::Accessibility => "Accessibility",
-            Page::VoiceVideo => "Voice and video",
-            Page::Chat => "Chat",
-            Page::Notifications => "Notifications",
-            Page::Keybinds => "Keybinds",
-            Page::Advanced => "Advanced",
-            Page::Updates => "Updates",
-            Page::ActivityPrivacy => "Activity privacy",
-        }
-    }
-
-    fn glyph(self) -> Glyph {
-        match self {
-            Page::Account => Glyph::UserCircle,
-            Page::Profiles => Glyph::Id,
-            Page::ContentSocial => Glyph::Shield,
-            Page::Appearance => Glyph::Palette,
-            Page::Accessibility => Glyph::Eye,
-            Page::VoiceVideo => Glyph::Mic,
-            Page::Chat => Glyph::ChatRound,
-            Page::Notifications => Glyph::Bell,
-            Page::Keybinds => Glyph::Keyboard,
-            Page::Advanced => Glyph::Settings,
-            Page::Updates => Glyph::Download,
-            Page::ActivityPrivacy => Glyph::Game,
-        }
-    }
-
-    // In-page anchors listed under the open page.
-    fn sections(self) -> &'static [&'static str] {
-        match self {
-            Page::VoiceVideo => &["Voice", "Camera", "Sounds", "Advanced"],
-            _ => &[],
-        }
-    }
-}
-
-// Discord's three headings. My account sits on its own as the identity row at the top of the nav.
-const NAV: [(&str, &[Page]); 3] = [
-    ("User settings", &[Page::Profiles, Page::ContentSocial]),
-    ("App settings", &[Page::Appearance, Page::Accessibility, Page::VoiceVideo, Page::Chat, Page::Notifications, Page::Keybinds, Page::Advanced, Page::Updates]),
-    ("Activity settings", &[Page::ActivityPrivacy]),
-];
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-pub enum ThemePref {
-    #[default]
-    System,
-    Dark,
-    Light,
-}
-
-// Discord's choices and ranges (docs/discord-settings-re.md).
-pub const CHAT_FONT_SIZES: [u8; 7] = [12, 14, 15, 16, 18, 20, 24];
-pub const GROUP_SPACINGS: [u8; 5] = [0, 4, 8, 16, 24];
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-pub enum Density {
-    Compact,
-    #[default]
-    Default,
-    Spacious,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-pub enum RoleStyle {
-    #[default]
-    InNames,
-    NextToNames,
-    Hidden,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-pub enum Spoilers {
-    #[default]
-    OnClick,
-    IfModerator,
-    Always,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-pub enum InputProfile {
-    VoiceIsolation,
-    Studio,
-    #[default]
-    Custom,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-pub enum NoiseMode {
-    #[default]
-    Advanced,
-    Standard,
-}
-
-// The interface fonts Appearance offers: (family as the OS names it, label), the first the default. Figtree and
-// Gabarito are bundled (Figtree's weights cut from its variable font, so gpui can pick each); the rest are macOS's.
-// The bundled faces (OFL, in assets/fonts), used until another installed font is picked.
-pub const UI_FONT: &str = "Figtree";
-pub const MONO_FONT: &str = "Roboto Mono";
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Prefs {
-    pub theme: ThemePref,
-    // macOS's Liquid Glass behind the sidebar, where the system has it.
-    pub native_sidebar: bool,
-    // The interface's font family: Figtree (bundled) unless picked in Appearance.
-    pub ui_font: String,
-    pub mono_font: String,
-    // Discord's "Enable Reduced Motion": used while `reduce_motion_sync` is off, which follows the OS instead.
-    pub reduce_motion: bool,
-    pub reduce_motion_sync: bool,
-    // Accessibility, kept on this computer as Discord does (docs/discord-settings-re.md §2).
-    // Text size in chat, one of `CHAT_FONT_SIZES`.
-    pub chat_font_size: u8,
-    // Space between message groups, one of `GROUP_SPACINGS`; None follows the display (16 cozy, 0 compact).
-    pub group_spacing: Option<u8>,
-    pub ui_density: Density,
-    // 0..=1, in 0.05 steps. Leaves images, video and user colours alone unless `desaturate_user_colors`.
-    pub saturation: f32,
-    pub desaturate_user_colors: bool,
-    pub high_contrast: bool,
-    // Discord's "Show on/off indicators": a tick or cross inside each switch's thumb.
-    pub switch_icons: bool,
-    pub role_style: RoleStyle,
-    pub underline_links: bool,
-    pub display_name_styles: bool,
-    // Toasts stay at least this long, 3..=20 s.
-    pub min_toast_secs: u8,
-    // Text-to-speech rate, 0..=10 in 0.25 steps, 1 is normal.
-    pub tts_rate: f32,
-    // Chat. Not verified: Discord syncs these three, but only in the protobuf settings Waffle doesn't use
-    // (`display_compact_avatars`, `render_spoilers`); the send button is local in Discord too.
-    pub compact_avatars: bool,
-    pub spoilers: Spoilers,
-    pub send_button: bool,
-    pub app_icon: crate::app_icon::AppIcon,
-    pub input_device: Option<String>,
-    pub output_device: Option<String>,
-    pub camera: Option<String>,
-    // 0..=2, 1 is 100%.
-    pub input_volume: f32,
-    pub output_volume: f32,
-    pub input_profile: InputProfile,
-    pub sensitivity_auto: bool,
-    // -100..=0 dB.
-    pub sensitivity_db: f32,
-    // Discord's "Advanced Voice Activity": a neural speech detector drives automatic sensitivity.
-    pub advanced_voice_activity: bool,
-    pub noise_suppression: bool,
-    // Which suppressor while it's on: DeepFilterNet (Discord's Krisp slot) or WebRTC's.
-    pub noise_mode: NoiseMode,
-    pub echo_cancellation: bool,
-    pub auto_gain: bool,
-    // Global Attenuation: percent other apps are lowered (0 = off), and when.
-    pub attenuation: u8,
-    pub attenuate_self: bool,
-    pub attenuate_others: bool,
-    pub silence_warning: bool,
-    pub qos: bool,
-    pub push_to_talk: bool,
-    pub ptt_release_ms: u32,
-    pub silenced_cues: Vec<Cue>,
-    pub keybinds: Vec<Keybind>,
-    // Per-user listening volume (0..=2) and local mutes, kept across calls as Discord does.
-    pub user_volumes: HashMap<String, f32>,
-    pub local_mutes: Vec<String>,
-    // Activities you started, newest first: the launcher's Recent.
-    pub recent_activities: Vec<String>,
-    // Sites whose links activities may open without asking (Waffle's "Trust this domain").
-    pub trusted_link_domains: Vec<String>,
-    // Discord's per-user "Mute Soundboard" and "Disable Video", kept locally like the volume.
-    pub soundboard_mutes: Vec<String>,
-    pub hidden_video: Vec<String>,
-    // Discord's Soundboard Volume as it stores it: amplitude, 100 = as uploaded, 0 = soundboard muted.
-    // Shown on its perceptual scale (soundboard::perceptual).
-    pub soundboard_volume: f32,
-    // Soundboard favorites by sound id, oldest first, and how often we've played each sound. Discord syncs
-    // both in its frecency settings; Waffle keeps them here.
-    pub soundboard_favorites: Vec<String>,
-    pub soundboard_uses: Vec<(String, u32)>,
-    // Voice channels where our own Go Live's preview is hidden (Discord's per-channel "Hide Preview").
-    pub hidden_self_streams: Vec<String>,
-    // Registered games: ids not to detect, programs added as games, and every game seen here.
-    pub games_off: Vec<String>,
-    pub games_added: Vec<crate::games::Added>,
-    pub games_seen: Vec<crate::games::Seen>,
-    // How often we've reacted with each emoji, for the "frequently used" rows.
-    pub emoji_uses: Vec<(crate::discord::Emoji, u32)>,
-    // When each emoji was last used (unix seconds, newest last, at most FRECENCY_SAMPLES), for Discord's frecency.
-    pub emoji_times: Vec<(crate::discord::Emoji, Vec<i64>)>,
-    pub sticker_uses: Vec<(crate::discord::Sticker, u32)>,
-    pub mention_filters: crate::inbox::MentionFilters,
-    // The voice channel chat's width beside the call, and the voice channels whose new message
-    // previews are off (Discord's "Show New Message Previews", local only).
-    pub call_chat_width: f32,
-    pub call_previews_off: Vec<String>,
-    // Go Live quality: height (0 = source), frame rate, and whether the source's sound goes too.
-    pub stream_resolution: u32,
-    pub stream_fps: u32,
-    pub stream_audio: bool,
-    // What we last went live with: preselected in the picker, reused by the Toggle Screen Share keybind.
-    pub last_share: Option<crate::go_live::LastShare>,
-    // Generations of default keybinds this file has been given. A file from before the field reads 0
-    // (the field's own default, not `Prefs::default`'s), so it gets newer defaults once; deleting one
-    // afterwards sticks.
-    #[serde(default)]
-    pub keybinds_version: u32,
-    // Signed-in accounts (no tokens: those live in the keyring) and the one to start with.
-    pub accounts: Vec<crate::accounts::Account>,
-    pub account: Option<String>,
-    pub desktop_notifications: bool,
-    pub dock_badge: bool,
-    pub clock_24h: bool,
-    // Discord keeps this in its protobuf settings (textAndImages.viewImageDescriptions), which Waffle
-    // doesn't sync, so it's local.
-    pub show_image_descriptions: bool,
-    // Discord's "Allow playback and usage of /tts command" (textAndImages.enableTtsCommand), kept locally.
-    pub tts_command: bool,
-    // Off: the updater still checks and says so, but downloads only when asked.
-    pub auto_download_updates: bool,
-    // Recent message searches per account id, newest first.
-    pub search_history: HashMap<String, Vec<crate::search::Saved>>,
-    // Window zoom, 1 = 100% (⌘= / ⌘- / ⌘0).
-    pub zoom: f32,
-    // The server voice channel (guild, channel) a restart left, offered back once the new session is ready.
-    pub rejoin_voice: Option<(String, String)>,
-    // Announcement channels whose "Share with your followers!" bump was turned off with Don't show again.
-    pub publish_bump_hidden: Vec<String>,
-    // Discord's one playback speed for every voice message.
-    pub voice_rate: f32,
-    // Where each voice message was left, by attachment id, oldest first; Discord keeps 25.
-    pub voice_resume: Vec<(String, f32)>,
-}
-
-const KEYBINDS_VERSION: u32 = 1;
-const STUDIO_THRESHOLD_DB: f32 = -84.;
-
-impl Default for Prefs {
-    fn default() -> Self {
-        Self {
-            theme: ThemePref::System,
-            native_sidebar: true,
-            ui_font: UI_FONT.into(),
-            mono_font: MONO_FONT.into(),
-            reduce_motion: false,
-            reduce_motion_sync: true,
-            chat_font_size: 16,
-            group_spacing: None,
-            ui_density: Density::Default,
-            saturation: 1.,
-            desaturate_user_colors: false,
-            high_contrast: false,
-            switch_icons: false,
-            role_style: RoleStyle::InNames,
-            underline_links: false,
-            display_name_styles: true,
-            min_toast_secs: 3,
-            tts_rate: 1.,
-            compact_avatars: false,
-            spoilers: Spoilers::OnClick,
-            send_button: false,
-            app_icon: crate::app_icon::AppIcon::default(),
-            input_device: None,
-            output_device: None,
-            camera: None,
-            input_volume: 1.,
-            output_volume: 1.,
-            input_profile: InputProfile::Custom,
-            sensitivity_auto: true,
-            sensitivity_db: -60.,
-            advanced_voice_activity: true,
-            noise_suppression: true,
-            noise_mode: NoiseMode::Advanced,
-            echo_cancellation: true,
-            auto_gain: true,
-            attenuation: 0,
-            attenuate_self: false,
-            attenuate_others: true,
-            silence_warning: true,
-            qos: false,
-            push_to_talk: false,
-            ptt_release_ms: 20,
-            silenced_cues: Vec::new(),
-            keybinds: vec![Keybind { action: Action::PushToTalk, keys: Some("`".into()) }, share_keybind()],
-            user_volumes: HashMap::new(),
-            local_mutes: Vec::new(),
-            recent_activities: Vec::new(),
-            trusted_link_domains: Vec::new(),
-            soundboard_mutes: Vec::new(),
-            hidden_video: Vec::new(),
-            soundboard_volume: 100.,
-            soundboard_favorites: Vec::new(),
-            soundboard_uses: Vec::new(),
-            hidden_self_streams: Vec::new(),
-            games_off: Vec::new(),
-            games_added: Vec::new(),
-            games_seen: Vec::new(),
-            emoji_uses: Vec::new(),
-            emoji_times: Vec::new(),
-            sticker_uses: Vec::new(),
-            mention_filters: crate::inbox::MentionFilters::default(),
-            call_chat_width: crate::call::CHAT_MIN_WIDTH,
-            call_previews_off: Vec::new(),
-            stream_resolution: 720,
-            stream_fps: 30,
-            stream_audio: true,
-            last_share: None,
-            keybinds_version: KEYBINDS_VERSION,
-            accounts: Vec::new(),
-            account: None,
-            desktop_notifications: true,
-            dock_badge: true,
-            clock_24h: false,
-            show_image_descriptions: false,
-            tts_command: true,
-            auto_download_updates: true,
-            search_history: HashMap::new(),
-            zoom: 1.,
-            rejoin_voice: None,
-            publish_bump_hidden: Vec::new(),
-            voice_rate: 1.,
-            voice_resume: Vec::new(),
-        }
-    }
-}
-
-fn share_keybind() -> Keybind {
-    Keybind { action: Action::ToggleScreenShare, keys: Some(hotkeys::SHARE_KEYS.into()) }
-}
-
-impl Prefs {
-    pub fn load() -> Self {
-        let text = prefs_file().and_then(|path| std::fs::read_to_string(path).ok()).unwrap_or_default();
-        let mut prefs: Self = serde_json::from_str(&text).unwrap_or_default();
-        // Before the sync switch, Reduce motion added to the OS setting; a file that had it on keeps it on.
-        if prefs.reduce_motion && !text.contains("\"reduce_motion_sync\"") {
-            prefs.reduce_motion_sync = false;
-        }
-        prefs.add_new_keybinds();
-        // 480p left the picker; the nearest offered quality takes its place.
-        if prefs.stream_resolution == 480 {
-            prefs.stream_resolution = 720;
-        }
-        prefs
-    }
-
-    fn add_new_keybinds(&mut self) {
-        if self.keybinds_version >= KEYBINDS_VERSION {
-            return;
-        }
-        if !self.keybinds.iter().any(|k| k.action == Action::ToggleScreenShare) {
-            self.keybinds.push(share_keybind());
-        }
-        self.keybinds_version = KEYBINDS_VERSION;
-    }
-
-    pub fn reduces_motion(&self) -> bool {
-        if self.reduce_motion_sync { crate::material::system_reduce_motion() } else { self.reduce_motion }
-    }
-
-    // Discord's default spacing is 16 in cozy and 0 in compact until it's moved.
-    pub fn group_spacing(&self, compact: bool) -> u8 {
-        self.group_spacing.unwrap_or(if compact { 0 } else { 16 })
-    }
-
-    pub(crate) fn save(&self) {
-        let Some(path) = prefs_file() else { return };
-        if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        if let Ok(text) = serde_json::to_string_pretty(self) {
-            let _ = std::fs::write(path, text);
-        }
-    }
-
-    // Discord's input profiles overlay the stored switches (MediaEngineStore `e7`) rather than
-    // overwrite them, so going back to Custom restores what was there.
-    fn set_profile(&mut self, profile: InputProfile) {
-        self.input_profile = profile;
-    }
-}
-
-impl Prefs {
-    pub fn voice_settings(&self) -> voice::VoiceSettings {
-        voice::VoiceSettings {
-            input_device: self.input_device.clone(),
-            output_device: self.output_device.clone(),
-            input_volume: self.input_volume,
-            output_volume: self.output_volume,
-            input_mode: self.input_mode(),
-            echo_cancellation: self.echo_cancellation(),
-            noise_suppression: self.noise(),
-            auto_gain: self.auto_gain(),
-            attenuation: self.attenuation(),
-            qos: self.qos,
-        }
-    }
-
-    // Voice Isolation: Krisp-tier suppression, echo cancellation, AGC, automatic sensitivity with
-    // Advanced Voice Activity. Studio: everything off, voice activity at a fixed -84 dB.
-    fn noise(&self) -> voice::NoiseSuppression {
-        match (self.input_profile, self.noise_suppression, self.noise_mode) {
-            (InputProfile::VoiceIsolation, ..) => voice::NoiseSuppression::Advanced,
-            (InputProfile::Studio, ..) | (InputProfile::Custom, false, _) => voice::NoiseSuppression::Off,
-            (InputProfile::Custom, true, NoiseMode::Advanced) => voice::NoiseSuppression::Advanced,
-            (InputProfile::Custom, true, NoiseMode::Standard) => voice::NoiseSuppression::Standard,
-        }
-    }
-
-    fn echo_cancellation(&self) -> bool {
-        self.profile_switch(self.echo_cancellation)
-    }
-
-    fn auto_gain(&self) -> bool {
-        self.profile_switch(self.auto_gain)
-    }
-
-    fn profile_switch(&self, custom: bool) -> bool {
-        match self.input_profile {
-            InputProfile::VoiceIsolation => true,
-            InputProfile::Studio => false,
-            InputProfile::Custom => custom,
-        }
-    }
-
-    fn input_mode(&self) -> voice::InputMode {
-        let ptt = voice::InputMode::PushToTalk { release_delay_ms: self.ptt_release_ms };
-        match self.input_profile {
-            InputProfile::Studio => voice::InputMode::VoiceActivity { auto: false, threshold_db: STUDIO_THRESHOLD_DB, advanced: false },
-            _ if self.push_to_talk => ptt,
-            InputProfile::VoiceIsolation => voice::InputMode::VoiceActivity { auto: true, threshold_db: self.sensitivity_db, advanced: true },
-            InputProfile::Custom => {
-                voice::InputMode::VoiceActivity { auto: self.sensitivity_auto, threshold_db: self.sensitivity_db, advanced: self.advanced_voice_activity }
-            }
-        }
-    }
-
-    fn attenuation(&self) -> voice::Attenuation {
-        voice::Attenuation { strength: self.attenuation.min(100), when_self_speaks: self.attenuate_self, when_others_speak: self.attenuate_others }
-    }
-
-    pub fn apply_to(&self, session: &voice::VoiceSession) {
-        session.set_input_device(self.input_device.clone());
-        session.set_output_device(self.output_device.clone());
-        session.set_input_volume(self.input_volume);
-        session.set_output_volume(self.output_volume);
-        session.set_input_mode(self.input_mode());
-        session.set_echo_cancellation(self.echo_cancellation());
-        session.set_noise_suppression(self.noise());
-        session.set_auto_gain(self.auto_gain());
-        session.set_attenuation(self.attenuation());
-    }
-}
-
-impl Prefs {
-    // By Discord's frecency, topped up with Discord's own defaults when we haven't reacted enough yet.
-    // Synced with Discord's settings-proto (frecency_sync.rs).
-    pub fn frequent_emojis(&self, n: usize, pad: &[&str]) -> Vec<crate::discord::Emoji> {
-        let now = chrono::Utc::now().timestamp();
-        let mut uses = self.emoji_uses.clone();
-        uses.sort_by_key(|(emoji, count)| {
-            let times = self.emoji_times.iter().find(|(e, _)| e == emoji).map_or(&[][..], |(_, t)| t.as_slice());
-            std::cmp::Reverse(frecency(*count, times, now))
-        });
-        let mut out: Vec<crate::discord::Emoji> = uses.into_iter().map(|(e, _)| e).take(n).collect();
-        for name in pad {
-            if out.len() >= n {
-                break;
-            }
-            let emoji = crate::discord::Emoji::unicode(name);
-            if !out.contains(&emoji) {
-                out.push(emoji);
-            }
-        }
-        out
-    }
-
-    // Most used first, counted like emoji.
-    pub fn frequent_stickers(&self, n: usize) -> Vec<crate::discord::Sticker> {
-        let mut uses = self.sticker_uses.clone();
-        uses.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
-        uses.into_iter().map(|(s, _)| s).take(n).collect()
-    }
-
-    pub fn record_sticker(&mut self, sticker: &crate::discord::Sticker) {
-        match self.sticker_uses.iter_mut().find(|(s, _)| s.id == sticker.id) {
-            Some((_, count)) => *count += 1,
-            None => self.sticker_uses.push((sticker.clone(), 1)),
-        }
-    }
-
-    // Uses from another device (Discord's synced frecency): the higher count, and both sets of times.
-    pub fn merge_emoji_uses(&mut self, remote: Vec<(crate::discord::Emoji, u32, Vec<i64>)>) {
-        for (emoji, total, times) in remote {
-            match self.emoji_uses.iter_mut().find(|(e, _)| *e == emoji) {
-                Some((_, count)) => *count = (*count).max(total),
-                None => self.emoji_uses.push((emoji.clone(), total)),
-            }
-            match self.emoji_times.iter_mut().find(|(e, _)| *e == emoji) {
-                Some((_, kept)) => {
-                    kept.extend(times);
-                    kept.sort_unstable();
-                    kept.dedup();
-                    let excess = kept.len().saturating_sub(FRECENCY_SAMPLES);
-                    kept.drain(..excess);
-                }
-                None => self.emoji_times.push((emoji, times.into_iter().rev().take(FRECENCY_SAMPLES).rev().collect())),
-            }
-        }
-    }
-
-    pub fn record_emoji(&mut self, emoji: &crate::discord::Emoji) {
-        match self.emoji_uses.iter_mut().find(|(e, _)| e == emoji) {
-            Some((_, count)) => *count += 1,
-            None => self.emoji_uses.push((emoji.clone(), 1)),
-        }
-        let now = chrono::Utc::now().timestamp();
-        match self.emoji_times.iter_mut().find(|(e, _)| e == emoji) {
-            Some((_, times)) => {
-                times.push(now);
-                let excess = times.len().saturating_sub(FRECENCY_SAMPLES);
-                times.drain(..excess);
-            }
-            None => self.emoji_times.push((emoji.clone(), vec![now])),
-        }
-    }
-}
-
-const FRECENCY_SAMPLES: usize = 10;
-
-// Discord's frecency score (its web client, module 283047): each recent use weighs by its age (100 up
-// to 3 days, 70 to 15, 50 to 30, 30 to 45, 10 to 80, else 1), and the total use count scales their
-// average. A count with no recorded times (from before they were kept) scores as itself.
-fn frecency(total: u32, times: &[i64], now: i64) -> u64 {
-    if times.is_empty() {
-        return u64::from(total);
-    }
-    let weight = |at: &i64| match (now - at) / 86_400 {
-        ..=3 => 100,
-        4..=15 => 70,
-        16..=30 => 50,
-        31..=45 => 30,
-        46..=80 => 10,
-        _ => 1,
-    };
-    let sum: u64 = times.iter().map(weight).sum();
-    (u64::from(total) * sum).div_ceil(times.len() as u64)
-}
-
-fn prefs_file() -> Option<std::path::PathBuf> {
-    Some(crate::data_dir()?.join("settings.json"))
-}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Slider {
@@ -781,15 +211,17 @@ impl Waffle {
     pub(crate) fn open_settings(&mut self, page: Page, window: &mut Window, cx: &mut Context<Self>) {
         self.settings = Some(SettingsView::new(page));
         self.settings_search.update(cx, |state, cx| state.set_value("", window, cx));
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 
     fn open_page(&mut self, page: Page, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(s) = &mut self.settings {
             (s.page, s.section, s.select, s.recording, s.asking) = (page, 0, None, None, None);
-            s.scroll.set_offset(gpui_kit::point(px(0.), px(0.)));
+            s.scroll.set_offset(Default::default());
         }
         self.settings_search.update(cx, |state, cx| state.set_value("", window, cx));
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 
@@ -798,6 +230,7 @@ impl Waffle {
         // The mic test plays the mic back through a speaker stream of its own, outside any call's
         // echo cancellation: left running, it feeds the far end their own voice whenever we talk.
         self.stop_mic_test();
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 
@@ -811,6 +244,7 @@ impl Waffle {
             palette::apply(cx);
         }
         cx.set_reduce_motion(self.prefs.reduces_motion());
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 
@@ -841,160 +275,10 @@ impl Waffle {
                 }
             }
         })
+        // lint-allow(detached-task): a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
         .detach();
     }
 
-    // While a keybind is recording, held keys record it instead of firing anything but releases.
-    fn on_keys_held(&mut self, held: Vec<&'static str>, cx: &mut Context<Self>) {
-        let recording = self.settings.as_ref().and_then(|s| s.recording);
-        let Some(hotkeys) = &mut self.hotkeys else { return };
-        let was_listening = hotkeys.listening;
-        let mut changes = hotkeys.update(held);
-        let recorded = hotkeys.record(recording.is_some());
-        if recording.is_some() {
-            changes.retain(|(_, pressed)| !pressed);
-        }
-        if let (Some(index), Some(keys)) = (recording, recorded) {
-            self.finish_recording(index, keys, cx);
-        }
-        for (action, pressed) in changes {
-            self.on_hotkey(action, pressed, cx);
-        }
-        if !was_listening {
-            cx.notify();
-        }
-    }
-
-    // Escape alone cancels, as in Discord.
-    fn finish_recording(&mut self, index: usize, keys: String, cx: &mut Context<Self>) {
-        if let Some(settings) = &mut self.settings {
-            settings.recording = None;
-        }
-        if keys == "escape" {
-            return cx.notify();
-        }
-        self.update_prefs(cx, |prefs| {
-            if let Some(bind) = prefs.keybinds.get_mut(index) {
-                bind.keys = Some(keys);
-            }
-        });
-    }
-
-    fn on_hotkey(&mut self, action: Action, pressed: bool, cx: &mut Context<Self>) {
-        if !pressed && !action.held() {
-            return;
-        }
-        match action {
-            Action::PushToTalk if self.prefs.push_to_talk => self.set_talk_key(pressed),
-            Action::PushToTalk => {}
-            Action::PushToMute => {
-                if let Some(call) = &self.call {
-                    call.session.set_flags(pressed || self.muted || self.deafened, self.deafened);
-                }
-            }
-            Action::ToggleMute => self.toggle_mute(cx),
-            Action::ToggleDeafen => self.toggle_deafen(cx),
-            Action::ToggleVoiceMode => self.update_prefs(cx, |p| p.push_to_talk = !p.push_to_talk),
-            Action::ToggleScreenShare => self.toggle_share_keybind(cx),
-            Action::Disconnect => self.leave_voice(cx),
-            Action::ToggleVoiceChannelChat => self.toggle_call_chat_keybind(cx),
-            Action::Unassigned => {}
-        }
-        cx.notify();
-    }
-
-    pub(crate) fn toggle_mute(&mut self, cx: &mut Context<Self>) {
-        // Unmuting while deafened undeafens too, as in Discord.
-        let muted = !(self.muted || self.deafened);
-        self.muted = muted;
-        if !muted {
-            self.deafened = false;
-        }
-        self.keep_mic_test_choice();
-        sounds::play(if muted { Cue::Mute } else { Cue::Unmute });
-        self.sync_voice_flags();
-        cx.notify();
-    }
-
-    pub(crate) fn toggle_deafen(&mut self, cx: &mut Context<Self>) {
-        self.deafened = !self.deafened;
-        self.keep_mic_test_choice();
-        sounds::play(if self.deafened { Cue::Deafen } else { Cue::Undeafen });
-        self.sync_voice_flags();
-        // Deafening stops every soundboard sound playing, as Discord's does.
-        if self.deafened {
-            self.soundboard.stop_playing();
-            self.soundboard.close_picker();
-        }
-        cx.notify();
-    }
-
-    // Discord's Mic Test: our processed mic, looped back to the speaker, metered. Deafened while it
-    // runs, so a call's voices don't play over it.
-    fn toggle_mic_test(&mut self, cx: &mut Context<Self>) {
-        if self.mic_test.is_some() {
-            self.stop_mic_test();
-            return cx.notify();
-        }
-        match voice::mic_test(None, &self.prefs.voice_settings()) {
-            Ok((test, mut levels)) => {
-                let task = cx.spawn(async move |this, cx| {
-                    while let Some(level) = futures::StreamExt::next(&mut levels).await {
-                        if this.update(cx, |this, cx| {
-                            this.mic_level = level.db;
-                            if let Some(view) = &mut this.settings {
-                                (view.mic_speaking, view.mic_input) = (level.speaking, level.input_detected);
-                            }
-                            cx.notify();
-                        })
-                        .is_err()
-                        {
-                            return;
-                        }
-                    }
-                    // The test ended by itself (its device failed): give deafen back.
-                    let _ = this.update(cx, |this, cx| {
-                        this.stop_mic_test();
-                        cx.notify();
-                    });
-                });
-                let held = HeldDeafen::hold(&mut self.deafened);
-                self.sync_voice_flags();
-                self.mic_test = Some(MicTestRun { _test: test, _task: task, held });
-            }
-            Err(error) => self.voice_error = Some(error.into()),
-        }
-        cx.notify();
-    }
-
-    // Ends the mic test, if one runs, and restores deafen as the user last chose it.
-    pub(crate) fn stop_mic_test(&mut self) {
-        let Some(run) = self.mic_test.take() else { return };
-        run.held.release(&mut self.deafened);
-        self.mic_level = crate::SILENCE_DB;
-        self.sync_voice_flags();
-    }
-
-    // A mute or deafen toggle during the mic test is what its end gives back.
-    fn keep_mic_test_choice(&mut self) {
-        if let Some(run) = &mut self.mic_test {
-            run.held.chosen(self.deafened);
-        }
-    }
-
-    // While a keybind is recording the key hook records it (on_keys_held); keystrokes here only
-    // cancel on Escape and are kept from the rest of the app.
-    pub(crate) fn record_keystroke(&mut self, keystroke: &gpui_kit::Keystroke, cx: &mut Context<Self>) -> bool {
-        let Some(settings) = &mut self.settings else { return false };
-        if settings.recording.is_none() {
-            return false;
-        }
-        if keystroke.key == "escape" && !keystroke.modifiers.modified() {
-            settings.recording = None;
-            cx.notify();
-        }
-        true
-    }
 
     // Settings take the whole window: the nav on the sidebar tone, one page on the right with a big
     // title, and a close button pinned top right (design/settings.html, .set).
@@ -1028,6 +312,7 @@ impl Waffle {
                 (rank, section)
             })
             .collect();
+        // lint-allow(render-work): one page's groups, a dozen at most
         ranked.sort_by_key(|(rank, _)| *rank);
         let sections: Vec<Section> = ranked.into_iter().map(|(_, s)| s).collect();
         // A search jump scrolls once its page is laid out: the title is the list's first item.
@@ -1052,7 +337,7 @@ impl Waffle {
             .min_w_0()
             .h_full()
             .bg(palette::surface(Level::Page, cx))
-            .child(div().size_full().relative().child(body).child(gpui_kit::component::scroll::Scrollbar::vertical(&scroll)).with_animation(SharedString::from(format!("set-page-{page:?}")), Animation::new(ui::DUR_POP).with_easing(|t| motion::ease_out().sample(t)), |el, t| el.top(px(-4. * (1. - t))).opacity(t)))
+            .child(div().size_full().relative().child(body).child(gpui_kit::component::scroll::Scrollbar::vertical(&scroll)).with_animation(SharedString::from(format!("set-page-{page:?}")), Animation::new(ui::DUR_POP).with_easing(|t| motion::ease_out().sample(t)), |el, t| el.top(px(-PAGE_DROP * (1. - t))).opacity(t)))
             .children(bar)
             .children(undo)
             .child(ui::settings_close("settings-close", cx.listener(|this, _, _, cx| this.close_settings(cx)), cx));
@@ -1069,14 +354,11 @@ impl Waffle {
         let search = div().flex_none().pb_3().child(ui::search_field("settings-search", &self.settings_search, cx).on_sidebar());
         let me = (!searching).then(|| self.me.clone()).flatten().map(|me| {
             let sidebar = crate::material::sidebar_fill(cx);
-            let avatar = div().relative().flex_none().child(ui::avatar(me.avatar.clone(), 32.)).children(self.my_mark().map(|status| div().absolute().right_neg_0p5().bottom_neg_0p5().child(ui::status_mark(status, 12., sidebar, cx))));
-            let text = div()
+            let avatar = ui::badged(ui::avatar(me.avatar.clone(), ui::AVATAR_LG), ui::AVATAR_LG, ui::Shape::Round, sidebar).status(self.my_mark());
+            let text = ui::col().min_h_0()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .line_height(ui::LINE_DETAIL)
-                .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(me.name.clone()))
+                .child(ui::line(me.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
                 .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Page::Account.label()));
             ui::menu_row("nav-Account", cx).toggled(view.page == Page::Account, cx).h_auto().py_1p5().child(avatar).child(text).on_click(cx.listener(|this, _, window, cx| this.open_page(Page::Account, window, cx)))
         });
@@ -1100,12 +382,12 @@ impl Waffle {
             .child(search)
             .children(me)
             .children(list)
-            .child(div().h(ui::HAIRLINE).mx_2p5().my_2().flex_none().bg(palette::line(cx)))
+            .child(div().px_2p5().py_2().flex_none().child(ui::divider(None, cx)))
             .child(self.log_out_item(cx))
             .children(asking.then(|| self.log_out_ask(cx)))
+            .child(div().flex_1())
             .child(
                 div()
-                    .mt_auto()
                     .pt_4()
                     .px_2p5()
                     .pb_1()
@@ -1126,30 +408,29 @@ impl Waffle {
 
     // Log out asks in place: what happens, then Stay or Log out.
     fn log_out_ask(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let buttons = div()
-            .flex()
+        let buttons = ui::row().items_stretch()
             .gap_2()
             .child(ui::button("log-out-stay", Tone::Secondary, cx).small().flex_1().child("Stay").on_click(cx.listener(|this, _, _, cx| this.set_ask(None, cx))))
             .child(ui::button("log-out-yes", Tone::Danger, cx).small().flex_1().child("Log out").on_click(cx.listener(|this, _, window, cx| this.sign_out(window, cx))));
         reveal(
             "log-out-ask",
-            div()
-                .my_1()
-                .p_2p5()
-                .squircle(ui::RADIUS_MD)
-                .bg(palette::danger().opacity(0.1))
-                .flex()
-                .flex_col()
-                .gap_2()
-                .child(
-                    div()
-                        .text_size(ui::TEXT_SM)
-                        .font_weight(FontWeight::NORMAL)
-                        .text_color(palette::strong(cx))
-                        .child("Log out of Waffle on this computer?")
-                        .child(div().mt_0p5().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child("You'll scan a new code with your phone to sign back in.")),
-                )
-                .child(buttons),
+            div().py_1().child(
+                ui::col()
+                    .p_2p5()
+                    .squircle(ui::RADIUS_MD)
+                    .bg(palette::danger().opacity(0.1))
+                    .gap_2()
+                    .child(
+                        ui::col()
+                            .gap_0p5()
+                            .text_size(ui::TEXT_SM)
+                            .font_weight(FontWeight::NORMAL)
+                            .text_color(palette::strong(cx))
+                            .child("Log out of Waffle on this computer?")
+                            .child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child("You'll scan a new code with your phone to sign back in.")),
+                    )
+                    .child(buttons),
+            ),
         )
     }
 
@@ -1157,6 +438,7 @@ impl Waffle {
         if let Some(view) = &mut self.settings {
             view.asking = ask;
         }
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 
@@ -1170,20 +452,21 @@ impl Waffle {
         };
         // Over a banner Waffle doesn't choose, so its own scrim, not a theme fill.
         let banner_button = ui::button("change-banner", Tone::OnMedia, cx).small().child("Change banner").on_click(cx.listener(|this, _, _, cx| this.pick_profile_image(profile::ProfileImage::Banner, cx)));
-        let banner = div().relative().h(px(120.)).child(banner_art).child(div().absolute().top_3().right_3().child(banner_button));
-        let avatar = div()
-            .relative()
-            .flex_none()
-            .child(ui::avatar(me.avatar.clone(), 100.).border(px(6.)).border_color(fill))
-            .children(self.my_mark().map(|status| div().absolute().right_1().bottom_1().p_0p5().rounded_full().bg(fill).child(ui::status_mark(status, 28., fill, cx))));
-        let identity = div()
-            .mt(px(-42.))
+        let banner = div().relative().h(px(BANNER_HEIGHT)).child(banner_art).child(div().absolute().top_3().right_3().child(banner_button));
+        let avatar = ui::badged(ui::avatar(me.avatar.clone(), PROFILE_AVATAR).border(px(AVATAR_RING)).border_color(fill), PROFILE_AVATAR, ui::Shape::Round, fill);
+        // Your presence only once the live connection has confirmed it (see `my_mark`).
+        let avatar = match self.my_mark() {
+            Some(status) => avatar.mark(ui::Spot::BottomRight, ui::Badge::status(status, PROFILE_STATUS)),
+            None => avatar,
+        };
+        let identity = ui::row()
+            // lint-allow(raw-margin): the avatar rides up over the banner, which only a negative margin does
+            .mt(px(-AVATAR_LIFT))
             .px_2p5()
-            .flex()
             .items_end()
             .gap_4()
             .child(avatar)
-            .child(div().flex_1().min_w_0().pb_3().truncate().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(me.name.clone()))
+            .child(ui::line(me.name.clone()).flex_1().pb_3().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
             .child(div().flex_none().pb_2p5().child(ui::button("change-avatar", Tone::Secondary, cx).small().child("Change avatar").on_click(cx.listener(|this, _, _, cx| this.pick_profile_image(profile::ProfileImage::Avatar, cx)))));
         let copied = self.settings.as_ref().is_some_and(|s| s.copied);
         let id = me.id.clone();
@@ -1194,16 +477,14 @@ impl Waffle {
             .child(if copied { "Copied" } else { "Copy ID" })
             .on_click(cx.listener(move |this, _, _, cx| this.copy_user_id(&id, cx)));
         let mut lines = Hairlines::default();
-        let fields = div()
+        let fields = ui::col()
             .pt_3()
             .px_1()
             .pb_1()
-            .flex()
-            .flex_col()
             .child(self.profile_row("acct-name", profile::ProfileField::DisplayName, "Display name", me.name.clone().into(), lines.next(), cx))
             .child(self.profile_row("acct-username", profile::ProfileField::Username, "Username", self.my_account.username.clone().into(), lines.next(), cx))
             .child(ui::settings_row("acct-id", lines.next(), cx).child(field_text("User ID", me.id.clone(), cx)).child(copy));
-        let card = div().squircle(ui::RADIUS_XL).bg(fill).flex().flex_col().child(banner).child(identity).child(fields);
+        let card = ui::col().squircle(ui::RADIUS_XL).bg(fill).child(banner).child(identity).child(fields);
         vec![Section::keyed("Account info", ui::settings_group("Account info", cx).child(card))]
     }
 
@@ -1226,11 +507,14 @@ impl Waffle {
                 if let Some(view) = &mut this.settings {
                     view.copied = false;
                 }
+                // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
                 cx.notify();
             })
             .ok();
         })
+        // lint-allow(detached-task): a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
         .detach();
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 
@@ -1275,10 +559,8 @@ impl Waffle {
                         .child(preview),
                 )
                 .child(
-                    div()
+                    ui::col()
                         .px_1()
-                        .flex()
-                        .flex_col()
                         .gap_px()
                         .child(label)
                         .children(note.map(|n| div().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child(n))),
@@ -1288,8 +570,7 @@ impl Waffle {
                     palette::sync(window, cx);
                 }))
         };
-        let picks = div()
-            .flex()
+        let picks = ui::row().items_stretch()
             .gap_3()
             .child(pick("theme-light", ThemePref::Light, mini_window(&MINI_LIGHT).into_any_element(), "Light", None, cx))
             .child(pick("theme-dark", ThemePref::Dark, mini_window(&MINI_DARK).into_any_element(), "Midnight", None, cx))
@@ -1321,7 +602,7 @@ impl Waffle {
             .chain(installed_fonts(cx).iter().filter(|f| f.as_str() != default).map(|f| (f.clone(), f.clone())))
             .collect();
         let value: SharedString = if chosen == default { format!("{default} (default)").into() } else { chosen.to_owned().into() };
-        let field = div().w(px(240.)).flex_none().font_family(chosen.to_owned()).child(self.select_field(select, None, &options, chosen, value, 36., cx));
+        let field = div().w(px(FONT_SELECT_WIDTH)).flex_none().font_family(chosen.to_owned()).child(self.select_field(select, None, &options, chosen, value, 36., cx));
         ui::settings_row(SharedString::from(format!("row-{select:?}")), line, cx).child(ui::settings_text(title, detail, cx)).child(field).into_any_element()
     }
 
@@ -1331,7 +612,7 @@ impl Waffle {
             let on = icon == current;
             let hover = palette::hover(cx);
             ui::pressable(div().id(SharedString::from(format!("app-icon-{}", icon.label()))), 0.95)
-                .w(px(88.))
+                .w(px(ICON_TILE_WIDTH))
                 .pt_2p5()
                 .px_1()
                 .pb_2()
@@ -1346,730 +627,18 @@ impl Waffle {
                 .text_color(if on { palette::strong(cx) } else { palette::text(cx) })
                 .when(on, |d| d.bg(palette::selected(cx)).shadow(vec![inset_ring(palette::accent(), 2.)]))
                 .when(!on, |d| d.hover(move |s| s.bg(hover)))
-                .child(img(icon.asset()).size(px(56.)))
+                .child(img(icon.asset()).size(px(ICON_PICTURE)))
                 .child(icon.label())
+                // lint-allow(raw-margin): an optical nudge that tucks the Default note up under its name, tighter than the tile's gap
                 .children((icon == crate::app_icon::AppIcon::default()).then(|| div().mt_neg_1().font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child("Default")))
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.update_prefs(cx, |prefs| prefs.app_icon = icon);
                     icon.apply();
                 }))
         });
-        div().flex().flex_wrap().gap_2().children(tiles).into_any_element()
+        ui::row().items_stretch().flex_wrap().gap_2().children(tiles).into_any_element()
     }
 
-    fn voice_page(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Vec<Section> {
-        let prefs = self.prefs.clone();
-        let view = self.settings.as_ref().expect("settings are open");
-        let (inputs, outputs, cameras) = (view.devices.inputs.clone(), view.devices.outputs.clone(), view.devices.cameras.clone());
-        let advanced = view.advanced;
-        let (custom, studio) = (prefs.input_profile == InputProfile::Custom, prefs.input_profile == InputProfile::Studio);
-        let mut out = vec![Section::with_anchor("Voice", self.devices_group(&inputs, &outputs, cx))];
-
-        let mut lines = Hairlines::default();
-        let profiles = [
-            ("profile-isolation", "Voice isolation", "Just your beautiful voice: Waffle cuts through the noise around you", InputProfile::VoiceIsolation),
-            ("profile-studio", "Studio", "Pure audio: an open mic with no processing", InputProfile::Studio),
-            ("profile-custom", "Custom", "Advanced mode: every button and dial, set your way", InputProfile::Custom),
-        ];
-        let profile_rows: Vec<Stateful<Div>> = profiles
-            .into_iter()
-            .map(|(id, title, detail, value)| {
-                radio_row(id, lines.next(), title, detail, prefs.input_profile == value, cx).on_click(cx.listener(move |this, _, _, cx| this.update_prefs(cx, |p| p.set_profile(value))))
-            })
-            .collect();
-        out.push(Section::keyed(
-            "Input profile",
-            ui::settings_group("Input profile", cx)
-                .child(ui::settings_card(cx).children(profile_rows))
-                .when(!custom, |g| g.child(ui::settings_caption("This profile sets noise suppression, echo cancellation and sensitivity for you. Pick Custom to change them.", cx))),
-        ));
-        if !studio {
-            out.push(Section::keyed("Input mode", ui::settings_group("Input mode", cx).child(self.input_mode_card(custom, window, cx))));
-        }
-        if custom {
-            let mut lines = Hairlines::default();
-            let noise = self.noise_row(lines.next(), window, cx);
-            let echo = self.switch_row(SwitchRow { id: "set-echo", title: "Echo cancellation", detail: Some("Stops others hearing themselves through your speakers"), on: prefs.echo_cancellation, enabled: true, field: |p| &mut p.echo_cancellation }, lines.next(), window, cx);
-            out.push(Section::keyed("Voice processing", ui::settings_group("Voice processing", cx).child(ui::settings_card(cx).child(noise).child(echo))));
-        }
-        let expander = expander_row("voice-advanced", false, if advanced { "Hide advanced voice settings" } else { "Show advanced voice settings" }, &advanced_summary(custom), advanced, window, cx).on_click(cx.listener(|this, _, _, cx| {
-            if let Some(s) = &mut this.settings {
-                s.advanced = !s.advanced;
-            }
-            cx.notify();
-        }));
-        let advanced_rows = advanced.then(|| reveal("voice-advanced-body", self.advanced_voice_rows(custom, window, cx)));
-        out.push(Section::new(ui::settings_card(cx).child(expander).children(advanced_rows)));
-
-        let camera = div()
-            .flex()
-            .flex_col()
-            .gap_1p5()
-            .child(field_label("Camera", cx))
-            .child(self.device_select(Select::Camera, Glyph::Video, &cameras, prefs.camera.as_deref(), 40., cx));
-        // GAP: the design's camera preview tile (Test video, mirrored self view) needs a local camera
-        // preview the settings page doesn't have yet.
-        out.push(Section::with_anchor("Camera", ui::settings_group("Camera", cx).child(card_pad(cx).child(camera))));
-        out.push(Section::with_anchor("Sounds", self.sounds_group(window, cx)));
-        out.push(Section::with_anchor("Advanced", ui::settings_group("Advanced", cx).child(ui::settings_card(cx).child(self.reset_row(cx)))));
-        out
-    }
-
-    fn devices_group(&mut self, inputs: &[(String, String)], outputs: &[(String, String)], cx: &mut Context<Self>) -> Div {
-        let prefs = self.prefs.clone();
-        let view = self.settings.as_ref().expect("settings are open");
-        let testing = self.mic_test.is_some();
-        // The mic test's "isn't detecting any input", or in a call the No audio detected warning.
-        let in_call_silent = prefs.silence_warning && self.call.as_ref().is_some_and(|c| c.session.input_detected() == Some(false));
-        let no_input = if testing { view.mic_input == Some(false) } else { in_call_silent };
-        let column = |label: &'static str, field: AnyElement, cx: &App| div().flex_1().min_w_0().flex().flex_col().gap_1p5().child(field_label(label, cx)).child(field);
-        let percent = |v: f32| format!("{}%", (v * 100.).round() as i32);
-        let devices = div()
-            .flex()
-            .gap_6()
-            .child(column("Microphone", self.device_select(Select::Microphone, Glyph::Mic, inputs, prefs.input_device.as_deref(), 40., cx), cx))
-            .child(column("Speaker", self.device_select(Select::Speaker, Glyph::Headphones, outputs, prefs.output_device.as_deref(), 40., cx), cx));
-        let volumes = div()
-            .flex()
-            .gap_6()
-            .child(div().flex_1().min_w_0().child(self.volume("Microphone volume", &percent(prefs.input_volume), Slider::InputVolume, cx)))
-            .child(div().flex_1().min_w_0().child(self.volume("Speaker volume", &percent(prefs.output_volume), Slider::OutputVolume, cx)));
-        // Discord's own name for it; it sits under the speaker it plays through.
-        let soundboard = format!("{}%", crate::soundboard::perceptual(prefs.soundboard_volume).round() as i32);
-        let soundboard = div().flex().gap_6().child(div().flex_1()).child(div().flex_1().min_w_0().child(self.volume("Soundboard Volume", &soundboard, Slider::SoundboardVolume, cx)));
-        let test_button = ui::button("mic-test", Tone::Primary, cx)
-            .min_w(px(112.))
-            .child(Icon::new(if testing { Glyph::Stop } else { Glyph::Mic }).size(ui::ICON_MD))
-            .child(if testing { "Stop testing" } else { "Test mic" })
-            .on_click(cx.listener(|this, _, _, cx| this.toggle_mic_test(cx)));
-        let mic_test = div().flex().items_center().gap_4().child(test_button).child(mic_wave(self.mic_level, testing, cx));
-        let speaker = outputs.iter().find(|(id, _)| Some(id.as_str()) == prefs.output_device.as_deref()).map_or("your speaker", |(_, name)| name.as_str());
-        let mic = inputs.iter().find(|(id, _)| Some(id.as_str()) == prefs.input_device.as_deref()).map_or("your microphone", |(_, name)| name.as_str());
-        let notice = no_input.then(|| self.no_input_notice(mic, cx));
-        ui::settings_group("Devices", cx).child(
-            card_pad(cx)
-                .child(div().flex().flex_col().gap_4().child(devices).child(volumes).child(soundboard))
-                .child(mic_test)
-                .children(notice)
-                .child(ui::settings_caption(format!("Talk normally. You'll hear yourself back through {speaker}."), cx).px_0()),
-        )
-    }
-
-    // Names the device and every likely fix, with the fixes one click away.
-    fn no_input_notice(&self, mic: &str, cx: &mut Context<Self>) -> Div {
-        let actions = div()
-            .mt_2()
-            .flex()
-            .flex_wrap()
-            .gap_2()
-            .child(ui::button("nomic-pick", Tone::Secondary, cx).small().child("Choose another input").on_click(cx.listener(|this, _, _, cx| {
-                if let Some(s) = &mut this.settings {
-                    s.select = Some(Select::Microphone);
-                }
-                cx.notify();
-            })))
-            .when(cfg!(target_os = "macos"), |d| {
-                d.child(ui::button("nomic-system", Tone::Ghost, cx).small().child("Open System Settings").on_click(|_, _, cx| cx.open_url(MAC_MIC_PRIVACY)))
-            });
-        ui::callout_with(
-            ui::Notice::Warning,
-            Glyph::MicOff,
-            "No audio detected from your mic",
-            format!("Waffle hears nothing from {mic}. Turn up Microphone volume above, pick another input, or let Waffle use the microphone in System Settings."),
-            actions,
-            cx,
-        )
-    }
-
-    fn volume(&self, label: &'static str, value: &str, slider: Slider, cx: &mut Context<Self>) -> Div {
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(
-                div()
-                    .flex()
-                    .justify_between()
-                    .text_size(ui::TEXT_XS)
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(palette::muted(cx))
-                    .child(label)
-                    .child(div().text_color(palette::strong(cx)).child(value.to_owned())),
-            )
-            .child(self.slider(slider, None, cx))
-    }
-
-    // Voice activity or push to talk; push to talk shows its shortcut and release delay, voice
-    // activity under Custom its sensitivity.
-    fn input_mode_card(&self, custom: bool, window: &mut Window, cx: &mut Context<Self>) -> Div {
-        let prefs = &self.prefs;
-        let ptt = prefs.push_to_talk;
-        let mut lines = Hairlines::default();
-        let mode = |id: &'static str, title: &'static str, detail: &'static str, on_ptt: bool, line: bool, cx: &mut Context<Self>| {
-            radio_row(id, line, title, detail, ptt == on_ptt, cx).on_click(cx.listener(move |this, _, _, cx| this.update_prefs(cx, |p| p.push_to_talk = on_ptt)))
-        };
-        let mut card = ui::settings_card(cx).child(mode("mode-vad", "Voice activity", "Transmits when you speak above the sensitivity", false, lines.next(), cx)).child(mode(
-            "mode-ptt",
-            "Push to talk",
-            "Transmits while you hold a key",
-            true,
-            lines.next(),
-            cx,
-        ));
-        if ptt {
-            let ptt_index = prefs.keybinds.iter().position(|k| k.action == Action::PushToTalk);
-            card = card
-                .child(ui::settings_row("ptt-shortcut", lines.next(), cx).child(ui::settings_text("Shortcut", Some("Also listed under Keybinds"), cx)).children(ptt_index.map(|i| self.keybind_recorder(i, cx).flex_basis(px(300.)).flex_shrink(1.))))
-                .child(
-                    stack_row("ptt-delay", lines.next(), cx)
-                        .child(numbered("Push to talk release delay", "Keeps transmitting this long after you let go, so word endings aren't cut", &format!("{} ms", prefs.ptt_release_ms), cx))
-                        .child(self.slider(Slider::ReleaseDelay, None, cx)),
-                );
-        } else if custom {
-            let auto = prefs.sensitivity_auto;
-            card = card
-                .child(self.switch_row(
-                    SwitchRow { id: "set-auto-sensitivity", title: "Set sensitivity automatically", detail: Some("Waffle adjusts to the noise around you. When the bar fills, you're transmitting."), on: auto, enabled: true, field: |p| &mut p.sensitivity_auto },
-                    lines.next(),
-                    window,
-                    cx,
-                ))
-                .child(
-                    stack_row("input-sensitivity", lines.next(), cx)
-                        .child(ui::settings_text("Input sensitivity", Some(if auto { "Your mic transmits when Waffle hears your voice" } else { "Your mic transmits when the level passes the handle" }), cx))
-                        .child(if auto { sensitivity_track(None, self.mic_level, cx).into_any_element() } else { self.slider(Slider::Sensitivity, Some(self.mic_level), cx) })
-                        .when(!auto, |d| d.child(scale(&["\u{2212}100 dB", "0 dB"], cx))),
-                );
-        }
-        card
-    }
-
-    fn sounds_group(&self, window: &mut Window, cx: &mut Context<Self>) -> Div {
-        let more = self.settings.as_ref().is_some_and(|s| s.more_sounds);
-        let mut lines = Hairlines::default();
-        let first: Vec<AnyElement> = VOICE_CUES.iter().map(|&(id, label, cue)| self.cue_row(id, label, cue, lines.next(), window, cx)).collect();
-        let expander = expander_row(
-            "more-sounds",
-            lines.next(),
-            &if more { format!("Hide {} sounds", MORE_CUES.len()) } else { format!("Show {} more sounds", MORE_CUES.len()) },
-            "Voice disconnected, PTT activate, User join, and more",
-            more,
-            window,
-            cx,
-        )
-        .on_click(cx.listener(|this, _, _, cx| {
-            if let Some(s) = &mut this.settings {
-                s.more_sounds = !s.more_sounds;
-            }
-            cx.notify();
-        }));
-        let mut body = Hairlines(true);
-        let rest = more.then(|| reveal("more-sounds-body", div().flex().flex_col().children(MORE_CUES.iter().map(|&(id, label, cue)| self.cue_row(id, label, cue, body.next(), window, cx)))));
-        ui::settings_group("Sounds", cx).child(ui::settings_card(cx).children(first).child(expander).children(rest)).child(ui::settings_caption("Message and mention sounds are under Notifications.", cx))
-    }
-
-    // Reset asks in place, naming what happens; once done it offers Undo for a few seconds.
-    fn reset_row(&self, cx: &mut Context<Self>) -> Stateful<Div> {
-        let view = self.settings.as_ref().expect("settings are open");
-        let (asking, done) = (view.asking == Some(Ask::Reset), view.reset_undo.is_some());
-        let trigger = (!asking && !done).then(|| {
-            ui::button("reset-voice", Tone::Secondary, cx).small().text_color(palette::danger_ink(cx)).child("Reset voice settings").on_click(cx.listener(|this, _, _, cx| this.set_ask(Some(Ask::Reset), cx)))
-        });
-        let ask = asking.then(|| {
-            reveal(
-                "reset-ask",
-                div()
-                    .w_full()
-                    .py_2p5()
-                    .px_3()
-                    .squircle(ui::RADIUS_MD)
-                    .bg(palette::danger().opacity(0.1))
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_2()
-                    .child(div().flex_1().min_w(px(200.)).font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child("Reset every voice and video setting to its default?"))
-                    .child(
-                        div()
-                            .flex()
-                            .gap_2()
-                            .child(ui::button("reset-keep", Tone::Secondary, cx).small().child("Keep my settings").on_click(cx.listener(|this, _, _, cx| this.set_ask(None, cx))))
-                            .child(ui::button("reset-yes", Tone::Danger, cx).small().child("Reset voice settings").on_click(cx.listener(|this, _, _, cx| this.reset_voice(cx)))),
-                    ),
-            )
-        });
-        let done = done.then(|| {
-            div()
-                .flex()
-                .items_center()
-                .gap_1p5()
-                .font_weight(FontWeight::NORMAL)
-                .text_color(palette::positive_ink(cx))
-                .child(Icon::new(Glyph::CheckCircle).size(ui::ICON_MD))
-                .child("Voice and video settings reset")
-                .child(ui::button("reset-undo", ui::Tone::Link, cx).ml_1().child("Undo").on_click(cx.listener(|this, _, _, cx| this.undo_reset(cx))))
-        });
-        ui::settings_row("reset", false, cx)
-            .flex_wrap()
-            .child(ui::settings_text("Reset voice and video settings", Some("Puts devices, levels, processing and sounds back to their defaults. Your keybinds and theme stay."), cx))
-            .children(trigger)
-            .children(done)
-            .children(ask)
-    }
-
-    fn reset_voice(&mut self, cx: &mut Context<Self>) {
-        let before = self.prefs.clone();
-        self.update_prefs(cx, |p| {
-            let keep = (p.theme, p.keybinds.clone(), p.app_icon);
-            *p = Prefs::default();
-            (p.theme, p.keybinds, p.app_icon) = keep;
-        });
-        if let Some(view) = &mut self.settings {
-            (view.asking, view.reset_undo) = (None, Some(before));
-        }
-        cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(UNDO_FOR).await;
-            this.update(cx, |this, cx| {
-                if let Some(view) = &mut this.settings {
-                    view.reset_undo = None;
-                }
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
-    }
-
-    fn undo_reset(&mut self, cx: &mut Context<Self>) {
-        let Some(before) = self.settings.as_mut().and_then(|v| v.reset_undo.take()) else { return };
-        self.update_prefs(cx, |p| *p = before);
-    }
-
-    fn keybinds_page(&self, cx: &mut Context<Self>) -> Vec<Section> {
-        let header = div()
-            .flex()
-            .items_start()
-            .gap_4()
-            .child(div().flex_1().min_w_0().flex().flex_col().gap_1().child(ui::settings_title("Keybinds", cx)).child(div().text_color(palette::muted(cx)).child("Shortcuts that work everywhere, even while another app is in front.")))
-            .child(ui::button("add-keybind", Tone::Primary, cx).child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("Add a keybind").on_click(cx.listener(|this, _, _, cx| {
-                this.update_prefs(cx, |p| p.keybinds.push(Keybind { action: Action::Unassigned, keys: None }));
-                let index = this.prefs.keybinds.len() - 1;
-                if let Some(s) = &mut this.settings {
-                    s.recording = Some(index);
-                }
-            })));
-        let mut lines = Hairlines::default();
-        let rows: Vec<AnyElement> = self.prefs.keybinds.iter().enumerate().map(|(index, keybind)| self.keybind_row(index, keybind, lines.next(), cx)).collect();
-        let yours = ui::settings_group("Your keybinds", cx).children(self.input_monitoring_notice(cx)).when(!rows.is_empty(), |g| g.child(ui::settings_card(cx).children(rows)));
-        vec![Section::new(header), Section::keyed("Your keybinds", yours), Section::keyed("Default keybinds", self.default_keybinds(cx))]
-    }
-
-    // macOS keeps keys from Waffle until it's allowed Input Monitoring; the hook starts once it is.
-    fn input_monitoring_notice(&self, cx: &mut Context<Self>) -> Option<Div> {
-        if !self.keys_unheard() {
-            return None;
-        }
-        let open = ui::button("keys-system", Tone::Secondary, cx).small().child("Open System Settings").on_click(|_, _, cx| cx.open_url(MAC_INPUT_PRIVACY));
-        Some(ui::callout_with(
-            ui::Notice::Warning,
-            Glyph::Keyboard,
-            "Keybinds need Input Monitoring",
-            "Turn on Waffle in System Settings, under Privacy & Security, Input Monitoring. Already on? An update can leave it stale: remove Waffle with \u{2212} and add it again. Keybinds start working as soon as you do.",
-            div().mt_2().flex().child(open),
-            cx,
-        ))
-    }
-
-    fn keys_unheard(&self) -> bool {
-        cfg!(target_os = "macos") && self.hotkeys.as_ref().is_some_and(|h| !h.listening)
-    }
-
-    // Action picker, recorder, and a remove button that's always there.
-    fn keybind_row(&self, index: usize, keybind: &Keybind, line: bool, cx: &mut Context<Self>) -> AnyElement {
-        let unknown = keybind.keys.as_ref().is_some_and(|k| self.keybind_errors.contains(k));
-        let actions: Vec<(String, String)> = Action::ALL.iter().map(|a| (format!("{a:?}"), sentence(a.label()))).collect();
-        let action = self.select_field(Select::Action(index), None, &actions, &format!("{:?}", keybind.action), sentence(keybind.action.label()).into(), 36., cx);
-        let (danger, hover, press) = (palette::danger_ink(cx), palette::hover(cx), palette::press(cx));
-        // The design's .iconbtn.rm: ui::icon_button, but hovering to the danger ink.
-        let remove = div()
-            .id(SharedString::from(format!("keybind-delete-{index}")))
-            .size_8()
-            .flex_none()
-            .squircle(ui::RADIUS_SM)
-            .flex()
-            .items_center()
-            .justify_center()
-            .cursor_pointer()
-            .text_color(palette::muted(cx))
-            .hover(move |s| s.bg(hover).text_color(danger))
-            .active(move |s| s.bg(press))
-            .child(Icon::new(Glyph::Trash).size(ui::ICON_XL))
-            .tooltip(|window, cx| ui::tip("Remove keybind", window, cx))
-            .on_click(cx.listener(move |this, _, _, cx| {
-                if let Some(s) = &mut this.settings {
-                    s.recording = None;
-                }
-                this.update_prefs(cx, |p| {
-                    if index < p.keybinds.len() {
-                        p.keybinds.remove(index);
-                    }
-                });
-            }));
-        ui::settings_row(SharedString::from(format!("keybind-{index}")), line, cx)
-            .flex_wrap()
-            .gap_3()
-            .child(div().flex_grow(1.).flex_basis(Pixels::ZERO).min_w_0().child(action))
-            .child(self.keybind_recorder(index, cx).flex_grow(1.25).flex_basis(Pixels::ZERO))
-            .child(remove)
-            .children(unknown.then(|| error_line("Waffle can't listen for this shortcut. Record it again.", cx).w_full()))
-            .into_any_element()
-    }
-
-    // The binding as keycaps, and a button that starts, stops or edits recording. Recording rings the
-    // field in the accent, pulsing.
-    fn keybind_recorder(&self, index: usize, cx: &mut Context<Self>) -> Div {
-        let recording = self.settings.as_ref().and_then(|s| s.recording) == Some(index);
-        let keys = self.prefs.keybinds.get(index).and_then(|k| k.keys.clone());
-        let unknown = keys.as_ref().is_some_and(|k| self.keybind_errors.contains(k));
-        let value = match (&keys, recording) {
-            (_, true) => div()
-                .flex()
-                .items_center()
-                .gap_1p5()
-                .text_color(palette::muted(cx))
-                .child(div().text_color(palette::accent_ink(cx)).child(Icon::new(Glyph::Record).size(ui::ICON_SM)))
-                .child(if self.keys_unheard() { "Allow Input Monitoring first" } else { "Press keys\u{2026}" })
-                .into_any_element(),
-            (Some(keys), false) => key_caps(keys, cx).into_any_element(),
-            (None, false) => div().text_color(palette::muted(cx)).font_weight(FontWeight::NORMAL).child("No keybind set").into_any_element(),
-        };
-        let border = match (recording, unknown) {
-            (true, _) => palette::accent(),
-            (false, true) => palette::danger_ink(cx),
-            (false, false) => palette::line_strong(cx),
-        };
-        let label = if recording {
-            "Stop recording"
-        } else if keys.is_some() {
-            "Edit keybind"
-        } else {
-            "Record keybind"
-        };
-        div()
-            .relative()
-            .h_10()
-            .min_w_0()
-            .pl(px(11.))
-            .pr_1()
-            .squircle(ui::RADIUS_MD)
-            .bg(palette::surface(Level::Page, cx))
-            .border_1()
-            .border_color(border)
-            .flex()
-            .items_center()
-            .gap_2()
-            .children(recording.then(|| pulse_ring(SharedString::from(format!("record-ring-{index}")), cx)))
-            .child(div().flex_1().min_w_0().p_px().overflow_hidden().whitespace_nowrap().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child(value))
-            .child(ui::button(SharedString::from(format!("record-{index}")), Tone::Secondary, cx).small().child(label).on_click(cx.listener(move |this, _, window, cx| {
-                if let Some(s) = &mut this.settings {
-                    s.recording = if s.recording == Some(index) { None } else { Some(index) };
-                }
-                this.focus.focus(window, cx);
-                cx.notify();
-            })))
-    }
-
-    // Discord's "Show advanced voice settings" rows, in its order; the first two only under Custom.
-    fn advanced_voice_rows(&self, custom: bool, window: &mut Window, cx: &mut Context<Self>) -> Div {
-        let prefs = &self.prefs;
-        let vad_enabled = !prefs.push_to_talk && prefs.sensitivity_auto;
-        let mut lines = Hairlines(true);
-        let mut rows: Vec<AnyElement> = Vec::new();
-        if custom {
-            rows.push(
-                self.switch_row(SwitchRow { id: "set-agc", title: "Automatic gain control", detail: Some("Adjusts your mic volume to keep you clear and steady"), on: prefs.auto_gain, enabled: true, field: |p| &mut p.auto_gain }, lines.next(), window, cx)
-                    .into_any_element(),
-            );
-            let detail = if vad_enabled { "Turn this off if automatic sensitivity misses your voice" } else { WHY_VAD };
-            rows.push(
-                self.switch_row(
-                    SwitchRow { id: "set-advanced-vad", title: "Advanced voice activity", detail: Some(detail), on: prefs.advanced_voice_activity, enabled: vad_enabled, field: |p| &mut p.advanced_voice_activity },
-                    lines.next(),
-                    window,
-                    cx,
-                )
-                .into_any_element(),
-            );
-        }
-        rows.push(
-            self.switch_row(
-                SwitchRow { id: "set-silence-warning", title: "No audio detected warning", detail: Some("Warns you in a call when Waffle hears nothing from your mic"), on: prefs.silence_warning, enabled: true, field: |p| &mut p.silence_warning },
-                lines.next(),
-                window,
-                cx,
-            )
-            .into_any_element(),
-        );
-        if voice::ATTENUATION_SUPPORTED {
-            rows.push(
-                stack_row("attenuation", lines.next(), cx)
-                    .child(ui::settings_text("Global attenuation", Some("Lowers other apps by this much while someone speaks. 0% turns it off."), cx))
-                    .child(self.volume("Attenuation strength", &format!("{}%", prefs.attenuation), Slider::Attenuation, cx))
-                    .into_any_element(),
-            );
-            rows.push(
-                self.switch_row(SwitchRow { id: "set-attenuate-self", title: "When I speak", detail: Some("Lower other apps while you talk"), on: prefs.attenuate_self, enabled: true, field: |p| &mut p.attenuate_self }, lines.next(), window, cx)
-                    .into_any_element(),
-            );
-            rows.push(
-                self.switch_row(
-                    SwitchRow { id: "set-attenuate-others", title: "When others speak", detail: Some("Lower other apps while anyone else talks"), on: prefs.attenuate_others, enabled: true, field: |p| &mut p.attenuate_others },
-                    lines.next(),
-                    window,
-                    cx,
-                )
-                .into_any_element(),
-            );
-        }
-        rows.push(
-            self.switch_row(
-                SwitchRow {
-                    id: "set-qos",
-                    title: "Quality of service",
-                    detail: Some("Asks your router to send Waffle's voice first. Turn it off if calls drop; some routers handle it badly."),
-                    on: prefs.qos,
-                    enabled: true,
-                    field: |p| &mut p.qos,
-                },
-                lines.next(),
-                window,
-                cx,
-            )
-            .into_any_element(),
-        );
-        div().flex().flex_col().children(rows)
-    }
-
-    // Three options fit in a row, so noise suppression is a segmented control. Krisp is licensed to
-    // Discord, so Advanced is DeepFilterNet, an open neural suppressor, in its place.
-    fn noise_row(&self, line: bool, window: &mut Window, cx: &mut Context<Self>) -> Stateful<Div> {
-        let selected = match (self.prefs.noise_suppression, self.prefs.noise_mode) {
-            (false, _) => 0,
-            (true, NoiseMode::Standard) => 1,
-            (true, NoiseMode::Advanced) => 2,
-        };
-        let degraded = selected == 2 && self.call.as_ref().is_some_and(|c| c.session.noise_suppression_degraded());
-        let detail = if degraded {
-            div()
-                .flex()
-                .items_center()
-                .gap_1()
-                .text_size(ui::TEXT_XS)
-                .font_weight(FontWeight::NORMAL)
-                .text_color(palette::warning_ink(cx))
-                .child(Icon::new(Glyph::WarningBold).size(ui::ICON_SM))
-                .child("Your computer couldn't run DeepFilterNet in real time, so this call uses Standard.")
-        } else {
-            div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("Reduces background noise from your mic. Advanced is powered by DeepFilterNet.")
-        };
-        let this = cx.entity().downgrade();
-        let control = ui::segmented_live(
-            "set-noise",
-            &["None", "Standard", "Advanced"],
-            selected,
-            move |i, _, cx| {
-                this.update(cx, |this, cx| {
-                    this.update_prefs(cx, |p| match i {
-                        0 => p.noise_suppression = false,
-                        1 => (p.noise_suppression, p.noise_mode) = (true, NoiseMode::Standard),
-                        _ => (p.noise_suppression, p.noise_mode) = (true, NoiseMode::Advanced),
-                    })
-                })
-                .ok();
-            },
-            window,
-            cx,
-        );
-        ui::settings_row("noise", line, cx).child(ui::settings_text("Noise suppression", None::<&str>, cx).child(detail)).child(control.flex_none())
-    }
-
-    // A sound cue: its preview button beside its switch.
-    fn cue_row(&self, id: &'static str, title: &'static str, cue: Cue, line: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let on = !self.prefs.silenced_cues.contains(&cue);
-        let (selected, press) = (palette::selected(cx), palette::press(cx));
-        let play = div()
-            .id(SharedString::from(format!("preview-{id}")))
-            .size_9()
-            .flex_none()
-            .squircle(ui::RADIUS_MD)
-            .bg(selected)
-            .text_color(palette::strong(cx))
-            .flex()
-            .items_center()
-            .justify_center()
-            .cursor_pointer()
-            .hover(move |s| s.bg(press))
-            .child(Icon::new(Glyph::Play).size(ui::ICON_MD))
-            .tooltip(move |window, cx| ui::tip(format!("Preview {title}"), window, cx))
-            .on_click(move |_, _, cx| {
-                cx.stop_propagation();
-                sounds::preview(cue);
-            });
-        let switch = ui::switch_live(id, on, window, cx).on_click(cx.listener(move |this, _, _, cx| {
-            this.update_prefs(cx, |p| match p.silenced_cues.iter().position(|c| *c == cue) {
-                Some(i) => {
-                    p.silenced_cues.remove(i);
-                }
-                None => p.silenced_cues.push(cue),
-            })
-        }));
-        // GAP: the play button turns into the mini wave while its sound plays; sounds.rs doesn't report
-        // playback yet.
-        ui::settings_row(SharedString::from(format!("cue-{id}")), line, cx)
-            .min_h(px(52.))
-            .child(ui::settings_text(title, None::<&str>, cx))
-            .child(div().flex().items_center().gap_2().flex_none().child(play).child(switch))
-            .into_any_element()
-    }
-
-    // A switch row toggles from anywhere on it. A disabled one dims its switch and says why.
-    fn switch_row(&self, spec: SwitchRow, line: bool, window: &mut Window, cx: &mut Context<Self>) -> Stateful<Div> {
-        let SwitchRow { id, title, detail, on, enabled, field } = spec;
-        let text = if enabled {
-            ui::settings_text(title, detail, cx)
-        } else {
-            div()
-                .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .gap_0p5()
-                .child(div().truncate().font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child(title))
-                .child(div().flex().items_center().gap_1().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Icon::new(Glyph::Info).size(ui::ICON_SM)).children(detail))
-        };
-        let switch = ui::switch_live(id, on, window, cx);
-        let row = ui::settings_row(SharedString::from(format!("row-{id}")), line, cx).child(text);
-        if !enabled {
-            return row.child(div().opacity(0.45).child(switch));
-        }
-        ui::settings_choice(row, cx).child(switch).on_click(cx.listener(move |this, _, _, cx| {
-            this.update_prefs(cx, |p| {
-                let value = field(p);
-                *value = !*value;
-            })
-        }))
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn device_select(&self, select: Select, glyph: Glyph, devices: &[(String, String)], chosen: Option<&str>, height: f32, cx: &mut Context<Self>) -> AnyElement {
-        let mut options = vec![(String::new(), "Default".to_owned())];
-        options.extend(devices.iter().cloned());
-        let value = chosen.and_then(|id| devices.iter().find(|(d, _)| d == id)).map_or("Default".to_owned(), |(_, name)| name.clone());
-        self.select_field(select, Some(glyph), &options, chosen.unwrap_or(""), value.into(), height, cx)
-    }
-
-    // A dropdown trigger whose list rises from it; the chosen option carries a check.
-    #[allow(clippy::too_many_arguments)]
-    fn select_field(&self, select: Select, glyph: Option<Glyph>, options: &[(String, String)], chosen: &str, value: SharedString, height: f32, cx: &mut Context<Self>) -> AnyElement {
-        let open = self.settings.as_ref().and_then(|s| s.select) == Some(select);
-        let field = ui::select(SharedString::from(format!("select-{select:?}")), glyph, value, open, cx).h(px(height)).on_click(cx.listener(move |this, _, _, cx| {
-            if let Some(s) = &mut this.settings {
-                s.select = if s.select == Some(select) { None } else { Some(select) };
-            }
-            cx.notify();
-        }));
-        let list = open.then(|| {
-            let (this, close) = (cx.entity(), cx.entity());
-            let dismiss = move |_: &mut Window, cx: &mut App| {
-                close.update(cx, |this, cx| {
-                    if let Some(s) = &mut this.settings {
-                        s.select = None;
-                    }
-                    cx.notify();
-                })
-            };
-            ui::select_options(SharedString::from(format!("options-{select:?}")), options, chosen, height, move |id, window, cx| this.update(cx, |this, cx| this.choose(select, &id, window, cx)), dismiss, cx)
-        });
-        div().relative().w_full().child(field).children(list).into_any_element()
-    }
-
-    fn choose(&mut self, select: Select, id: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let device = (!id.is_empty()).then(|| id.to_owned());
-        if let Some(s) = &mut self.settings {
-            s.select = None;
-        }
-        if select == Select::JoinActivity {
-            return self.set_join_activity_default(id.parse().unwrap_or(0), cx);
-        }
-        if matches!(select, Select::UiFont | Select::MonoFont) {
-            self.update_prefs(cx, |p| match select {
-                Select::UiFont => p.ui_font = id.to_owned(),
-                _ => p.mono_font = id.to_owned(),
-            });
-            palette::sync(window, cx);
-            return window.refresh();
-        }
-        self.update_prefs(cx, |p| match select {
-            Select::Microphone => p.input_device = device,
-            Select::Speaker => p.output_device = device,
-            Select::Camera => p.camera = device,
-            Select::Action(index) => {
-                let action = Action::ALL.into_iter().find(|a| format!("{a:?}") == id).unwrap_or(Action::Unassigned);
-                if let Some(bind) = p.keybinds.get_mut(index) {
-                    bind.action = action;
-                }
-            }
-            Select::UiFont | Select::MonoFont | Select::JoinActivity => {}
-        });
-    }
-
-    fn slider(&self, slider: Slider, level: Option<f32>, cx: &mut Context<Self>) -> AnyElement {
-        let fill = match slider {
-            Slider::Sensitivity => Fill::Threshold(level),
-            _ => Fill::Accent,
-        };
-        self.range(format!("{slider:?}").into(), slider.fraction(&self.prefs), fill, move |this, f, cx| this.update_prefs(cx, |p| slider.set(p, f)), cx)
-    }
-
-    // Waffle's slider: the done part, a gap, a tall narrow thumb, a gap, the rest; click or drag anywhere
-    // on it. The sensitivity slider draws the live level under its handle instead.
-    pub(crate) fn range(
-        &self,
-        key: SharedString,
-        fraction: f32,
-        fill: Fill,
-        on_set: impl Fn(&mut Waffle, f32, &mut Context<Waffle>) + Clone + 'static,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let bounds = self.slider_bounds.clone();
-        let record = bounds.clone();
-        let track = match fill {
-            Fill::Accent => ui::slider_track(fraction, cx).into_any_element(),
-            Fill::Threshold(level) => sensitivity_track(Some(fraction), level.unwrap_or(crate::SILENCE_DB), cx).into_any_element(),
-        };
-        let (down_key, drag_key, move_key, record_key) = (key.clone(), key.clone(), key.clone(), key.clone());
-        let set = move |this: &mut Waffle, key: &SharedString, x: Pixels, cx: &mut Context<Waffle>| {
-            let Some(b) = bounds.borrow().get(key).copied() else { return };
-            on_set(this, (x - b.left()) / b.size.width, cx);
-        };
-        let set_drag = set.clone();
-        div()
-            .id(SharedString::from(format!("slider-{key}")))
-            .relative()
-            .h_6()
-            .w_full()
-            .cursor_pointer()
-            .child(canvas(move |b, _, _| { record.borrow_mut().insert(record_key.clone(), b); }, |_, _, _, _| {}).absolute().size_full())
-            .child(track)
-            .on_mouse_down(MouseButton::Left, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| set(this, &down_key, e.position.x, cx)))
-            .on_drag(SliderDrag(drag_key), |drag, _, _, cx| cx.new(|_| drag.clone()))
-            .on_drag_move::<SliderDrag>(cx.listener(move |this, e: &gpui_kit::DragMoveEvent<SliderDrag>, _, cx| {
-                if e.drag(cx).0 == move_key {
-                    set_drag(this, &move_key, e.event.position.x, cx);
-                }
-            }))
-            .into_any_element()
-    }
 }
 
 pub(crate) enum Fill {
@@ -2124,6 +693,21 @@ impl Hairlines {
     }
 }
 
+// The profile page's avatar and the presence mark on it, larger than any face elsewhere.
+// The account card's banner height, the border ringing its avatar, how far the avatar rides up over the banner, and
+// how far the page drops while it fades in.
+const BANNER_HEIGHT: f32 = 120.;
+const AVATAR_RING: f32 = 6.;
+const AVATAR_LIFT: f32 = 42.;
+const PAGE_DROP: f32 = 4.;
+// A font picker's width, an app icon tile's width and its picture, the nav sub-item's indent.
+const FONT_SELECT_WIDTH: f32 = 240.;
+const ICON_TILE_WIDTH: f32 = 88.;
+const ICON_PICTURE: f32 = 56.;
+const SUB_ITEM_INDENT: f32 = 38.;
+const PROFILE_AVATAR: f32 = 100.;
+const PROFILE_STATUS: f32 = 28.;
+
 const COPIED_FOR: Duration = Duration::from_secs(2);
 const UNDO_FOR: Duration = Duration::from_secs(8);
 const WHY_VAD: &str = "Works with automatic sensitivity in voice activity mode";
@@ -2171,16 +755,15 @@ fn nav_item(page: Page, selected: bool, cx: &mut Context<Waffle>) -> impl IntoEl
 fn sub_items(page: Page, current: usize, anchors: &[usize], cx: &mut Context<Waffle>) -> impl IntoElement {
     let (strong, muted, hover) = (palette::strong(cx), palette::muted(cx), palette::hover(cx));
     let anchors = anchors.to_vec();
-    div().pt_0p5().pb_1().flex().flex_col().gap_px().children(page.sections().iter().enumerate().map(move |(i, name)| {
+    ui::col().pt_0p5().pb_1().gap_px().children(page.sections().iter().enumerate().map(move |(i, name)| {
         let item = anchors.get(i).copied().unwrap_or(0);
-        div()
+        // lint-allow(custom-button): ui::settings_nav_item has no icon-less, indented sub-entry
+        ui::row()
             .id(SharedString::from(format!("sub-{name}")))
             .min_h_7()
-            .pl(px(38.))
+            .pl(px(SUB_ITEM_INDENT))
             .pr_2p5()
             .squircle(ui::RADIUS_SM)
-            .flex()
-            .items_center()
             .cursor_pointer()
             .font_weight(FontWeight::NORMAL)
             .text_color(if i == current { strong } else { muted })
@@ -2212,11 +795,8 @@ fn stack_row(id: &'static str, line: bool, cx: &App) -> Stateful<Div> {
 
 // A label over its value, as Account info lists them.
 pub(super) fn field_text(label: &'static str, value: impl Into<SharedString>, cx: &App) -> Div {
-    div()
+    ui::col().min_h_0()
         .flex_1()
-        .min_w_0()
-        .flex()
-        .flex_col()
         .gap_0p5()
         .child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(label))
         .child(div().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child(value.into()))
@@ -2228,124 +808,47 @@ pub(super) fn field_label(text: &'static str, cx: &App) -> Div {
 
 // A title and description with the value it sets on the right.
 fn numbered(title: &'static str, detail: &'static str, value: &str, cx: &App) -> Div {
-    div().flex().items_start().justify_between().gap_4().child(ui::settings_text(title, Some(detail), cx)).child(div().whitespace_nowrap().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(value.to_owned()))
+    ui::row().items_start().justify_between().gap_4().child(ui::settings_text(title, Some(detail), cx)).child(div().whitespace_nowrap().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(value.to_owned()))
 }
 
 fn scale(stops: &[&'static str], cx: &App) -> Div {
-    div().flex().justify_between().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).children(stops.iter().copied())
+    ui::row().items_stretch().justify_between().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).children(stops.iter().copied())
 }
 
 fn radio_row(id: &'static str, line: bool, title: &'static str, detail: &'static str, on: bool, cx: &App) -> Stateful<Div> {
-    ui::settings_choice(ui::settings_row(id, line, cx), cx).items_start().child(div().mt_0p5().child(ui::radio(on, cx))).child(ui::settings_text(title, Some(detail), cx))
+    ui::settings_choice(ui::settings_row(id, line, cx), cx).items_start().child(div().pt_0p5().child(ui::radio(on, cx))).child(ui::settings_text(title, Some(detail), cx))
 }
 
 // A row that reveals more rows under it; closed, it names what's inside.
 #[allow(clippy::too_many_arguments)]
 fn expander_row(id: &'static str, line: bool, title: &str, summary: &str, open: bool, window: &mut Window, cx: &mut App) -> Stateful<Div> {
     let angle = turn(format!("chevron-{id}"), if open { 90. } else { 0. }, window, cx);
-    let chev = div()
+    let chev = ui::row()
         .size_8()
         .flex_none()
         .squircle(ui::RADIUS_SM)
         .bg(palette::selected(cx))
         .text_color(palette::strong(cx))
-        .flex()
-        .items_center()
         .justify_center()
         .child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD).rotate(angle));
     ui::settings_choice(ui::settings_row(id, line, cx), cx).child(ui::settings_text(title.to_owned(), (!open).then(|| summary.to_owned()), cx)).child(chev)
 }
 
 fn error_line(text: &'static str, cx: &App) -> Div {
-    div()
+    ui::row()
         .px_0p5()
-        .flex()
         .items_start()
         .gap_1p5()
         .text_size(ui::TEXT_XS)
         .font_weight(FontWeight::NORMAL)
         .text_color(palette::danger_ink(cx))
-        .child(div().mt_px().flex_none().child(Icon::new(Glyph::WarningCircle).size(ui::ICON_SM)))
+        .child(div().pt_px().flex_none().child(Icon::new(Glyph::WarningCircle).size(ui::ICON_SM)))
         .child(text)
-}
-
-// An icon's angle in degrees, eased over the pop duration whenever `degrees` changes.
-fn turn(id: String, degrees: f32, window: &mut Window, cx: &mut App) -> Radians {
-    let degrees = gpui_kit::base::transition(id, degrees, gpui_kit::base::Transition::new(ui::DUR_POP).easing(motion::ease_out()), window, cx);
-    Radians(degrees.to_radians())
-}
-
-// The mic test draws your voice as the wave: 40 bars swelling from the middle, accent while live.
-fn mic_wave(level_db: f32, live: bool, cx: &App) -> Div {
-    const BARS: usize = 40;
-    let level = ((level_db + 100.) / 100.).clamp(0., 1.);
-    // Quieter than a whisper reads as silence, so the wave stays flat in a quiet room.
-    let voice = ((level - 0.35) / 0.55).clamp(0., 1.);
-    let (rest, on) = (palette::line_strong(cx), palette::accent());
-    div().flex_1().min_w_0().h_10().flex().items_center().gap(px(3.)).children((0..BARS).map(move |i| {
-        let shape = (i as f32 / BARS as f32 * std::f32::consts::PI).sin();
-        let jitter = 0.6 + 0.6 * ((i as f32 * 12.9898 + level_db * 78.233).sin() * 0.5 + 0.5);
-        let l = if live { (voice * shape * jitter).clamp(0.1, 1.) } else { 0.1 };
-        div().flex_1().min_w_0p5().h(px(40. * l)).rounded_full().bg(if live && l > 0.15 { on } else { rest })
-    }))
-}
-
-// The input sensitivity track: the live level lit over a bar split at the threshold, the handle on
-// the threshold. With no threshold (automatic) the whole bar lights green up to the level.
-fn sensitivity_track(threshold: Option<f32>, level_db: f32, cx: &App) -> Div {
-    let level = ((level_db + 100.) / 100.).clamp(0., 1.);
-    let (rest, online) = (palette::line_strong(cx), palette::status_in(crate::discord::Status::Online, cx));
-    let part = |from: f32, to: f32, fill: Hsla| {
-        let (from, to) = (from.clamp(0., 1.), to.clamp(0., 1.));
-        div().absolute().top_0().bottom_0().left(relative(from)).w(relative((to - from).max(0.))).bg(fill).when(from == 0., |d| d.rounded_l_full()).when(to >= 1., |d| d.rounded_r_full())
-    };
-    let bar = div().absolute().left_0().right_0().top_2().h_2();
-    let bar = match threshold {
-        None => bar.child(part(0., 1., rest)).child(part(0., level, online)),
-        Some(th) => bar
-            .child(part(0., th, rest))
-            .child(part(th, 1., online.opacity(0.35)))
-            .child(part(0., level.min(th), palette::faint(cx)))
-            .when(level > th, |d| d.child(part(th, level, online))),
-    };
-    div()
-        .relative()
-        .w_full()
-        .h_6()
-        .child(bar)
-        .children(threshold.map(|th| div().absolute().top_0().left(relative(th.clamp(0., 1.))).ml(px(-3.)).w_1p5().h_6().rounded(px(3.)).bg(palette::accent())))
-}
-
-// The recorder's listening ring: 3px of accent tint 4px out, breathing.
-fn pulse_ring(id: SharedString, cx: &App) -> AnyElement {
-    let ring = div().absolute().top(px(-5.)).bottom(px(-5.)).left(px(-5.)).right(px(-5.)).squircle(ui::RADIUS_MD + 4.).border(px(3.)).border_color(palette::accent_soft(cx));
-    if cx.reduce_motion() {
-        return ring.into_any_element();
-    }
-    ring.with_animation(id, Animation::new(Duration::from_millis(2400)).repeat(), |ring, t| ring.opacity(0.2 + 0.8 * (0.5 - 0.5 * (t * std::f32::consts::TAU).cos())))
-        .into_any_element()
-}
-
-// Content arriving in place: a fade down from 4px above, on the house ease-out.
-fn reveal(id: impl Into<ElementId>, el: impl IntoElement) -> AnyElement {
-    div()
-        .relative()
-        .child(el)
-        .with_animation(id, Animation::new(ui::DUR_POP).with_easing(|t| motion::ease_out().sample(t)), |el, t| el.top(px(-4. * (1. - t))).opacity(t))
-        .into_any_element()
-}
-
-fn ring(color: Hsla, width: f32) -> BoxShadow {
-    BoxShadow { color, offset: point(px(0.), px(0.)), blur_radius: px(0.), spread_radius: px(width), inset: false }
-}
-
-fn inset_ring(color: Hsla, width: f32) -> BoxShadow {
-    BoxShadow { inset: true, ..ring(color, width) }
 }
 
 // Keycaps for a recorded binding, with the platform's own key names.
 pub(crate) fn key_caps(keys: &str, cx: &App) -> Div {
-    div().flex().items_center().gap_1().children(keys.split('+').map(|key| ui::kbd(key_name(key), cx)))
+    ui::row().gap_1().children(keys.split('+').map(|key| ui::kbd(key_name(key), cx)))
 }
 
 // ⌘ ⇧ ⌥ ⌃ on macOS, printed names elsewhere; arrows as arrows, letters upper-case.

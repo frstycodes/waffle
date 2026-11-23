@@ -111,7 +111,7 @@ impl Waffle {
                 cx.notify(); // lint-allow(global-notify): the launcher is drawn by the root, over the columns
             });
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot fetch that ends when the request returns, holding a WeakEntity
     }
 
     // Starting one puts it first among your recent apps.
@@ -246,7 +246,7 @@ impl Waffle {
             }
             None => {}
         }
-        let list = div().id("launcher-list").flex().flex_col().p(px(SURFACE_INSET)).gap_0p5().children(rows);
+        let list = ui::col().id("launcher-list").p(px(SURFACE_INSET)).gap_0p5().children(rows);
         ui::col()
             .size_full()
             .child(ui::row().flex_none().px_3().pt_3().pb_2().child(div().flex_1().child(ui::search_field("launcher-search", &launcher.search, cx))))
@@ -256,7 +256,7 @@ impl Waffle {
 
     fn card_grid(&self, apps: Vec<&ShelfApp>, cx: &mut Context<Self>) -> AnyElement {
         // Rows of two, built as rows: wrapping inside the scroll area laid them one a row.
-        let rows: Vec<AnyElement> = apps.chunks(2).map(|pair| div().flex().gap(px(GRID_GAP)).children(pair.iter().map(|app| self.launcher_card(app, cx))).into_any_element()).collect();
+        let rows: Vec<AnyElement> = apps.chunks(2).map(|pair| ui::row().items_stretch().gap(px(GRID_GAP)).children(pair.iter().map(|app| self.launcher_card(app, cx))).into_any_element()).collect();
         ui::col().gap(px(GRID_GAP)).px(px(GRID_GAP / 2.)).pb_2().children(rows).into_any_element()
     }
 
@@ -296,7 +296,7 @@ impl Waffle {
         let width = ((WIDTH - SURFACE_INSET * 2. - GRID_GAP * 2.) / 2. - GRID_SLACK).floor();
         let art: AnyElement = match &app.cover {
             Some(url) => img(url.clone()).size_full().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
-            None => div().size_full().flex().items_center().justify_center().bg(palette::selected(cx)).child(Icon::new(Glyph::Image).size(ICON_XL).text_color(palette::faint(cx))).into_any_element(),
+            None => ui::row().size_full().justify_center().bg(palette::selected(cx)).child(Icon::new(Glyph::Image).size(ICON_XL).text_color(palette::faint(cx))).into_any_element(),
         };
         let marks = ui::row()
             .absolute()
@@ -331,7 +331,7 @@ impl Waffle {
                     .p_2p5()
                     .gap_2p5()
                     .child(ui::server_tile(app.icon.as_deref(), &app.name, AVATAR_XL, cx))
-                    .child(ui::col().flex_1().child(ui::line(app.name.clone()).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(palette::strong(cx))).child(ui::line(line).text_size(TEXT_XS).text_color(palette::muted(cx)))),
+                    .child(ui::col().min_h_0().flex_1().child(ui::line(app.name.clone()).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(palette::strong(cx))).child(ui::line(line).text_size(TEXT_XS).text_color(palette::muted(cx)))),
             )
             .when_some(blocked, |d, why| d.tooltip(move |window, cx| ui::tip(why, window, cx)))
             .on_click(cx.listener(move |this, _, _, cx| this.open_detail(Some(id.clone()), cx)))
@@ -379,7 +379,7 @@ impl Waffle {
                         .p_3()
                         .gap_3()
                         .children(art)
-                        .child(ui::row().gap_3().child(ui::server_tile(app.icon.as_deref(), &app.name, AVATAR_XL, cx)).child(ui::col().flex_1().gap_0p5().child(ui::line(app.name.clone()).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(palette::strong(cx))).child(ui::line(facts).text_size(TEXT_XS).text_color(palette::muted(cx)))))
+                        .child(ui::row().gap_3().child(ui::server_tile(app.icon.as_deref(), &app.name, AVATAR_XL, cx)).child(ui::col().min_h_0().flex_1().gap_0p5().child(ui::line(app.name.clone()).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(palette::strong(cx))).child(ui::line(facts).text_size(TEXT_XS).text_color(palette::muted(cx)))))
                         .when(!app.description.is_empty(), |d| d.child(div().text_size(TEXT_SM).line_height(relative(LEADING_BODY)).text_color(palette::text(cx)).child(app.description.clone()))),
                 ),
             )
@@ -461,6 +461,6 @@ fn loading_row(i: usize, cx: &gpui_kit::App) -> AnyElement {
         .py_1p5()
         .gap_2p5()
         .child(ui::skeleton(SharedString::from(format!("launcher-skel-icon-{i}")), RADIUS_MD, cx).size(px(AVATAR_XL)).flex_none())
-        .child(ui::col().flex_1().gap_1p5().child(ui::skeleton(SharedString::from(format!("launcher-skel-a-{i}")), RADIUS_XS, cx).h_3().w(relative(0.5))).child(ui::skeleton(SharedString::from(format!("launcher-skel-b-{i}")), RADIUS_XS, cx).h_2p5().w(relative(0.8))))
+        .child(ui::col().min_h_0().flex_1().gap_1p5().child(ui::skeleton(SharedString::from(format!("launcher-skel-a-{i}")), RADIUS_XS, cx).h_3().w(relative(0.5))).child(ui::skeleton(SharedString::from(format!("launcher-skel-b-{i}")), RADIUS_XS, cx).h_2p5().w(relative(0.8))))
         .into_any_element()
 }

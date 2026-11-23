@@ -46,13 +46,15 @@ impl Waffle {
         let target = cx.prompt_for_new_path(&downloads, name.as_deref());
         cx.spawn(async move |this, cx| {
             let Ok(Ok(Some(to))) = target.await else { return };
-            let result = std::fs::copy(&path, &to);
+            let (from, dest) = (path.clone(), to.clone());
+            let result = cx.background_executor().spawn(async move { std::fs::copy(&from, &dest) }).await;
             this.update(cx, |this, cx| match result {
                 Ok(_) => cx.reveal_path(&to),
                 Err(e) => this.show_toast(format!("Couldn't save the crash log: {e}"), cx),
             })
             .ok();
         })
+        // lint-allow(detached-task): ends after the one save-dialog answer and copy, and only updates the view if it is still alive
         .detach();
     }
 }

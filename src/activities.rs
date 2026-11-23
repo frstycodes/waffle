@@ -229,7 +229,7 @@ impl Waffle {
                 this.redraw(Column::Main, cx);
             });
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot fetch that ends when the request returns, holding a WeakEntity
     }
 
     pub(crate) fn app_name(&self, app_id: &str) -> String {
@@ -295,7 +295,7 @@ impl Waffle {
             let Err(error) = result else { return };
             _ = this.update(cx, |this, cx| this.fail_activity(&app_id, error, cx));
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot request that ends when it returns, holding a WeakEntity
         cx.notify(); // lint-allow(global-notify): closes the root-drawn launcher
     }
 
@@ -311,7 +311,7 @@ impl Waffle {
                 }
             });
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends after its one timer fires, holding a WeakEntity
     }
 
     // Opens the game again in the same instance, keeping your place in it.
@@ -418,7 +418,7 @@ impl Waffle {
             }
             _ = this.update(cx, |this, cx| this.fail_activity(&app_id, "It didn't start in time".into(), cx));
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends when the activity starts or the wait times out, holding a WeakEntity
     }
 
     fn cancel_start(&mut self, cx: &mut Context<Self>) {
@@ -486,7 +486,7 @@ impl Waffle {
         crate::sounds::play(crate::sounds::Cue::ActivityEnd);
         if let (Some(client), Some(instance)) = (self.client.clone(), self.game_instance(&app_id)) {
             let session = self.gateway_session.clone();
-            cx.spawn(async move |_, _| _ = client.leave_activity(&instance, &session).await).detach();
+            cx.spawn(async move |_, _| _ = client.leave_activity(&instance, &session).await).detach(); // lint-allow(detached-task): a one-shot leave request that ends when it returns, holding no entity
         }
         self.close_frame(cx);
     }
@@ -532,7 +532,7 @@ impl Waffle {
                 });
             });
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot start that ends when the request returns, holding a WeakEntity
     }
 
     // What the app draws beside or over a game, lifted over its webview while one is open: the webview sits on

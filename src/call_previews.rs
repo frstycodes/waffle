@@ -12,6 +12,9 @@ use crate::{
     ui::{self, RADIUS_MD, Squircle},
 };
 
+// How far a preview card starts to the right of its place, in px, before sliding in.
+const SLIDE_IN: f32 = 12.;
+
 // Discord's toasts: three at most, one shared 10 s timer, 8px apart.
 const CAP: usize = 3;
 const LINGER: Duration = Duration::from_secs(10);
@@ -108,12 +111,12 @@ impl Waffle {
             this.update(cx, |this, cx| {
                 if this.call_previews.expire(timer, Instant::now()) {
                     this.after_preview_exit(cx);
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the call preview cards are an overlay, which only follows the app
                 }
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends after its one timer fires, holding a WeakEntity
     }
 
     // Redraws once cards that just left have faded, to take them out.
@@ -125,11 +128,11 @@ impl Waffle {
             cx.background_executor().timer(EXIT).await;
             this.update(cx, |this, cx| {
                 this.call_previews.prune(Instant::now());
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the call preview cards are an overlay, which only follows the app
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends after its one timer fires, holding a WeakEntity
     }
 
     // Discord's Open Chat: in that call, the chat opens beside it; otherwise the channel opens on its own.
@@ -146,7 +149,7 @@ impl Waffle {
             self.call_view = true;
             self.composer.update(cx, |state, cx| state.focus(window, cx));
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): opening the call chat swaps the main column and shows its panel
     }
 
     // The Toggle Voice Channel Chat keybind: only in a server voice channel. Hotkeys come without a
@@ -215,18 +218,16 @@ impl Waffle {
                 .cursor_pointer()
                 .hover(|s| s.bg(palette::oklch(0.30, 0.005, 260.)))
                 .on_click(cx.listener(move |this, _, window, cx| this.open_preview(&channel, id.clone(), window, cx)))
-                .with_animation(SharedString::from(format!("call-preview-in-{}", p.message.id)), Animation::new(ui::DUR_PANEL), |card, t| card.opacity(t).left(px(12. * (1. - crate::motion::back_out(t)))))
+                .with_animation(SharedString::from(format!("call-preview-in-{}", p.message.id)), Animation::new(ui::DUR_PANEL), |card, t| card.opacity(t).left(px(SLIDE_IN * (1. - crate::motion::back_out(t)))))
                 .into_any_element()
         });
-        let stack = div()
+        let stack = ui::col()
             .id("call-previews")
             .occlude()
             .absolute()
             .top(px(TOP))
             .right(px(RIGHT))
             .w(px(WIDTH))
-            .flex()
-            .flex_col()
             .gap(px(GAP))
             .children(leaving)
             .children(cards)
@@ -236,7 +237,7 @@ impl Waffle {
                 if !*hovered {
                     this.after_preview_exit(cx);
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the call preview cards are an overlay, which only follows the app
             }));
         Some(stack.into_any_element())
     }
@@ -263,9 +264,10 @@ fn preview_card(preview: &Preview, ctx: &std::rc::Rc<crate::chat::RowContext>) -
     let text = crate::chat::plain_text(&message.content, ctx);
     let body = (!text.trim().is_empty()).then(|| text.into_any_element()).or_else(|| {
         let (glyph, label) = crate::forward::attachment_summary(message)?;
-        Some(div().flex().items_center().gap_1p5().text_color(stage::muted()).child(Icon::new(glyph).size(ui::ICON_MD)).child(label).into_any_element())
+        Some(ui::row().gap_1p5().text_color(stage::muted()).child(Icon::new(glyph).size(ui::ICON_MD)).child(label).into_any_element())
     });
-    div()
+    // lint-allow(custom-surface): ui::surface rings and shadows in the app's overlay colours, and this card is the call stage's own dark overlay
+    ui::row().items_stretch()
         .id(SharedString::from(format!("call-preview-{}", message.id)))
         .relative()
         .w_full()
@@ -274,17 +276,13 @@ fn preview_card(preview: &Preview, ctx: &std::rc::Rc<crate::chat::RowContext>) -
         .squircle(RADIUS_MD)
         .bg(stage::overlay())
         .shadow(shadows)
-        .flex()
         .gap_2()
         .child(ui::avatar(message.author.avatar.clone(), AVATAR))
         .child(
-            div()
+            ui::col().min_h_0()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .gap_0p5()
-                .child(div().truncate().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(message.author.name.clone()))
+                .child(ui::line(message.author.name.clone()).text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()))
                 .children(body.map(|b| div().text_size(ui::TEXT_SM).text_color(stage::text()).line_clamp(2).child(b))),
         )
 }

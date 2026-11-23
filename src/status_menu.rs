@@ -34,6 +34,8 @@ const TEXT_WARN: usize = 110;
 const MENU_WIDTH: f32 = 288.;
 const DIALOG_WIDTH: f32 = 480.;
 const FLYOUT_WIDTH: f32 = 200.;
+// The corner radius of the editor's thought bubble.
+const BUBBLE_RADIUS: f32 = 18.;
 const PRESENCES: [(Status, &str, &str); 4] = [
     (Status::Online, "Online", ""),
     (Status::Idle, "Idle", ""),
@@ -145,7 +147,7 @@ impl Waffle {
     pub(crate) fn toggle_status_menu(&mut self, cx: &mut Context<Self>) {
         self.status_menu = !self.status_menu;
         self.status_flyout = Flyout::default();
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the menu is an overlay, but the user panel under it also lights while it's open
     }
 
     // Hovering a row opens its durations (`target`), or closes them for a row without any.
@@ -163,17 +165,18 @@ impl Waffle {
                     if this.status_flyout.pending == Some(target) {
                         this.status_flyout.pending = None;
                         this.status_flyout.open = target;
-                        cx.notify();
+                        this.redraw_overlays(cx);
                     }
                 })
                 .ok();
             })
+            // lint-allow(detached-task): ends itself after the one grace timer, and holds only a WeakEntity.
             .detach();
             return;
         }
         flyout.pending = None;
         flyout.open = target;
-        cx.notify();
+        self.redraw_overlays(cx);
     }
 
     fn row_hover(&self, target: Option<Status>, cx: &mut Context<Self>) -> impl Fn(&bool, &mut Window, &mut App) + 'static {
@@ -203,7 +206,7 @@ impl Waffle {
                 }
             }, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): your presence draws in the user panel, the member list and the status menu
     }
 
     pub(crate) fn set_custom_status(&mut self, custom: Option<CustomStatus>, cx: &mut Context<Self>) {
@@ -234,7 +237,7 @@ impl Waffle {
             if this.custom_status.as_ref().and_then(|c| c.expires_at) == Some(at) {
                 this.custom_status = None;
                 this.publish_presence();
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): your custom status draws in the user panel and the member list
             }
         }, cx);
     }
@@ -251,6 +254,7 @@ impl Waffle {
             cx.background_executor().timer(wait).await;
             this.update(cx, |this, cx| then(this, cx)).ok();
         })
+        // lint-allow(detached-task): ends itself once the timer fires and `then` has run, and holds only a WeakEntity.
         .detach();
     }
 
@@ -273,13 +277,13 @@ impl Waffle {
         if let Some(me) = self.me.clone() {
             self.fetch_profile(me, None, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the editor is an overlay, but closing the menu also unlights the user panel
     }
 
     pub(crate) fn on_status_input(&mut self, _: &Entity<SearchState>, event: &InputEvent, _: &mut Window, cx: &mut Context<Self>) {
         match event {
             InputEvent::PressEnter { .. } => self.save_status(cx),
-            InputEvent::Change => cx.notify(),
+            InputEvent::Change => self.redraw_overlays(cx),
             _ => {}
         }
     }
@@ -297,7 +301,7 @@ impl Waffle {
 
     fn close_status_editor(&mut self, cx: &mut Context<Self>) {
         self.status_editor = None;
-        cx.notify();
+        self.redraw_overlays(cx);
     }
 
     fn clear_after_entries(&self) -> Vec<Entry> {
@@ -308,7 +312,7 @@ impl Waffle {
                 let row = menu::item(choice.name(), move |this, _, cx| {
                     this.clear_after = choice;
                     this.menu = None;
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): closes the menu, which the root draws over the columns
                 })
                 .icon(choice.glyph())
                 .radio(self.clear_after == choice);
@@ -381,6 +385,7 @@ impl Waffle {
         };
         let chevron = timed.then(|| div().flex_none().text_color(palette::muted(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)));
         let flyout = open.then(|| {
+            // lint-allow(raw-margin): sits past its row's right edge by the card's inset and a gap, which left_full can't add to.
             div().absolute().top(px(-ui::SURFACE_INSET)).left_full().ml(px(ui::SURFACE_INSET + 4.)).child(ui::floating("status-duration-float", self.duration_flyout(status, cx)).with_priority(1))
         });
         menu::menu_item_row(SharedString::from(format!("status-{label}")), &row, open, true, cx)
@@ -422,14 +427,11 @@ impl Waffle {
         let current = self.me.as_ref().is_some_and(|me| me.id == account.id);
         let status = if current { self.my_status } else { account.status };
         let ring = if current { palette::selected(cx) } else { palette::surface(palette::Level::Overlay, cx) };
-        let name = div()
+        let name = ui::col().min_h_0()
             .flex_1()
-            .min_w_0()
-            .flex()
-            .flex_col()
             .line_height(ui::LINE_DETAIL)
-            .child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(account.name.clone()))
-            .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(status.label()));
+            .child(ui::line(account.name.clone()).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
+            .child(ui::line(status.label()).text_size(ui::TEXT_XS).text_color(palette::muted(cx)));
         let (switch_id, out_id) = (account.id.clone(), account.id.clone());
         let log_out = (!current).then(|| {
             ui::icon_button(SharedString::from(format!("log-out-{}", account.id)), Glyph::DoorExit, format!("Log out of {}", account.name), cx).small().on_click(cx.listener(move |this, _, window, cx| {
@@ -451,16 +453,12 @@ impl Waffle {
 
     pub(crate) fn status_editor_overlay(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let editor = self.status_editor.as_ref()?;
-        let head = div()
-            .flex()
+        let head = ui::row()
             .items_start()
             .gap_3()
             .child(
-                div()
+                ui::col().min_h_0()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
                     .gap_1()
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Set your status"))
                     .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child("Shown on your profile and in member lists.")),
@@ -468,11 +466,9 @@ impl Waffle {
             .child(ui::icon_button("status-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_status_editor(cx))));
         let clear_after = ui::select("status-clear-after", Some(self.clear_after.glyph()), self.clear_after.name(), false, cx)
             .on_click(cx.listener(|this, _, window, cx| this.open_menu(window.mouse_position(), this.clear_after_entries(), cx)));
-        let footer = div()
-            .flex()
-            .items_center()
+        let footer = ui::row()
             .gap_2()
-            .child(div().flex_1().flex().child(ui::button("status-clear-all", ui::Tone::Ghost, cx).child("Clear status").on_click(cx.listener(|this, _, _, cx| {
+            .child(ui::row().items_stretch().flex_1().child(ui::button("status-clear-all", ui::Tone::Ghost, cx).child("Clear status").on_click(cx.listener(|this, _, _, cx| {
                 this.status_editor = None;
                 this.set_custom_status(None, cx);
             }))))
@@ -483,7 +479,7 @@ impl Waffle {
             .child(self.status_preview(editor, cx))
             .child(ui::field("Custom status", cx).child(self.status_text_field(editor, cx)))
             .child(ui::field("Clear after", cx).child(clear_after))
-            .child(ui::field("Status", cx).child(div().flex().flex_col().children(PRESENCES.iter().map(|&(status, label, detail)| presence_choice(status, label, detail, editor.status == status, cx)))))
+            .child(ui::field("Status", cx).child(ui::col().children(PRESENCES.iter().map(|&(status, label, detail)| presence_choice(status, label, detail, editor.status == status, cx)))))
             .child(footer);
         let backdrop = div().id("status-editor-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_status_editor(cx)));
         Some(ui::modal(backdrop, ui::dialog("status-editor", DIALOG_WIDTH, body, window, cx), cx))
@@ -495,7 +491,7 @@ impl Waffle {
         let profile = self.my_profile();
         let ink = Ink::new(profile.theme, cx);
         let text = self.status_input.read(cx).value().trim().to_owned();
-        let face = div().min_w_0().flex().items_center().gap_1p5().text_color(ink.text);
+        let face = ui::row().gap_1p5().text_color(ink.text);
         let face = if text.is_empty() && editor.emoji.is_none() {
             face.text_color(ink.muted).child(div().italic().child("What's on your mind?"))
         } else {
@@ -506,13 +502,12 @@ impl Waffle {
         let decoration = me.decoration.clone().or(profile.decoration.clone());
         let avatar = div().p(px(AVATAR_RING)).rounded_full().bg(ink.top).child(crate::layout::decorated_avatar(&me.avatar, decoration.as_deref(), AVATAR, Some(editor.status.into()), ink.top));
         let inset = 16.;
-        let header = div()
+        let header = ui::col()
             .relative()
-            .flex()
-            .flex_col()
             .child(banner)
-            .child(div().px(px(inset - AVATAR_RING)).mt(px(-(AVATAR / 2. + AVATAR_RING))).mb_2().flex().child(avatar))
-            .child(div().absolute().top(px(banner_height - 20.)).left(px(inset + AVATAR + AVATAR_RING + 6.)).right_3().flex().child(bubble(face, ink, cx)));
+            // lint-allow(raw-margin): the avatar row pulls up over the banner's foot, which padding can't do.
+            .child(ui::row().items_stretch().px(px(inset - AVATAR_RING)).mt(px(-(AVATAR / 2. + AVATAR_RING))).mb_2().child(avatar))
+            .child(ui::row().items_stretch().absolute().top(px(banner_height - 20.)).left(px(inset + AVATAR + AVATAR_RING + 6.)).right_3().child(bubble(face, ink, cx)));
         let (outer, inner) = profile::themed_card(ink, f32::MAX, cx);
         outer.child(inner.child(header).child(div().px(px(inset)).pb(px(inset)).child(name_block(me, &profile, ink)))).into_any_element()
     }
@@ -525,11 +520,9 @@ impl Waffle {
     // The emoji button, the text, its count against the limit and a clear button once there's text.
     fn status_text_field(&self, editor: &StatusEditor, cx: &mut Context<Self>) -> AnyElement {
         let length = self.status_input.read(cx).value().chars().count();
-        let emoji = div()
+        let emoji = ui::row()
             .id("status-emoji")
             .size_6()
-            .flex()
-            .items_center()
             .justify_center()
             .cursor_pointer()
             .text_color(palette::muted(cx))
@@ -546,7 +539,7 @@ impl Waffle {
         }
         field.trailing(ui::icon_button("status-clear-text", Glyph::XCircle, "Clear text", cx).small().on_click(cx.listener(|this, _, window, cx| {
             this.status_input.update(cx, |state, cx| state.set_value("", window, cx));
-            cx.notify();
+            this.redraw_overlays(cx);
         })))
         .into_any_element()
     }
@@ -554,23 +547,18 @@ impl Waffle {
 
 // A presence to pick in the dialog: its mark, name and what it does, the radio at the end.
 fn presence_choice(status: Status, label: &'static str, detail: &'static str, on: bool, cx: &mut Context<Waffle>) -> gpui_kit::Stateful<Div> {
-    let row = div()
+    let row = ui::row()
         .id(SharedString::from(format!("status-choice-{label}")))
         .min_h_11()
         .px_2p5()
         .py_1p5()
         .squircle(ui::RADIUS_MD)
-        .flex()
-        .items_center()
         .gap_3()
         .when(on, |r| r.bg(palette::selected(cx)))
         .child(ui::status_mark(status, 14., palette::surface(palette::Level::Raised, cx), cx).border_0())
         .child(
-            div()
+            ui::col().min_h_0()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(label))
                 .when(!detail.is_empty(), |d| d.child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail))),
         )
@@ -595,7 +583,7 @@ fn bubble(content: Div, ink: Ink, cx: &App) -> Stateful<Div> {
         .min_w_0()
         .child(dot(8.).left_neg_2().top_neg_3p5())
         .child(dot(16.).left_1().top_neg_2())
-        .child(div().relative().min_w_0().min_h_9().px_3().py_2().rounded(px(18.)).bg(fill).border_1().border_color(edge).flex().items_center().text_size(ui::TEXT_SM).line_height(ui::LINE_DETAIL).child(content))
+        .child(ui::row().relative().min_h_9().px_3().py_2().rounded(px(BUBBLE_RADIUS)).bg(fill).border_1().border_color(edge).text_size(ui::TEXT_SM).line_height(ui::LINE_DETAIL).child(content))
 }
 
 #[cfg(test)]

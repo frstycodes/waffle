@@ -66,6 +66,7 @@ pub fn install(window: &mut Window, cx: &mut App) {
         TRAY.with(|t| t.borrow_mut().take());
         async {}
     })
+    // lint-allow(detached-task): an app-quit subscription, with no view to drop; it lives as long as the process.
     .detach();
 
     let (open_id, quit_id) = (open.id().clone(), quit.id().clone());
@@ -92,6 +93,7 @@ pub fn install(window: &mut Window, cx: &mut App) {
             }
         }
     })
+    // lint-allow(detached-task): polls the tray for the life of the process and ends on Quit; there is no view to drop.
     .detach();
 }
 
@@ -133,6 +135,7 @@ fn watch_activation(hwnd: HWND, cx: &mut App) {
             }
         }
     })
+    // lint-allow(detached-task): polls for a second launch for the life of the process; there is no view to drop.
     .detach();
 }
 

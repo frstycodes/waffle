@@ -20,6 +20,13 @@ use crate::{
     ui::{self, RADIUS_MD, Squircle},
 };
 
+// The least height of a reactor row.
+const REACTOR_ROW: f32 = 52.;
+// The emoji column of a reaction tab.
+const TAB_EMOJI: f32 = 26.;
+// A loading reactor's name bar.
+const SKELETON_NAME: f32 = 140.;
+
 const PAGE: usize = 100;
 const DIALOG_WIDTH: f32 = 560.;
 const DIALOG_HEIGHT: f32 = 600.;
@@ -82,6 +89,7 @@ impl ReactorsCard {
 
 impl Render for ReactorsCard {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("ReactorsCard");
         let Some(waffle) = self.this.upgrade() else { return div().into_any_element() };
         let waffle = waffle.read(cx);
         // Its link opened the dialog; a hoverable tooltip stays up while the pointer rests on it, so it steps aside.
@@ -94,6 +102,7 @@ impl Render for ReactorsCard {
         let strong = HighlightStyle { color: Some(palette::strong(cx)), font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() };
         let link = HighlightStyle { color: Some(palette::accent_ink(cx)), font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() };
         let mut runs: Vec<(Range<usize>, HighlightStyle)> = line.strong.iter().map(|r| (r.clone(), strong)).chain(line.link.clone().map(|r| (r, link))).collect();
+        // lint-allow(render-work): sorts at most four runs (three names and a link) of one small card
         runs.sort_by_key(|(r, _)| r.start);
         let (this, channel_id, message_id, emoji) = (self.this.clone(), self.channel_id.clone(), self.message_id.clone(), self.reaction.emoji.clone());
         let text = InteractiveText::new("reactors-text", StyledText::new(line.text).with_highlights(runs)).on_click(line.link.into_iter().collect(), move |_, _, cx| {
@@ -128,6 +137,7 @@ impl Render for ReactorsCard {
 #[derive(Debug, PartialEq)]
 pub(crate) struct Line {
     pub text: String,
+    // lint-allow(unbounded-growth): the name spans of one card sentence, three at most, rebuilt for each card
     pub strong: Vec<Range<usize>>,
     pub link: Option<Range<usize>>,
 }
@@ -219,11 +229,11 @@ impl Waffle {
                     }
                     Err(_) => entry.failed = true,
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the reactions dialog is drawn by the root's overlays, over every column
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one page fetch: ends when the request returns, or when Waffle is dropped
     }
 
     /// A reaction changed: someone leaving drops out of the loaded list; someone joining isn't placed
@@ -251,7 +261,7 @@ impl Waffle {
             hovered: None,
             scroll: ScrollHandle::new(),
         });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the reactions dialog is drawn by the root's overlays, over every column
     }
 
     fn select_reaction(&mut self, emoji: Emoji, cx: &mut Context<Self>) {
@@ -260,12 +270,12 @@ impl Waffle {
         dialog.scroll = ScrollHandle::new();
         let (channel_id, message_id) = (dialog.channel_id.clone(), dialog.message_id.clone());
         self.load_reactors(&channel_id, &message_id, &emoji, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the reactions dialog is drawn by the root's overlays, over every column
     }
 
     fn close_reactions(&mut self, cx: &mut Context<Self>) {
         self.reactions_dialog = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the reactions dialog is drawn by the root's overlays, over every column
     }
 
     fn reactions_scrolled(&mut self, cx: &mut Context<Self>) {
@@ -325,7 +335,7 @@ impl Waffle {
         } else if dialog.hovered.as_deref() == Some(user_id) {
             dialog.hovered = None;
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the reactions dialog is drawn by the root's overlays, over every column
     }
 
     // Header, then the reactions down the left by count and the selected one's people on the right.
@@ -339,9 +349,7 @@ impl Waffle {
         };
         let line = palette::line(cx);
         let total: u64 = message.reactions.iter().map(|r| u64::from(r.count)).sum();
-        let head = div()
-            .flex()
-            .items_center()
+        let head = ui::row()
             .gap_3()
             .pl_6()
             .pr_5()
@@ -352,9 +360,8 @@ impl Waffle {
             .child(
                 // GAP: gpui's `items_baseline` doesn't line up mixed sizes, so the count's taller line box puts its
                 // baseline on the title's: half-leading plus (ascent - descent) / 2 of each size, top-aligned.
-                div()
+                ui::row()
                     .flex_1()
-                    .flex()
                     .items_start()
                     .gap_2()
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Reactions"))
@@ -362,7 +369,7 @@ impl Waffle {
             )
             .child(ui::icon_button("reactions-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_reactions(cx))));
         let tabs: Vec<AnyElement> = order.iter().map(|r| reaction_tab(r, r.emoji == selected, cx)).collect();
-        let rail = div()
+        let rail = ui::col()
             .id("reactions-rail")
             .w(px(RAIL_WIDTH))
             .flex_none()
@@ -372,23 +379,18 @@ impl Waffle {
             .border_color(line)
             .py_2p5()
             .px_2()
-            .flex()
-            .flex_col()
             .gap_0p5()
             .children(tabs);
-        let people = div()
+        let people = ui::col().min_h_0()
             .id("reactions-people")
             .flex_1()
-            .min_w_0()
             .h_full()
             .overflow_y_scroll()
             .track_scroll(&dialog.scroll)
             .on_scroll(cx.listener(|this, _, _, cx| this.reactions_scrolled(cx)))
             .p_2()
-            .flex()
-            .flex_col()
             .children(self.reactor_rows(&message, &selected, cx));
-        let body = div().h(px(DIALOG_HEIGHT)).flex().flex_col().child(head).child(div().flex_1().min_h_0().flex().child(rail).child(people));
+        let body = ui::col().h(px(DIALOG_HEIGHT)).child(head).child(ui::row().items_stretch().flex_1().min_h_0().child(rail).child(people));
         let (channel_id, message_id) = (message.channel_id.clone(), message.id.clone());
         self.load_reactors(&channel_id, &message_id, &selected, cx);
         Some(ui::modal(backdrop("reactions-backdrop", cx), ui::dialog("reactions-dialog", DIALOG_WIDTH, body, window, cx), cx))
@@ -425,13 +427,10 @@ impl Waffle {
     fn reactor_row(&self, user: &crate::discord::User, name: String, detail: String, removable: bool, cx: &mut Context<Self>) -> AnyElement {
         let id = user.id.clone();
         let hover_id = id.clone();
-        let who = div()
+        let who = ui::col().min_h_0()
             .flex_1()
-            .min_w_0()
-            .flex()
-            .flex_col()
-            .child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(name))
-            .when(!detail.is_empty(), |w| w.child(div().truncate().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(detail)));
+            .child(ui::line(name).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
+            .when(!detail.is_empty(), |w| w.child(ui::line(detail).text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx))));
         let remove = removable.then(|| {
             ui::button(SharedString::from(format!("reactor-remove-{id}")), ui::Tone::Secondary, cx)
                 .small()
@@ -439,13 +438,11 @@ impl Waffle {
                 .on_click(cx.listener(move |this, _, _, cx| this.remove_reactor(id.clone(), cx)))
         });
         let hover = palette::hover(cx);
-        div()
+        ui::row()
             .id(SharedString::from(format!("reactor-{}", user.id)))
-            .flex()
             .flex_none()
-            .items_center()
             .gap_3()
-            .min_h(px(52.))
+            .min_h(px(REACTOR_ROW))
             .px_2p5()
             .py_1p5()
             .squircle(RADIUS_MD)
@@ -467,7 +464,7 @@ fn reaction_tab(reaction: &Reaction, on: bool, cx: &mut Context<Waffle>) -> AnyE
         .h_10()
         .text_size(ui::TEXT_LEAD)
         .font_weight(FontWeight::SEMIBOLD)
-        .child(div().w(px(26.)).flex_none().flex().justify_center().child(emoji_face(&emoji, 22.)))
+        .child(ui::row().items_stretch().w(px(TAB_EMOJI)).flex_none().justify_center().child(emoji_face(&emoji, 22.)))
         .child(div().font_features(tabular()).when(reaction.me, |d| d.text_color(palette::accent_ink(cx))).child(grouped(reaction.count.into())))
         .tooltip(move |window, cx| ui::tip(code.clone(), window, cx))
         .on_click(cx.listener(move |this, _, _, cx| this.select_reaction(emoji.clone(), cx)))
@@ -475,25 +472,21 @@ fn reaction_tab(reaction: &Reaction, on: bool, cx: &mut Context<Waffle>) -> AnyE
 }
 
 fn skeleton_row(i: usize, cx: &mut Context<Waffle>) -> AnyElement {
-    div()
-        .flex()
+    ui::row()
         .flex_none()
-        .items_center()
         .gap_3()
-        .min_h(px(52.))
+        .min_h(px(REACTOR_ROW))
         .px_2p5()
         .child(ui::skeleton_circle(("reactor-skeleton-face", i), AVATAR, cx))
-        .child(ui::skeleton(("reactor-skeleton-name", i), 6., cx).w(px(140.)).h_3())
+        .child(ui::skeleton(("reactor-skeleton-name", i), 6., cx).w(px(SKELETON_NAME)).h_3())
         .into_any_element()
 }
 
 fn failed_row(cx: &mut Context<Waffle>) -> AnyElement {
-    div()
-        .flex()
+    ui::row()
         .flex_none()
-        .items_center()
         .gap_2()
-        .min_h(px(52.))
+        .min_h(px(REACTOR_ROW))
         .px_2p5()
         .text_color(palette::muted(cx))
         .child("Couldn't load everyone who reacted.")

@@ -29,6 +29,11 @@ use crate::{
     ui::{self, Notice, Tone},
 };
 
+// The size a role row has before its first measure, for the drag ghost.
+const ROLE_ROW_WIDTH: f32 = 480.;
+const ROLE_ROW_HEIGHT: f32 = 56.;
+// Ten swatches to a row, as Discord lays them out.
+const SWATCH_ROW_WIDTH: f32 = 400.;
 // The roles list's sortable list and its drag (sortable.rs).
 const ROLE_LIST: &str = "roles";
 
@@ -93,7 +98,7 @@ impl RolesView {
     pub fn new(window: &mut Window, cx: &mut Context<Waffle>) -> Self {
         let mut input = |placeholder: &'static str| {
             let state = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
-            cx.subscribe(&state, |_, _, _: &InputEvent, cx| cx.notify()).detach();
+            cx.subscribe(&state, |_, _, _: &InputEvent, cx| cx.notify()).detach(); // lint-allow(detached-task): the subscription ends when the input entity it watches is dropped with the settings state
             state
         };
         RolesView { list: Load::Loading, counts: HashMap::new(), search: input("Search roles"), perm_search: input("Search permissions"), name: input("Role name"), open: None, pending_open: None }
@@ -133,7 +138,7 @@ impl Waffle {
                 Err(error) => Load::Failed(error),
             };
         }, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     fn role_current(&self, cx: &App) -> Option<(String, RoleDraft, RoleDraft)> {
@@ -184,7 +189,7 @@ impl Waffle {
         if let Some(view) = &mut self.server_settings {
             view.save = super::view::Save::Idle;
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     pub(crate) fn ss_roles_page(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
@@ -229,10 +234,10 @@ impl Waffle {
                 let count = counts.get(&r.id).map(|n| plural(*n, "member", "members"));
                 let id = r.id.clone();
                 // A grip on the rows that drag; the rest keep its slot so every name lines up.
-                let grip = div().w_4().flex_none().flex().justify_center().when(draggable, |g| g.cursor_grab().text_color(palette::faint(cx)).child(Icon::new(Glyph::Grip).size(ui::ICON_MD)));
+                let grip = ui::row().items_stretch().w_4().flex_none().justify_center().when(draggable, |g| g.cursor_grab().text_color(palette::faint(cx)).child(Icon::new(Glyph::Grip).size(ui::ICON_MD)));
                 let row = ui::settings_row(SharedString::from(format!("ss-role-{}", r.id)), i > 0 || default_shown(&list, &guild_id), cx)
                     .child(grip)
-                    .child(div().size_3().m_0p5().rounded_full().bg(color).flex_none())
+                    .child(div().p_0p5().flex_none().child(div().size_3().rounded_full().bg(color)))
                     .child(ui::settings_text(r.role.name.clone(), count.or_else(|| lock.reason().map(str::to_owned)), cx))
                     .child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD));
                 let key = format!("ss-role-{}", r.id);
@@ -243,7 +248,7 @@ impl Waffle {
                     .on_click(cx.listener(move |this, _, window, cx| this.open_role(id.clone(), window, cx)));
                 let row = match draggable {
                     true => {
-                        let size = self.role_board.slot(&r.id).map_or(gpui_kit::point(px(480.), px(56.)), |b| gpui_kit::point(b.size.width, b.size.height));
+                        let size = self.role_board.slot(&r.id).map_or(gpui_kit::point(px(ROLE_ROW_WIDTH), px(ROLE_ROW_HEIGHT)), |b| gpui_kit::point(b.size.width, b.size.height));
                         let ghost = crate::drag::pick_up(cx.weak_entity(), key.into(), Look::Label { dot: color, text: r.role.name.clone().into() }, size, 1.03, 0., true);
                         let row = row.on_drag(RoleDrag, Board::lift(cx.weak_entity(), role_board, r.id.clone(), ghost));
                         Board::target(row, role_board, ROLE_LIST, r.id.clone(), |_: &RoleDrag| false, cx)
@@ -256,7 +261,7 @@ impl Waffle {
         let empty = rows.is_empty().then(|| ui::settings_caption(if query.is_empty() { "No roles yet. Create one to group members and give them permissions." } else { "No roles match." }, cx));
         vec![
             ui::settings_card(cx).children(default).into_any_element(),
-            div().flex().gap_3().items_center().child(div().flex_1().child(search)).child(create).into_any_element(),
+            ui::row().gap_3().child(div().flex_1().child(search)).child(create).into_any_element(),
             ui::settings_group("Roles", cx).child(ui::settings_card(cx).id("ss-roles").children(rows)).children(empty).child(ui::settings_caption("Members use the colour of their highest role. You can only move roles below your own highest role.", cx)).into_any_element(),
         ]
     }
@@ -317,7 +322,7 @@ impl Waffle {
         let back: Vec<(&str, i64)> = before.iter().map(|(id, _)| (id.as_str(), now[id])).collect();
         let undo = api::reorder_roles(&guild_id, &back);
         let name = list[j].role.name.clone();
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
         self.server_call(call, move |this, result, cx| match result {
             Ok(_) => {
                 if let Some(undo) = undo {
@@ -348,9 +353,9 @@ impl Waffle {
             if let Some(view) = &mut this.server_settings {
                 view.roles.open = None;
             }
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
         }));
-        let title = div().text_size(ui::TEXT_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).truncate().child(if is_everyone { "@everyone".to_owned() } else { format!("Edit role · {}", row.role.name) });
+        let title = ui::line(if is_everyone { "@everyone".to_owned() } else { format!("Edit role · {}", row.role.name) }).text_size(ui::TEXT_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx));
         let mut tabs = vec![ui::Tab::new("Permissions")];
         if !is_everyone {
             tabs.insert(0, ui::Tab::new("Display"));
@@ -366,10 +371,10 @@ impl Waffle {
                 if let Some(edit) = this.server_settings.as_mut().and_then(|v| v.roles.open.as_mut()) {
                     edit.tab = pick;
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
             })
         }, window, cx);
-        let mut out = vec![div().flex().flex_col().gap_2().child(div().flex().items_center().gap_2().child(back).child(title)).child(strip).into_any_element()];
+        let mut out = vec![ui::col().gap_2().child(ui::row().gap_2().child(back).child(title)).child(strip).into_any_element()];
         if let Some(reason) = lock.reason().filter(|_| lock == RoleLock::Above) {
             out.push(ui::callout(Notice::Info, Glyph::Shield, "View only", reason, cx).into_any_element());
         }
@@ -395,7 +400,7 @@ impl Waffle {
             let none = ui::swatch(SharedString::from(format!("ss-swatch-{slot}-none")), palette::faint(cx), current.is_none_or(|c| c == 0), ring).on_click(cx.listener(move |this, _, _, cx| this.edit_role_draft(cx, |d| set_color(d, slot, None))));
             let rest = COLORS.map(|c| ui::swatch(SharedString::from(format!("ss-swatch-{slot}-{c:06x}")), palette::data_color(c), current == Some(c), ring).on_click(cx.listener(move |this, _, _, cx| this.edit_role_draft(cx, |d| set_color(d, slot, Some(c))))).into_any_element());
             // Ten to a row, as Discord lays them out.
-            div().max_w(px(400.)).flex().flex_wrap().gap_2().child(none).children(rest)
+            ui::row().items_stretch().max_w(px(SWATCH_ROW_WIDTH)).flex_wrap().gap_2().child(none).children(rest)
         };
         let primary = swatches(0, Some(draft.color), cx);
         let mut colour = ui::settings_card(cx).p_4().gap_3().child(ui::settings_text("Colour", Some("Members show the colour of their highest coloured role"), cx)).child(primary);
@@ -423,7 +428,7 @@ impl Waffle {
             if let Some(edit) = this.server_settings.as_mut().and_then(|v| v.roles.open.as_mut()) {
                 edit.asking_delete = !edit.asking_delete;
             }
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
         });
         if !asking {
             return ui::settings_card(cx).child(ui::settings_row("ss-role-delete", false, cx).child(ui::settings_text("Delete role", Some("Everyone who has it loses it"), cx)).child(ui::button("ss-role-delete-ask", Tone::Danger, cx).small().child("Delete role").on_click(ask))).into_any_element();
@@ -449,7 +454,7 @@ impl Waffle {
             }, cx);
         }));
         let count = self.server_settings.as_ref().and_then(|v| v.roles.counts.get(&row.id).copied()).unwrap_or(0);
-        ui::callout_with(Notice::Danger, Glyph::Trash, format!("Delete {}?", row.role.name), format!("{} lose it. This can't be undone.", plural(count, "member", "members")), div().flex().gap_2().child(keep).child(delete), cx).into_any_element()
+        ui::callout_with(Notice::Danger, Glyph::Trash, format!("Delete {}?", row.role.name), format!("{} lose it. This can't be undone.", plural(count, "member", "members")), ui::row().items_stretch().gap_2().child(keep).child(delete), cx).into_any_element()
     }
 
     fn ss_role_permissions(&mut self, editable: bool, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
@@ -459,7 +464,7 @@ impl Waffle {
         let query = view.roles.perm_search.read(cx).value().to_string();
         let search = ui::search_field("ss-perm-search", &view.roles.perm_search, cx);
         let clear = ui::button("ss-perm-clear", Tone::Ghost, cx).small().disabled(!editable || bits == 0).child("Clear permissions").on_click(cx.listener(|this, _, _, cx| this.edit_role_draft(cx, |d| d.permissions = 0)));
-        let mut out = vec![div().flex().items_center().gap_3().child(div().flex_1().child(search)).child(clear).into_any_element()];
+        let mut out = vec![ui::row().gap_3().child(div().flex_1().child(search)).child(clear).into_any_element()];
         let groups = perms::search(&query);
         if groups.is_empty() {
             out.push(ui::settings_caption("No permissions match.", cx).into_any_element());

@@ -20,6 +20,9 @@ use crate::{
 
 const DIALOG_WIDTH: f32 = 480.;
 const PREVIEW_AVATAR: f32 = 32.;
+// The thank-you illustration's size.
+const SENT_ART_WIDTH: f32 = 200.;
+const SENT_ART_HEIGHT: f32 = 150.;
 // Discord's copy when a submit fails for a reason it doesn't name.
 const SUBMIT_FAILED: &str = "There was an error trying to submit this report. Please try again!";
 
@@ -82,7 +85,7 @@ struct Node {
     button: Option<(String, Option<String>)>,
     elements: Vec<Element>,
     // (label, node it leads to)
-    children: Vec<(String, String)>,
+    children: Vec<(String, String)>, // lint-allow(unbounded-growth): the reasons of one menu node, a few dozen at most
     auto_submit: bool,
 }
 
@@ -107,7 +110,7 @@ pub(crate) struct ReportDialog {
     // The nodes behind this one, each with the reason picked to leave it.
     history: Vec<(String, Option<String>)>,
     // Element name to what's chosen: an array for a checkbox group, a string for a radio group.
-    picks: HashMap<String, Value>,
+    picks: HashMap<String, Value>, // lint-allow(unbounded-growth): one pick per form element of the node on screen, a handful
     pub(crate) also_block: bool,
     sending: bool,
     error: Option<&'static str>,
@@ -119,13 +122,13 @@ impl Waffle {
     pub(crate) fn open_report(&mut self, target: ReportTarget, cx: &mut Context<Self>) {
         let name = target.name();
         self.report_dialog = Some(ReportDialog { target, menu: Load::Loading, node: String::new(), history: Vec::new(), picks: HashMap::new(), also_block: false, sending: false, error: None, done: HashSet::new() });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the report dialog is drawn by render_root, not by a column
         let Some(client) = self.client.clone() else { return };
         cx.spawn(async move |this, cx| {
             let menu = client.call(Method::GET, format!("/reporting/menu/{name}"), None).await.ok().and_then(|v| ReportMenu::parse(&v));
             this.update(cx, |this, cx| this.report_menu_loaded(menu, cx)).ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one request that ends when the menu lands, holding only a WeakEntity
     }
 
     pub(crate) fn report_menu_loaded(&mut self, menu: Option<ReportMenu>, cx: &mut Context<Self>) {
@@ -137,12 +140,12 @@ impl Waffle {
             }
             None => Load::Failed,
         };
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the report dialog is drawn by render_root, not by a column
     }
 
     fn close_report(&mut self, cx: &mut Context<Self>) {
         self.report_dialog = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the report dialog is drawn by render_root, not by a column
     }
 
     // A reason or Next: on to `to`, past any node marked to skip. A node that isn't in the menu goes nowhere, as in
@@ -157,7 +160,7 @@ impl Waffle {
         if auto {
             self.submit_report(cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the report dialog is drawn by render_root, not by a column
     }
 
     fn report_back(&mut self, cx: &mut Context<Self>) {
@@ -165,7 +168,7 @@ impl Waffle {
         let Some((node, _)) = dialog.history.pop() else { return };
         dialog.node = node;
         dialog.error = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the report dialog is drawn by render_root, not by a column
     }
 
     fn report_pick(&mut self, name: String, value: String, many: bool, cx: &mut Context<Self>) {
@@ -178,7 +181,7 @@ impl Waffle {
                 None => values.push(value.into()),
             }
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the report dialog is drawn by render_root, not by a column
     }
 
     fn submit_report(&mut self, cx: &mut Context<Self>) {
@@ -191,14 +194,14 @@ impl Waffle {
         let name = dialog.target.name();
         dialog.sending = true;
         dialog.error = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the report dialog is drawn by render_root, not by a column
         // Signed out, as in demo scenes: nothing is sent, and the flow carries on as if Discord took it.
         let Some(client) = self.client.clone() else { return self.report_sent(true, cx) };
         cx.spawn(async move |this, cx| {
             let sent = client.call(Method::POST, format!("/reporting/{name}"), Some(body)).await.is_ok();
             this.update(cx, |this, cx| this.report_sent(sent, cx)).ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one request that ends when the report is sent, holding only a WeakEntity
     }
 
     // Also block, when ticked, goes once Discord has the report.
@@ -208,7 +211,7 @@ impl Waffle {
         dialog.sending = false;
         if !sent {
             dialog.error = Some(SUBMIT_FAILED);
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the report dialog is drawn by render_root, not by a column
         }
         let success = menu.success.clone();
         dialog.history.push((std::mem::replace(&mut dialog.node, success), None));
@@ -216,7 +219,7 @@ impl Waffle {
         if let Some(user) = block {
             self.report_follow_up("block", user, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the report dialog is drawn by render_root, not by a column
     }
 
     fn report_follow_up(&mut self, action: &'static str, user: User, cx: &mut Context<Self>) {
@@ -243,7 +246,7 @@ impl Waffle {
             }
             _ => {}
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the report dialog is drawn by render_root, not by a column
     }
 
     pub(crate) fn report_overlay(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -251,7 +254,7 @@ impl Waffle {
         let close = ui::icon_button("report-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_report(cx)));
         let body = match &dialog.menu {
             Load::Loading => ui::dialog_body().child(head(SharedString::from("Report"), None, close, cx)).child(
-                div().flex().flex_col().gap_2().children((0..4usize).map(|i| ui::skeleton(("report-loading", i), RADIUS_MD, cx).h_11().w_full())),
+                ui::col().gap_2().children((0..4usize).map(|i| ui::skeleton(("report-loading", i), RADIUS_MD, cx).h_11().w_full())),
             ),
             Load::Failed => ui::dialog_body().child(head(SharedString::from("Report"), None, close, cx)).child(
                 ui::empty_state("report-failed", Illustration::LoadFailed, "Couldn't load the report menu", "Discord didn't send it. Close this and try again in a moment.", cx),
@@ -270,7 +273,7 @@ impl Waffle {
         let subheader = node.subheader.as_deref().and_then(|s| markdown(s, cx));
         let mut body = ui::dialog_body();
         if success {
-            body = body.child(div().flex().justify_center().pt_2().child(img(Illustration::ReportSent.path()).w(px(200.)).h(px(150.))));
+            body = body.child(ui::row().items_stretch().justify_center().pt_2().child(img(Illustration::ReportSent.path()).w(px(SENT_ART_WIDTH)).h(px(SENT_ART_HEIGHT))));
         }
         body = body.child(head(node.header.clone().into(), subheader, close, cx).when(success, |h| h.text_center()));
         if let Some(info) = node.info.as_deref().and_then(|s| markdown(s, cx)) {
@@ -296,7 +299,7 @@ impl Waffle {
             }
         }
         if !more.is_empty() {
-            body = body.child(labelled("More you can do", div().flex().flex_col().gap_0p5().mx_neg_2().children(more), cx));
+            body = body.child(labelled("More you can do", ui::col().gap_0p5().mx_neg_2().children(more), cx)); // lint-allow(raw-margin): a negative margin lets the row's hover fill reach the dialog's text edge, which ui::pick_row has no option for
         }
         if !node.children.is_empty() {
             let rows = node.children.iter().enumerate().map(|(i, (label, to))| {
@@ -309,7 +312,7 @@ impl Waffle {
                     .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_LG)))
                     .on_click(cx.listener(move |this, _, _, cx| this.report_step(to.clone(), Some(label_owned.clone()), cx)))
             });
-            body = body.child(div().flex().flex_col().gap_0p5().mx_neg_2().children(rows));
+            body = body.child(ui::col().gap_0p5().mx_neg_2().children(rows)); // lint-allow(raw-margin): a negative margin lets the row's hover fill reach the dialog's text edge, which ui::pick_row has no option for
         }
         let submit = node.button.as_ref().is_some_and(|(kind, _)| kind == "submit");
         if submit && !success {
@@ -343,7 +346,7 @@ impl Waffle {
             return None;
         }
         let also_block = (kind == Some("submit") && self.can_also_block(dialog)).then(|| self.also_block_toggle(dialog.also_block, window, cx));
-        Some(div().flex().items_center().gap_2().pt_1().children(back).child(div().flex_1()).children(also_block).children(primary).into_any_element())
+        Some(ui::row().gap_2().pt_1().children(back).child(div().flex_1()).children(also_block).children(primary).into_any_element())
     }
 
     // Waffle's own (better.html): block on the way out instead of a second step on the thank-you node.
@@ -353,12 +356,10 @@ impl Waffle {
     }
 
     fn also_block_toggle(&self, on: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        div()
+        ui::row()
             .id("report-also-block")
-            .flex()
-            .items_center()
             .gap_2()
-            .mr_2()
+            .mr_2() // lint-allow(raw-margin): spacing from the footer's neighbouring button, whose row sets no gap
             .cursor_pointer()
             .child(ui::check_live("report-also-block-check", if on { Check::On } else { Check::Off }, window, cx))
             .child("Also block")
@@ -366,7 +367,7 @@ impl Waffle {
                 if let Some(dialog) = this.report_dialog.as_mut() {
                     dialog.also_block = !dialog.also_block;
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the report dialog is drawn by render_root, not by a column
             }))
             .into_any_element()
     }
@@ -374,9 +375,7 @@ impl Waffle {
     fn report_message_preview(&self, dialog: &ReportDialog, cx: &mut Context<Self>) -> Option<AnyElement> {
         let ReportTarget::Message(m) = &dialog.target else { return None };
         let preview = self.forward_preview(m, cx).unwrap_or_else(|| div().into_any_element());
-        let who = div()
-            .flex()
-            .items_center()
+        let who = ui::row()
             .gap_2()
             .child(ui::avatar(m.author.avatar.clone(), PREVIEW_AVATAR / 1.5))
             .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(m.author.name.clone()));
@@ -406,7 +405,7 @@ impl Waffle {
             ui::pick_row(row_id, mark, label, detail.map(Into::into), cx).on_click(cx.listener(move |this, _, _, cx| this.report_pick(name.clone(), value.clone(), many, cx)))
         }).collect::<Vec<_>>();
         let title = element.data["title"].as_str().map(|t| div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(t.to_owned()));
-        div().flex().flex_col().gap_0p5().children(title).child(div().flex().flex_col().gap_0p5().mx_neg_2().children(rows)).into_any_element()
+        ui::col().gap_0p5().children(title).child(ui::col().gap_0p5().mx_neg_2().children(rows)).into_any_element() // lint-allow(raw-margin): a negative margin lets the row's hover fill reach the dialog's text edge, which ui::pick_row has no option for
     }
 
     fn report_action(&self, dialog: &ReportDialog, kind: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -438,13 +437,11 @@ impl Waffle {
             false => button.on_click(cx.listener(move |this, _, _, cx| this.report_follow_up(action, person.clone(), cx))),
         };
         Some(
-            div()
-                .flex()
-                .items_center()
+            ui::row()
                 .gap_3()
                 .p_2()
                 .child(ui::icon_tile(glyph, palette::selected(cx), palette::strong(cx)))
-                .child(div().flex_1().min_w_0().flex().flex_col().child(div().text_color(palette::strong(cx)).truncate().child(title)).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail)))
+                .child(ui::col().min_h_0().flex_1().child(ui::line(title).text_color(palette::strong(cx))).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail)))
                 .child(button)
                 .into_any_element(),
         )
@@ -534,23 +531,20 @@ fn key(id: &Value) -> String {
 }
 
 fn head(title: SharedString, subheader: Option<AnyElement>, close: ui::Control, cx: &mut Context<Waffle>) -> gpui_kit::Div {
-    let text = div()
+    let text = ui::col().min_h_0()
         .flex_1()
-        .min_w_0()
-        .flex()
-        .flex_col()
         .gap_1()
         .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
         .children(subheader.map(|s| div().text_color(palette::muted(cx)).child(s)));
-    div().flex().items_start().gap_3().child(text).child(close)
+    ui::row().items_start().gap_3().child(text).child(close)
 }
 
 fn labelled(label: &'static str, content: impl IntoElement, cx: &mut Context<Waffle>) -> gpui_kit::Div {
-    div().flex().flex_col().gap_1p5().child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(label)).child(content)
+    ui::col().gap_1p5().child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(label)).child(content)
 }
 
 fn well(cx: &mut Context<Waffle>) -> gpui_kit::Div {
-    div().flex().p_3().squircle(RADIUS_MD).bg(palette::surface(palette::Level::Page, cx))
+    ui::row().items_stretch().p_3().squircle(RADIUS_MD).bg(palette::surface(palette::Level::Page, cx))
 }
 
 fn notice(body: AnyElement, cx: &mut Context<Waffle>) -> gpui_kit::Div {
@@ -568,14 +562,14 @@ fn crumbs(history: &[(String, Option<String>)], cx: &mut Context<Waffle>) -> Opt
         return None;
     }
     let faint = palette::faint(cx);
-    let rows = picked.into_iter().map(move |label| div().flex().items_center().gap_2().child(div().text_color(faint).child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD))).child(label));
+    let rows = picked.into_iter().map(move |label| ui::row().gap_2().child(div().text_color(faint).child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD))).child(label));
     Some(labelled("Report category", well(cx).flex_col().gap_1p5().text_color(palette::strong(cx)).children(rows), cx))
 }
 
 fn text_block(data: &Value, cx: &mut Context<Waffle>) -> Option<gpui_kit::Div> {
     let header = data["header"].as_str().filter(|s| !s.is_empty()).map(|h| div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(h.to_owned()));
     let body = data["body"].as_str().filter(|s| !s.is_empty()).map(|b| div().text_color(palette::text(cx)).child(b.to_owned()));
-    (header.is_some() || body.is_some()).then(|| div().flex().flex_col().gap_1().children(header).children(body))
+    (header.is_some() || body.is_some()).then(|| ui::col().gap_1().children(header).children(body))
 }
 
 fn link_row(data: &Value, id: &str, cx: &mut Context<Waffle>) -> Option<AnyElement> {
@@ -583,13 +577,12 @@ fn link_row(data: &Value, id: &str, cx: &mut Context<Waffle>) -> Option<AnyEleme
     let text = data["link_text"].as_str().unwrap_or(&url).to_owned();
     let detail = data["link_description"].as_str().filter(|s| !s.is_empty()).map(|d| SharedString::from(d.to_owned()));
     let row = ui::pick_row(SharedString::from(id.to_owned()), div().text_color(palette::muted(cx)).child(Icon::new(Glyph::Open).size(ui::ICON_LG)), text, detail, cx).on_click(move |_, _, cx| cx.open_url(&url));
-    Some(labelled("Learn more", div().mx_neg_2().child(row), cx).into_any_element())
+    Some(labelled("Learn more", div().mx_neg_2().child(row), cx).into_any_element()) // lint-allow(raw-margin): a negative margin lets the row's hover fill reach the dialog's text edge, which ui::pick_row has no option for
 }
 
 fn legal(cx: &mut Context<Waffle>) -> AnyElement {
     let link = div().id("report-guidelines").text_color(palette::accent_ink(cx)).font_weight(FontWeight::SEMIBOLD).cursor_pointer().child("Community Guidelines").on_click(|_, _, cx| cx.open_url("https://discord.com/guidelines"));
-    div()
-        .flex()
+    ui::row().items_stretch()
         .flex_wrap()
         .gap_x_1()
         .text_size(ui::TEXT_XS)

@@ -2,9 +2,9 @@
 use std::{collections::HashSet, iter, time::Duration};
 
 use gpui_kit::{
-    AnyElement, App, Context, Div, FontWeight, Hsla, ImgResourceLoader, InteractiveElement, IntoElement, ObjectFit, ParentElement, Resource, ScrollHandle, StatefulInteractiveElement, Styled, Window,
+    AnyElement, App, Context, Div, FontWeight, Hsla, ImgResourceLoader, InteractiveElement, IntoElement, ObjectFit, ParentElement, Pixels, Point, Resource, ScrollHandle, StatefulInteractiveElement, Styled, Window,
     component::Icon,
-    div, img, point, prelude::*, px, relative,
+    div, img, prelude::*, px, relative,
 };
 
 use super::{Form, Onboarding, OptionEmoji, Prompt, PromptKind, PromptOption, api, features, member_flags};
@@ -28,6 +28,16 @@ const FOOTER_ROOM: f32 = 120.;
 // An option card's title line; its emoji centres on it.
 const TITLE_LINE: f32 = 22.;
 const RULES_HEIGHT: f32 = 300.;
+// The top room above a step's column, and the cover's room above and below.
+const TOP_PAD: f32 = 56.;
+// The widest a step's column grows.
+const COLUMN_WIDTH: f32 = 640.;
+// An option card's minimum height, and its custom emoji's size.
+const OPTION_HEIGHT: f32 = 56.;
+const OPTION_EMOJI: f32 = 22.;
+// The rules count as read within this far of their end, and scroll at all past this much overflow.
+const READ_NEAR_END: f32 = 4.;
+const SCROLLS_PAST: f32 = 1.;
 
 // One server's flow: where you are and what you picked, kept when closed halfway.
 pub struct OnboardingView {
@@ -35,6 +45,7 @@ pub struct OnboardingView {
     step: Step,
     picked: HashSet<String>,
     // Prompts moved past with Next or Skip.
+    // lint-allow(unbounded-growth): the ids of one server's onboarding questions, a dozen at most
     passed: HashSet<String>,
     rules_read: bool,
     warning: Option<Warning>,
@@ -196,11 +207,11 @@ impl OnboardingView {
         }
         let scroll = &self.rules_scroll;
         // Not laid out yet: ask again next frame, once the list has its size.
-        if scroll.bounds().size.height <= px(0.) {
+        if scroll.bounds().size.height <= Pixels::ZERO {
             return window.request_animation_frame();
         }
         let max = scroll.max_offset().y;
-        if max > px(1.) && -scroll.offset().y < max - px(4.) {
+        if max > px(SCROLLS_PAST) && -scroll.offset().y < max - px(READ_NEAR_END) {
             return;
         }
         self.rules_read = true;
@@ -281,7 +292,7 @@ impl Waffle {
         if on_cover {
             self.advance_cover_later(guild_id, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the onboarding flow is drawn by the Overlays view, which re-renders only with the app
     }
 
     fn advance_cover_later(&mut self, guild_id: String, cx: &mut Context<Self>) {
@@ -294,6 +305,7 @@ impl Waffle {
             })
             .ok();
         })
+        // lint-allow(detached-task): ends itself once the cover's hold timer fires, and holds only a weak handle
         .detach();
     }
 
@@ -319,10 +331,10 @@ impl Waffle {
                 view.warning = None;
                 let Next::Go(step) = next else { return self.finish_onboarding(cx) };
                 view.step = step;
-                view.body_scroll.set_offset(point(px(0.), px(0.)));
+                view.body_scroll.set_offset(Point::default());
             }
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the onboarding flow is drawn by the Overlays view, which re-renders only with the app
     }
 
     fn onboarding_back(&mut self, cx: &mut Context<Self>) {
@@ -330,15 +342,15 @@ impl Waffle {
         let prompts = self.onboarding_prompts(&guild_id).unwrap_or_default();
         let Some(view) = self.join.onboard.as_mut() else { return };
         (view.step, view.warning) = (view.back(&prompts), None);
-        view.body_scroll.set_offset(point(px(0.), px(0.)));
-        cx.notify();
+        view.body_scroll.set_offset(Point::default());
+        cx.notify(); // lint-allow(global-notify): the onboarding flow is drawn by the Overlays view, which re-renders only with the app
     }
 
     fn onboarding_pick(&mut self, prompt: &Prompt, option_id: &str, cx: &mut Context<Self>) {
         let Some(view) = self.join.onboard.as_mut() else { return };
         view.pick(prompt, option_id);
         view.warning = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the onboarding flow is drawn by the Overlays view, which re-renders only with the app
     }
 
     // Closing keeps the picks and the step for Finish joining.
@@ -346,7 +358,7 @@ impl Waffle {
         let Some(mut view) = self.join.onboard.take() else { return };
         (view.warning, view.error) = (None, None);
         self.join.paused_onboarding.insert(view.guild_id.clone(), view);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): closing the flow redraws the Overlays view and the nav's Finish joining row
     }
 
     // POST the answers, then agree to the rules when the flow had them.
@@ -373,7 +385,7 @@ impl Waffle {
                 Err(error) => this.onboarding_failed(&id, error),
             }, cx);
         }, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the onboarding flow is drawn by the Overlays view, which re-renders only with the app
     }
 
     fn onboarding_failed(&mut self, guild_id: &str, error: String) {
@@ -427,30 +439,25 @@ impl Waffle {
             true => {
                 let room = f32::from(window.viewport_size().height) - 2. * SPLASH_INSET;
                 let list = div().id("onboarding-body").max_h(px((room - FOOTER_ROOM).min(STEP_MAX_HEIGHT))).child(body);
-                let card = div().relative().bg(page).flex().flex_col().child(ui::scroll_fade(list, &view.body_scroll, page)).child(footer).child(close);
+                let card = ui::col().relative().bg(page).child(ui::scroll_fade(list, &view.body_scroll, page)).child(footer).child(close);
                 let width = SHEET_WIDTH.min(f32::from(window.viewport_size().width) - 2. * SPLASH_INSET);
                 ui::dialog("onboarding-card", width, card, window, cx).into_any_element()
             }
-            false => div()
+            false => ui::col().min_h_0()
                 .relative()
                 .w_full()
                 .flex_1()
-                .min_h_0()
-                .flex()
-                .flex_col()
                 .when(!on_splash_cover, |d| d.bg(page))
                 .child(ui::scroll_area(div().id("onboarding-body").child(body), &view.body_scroll))
                 .child(footer)
                 .child(close)
                 .into_any_element(),
         };
-        let root = div()
+        let root = ui::col()
             .id("onboarding")
             .occlude()
             .absolute()
             .inset_0()
-            .flex()
-            .flex_col()
             .bg(page)
             .when_some(splash, |d, url| {
                 // gpui has no text shadow: a dark wash over the splash keeps the cover's white text legible.
@@ -465,8 +472,7 @@ impl Waffle {
     fn prompt_step(&self, guild: &Guild, prompts: &[Prompt], index: usize, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let view = self.join.onboard.as_ref().expect("overlay checked the open view");
         let prompt = &prompts[index];
-        let caption = div()
-            .flex()
+        let caption = ui::row().items_stretch()
             .gap_1p5()
             .text_size(ui::TEXT_SM)
             .font_weight(FontWeight::SEMIBOLD)
@@ -483,18 +489,17 @@ impl Waffle {
         let column = column()
             .child(caption)
             .child(heading(prompt.title.clone(), cx))
-            .child(div().mb_4().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(help))
+            .child(div().pb_4().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(help))
             .child(options)
             .child(
-                div()
-                    .mt_4()
-                    .min_h_6()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .text_size(ui::TEXT_SM)
-                    .text_color(palette::muted(cx))
-                    .children(gives(sentence.channels, sentence.roles).into_iter().flat_map(|p| piece(p, cx))),
+                div().pt_4().child(
+                    ui::row()
+                        .min_h_6()
+                        .flex_wrap()
+                        .text_size(ui::TEXT_SM)
+                        .text_color(palette::muted(cx))
+                        .children(gives(sentence.channels, sentence.roles).into_iter().flat_map(|p| piece(p, cx))),
+                ),
             );
         centered(column)
     }
@@ -526,11 +531,9 @@ impl Waffle {
         // The hint gets its own line over the buttons, ending under the button it's about, instead of a
         // third of the row.
         let hint = hint.map(|hint| div().text_right().text_size(ui::TEXT_SM).text_color(palette::danger_ink(cx)).child(hint));
-        let row = div().flex().items_center().gap_3().child(div().flex_1().flex().children(back)).children(dots).child(div().flex_1().flex().justify_end().child(next));
-        div()
+        let row = ui::row().gap_3().child(ui::row().items_stretch().flex_1().children(back)).children(dots).child(ui::row().items_stretch().flex_1().justify_end().child(next));
+        ui::col()
             .flex_none()
-            .flex()
-            .flex_col()
             .gap_2p5()
             .px_6()
             .py_4()
@@ -543,20 +546,18 @@ impl Waffle {
 // The cover: the server, "Welcome to …", over the splash in white or on the plain page.
 fn cover(guild: &Guild, on_splash: bool, cx: &App) -> AnyElement {
     let (strong, soft) = if on_splash { (palette::stage::strong(), palette::stage::text()) } else { (palette::strong(cx), palette::muted(cx)) };
-    div()
+    ui::col()
         .min_h_full()
-        .flex()
-        .flex_col()
         .items_center()
         .justify_center()
         .px_6()
-        .py(px(56.))
+        .py(px(TOP_PAD))
         .text_center()
         // The initials' tile is a translucent wash: over the splash it needs the page under it to read.
-        .child(div().mb_5().squircle(40.).bg(palette::surface(palette::Level::Page, cx)).child(ui::server_tile(guild.icon.as_deref(), &guild.name, 88., cx)))
-        .child(div().mb_1p5().text_size(ui::TEXT_XL).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("Welcome to {}", guild.name)))
+        .child(div().pb_5().child(div().squircle(40.).bg(palette::surface(palette::Level::Page, cx)).child(ui::server_tile(guild.icon.as_deref(), &guild.name, 88., cx))))
+        .child(div().pb_1p5().text_size(ui::TEXT_XL).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("Welcome to {}", guild.name)))
         .child(div().text_size(ui::TEXT_MD).text_color(soft).child("Let's customize your experience"))
-        .child(div().mt_10().text_size(ui::TEXT_XS).text_color(if on_splash { soft } else { palette::faint(cx) }).child("Your responses will be treated in accordance with Discord's Privacy Policy"))
+        .child(div().pt_10().text_size(ui::TEXT_XS).text_color(if on_splash { soft } else { palette::faint(cx) }).child("Your responses will be treated in accordance with Discord's Privacy Policy"))
         .into_any_element()
 }
 
@@ -567,7 +568,7 @@ fn rules_note(view: &OnboardingView, cx: &App) -> Option<Div> {
         _ if view.rules_read => ("By clicking \"Finish\", you have read and agreed to the Server Rules.", false),
         _ => return None,
     };
-    Some(div().mt_3().mx_1().text_size(ui::TEXT_SM).text_color(if alarm { palette::danger_ink(cx) } else { palette::muted(cx) }).child(text))
+    Some(div().pt_3().px_1().text_size(ui::TEXT_SM).text_color(if alarm { palette::danger_ink(cx) } else { palette::muted(cx) }).child(text))
 }
 
 fn rules_body(rules: &RulesStep, scroll: &ScrollHandle, note: Option<Div>, cx: &App) -> AnyElement {
@@ -579,7 +580,7 @@ fn rules_body(rules: &RulesStep, scroll: &ScrollHandle, note: Option<Div>, cx: &
         column()
             .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child("One last step!"))
             .child(heading("Read & Agree to Server Rules".into(), cx))
-            .child(div().mt_3().child(list))
+            .child(div().pt_3().child(list))
             .children(note),
     )
 }
@@ -588,44 +589,30 @@ fn rules_body(rules: &RulesStep, scroll: &ScrollHandle, note: Option<Div>, cx: &
 fn rules_list(rules: &[String], scroll: &ScrollHandle, cx: &App) -> Div {
     let last = rules.len().saturating_sub(1);
     let rows = rules.iter().enumerate().map(|(i, rule)| {
-        div()
+        ui::row()
             .relative()
-            .flex()
             .items_start()
             .gap_3()
             .p_3()
-            .child(
-                div()
-                    .size_6()
-                    .flex_none()
-                    .rounded_full()
-                    .bg(palette::accent_soft(cx))
-                    .text_color(palette::accent_ink(cx))
-                    .text_size(ui::TEXT_XS)
-                    .font_weight(FontWeight::BOLD)
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child((i + 1).to_string()),
-            )
+            .child(super::numbered_mark(i + 1, cx))
             .child(div().flex_1().min_w_0().text_size(ui::TEXT_LEAD).line_height(relative(1.45)).text_color(palette::strong(cx)).child(rule.clone()))
             .when(i < last, |d| d.child(ui::inset_rule(12., cx).left_12()))
     });
     let group = palette::surface(palette::Level::Group, cx);
-    let list = div().id("onboarding-rules").max_h(px(RULES_HEIGHT)).flex().flex_col().children(rows);
+    let list = ui::col().id("onboarding-rules").max_h(px(RULES_HEIGHT)).children(rows);
     div().squircle(ui::RADIUS_LG).bg(group).p_1().child(ui::scroll_fade(list, scroll, group))
 }
 
 fn column() -> Div {
-    div().w_full().max_w(px(640.)).flex().flex_col().gap_1p5()
+    ui::col().w_full().max_w(px(COLUMN_WIDTH)).gap_1p5()
 }
 
 fn centered(column: Div) -> AnyElement {
-    div().w_full().flex().justify_center().px_6().pt(px(56.)).pb_6().child(column).into_any_element()
+    ui::row().items_stretch().w_full().justify_center().px_6().pt(px(TOP_PAD)).pb_6().child(column).into_any_element()
 }
 
 fn heading(text: String, cx: &App) -> Div {
-    div().mb_1().text_size(ui::TEXT_XL).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(text)
+    div().pb_1().text_size(ui::TEXT_XL).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(text)
 }
 
 fn progress_dots(step: Step, total: usize, cx: &App) -> Div {
@@ -633,7 +620,7 @@ fn progress_dots(step: Step, total: usize, cx: &App) -> Div {
         Step::Prompt(i) => i,
         _ => total.saturating_sub(1),
     };
-    div().flex_none().flex().gap_1p5().children((0..total).map(|i| {
+    ui::row().items_stretch().flex_none().gap_1p5().children((0..total).map(|i| {
         let fill = match i.cmp(&now) {
             std::cmp::Ordering::Less => palette::accent(),
             std::cmp::Ordering::Equal => palette::strong(cx),
@@ -651,23 +638,20 @@ fn option_grid(guild: &Guild, prompt: &Prompt, picked: &HashSet<String>, cx: &mu
             let on = picked.contains(&option.id);
             let adds = adds_of(guild, iter::once(option));
             let ink = if on { palette::accent_ink(cx) } else { palette::muted(cx) };
-            let gets = adds.channels.iter().map(|c| div().min_w_0().max_w_full().truncate().child(format!("#{c}")).into_any_element()).chain(adds.roles.iter().map(|(name, color)| ui::role_chip(name.clone(), role_color(*color, cx), cx).into_any_element()));
+            let gets = adds.channels.iter().map(|c| ui::line(format!("#{c}")).max_w_full().into_any_element()).chain(adds.roles.iter().map(|(name, color)| ui::role_chip(name.clone(), role_color(*color, cx), cx).into_any_element()));
             let gets: Vec<AnyElement> = gets.enumerate().flat_map(|(i, el)| (i > 0).then(|| div().child("·").into_any_element()).into_iter().chain(iter::once(el))).collect();
-            let text = div()
+            let text = ui::col().min_h_0()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .gap_0p5()
                 .child(div().text_size(ui::TEXT_LEAD).line_height(px(TITLE_LINE)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(option.title.clone()))
                 .when_some(option.description.clone(), |d, desc| d.child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(desc)))
-                .when(!gets.is_empty(), |d| d.child(div().mt_0p5().flex().flex_wrap().items_center().gap_1().text_size(ui::TEXT_XS).text_color(ink).children(gets)));
+                .when(!gets.is_empty(), |d| d.child(ui::row().pt_0p5().flex_wrap().gap_1().text_size(ui::TEXT_XS).text_color(ink).children(gets)));
             let edge = if on { palette::accent().opacity(0.7) } else { palette::line(cx) };
             let hover_edge = if on { edge } else { palette::line_strong(cx) };
-            let card = div()
+            // lint-allow(custom-button): ui::card has no toggled look in the accent tint with a half-accent edge
+            let card = ui::row()
                 .id(gpui_kit::SharedString::from(format!("onboarding-option-{}", option.id)))
-                .min_h(px(56.))
-                .flex()
+                .min_h(px(OPTION_HEIGHT))
                 // The emoji sits on the title's line, not mid-card, so it stays put as descriptions wrap.
                 .items_start()
                 .gap_3()
@@ -710,9 +694,7 @@ fn dropdown(prompt: &Prompt, picked: &HashSet<String>, window: &mut Window, cx: 
             ui::pick_row(gpui_kit::SharedString::from(id), mark, title, option.description.clone().map(Into::into), cx).on_click(listener).into_any_element()
         })
         .collect();
-    div()
-        .flex()
-        .flex_col()
+    ui::col()
         .gap_0p5()
         .p_1p5()
         .squircle(ui::RADIUS_MD)
@@ -726,9 +708,9 @@ fn dropdown(prompt: &Prompt, picked: &HashSet<String>, window: &mut Window, cx: 
 // A unicode emoji as text, a custom one as its image.
 // One title line tall, centred on it.
 fn option_emoji(emoji: &OptionEmoji) -> Option<AnyElement> {
-    let slot = div().w_7().h(px(TITLE_LINE)).flex_none().flex().items_center().justify_center();
+    let slot = ui::row().w_7().h(px(TITLE_LINE)).flex_none().justify_center();
     if let Some(url) = emoji.url() {
-        return Some(slot.child(img(url).size(px(22.)).object_fit(ObjectFit::Contain)).into_any_element());
+        return Some(slot.child(img(url).size(px(OPTION_EMOJI)).object_fit(ObjectFit::Contain)).into_any_element());
     }
     let name = emoji.name.clone()?;
     // The emoji font draws above the line box's middle: nudged down to the title's optical centre.
@@ -812,7 +794,8 @@ fn and_list(items: Vec<Piece>) -> Vec<Piece> {
 fn piece(piece: Piece, cx: &App) -> Vec<AnyElement> {
     match piece {
         Piece::Text(text) => text.split_inclusive(' ').map(|word| div().whitespace_nowrap().child(word.to_owned()).into_any_element()).collect(),
-        Piece::Channel(name) => vec![div().min_w_0().max_w_full().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(format!("#{name}")).into_any_element()],
+        Piece::Channel(name) => vec![ui::line(format!("#{name}")).max_w_full().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).into_any_element()],
+        // lint-allow(raw-margin): an optical gap either side of a chip in wrapping running text, which has no flex gap
         Piece::Role(name, color) => vec![ui::role_chip(name, role_color(color, cx), cx).mx_0p5().into_any_element()],
     }
 }

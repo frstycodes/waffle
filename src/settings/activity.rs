@@ -12,6 +12,8 @@ const GROUP: &str = "Where I share activity";
 
 // (stored value, label), in Discord's order.
 // Not verified: the proto enum's numbering (taken as 0 share everywhere, 1 restrict servers over 200, 2 restrict all).
+// The width of the "When joining a server" dropdown.
+const JOIN_FIELD_WIDTH: f32 = 260.;
 const JOIN_DEFAULTS: [(u8, &str); 3] = [(0, "Share in all servers"), (1, "Share in servers with 200 or fewer members"), (2, "Do not share in any servers")];
 
 impl Waffle {
@@ -20,7 +22,7 @@ impl Waffle {
         let chosen = account.default_guilds_activity_restricted;
         let options: Vec<(String, String)> = JOIN_DEFAULTS.iter().map(|(value, label)| (value.to_string(), (*label).to_owned())).collect();
         let value = JOIN_DEFAULTS.iter().find(|(v, _)| *v == chosen).map_or(JOIN_DEFAULTS[0].1, |(_, label)| label);
-        let field = div().w(px(260.)).flex_none().child(self.select_field(Select::JoinActivity, None, &options, &chosen.to_string(), value.into(), 36., cx));
+        let field = div().w(px(JOIN_FIELD_WIDTH)).flex_none().child(self.select_field(Select::JoinActivity, None, &options, &chosen.to_string(), value.into(), 36., cx));
         let join = ui::settings_row("activity-join-default", false, cx).child(ui::settings_text("When joining a server", Some("Whether new servers see your activity"), cx)).child(field);
         let sharing = account.show_current_game;
         let mut card = ui::settings_card(cx).child(join);

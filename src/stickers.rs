@@ -19,6 +19,13 @@ use crate::{
     ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, RADIUS_XS, Squircle},
 };
 
+// A sticker tile's height.
+const TILE_HEIGHT: f32 = 84.;
+// The preview foot's least height.
+const FOOT_HEIGHT: f32 = 60.;
+// The dashed empty-slot edge.
+const DASH_WIDTH: f32 = 1.5;
+
 const IN_CHAT: f32 = 160.;
 // Fetched at twice the drawn size so they stay sharp on Retina.
 const FETCH: u32 = 320;
@@ -102,7 +109,7 @@ impl Waffle {
         if tab == PickerTab::Stickers && self.sticker_packs.as_ref().is_none_or(|packs| packs.is_err()) {
             self.fetch_sticker_packs(cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the sticker picker is drawn by the root's overlays, over every column
     }
 
     fn fetch_sticker_packs(&mut self, cx: &mut Context<Self>) {
@@ -112,16 +119,16 @@ impl Waffle {
             let result = client.sticker_packs().await;
             this.update(cx, |this, cx| {
                 this.sticker_packs = Some(result.map_err(Into::into));
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the sticker picker is drawn by the root's overlays, over every column
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one fetch: ends when the request returns, or when Waffle is dropped
     }
 
     pub(crate) fn on_sticker_search(&mut self, _: &Entity<SearchState>, event: &InputEvent, _: &mut Window, cx: &mut Context<Self>) {
         if let InputEvent::Change = event {
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the sticker picker is drawn by the root's overlays, over every column
         }
     }
 
@@ -151,7 +158,7 @@ impl Waffle {
             let result = client.send_sticker(&channel.id, &sticker.id, &nonce, reply.as_ref().map(|r| r.id.as_str()), ping).await;
             this.update(cx, |this, cx| this.settle(&channel.id, &nonce, result, cx)).ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one send: ends when the request returns, or when Waffle is dropped
     }
 
     // Recently used (before you search), this server's, your other servers' (Nitro only, as Discord allows),
@@ -200,44 +207,34 @@ impl Waffle {
             (Some(Err(error)), true) => note(error.clone(), cx),
             (_, true) if !query.trim().is_empty() => note(format!("No stickers match \u{201c}{}\u{201d}", query.trim()), cx),
             (_, true) => note("No stickers yet", cx),
-            _ => div().flex_1().min_h_0().flex().child(self.sticker_rail(&sections, &scroll, motion, cx)).child(sticker_grid(sections, &scroll, &hovered, motion, cx)).into_any_element(),
+            _ => ui::row().items_stretch().flex_1().min_h_0().child(self.sticker_rail(&sections, &scroll, motion, cx)).child(sticker_grid(sections, &scroll, &hovered, motion, cx)).into_any_element(),
         };
         vec![head.into_any_element(), body, sticker_foot(preview, motion, cx).into_any_element()]
     }
 
     fn sticker_rail(&self, sections: &[Section], scroll: &ScrollHandle, motion: StickerMotion, cx: &mut Context<Self>) -> impl IntoElement {
         let in_view = scroll.top_item();
-        div()
+        ui::col()
             .id("sticker-rail")
             .w_12()
             .flex_none()
             .px_1p5()
             .pb_1p5()
-            .flex()
-            .flex_col()
             .items_center()
             .gap_0p5()
             .overflow_y_scroll()
             .border_r_1()
             .border_color(palette::line(cx))
             .children(sections.iter().enumerate().flat_map(|(i, section)| {
-                let (selected, hover, strong) = (palette::selected(cx), palette::hover(cx), palette::strong(cx));
                 let scroll = scroll.clone();
                 // A line sets Discord's packs apart from yours.
                 let first_pack = matches!(section.lead, Lead::Pack(_)) && i > 0 && !matches!(sections[i - 1].lead, Lead::Pack(_));
-                let line = first_pack.then(|| div().w_5().h(ui::HAIRLINE).my_1().flex_none().bg(palette::line(cx)).into_any_element());
-                let tab = div()
-                    .id(("sticker-pack", i))
+                let line = first_pack.then(|| div().py_1().flex_none().child(ui::divider(None, cx).w_5()).into_any_element());
+                let tab = ui::card(("sticker-pack", i), cx)
+                    .toggled(i == in_view, cx)
                     .size_9()
-                    .flex_none()
+                    .p_0()
                     .squircle(RADIUS_SM)
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .text_color(if i == in_view { strong } else { palette::muted(cx) })
-                    .when(i == in_view, |d| d.bg(selected))
-                    .when(i != in_view, |d| d.hover(move |s| s.bg(hover).text_color(strong)))
                     .child(section.lead.render(24., motion, cx))
                     .tooltip({
                         let name = section.name.clone();
@@ -245,7 +242,7 @@ impl Waffle {
                     })
                     .on_click(cx.listener(move |_, _, _, cx| {
                         scroll.scroll_to_top_of_item(i);
-                        cx.notify();
+                        cx.notify(); // lint-allow(global-notify): the sticker picker is drawn by the root's overlays, over every column
                     }));
                 line.into_iter().chain([tab.into_any_element()])
             }))
@@ -253,6 +250,7 @@ impl Waffle {
 }
 
 fn sticker_grid(sections: Vec<Section>, scroll: &ScrollHandle, hovered: &Entity<Option<(Sticker, SharedString)>>, motion: StickerMotion, cx: &mut Context<Waffle>) -> impl IntoElement {
+    // lint-allow(unvirtualized-list): Discord's packs and yours, a few dozen stickers each, a few hundred cells at most
     div()
         .id("sticker-scroll")
         .flex_1()
@@ -267,12 +265,10 @@ fn sticker_grid(sections: Vec<Section>, scroll: &ScrollHandle, hovered: &Entity<
             for (i, sticker) in section.stickers.iter().enumerate() {
                 cells.push(sticker_cell(sticker, &section.name, format!("sticker-{}-{i}", section.name), hovered, motion, cx));
             }
-            div()
-                .flex()
-                .flex_col()
-                .mb_1()
-                .child(div().flex().items_center().gap_1p5().py_1p5().px_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(section.lead.render(16., motion, cx)).child(section.name.clone()))
-                .child(div().flex().flex_wrap().children(cells))
+            ui::col()
+                .pb_1()
+                .child(ui::row().gap_1p5().py_1p5().px_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(section.lead.render(16., motion, cx)).child(section.name.clone()))
+                .child(ui::row().items_stretch().flex_wrap().children(cells))
         }))
 }
 
@@ -282,14 +278,13 @@ fn sticker_cell(sticker: &Sticker, pack: &SharedString, key: String, hovered: &E
     let (picked, shown) = (sticker.clone(), (sticker.clone(), pack.clone()));
     let hovered = hovered.clone();
     let mark = sticker.animated().then(|| {
-        div()
+        // lint-allow(custom-mark): ui::badged hangs a mark past a tile's corner; this play mark sits 4px inside the cell's
+        ui::row()
             .absolute()
             .right_1()
             .bottom_1()
             .size_5()
             .squircle(RADIUS_XS)
-            .flex()
-            .items_center()
             .justify_center()
             .bg(palette::surface(palette::Level::Overlay, cx))
             .border_1()
@@ -300,7 +295,7 @@ fn sticker_cell(sticker: &Sticker, pack: &SharedString, key: String, hovered: &E
     ui::pressable(div().id(SharedString::from(key)), 0.95)
         .relative()
         .w(relative(0.25))
-        .h(px(84.))
+        .h(px(TILE_HEIGHT))
         .p_2()
         .squircle(RADIUS_MD)
         .cursor_pointer()
@@ -320,31 +315,23 @@ fn sticker_cell(sticker: &Sticker, pack: &SharedString, key: String, hovered: &E
 }
 
 fn sticker_foot(preview: Option<(Sticker, SharedString)>, motion: StickerMotion, cx: &App) -> Div {
-    div()
-        .min_h(px(60.))
+    ui::row()
+        .min_h(px(FOOT_HEIGHT))
         .flex_none()
         .py_1p5()
         .px_3()
-        .flex()
-        .items_center()
         .gap_2p5()
         .border_t_1()
         .border_color(palette::line(cx))
         .children(preview.map(|(sticker, pack)| {
             let detail = if sticker.animated() { format!("{pack} · Animated") } else { pack.to_string() };
-            div()
-                .flex()
-                .items_center()
+            ui::row()
                 .gap_2p5()
-                .min_w_0()
                 .child(div().size_11().flex_none().child(picture(&sticker, 44., motion.plays(true))))
                 .child(
-                    div()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(format!(":{}:", sticker.name)))
-                        .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail)),
+                    ui::col()
+                        .child(ui::line(format!(":{}:", sticker.name)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
+                        .child(ui::line(detail).text_size(ui::TEXT_XS).text_color(palette::muted(cx))),
                 )
         }))
 }
@@ -358,11 +345,11 @@ fn note(text: impl Into<SharedString>, cx: &App) -> AnyElement {
 fn picture(sticker: &Sticker, size: f32, animate: bool) -> AnyElement {
     let Some(url) = sticker.url(FETCH_SMALL) else { return stand_in(size) };
     let image = img(url).size(px(size)).object_fit(ObjectFit::Contain).with_fallback(move || stand_in(size));
-    div().size(px(size)).flex().items_center().justify_center().child(crate::chat::moving(image, animate)).into_any_element()
+    ui::row().size(px(size)).justify_center().child(crate::chat::moving(image, animate)).into_any_element()
 }
 
 fn stand_in(size: f32) -> AnyElement {
-    div().size(px(size)).flex().items_center().justify_center().child(Icon::new(Glyph::Sticker).size(px(size * 0.45))).into_any_element()
+    ui::row().size(px(size)).justify_center().child(Icon::new(Glyph::Sticker).size(px(size * 0.45))).into_any_element()
 }
 
 /// A sticker in a message: bare at 160px, still unless `animate`. One that can't be drawn keeps its name
@@ -373,16 +360,14 @@ pub(crate) fn in_chat(sticker: &Sticker, animate: bool, cx: &App) -> AnyElement 
     let lottie = sticker.url(FETCH).is_none();
     let missing = move || {
         let text = if lottie { format!("Can't play :{name}: here") } else { format!("Couldn't load :{name}:") };
-        div()
+        ui::col()
             .size(px(IN_CHAT))
             .p_3()
-            .flex()
-            .flex_col()
             .items_center()
             .justify_center()
             .gap_1()
             .squircle(RADIUS_LG)
-            .border(px(1.5))
+            .border(px(DASH_WIDTH))
             .border_dashed()
             .border_color(line)
             .text_size(ui::TEXT_XS)
@@ -395,7 +380,7 @@ pub(crate) fn in_chat(sticker: &Sticker, animate: bool, cx: &App) -> AnyElement 
         None => missing(),
         Some(url) => crate::chat::moving(img(url).size_full().object_fit(ObjectFit::Contain).with_fallback(missing), animate),
     };
-    div().mt_1().size(px(IN_CHAT)).flex_none().child(picture).into_any_element()
+    div().pt_1().flex_none().child(div().size(px(IN_CHAT)).flex_none().child(picture)).into_any_element()
 }
 
 #[cfg(test)]

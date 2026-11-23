@@ -20,8 +20,12 @@ use crate::{
         perms::{self, CREATE_GUILD_EXPRESSIONS, MANAGE_GUILD, MANAGE_GUILD_EXPRESSIONS, MANAGE_WEBHOOKS, Permission},
         view::{sentence_spans, snowflake_time},
     },
+    part::Column,
     ui::{self, Squircle},
 };
+
+// A skeleton pill's height, the loaded role chip's.
+const PILL_HEIGHT: f32 = 22.;
 
 // Wider than the member list: sections carry a label and a value side by side.
 pub(crate) const PANEL_WIDTH: f32 = 340.;
@@ -143,7 +147,7 @@ impl Waffle {
             Page::Info => self.right_panel = RightPanel::Members,
             _ => view.page = Page::Info,
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): Closing Mod View swaps the right panel, whose width every column lays out around
         true
     }
 
@@ -170,7 +174,7 @@ impl Waffle {
     pub(crate) fn mod_view_timed_out(&mut self, guild_id: &str, user_id: &str, until: Option<DateTime<Utc>>, cx: &mut Context<Self>) {
         let Some(member) = self.mod_view().filter(|v| v.guild_id == guild_id && v.user_id == user_id).and_then(|v| v.member.as_mut()) else { return };
         member.timed_out_until = until;
-        cx.notify();
+        self.redraw(Column::Panel, cx);
     }
 
     // Everything at once: the member over the gateway, and over REST the join source, the profile (for
@@ -215,11 +219,11 @@ impl Waffle {
                     if let Some(inviter) = inviter.filter(|i| this.members.get(&g).is_none_or(|m| !m.contains_key(i))) {
                         client.request_members(&g, vec![inviter]);
                     }
-                    cx.notify();
+                    this.redraw(Column::Panel, cx);
                 })
                 .ok();
             })
-            .detach();
+            .detach(); // lint-allow(detached-task): one request that ends when the reply lands, holding only a WeakEntity
         }
         let (g2, u2) = (g, u);
         cx.spawn(async move |this, cx| {
@@ -227,12 +231,12 @@ impl Waffle {
             this.update(cx, |this, cx| {
                 if let Some(view) = this.mod_view_at(&g2, &u2, load) {
                     view.settled = true;
-                    cx.notify();
+                    this.redraw(Column::Panel, cx);
                 }
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a single timer that ends after MEMBER_WAIT, holding only a WeakEntity
     }
 
     fn refresh_mod_view(&mut self, cx: &mut Context<Self>) {
@@ -240,7 +244,7 @@ impl Waffle {
         let fresh = ModView { page: view.page, load: view.load + 1, ..ModView::new(view.guild_id.clone(), view.user_id.clone()) };
         *view = fresh;
         self.load_mod_view(cx);
-        cx.notify();
+        self.redraw(Column::Panel, cx);
     }
 
     // The timeout counts down each second while Mod View stays open on this member.
@@ -254,7 +258,7 @@ impl Waffle {
                     .update(cx, |this, cx| {
                         let Some(view) = this.mod_view().filter(|v| v.guild_id == g && v.user_id == u) else { return false };
                         if view.member.as_ref().and_then(|m| m.timed_out_until).is_some_and(|t| t > Utc::now()) {
-                            cx.notify();
+                            this.redraw(Column::Panel, cx);
                         }
                         true
                     })
@@ -264,15 +268,15 @@ impl Waffle {
                 }
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): the loop breaks once Mod View closes or the member changes, and ends when the app entity drops
     }
 
     fn set_mod_view_page(&mut self, page: Page, cx: &mut Context<Self>) {
         if let Some(view) = self.mod_view() {
             view.page = page;
         }
-        self.panel_scroll.set_offset(gpui_kit::point(px(0.), px(0.)));
-        cx.notify();
+        self.panel_scroll.set_offset(Default::default());
+        self.redraw(Column::Panel, cx);
     }
 
     fn mod_view_user(&self, view: &ModView) -> Option<User> {
@@ -308,11 +312,9 @@ impl Waffle {
         let now = Utc::now();
         let user = self.mod_view_user(view).unwrap_or_else(|| User { id: view.user_id.clone(), name: view.user_id.clone(), ..Default::default() });
         let signals = signals(view.member.as_ref(), now);
-        div()
-            .flex()
-            .flex_col()
+        ui::col()
             .gap_4()
-            .child(div().flex().flex_col().gap_3().child(self.mod_view_who(view, &user, cx)).child(self.mod_view_actions(view, &user, cx)))
+            .child(ui::col().gap_3().child(self.mod_view_who(view, &user, cx)).child(self.mod_view_actions(view, &user, cx)))
             .when(!signals.is_empty(), |d| d.child(section("Signals", cx).children(signals.iter().map(|s| signal_row(s, now, cx)))))
             .child(self.mod_view_activity(view, cx))
             .child(self.mod_view_permissions(view, guild, roles, cx))
@@ -325,20 +327,15 @@ impl Waffle {
         let status = self.presence_of(&user.id).map(|p| p.mark());
         let surface = palette::surface(palette::Level::Sidebar, cx);
         let username = view.username.clone().unwrap_or_default();
-        div()
-            .flex()
-            .items_center()
+        ui::row()
             .gap_3()
             .px_2()
             .child(decorated_avatar(&user.avatar, None, 48., status, surface))
             .child(
-                div()
+                ui::col().min_h_0()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .child(div().truncate().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(user.name.clone()))
-                    .child(div().truncate().text_color(palette::muted(cx)).child(username)),
+                    .child(ui::line(user.name.clone()).text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
+                    .child(ui::line(username).text_color(palette::muted(cx))),
             )
     }
 
@@ -378,7 +375,7 @@ impl Waffle {
             })),
         };
         let copy = ui::icon_button("mod-view-copy-id", Glyph::Id, "Copy ID", cx).on_click(cx.listener(move |this, _, _, cx| this.copy_text(u.clone(), cx)));
-        div().flex().gap_1().px_1().child(message).child(kick).child(ban).child(timeout).child(copy)
+        ui::row().items_stretch().gap_1().px_1().child(message).child(kick).child(ban).child(timeout).child(copy)
     }
 
     fn mod_view_activity(&self, view: &ModView, cx: &mut Context<Self>) -> Div {
@@ -426,12 +423,12 @@ impl Waffle {
         let held = mod_permissions(bits);
         let all = perms::all().filter(|p| bits & p.bit != 0).count();
         let more = ui::button("mod-view-all-perms", ui::Tone::Link, cx).small().child(format!("All ({all})")).on_click(cx.listener(|this, _, _, cx| this.set_mod_view_page(Page::Permissions, cx)));
-        let head = div().flex().items_center().justify_between().pr_2().child(group_label("Mod permissions", cx)).child(more);
+        let head = ui::row().justify_between().pr_2().child(group_label("Mod permissions", cx)).child(more);
         let body = match held.is_empty() {
             true => div().px_1p5().text_color(palette::positive_ink(cx)).child("No mod permissions"),
-            false => div().px_1p5().flex().flex_wrap().gap_1().children(held.into_iter().map(|(p, elevated)| perm_pill(p, elevated, cx))),
+            false => ui::row().items_stretch().px_1p5().flex_wrap().gap_1().children(held.into_iter().map(|(p, elevated)| perm_pill(p, elevated, cx))),
         };
-        div().flex().flex_col().gap_1().child(head).child(body)
+        ui::col().gap_1().child(head).child(body)
     }
 
     fn mod_view_roles(&self, view: &ModView, guild: &Guild, roles: &[String], cx: &mut Context<Self>) -> Div {
@@ -453,7 +450,7 @@ impl Waffle {
             }))
         });
         let empty = (held.is_empty() && !manage).then(|| div().text_color(palette::muted(cx)).child("No roles"));
-        section("Roles", cx).child(div().px_1p5().flex().flex_wrap().items_center().gap_1().children(chips).children(add).children(empty))
+        section("Roles", cx).child(ui::row().px_1p5().flex_wrap().gap_1().children(chips).children(add).children(empty))
     }
 
     fn mod_view_account(&self, view: &ModView, user: &User, cx: &mut Context<Self>) -> Div {
@@ -468,7 +465,7 @@ impl Waffle {
             .children(rules.map(|ok| value_row("Agreed to rules", check_mark(ok, cx), cx)))
             .child(value_row("Discord join date", div().child(snowflake_date(&user.id)), cx))
             .child(value_row("Server join date", div().child(joined.unwrap_or_else(|| "Unknown".into())), cx))
-            .child(value_row("Join method", div().flex().items_center().gap_1().children(glyph.map(|g| Icon::new(g).size(ui::ICON_SM))).child(method), cx))
+            .child(value_row("Join method", ui::row().gap_1().children(glyph.map(|g| Icon::new(g).size(ui::ICON_SM))).child(method), cx))
             .children(footer)
     }
 
@@ -498,7 +495,7 @@ impl Waffle {
     // Mod View opened and never answered, so it holds its skeleton.
     pub(crate) fn demo_mod_view_loading(&mut self, guild_id: String, user_id: String, cx: &mut Context<Self>) {
         self.right_panel = RightPanel::ModView(Box::new(ModView::new(guild_id, user_id)));
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): swapping the right panel changes the panel width every column lays out around
     }
 
     pub(crate) fn demo_mod_view(&mut self, guild_id: String, user_id: String, audit: Value, cx: &mut Context<Self>) {
@@ -678,26 +675,22 @@ impl Count {
 fn info_skeleton(cx: &App) -> Div {
     let bar = |id: (&'static str, usize), w: f32| ui::skeleton(id, ui::RADIUS_XS, cx).h_3().w(px(w));
     let rows = |key: &'static str, widths: &[(f32, f32)]| {
-        widths.iter().enumerate().fold(div().flex().flex_col().gap_0p5(), |d, (i, &(label, value))| {
+        widths.iter().enumerate().fold(ui::col().gap_0p5(), |d, (i, &(label, value))| {
             d.child(line(cx).child(bar((key, i * 2), label)).child(div().flex_1()).child(bar((key, i * 2 + 1), value)))
         })
     };
     let pills = |key: &'static str, widths: &[f32]| {
-        widths.iter().enumerate().fold(div().px_1p5().flex().flex_wrap().gap_1(), |d, (i, &w)| d.child(ui::skeleton((key, i), ui::RADIUS_XS, cx).h(px(22.)).w(px(w))))
+        widths.iter().enumerate().fold(ui::row().items_stretch().px_1p5().flex_wrap().gap_1(), |d, (i, &w)| d.child(ui::skeleton((key, i), ui::RADIUS_XS, cx).h(px(PILL_HEIGHT)).w(px(w))))
     };
-    let who = div()
-        .flex()
-        .items_center()
+    let who = ui::row()
         .gap_3()
         .px_2()
         .child(ui::skeleton_circle("mv-sk-face", 48., cx))
-        .child(div().flex().flex_col().gap_2().child(bar(("mv-sk-name", 0), 120.).h_3p5()).child(bar(("mv-sk-name", 1), 80.)));
-    let actions = (0..5usize).fold(div().flex().gap_1().px_1(), |d, i| d.child(ui::skeleton(("mv-sk-act", i), ui::RADIUS_SM, cx).size_8()));
-    div()
-        .flex()
-        .flex_col()
+        .child(ui::col().gap_2().child(bar(("mv-sk-name", 0), 120.).h_3p5()).child(bar(("mv-sk-name", 1), 80.)));
+    let actions = (0..5usize).fold(ui::row().items_stretch().gap_1().px_1(), |d, i| d.child(ui::skeleton(("mv-sk-act", i), ui::RADIUS_SM, cx).size_8()));
+    ui::col()
         .gap_4()
-        .child(div().flex().flex_col().gap_3().child(who).child(actions))
+        .child(ui::col().gap_3().child(who).child(actions))
         .child(section("Server activity", cx).child(rows("mv-sk-activity", &[(72., 32.), (48., 24.), (56., 28.), (64., 20.)])))
         .child(section("Mod permissions", cx).child(pills("mv-sk-perms", &[112., 96., 128.])))
         .child(section("Roles", cx).child(pills("mv-sk-roles", &[80., 72.])))
@@ -706,28 +699,28 @@ fn info_skeleton(cx: &App) -> Div {
 
 // The action log before it lands: entry-shaped rows, a glyph then a title over its byline.
 fn audit_skeleton(cx: &App) -> Div {
-    [(168., 120.), (140., 96.), (152., 108.)].iter().enumerate().fold(div().flex().flex_col().gap_0p5(), |d, (i, &(title, meta))| {
+    [(168., 120.), (140., 96.), (152., 108.)].iter().enumerate().fold(ui::col().gap_0p5(), |d, (i, &(title, meta))| {
         d.child(
             line(cx)
                 .py_1p5()
                 .items_start()
                 .child(ui::skeleton_circle(("mv-sk-audit-glyph", i), 16., cx))
-                .child(div().flex().flex_col().gap_1p5().child(ui::skeleton(("mv-sk-audit", i * 2), ui::RADIUS_XS, cx).h_3().w(px(title))).child(ui::skeleton(("mv-sk-audit", i * 2 + 1), ui::RADIUS_XS, cx).h_2p5().w(px(meta)))),
+                .child(ui::col().gap_1p5().child(ui::skeleton(("mv-sk-audit", i * 2), ui::RADIUS_XS, cx).h_3().w(px(title))).child(ui::skeleton(("mv-sk-audit", i * 2 + 1), ui::RADIUS_XS, cx).h_2p5().w(px(meta)))),
         )
     })
 }
 
 fn section(title: &'static str, cx: &App) -> Div {
-    div().flex().flex_col().gap_0p5().child(group_label(title, cx))
+    ui::col().gap_0p5().child(group_label(title, cx))
 }
 
 // A line of a section (.mv-line): an optional glyph, the label, and its value on the right.
 fn line(cx: &App) -> Div {
-    div().min_h_8().px_1p5().flex().items_center().gap_2().squircle(ui::RADIUS_SM).text_color(palette::text(cx))
+    ui::row().min_h_8().px_1p5().gap_2().squircle(ui::RADIUS_SM).text_color(palette::text(cx))
 }
 
 fn value_row(label: &'static str, value: impl IntoElement, cx: &App) -> Div {
-    line(cx).child(div().flex_1().min_w_0().truncate().child(label)).child(div().flex_none().text_color(palette::muted(cx)).child(value))
+    line(cx).child(ui::line(label).flex_1()).child(div().flex_none().text_color(palette::muted(cx)).child(value))
 }
 
 fn signal_row(signal: &Signal, now: DateTime<Utc>, cx: &App) -> Div {
@@ -737,7 +730,7 @@ fn signal_row(signal: &Signal, now: DateTime<Utc>, cx: &App) -> Div {
     };
     line(cx)
         .child(Icon::new(glyph).size(ui::ICON_MD).text_color(palette::muted(cx)))
-        .child(div().flex_1().min_w_0().truncate().child(label))
+        .child(ui::line(label).flex_1())
         .child(div().flex_none().text_color(ink).font_features(crate::call::tabular()).child(value))
 }
 
@@ -753,8 +746,8 @@ fn count_row(id: SharedString, glyph: Glyph, label: &'static str, count: Count, 
     line(cx)
         .id(id)
         .child(Icon::new(glyph).size(ui::ICON_MD).text_color(muted))
-        .child(div().flex_1().min_w_0().truncate().child(label))
-        .child(div().flex_none().flex().items_center().gap_1().text_color(muted).child(value).when(count.navigates(), |v| v.child(Icon::new(Glyph::ChevronRight).size(ui::ICON_SM))))
+        .child(ui::line(label).flex_1())
+        .child(ui::row().flex_none().gap_1().text_color(muted).child(value).when(count.navigates(), |v| v.child(Icon::new(Glyph::ChevronRight).size(ui::ICON_SM))))
         .when(count.navigates(), |r| r.cursor_pointer().hover(move |s| s.bg(hover)))
 }
 
@@ -772,7 +765,7 @@ fn grouped(n: u64) -> String {
 
 fn check_mark(ok: bool, cx: &App) -> Div {
     let (glyph, ink, label) = if ok { (Glyph::Checkmark, palette::positive_ink(cx), "Yes") } else { (Glyph::X, palette::danger_ink(cx), "No") };
-    div().flex().items_center().gap_1().text_color(ink).child(Icon::new(glyph).size(ui::ICON_MD)).child(label)
+    ui::row().gap_1().text_color(ink).child(Icon::new(glyph).size(ui::ICON_MD)).child(label)
 }
 
 fn perm_pill(p: &Permission, elevated: bool, cx: &App) -> Div {
@@ -800,21 +793,19 @@ fn permissions_page(view: &ModView, guild: &Guild, roles: &[String], cx: &App) -
                 _ => tag.into_any_element(),
             }
         });
-        div()
+        ui::col()
             .p_3()
-            .flex()
-            .flex_col()
             .gap_1p5()
             .squircle(ui::RADIUS_LG)
             .bg(palette::surface(palette::Level::Page, cx))
             .border_1()
             .border_color(palette::line(cx))
-            .child(div().flex().items_center().gap_2().child(div().flex_1().min_w_0().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(p.name)).children(tag))
+            .child(ui::row().gap_2().child(div().flex_1().min_w_0().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(p.name)).children(tag))
             .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(format!("{category} · {count}")))
             .child(div().text_color(palette::text(cx)).child(p.detail))
-            .child(div().flex().flex_wrap().gap_1().children(chips))
+            .child(ui::row().items_stretch().flex_wrap().gap_1().children(chips))
     });
-    div().flex().flex_col().gap_2().children(cards).into_any_element()
+    ui::col().gap_2().children(cards).into_any_element()
 }
 
 fn audit_page(view: &ModView, cx: &App) -> AnyElement {
@@ -839,9 +830,9 @@ fn audit_page(view: &ModView, cx: &App) -> AnyElement {
             .items_start()
             .py_1p5()
             .child(div().pt_0p5().flex_none().text_color(ink).child(Icon::new(glyph).size(ui::ICON_MD)))
-            .child(div().flex_1().min_w_0().flex().flex_col().gap_0p5().child(sentence_spans(&audit::sentence(e, names), cx)).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(meta)))
+            .child(ui::col().min_h_0().flex_1().gap_0p5().child(sentence_spans(&audit::sentence(e, names), cx)).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(meta)))
     });
-    div().flex().flex_col().gap_0p5().children(rows).into_any_element()
+    ui::col().gap_0p5().children(rows).into_any_element()
 }
 
 #[cfg(test)]

@@ -252,9 +252,15 @@ impl DragMotion {
     }
 }
 
+// The hole's outline, a ghost row's height, and its tag chip's height.
+const HOLE_OUTLINE: f32 = 1.5;
+const GHOST_ROW: f32 = 30.;
+const GHOST_AVATAR: f32 = 22.;
+const TAG_HEIGHT: f32 = 22.;
+
 // .is-hole: the place a carried row left, a faint 1.5px outline at 32%; the caller leaves it empty.
 pub fn hole<E: Styled>(place: E, cx: &App) -> E {
-    place.opacity(0.32).border(px(1.5)).border_color(palette::faint(cx).opacity(0.55))
+    place.opacity(0.32).border(px(HOLE_OUTLINE)).border_color(palette::faint(cx).opacity(0.55))
 }
 
 // Starts a carry as gpui starts the drag: the ghost is the drag's view, and the app keeps a hand on
@@ -289,6 +295,7 @@ pub struct Ghost {
 
 impl Render for Ghost {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("Ghost");
         let mut held = self.hand.borrow_mut();
         let anchor = window.mouse_position() - held.offset;
         let target = held.lock_x.map_or(anchor, |x| point(x, anchor.y));
@@ -311,7 +318,7 @@ fn ghost(held: &Held, origin: Point<Pixels>, settle: f32, cx: &App) -> Div {
         Look::Channel { channel, people } => row_card(ui::RADIUS_MD, lifted, cx)
             .flex_col()
             .gap_px()
-            .child(div().h_8().px_2().flex().items_center().gap_2().child(channel_glyph(channel).size(ui::ICON_LG).flex_none().text_color(palette::faint(cx))).child(div().flex_1().min_w_0().truncate().child(channel.name.clone())))
+            .child(ui::row().h_8().px_2().gap_2().child(channel_glyph(channel).size(ui::ICON_LG).flex_none().text_color(palette::faint(cx))).child(ui::line(channel.name.clone()).flex_1()))
             .children(people.iter().map(|(avatar, name)| person(avatar, name).text_color(palette::muted(cx)))),
         Look::Label { dot, text } => row_card(ui::RADIUS_MD, lifted, cx)
             .h(held.size.y)
@@ -320,7 +327,7 @@ fn ghost(held: &Held, origin: Point<Pixels>, settle: f32, cx: &App) -> Div {
             .gap_3()
             .text_size(ui::TEXT_SM)
             .child(div().size_3().flex_none().rounded_full().bg(*dot))
-            .child(div().flex_1().min_w_0().truncate().child(text.clone())),
+            .child(ui::line(text.clone()).flex_1()),
         Look::Category(name) => row_card(ui::RADIUS_SM, lifted, cx)
             .h(held.size.y)
             .px_1p5()
@@ -328,8 +335,8 @@ fn ghost(held: &Held, origin: Point<Pixels>, settle: f32, cx: &App) -> Div {
             .gap_1()
             .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::MEDIUM)
-            .child(crate::sidebar::Nav::Caret.icon().size(px(11.)))
-            .child(div().flex_1().min_w_0().truncate().child(name.clone())),
+            .child(crate::sidebar::Nav::Caret.icon().size(px(crate::sidebar::CARET_SIZE)))
+            .child(ui::line(name.clone()).flex_1()),
     };
     let (sx, sy) = held.carry.scale();
     let grab = point(relative(f32::from(held.offset.x) / f32::from(held.size.x)), relative(f32::from(held.offset.y) / f32::from(held.size.y)));
@@ -348,35 +355,39 @@ fn ghost(held: &Held, origin: Point<Pixels>, settle: f32, cx: &App) -> Div {
 }
 
 // .vd-ghost: the overlay surface under --lift, with the row's own layout inside.
+// lint-allow(custom-component): ui::card is a clickable raised card; the ghost is a lifted overlay surface that fades into its row's look as it lands.
 fn row_card(radius: f32, lifted: f32, cx: &App) -> Div {
-    div().w_full().flex().squircle(radius).bg(palette::surface(palette::Level::Overlay, cx).opacity(lifted)).shadow(lift_shadow(lifted, cx)).text_color(palette::strong(cx))
+    // lint-allow(custom-surface): ui::surface has a fixed fill and shadow; this one's fill and shadow fade with the lift.
+    ui::row().items_stretch().w_full().squircle(radius).bg(palette::surface(palette::Level::Overlay, cx).opacity(lifted)).shadow(lift_shadow(lifted, cx)).text_color(palette::strong(cx))
 }
 
 fn person(avatar: &str, name: &SharedString) -> Div {
-    div().h(px(30.)).w_full().pl_8().pr_2().flex().items_center().gap_2().child(ui::avatar(avatar.to_owned(), 22.)).child(div().flex_1().min_w_0().truncate().child(name.clone()))
+    ui::row().h(px(GHOST_ROW)).w_full().pl_8().pr_2().gap_2().child(ui::avatar(avatar.to_owned(), GHOST_AVATAR)).child(ui::line(name.clone()).flex_1())
 }
 
 // --lift: 0 10px 28px black at 32% over a 1px line_strong ring, both fading as it lands.
 fn lift_shadow(lifted: f32, cx: &App) -> Vec<BoxShadow> {
     vec![
-        BoxShadow { color: gpui_kit::black().opacity(0.32 * lifted), offset: point(px(0.), px(10.)), blur_radius: px(28.), spread_radius: px(0.), inset: false },
-        BoxShadow { color: palette::line_strong(cx).opacity(lifted), offset: point(px(0.), px(0.)), blur_radius: px(0.), spread_radius: px(1.), inset: false },
+        ui::shadow(gpui_kit::black().opacity(0.32 * lifted), 0., 10., 28., 0., false),
+        ui::shadow(palette::line_strong(cx).opacity(lifted), 0., 0., 0., 1., false),
     ]
 }
 
 // .vd-tag: a dark chip 10px off the ghost's right edge, easing in from the left each time it changes.
+// lint-allow(custom-component): ui::badge is a static label; this chip hangs off the ghost's edge, led by a glyph, and eases in each time it changes.
 fn tag_chip(tag: SharedString, cx: &App) -> AnyElement {
-    div()
+    // lint-allow(custom-badge, custom-mark): ui::badge is a static label and ui::badged marks a face's corner; this chip hangs off the ghost's right edge.
+    ui::row()
         .absolute()
         .left(relative(1.))
         .top(relative(0.5))
-        .mt(px(-11.))
+        // lint-allow(raw-margin): centres the chip on the ghost's edge (half its height up) and sets it 10px off, which padding can't do.
+        .mt(px(-TAG_HEIGHT / 2.))
+        // lint-allow(raw-margin): sets the chip 10px clear of the ghost's edge, which padding on the ghost can't do.
         .ml_2p5()
-        .h(px(22.))
+        .h(px(TAG_HEIGHT))
         .px_2()
         .squircle(ui::RADIUS_XS)
-        .flex()
-        .items_center()
         .gap_1()
         .whitespace_nowrap()
         .text_size(ui::TEXT_XS)
@@ -385,6 +396,7 @@ fn tag_chip(tag: SharedString, cx: &App) -> AnyElement {
         .text_color(palette::surface(palette::Level::Page, cx))
         .child(Icon::new(Glyph::ArrowRight).size(ui::ICON_SM))
         .child(tag.clone())
+        // lint-allow(raw-px): the slide's distance is computed from the animation's progress.
         .with_animation(tag, Animation::new(ui::DUR_POP).with_easing(gpui_kit::ease_out_quint()), |chip, t| chip.opacity(t).translate_x(px(-4. * (1. - t))).scale(0.95 + 0.05 * t))
         .into_any_element()
 }
@@ -424,7 +436,7 @@ impl Waffle {
         if held.carry.step() || puffed == Some(1.) {
             drop(held);
             self.drag_motion.landing = None;
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the landing ghost is drawn by the root over the columns, whose rows were held as holes under it
             return None;
         }
         window.request_animation_frame();
@@ -610,13 +622,17 @@ mod tests {
         assert_eq!(reorder(list(), "c", Some(("b", false)))[0], ("c".to_owned(), 0));
     }
 
+    fn at(x: f32, y: f32) -> Point<Pixels> {
+        point(px(x), px(y))
+    }
+
     // Carried right fast it tilts clockwise toward 14° (its underdamped spring may pass it a little,
     // as the design's does) and swells; let go, it glides onto its row in about 250ms without a jump.
     // Held, the ghost keeps up: 100px behind the pointer, it's there within 150ms, never more than a few px past.
     #[test]
     fn ghost_keeps_up_with_the_pointer() {
-        let mut carry = Carry::new(point(px(0.), px(0.)), 1.04, 0.);
-        carry.follow(point(px(0.), px(100.)));
+        let mut carry = Carry::new(at(0., 0.), 1.04, 0.);
+        carry.follow(at(0., 100.));
         let mut peak: f32 = 0.;
         for _ in 0..9 {
             carry.advance(1. / 60.);
@@ -629,15 +645,15 @@ mod tests {
     #[test]
     fn carries_then_lands() {
         let frame = 1. / 120.;
-        let mut carry = Carry::new(point(px(0.), px(0.)), 1.05, 0.);
+        let mut carry = Carry::new(at(0., 0.), 1.05, 0.);
         for i in 1..=24 {
-            carry.follow(point(px(i as f32 * 2000. * frame), px(0.)));
+            carry.follow(at(i as f32 * 2000. * frame, 0.));
             carry.advance(frame);
             assert!(carry.tilt.position.abs() <= MAX_TILT * 1.2, "tilt {}", carry.tilt.position);
         }
         assert!(carry.tilt.position > 4., "tilt {}", carry.tilt.position);
         assert!(carry.lift.position > 1.02);
-        carry.follow(point(px(40.), px(120.)));
+        carry.follow(at(40., 120.));
         carry.land();
         let (mut last, mut frames) = (carry.at(), 0);
         while !carry.advance(frame) {

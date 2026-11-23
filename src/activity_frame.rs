@@ -279,6 +279,7 @@ impl Drop for ActivityFrame {
 // gpui-webview does: a native surface positioned then stacks with the view that hosts it.
 impl Render for ActivityFrame {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("ActivityFrame");
         let this = cx.weak_entity();
         div().relative().size_full().child(
             canvas(
@@ -442,7 +443,7 @@ mod compose {
             let (id, window) = (self.surface.id(), self.window);
             self.cx
                 .spawn(async move |cx| _ = window.update(cx, |_, window, _| remove(window, id)))
-                .detach();
+                .detach(); // lint-allow(detached-task): a one-shot turn of the main thread that ends when it runs, holding no entity
         }
     }
 

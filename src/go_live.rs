@@ -119,7 +119,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot lookup that ends when it returns, holding a WeakEntity
     }
 
     // Goes live through `start_share`, then remembers the source once the stream is really up.
@@ -152,8 +152,8 @@ pub struct SharePicker {
     tab: ShareTab,
     windows: Option<Result<Vec<ShareableWindow>, SharedString>>,
     screens: Option<Result<Vec<ShareableScreen>, SharedString>>,
-    thumbs: Vec<(ShareSource, Arc<RenderImage>)>,
-    icons: Vec<(i32, Arc<RenderImage>)>,
+    thumbs: Vec<(ShareSource, Arc<RenderImage>)>, // lint-allow(unbounded-growth): one per shareable screen or window, a few dozen at most, dropped with the picker
+    icons: Vec<(i32, Arc<RenderImage>)>, // lint-allow(unbounded-growth): one per app with a shareable window, a few dozen at most, dropped with the picker
     // Whether the user has picked; the preselection lands without motion.
     picked: bool,
 }
@@ -193,7 +193,7 @@ impl Waffle {
             let kept = this.update(cx, |this, cx| {
                 let Some(picker) = &mut this.share_picker else { return false };
                 picker.icons.extend(icons.iter().cloned());
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
                 true
             });
             if !kept.unwrap_or(false) {
@@ -206,7 +206,7 @@ impl Waffle {
                 let kept = this.update(cx, |this, cx| {
                     let Some(picker) = &mut this.share_picker else { return false };
                     picker.thumbs.push((source, image.clone()));
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
                     true
                 });
                 if !kept.unwrap_or(false) {
@@ -215,7 +215,7 @@ impl Waffle {
                 }
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends when the thumbnails are all captured or the picker is closed, holding a WeakEntity
     }
 
     pub(crate) fn empty_share_picker(&mut self, cx: &mut Context<Self>) {
@@ -223,7 +223,7 @@ impl Waffle {
         self.share_picker = Some(SharePicker { tab: ShareTab::Windows, windows: None, screens: None, thumbs: Vec::new(), icons: Vec::new(), picked: false });
         self.share_choice = None;
         self.share_choice_label = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
     }
 
     // Fills the open picker's lists and preselects; the selection, or None once the picker has closed.
@@ -239,7 +239,7 @@ impl Waffle {
             self.share_choice = Some(source);
             self.share_choice_label = Some(label);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
         Some(self.share_choice)
     }
 
@@ -260,7 +260,7 @@ impl Waffle {
         picker.picked = true;
         self.share_choice = Some(source);
         self.share_choice_label = Some(label);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
     }
 
     fn go_live_from_picker(&mut self, cx: &mut Context<Self>) {
@@ -287,9 +287,7 @@ impl Waffle {
     pub(crate) fn share_overlay(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let picker = self.share_picker.as_ref()?;
         let channel = self.call.as_ref().map_or_else(|| "voice".to_owned(), |c| c.channel.name.clone());
-        let head = div()
-            .flex()
-            .flex_col()
+        let head = ui::col()
             .gap_0p5()
             .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(format!("Go live in {channel}")))
             .child(div().text_color(palette::muted(cx)).child("Choose a screen, a window or a capture device."));
@@ -302,7 +300,7 @@ impl Waffle {
             .child(self.share_footer(cx));
         let backdrop = div().id("share-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
             this.close_share_picker(cx);
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
         }));
         let dialog = ui::dialog("share-picker", DIALOG_WIDTH, body, window, cx);
         Some(ui::modal(backdrop, dialog, cx))
@@ -318,7 +316,7 @@ impl Waffle {
                 if let Some(picker) = &mut this.share_picker {
                     picker.tab = TABS[i];
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
             })
             .ok();
         }, window, cx)
@@ -327,7 +325,7 @@ impl Waffle {
     // .srcs: three across, 12px apart; each a live still and its name.
     fn share_sources(&self, picker: &SharePicker, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = palette::muted(cx);
-        let note = |text: SharedString, color: Hsla| div().py_8().flex().justify_center().text_color(color).child(text).into_any_element();
+        let note = |text: SharedString, color: Hsla| ui::row().items_stretch().py_8().justify_center().text_color(color).child(text).into_any_element();
         let body: AnyElement = match picker.tab {
             ShareTab::Windows => match &picker.windows {
                 None => note("Finding windows…".into(), muted),
@@ -344,7 +342,8 @@ impl Waffle {
             ShareTab::Devices => note("No capture devices found".into(), muted),
         };
         // Bled 4px past the column so a tile's hover fill and selection ring aren't clipped by the scroller.
-        div().id("share-list").max_h(px(SOURCES_HEIGHT)).mx_neg_1().overflow_y_scroll().child(div().p_1().child(body))
+        div().id("share-list").max_h(px(SOURCES_HEIGHT)).mx_neg_1() // lint-allow(raw-margin): an optical bleed, so a tile's hover fill and ring aren't clipped by the scroller
+            .overflow_y_scroll().child(div().p_1().child(body))
     }
 
     // .src: a 16:10 still under a hairline; picked, it's ringed in accent and its name turns strong.
@@ -357,7 +356,7 @@ impl Waffle {
             Some(image) => ui::media(image, ui::all(ui::RADIUS_MD)).size_full().object_fit(gpui_kit::ObjectFit::Contain).into_any_element(),
             None => Icon::new(glyph(source)).size_8().text_color(muted).into_any_element(),
         };
-        let shot = div()
+        let shot = ui::row()
             .relative()
             .w_full()
             .aspect_ratio(16. / 10.)
@@ -365,8 +364,6 @@ impl Waffle {
             .bg(palette::surface(palette::Level::Rail, cx))
             .border_1()
             .border_color(palette::line(cx))
-            .flex()
-            .items_center()
             .justify_center()
             .child(still)
             .when(selected, |d| d.child(selection_ring(&key, picker.picked, palette::surface(palette::Level::Raised, cx))));
@@ -374,28 +371,22 @@ impl Waffle {
             Some(image) => img(image).size_4().flex_none().into_any_element(),
             None => Icon::new(glyph(source)).size(ui::ICON_MD).flex_none().text_color(muted).into_any_element(),
         };
-        div()
+        ui::col() // lint-allow(custom-button): ui::card fills at rest and pads 12px, and this tile is clear until hovered
             .id(SharedString::from(format!("share-{key}")))
-            .min_w_0()
             .p_1()
-            .m_neg_1()
+            .m_neg_1() // lint-allow(raw-margin): an optical bleed, so the hover fill sits past the still's edge as the ring does
             .squircle(ui::RADIUS_LG)
-            .flex()
-            .flex_col()
             .gap_1p5()
             .cursor_pointer()
             .hover(move |s| s.bg(hover))
             .child(shot)
             .child(
-                div()
-                    .flex()
-                    .items_center()
+                ui::row()
                     .gap_1p5()
-                    .min_w_0()
                     .font_weight(FontWeight::NORMAL)
                     .text_color(if selected { palette::strong(cx) } else { palette::text(cx) })
                     .child(icon)
-                    .child(div().min_w_0().truncate().child(name)),
+                    .child(ui::line(name)),
             )
             .on_click(cx.listener(move |this, _, _, cx| this.pick_share(source, label.clone(), cx)))
             .into_any_element()
@@ -428,8 +419,8 @@ impl Waffle {
             window,
             cx,
         );
-        let field = |label: &'static str, control: Div| div().flex_1().min_w_0().flex().flex_col().gap_1p5().child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(label)).child(control);
-        div().flex().gap_4().child(field("Resolution", resolutions)).child(field("Frame rate", rates))
+        let field = |label: &'static str, control: Div| ui::col().min_h_0().flex_1().gap_1p5().child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(label)).child(control);
+        ui::row().items_stretch().gap_4().child(field("Resolution", resolutions)).child(field("Frame rate", rates))
     }
 
     // The sound switch, saying whose sound viewers get.
@@ -439,14 +430,12 @@ impl Waffle {
             (Some(_), Some(label)) => format!("Viewers hear {label}, not your other apps"),
             (Some(_), None) => "Viewers hear this app, not your other apps".to_owned(),
         };
-        div()
+        ui::row()
             .id("stream-audio")
             .py_2p5()
-            .flex()
-            .items_center()
             .gap_3()
             .cursor_pointer()
-            .child(div().flex_1().min_w_0().child(div().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child("Share audio")).child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(what)))
+            .child(div().flex_1().min_w_0().child(div().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child("Share audio")).child(ui::line(what).text_size(ui::TEXT_XS).text_color(palette::muted(cx))))
             .child(ui::switch_live("stream-audio-switch", self.prefs.stream_audio, window, cx))
             .on_click(cx.listener(|this, _, _, cx| this.update_prefs(cx, |p| p.stream_audio = !p.stream_audio)))
     }
@@ -461,13 +450,11 @@ impl Waffle {
             .when(ready, |b| b.on_click(cx.listener(|this, _, _, cx| this.go_live_from_picker(cx))));
         let cancel = ui::button("go-live-cancel", ui::Tone::Ghost, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| {
             this.close_share_picker(cx);
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
         }));
-        div()
-            .flex()
-            .items_center()
+        ui::row()
             .gap_2()
-            .child(div().flex_1().min_w_0().truncate().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(self.share_hint()))
+            .child(ui::line(self.share_hint()).flex_1().text_size(ui::TEXT_XS).text_color(palette::faint(cx)))
             .child(cancel)
             .child(go)
     }
@@ -495,16 +482,18 @@ fn glyph(source: ShareSource) -> Glyph {
 // .src[aria-pressed] .shot: a 2px gap in the dialog's colour, then a 2px accent ring. A user's pick
 // springs out from the still's edge, overshooting a touch; the preselection lands still.
 fn selection_ring(key: &str, animate: bool, gap: Hsla) -> AnyElement {
-    let ring = div().absolute().border_2().border_color(palette::accent()).child(div().absolute().inset_0().squircle(ui::RADIUS_MD + 2.).border_2().border_color(gap));
+    let ring = div().absolute().inset_0();
     if !animate {
-        return place_ring(ring, 1., 1.).into_any_element();
+        return place_ring(ring, gap, 1., 1.).into_any_element();
     }
-    ring.with_animation(SharedString::from(format!("ring-{key}")), Animation::new(ui::DUR_POP), |ring, t| place_ring(ring, crate::motion::back_out(t), (t / 0.4).min(1.))).into_any_element()
+    ring.with_animation(SharedString::from(format!("ring-{key}")), Animation::new(ui::DUR_POP), move |ring, t| place_ring(ring, gap, crate::motion::back_out(t), (t / 0.4).min(1.))).into_any_element()
 }
 
-fn place_ring(ring: Div, grow: f32, alpha: f32) -> Div {
+fn place_ring(ring: Div, gap: Hsla, grow: f32, alpha: f32) -> Div {
     let offset = 1. - 5. * grow;
-    ring.top(px(offset)).left(px(offset)).right(px(offset)).bottom(px(offset)).squircle(ui::RADIUS_MD - offset).opacity(alpha)
+    // lint-allow(custom-mark): ui::speaking_ring is a shadow ring that would paint over the still from above, and this one springs out from its edge
+    let edge = |inset: f32, color: Hsla| div().absolute().top(px(inset)).left(px(inset)).right(px(inset)).bottom(px(inset)).squircle(ui::RADIUS_MD - inset).border_2().border_color(color);
+    ring.opacity(alpha).child(edge(offset, palette::accent())).child(edge(offset + 2., gap))
 }
 
 #[cfg(test)]

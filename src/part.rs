@@ -14,12 +14,15 @@ type RenderFn = fn(&mut Waffle, &mut Window, &mut Context<Waffle>) -> AnyElement
 pub struct Part {
     waffle: WeakEntity<Waffle>,
     render: RenderFn,
+    // Which column, for the render counters (perf.rs).
+    name: &'static str,
     images: Entity<Images>,
     _observe: Subscription,
 }
 
 impl Render for Part {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe(self.name);
         self.images.update(cx, |images, cx| images.next_frame(cx));
         let render = self.render;
         let content = self.waffle.update(cx, |waffle, cx| render(waffle, window, cx)).unwrap_or_else(|_| div().into_any_element());
@@ -46,18 +49,21 @@ pub enum Column {
 impl Waffle {
     // `column` as a cached view laid out by `style`; its own content can't size it.
     pub fn part(&mut self, column: Column, style: StyleRefinement, cx: &mut Context<Self>) -> AnyElement {
-        let (slot, render): (&mut Option<Entity<Part>>, RenderFn) = match column {
-            Column::Nav => (&mut self.parts.nav, |w, window, cx| w.render_nav(window, cx).into_any_element()),
-            Column::Main => (&mut self.parts.main, Waffle::render_main),
-            Column::Panel => (&mut self.parts.panel, |w, window, cx| w.render_panel(window, cx).unwrap_or_else(|| div().into_any_element())),
+        let (slot, render, name): (&mut Option<Entity<Part>>, RenderFn, &'static str) = match column {
+            Column::Nav => (&mut self.parts.nav, |w, window, cx| w.render_nav(window, cx).into_any_element(), "Nav column"),
+            Column::Main => (&mut self.parts.main, Waffle::render_main, "Main column"),
+            Column::Panel => (&mut self.parts.panel, |w, window, cx| w.render_panel(window, cx).unwrap_or_else(|| div().into_any_element()), "Panel column"),
         };
         let waffle = cx.entity();
         let part = slot.get_or_insert_with(|| {
+            // lint-allow(render-work): made once, on the column's first draw (get_or_insert_with), then kept.
             cx.new(|cx: &mut Context<Part>| Part {
                 waffle: waffle.downgrade(),
                 render,
+                name,
                 images: crate::images::new_cache(cx),
-                _observe: cx.observe(&waffle, |_, _, cx| cx.notify()), // lint-allow(global-notify): notifies this part, following the app
+                // lint-allow(render-work, global-notify): subscribed once with the part, which notifies itself, following the app.
+                _observe: cx.observe(&waffle, |_, _, cx| cx.notify()),
             })
         });
         AnyView::from(part.clone()).cached(style).into_any_element()
@@ -78,10 +84,21 @@ impl Waffle {
         }
     }
 
+    // Re-renders the popovers and pickers (`Overlays`) alone, for state only they draw. The menu and the
+    // dialogs are built by the root, so they still take the app's redraw.
+    pub fn redraw_overlays(&mut self, cx: &mut Context<Self>) {
+        match self.parts.overlays.clone() {
+            Some(overlays) => overlays.update(cx, |_, cx| cx.notify()), // lint-allow(global-notify): notifies the overlay layer alone
+            // Not drawn yet: nothing to keep, so the app's redraw draws it.
+            None => cx.notify(), // lint-allow(global-notify): the overlay layer doesn't exist yet
+        }
+    }
+
     // The popovers (overlays.rs) as a view of their own, so a list scrolling or a hover style in one
     // notifies this view rather than the app.
     pub fn overlays(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let waffle = cx.entity().downgrade();
+        // lint-allow(render-work): made once, on the first draw (get_or_insert_with), then kept.
         self.parts.overlays.get_or_insert_with(|| cx.new(|_| Overlays { waffle })).clone().into_any_element()
     }
 }
@@ -94,6 +111,7 @@ pub struct Overlays {
 
 impl Render for Overlays {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("Overlays");
         let overlays = self.waffle.update(cx, |waffle, cx| waffle.render_overlays(window, cx)).unwrap_or_default();
         // After the app's render set the rest of this layout's covering.
         if !overlays.is_empty() {

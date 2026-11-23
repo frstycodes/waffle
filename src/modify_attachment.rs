@@ -45,7 +45,7 @@ impl Waffle {
         let Some(file) = self.pending_files.get(index).cloned() else { return };
         self.fill_modify_inputs(&file.name, file.description.as_deref(), false, window, cx);
         self.modify_attachment = Some(ModifyAttachment { target: Target::Pending(file.path.clone()), kind: file.kind(), spoiler: file.spoiler });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the attachment dialog is drawn by the root's overlays, over every column
     }
 
     pub(crate) fn open_modify_sent(&mut self, message: Message, index: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -57,7 +57,7 @@ impl Waffle {
         let spoiler = item.spoiler;
         self.fill_modify_inputs(&file_name(&item.url), item.description.as_deref(), true, window, cx);
         self.modify_attachment = Some(ModifyAttachment { target: Target::Sent { message: Box::new(message), index }, kind, spoiler });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the attachment dialog is drawn by the root's overlays, over every column
     }
 
     // The filename goes in the shared dialog field; the description gets focus once the name is locked.
@@ -92,7 +92,7 @@ impl Waffle {
 
     fn close_modify_attachment(&mut self, cx: &mut Context<Self>) {
         self.modify_attachment = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the attachment dialog is drawn by the root's overlays, over every column
     }
 
     pub(crate) fn save_modify_attachment(&mut self, cx: &mut Context<Self>) {
@@ -110,7 +110,7 @@ impl Waffle {
                     file.description = description;
                     file.spoiler = spoiler;
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the attachment dialog is drawn by the root's overlays, over every column
             }
             Target::Sent { message, index } => self.patch_sent_attachment(*message, index, description.unwrap_or_default(), spoiler, cx),
         }
@@ -148,9 +148,7 @@ impl Waffle {
         let sent = matches!(form.target, Target::Sent { .. });
         let forced = self.dialog_input.read(cx).value().starts_with(SPOILER_PREFIX);
         let strong = palette::strong(cx);
-        let head = div()
-            .flex()
-            .items_center()
+        let head = ui::row()
             .child(div().flex_1().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(strong).child("Modify Attachment"))
             .child(ui::icon_button("modify-attachment-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_modify_attachment(cx))));
         let name_focus = gpui_kit::Focusable::focus_handle(self.dialog_input.read(cx), cx);
@@ -160,10 +158,8 @@ impl Waffle {
             ui::field("Description (Alt Text)", cx).child(ui::text_area("modify-attachment-alt", Textarea::new(&self.alt_input).appearance(false).px_0().text_size(ui::TEXT_SM), &focus))
         });
         let checked = if form.spoiler || forced { Check::On } else { Check::Off };
-        let spoiler = div()
+        let spoiler = ui::row()
             .id("modify-attachment-spoiler")
-            .flex()
-            .items_center()
             .gap_2p5()
             .text_color(if forced { palette::muted(cx) } else { strong })
             .child(ui::check_live("modify-attachment-spoiler-box", checked, window, cx))
@@ -174,11 +170,10 @@ impl Waffle {
                     if let Some(form) = this.modify_attachment.as_mut() {
                         form.spoiler = !form.spoiler;
                     }
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the attachment dialog is drawn by the root's overlays, over every column
                 }))
             });
-        let actions = div()
-            .flex()
+        let actions = ui::row().items_stretch()
             .justify_end()
             .gap_2()
             .child(ui::button("modify-attachment-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_modify_attachment(cx))))
@@ -201,7 +196,7 @@ impl Waffle {
 
     // The picture as the tile shows it, or the file's type icon.
     fn modify_preview(&self, form: &ModifyAttachment, cx: &Context<Self>) -> impl IntoElement + use<> {
-        let well = div().h_40().flex_none().overflow_hidden().squircle(RADIUS_LG).bg(palette::selected(cx)).text_color(palette::muted(cx)).flex().items_center().justify_center();
+        let well = ui::row().h_40().flex_none().overflow_hidden().squircle(RADIUS_LG).bg(palette::selected(cx)).text_color(palette::muted(cx)).justify_center();
         let corners = ui::all(RADIUS_LG);
         match &form.target {
             Target::Pending(path) => match self.file_previews.get(path).cloned().flatten() {

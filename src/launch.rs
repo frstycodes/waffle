@@ -60,7 +60,7 @@ impl Waffle {
                 }
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): holds a WeakEntity and ends when the app's entity is gone or the store's channel closes
         self.launch._saver = Some(cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(SAVE_EVERY).await;
@@ -78,7 +78,7 @@ impl Waffle {
             let _ = wait.recv_timeout(QUIT_FLUSH);
             async {}
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): the quit hook lives as long as the app, which is what it's for
         self.launch_from_snapshot(window, cx);
     }
 
@@ -98,7 +98,7 @@ impl Waffle {
             let Some((snapshot, messages)) = read.await else { return };
             this.update_in(cx, |this, window, cx| this.apply_snapshot(snapshot, messages, window, cx)).ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one read, applied once through a WeakEntity, then done
     }
 
     fn apply_snapshot(&mut self, snapshot: Snapshot, messages: Option<(String, Read<Vec<discord::Message>>)>, window: &mut Window, cx: &mut Context<Self>) {

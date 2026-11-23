@@ -397,7 +397,7 @@ impl Waffle {
         self.favorites_open = Some(String::new());
         self.guild_id = Some(GUILD_ID.to_owned());
         self.channel = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): opening Favorites changes the rail's selection, the channel list and the main column
     }
 
     // The real channel opens in its own server, for its messages and permissions, while the list stays on Favorites.
@@ -418,6 +418,7 @@ impl Waffle {
             let proto = body["settings"].as_str().unwrap_or_default().to_owned();
             this.update(cx, |this, cx| this.apply_settings_proto(&proto, false, cx)).ok();
         })
+        // lint-allow(detached-task): ends when the settings request returns, and holds only a WeakEntity.
         .detach();
     }
 
@@ -428,7 +429,7 @@ impl Waffle {
             Some(None) if !partial => self.favorites = Favorites::default(),
             _ => return,
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): favorites show in the rail's tile, the channel list and the feed
     }
 
     // Not verified: whether the server replaces the favorite_channels map wholesale (removals rely on it);
@@ -438,7 +439,7 @@ impl Waffle {
         favorites.prune(|id| self.reach(id));
         self.favorites = favorites;
         let settings = base64::engine::general_purpose::STANDARD.encode(self.favorites.to_settings());
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): favorites show in the rail's tile, the channel list and the feed
         self.rest(Method::PATCH, SETTINGS_PATH.to_owned(), Some(json!({ "settings": settings })), |_, _| {}, cx);
     }
 
@@ -661,10 +662,10 @@ impl Waffle {
                 continue;
             };
             let key = category.to_string();
-            let section = div().flex().flex_col().gap(px(row_gap())).child(self.favorite_category_head(category, collapsed, cx)).children(channel_rows);
+            let section = ui::col().gap(px(row_gap())).child(self.favorite_category_head(category, collapsed, cx)).children(channel_rows);
             let section = Board::target(section, favorite_board, CATEGORY_LIST, key.clone(), |_: &FavoriteCategoryDrag| false, cx);
             let spaced = !rows.is_empty();
-            rows.push(div().when(spaced, |d| d.mt_3p5()).child(categories.item(&key, section)).into_any_element());
+            rows.push(div().when(spaced, |d| d.pt_3p5()).child(categories.item(&key, section)).into_any_element());
         }
         rows
     }
@@ -683,7 +684,7 @@ impl Waffle {
                 let target_ink = palette::accent_ink(cx);
                 label
                     .when(carried == RowDrag::Hidden, |l| l.invisible())
-                    .child(Nav::Caret.icon().size(px(11.)).rotate(Radians(degrees.to_radians())))
+                    .child(Nav::Caret.icon().size(px(crate::sidebar::CARET_SIZE)).rotate(Radians(degrees.to_radians())))
                     .child(ui::truncating(format!("fav-cat-name-{id}"), name.clone()))
                     .on_click(cx.listener(move |this, _, _, cx| this.edit_favorite(id, |e| e.collapsed = !e.collapsed, cx)))
                     .drag_over::<FavoriteDrag>(move |s, _, _, _| s.text_color(target_ink))
@@ -722,7 +723,7 @@ impl Waffle {
                 .when(carried == RowDrag::Hidden, |r| r.invisible())
                 .child(favorite_glyph(&channel).size(ui::ICON_LG).flex_none().text_color(if selected { palette::muted(cx) } else { faint }))
                 .child(ui::truncating(format!("fav-name-{}", channel.id), name.clone()).flex_1())
-                .children(origin.map(|o| div().flex_none().max_w_24().truncate().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(faint).child(o)))
+                .children(origin.map(|o| ui::line(o).flex_none().max_w_24().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(faint)))
                 .when(mentions > 0, |r| r.child(ui::count_badge(mentions))),
         };
         let size = point(px(self.channels_width - 16.), px(row_height()));
@@ -759,9 +760,7 @@ fn favorite_glyph(channel: &Channel) -> Icon {
 }
 
 fn favorites_empty(cx: &mut Context<Waffle>) -> AnyElement {
-    div()
-        .flex()
-        .flex_col()
+    ui::col()
         .items_center()
         .gap_2()
         .py_8()

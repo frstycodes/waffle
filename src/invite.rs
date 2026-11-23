@@ -34,6 +34,9 @@ const ROW_CAP: usize = 100;
 // Four and a half rows; past that the list scrolls.
 const LIST_HEIGHT: f32 = 360.;
 const FACE: f32 = 32.;
+// The link field's skeleton width while the link loads, and the room right of its Copy button.
+const LINK_SKELETON: f32 = 180.;
+const FIELD_END_PAD: f32 = 5.;
 const COPIED_FOR: Duration = Duration::from_secs(1);
 
 // Discord's MAX_AGE_OPTIONS (seconds) and max-uses options, minus the experiment-only 14, 30 and 60 days.
@@ -124,7 +127,7 @@ impl Waffle {
         }
         let channel_id = channel.id.clone();
         let search = cx.new(|cx| SearchState::new(window, cx).placeholder("Search for friends"));
-        let subscription = cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify());
+        let subscription = cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify()); // lint-allow(global-notify): the invite dialog is drawn by the app's own render, outside the columns
         let focus = cx.focus_handle();
         match self.invite_rows("").is_empty() {
             true => window.focus(&focus, cx),
@@ -151,7 +154,7 @@ impl Waffle {
         if can_create {
             self.create_invite(LinkSettings::default(), cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the invite dialog is drawn by the app's own render, outside the columns
     }
 
     // Discord's answer for someone who may not invite and has no custom link to hand out.
@@ -164,7 +167,7 @@ impl Waffle {
 
     fn close_invite_dialog(&mut self, cx: &mut Context<Self>) {
         self.invite = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the invite dialog is drawn by the app's own render, outside the columns
     }
 
     // Discord sends `validate` (the last code for the channel) on open so the server can hand it back; we
@@ -173,7 +176,7 @@ impl Waffle {
         let Some(invite) = self.invite.as_mut() else { return };
         if invite.vanity.is_some() && settings == LinkSettings::NEVER {
             (invite.code, invite.settings, invite.draft, invite.error) = (None, settings, None, None);
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the invite dialog is drawn by the app's own render, outside the columns
         }
         let Some(client) = self.client.clone() else { return };
         (invite.creating, invite.error) = (true, None);
@@ -189,12 +192,12 @@ impl Waffle {
                     Ok(None) => invite.error = Some(FALLBACK_ERROR.into()),
                     Err(error) => invite.error = Some(invite_error(&error)),
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the invite dialog is drawn by the app's own render, outside the columns
             })
             .ok();
         })
-        .detach();
-        cx.notify();
+        .detach(); // lint-allow(detached-task): ends itself once its request or timer resolves, and holds only a weak handle
+        cx.notify(); // lint-allow(global-notify): the invite dialog is drawn by the app's own render, outside the columns
     }
 
     // Opens the friend's DM first when there isn't one, then posts the link as a plain message.
@@ -233,12 +236,12 @@ impl Waffle {
                     Ok(_) => invite.sends.insert(row.key.clone(), Delivery::Sent),
                     Err(_) => invite.sends.remove(&row.key),
                 };
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the invite dialog is drawn by the app's own render, outside the columns
             })
             .ok();
         })
-        .detach();
-        cx.notify();
+        .detach(); // lint-allow(detached-task): ends itself once its request or timer resolves, and holds only a weak handle
+        cx.notify(); // lint-allow(global-notify): the invite dialog is drawn by the app's own render, outside the columns
     }
 
     fn copy_invite(&mut self, cx: &mut Context<Self>) {
@@ -253,20 +256,20 @@ impl Waffle {
             this.update(cx, |this, cx| {
                 if let Some(invite) = this.invite.as_mut().filter(|i| i.copied == Some(copy)) {
                     invite.copied = None;
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the invite dialog is drawn by the app's own render, outside the columns
                 }
             })
             .ok();
         })
-        .detach();
-        cx.notify();
+        .detach(); // lint-allow(detached-task): ends itself once its request or timer resolves, and holds only a weak handle
+        cx.notify(); // lint-allow(global-notify): the invite dialog is drawn by the app's own render, outside the columns
     }
 
     fn edit_invite_dialog(&mut self, edit: impl FnOnce(&mut Invite), cx: &mut Context<Self>) {
         if let Some(invite) = self.invite.as_mut() {
             edit(invite);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the invite dialog is drawn by the app's own render, outside the columns
     }
 
     // DMs with messages (newest first), then group DMs, then the remaining friends; bots and blocked people left out.
@@ -295,9 +298,9 @@ impl Waffle {
         // The wide layout has room for the link's settings, so they show without Edit invite link.
         let always = friends.is_some() && invite.url().is_some();
         let draft = invite.draft.or(always.then_some(invite.settings));
-        let link = div().flex().flex_col().gap_5().child(link_section(invite, paused, !always, cx)).children(draft.map(|draft| settings_panel(invite, draft, always, window, cx)));
+        let link = ui::col().gap_5().child(link_section(invite, paused, !always, cx)).children(draft.map(|draft| settings_panel(invite, draft, always, window, cx)));
         let (columns, width) = match friends {
-            Some(friends) => (div().flex().items_start().gap_8().child(div().flex_1().min_w_0().child(friends)).child(link.flex_1().min_w_0()), WIDE),
+            Some(friends) => (ui::row().items_start().gap_8().child(div().flex_1().min_w_0().child(friends)).child(link.flex_1().min_w_0()), WIDE),
             None => (link, WIDTH),
         };
         let body = ui::dialog_body()
@@ -328,11 +331,11 @@ impl Waffle {
             true => div().py_4().text_center().text_color(palette::muted(cx)).child("No results found").into_any_element(),
             false => {
                 let items: Vec<AnyElement> = rows.into_iter().map(|row| self.invite_friend_row(row, invite, can_send, cx)).collect();
-                let list = div().id("invite-friends").flex().flex_col().gap_0p5().max_h(px(LIST_HEIGHT)).overflow_y_scroll().track_scroll(&invite.friends_scroll).children(items);
+                let list = ui::col().id("invite-friends").gap_0p5().max_h(px(LIST_HEIGHT)).overflow_y_scroll().track_scroll(&invite.friends_scroll).children(items);
                 div().relative().child(list).child(ui::more_below(&invite.friends_scroll, palette::surface(palette::Level::Raised, cx))).into_any_element()
             }
         };
-        Some(div().flex().flex_col().gap_2().child(ui::search_field("invite-search", &invite.search, cx)).child(list).into_any_element())
+        Some(ui::col().gap_2().child(ui::search_field("invite-search", &invite.search, cx)).child(list).into_any_element())
     }
 
     fn invite_friend_row(&self, row: Row, invite: &Invite, can_send: bool, cx: &mut Context<Self>) -> AnyElement {
@@ -345,18 +348,13 @@ impl Waffle {
             Some(group) => Some(members(group.recipients.len() + 1)),
             None => self.username(&row),
         };
-        let text = div()
+        let text = ui::col().min_h_0()
             .flex_1()
-            .min_w_0()
-            .flex()
-            .flex_col()
             .child(ui::truncating(format!("invite-name-{}", row.key), row.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
-            .children(detail.map(|d| div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(d)));
+            .children(detail.map(|d| ui::line(d).text_size(ui::TEXT_XS).text_color(palette::muted(cx))));
         let send = invite.sends.get(&row.key).copied();
         let button = invite_button(row, send, can_send, cx);
-        div()
-            .flex()
-            .items_center()
+        ui::row()
             .gap_3()
             .px_2()
             .py_1p5()
@@ -415,26 +413,19 @@ fn invite_rows(dms: &[Channel], relationships: &[Relationship]) -> Vec<Row> {
 // "Invite friends to Night Owls", then the channel they'll land in with its glyph.
 fn invite_head(guild: &Guild, channel: &Channel, cx: &mut Context<Waffle>) -> AnyElement {
     let (strong, muted) = (palette::strong(cx), palette::muted(cx));
-    let land = div()
-        .flex()
-        .items_center()
+    let land = ui::row()
         .gap_1()
-        .min_w_0()
         .text_size(ui::TEXT_SM)
         .text_color(muted)
         .child(crate::sidebar::channel_glyph(channel).size_4())
         .child(div().flex_none().child("Recipients will land in"))
-        .child(div().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(channel.name.clone()));
-    div()
-        .flex()
+        .child(ui::line(channel.name.clone()).font_weight(FontWeight::SEMIBOLD).text_color(strong));
+    ui::row()
         .items_start()
         .gap_3()
         .child(
-            div()
+            ui::col().min_h_0()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .gap_1()
                 .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("Invite friends to {}", guild.name)))
                 .child(land),
@@ -444,13 +435,12 @@ fn invite_head(guild: &Guild, channel: &Channel, cx: &mut Context<Waffle>) -> An
 }
 
 fn private_warning(cx: &App) -> AnyElement {
-    div()
-        .flex()
+    ui::row()
         .items_start()
         .gap_2()
         .text_size(ui::TEXT_SM)
         .text_color(palette::text(cx))
-        .child(div().flex_none().mt_px().text_color(palette::warning_ink(cx)).child(Icon::new(Glyph::WarningCircle).size(ui::ICON_LG)))
+        .child(div().flex_none().pt_px().text_color(palette::warning_ink(cx)).child(Icon::new(Glyph::WarningCircle).size(ui::ICON_LG)))
         .child(div().flex_1().min_w_0().child("This channel is private, only select members and roles can view this channel."))
         .into_any_element()
 }
@@ -471,8 +461,8 @@ fn link_section(invite: &Invite, paused: bool, editable: bool, cx: &mut Context<
     let url = invite.url();
     let (strong, faint) = (palette::strong(cx), palette::faint(cx));
     let value: AnyElement = match &url {
-        Some(url) => div().flex_1().min_w_0().truncate().text_color(if paused { faint } else { strong }).child(url.clone()).into_any_element(),
-        None => div().flex_1().min_w_0().child(ui::skeleton("invite-link-loading", ui::RADIUS_XS, cx).h_3p5().w(px(180.))).into_any_element(),
+        Some(url) => ui::line(url.clone()).flex_1().text_color(if paused { faint } else { strong }).into_any_element(),
+        None => div().flex_1().min_w_0().child(ui::skeleton("invite-link-loading", ui::RADIUS_XS, cx).h_3p5().w(px(LINK_SKELETON))).into_any_element(),
     };
     let copy_off = paused || url.is_none();
     let copy = ui::button("invite-copy", Tone::Primary, cx)
@@ -480,7 +470,7 @@ fn link_section(invite: &Invite, paused: bool, editable: bool, cx: &mut Context<
         .disabled(copy_off)
         .child(if invite.copied.is_some() { "Copied" } else { "Copy" })
         .when(!copy_off, |b| b.on_click(cx.listener(|this, _, _, cx| this.copy_invite(cx))));
-    let field = ui::field_frame(cx).pr(px(5.)).text_size(ui::TEXT_SM).when(paused, |d| d.bg(palette::selected(cx))).child(value).child(copy);
+    let field = ui::field_frame(cx).pr(px(FIELD_END_PAD)).text_size(ui::TEXT_SM).when(paused, |d| d.bg(palette::selected(cx))).child(value).child(copy);
     let line = match (&invite.code, &invite.vanity) {
         (None, Some(_)) => "Using this server's custom invite link.".to_owned(),
         _ => expiry_line(invite.settings.max_age, invite.settings.max_uses),
@@ -494,10 +484,8 @@ fn link_section(invite: &Invite, paused: bool, editable: bool, cx: &mut Context<
         .hover(|s| s.underline())
         .child("Edit invite link")
         .on_click(cx.listener(|this, _, _, cx| this.edit_invite_dialog(|i| (i.draft, i.select) = (Some(i.settings), None), cx)));
-    let hint = div().flex().flex_wrap().gap_x_1().text_size(ui::TEXT_DETAIL).line_height(ui::LINE_DETAIL).text_color(palette::muted(cx)).child(line).when(url.is_some() && editable, |d| d.child(edit));
-    div()
-        .flex()
-        .flex_col()
+    let hint = ui::row().items_stretch().flex_wrap().gap_x_1().text_size(ui::TEXT_DETAIL).line_height(ui::LINE_DETAIL).text_color(palette::muted(cx)).child(line).when(url.is_some() && editable, |d| d.child(edit));
+    ui::col()
         .gap_2()
         .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Or, send a server invite link to a friend"))
         .child(field)
@@ -529,8 +517,7 @@ fn settings_panel(invite: &Invite, draft: LinkSettings, always: bool, window: &m
             cx,
         )
     }));
-    let actions = div()
-        .flex()
+    let actions = ui::row().items_stretch()
         .justify_end()
         .gap_2()
         .when(cancellable, |d| d.child(ui::button("invite-settings-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.edit_invite_dialog(|i| (i.draft, i.select) = (None, None), cx)))))
@@ -544,14 +531,13 @@ fn settings_panel(invite: &Invite, draft: LinkSettings, always: bool, window: &m
                     }
                 })),
         );
-    div()
-        .flex()
-        .flex_col()
+    ui::col()
         .gap_4()
         .p_4()
         .squircle(RADIUS_LG)
         .bg(palette::hover(cx))
-        .child(div().flex().gap_3().child(div().flex_1().min_w_0().child(ui::field("Expire after", cx).child(age))).child(div().flex_1().min_w_0().child(ui::field("Max number of uses", cx).child(uses))))
+        .child(ui::row().items_stretch().gap_3().child(div().flex_1().min_w_0().child(ui::field("Expire after", cx).child(age))).child(div().flex_1().min_w_0().child(ui::field("Max number of uses", cx).child(uses))))
+        // lint-allow(raw-margin): pulls the toggle row's hover fill out to the card's edge, past the card's padding
         .child(temporary.mx_neg_3())
         .child(actions)
         .into_any_element()

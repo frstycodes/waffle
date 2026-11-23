@@ -1,5 +1,5 @@
 # Waffle's everyday commands. `make check` is what "done" means: lint, then tests.
-.PHONY: help run release demo demos design design-page lint clippy ui-lint ui-lint-update test check fmt
+.PHONY: help run release demo demos design design-page lint clippy ui-lint ui-lint-update find hooks perf test check fmt
 
 SCENE ?= home
 
@@ -33,8 +33,17 @@ ui-lint: ## The design-system ratchet (tools/ui_lint.py) and its own tests
 	python3 tools/ui_lint.py --check
 	python3 tools/test_ui_lint.py
 
-ui-lint-update: ## Lock in counts that fell and regenerate src/ui/CATALOG.md
+ui-lint-update: ## Lock in counts that fell; regenerate src/ui/CATALOG.md and ONE_OFFS.md
 	python3 tools/ui_lint.py --update
+
+perf: ## Opt-in runtime check: a demo scene with render counts and memory: make perf SCENE=call-streams
+	WAFFLE_PERF=1 WAFFLE_MEMORY=1 WAFFLE_DEMO=$(SCENE) cargo run
+
+find: ## Search the design system before building: make find Q="round button over video"
+	python3 tools/ui_find.py $(Q)
+
+hooks: ## Install the repo's git hooks (.githooks: the UI rules before each commit)
+	git config core.hooksPath .githooks
 
 test: ## Every test
 	cargo test

@@ -43,6 +43,7 @@ impl Waffle {
                     this.save_profile_edit(window, cx);
                 }
             })
+            // lint-allow(detached-task): the subscription ends with the entity it watches, which the view owns
             .detach();
         }
         input.update(cx, |state, cx| {
@@ -52,6 +53,7 @@ impl Waffle {
         if let Some(view) = &mut self.settings {
             view.editing = Some(ProfileEdit { field, input, password, saving: false });
         }
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 
@@ -59,6 +61,7 @@ impl Waffle {
     pub(super) fn cancel_profile_edit(&mut self, cx: &mut Context<Self>) -> bool {
         let editing = self.settings.as_mut().and_then(|v| v.editing.take()).is_some();
         if editing {
+            // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
             cx.notify();
         }
         editing
@@ -115,12 +118,14 @@ impl Waffle {
                 Err(e) => this.show_toast(e, cx),
             });
         })
+        // lint-allow(detached-task): a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
         .detach();
     }
 
     // Saves, then takes Discord's answer as the truth: your name, avatar and banner everywhere.
     fn send_profile_patch(&mut self, patch: Value, cx: &mut Context<Self>) {
         let Some(client) = self.client.clone() else { return };
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
         cx.spawn(async move |this, cx| {
             let result = client.modify_me(patch).await;
@@ -145,9 +150,11 @@ impl Waffle {
                         this.show_toast(message, cx);
                     }
                 }
+                // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
                 cx.notify();
             });
         })
+        // lint-allow(detached-task): a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
         .detach();
     }
 
@@ -158,11 +165,8 @@ impl Waffle {
             return super::field_text(label, value, cx).into_any_element();
         };
         let id = if field == ProfileField::Username { "edit-username" } else { "edit-name" };
-        div()
+        ui::col().min_h_0()
             .flex_1()
-            .min_w_0()
-            .flex()
-            .flex_col()
             .gap_1p5()
             .child(super::field_label(label, cx))
             .child(ui::text_field(id, gpui_kit::component::input::Input::new(&edit.input).appearance(false), &edit.input.read(cx).focus_handle(cx)))

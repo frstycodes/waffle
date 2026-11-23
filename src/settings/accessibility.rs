@@ -19,6 +19,14 @@ use crate::{
     ui::{self, Squircle},
 };
 
+// The compact preview's time column, the sample image (width, height), its sticker and the alt text's line height.
+const TIME_WIDTH: f32 = 52.;
+const SAMPLE_IMAGE: (f32, f32) = (180., 112.);
+const SAMPLE_STICKER: f32 = 72.;
+const SAMPLE_STICKER_ICON: f32 = 56.;
+const ALT_LINE: f32 = 15.;
+// Where a compact message's media starts: under its time column and avatar.
+const COMPACT_MEDIA_INDENT: f32 = 60.;
 const TTS_SAMPLE: &str = "This is what text-to-speech sounds like at the current speed.";
 const TTS_STOPS: usize = 41;
 const SATURATION_STOPS: usize = 21;
@@ -47,7 +55,7 @@ impl Waffle {
             .text_size(ui::TEXT_XS)
             .child("Adjust the visual density of chat messages and UI")
             .on_click(cx.listener(|this, _, window, cx| this.open_page(Page::Accessibility, window, cx)));
-        div().px_1().flex().child(link)
+        ui::row().items_stretch().px_1().child(link)
     }
 
     fn readability_group(&self, window: &mut Window, cx: &mut Context<Self>) -> Div {
@@ -157,21 +165,19 @@ impl Waffle {
                 .on_click(cx.listener(|this, _, _, _| crate::message_menu::speak(TTS_SAMPLE, this.prefs.tts_rate)))
         });
         let value = div().whitespace_nowrap().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(format!("x{:.2}", at as f32 / 4.));
-        let header = div()
-            .flex()
+        let header = ui::row()
             .items_start()
             .justify_between()
             .gap_4()
             .child(ui::settings_text(tts.title, Some(caption), cx))
-            .child(div().flex().items_center().gap_3().flex_none().child(value).children(preview));
-        let marks = div()
-            .flex()
+            .child(ui::row().gap_3().flex_none().child(value).children(preview));
+        let marks = ui::row().items_stretch()
             .gap_2()
             .text_size(ui::TEXT_XS)
             .text_color(palette::muted(cx))
             .child("Slower")
             .child("x1.0")
-            .child(div().ml_auto().child("Faster"));
+            .child(ui::row().flex_1().justify_end().child("Faster"));
         let rate_row = stack_row(tts.id, false, cx).child(header).child(slider).child(marks);
         let card = ui::settings_card(cx).child(rate_row).child(self.toggle_row(setting("image-descriptions"), Toggle::ImageDescriptions, true, window, cx));
         ui::settings_group("Audio and screen reader", cx).child(card)
@@ -200,9 +206,8 @@ impl Waffle {
     // GAP: drawn here, not by chat.rs's message_row, which needs a live channel's RowContext.
     fn a11y_preview(&self, cx: &mut Context<Self>) -> Div {
         let look = PreviewLook::new(self);
-        let card = div()
-            .flex()
-            .flex_col()
+        // lint-allow(custom-badge): ui::settings_card has no body-font-size option; this card sets the preview's message size
+        let card = ui::col()
             .py_3()
             .px_2()
             .squircle(ui::RADIUS_LG)
@@ -210,17 +215,15 @@ impl Waffle {
             .text_size(px(look.font))
             .line_height(px(look.font * 1.375))
             .children(SAMPLES.iter().enumerate().map(|(i, sample)| look.message(sample, i, cx)));
-        let heading = div()
+        let heading = ui::row()
             .px_1()
-            .flex()
-            .items_center()
             .gap_1p5()
             .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(palette::muted(cx))
             .child(Icon::new(Glyph::Eye).size(ui::ICON_SM))
             .child("Preview");
-        div().flex().flex_col().gap_2().child(heading).child(card)
+        ui::col().gap_2().child(heading).child(card)
     }
 }
 
@@ -250,7 +253,7 @@ fn value_marks<T: std::fmt::Display>(values: &[T], unit: &str, at: usize, cx: &m
 
 fn marks(labels: impl IntoIterator<Item = (SharedString, bool)>, cx: &mut Context<Waffle>) -> Div {
     let (muted, on) = (palette::muted(cx), palette::accent_ink(cx));
-    div().flex().justify_between().text_size(ui::TEXT_XS).text_color(muted).children(
+    ui::row().items_stretch().justify_between().text_size(ui::TEXT_XS).text_color(muted).children(
         labels.into_iter().map(|(label, chosen)| div().when(chosen, |d| d.text_color(on).font_weight(FontWeight::SEMIBOLD)).child(label)),
     )
 }
@@ -311,20 +314,22 @@ impl PreviewLook {
     }
 
     fn message(&self, sample: &Sample, index: usize, cx: &Context<Waffle>) -> Div {
+        // lint-allow(raw-px, raw-margin): the gap before a group is the user's message-spacing setting, a size computed from data
         let row = div().px_2().py(px(if self.compact { 1. } else { 2. })).when(sample.starts_group && index > 0, |d| d.mt(px(self.gap)));
         let media = self.media(&sample.media, cx);
         if self.compact {
-            let time = div().w(px(52.)).flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(sample.time);
+            let time = div().w(px(TIME_WIDTH)).flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(sample.time);
             let face = (sample.starts_group && self.compact_avatars).then(|| ui::monogram(sample.author, 18.));
-            let line = div().flex().items_baseline().gap_2().child(time).children(face).when(sample.starts_group, |d| d.child(self.name(sample, cx))).child(self.text(sample, cx));
-            return row.child(line).children(media.map(|m| m.ml(px(60.))));
+            let line = ui::row().items_baseline().gap_2().child(time).children(face).when(sample.starts_group, |d| d.child(self.name(sample, cx))).child(self.text(sample, cx));
+            // lint-allow(raw-margin): media aligns under the text, past the time column and avatar; no sibling gap does that
+            return row.child(line).children(media.map(|m| m.ml(px(COMPACT_MEDIA_INDENT))));
         }
         let face = if sample.starts_group { ui::monogram(sample.author, 40.) } else { div().w_10().flex_none() };
         let who = sample.starts_group.then(|| {
             let time = div().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(format!("Today at {}", sample.time));
-            div().flex().items_baseline().gap_2().child(self.name(sample, cx)).child(time)
+            ui::row().items_baseline().gap_2().child(self.name(sample, cx)).child(time)
         });
-        let body = div().flex_1().min_w_0().flex().flex_col().children(who).child(self.text(sample, cx)).children(media);
+        let body = ui::col().min_h_0().flex_1().children(who).child(self.text(sample, cx)).children(media);
         row.flex().gap_3p5().child(face).child(body)
     }
 
@@ -333,7 +338,7 @@ impl PreviewLook {
         let role = if self.desaturate_user_colors { self.saturate(role) } else { role };
         let ink = if self.role_style == RoleStyle::InNames { role } else { palette::strong(cx) };
         let dot = (self.role_style == RoleStyle::NextToNames).then(|| div().size_2p5().flex_none().rounded_full().bg(role));
-        div().flex().items_center().gap_1p5().font_weight(FontWeight::SEMIBOLD).text_color(ink).children(dot).child(sample.author)
+        ui::row().gap_1p5().font_weight(FontWeight::SEMIBOLD).text_color(ink).children(dot).child(sample.author)
     }
 
     fn text(&self, sample: &Sample, cx: &Context<Waffle>) -> Div {
@@ -343,7 +348,7 @@ impl PreviewLook {
             && let Some(start) = full.find(link)
         {
             let ink = self.saturate(palette::accent_ink(cx));
-            let underline = self.underline_links.then_some(UnderlineStyle { thickness: px(1.), color: Some(ink), wavy: false });
+            let underline = self.underline_links.then_some(UnderlineStyle { thickness: ui::HAIRLINE, color: Some(ink), wavy: false });
             runs.push((start..start + link.len(), HighlightStyle { color: Some(ink), underline, ..Default::default() }));
         }
         if let Some(spoiler) = sample.spoiler {
@@ -357,17 +362,17 @@ impl PreviewLook {
 
     // Images and stickers are user content: saturation leaves them alone.
     fn media(&self, media: &SampleMedia, cx: &Context<Waffle>) -> Option<Div> {
-        let frame = div().mt_1p5().flex();
+        let frame = ui::row().items_stretch().pt_1p5();
         match media {
             SampleMedia::None => None,
             SampleMedia::Image { description } => {
                 let fill = linear_gradient(135., linear_color_stop(palette::oklch(0.7, 0.13, 60.), 0.), linear_color_stop(palette::oklch(0.55, 0.12, 200.), 1.));
                 let alt = self.descriptions.then(|| {
-                    div().px_1p5().py_px().rounded_md().bg(gpui_kit::black().opacity(0.6)).text_size(ui::TEXT_XXS).line_height(px(15.)).text_color(gpui_kit::white()).child(*description)
+                    div().px_1p5().py_px().rounded_md().bg(gpui_kit::black().opacity(0.6)).text_size(ui::TEXT_XXS).line_height(px(ALT_LINE)).text_color(gpui_kit::white()).child(*description)
                 });
-                Some(frame.child(div().w(px(180.)).h(px(112.)).p_1p5().squircle(ui::RADIUS_MD).bg(fill).flex().items_end().children(alt)))
+                Some(frame.child(ui::row().w(px(SAMPLE_IMAGE.0)).h(px(SAMPLE_IMAGE.1)).p_1p5().squircle(ui::RADIUS_MD).bg(fill).items_end().children(alt)))
             }
-            SampleMedia::Sticker => Some(frame.child(div().size(px(72.)).flex().items_center().justify_center().text_color(self.saturate(palette::accent_ink(cx))).child(Icon::new(Glyph::Sticker).size(px(56.))))),
+            SampleMedia::Sticker => Some(frame.child(ui::row().size(px(SAMPLE_STICKER)).justify_center().text_color(self.saturate(palette::accent_ink(cx))).child(Icon::new(Glyph::Sticker).size(px(SAMPLE_STICKER_ICON))))),
         }
     }
 

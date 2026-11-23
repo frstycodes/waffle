@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use gpui_kit::{AnyElement, App, ClickEvent, Context, Div, FontWeight, MouseButton, Pixels, Point, SharedString, Stateful, WeakEntity, Window, component::Icon, div, prelude::*, px};
+use gpui_kit::{AnyElement, ClickEvent, Context, Div, FontWeight, MouseButton, Pixels, Point, SharedString, Window, component::Icon, div, prelude::*, px};
 use rand::seq::SliceRandom;
 use reqwest::Method;
 use serde_json::{Value, json};
@@ -24,6 +24,11 @@ use crate::{
     palette::{self, Level},
     ui::{self, RADIUS_LG, RADIUS_MD, Squircle},
 };
+
+mod views;
+
+pub(crate) use views::{publish_bump, publish_button, server_tag, source_deleted, source_trigger};
+use views::{alert_dialog, dialog_title, followed_dialog, footer, quota};
 
 const ANNOUNCEMENT: u8 = 5;
 const NEWS: &str = "NEWS";
@@ -42,6 +47,8 @@ const FOLLOWER_WEBHOOK: u64 = 2;
 const COMMUNITY_UPDATES_GUILD: &str = "667560445975986187";
 const COMMUNITY_UPDATES_AUTHOR: &str = "669627189624307712";
 const SOURCE_CARD_WIDTH: f32 = 300.;
+// The follow bar's minimum height, as tall as the composer it replaces.
+const BLOCKER_HEIGHT: f32 = 56.;
 const DIALOG_WIDTH: f32 = 440.;
 const FOLLOW_WIDTH: f32 = 480.;
 const ADJECTIVES: [&str; 10] = ["spiffy", "good", "dapper", "swanky", "snazzy", "dandy", "cozy", "nifty", "neato", "lively"];
@@ -63,14 +70,14 @@ pub(crate) struct Announcements {
     bumps: HashSet<String>,
     // ponytail: only Waffle's own publishes, per channel, so the hourly count runs low when other moderators
     // publish too; Discord exposes no remaining count.
-    published: HashMap<String, Vec<Instant>>,
+    published: HashMap<String, Vec<Instant>>, // lint-allow(unbounded-growth): one entry per announcement channel you publish in, a few dozen at most
     // Follower stats by channel and when they were asked for; Discord refetches after an hour.
     stats: HashMap<String, (Instant, FollowerStats)>,
     dialog: Option<Dialog>,
     // (guild, channel) last followed into, the Follow dialog's default.
     last_destination: Option<(String, String)>,
     // Each server's Channels Followed, from its Integrations page's webhook list.
-    followed: HashMap<String, Load<Vec<Followed>>>,
+    followed: HashMap<String, Load<Vec<Followed>>>, // lint-allow(unbounded-growth): one entry per server whose Integrations page was opened, a few dozen at most
     source_card: Option<SourceCard>,
 }
 
@@ -360,11 +367,11 @@ impl Waffle {
             let Ok(body) = client.call(Method::GET, format!("/channels/{id}/follower-stats"), None).await else { return };
             this.update(cx, |this, cx| {
                 this.announcements.stats.insert(id, (Instant::now(), parse_stats(&body)));
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the follower count draws in the main column's follow bar and in the Overlays view's dialogs
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends itself once its request resolves, and holds only a weak handle
     }
 
     fn follower_stats(&self, channel_id: &str) -> FollowerStats {
@@ -379,12 +386,12 @@ impl Waffle {
         self.announcements.bumps.remove(&message.id);
         self.fetch_follower_stats(&message.channel_id, cx);
         self.announcements.dialog = Some(Dialog::Publish { message: Box::new(message), publishing: false });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is drawn by the Overlays view, which re-renders only with the app
     }
 
     fn dismiss_publish_bump(&mut self, message_id: &str, cx: &mut Context<Self>) {
         self.announcements.bumps.remove(message_id);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): a message's publish bump draws in the main column and a thread's side panel
     }
 
     fn hide_publish_bumps(&mut self, channel_id: String, cx: &mut Context<Self>) {
@@ -394,7 +401,7 @@ impl Waffle {
             self.prefs.publish_bump_hidden.push(channel_id);
             self.prefs.save();
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): a message's publish bump draws in the main column and a thread's side panel
     }
 
     fn publish(&mut self, cx: &mut Context<Self>) {
@@ -409,12 +416,12 @@ impl Waffle {
             let result = client.call_raw(Method::POST, format!("/channels/{}/messages/{}/crosspost", message.channel_id, message.id), None).await;
             this.update(cx, |this, cx| {
                 this.settle_publish(&message, result);
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the dialog is drawn by the Overlays view and the message's published state in the main column and side panel
             })
             .ok();
         })
-        .detach();
-        cx.notify();
+        .detach(); // lint-allow(detached-task): ends itself once its request resolves, and holds only a weak handle
+        cx.notify(); // lint-allow(global-notify): the dialog is drawn by the Overlays view, which re-renders only with the app
     }
 
     // The CROSSPOSTED flag shows at once; Discord's MESSAGE_UPDATE carries it too.
@@ -456,12 +463,12 @@ impl Waffle {
             }
             this.update(cx, |this, cx| {
                 this.settle_failed_edit(original, &result);
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the dialog is drawn by the Overlays view and the message's published state in the main column and side panel
             })
             .ok();
         })
-        .detach();
-        cx.notify();
+        .detach(); // lint-allow(detached-task): ends itself once its request resolves, and holds only a weak handle
+        cx.notify(); // lint-allow(global-notify): a message's publish bump draws in the main column and a thread's side panel
     }
 
     fn settle_failed_edit(&mut self, original: Message, result: &Result<(u16, Value), String>) {
@@ -494,11 +501,11 @@ impl Waffle {
             let result = client.call_raw(Method::DELETE, format!("/webhooks/{webhook_id}"), None).await;
             this.update(cx, |this, cx| {
                 this.settle_unfollow(&guild_id, &webhook_id, &result);
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the Integrations page and the alert dialog are drawn outside the columns, by the settings window and the Overlays view
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends itself once its request resolves, and holds only a weak handle
     }
 
     fn settle_unfollow(&mut self, guild_id: &str, webhook_id: &str, result: &Result<(u16, Value), String>) {
@@ -539,7 +546,7 @@ impl Waffle {
 
     fn open_source_card(&mut self, source: Source, at: Point<Pixels>, cx: &mut Context<Self>) {
         self.announcements.source_card = Some(SourceCard { source, at });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is drawn by the Overlays view, which re-renders only with the app
     }
 
     // Go to Server for a server you're in: its source channel when you can see it, else the server.
@@ -554,7 +561,7 @@ impl Waffle {
         if let Some(channel) = channel {
             self.open_channel(channel, window, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): opening a server and channel changes what every column draws
     }
 
     // The source server's card: its icon and name, the followed channel, and the way there.
@@ -564,19 +571,14 @@ impl Waffle {
         let member = self.guilds.iter().find(|g| g.id == source.guild_id);
         let name: SharedString = member.map_or(source.name.clone(), |g| g.name.clone()).into();
         let icon = member.map_or(Some(source.avatar.clone()).filter(|a| !a.is_empty()), |g| g.icon.clone());
-        let head = div()
-            .flex()
-            .items_center()
+        let head = ui::row()
             .gap_3()
             .child(ui::server_tile(icon.as_deref(), &name, 48., cx))
             .child(
-                div()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
+                ui::col()
                     .gap_1()
-                    .child(div().flex().items_center().gap_1p5().min_w_0().child(div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(name.clone())).child(ui::tag(if source.official { "Official" } else { "Server" }, cx)))
-                    .child(div().flex().items_center().gap_1().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Icon::new(Glyph::Megaphone).size(ui::ICON_SM)).child(div().truncate().child(source.channel.clone()))),
+                    .child(ui::row().gap_1p5().child(ui::line(name.clone()).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx))).child(ui::tag(if source.official { "Official" } else { "Server" }, cx)))
+                    .child(ui::row().gap_1().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Icon::new(Glyph::Megaphone).size(ui::ICON_SM)).child(ui::line(source.channel.clone()))),
             );
         let action = match member {
             Some(_) => ui::button("source-card-go", ui::Tone::Primary, cx).w_full().child("Go to Server").on_click(cx.listener(move |this, _, window, cx| this.go_to_source(&source, window, cx))),
@@ -587,7 +589,7 @@ impl Waffle {
                 ui::button("source-card-join", ui::Tone::Primary, cx).w_full().child("Join Server").on_click(cx.listener(move |this, _, _, cx| {
                     this.announcements.source_card = None;
                     cx.open_url(&url);
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the dialog is drawn by the Overlays view, which re-renders only with the app
                 }))
             }
         };
@@ -611,7 +613,7 @@ impl Waffle {
     pub(crate) fn open_follow(&mut self, source: Channel, cx: &mut Context<Self>) {
         let (guild_id, channel_id) = self.default_destination();
         self.announcements.dialog = Some(Dialog::Follow(Box::new(Follow { source, guild_id, channel_id, following: false, error: None })));
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is drawn by the Overlays view, which re-renders only with the app
     }
 
     // Every server with a text channel you can manage webhooks in, and those channels.
@@ -646,14 +648,14 @@ impl Waffle {
         if let Some(follow) = self.follow_mut() {
             (follow.guild_id, follow.channel_id, follow.error) = (Some(guild_id), channel_id, None);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is drawn by the Overlays view, which re-renders only with the app
     }
 
     fn pick_follow_channel(&mut self, channel_id: String, cx: &mut Context<Self>) {
         if let Some(follow) = self.follow_mut() {
             (follow.channel_id, follow.error) = (Some(channel_id), None);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is drawn by the Overlays view, which re-renders only with the app
     }
 
     fn open_follow_guilds(&mut self, at: gpui_kit::Point<gpui_kit::Pixels>, cx: &mut Context<Self>) {
@@ -696,12 +698,12 @@ impl Waffle {
             let result = client.call_raw(Method::POST, format!("/channels/{source}/followers"), Some(json!({ "webhook_channel_id": channel_id }))).await;
             this.update(cx, |this, cx| {
                 this.settle_follow(guild_id, channel_id, result);
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the dialog is drawn by the Overlays view, which re-renders only with the app
             })
             .ok();
         })
-        .detach();
-        cx.notify();
+        .detach(); // lint-allow(detached-task): ends itself once its request resolves, and holds only a weak handle
+        cx.notify(); // lint-allow(global-notify): the dialog is drawn by the Overlays view, which re-renders only with the app
     }
 
     fn settle_follow(&mut self, guild_id: String, channel_id: String, result: Result<(u16, Value), String>) {
@@ -746,7 +748,7 @@ impl Waffle {
 
     fn close_announcement_dialog(&mut self, cx: &mut Context<Self>) {
         self.announcements.dialog = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is drawn by the Overlays view, which re-renders only with the app
     }
 
     // The header's Follow, on announcement channels in NEWS servers; members see it too.
@@ -774,23 +776,18 @@ impl Waffle {
             return None;
         }
         let source = channel.clone();
-        let text = div()
+        let text = ui::col().min_h_0()
             .flex_1()
-            .min_w_0()
-            .flex()
-            .flex_col()
             .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Follow to get this channel's updates in your own server."))
             .children(following_line(self.follower_stats(&channel.id)).map(|line| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(line)));
-        let card = div()
+        // lint-allow(custom-badge): ui::callout_with puts its action under the text; this bar keeps Follow at the row's end
+        let card = ui::row()
             .id("follow-blocker")
             .occlude()
-            .mx_4()
-            .min_h(px(56.))
+            .min_h(px(BLOCKER_HEIGHT))
             .py_2p5()
             .pl_4()
             .pr_2p5()
-            .flex()
-            .items_center()
             .gap_3()
             .squircle(RADIUS_LG)
             .bg(palette::surface(Level::Raised, cx))
@@ -800,7 +797,7 @@ impl Waffle {
             .child(Icon::new(Glyph::Megaphone).size(ui::ICON_XL).text_color(palette::muted(cx)))
             .child(text)
             .child(ui::button("follow-blocker-button", ui::Tone::Primary, cx).child("Follow").on_click(cx.listener(move |this, _, _, cx| this.open_follow(source.clone(), cx))));
-        Some(div().absolute().left_0().right_0().bottom_0().pb_2().child(card).into_any_element())
+        Some(div().absolute().left_0().right_0().bottom_0().px_4().pb_2().child(card).into_any_element())
     }
 
     pub(crate) fn announcement_overlay(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -836,15 +833,12 @@ impl Waffle {
         let guild = destinations.iter().find(|(g, _)| follow.guild_id.as_ref() == Some(&g.id));
         let channel = guild.and_then(|(_, channels)| channels.iter().find(|c| follow.channel_id.as_ref() == Some(&c.id)));
         let source_guild = self.channel_by_id(&follow.source.id).map(|(g, _)| g);
-        let head = div()
-            .flex()
+        let head = ui::row()
             .items_start()
             .gap_3()
             .child(dialog_title("Add this channel's updates to your server!", cx).flex_1().min_w_0())
             .child(ui::icon_button("follow-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_announcement_dialog(cx))));
-        let source = div()
-            .flex()
-            .items_center()
+        let source = ui::row()
             .gap_2p5()
             .py_2p5()
             .px_3()
@@ -852,12 +846,9 @@ impl Waffle {
             .bg(palette::surface(Level::Page, cx))
             .children(source_guild.map(|g| ui::server_tile(g.icon.as_deref(), &g.name, 32., cx)))
             .child(
-                div()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .children(source_guild.map(|g| div().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(g.name.clone())))
-                    .child(div().flex().items_center().gap_1().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Icon::new(Glyph::Megaphone).size(ui::ICON_SM)).child(follow.source.name.clone())),
+                ui::col()
+                    .children(source_guild.map(|g| ui::line(g.name.clone()).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx))))
+                    .child(ui::row().gap_1().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Icon::new(Glyph::Megaphone).size(ui::ICON_SM)).child(follow.source.name.clone())),
             );
         let intro = div()
             .text_color(palette::muted(cx))
@@ -893,129 +884,6 @@ impl Waffle {
     }
 }
 
-fn dialog_title(text: impl Into<SharedString>, cx: &App) -> Div {
-    div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(text.into())
-}
-
-fn footer() -> Div {
-    div().flex().justify_end().gap_2()
-}
-
-// Better than Discord: how many of the hour's ten Waffle has used here.
-fn quota(used: usize, cx: &App) -> Div {
-    let (on, off) = (palette::muted(cx), palette::line_strong(cx));
-    let pips = (0..PUBLISH_LIMIT).map(|i| div().w_2p5().h_1().rounded_xs().bg(if i < used { on } else { off }));
-    div()
-        .flex()
-        .items_center()
-        .gap_2()
-        .text_size(ui::TEXT_XS)
-        .text_color(palette::muted(cx))
-        .child(div().flex().gap(px(3.)).children(pips))
-        .child(format!("{} of {PUBLISH_LIMIT} published this hour", used.min(PUBLISH_LIMIT)))
-}
-
-fn alert_dialog(title: &'static str, text: String, cx: &mut Context<Waffle>) -> Div {
-    ui::dialog_body()
-        .child(dialog_title(title, cx))
-        .child(div().text_color(palette::muted(cx)).child(text))
-        .child(footer().child(ui::button("publish-alert-okay", ui::Tone::Primary, cx).child("Okay").on_click(cx.listener(|this, _, _, cx| this.close_announcement_dialog(cx)))))
-}
-
-fn followed_dialog(adjective: &str, cx: &mut Context<Waffle>) -> Div {
-    ui::dialog_body()
-        .items_center()
-        .text_center()
-        .child(crate::mascot::mascot_at("followed-mascot", crate::mascot::Mood::Happy, 0.8, cx))
-        .child(dialog_title(format!("What a nice addition to your server. Lookin' real {adjective} in here."), cx))
-        .child(div().text_color(palette::muted(cx)).child("The most important updates from this channel will now show up directly in your server. Enjoy!"))
-        .child(ui::button("followed-okay", ui::Tone::Primary, cx).child("Got it!").on_click(cx.listener(|this, _, _, cx| this.close_announcement_dialog(cx))))
-}
-
-// The hover toolbar's Publish; once published it reads "Published" and is disabled.
-pub(crate) fn publish_button(message: &Message, mine: bool, newsroom: &Newsroom, this: WeakEntity<Waffle>, cx: &App) -> Option<AnyElement> {
-    if !newsroom.can_publish(message, mine) {
-        return None;
-    }
-    let done = published(message);
-    let msg = message.clone();
-    Some(
-        ui::icon_button(SharedString::from(format!("publish-{}", message.id)), Glyph::Megaphone, if done { "Published" } else { "Publish" }, cx)
-            .disabled(done)
-            .on_click(move |_, _, cx| {
-                cx.stop_propagation();
-                this.update(cx, |this, cx| this.open_publish(msg.clone(), cx)).ok();
-            })
-            .into_any_element(),
-    )
-}
-
-// "Share with your followers!" under a message just sent: Publish, dismiss, and Don't show again for the channel.
-pub(crate) fn publish_bump(message: &Message, mine: bool, newsroom: &Newsroom, this: WeakEntity<Waffle>, cx: &App) -> Option<AnyElement> {
-    if !newsroom.shows_bump(message, mine) {
-        return None;
-    }
-    let (publish, dismiss, hide) = (this.clone(), this.clone(), this);
-    let (msg, id, channel_id) = (message.clone(), message.id.clone(), message.channel_id.clone());
-    let strip = div()
-        .mt_1p5()
-        .max_w(px(520.))
-        .py_2()
-        .pl_3()
-        .pr_2p5()
-        .flex()
-        .items_center()
-        .gap_2()
-        .squircle(RADIUS_MD)
-        .bg(palette::selected(cx))
-        .text_size(ui::TEXT_SM)
-        .text_color(palette::text(cx))
-        .child(Icon::new(Glyph::Megaphone).size(ui::ICON_MD).text_color(palette::muted(cx)))
-        .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Share with your followers!"))
-        .child(ui::button(SharedString::from(format!("bump-publish-{}", message.id)), ui::Tone::Link, cx).child("Publish").on_click(move |_, _, cx| {
-            cx.stop_propagation();
-            publish.update(cx, |this, cx| this.open_publish(msg.clone(), cx)).ok();
-        }))
-        .child(div().flex_1())
-        .child(ui::icon_button(SharedString::from(format!("bump-dismiss-{}", message.id)), Glyph::X, "Dismiss", cx).small().on_click(move |_, _, cx| {
-            cx.stop_propagation();
-            dismiss.update(cx, |this, cx| this.dismiss_publish_bump(&id, cx)).ok();
-        }));
-    let faint = palette::faint(cx);
-    let never = div()
-        .id(SharedString::from(format!("bump-hide-{}", message.id)))
-        .mt_1()
-        .w_auto()
-        .text_size(ui::TEXT_XS)
-        .text_color(faint)
-        .cursor_pointer()
-        .hover(|s| s.underline())
-        .child("Don't show again")
-        .on_click(move |_, _, cx| {
-            cx.stop_propagation();
-            hide.update(cx, |this, cx| this.hide_publish_bumps(channel_id.clone(), cx)).ok();
-        });
-    Some(div().flex().flex_col().items_start().child(strip).child(never).into_any_element())
-}
-
-// A crosspost's author tag, where a bot's reads APP; Discord's own community updates read OFFICIAL.
-pub(crate) fn server_tag(message: &Message, cx: &App) -> Div {
-    ui::tag(if is_official(message) { "Official" } else { "Server" }, cx)
-}
-
-// A crosspost's avatar and name open its source server's card, not the webhook's profile.
-pub(crate) fn source_trigger(id: String, message: &Message, this: WeakEntity<Waffle>) -> Option<Stateful<Div>> {
-    let source = Source::of(message)?;
-    Some(div().id(SharedString::from(id)).cursor_pointer().on_click(move |event, _, cx| {
-        cx.stop_propagation();
-        let at = event.position();
-        this.update(cx, |this, cx| this.open_source_card(source.clone(), at, cx)).ok();
-    }))
-}
-
-pub(crate) fn source_deleted(cx: &App) -> AnyElement {
-    div().italic().text_color(palette::muted(cx)).child("[Original Message Deleted]").into_any_element()
-}
 
 #[cfg(test)]
 mod tests {

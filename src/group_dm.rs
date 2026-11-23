@@ -38,6 +38,8 @@ const WIDTH: f32 = 440.;
 const LIST_HEIGHT: f32 = 288.;
 const ROW_AVATAR: f32 = 32.;
 const EDIT_ICON: f32 = 80.;
+// The gap between the segments of the member-limit bar.
+const SEGMENT_GAP: f32 = 3.;
 
 pub(crate) enum GroupDialog {
     Picker(Box<Picker>),
@@ -113,21 +115,21 @@ impl Waffle {
         let search = cx.new(|cx| SearchState::new(window, cx).placeholder("Search"));
         let name = cx.new(|cx| SearchState::new(window, cx).validate(|text, _| text.chars().count() <= NAME_MAX));
         let _subscriptions = [
-            cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify()),
+            cx.subscribe_in(&search, window, |this, _, _: &InputEvent, _, cx| this.redraw_overlays(cx)),
             cx.subscribe_in(&name, window, |this, _, event: &InputEvent, window, cx| match event {
                 InputEvent::PressEnter { .. } => this.submit_group_picker(window, cx),
-                _ => cx.notify(),
+                _ => this.redraw_overlays(cx),
             }),
         ];
         search.update(cx, |state, cx| state.focus(window, cx));
         self.menu = None;
         self.group_dialog = Some(GroupDialog::Picker(Box::new(Picker { flavour, channel, search, name, picked: Vec::new(), error: None, busy: false, _subscriptions })));
-        cx.notify();
+        self.redraw_overlays(cx);
     }
 
     fn close_group_dialog(&mut self, cx: &mut Context<Self>) {
         self.group_dialog = None;
-        cx.notify();
+        self.redraw_overlays(cx);
     }
 
     fn picker(&self) -> Option<&Picker> {
@@ -175,7 +177,7 @@ impl Waffle {
             state.focus(window, cx);
         });
         name.update(cx, |state, cx| state.set_placeholder(auto, window, cx));
-        cx.notify();
+        self.redraw_overlays(cx);
     }
 
     fn submit_group_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -198,7 +200,7 @@ impl Waffle {
                 self.create_group(recipients, name, window, cx);
             }
         }
-        cx.notify();
+        self.redraw_overlays(cx);
     }
 
     fn picker_failed(&mut self, error: String, cx: &mut Context<Self>) {
@@ -206,7 +208,7 @@ impl Waffle {
             picker.busy = false;
             picker.error = Some(error.into());
         }
-        cx.notify();
+        self.redraw_overlays(cx);
     }
 
     // A new group, named if a name was given, then opened.
@@ -238,6 +240,7 @@ impl Waffle {
             })
             .ok();
         })
+        // lint-allow(detached-task): ends when the group is made, and holds only a WeakEntity.
         .detach();
     }
 
@@ -256,6 +259,7 @@ impl Waffle {
             }
             this.update(cx, |this, cx| this.close_group_dialog(cx)).ok();
         })
+        // lint-allow(detached-task): ends after the last person is added (or the first refusal), and holds only a WeakEntity.
         .detach();
     }
 
@@ -272,11 +276,11 @@ impl Waffle {
         });
         let _subscription = cx.subscribe_in(&name, window, |this, _, event: &InputEvent, _, cx| match event {
             InputEvent::PressEnter { .. } => this.save_edit_group(cx),
-            _ => cx.notify(),
+            _ => this.redraw_overlays(cx),
         });
         self.menu = None;
         self.group_dialog = Some(GroupDialog::Edit(Box::new(EditGroup { channel_id, name, was_named, icon: IconEdit::Keep, error: None, busy: false, _subscription })));
-        cx.notify();
+        self.redraw_overlays(cx);
     }
 
     fn edit_mut(&mut self) -> Option<&mut EditGroup> {
@@ -298,10 +302,11 @@ impl Waffle {
                     Ok(uri) => (edit.icon, edit.error) = (IconEdit::Set { path, uri }, None),
                     Err(error) => edit.error = Some(error.into()),
                 }
-                cx.notify();
+                this.redraw_overlays(cx);
             })
             .ok();
         })
+        // lint-allow(detached-task): ends when the file dialog closes, and holds only a WeakEntity.
         .detach();
     }
 
@@ -319,11 +324,12 @@ impl Waffle {
                     if let Some(edit) = this.edit_mut() {
                         (edit.busy, edit.error) = (false, Some(error.into()));
                     }
-                    cx.notify();
+                    this.redraw_overlays(cx);
                 }
             })
             .ok();
         })
+        // lint-allow(detached-task): ends when Discord answers the save, and holds only a WeakEntity.
         .detach();
     }
 
@@ -333,7 +339,7 @@ impl Waffle {
         let next_owner = self.group_owner_is_me(group).then(|| group.recipients.first().map(|u| u.name.clone())).flatten();
         self.menu = None;
         self.group_dialog = Some(GroupDialog::Leave(LeaveGroup { channel_id, name: group.name.clone(), silent: false, next_owner }));
-        cx.notify();
+        self.redraw_overlays(cx);
     }
 
     // Gone from the list at once, as Discord dispatches its CHANNEL_DELETE before the request.
@@ -384,7 +390,7 @@ impl Waffle {
         let body = ui::dialog_body().child(dialog_head(title, Some(subtitle), cx));
         if picker.flavour == Flavour::Invite && members >= LIMIT {
             let close = ui::button("group-picker-done", Tone::Secondary, cx).child("Close").on_click(cx.listener(|this, _, _, cx| this.close_group_dialog(cx)));
-            return body.child(member_meter(members, 0, cx)).child(div().flex().justify_end().child(close));
+            return body.child(member_meter(members, 0, cx)).child(ui::row().items_stretch().justify_end().child(close));
         }
         if let Some(stranger) = stranger {
             return body.child(self.stranger_footer(stranger, cx));
@@ -406,7 +412,7 @@ impl Waffle {
             })
             .collect();
         let list = match (rows.is_empty(), friends.is_empty()) {
-            (false, _) => div().id("group-picker-list").flex().flex_col().gap_0p5().max_h(px(LIST_HEIGHT)).overflow_y_scroll().children(rows).into_any_element(),
+            (false, _) => ui::col().id("group-picker-list").gap_0p5().max_h(px(LIST_HEIGHT)).overflow_y_scroll().children(rows).into_any_element(),
             (true, false) => div().py_4().text_color(palette::muted(cx)).child("No results found.").into_any_element(),
             (true, true) => div().into_any_element(),
         };
@@ -418,7 +424,7 @@ impl Waffle {
                 .child(create_label(picker.flavour, picked))
                 .on_click(cx.listener(|this, _, window, cx| this.submit_group_picker(window, cx)))
         });
-        let to = div().flex().items_start().gap_2().child(div().flex_1().min_w_0().child(self.to_field(picker, cx))).children(add);
+        let to = ui::row().items_start().gap_2().child(div().flex_1().min_w_0().child(self.to_field(picker, cx))).children(add);
         let name = (picker.flavour == Flavour::New && picked > 1).then(|| {
             let focus = picker.name.read(cx).focus_handle(cx);
             ui::field("Group Name (optional)", cx).child(ui::text_field("group-picker-name", Input::new(&picker.name).appearance(false), &focus))
@@ -429,7 +435,7 @@ impl Waffle {
                 .loading(picker.busy.then_some("Creating"))
                 .child(create_label(picker.flavour, picked))
                 .on_click(cx.listener(|this, _, window, cx| this.submit_group_picker(window, cx)));
-            div().flex().justify_end().gap_2().child(cancel_button("group-picker-cancel", cx)).child(create)
+            ui::row().items_stretch().justify_end().gap_2().child(cancel_button("group-picker-cancel", cx)).child(create)
         });
         body.child(to)
             .child(member_meter(members, picked, cx))
@@ -467,7 +473,7 @@ impl Waffle {
         let surface = palette::surface(palette::Level::Raised, cx);
         let check = if matches!(state, RowState::Picked | RowState::Member) { Check::On } else { Check::Off };
         let detail = (state == RowState::Member).then(|| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("Already in the group"));
-        let text = div().flex_1().min_w_0().flex().flex_col().child(div().truncate().text_color(palette::strong(cx)).child(user.name.clone())).children(detail);
+        let text = ui::col().min_h_0().flex_1().child(ui::line(user.name.clone()).text_color(palette::strong(cx))).children(detail);
         let row = ui::menu_row(SharedString::from(format!("group-pick-{}", user.id)), cx)
             .disabled(matches!(state, RowState::Member | RowState::Full))
             .child(avatar_with_status(&user.avatar, ROW_AVATAR, self.presences.get(&user.id).map(|p| p.mark()), surface))
@@ -487,7 +493,7 @@ impl Waffle {
             .disabled(sent)
             .child(if sent { "Friend Request Sent" } else { "Send Friend Request" })
             .on_click(cx.listener(move |this, _, _, cx| this.befriend(stranger.clone(), cx)));
-        div().flex().justify_end().gap_2().child(cancel_button("group-picker-cancel", cx)).child(request)
+        ui::row().items_stretch().justify_end().gap_2().child(cancel_button("group-picker-cancel", cx)).child(request)
     }
 
     fn edit_body(&self, edit: &EditGroup, cx: &mut Context<Self>) -> gpui_kit::Div {
@@ -504,7 +510,8 @@ impl Waffle {
             (IconEdit::Keep, Some(group)) => ui::dm_face(&group.face(), EDIT_ICON, surface),
             (_, None) => div().size(px(EDIT_ICON)).into_any_element(),
         };
-        let pen = div()
+        // lint-allow(custom-mark): ui::badged marks a face's corner with a count or a status; this is the Edit pen, a 28px button ringed in the dialog's surface.
+        let pen = ui::row()
             .absolute()
             .right_0()
             .bottom_0()
@@ -514,8 +521,6 @@ impl Waffle {
             .border_color(surface)
             .bg(palette::surface(palette::Level::Overlay, cx))
             .text_color(palette::strong(cx))
-            .flex()
-            .items_center()
             .justify_center()
             .child(Icon::new(Glyph::Pen).size(ui::ICON_SM));
         let icon = div()
@@ -532,7 +537,7 @@ impl Waffle {
                 if let Some(edit) = this.edit_mut() {
                     edit.icon = IconEdit::Remove;
                 }
-                cx.notify();
+                this.redraw_overlays(cx);
             }))
         });
         let typed = edit.name.read(cx).value().trim().to_owned();
@@ -548,10 +553,10 @@ impl Waffle {
             .on_click(cx.listener(|this, _, _, cx| this.save_edit_group(cx)));
         ui::dialog_body()
             .child(dialog_head("Edit Group", None, cx))
-            .child(div().flex().items_center().gap_4().child(icon).children(remove))
+            .child(ui::row().gap_4().child(icon).children(remove))
             .child(name)
             .children(edit.error.clone().map(|e| ui::field_error(e, cx)))
-            .child(div().flex().justify_end().gap_2().child(cancel_button("group-edit-cancel", cx)).child(save))
+            .child(ui::row().items_stretch().justify_end().gap_2().child(cancel_button("group-edit-cancel", cx)).child(save))
     }
 }
 
@@ -571,9 +576,7 @@ fn leave_body(leave: &LeaveGroup, window: &mut Window, cx: &mut Context<Waffle>)
     let warning = [("Are you sure you want to leave ".to_owned(), false), (name.clone(), true), ("? You won't be able to rejoin this group unless you are re-invited.".to_owned(), false)];
     let owner = leave.next_owner.clone().map(|next| {
         let line = [("You own this group. ".to_owned(), false), (next, true), (" becomes the owner.".to_owned(), false)];
-        div()
-            .flex()
-            .items_center()
+        ui::row()
             .gap_1p5()
             .text_color(muted)
             .child(div().flex_none().text_color(palette::warning_ink(cx)).child(Icon::new(Glyph::Crown).size(ui::ICON_MD)))
@@ -593,19 +596,16 @@ fn leave_body(leave: &LeaveGroup, window: &mut Window, cx: &mut Context<Waffle>)
         .child(div().text_color(muted).child(emphasised(&warning, strong)))
         .children(owner)
         .child(silent)
-        .child(div().flex().justify_end().gap_2().child(cancel_button("group-leave-cancel", cx)).child(confirm))
+        .child(ui::row().items_stretch().justify_end().gap_2().child(cancel_button("group-leave-cancel", cx)).child(confirm))
 }
 
 fn dialog_head(title: impl Into<SharedString>, subtitle: Option<SharedString>, cx: &mut Context<Waffle>) -> gpui_kit::Div {
-    let text = div()
+    let text = ui::col().min_h_0()
         .flex_1()
-        .min_w_0()
-        .flex()
-        .flex_col()
         .gap_1()
         .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.into()))
         .children(subtitle.map(|s| div().text_color(palette::muted(cx)).child(s)));
-    div().flex().items_start().gap_3().child(text).child(ui::icon_button("group-dialog-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_group_dialog(cx))))
+    ui::row().items_start().gap_3().child(text).child(ui::icon_button("group-dialog-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_group_dialog(cx))))
 }
 
 fn cancel_button(id: &'static str, cx: &mut Context<Waffle>) -> ui::Control {
@@ -625,11 +625,9 @@ fn member_meter(members: usize, picked: usize, cx: &Context<Waffle>) -> gpui_kit
         div().flex_1().h_1().rounded_xs().bg(fill)
     });
     let ink = if total >= LIMIT { palette::danger_ink(cx) } else { palette::muted(cx) };
-    div()
-        .flex()
-        .items_center()
+    ui::row()
         .gap_2p5()
-        .child(div().flex_1().flex().gap(px(3.)).children(segments))
+        .child(ui::row().items_stretch().flex_1().gap(px(SEGMENT_GAP)).children(segments))
         .child(div().flex_none().text_size(ui::TEXT_XS).text_color(ink).child(format!("{} of {LIMIT}", total.min(LIMIT))))
 }
 

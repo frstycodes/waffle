@@ -4,7 +4,7 @@
 // caption buttons of its own. Each button is tagged with its WindowControlArea, so Windows does the
 // hit-testing: clicks, Snap Layouts on maximize hover, and the close button all behave like native
 // ones. Nothing is drawn on other platforms.
-use gpui_kit::{AnyElement, App, Hsla, Window, WindowControlArea, component::Icon, div, prelude::*, px};
+use gpui_kit::{AnyElement, App, Hsla, Window, WindowControlArea, component::Icon, prelude::*, px};
 
 use crate::{icons::Glyph, layout::HEADER_HEIGHT, palette, sidebar::Nav, ui};
 
@@ -22,12 +22,10 @@ pub fn render(window: &Window, cx: &App) -> Option<AnyElement> {
     }
     let (muted, strong, hover) = (palette::muted(cx), palette::strong(cx), palette::hover(cx));
     let button = |id: &'static str, icon: Icon, area: WindowControlArea, hover_bg: Hsla, hover_fg: Hsla| {
-        div()
+        ui::row()
             .id(id)
             .w(px(BUTTON_WIDTH))
             .h_full()
-            .flex()
-            .items_center()
             .justify_center()
             .text_color(muted)
             .hover(move |s| s.bg(hover_bg).text_color(hover_fg))
@@ -41,12 +39,11 @@ pub fn render(window: &Window, cx: &App) -> Option<AnyElement> {
     };
     let maximize = if window.is_maximized() { Nav::Restore } else { Nav::Maximize };
     Some(
-        div()
+        ui::row().items_stretch()
             .absolute()
             .top_0()
             .right_0()
             .h(px(HEADER_HEIGHT))
-            .flex()
             .child(button("window-minimize", Nav::Minimize.icon(), WindowControlArea::Min, hover, strong))
             .child(button("window-maximize", maximize.icon(), WindowControlArea::Max, hover, strong))
             .child(button("window-close", Icon::new(Glyph::X), WindowControlArea::Close, palette::window_close_hover(), gpui_kit::white()))

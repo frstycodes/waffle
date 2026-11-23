@@ -16,6 +16,11 @@ use crate::{
     ui::{self, Squircle},
 };
 
+// The previous and next buttons' diameter.
+const NAV_SIZE: f32 = 48.;
+// The Open and Close buttons' height.
+const TOP_BUTTON: f32 = 32.;
+
 const THUMB: f32 = 56.;
 const GAP: f32 = 8.;
 const STRIDE: f32 = THUMB + GAP;
@@ -58,7 +63,7 @@ impl Waffle {
     pub(crate) fn open_viewer_on(&mut self, items: Vec<Media>, index: usize, channel_id: String, window: &mut Window, cx: &mut Context<Self>) {
         self.viewer = Some(Viewer { items, index, from: index, strip: ScrollHandle::new(), reveal: Cell::new(true), loaded: Cell::new(0..0), channel_id, channel_total: None });
         window.focus(&self.focus, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the media viewer is drawn by the root, over every column
     }
 
     // Asks Discord's search how many messages in the channel carry an image and a video, for the counter.
@@ -83,11 +88,11 @@ impl Waffle {
             this.update(cx, |this, cx| {
                 let Some(viewer) = this.viewer.as_mut().filter(|v| v.channel_id == channel_id) else { return };
                 viewer.channel_total = Some((images.total + videos.total) as usize);
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the media viewer is drawn by the root, over every column
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one count fetch: ends when the request returns, or when Waffle is dropped
     }
 
     // The open channel's history grew: the viewer takes in what was added, keeping its place.
@@ -101,7 +106,7 @@ impl Waffle {
         viewer.index = index;
         viewer.items = items;
         viewer.reveal.set(true);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the media viewer is drawn by the root, over every column
     }
 
     pub(crate) fn close_viewer(&mut self, cx: &mut Context<Self>) {
@@ -109,7 +114,7 @@ impl Waffle {
             crate::video::pause(&key, cx);
         }
         self.viewer = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the media viewer is drawn by the root, over every column
     }
 
     pub(crate) fn step_viewer(&mut self, delta: isize, cx: &mut Context<Self>) {
@@ -135,7 +140,7 @@ impl Waffle {
         if let Some(key) = leaving {
             crate::video::pause(&key, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the media viewer is drawn by the root, over every column
     }
 
     // ←/→ step, Space plays or pauses a video, Shift+←/→ skip it 5s, M mutes it, Esc closes. True if handled.
@@ -177,51 +182,37 @@ impl Waffle {
             .children(neighbours(viewer, viewport))
             .with_animation(SharedString::from(format!("viewer-{index}")), Animation::new(Duration::from_millis(140)), |el, t| el.opacity(t));
         let strip = self.strip(viewer, viewport.0 - 96., window, cx);
-        let nav = |id: &'static str, glyph: Glyph, enabled: bool, delta: isize| {
-            div()
-                .id(id)
-                .size_12()
-                .rounded_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(gpui_kit::white().opacity(if enabled { 0.12 } else { 0.04 }))
-                .text_color(gpui_kit::white().opacity(if enabled { 1. } else { 0.3 }))
-                .when(enabled, |b| b.cursor_pointer().hover(|s| s.bg(gpui_kit::white().opacity(0.2))))
-                .child(Icon::new(glyph).size(px(26.)))
+        let nav = |id: &'static str, glyph: Glyph, tip: &'static str, enabled: bool, delta: isize| {
+            ui::round_button(id, glyph, tip, NAV_SIZE)
+                .disabled(!enabled)
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_click(cx.listener(move |this, _, _, cx| this.step_viewer(delta, cx)))
         };
         let url = item.url.clone();
-        let top = div()
+        let top = ui::row().items_stretch()
             .absolute()
             .top(px(TITLE_HEIGHT + 8.))
             .right_4()
-            .flex()
             .gap_2()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(top_button("viewer-open").px_3().gap_1p5().child(Icon::new(Glyph::Open).size(ui::ICON_MD)).child("Open in Browser").on_click(move |_, _, cx| cx.open_url(&url)))
-            .child(top_button("viewer-close").w_8().justify_center().child(Icon::new(Glyph::X).size(ui::ICON_LG)).on_click(cx.listener(|this, _, _, cx| this.close_viewer(cx))));
-        let foot = div()
+            .child(ui::button("viewer-open", ui::Tone::Stage, cx).small().h_8().px_3().gap_1p5().child(Icon::new(Glyph::Open).size(ui::ICON_MD)).child("Open in Browser").on_click(move |_, _, cx| cx.open_url(&url)))
+            .child(ui::icon_button("viewer-close", Glyph::X, "Close", cx).tone(ui::Tone::Stage, cx).sized(TOP_BUTTON).on_click(cx.listener(|this, _, _, cx| this.close_viewer(cx))));
+        let foot = ui::col()
             .absolute()
             .bottom_4()
             .left_0()
             .right_0()
-            .flex()
-            .flex_col()
             .items_center()
             .gap_2()
             .child(div().text_size(ui::TEXT_SM).text_color(gpui_kit::white().opacity(0.8)).child(format!("{position} / {total}")))
             .child(strip);
         Some(
-            div()
+            ui::row()
                 .id("viewer")
                 .absolute()
                 .occlude()
                 .inset_0()
                 .bg(gpui_kit::black().opacity(0.88))
-                .flex()
-                .items_center()
                 .justify_between()
                 .px_6()
                 .pb(px(STAGE_INSET.1 / 2. - 50.))
@@ -232,9 +223,9 @@ impl Waffle {
                     }
                 }))
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_viewer(cx)))
-                .child(nav("viewer-prev", Glyph::ChevronLeft, index > 0, -1))
+                .child(nav("viewer-prev", Glyph::ChevronLeft, "Previous", index > 0, -1))
                 .child(stage)
-                .child(nav("viewer-next", Glyph::ChevronRight, index + 1 < count, 1))
+                .child(nav("viewer-next", Glyph::ChevronRight, "Next", index + 1 < count, 1))
                 .child(top)
                 .child(foot)
                 .with_animation("viewer-open", Animation::new(Duration::from_millis(160)), |el, t| el.opacity(t))
@@ -254,7 +245,7 @@ impl Waffle {
             viewer.reveal.set(false);
             let scroll = -f32::from(viewer.strip.offset().x);
             if let Some(to) = reveal_offset(viewer.index, scroll, view, content) {
-                viewer.strip.set_offset(point(px(-to), px(0.)));
+                viewer.strip.set_offset(point(px(-to), gpui_kit::Pixels::ZERO));
             }
         }
         let scroll = -f32::from(viewer.strip.offset().x);
@@ -269,6 +260,7 @@ impl Waffle {
             let current = i == viewer.index;
             let picture = range.contains(&i).then(|| img(discord::thumb_url(item, side)).absolute().inset_0().size(px(THUMB)).object_fit(ObjectFit::Cover).squircle(ui::RADIUS_XS));
             let is_video = matches!(item.kind, MediaKind::Video { .. });
+            // lint-allow(custom-button): ui::icon_button takes a glyph and fills on hover; a thumbnail is a picture that dims and brightens
             div()
                 .id(("viewer-thumb", i))
                 .relative()
@@ -285,6 +277,7 @@ impl Waffle {
                 .on_click(cx.listener(move |this, _, _, cx| this.show_in_viewer(i, cx)))
         });
         let (from, to) = (thumb_x(viewer.from), thumb_x(viewer.index));
+        // lint-allow(custom-mark): ui::badged marks a face's corner; this is the selection ring sliding along the strip
         let ring = div()
             .absolute()
             .top(px(PAD - RING_OUT))
@@ -305,7 +298,7 @@ impl Waffle {
             .overflow_x_scroll()
             .track_scroll(&viewer.strip)
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(div().relative().w(px(content)).h_full().p(px(PAD)).flex().gap(px(GAP)).children(thumbs).child(ring))
+            .child(ui::row().items_stretch().relative().w(px(content)).h_full().p(px(PAD)).gap(px(GAP)).children(thumbs).child(ring))
             .into_any_element()
     }
 }
@@ -347,22 +340,11 @@ fn neighbours(viewer: &Viewer, viewport: (f32, f32)) -> Vec<AnyElement> {
         .collect()
 }
 
-fn top_button(id: &'static str) -> gpui_kit::Stateful<gpui_kit::Div> {
-    div()
-        .id(id)
-        .h_8()
-        .squircle(ui::RADIUS_SM)
-        .flex()
-        .items_center()
-        .cursor_pointer()
-        .text_color(gpui_kit::white())
-        .bg(gpui_kit::white().opacity(0.12))
-        .hover(|s| s.bg(gpui_kit::white().opacity(0.2)))
-}
+
 
 fn play_mark() -> impl IntoElement {
-    div().absolute().inset_0().flex().items_center().justify_center().child(
-        div().size_6().rounded_full().bg(gpui_kit::black().opacity(0.6)).flex().items_center().justify_center().text_color(gpui_kit::white()).child(Icon::new(Glyph::Play).size(ui::ICON_SM)),
+    ui::row().absolute().inset_0().justify_center().child(
+        ui::row().size_6().rounded_full().bg(gpui_kit::black().opacity(0.6)).justify_center().text_color(gpui_kit::white()).child(Icon::new(Glyph::Play).size(ui::ICON_SM)),
     )
 }
 

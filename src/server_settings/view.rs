@@ -32,6 +32,11 @@ use crate::{
     ui::{self, Notice, Tone},
 };
 
+// How wide a select sits at the end of a settings row.
+pub const SELECT_WIDTH: f32 = 220.;
+// The line height of a row's muted detail under its title.
+const DETAIL_LINE: f32 = 17.;
+
 // What GET /guilds/{id} tells the window beyond the draft.
 #[derive(Clone, Debug, Default)]
 pub struct Info {
@@ -131,14 +136,14 @@ impl Waffle {
         let Some(page) = self.with_access(&guild_id, |me| me.nav().first().and_then(|(_, pages)| pages.first().copied())).flatten() else { return };
         let mut input = |placeholder: &'static str, cx: &mut Context<Self>| {
             let state = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
-            cx.subscribe(&state, |_, _, _: &InputEvent, cx| cx.notify()).detach();
+            cx.subscribe(&state, |_, _, _: &InputEvent, cx| cx.notify()).detach(); // lint-allow(global-notify, detached-task): the server settings window is built by the root render over the columns, so every column's draw reads it; the subscription ends when the input entity it watches is dropped with the settings state
             state
         };
         let name = input("Server name", cx);
         let search = input("Search", cx);
         let delete_name = input("Server name", cx);
         let description = cx.new(|cx| TextareaState::new(window, cx).placeholder("How did your server get started? Why should people join?"));
-        cx.subscribe(&description, |_, _, _: &InputEvent, cx| cx.notify()).detach();
+        cx.subscribe(&description, |_, _, _: &InputEvent, cx| cx.notify()).detach(); // lint-allow(global-notify, detached-task): the server settings window is built by the root render over the columns, so every column's draw reads it; the subscription ends when the input entity it watches is dropped with the settings state
         let roles = RolesView::new(window, cx);
         let lists = Lists::new(window, cx);
         self.server_settings = Some(ServerSettings {
@@ -164,7 +169,7 @@ impl Waffle {
         self.menu = None;
         self.load_server_info(window, cx);
         self.open_server_page(page, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     fn load_server_info(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -199,21 +204,21 @@ impl Waffle {
             let result = call.send(&client).await;
             this.update(cx, |this, cx| {
                 then(this, result, cx);
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): holds a WeakEntity and ends when its work finishes or the update fails
     }
 
     pub(crate) fn open_server_page(&mut self, page: Page, cx: &mut Context<Self>) {
         let Some(view) = &mut self.server_settings else { return };
         (view.page, view.select, view.asking_delete) = (page, None, false);
-        view.scroll.set_offset(gpui_kit::point(px(0.), px(0.)));
+        view.scroll.set_offset(gpui_kit::Point::default());
         if view.loaded.insert(page) {
             self.load_server_page(page, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     pub(crate) fn close_server_settings(&mut self, force: bool, cx: &mut Context<Self>) {
@@ -221,10 +226,10 @@ impl Waffle {
             if let Some(view) = &mut self.server_settings {
                 view.closing = true;
             }
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
         }
         self.server_settings = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     fn current_overview(&self, cx: &App) -> Option<(Overview, Overview)> {
@@ -248,7 +253,7 @@ impl Waffle {
                 view.save = Save::Idle;
             }
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     fn reset_server_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -260,7 +265,7 @@ impl Waffle {
         name.update(cx, |s, cx| s.set_value(saved.name.clone(), window, cx));
         description.update(cx, |s, cx| s.set_value(saved.description.clone().unwrap_or_default(), window, cx));
         self.reset_role_draft(window, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     // The server and the open role go out together; nothing local changes until Discord answers.
@@ -273,7 +278,7 @@ impl Waffle {
                 if let Some(view) = &mut self.server_settings {
                     view.save = Save::Failed("Server name can't be empty.".into());
                 }
-                return cx.notify();
+                return cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
             }
             calls.extend(api::edit_guild(&guild_id, &saved, &draft).map(|c| (c, Saved::Guild)));
         }
@@ -281,7 +286,7 @@ impl Waffle {
         if let Some(view) = &mut self.server_settings {
             view.save = Save::Saving;
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
         self.run_saves(calls, close_after, cx);
     }
 
@@ -293,7 +298,7 @@ impl Waffle {
             if close_after {
                 self.server_settings = None;
             }
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
         }
         let (call, kind) = calls.remove(0);
         self.server_call(call, move |this, result, cx| {
@@ -338,7 +343,7 @@ impl Waffle {
             _ => self.server_page(page, window, cx),
         };
         let undo = self.undo_bar(page, cx);
-        let body = ui::settings_page("server-settings-scroll", &scroll).child(ui::settings_column(div().flex().flex_col().gap_8().child(ui::settings_title(page.label(community), cx)).children(undo).children(sections)));
+        let body = ui::settings_page("server-settings-scroll", &scroll).child(ui::settings_column(ui::col().gap_8().child(ui::settings_title(page.label(community), cx)).children(undo).children(sections)));
         let main = div()
             .relative()
             .flex_1()
@@ -378,15 +383,12 @@ impl Waffle {
             Some(url) => ui::avatar(url, 40.).flex_none().into_any_element(),
             None => ui::monogram(&name, 40.).flex_none().into_any_element(),
         };
-        let head = div()
-            .flex()
-            .items_center()
+        let head = ui::row()
             .gap_2p5()
             .px_1p5()
             .pb_3()
-            .min_w_0()
             .child(icon)
-            .child(div().flex_1().min_w_0().flex().flex_col().line_height(ui::LINE_DETAIL).child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(name)).child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("Server settings")));
+            .child(ui::col().min_h_0().flex_1().line_height(ui::LINE_DETAIL).child(ui::line(name).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx))).child(ui::line("Server settings").text_size(ui::TEXT_XS).text_color(palette::muted(cx))));
         let search = ui::search_field("ss-search", &view.search, cx).into_any_element();
         let query = view.search.read(cx).value().to_string();
         let mut out = vec![head.into_any_element(), div().pb_2().child(search).into_any_element()];
@@ -400,7 +402,7 @@ impl Waffle {
             if let Some(title) = title {
                 out.push(div().px_2p5().pt_3p5().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(title).into_any_element());
             } else if out.len() > 2 {
-                out.push(div().h(ui::HAIRLINE).mx_2p5().my_2().flex_none().bg(palette::line(cx)).into_any_element());
+                out.push(div().px_2p5().py_2().flex_none().child(ui::divider(None, cx)).into_any_element());
             }
             for page in pages {
                 let item = if page == Page::Delete {
@@ -426,7 +428,7 @@ impl Waffle {
                 ui::menu_row(SharedString::from(format!("ss-result-{}", setting.id)), cx)
                     .h_auto()
                     .py_1p5()
-                    .child(div().flex_1().min_w_0().flex().flex_col().child(div().truncate().text_color(palette::strong(cx)).child(setting.title)).child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(place)))
+                    .child(ui::col().min_h_0().flex_1().child(ui::line(setting.title).text_color(palette::strong(cx))).child(ui::line(place).text_size(ui::TEXT_XS).text_color(palette::muted(cx))))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         if let Some(view) = &this.server_settings {
                             view.search.update(cx, |s, cx| s.set_value("", window, cx));
@@ -468,7 +470,7 @@ impl Waffle {
         let voice = self.text_channels(&view.guild_id, ChannelKind::Voice);
         let mut none = vec![(String::new(), "No system messages".to_owned())];
         none.extend(channels.iter().cloned());
-        let system = ui::settings_row("ss-system-channel", false, cx).child(ui::settings_text("System messages channel", Some("Where Discord posts joins, boosts and tips"), cx)).child(div().w(px(220.)).flex_none().child(self.ss_select(Select::SystemChannel, &none, draft.system_channel_id.as_deref().unwrap_or_default(), cx)));
+        let system = ui::settings_row("ss-system-channel", false, cx).child(ui::settings_text("System messages channel", Some("Where Discord posts joins, boosts and tips"), cx)).child(div().w(px(SELECT_WIDTH)).flex_none().child(self.ss_select(Select::SystemChannel, &none, draft.system_channel_id.as_deref().unwrap_or_default(), cx)));
         let flag_rows = [(JOIN, "Welcome people when they join", "A random greeting with their name", "ss-flag-join"), (JOIN_STICKER_REPLIES, "Suggest a sticker reply to welcomes", "Members see a wave button under the greeting", "ss-flag-sticker"), (BOOSTS, "Thank people who boost", "A message when someone boosts this server", "ss-flag-boost"), (SETUP_TIPS, "Send setup tips", "Helpful tips for setting up the server", "ss-flag-tips")].map(|(bit, title, detail, id)| {
             // The flags are "suppress" bits: on means the message is sent.
             let on = draft.system_channel_flags & bit == 0;
@@ -481,8 +483,8 @@ impl Waffle {
         let mut afk = vec![(String::new(), "No inactive channel".to_owned())];
         afk.extend(voice);
         let timeouts: Vec<(String, String)> = api::AFK_TIMEOUTS.iter().map(|s| (s.to_string(), minutes(*s))).collect();
-        let afk_channel = ui::settings_row("ss-afk-channel", false, cx).child(ui::settings_text("Inactive channel", Some("Where idle members are moved, muted"), cx)).child(div().w(px(220.)).flex_none().child(self.ss_select(Select::AfkChannel, &afk, draft.afk_channel_id.as_deref().unwrap_or_default(), cx)));
-        let afk_timeout = ui::settings_row("ss-afk-timeout", true, cx).child(ui::settings_text("Move after", Some("Counted from their last sound"), cx)).child(div().w(px(220.)).flex_none().child(self.ss_select(Select::AfkTimeout, &timeouts, &draft.afk_timeout.to_string(), cx)));
+        let afk_channel = ui::settings_row("ss-afk-channel", false, cx).child(ui::settings_text("Inactive channel", Some("Where idle members are moved, muted"), cx)).child(div().w(px(SELECT_WIDTH)).flex_none().child(self.ss_select(Select::AfkChannel, &afk, draft.afk_channel_id.as_deref().unwrap_or_default(), cx)));
+        let afk_timeout = ui::settings_row("ss-afk-timeout", true, cx).child(ui::settings_text("Move after", Some("Counted from their last sound"), cx)).child(div().w(px(SELECT_WIDTH)).flex_none().child(self.ss_select(Select::AfkTimeout, &timeouts, &draft.afk_timeout.to_string(), cx)));
         let mut out = vec![
             ui::settings_group("System messages", cx).child(ui::settings_card(cx).child(system).children(flag_rows)).into_any_element(),
             ui::settings_group("Default notifications", cx).child(ui::settings_card(cx).children(notifications)).child(ui::settings_caption("New members start here; anyone can change it for themselves.", cx)).into_any_element(),
@@ -506,7 +508,7 @@ impl Waffle {
                 };
                 let mut options = vec![(String::new(), "No invite".to_owned())];
                 options.extend(channels.iter().cloned());
-                let invite = ui::settings_row("ss-widget-channel", true, cx).child(ui::settings_text("Invite channel", Some("Where people who join from the widget land"), cx)).child(div().w(px(220.)).flex_none().child(self.ss_select(Select::WidgetChannel, &options, channel.as_deref().unwrap_or_default(), cx)));
+                let invite = ui::settings_row("ss-widget-channel", true, cx).child(ui::settings_text("Invite channel", Some("Where people who join from the widget land"), cx)).child(div().w(px(SELECT_WIDTH)).flex_none().child(self.ss_select(Select::WidgetChannel, &options, channel.as_deref().unwrap_or_default(), cx)));
                 ui::settings_card(cx).child(toggle).child(invite)
             }
         };
@@ -525,7 +527,7 @@ impl Waffle {
                 this.show_toast(error, cx);
             }
         }, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     fn ss_boost_page(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
@@ -604,7 +606,7 @@ impl Waffle {
         }));
         vec![
             ui::callout(Notice::Danger, Glyph::Trash, format!("Deleting {name} can't be undone"), "Every channel, message and role goes, for everyone.", cx).into_any_element(),
-            ui::settings_card(cx).p_4().gap_4().child(field).child(div().flex().justify_end().child(delete)).into_any_element(),
+            ui::settings_card(cx).p_4().gap_4().child(field).child(ui::row().items_stretch().justify_end().child(delete)).into_any_element(),
         ]
     }
 
@@ -626,7 +628,7 @@ impl Waffle {
             if let Some(v) = &mut this.server_settings {
                 v.select = if v.select == Some(select) { None } else { Some(select) };
             }
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
         }));
         let list = open.then(|| {
             let (this, close) = (cx.entity(), cx.entity());
@@ -635,7 +637,7 @@ impl Waffle {
                     if let Some(v) = &mut this.server_settings {
                         v.select = None;
                     }
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
                 })
             };
             ui::select_options(SharedString::from(format!("ss-options-{select:?}")), options, chosen, 40., move |id, _, cx| this.update(cx, |this, cx| this.ss_pick(select, &id, cx)), dismiss, cx)
@@ -666,11 +668,12 @@ impl Waffle {
         cx.spawn(async move |this, cx| {
             let Ok(Ok(Some(paths))) = paths.await else { return };
             let Some(path) = paths.into_iter().next() else { return };
-            let Ok(bytes) = std::fs::read(&path) else { return };
+            let read_path = path.clone();
+            let Ok(bytes) = cx.background_spawn(async move { std::fs::read(read_path) }).await else { return };
             let data = api::image_data(mime(&path), &bytes);
             this.update(cx, |this, cx| this.edit_server_draft(cx, |d| *field.slot(d) = Some(data))).ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): holds a WeakEntity and ends when its work finishes or the update fails
     }
 
     fn server_save_bar(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
@@ -697,8 +700,8 @@ impl Waffle {
         let save = ui::button("ss-save", Tone::Primary, cx).loading(saving.then_some("Saving")).child("Save changes").on_click(cx.listener(move |this, _, _, cx| this.save_server_settings(closing, cx)));
         let bar = ui::floating_bar("ss-savebar", cx)
             .child(div().text_color(ink).flex_none().child(Icon::new(glyph).size(ui::ICON_XL)))
-            .child(div().flex_1().min_w_0().flex().flex_col().child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title)).children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(px(17.)).text_color(palette::muted(cx)).child(d))))
-            .child(div().flex().gap_2().flex_none().child(reset).child(save));
+            .child(ui::col().min_h_0().flex_1().child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title)).children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(px(DETAIL_LINE)).text_color(palette::muted(cx)).child(d))))
+            .child(ui::row().items_stretch().gap_2().flex_none().child(reset).child(save));
         Some(ui::foot_dock(bar, "ss-savebar-in"))
     }
 
@@ -718,16 +721,16 @@ impl Waffle {
             if let Some(view) = &mut this.server_settings {
                 view.undo = None;
             }
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
         }));
-        Some(ui::callout_with(Notice::Info, Glyph::CheckCircle, self.server_settings.as_ref()?.undo.as_ref()?.label.clone(), "", div().flex().gap_1().child(button).child(dismiss), cx).into_any_element())
+        Some(ui::callout_with(Notice::Info, Glyph::CheckCircle, self.server_settings.as_ref()?.undo.as_ref()?.label.clone(), "", ui::row().items_stretch().gap_1().child(button).child(dismiss), cx).into_any_element())
     }
 
     pub(crate) fn offer_undo(&mut self, label: impl Into<String>, call: Call, cx: &mut Context<Self>) {
         if let Some(view) = &mut self.server_settings {
             view.undo = Some(Undo { label: label.into(), call, page: view.page });
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     pub(crate) fn reload_server_page(&mut self, page: Page, cx: &mut Context<Self>) {
@@ -767,7 +770,7 @@ impl ImageField {
 fn image_row(id: &'static str, title: &'static str, detail: &'static str, has: bool, open: bool, field: ImageField, line: bool, cx: &mut Context<Waffle>) -> gpui_kit::Stateful<Div> {
     let upload = ui::button(SharedString::from(format!("{id}-upload")), Tone::Secondary, cx).small().disabled(!open).child(Icon::new(Glyph::Upload).size(ui::ICON_MD)).child(if has { "Change" } else { "Upload" }).on_click(cx.listener(move |this, _, _, cx| this.pick_image(field, cx)));
     let remove = has.then(|| ui::button(SharedString::from(format!("{id}-remove")), Tone::Ghost, cx).small().child("Remove").on_click(cx.listener(move |this, _, _, cx| this.edit_server_draft(cx, |d| *field.slot(d) = None))));
-    ui::settings_row(id, line, cx).child(ui::settings_text(title, Some(detail), cx)).child(div().flex().gap_2().flex_none().child(upload).children(remove))
+    ui::settings_row(id, line, cx).child(ui::settings_text(title, Some(detail), cx)).child(ui::row().items_stretch().gap_2().flex_none().child(upload).children(remove))
 }
 
 fn mime(path: &std::path::Path) -> &'static str {
@@ -854,7 +857,7 @@ pub fn snowflake_ms(id: &str) -> i64 {
 
 pub fn sentence_spans(segs: &[audit::Seg], cx: &App) -> Div {
     let (strong, text) = (palette::strong(cx), palette::text(cx));
-    div().flex().flex_wrap().min_w_0().children(segs.iter().map(|s| match s {
+    ui::row().items_stretch().flex_wrap().children(segs.iter().map(|s| match s {
         audit::Seg::Name(n) => div().font_weight(FontWeight::MEDIUM).text_color(strong).child(n.clone()),
         audit::Seg::Text(t) => div().text_color(text).whitespace_nowrap().child(t.clone()),
     }))
