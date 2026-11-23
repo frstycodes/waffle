@@ -88,8 +88,6 @@ embed-resource = "3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-# The completion handler of WKWebView's snapshot (an activity's still under a menu); already in the tree through wry.
-block2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSRunningApplication", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphicsContext", "NSGraphics", "NSWorkspace", "objc2-core-foundation"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "NSString", "NSProcessInfo"] }
 screencapturekit = { version = "11", features = ["macos_14_0"] }

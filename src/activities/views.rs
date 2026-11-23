@@ -180,7 +180,7 @@ impl Waffle {
         }
         if let Some(frame) = self.activities.frame.clone() {
             let main = self.main_window;
-            cx.defer(move |cx| _ = main.update(cx, |_, window, cx| frame.update(cx, |frame, _| frame.move_to(window))));
+            cx.defer(move |cx| _ = main.update(cx, |_, window, cx| frame.update(cx, |frame, cx| frame.move_to(window, cx))));
         }
         cx.notify(); // lint-allow(global-notify): the stage's slot and the root's visibility both change
     }
@@ -476,7 +476,7 @@ impl Waffle {
             ..Default::default()
         };
         let opened = cx.open_window(options, |window, cx| {
-            frame.update(cx, |frame, _| frame.move_to(window));
+            frame.update(cx, |frame, cx| frame.move_to(window, cx));
             window.on_window_should_close(cx, move |_, cx| {
                 _ = this.update(cx, |this, cx| this.pop_in(cx));
                 true

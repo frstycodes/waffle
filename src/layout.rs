@@ -107,16 +107,8 @@ impl Waffle {
             let (menu, dialog) = (self.render_menu(window, cx), self.render_dialog(window, cx).or_else(|| self.render_create_channel(window, cx)).or_else(|| self.render_create_server(window, cx)).or_else(|| self.render_invite(window, cx)).or_else(|| self.render_stage_topic(window, cx)).or_else(|| self.render_modify_attachment(window, cx)).or_else(|| self.render_notification_settings(window, cx)).or_else(|| self.render_new_post(window, cx)));
             let combos = self.render_keyboard_combos(window, cx);
             crate::gif::set_covered(!call_overlays.is_empty() || menu.is_some() || dialog.is_some() || combos.is_some());
-            return root
-                .child(call)
-                .children(self.call_window(cx))
-                .child(overlays)
-                .children(call_overlays)
-                .children(self.render_toast(cx))
-                .children(menu)
-                .children(dialog)
-                .children(combos)
-                .into_any_element();
+            let layer = std::iter::once(overlays).chain(call_overlays).chain(self.render_toast(cx)).chain(menu).chain(dialog).chain(combos);
+            return root.child(call).children(self.call_window(cx)).child(over_the_game(layer)).into_any_element();
         }
         // A settings view covers the whole window and its nav takes the sidebar's place, so the app under it
         // isn't drawn: over the native material its own sidebar would show through the settings nav.
@@ -140,20 +132,21 @@ impl Waffle {
         // An activity away from its call outranks the DM call's window (it carries the way back); a ring outranks both.
         let activity = (!self.call_view && self.ringing_in.is_none()).then(|| self.activity_pip(cx)).flatten();
         let pip = activity.or_else(|| self.call_window(cx)).or_else(|| (!self.call_view).then(|| self.stream_pip(cx)).flatten());
+        let layer = std::iter::once(overlays)
+            .chain(call_overlays)
+            .chain(viewer)
+            .chain(settings)
+            .chain(channel_settings)
+            .chain(server_settings)
+            // Over the settings views too: their menus, confirms and toasts come from the same places.
+            .chain(self.render_toast(cx))
+            .chain(menu)
+            .chain(dialog)
+            .chain(combos);
         self.pip_drop_zone(root, cx)
             .child(body)
             .children(pip)
-            .child(overlays)
-            .children(call_overlays)
-            .children(viewer)
-            .children(settings)
-            .children(channel_settings)
-            .children(server_settings)
-            // Over the settings views too: their menus, confirms and toasts come from the same places.
-            .children(self.render_toast(cx))
-            .children(menu)
-            .children(dialog)
-            .children(combos)
+            .child(over_the_game(layer))
             .children(crate::window_controls::render(window, cx))
             .children(self.render_landing(window, cx))
             .into_any_element()
@@ -805,4 +798,11 @@ fn me_button(id: &'static str, glyph: Nav, on: bool, label: &'static str, cx: &A
         .hover(move |s| s.bg(hover))
         .child(icon)
         .tooltip(move |window, cx| ui::tip(label, window, cx))
+}
+
+// What draws over the app (dialogs, settings, the viewer, menus, toasts), as one deferred layer after it: an
+// activity's webview sits between the app and its deferred draws (activity_frame.rs), so these show over the game.
+fn over_the_game(layer: impl Iterator<Item = AnyElement>) -> gpui_kit::Deferred {
+    // lint-allow(raw-floating): a transparent full-window layer must not occlude; each overlay in it occludes itself
+    gpui_kit::deferred(div().absolute().inset_0().children(layer))
 }

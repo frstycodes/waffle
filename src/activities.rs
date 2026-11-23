@@ -566,12 +566,12 @@ impl Waffle {
         self.close_frame(cx);
     }
 
-    // The webview sits above every gpui layer, so it shows only while nothing else wants its spot: the call
-    // on screen with its card drawn, and no menu, dialog or settings over it.
+    // The game shows while the call is on screen with its card drawn. Composed, menus, dialogs and settings
+    // draw over it; otherwise the webview covers them, so it hides while one is up.
     pub(crate) fn sync_activity_frame(&self, cx: &mut Context<Self>) {
         let Some(frame) = &self.activities.frame else { return };
-        let app_id = frame.read(cx).app_id.clone();
-        let covered = self.menu.is_some()
+        let (app_id, composed) = frame.read_with(cx, |frame, _| (frame.app_id.clone(), frame.composed()));
+        let covered = !composed && (self.menu.is_some()
             || self.dialog.is_some()
             || self.device_menu.is_some()
             || self.connection_info
@@ -580,9 +580,9 @@ impl Waffle {
             || self.activities.consent.is_some()
             || self.activities.ask.is_some()
             || self.activities.unloaded.is_some()
-            || self.viewer.is_some();
+            || self.viewer.is_some());
         if self.activities.popout.is_some() {
-            return frame.update(cx, |frame, cx| frame.set_shown(true, cx));
+            return frame.update(cx, |frame, _| frame.set_shown(true));
         }
         let Some(place) = self.game_place() else { return };
         let on_screen = self.game_on_screen(&place);
@@ -590,7 +590,7 @@ impl Waffle {
         let on_stage = on_screen && (!place.voice || focused);
         // Away from its place it plays in the floating window, which a ring takes the place of.
         let in_pip = !on_screen && self.ringing_in.is_none();
-        frame.update(cx, |frame, cx| frame.set_shown((on_stage || in_pip) && !covered, cx));
+        frame.update(cx, |frame, _| frame.set_shown((on_stage || in_pip) && !covered));
     }
 
     fn call_permissions(&self) -> u64 {

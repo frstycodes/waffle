@@ -11613,7 +11613,6 @@ dependencies = [
  "async-trait",
  "backtrace",
  "base64 0.22.1",
- "block2 0.6.2",
  "brotli-decompressor",
  "bytes",
  "chacha20poly1305",

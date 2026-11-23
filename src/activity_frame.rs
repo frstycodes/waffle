@@ -1,10 +1,14 @@
-// An activity's frame: Discord's embedded app (https://<app>.discordsays.com) in a native webview laid over
-// its tile, and the client's half of the Embedded App SDK's postMessage RPC. The webview loads a host page
-// with an opaque origin ("null", which the SDK accepts) that frames the app and relays its messages here.
-use std::{collections::HashSet, sync::Arc};
+// An activity's frame: Discord's embedded app (https://<app>.discordsays.com) in a native webview over its
+// tile, and the client's half of the Embedded App SDK's postMessage RPC. The webview loads a host page with an
+// opaque origin ("null", which the SDK accepts) that frames the app and relays its messages here.
+//
+// On macOS the webview sits in a gpui-fast composition surface: above the app, below its deferred draws, so
+// tooltips, menus, popovers and dialogs draw over the game. Elsewhere it covers the window, and hides while
+// something else needs its spot.
+use std::collections::HashSet;
 
 use futures::{StreamExt, channel::mpsc};
-use gpui_kit::{Bounds, Context, EventEmitter, Image, ImageFormat, IntoElement, ObjectFit, ParentElement, Pixels, Render, Styled, StyledImage, Task, Window, canvas, div, img};
+use gpui_kit::{App, Bounds, Context, EventEmitter, IntoElement, ParentElement, Pixels, Render, Styled, Task, Window, canvas, div};
 use serde_json::{Value, json};
 
 // The SDK's opcodes.
@@ -34,9 +38,8 @@ pub struct ActivityFrame {
     pub connected: bool,
     // Events the app subscribed to; only those are dispatched to it.
     subscriptions: HashSet<String>,
-    // The game as it last looked, drawn in its place while the live view is hidden under a menu or dialog.
-    still: Option<Arc<Image>>,
-    _snapshot: Option<Task<()>>,
+    #[cfg(target_os = "macos")]
+    composed: Option<compose::Composed>,
     _inbox: Task<()>,
 }
 
@@ -59,6 +62,8 @@ impl ActivityFrame {
             .build_as_child(window)
             .map_err(|e| eprintln!("activity frame: {e}"))
             .ok();
+        #[cfg(target_os = "macos")]
+        let composed = webview.as_ref().and_then(|webview| compose::attach(webview, window, cx));
         let inbox = cx.spawn(async move |this, cx| {
             while let Some(text) = rx.next().await {
                 if this.update(cx, |frame, cx| frame.receive(&text, cx)).is_err() {
@@ -66,39 +71,37 @@ impl ActivityFrame {
                 }
             }
         });
-        Self { app_id, webview, frame_id, connected: false, shown: false, placed: None, subscriptions: HashSet::new(), still: None, _snapshot: None, _inbox: inbox }
+        Self {
+            app_id,
+            webview,
+            frame_id,
+            connected: false,
+            shown: false,
+            placed: None,
+            subscriptions: HashSet::new(),
+            #[cfg(target_os = "macos")]
+            composed,
+            _inbox: inbox,
+        }
     }
 
     pub fn failed(&self) -> bool {
         self.webview.is_none()
     }
 
-    // The webview draws over everything in the window, so it hides while anything else needs that spot. Hiding,
-    // it first takes a still of the game to show in its place, and goes once the still is up; a menu opening
-    // waits that long (a few frames) to show over the game.
-    pub fn set_shown(&mut self, shown: bool, cx: &mut Context<Self>) {
-        if self.shown == shown {
-            return;
-        }
-        self.shown = shown;
-        if shown {
-            self.still = None;
-            self._snapshot = None;
+    // Whether gpui draws its overlays over the game; without it the webview covers them, and must hide.
+    pub fn composed(&self) -> bool {
+        #[cfg(target_os = "macos")]
+        return self.composed.is_some();
+        #[cfg(not(target_os = "macos"))]
+        false
+    }
+
+    pub fn set_shown(&mut self, shown: bool) {
+        if self.shown != shown {
+            self.shown = shown;
             self.apply_visibility();
-            return cx.notify();
         }
-        let Some(still) = self.webview.as_ref().and_then(snapshot) else { return self.apply_visibility() };
-        self._snapshot = Some(cx.spawn(async move |this, cx| {
-            let still = still.await.ok().flatten();
-            _ = this.update(cx, |frame, cx| {
-                if frame.shown {
-                    return;
-                }
-                frame.still = still.map(|jpeg| Arc::new(Image::from_bytes(ImageFormat::Jpeg, jpeg)));
-                frame.apply_visibility();
-                cx.notify();
-            });
-        }));
     }
 
     pub fn reply(&self, nonce: Value, cmd: &str, result: Result<Value, (u32, String)>) {
@@ -160,51 +163,81 @@ impl ActivityFrame {
     }
 
     // Moves the webview into another window (a pop-out, and back); it places itself again on that window's next paint.
-    pub fn move_to(&mut self, window: &Window) {
+    pub fn move_to(&mut self, window: &Window, cx: &mut App) {
         self.placed = None;
         let Some(webview) = &self.webview else { return };
+        #[cfg(target_os = "macos")]
+        if let Some(composed) = self.composed.take() {
+            composed.release(cx);
+        }
         move_webview(webview, window);
+        #[cfg(target_os = "macos")]
+        {
+            self.composed = compose::attach(webview, window, cx);
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = cx;
     }
 
-    fn place(&mut self, bounds: Bounds<Pixels>) {
+    fn place(&mut self, bounds: Bounds<Pixels>, scale: f32) {
         if self.placed == Some(bounds) {
             return;
         }
         self.placed = Some(bounds);
-        if let Some(webview) = &self.webview {
-            let (origin, size) = (bounds.origin, bounds.size);
-            _ = webview.set_bounds(wry::Rect {
-                position: wry::dpi::LogicalPosition::new(f32::from(origin.x) as f64, f32::from(origin.y) as f64).into(),
-                size: wry::dpi::LogicalSize::new(f32::from(size.width) as f64, f32::from(size.height) as f64).into(),
-            });
+        let Some(webview) = &self.webview else { return };
+        #[cfg(target_os = "macos")]
+        if let Some(composed) = &self.composed {
+            composed.place(webview, bounds, scale);
+            return self.apply_visibility();
         }
+        let _ = scale;
+        let (origin, size) = (bounds.origin, bounds.size);
+        _ = webview.set_bounds(wry::Rect {
+            position: wry::dpi::LogicalPosition::new(f32::from(origin.x) as f64, f32::from(origin.y) as f64).into(),
+            size: wry::dpi::LogicalSize::new(f32::from(size.width) as f64, f32::from(size.height) as f64).into(),
+        });
         self.apply_visibility();
     }
 
     fn apply_visibility(&self) {
-        if let Some(webview) = &self.webview {
-            _ = webview.set_visible(self.shown && self.placed.is_some());
+        let visible = self.shown && self.placed.is_some();
+        let Some(webview) = &self.webview else { return };
+        #[cfg(target_os = "macos")]
+        if let Some(composed) = &self.composed {
+            composed.set_visible(visible);
+        }
+        _ = webview.set_visible(visible);
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for ActivityFrame {
+    // The webview goes with the frame; its surface is taken out of the window's composition after it.
+    fn drop(&mut self) {
+        self.webview = None;
+        if let Some(composed) = self.composed.take() {
+            composed.release_later();
         }
     }
 }
 
-// The frame takes the bounds its slot paints at; the webview follows them.
+// The frame takes the bounds its slot prepaints at; the webview follows them. Placed at prepaint, as
+// gpui-webview does: a native surface positioned then stacks with the view that hosts it.
 impl Render for ActivityFrame {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let this = cx.weak_entity();
-        let still = self.still.clone().filter(|_| !self.shown);
-        div()
-            .relative()
-            .size_full()
-            .children(still.map(|image| img(image).absolute().inset_0().size_full().object_fit(ObjectFit::Fill)))
-            .child(
-                canvas(|_, _, _| (), move |bounds, _, _, cx| {
-                    _ = this.update(cx, |frame, _| frame.place(bounds));
-                })
-                .absolute()
-                .inset_0()
-                .size_full(),
+        div().relative().size_full().child(
+            canvas(
+                move |bounds, window, cx| {
+                    let scale = window.scale_factor();
+                    _ = this.update(cx, |frame, _| frame.place(bounds, scale));
+                },
+                |_, _, _, _| {},
             )
+            .absolute()
+            .inset_0()
+            .size_full(),
+        )
     }
 }
 
@@ -243,51 +276,92 @@ fn move_webview(webview: &wry::WebView, window: &Window) {
 #[cfg(not(target_os = "macos"))]
 fn move_webview(_: &wry::WebView, _: &Window) {}
 
-// The webview's current picture as JPEG, from WKWebView's own snapshot. None where there's no snapshot to take.
 #[cfg(target_os = "macos")]
-fn snapshot(webview: &wry::WebView) -> Option<futures::channel::oneshot::Receiver<Option<Vec<u8>>>> {
-    use std::cell::RefCell;
-
-    use block2::RcBlock;
-    use objc2::{class, msg_send, rc::Retained, runtime::AnyObject};
+mod compose {
+    use anyhow::{Context as _, anyhow, ensure};
+    use gpui_kit::{AnyWindowHandle, App, AsyncApp, Bounds, Pixels, Window, WindowCompositionSurface};
+    use objc2::{msg_send, runtime::AnyObject};
+    use objc2_foundation::{NSPoint, NSRect, NSSize};
     use wry::WebViewExtMacOS;
 
-    // NSBitmapImageFileTypeJPEG.
-    const JPEG: usize = 3;
-    let (tx, rx) = futures::channel::oneshot::channel();
-    let tx = RefCell::new(Some(tx));
-    let done = RcBlock::new(move |image: *mut AnyObject, _error: *mut AnyObject| {
-        let Some(tx) = tx.borrow_mut().take() else { return };
-        if image.is_null() {
-            _ = tx.send(None);
-            return;
-        }
-        // SAFETY: WebKit calls this on the main thread with a live NSImage; every object here is autoreleased
-        // or owned by `image`, and the bytes are copied out before returning.
-        let jpeg = unsafe {
-            let tiff: *mut AnyObject = msg_send![image, TIFFRepresentation];
-            let rep: *mut AnyObject = msg_send![class!(NSBitmapImageRep), imageRepWithData: tiff];
-            let options: *mut AnyObject = msg_send![class!(NSDictionary), dictionary];
-            let data: *mut AnyObject = if rep.is_null() { std::ptr::null_mut() } else { msg_send![rep, representationUsingType: JPEG, properties: options] };
-            (!data.is_null()).then(|| {
-                let len: usize = msg_send![data, length];
-                let bytes: *const u8 = msg_send![data, bytes];
-                std::slice::from_raw_parts(bytes, len).to_vec()
-            })
-        };
-        _ = tx.send(jpeg);
-    });
-    let view = webview.webview();
-    let view: &AnyObject = Retained::as_ref(&view);
-    let nil: *mut AnyObject = std::ptr::null_mut();
-    // SAFETY: a live WKWebView on the main thread; a nil configuration snapshots the whole visible view.
-    unsafe {
-        let _: () = msg_send![view, takeSnapshotWithConfiguration: nil, completionHandler: &*done];
+    pub(super) struct Composed {
+        surface: WindowCompositionSurface,
+        window: AnyWindowHandle,
+        cx: AsyncApp,
     }
-    Some(rx)
-}
 
-#[cfg(not(target_os = "macos"))]
-fn snapshot(_: &wry::WebView) -> Option<futures::channel::oneshot::Receiver<Option<Vec<u8>>>> {
-    None
+    // Moves the WKWebView into a native surface of `window`'s composition. None (logged) where the window
+    // can't compose: the webview stays on the window, over everything.
+    pub(super) fn attach(webview: &wry::WebView, window: &Window, cx: &App) -> Option<Composed> {
+        let attached = (|| {
+            let composition = window.enable_window_composition()?;
+            let surface = composition.create_native_surface()?;
+            let added = (|| {
+                let handle = surface.platform_surface()?.platform_handle()?;
+                let parent = *handle.downcast::<usize>().map_err(|_| anyhow!("the surface is not an AppKit view"))?;
+                ensure!(parent != 0, "the surface has no AppKit view");
+                let view = webview.webview();
+                // SAFETY: the surface's NSView and Wry's WKWebView are live, on the main thread.
+                unsafe {
+                    let _: () = msg_send![parent as *mut AnyObject, addSubview: &*view];
+                }
+                Ok(())
+            })();
+            if let Err(error) = added {
+                composition.remove_surface(surface.id())?;
+                return Err(error);
+            }
+            anyhow::Ok(surface)
+        })();
+        match attached {
+            Ok(surface) => Some(Composed { surface, window: window.window_handle(), cx: cx.to_async() }),
+            Err(error) => {
+                eprintln!("activity frame: no composition, the game covers overlays: {error:#}");
+                None
+            }
+        }
+    }
+
+    impl Composed {
+        // The surface takes the slot's window bounds; the webview fills it.
+        pub(super) fn place(&self, webview: &wry::WebView, bounds: Bounds<Pixels>, scale: f32) {
+            let Ok(surface) = self.surface.platform_surface() else { return };
+            _ = surface.set_bounds(bounds.to_device_pixels(scale));
+            let size = NSSize::new(f32::from(bounds.size.width) as f64, f32::from(bounds.size.height) as f64);
+            let view = webview.webview();
+            // SAFETY: Wry's live WKWebView, on the main thread; its frame is local to the surface's view.
+            unsafe {
+                let _: () = msg_send![&*view, setFrame: NSRect::new(NSPoint::new(0., 0.), size)];
+            }
+        }
+
+        pub(super) fn set_visible(&self, visible: bool) {
+            if let Ok(surface) = self.surface.platform_surface() {
+                _ = surface.set_visible(visible);
+            }
+        }
+
+        // Takes the surface out of its window's composition, which draws again so the pointer reaches what
+        // was under it.
+        pub(super) fn release(self, cx: &mut App) {
+            let id = self.surface.id();
+            _ = self.window.update(cx, |_, window, _| remove(window, id));
+        }
+
+        // `release` from where the app may be borrowed (a drop): on the next turn of the main thread.
+        pub(super) fn release_later(self) {
+            let (id, window) = (self.surface.id(), self.window);
+            self.cx
+                .spawn(async move |cx| _ = window.update(cx, |_, window, _| remove(window, id)))
+                .detach();
+        }
+    }
+
+    fn remove(window: &mut Window, id: gpui_kit::CompositionSurfaceId) {
+        let removed = window.enable_window_composition().and_then(|c| c.remove_surface(id)).context("removing the activity's surface");
+        if let Err(error) = removed {
+            eprintln!("activity frame: {error:#}");
+        }
+        window.refresh();
+    }
 }
