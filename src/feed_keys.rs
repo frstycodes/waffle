@@ -2,7 +2,7 @@
 // arrows and act on it by key (`MessageAction`). Esc goes back to the composer, and so does typing.
 use gpui_kit::{Context, KeyDownEvent, Keystroke, Window};
 
-use crate::{Waffle, discord::Message, message_menu::MessageAction};
+use crate::{Waffle, discord::Message, message_menu::MessageAction, part::Column};
 
 const SECONDARY: &str = if cfg!(target_os = "macos") { "cmd" } else { "ctrl" };
 
@@ -10,7 +10,7 @@ impl Waffle {
     pub(crate) fn focus_message(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
         self.focused_message = Some(id);
         window.focus(&self.feed_focus, cx);
-        cx.notify();
+        self.redraw(Column::Main, cx);
     }
 
     pub(crate) fn on_feed_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -40,7 +40,8 @@ impl Waffle {
     pub(crate) fn focus_search(&mut self, _: &crate::app_keys::FocusSearch, window: &mut Window, cx: &mut Context<Self>) {
         self.focused_message = None;
         self.search_input.update(cx, |state, cx| state.focus(window, cx));
-        cx.notify();
+        // The header's field and its popover (channel_search) are the main column's.
+        self.redraw(Column::Main, cx);
     }
 
     fn focused(&self) -> Option<(usize, Message)> {
@@ -55,7 +56,7 @@ impl Waffle {
         let Some(next) = step(ix, messages.len(), down) else { return };
         self.focused_message = Some(messages[next].id.clone());
         self.list.scroll_to_reveal_item(next);
-        cx.notify();
+        self.redraw(Column::Main, cx);
     }
 
     // Back to the composer, carrying the key that started typing.
@@ -67,7 +68,7 @@ impl Waffle {
                 state.insert(text, window, cx);
             }
         });
-        cx.notify();
+        self.redraw(Column::Main, cx);
     }
 }
 
