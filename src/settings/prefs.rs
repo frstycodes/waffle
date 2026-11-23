@@ -326,7 +326,8 @@ impl Prefs {
 
     // Discord's default spacing is 16 in cozy and 0 in compact until it's moved.
     pub fn group_spacing(&self, compact: bool) -> u8 {
-        self.group_spacing.unwrap_or(if compact { 0 } else { 16 })
+        // Cozy defaults to Discord's widest, 24px, with the Spacious density (chat::row).
+        self.group_spacing.unwrap_or(if compact { 0 } else { 24 })
     }
 
     pub(crate) fn save(&self) {

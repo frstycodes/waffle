@@ -380,7 +380,7 @@ pub(crate) fn in_chat(sticker: &Sticker, animate: bool, cx: &App) -> AnyElement 
         None => missing(),
         Some(url) => crate::chat::moving(img(url).size_full().object_fit(ObjectFit::Contain).with_fallback(missing), animate),
     };
-    div().pt_1().flex_none().child(div().size(px(IN_CHAT)).flex_none().child(picture)).into_any_element()
+    div().pt(px(crate::chat::ACCESSORY_GAP)).flex_none().child(div().size(px(IN_CHAT)).flex_none().child(picture)).into_any_element()
 }
 
 #[cfg(test)]

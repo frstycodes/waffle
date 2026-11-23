@@ -219,7 +219,7 @@ impl Waffle {
             .text_color(palette::strong(cx))
             .hover(move |s| s.bg(hover))
             .child(Icon::new(Glyph::ArrowDown).size(ui::ICON_MD))
-            .child("Jump to present")
+            .child("Jump To Present")
             .on_click(cx.listener(|this, _, _, cx| {
                 this.list.scroll_to_end();
                 this.scrolled_up = false;

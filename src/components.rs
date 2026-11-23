@@ -47,15 +47,15 @@ const DEMO_SELECT_X: f32 = 80.;
 // Where the demo scene opens a select.
 const DEMO_SELECT_Y: f32 = 400.;
 // The height of the line naming who used a component.
-const CAPTION_HEIGHT: f32 = 22.;
+const CAPTION_HEIGHT: f32 = 20.;
 // The row the eye mark sits in, one text line.
 const SEEN_ICON_HEIGHT: f32 = 18.;
 
 // The prototype's `.comps`: components never run wider than this.
 const MAX_WIDTH: f32 = 520.;
-// Discord fits a thumbnail inside 170×170 at its own shape, no side under 85.
+// Discord fits a thumbnail inside 170×170 at its own shape, no side under 85 (84 here, an even pixel).
 const THUMBNAIL_MAX: f32 = 170.;
-const THUMBNAIL_MIN: f32 = 85.;
+const THUMBNAIL_MIN: f32 = 84.;
 // A media gallery item Discord sent without its size is framed 16:9.
 const GALLERY_ITEM: (f32, f32) = (400., 225.);
 // Discord lists at most 25 options in a select.
@@ -584,7 +584,7 @@ pub(crate) fn message_components(message: &Message, ctx: &Rc<RowContext>, cx: &m
     let room = Room { width, reduced: false };
     let children: Vec<AnyElement> = message.components.iter().enumerate().map(|(i, c)| component(message, c, i.to_string(), room, ctx, cx)).collect();
     // lint-allow(raw-margin): the gap under the message body, whose row is stacked in chat.rs outside this component
-    Some(ui::col().mt_2().w_full().max_w(px(width)).gap_2().children(children).into_any_element())
+    Some(ui::col().mt(px(chat::ACCESSORY_GAP)).w_full().max_w(px(width)).gap_2().children(children).into_any_element())
 }
 
 // `path` keeps element ids apart: each component's index, from the top level down.
@@ -818,13 +818,13 @@ mod tests {
     }
 
     #[test]
-    fn thumbnails_keep_their_shape_between_85_and_170() {
+    fn thumbnails_keep_their_shape_between_84_and_170() {
         assert_eq!(thumbnail_size(Some(400), Some(400)), (170., 170.));
         assert_eq!(thumbnail_size(Some(340), Some(170)), (170., 85.));
-        assert_eq!(thumbnail_size(Some(1000), Some(100)), (170., 85.), "the short side stops at 85");
+        assert_eq!(thumbnail_size(Some(1000), Some(100)), (170., 84.), "the short side stops at 84");
         assert_eq!(thumbnail_size(Some(100), Some(120)), (100., 120.), "small media isn't grown");
-        assert_eq!(thumbnail_size(Some(40), Some(40)), (85., 85.));
-        assert_eq!(thumbnail_size(None, Some(10)), (85., 85.));
+        assert_eq!(thumbnail_size(Some(40), Some(40)), (84., 84.));
+        assert_eq!(thumbnail_size(None, Some(10)), (84., 84.));
     }
 
     #[test]

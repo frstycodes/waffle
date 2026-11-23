@@ -391,7 +391,7 @@
 <main>
 <section id="messages-compare">
   <h1>Messages compared</h1>
-  <p class="lede">Every kind of message Discord can put in a chat, drawn the way Discord draws it, beside Waffle as it renders today. Discord's side is read from its shipped web client (discord.com bundle, CSS and English strings, 2026-11-24); Waffle's from <code>src/chat.rs</code>, <code>src/chat/</code>, <code>src/system_message.rs</code>, <code>src/discord/parse.rs</code> and the components, poll, embed and audio code on main. Both columns follow the page theme; Discord's dark side is its Dark theme (<code>.theme-darker</code>).</p>
+  <p class="lede">Every kind of message Discord can put in a chat, drawn the way Discord draws it, beside Waffle as it renders today. Discord's side is read from its shipped web client (discord.com bundle, CSS and English strings, 2026-11-24); Waffle's from <code>src/chat.rs</code>, <code>src/chat/</code>, <code>src/system_message.rs</code>, <code>src/discord/parse.rs</code> and the components, poll, embed and audio code on main. Both columns follow the page theme; Discord's dark side is its Dark theme (<code>.theme-darker</code>). Waffle's column is main as it stood before the message-parity pass of 2026-11-24, which closed most of the gaps below; the uncommitted diff has those changes.</p>
   <p class="src" id="srcnote"></p>
 </section>
 
@@ -868,8 +868,11 @@ const SYS = {
 };
 // The stamp follows the sentence, before any button or card under it.
 const withTime = (html, t) => { const i = html.indexOf("<div"); return i < 0 ? html + t : html.slice(0, i) + t + html.slice(i); };
+// Discord's AutoMod header (lazy 975933 `it`/`iV`): its avatar, "AutoMod" in the brand ink, the OFFICIAL tag.
+const dAutomodHead = m => `<span class="face d-av" style="background:#5865f2"><i class="ph-fill ph-shield" style="font-size:20px"></i></span><h3 class="d-h" style="margin:0;font:inherit;line-height:1.375rem"><span class="d-name" style="color:var(--d-brand-ink)">AutoMod</span><span class="d-tag"><i class="ph-bold ph-check"></i>Official</span><time class="d-time">${clock(m.min)}</time></h3>`;
 function dSysRow(m, start) {
-  const [, , ic, html] = SYS[m.sys];
+  const [, , ic, html, wic] = SYS[m.sys];
+  if (wic === "auto") return `<div class="d-m start" data-mid="${m.id}" role="article">${dAutomodHead(m)}<div class="d-mk">${html.replace(/<b data-hit="name">Mira<\/b>/, B("Mira"))}</div></div>`;
   return `<div class="d-m sys${start ? " start" : ""}${m.hov ? " hov" : ""}" data-mid="${m.id}" role="article"><div class="d-sys"><span class="si"><i class="ph-fill ${ic[0]}" style="color:${ic[1]}"></i></span><div style="min-width:0">${withTime(html, `<time class="d-time">${clock(m.min)}</time>`)}</div></div></div>`;
 }
 function wSysRow(m) {
@@ -880,7 +883,7 @@ function wSysRow(m) {
 }
 // AutoMod blocked/flagged (type 24) is its own card on both sides.
 function dAutomod(m) {
-  return `<div class="d-m start auto" data-mid="${m.id}" role="article"><span class="face d-av" style="background:#5865f2"><i class="ph-fill ph-shield" style="font-size:20px"></i></span><h3 class="d-h" style="margin:0;font:inherit;line-height:1.375rem"><span class="d-name">AutoMod</span><span class="d-tag"><i class="ph-bold ph-check"></i>App</span><time class="d-time">${clock(m.min)}</time></h3><div class="d-auto"><div class="d-mk">AutoMod has ${m.flag ? "flagged" : "blocked"} a message in <span class="men"><i class="ph-bold ph-hash" style="font-size:.85em"></i>general</span></div><div class="card">${face("Grumpy", "s16")} <b style="color:var(--d-strong);font-weight:500">Grumpy</b> buy cheap <mark>gold</mark> at shady dot site</div><div class="meta">Keyword: gold · Rule: No spam</div><div class="d-row"><button class="d-btn sec sm" data-hit="cbtn">Actions</button><button class="d-btn sec sm" data-hit="cbtn">Jump to Surrounding</button><button class="d-btn sec sm" data-hit="cbtn">Report Issues</button></div></div></div>`;
+  return `<div class="d-m start" data-mid="${m.id}" role="article">${dAutomodHead(m)}<div class="d-auto"><div class="d-mk">AutoMod has ${m.flag ? "flagged" : "blocked"} a message in <span class="men"><i class="ph-bold ph-hash" style="font-size:.85em"></i>general</span></div><div class="card">${face("Grumpy", "s16")} <b style="color:var(--d-strong);font-weight:500">Grumpy</b> buy cheap <mark>gold</mark> at shady dot site</div><div class="meta">Keyword: gold · Rule: No spam</div><div class="d-row"><button class="d-btn sec sm" data-hit="cbtn">Actions</button><button class="d-btn sec sm" data-hit="cbtn">Jump to Surrounding</button><button class="d-btn sec sm" data-hit="cbtn">Report Issues</button><button class="d-btn sec sm" data-hit="cbtn">Delete User's Message</button></div></div></div>`;
 }
 function wAutomod(m) {
   return `<div class="w-m start" data-mid="${m.id}"><span class="w-shield"><i class="ph-fill ph-shield"></i></span><div class="w-col"><div class="w-h"><span class="w-name">AutoMod</span><span class="w-tag">System</span><span class="w-time">Today at ${clock(m.min)}</span></div><div class="w-auto"><div class="w-mk">has ${m.flag ? "flagged" : "blocked"} a message in <span class="men">#general</span></div><div class="card"><b style="color:var(--text-strong)">Grumpy</b> buy cheap <mark>gold</mark> at shady dot site</div><div class="meta">Keyword: gold · Rule: No spam</div><div class="w-row"><button class="w-btn sm" data-hit="cbtn">Actions</button><button class="w-btn sm" data-hit="cbtn">Jump to Surrounding</button><button class="w-btn sm" data-hit="cbtn">Delete User's Message</button></div></div></div></div>`;
@@ -964,7 +967,7 @@ const CASES = [
   G("Media and rich content", "Super reactions", [M("theo", 41, "we won 13-2", { rx: [{ e: "❤️", n: 2, burst: true, glow: "#ff5c8a" }, { e: "🔥", n: 3 }] })], "Burst pill glows in the emoji's colour and animates. <span class='gap'>Waffle: counted as a plain reaction.</span>"),
   G("Media and rich content", "Translated", [M("ana", 41, "on y va ce soir ?", { translated: true })], "Menu “Translate”; line “Translated · See Original”. <span class='gap'>Waffle: absent.</span>"),
 
-  G("System messages", "AUTO_MODERATION_ACTION (24)", [{ id: "am1", automod: true, min: 41 }], "AutoMod card: keyword highlight, rule, buttons. <span class='gap'>Waffle: “System” tag, “Delete User's Message” instead of “Report Issues”.</span>"),
+  G("System messages", "AUTO_MODERATION_ACTION (24)", [{ id: "am1", automod: true, min: 41 }], "AutoMod in the brand ink with the OFFICIAL tag; no row tint (the red tint is for your own blocked message). Actions, Jump to Surrounding, Report Issues (“Did we get it wrong?”), Delete User's Message for moderators. <span class='gap'>Waffle (before this change): “System” tag, no Report Issues.</span>"),
   sysCase("join", "13 random lines (id timestamp mod 13) plus “Wave to say hi!”. <span class='ok'>Same lines and button.</span>"),
   sysCase("joinBot", "An app join. <span class='ok'>Same.</span>"),
   { ...sysCase("joinFold", "Discord shows each join. <span class='gap'>Waffle folds 3+ same-day joins into one line.</span>"), msgs: [{ id: "jf", sys: "joinFold", min: 41 }] },
@@ -985,7 +988,7 @@ const CASES = [
   sysCase("stageStart", "<span class='ok'>Same.</span>"), sysCase("stageEnd", "<span class='ok'>Same.</span>"), sysCase("speaker", "<span class='ok'>Same.</span>"),
   sysCase("hand", "<span class='gap'>No Invite to Speak.</span>"), sysCase("topic", "<span class='ok'>Same.</span>"),
   sysCase("disq", "<span class='ok'>Same.</span>"), sysCase("requal", "<span class='ok'>Same.</span>"), sysCase("grace1", "<span class='ok'>Same.</span>"), sysCase("grace3", "<span class='ok'>Same.</span>"),
-  sysCase("raid", "Incident report. <span class='gap'>Waffle draws it as an AutoMod row.</span>"), sysCase("alertOn", "<span class='gap'>AutoMod row.</span>"), sysCase("alertOff", "<span class='gap'>AutoMod row.</span>"), sysCase("falseAlarm", "<span class='gap'>AutoMod row.</span>"),
+  sysCase("raid", "Incident alerts render under AutoMod's header with the OFFICIAL tag. <span class='gap'>Waffle (before this change): strong name and a “System” tag.</span>"), sysCase("alertOn", "Date as “11/24/2026, 11:00 PM”. <span class='gap'>Waffle (before): “Nov 24, 2026, 11:00 PM”.</span>"), sysCase("alertOff", "<span class='ok'>Same text.</span>"), sysCase("falseAlarm", "<span class='ok'>Same text.</span>"),
   sysCase("pollEnd", "Poll closed + winner card + “View Poll”. <span class='ok'>Same parts</span>; sentence-case button."),
   sysCase("roleSub", "<span class='gap'>Dropped.</span>"), sysCase("purchase", "<span class='gap'>Dropped.</span>"), sysCase("appPremium", "<span class='gap'>Dropped.</span>"),
   sysCase("invite", "<span class='gap'>Dropped.</span>"), sysCase("hangout", "<span class='gap'>Dropped.</span>"), sysCase("friend", "<span class='gap'>Dropped (DMs).</span>"),
@@ -1063,7 +1066,6 @@ const GAPS = [
   ["P3", ">>> quotes", "Quote to the end of the message.", "No rule (CommonMark nesting)."],
   ["P3", "__underline__", "Underline.", "Bold (CommonMark; Not verified in gpui-base)."],
   ["P3", "Dropped system types", "GUILD_STREAM (13), INVITE_REMINDER (22), ROLE_SUBSCRIPTION_PURCHASE (25), APP_PREMIUM (32), PURCHASE (44), NITRO (48), LOBBY (49), GIFTING (50), IN_GAME (51), JOIN_REQUEST_* (52–54), VOICE_SESSION (65), FRIEND_REQUEST_ACCEPTED (67) and the rest have text or cards.", "Rendered as an empty div; nothing shows."],
-  ["P3", "Incident alerts (36–39)", "System lines with a shield, actor first.", "AutoMod-styled rows with a “System” tag."],
   ["P3", "Join folding", "Each join is its own line.", "3+ same-day joins fold into one line (Waffle's own choice)."],
   ["P3", "Stage raise hand", "“Invite to Speak” link.", "None."],
   ["P3", "Pinned marker", "Not verified: nothing on the row.", "Pin icon in the header."],

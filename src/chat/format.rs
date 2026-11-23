@@ -146,21 +146,32 @@ pub(super) fn custom_emoji(content: &str) -> Vec<Emoji> {
     out
 }
 
-pub(super) fn strip_emoji(content: &str) -> String {
-    let mut out = String::new();
-    let mut rest = content;
-    while let Some(start) = rest.find('<') {
-        out.push_str(&rest[..start]);
-        let tail = &rest[start..];
-        let Some(end) = tail.find('>') else { break };
-        let token = &tail[1..end];
-        if !(token.starts_with(':') || token.starts_with("a:")) {
-            out.push_str(&tail[..=end]);
+// Discord's jumbo rule: a message of nothing but emoji (unicode or custom) and whitespace, at most 30, shows them large.
+pub(super) enum JumboPart {
+    Custom(Emoji),
+    Unicode(String),
+}
+
+pub(super) fn jumbo_parts(content: &str) -> Option<Vec<JumboPart>> {
+    let mut out = Vec::new();
+    let mut rest = content.trim_start();
+    while !rest.is_empty() {
+        if rest.starts_with('<') {
+            let end = rest.find('>')?;
+            out.push(JumboPart::Custom(custom_emoji(&rest[..=end]).pop()?));
+            rest = &rest[end + 1..];
+        } else {
+            // Longest prefix that is one emoji, so ZWJ families and flags stay whole.
+            let len = (1..=rest.len().min(48)).rev().filter(|&n| rest.is_char_boundary(n)).find(|&n| emojis::get(&rest[..n]).is_some())?;
+            out.push(JumboPart::Unicode(rest[..len].to_owned()));
+            rest = &rest[len..];
         }
-        rest = &tail[end + 1..];
+        if out.len() > 30 {
+            return None;
+        }
+        rest = rest.trim_start();
     }
-    out.push_str(rest);
-    out
+    (!out.is_empty()).then_some(out)
 }
 
 // Who is typing, names emphasised: "Mira is typing…", "Mira and Theo are typing…", then "Several people".
@@ -261,7 +272,7 @@ pub(super) fn unread_line() -> AnyElement {
 // Between dates, inside the feed's gutters, never edge to edge.
 pub(super) fn day_divider(timestamp: &str, cx: &App) -> AnyElement {
     let label = day(timestamp).map(|d| d.format("%A, %B %-d, %Y").to_string()).unwrap_or_default();
-    div().pt_4().pb_2().px_4().child(ui::divider_with(label, palette::faint(cx), palette::line(cx))).into_any_element()
+    div().pt(px(DIVIDER_PAD.0)).pb(px(DIVIDER_PAD.1)).px(px(GUTTER)).child(ui::divider_with(label, palette::faint(cx), palette::line(cx))).into_any_element()
 }
 
 pub(super) fn empty_state(id: &'static str, art: impl Into<ui::Art>, title: &'static str, detail: impl Into<SharedString>, cx: &App) -> AnyElement {
@@ -274,7 +285,11 @@ pub(super) fn continues(previous: &Message, message: &Message) -> bool {
     };
     // An app's answer to a command keeps its own header and "used /command" line.
     let answers_command = message.interaction.as_ref().is_some_and(|i| i.command.is_some());
-    previous.author.id == message.author.id && !answers_command && (b - a).num_seconds() < GROUP_GAP_SECS
+    // A webhook posts every message under one id; Discord starts a new group when its username changes.
+    let same_author = previous.author.id == message.author.id && previous.author.name == message.author.name;
+    // Discord also breaks a group where the ephemeral flag flips.
+    let same_kind = components::is_ephemeral(previous) == components::is_ephemeral(message);
+    same_author && same_kind && !answers_command && (b - a).num_seconds() < GROUP_GAP_SECS
 }
 
 pub(crate) fn local(timestamp: &str) -> Option<DateTime<Local>> {
@@ -301,15 +316,15 @@ pub(super) fn time_format(gutter: bool) -> &'static str {
     }
 }
 
-// "Today at 9:41 PM", "Yesterday at 11:58 PM", the weekday within the week, then the date.
+// Discord's cozy header stamp (its message timestamp calls the calendar formatter with "today as time"):
+// "9:41 PM" today, "Yesterday at 11:58 PM", else "11/14/2026 9:41 PM".
 pub(crate) fn format_stamp(timestamp: &str) -> String {
     let Some(time) = local(timestamp) else { return String::new() };
     let clock = time.format(time_format(false));
     match (Local::now().date_naive() - time.date_naive()).num_days() {
-        0 => format!("Today at {clock}"),
+        0 => clock.to_string(),
         1 => format!("Yesterday at {clock}"),
-        2..=6 => format!("{} at {clock}", time.format("%A")),
-        _ => format!("{} at {clock}", time.format("%B %-d, %Y")),
+        _ => format!("{} {clock}", time.format("%m/%d/%Y")),
     }
 }
 

@@ -680,6 +680,7 @@ _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::r
 - `src/command_picker/render.rs` — lifts the popup clear of the composer by a computed amount, POPUP_RAISE
 - `src/command_picker/render.rs` — ui::divider lacks a short centred rule in a rail; the margin is its optical gap
 - `src/components.rs` — the gap under the message body, whose row is stacked in chat.rs outside this component
+- `src/components/status.rs` — Discord's gap under the command line, as under a reply; the row's children have no parent gap
 - `src/components/status.rs` — optical gap under the component's body; the parent is a message row in another file
 - `src/components/status.rs` — optical gap under the component's body; the parent is a message row in another file
 - `src/dm_call.rs` — the pill sits a step off the header's next control, which the caller's row doesn't gap
@@ -716,6 +717,7 @@ _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::r
 - `src/status_menu.rs` — the avatar row pulls up over the banner's foot, which padding can't do.
 - `src/system_message.rs` — optical, sets the time 2px clear of the sentence beyond the row's word gap
 - `src/system_message.rs` — pulls a glued word back over the row's gap_x, which a gap can't take away from one child
+- `src/system_message.rs` — the gap between groups is the reader's setting, and rows are list items with no parent gap to carry it
 - `src/system_message/automod.rs` — optical, lines the shield's top with the name's cap height
 
 ## custom-component

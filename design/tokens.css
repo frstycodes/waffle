@@ -16,7 +16,7 @@
   /* Type */
   --font-ui: "Figtree", system-ui, sans-serif;
   --font-mono: "Fragment Mono", ui-monospace, monospace;
-  --text-2xs: 11px;  /* uppercase tags and badges */
+  --text-2xs: 10px;  /* uppercase tags and badges, Discord's .625rem */
   --text-xs: 12px;   /* timestamps, section labels, badges */
   --text-detail: 13px; /* a row's second line: descriptions, hints, topics */
   --text-sm: 14px;   /* rows, menus, buttons */

@@ -326,6 +326,9 @@ pub struct Message {
     pub reactions: Vec<Reaction>,
     pub reply_to: Option<String>,
     pub reply: Option<Box<Message>>,
+    // A reply whose original was deleted: Discord's "Original message was deleted".
+    #[serde(default)]
+    pub reply_deleted: bool,
     pub mentions: Vec<User>,
     pub mention_roles: Vec<String>,
     pub mention_everyone: bool,

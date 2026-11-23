@@ -3,7 +3,7 @@ use super::*;
 // The reference above a reply, in the content column; clicking it jumps to the original and flashes it.
 // Discord's reply spine: from the preview's middle it runs left to over the avatar's centre, rounds
 // the corner and drops to just above the avatar, so the preview lines up with the name below it.
-pub(super) fn reply_spine(cx: &App) -> Div {
+pub(crate) fn reply_spine(cx: &App) -> Div {
     // lint-allow(custom-mark): ui::badged marks a face's corner; this is a connector line drawn from the preview to the avatar
     div()
         .absolute()
@@ -25,7 +25,7 @@ pub(super) fn reply_preview(reply: &Message, target: Option<String>, ctx: &Rc<Ro
     });
     let quote: Vec<AnyElement> = match hidden {
         Some(label) => vec![ui::line(label).into_any_element()],
-        None => vec![ui::avatar(reply.author.avatar.clone(), 16.).into_any_element(), div().flex_none().font_weight(FontWeight::MEDIUM).text_color(muted).child(ctx.name_of(&reply.author)).into_any_element(), reply_snippet(reply, ctx, cx)],
+        None => vec![ui::avatar(reply.author.avatar.clone(), 16.).into_any_element(), div().flex_none().font_weight(FontWeight::MEDIUM).text_color(muted).child(ctx.name_of(&reply.author)).into_any_element(), reply_snippet(reply, ctx)],
     };
     let this = ctx.this.clone();
     let preview = ui::row()
@@ -44,18 +44,50 @@ pub(super) fn reply_preview(reply: &Message, target: Option<String>, ctx: &Rc<Ro
             let Some(id) = target.clone() else { return };
             this.update(cx, |this, cx| this.jump_to(id, cx)).ok();
         });
-    div().pb_0p5().child(preview).into_any_element()
+    div().pb(px(ACCESSORY_GAP)).child(preview).into_any_element()
 }
 
-pub(super) fn reply_snippet(reply: &Message, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
+// Discord's quote of an original with no text: "Click to see attachment" (or sticker, or voice message) in
+// italics, its kind's icon after it.
+pub(super) fn reply_snippet(reply: &Message, ctx: &Rc<RowContext>) -> AnyElement {
     match reply.content.is_empty() {
-        true => ui::row().flex_none().gap_1().text_color(palette::muted(cx)).child(Icon::new(attachment_glyph(reply)).size(ui::ICON_SM)).child(attachment_kind(reply)).into_any_element(),
+        true => ui::row().flex_none().gap_1().child(div().italic().child(reply_placeholder(reply))).child(Icon::new(attachment_glyph(reply)).size(ui::ICON_MD)).into_any_element(),
         false => ui::line(plain(&readable_with(&reply.content, ctx, false))).into_any_element(),
     }
 }
 
-// A forwarded copy (design/messages.html `.fwd`): the label, the original's text, media and files, then
-// where it came from, which jumps to the original. A source outside your servers shows its time alone.
+pub(super) fn reply_placeholder(reply: &Message) -> &'static str {
+    match () {
+        _ if reply.media.is_empty() && reply.files.is_empty() && !reply.stickers.is_empty() => "Click to see sticker",
+        _ if reply.is_voice() => "Click to see voice message",
+        _ => "Click to see attachment",
+    }
+}
+
+// A reply whose original is gone (Discord sends `referenced_message: null`): the reply badge and
+// "Original message was deleted" in italics, with nothing to jump to.
+pub(super) fn deleted_reply_preview(ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
+    let badge = ui::row()
+        .size(px(ui::AVATAR_XS))
+        .flex_none()
+        .rounded_full()
+        .justify_center()
+        .bg(palette::surface(Level::Sidebar, cx))
+        .child(Icon::new(Glyph::Reply).size(ui::ICON_XS));
+    let preview = ui::row()
+        .relative()
+        .h(px(REPLY_HEIGHT))
+        .when(!ctx.compact, |r| r.pl(px(CONTENT_INSET)).child(reply_spine(cx)))
+        .gap_1()
+        .text_size(ui::TEXT_SM)
+        .text_color(palette::faint(cx))
+        .child(badge)
+        .child(div().italic().child("Original message was deleted"));
+    div().pb(px(ACCESSORY_GAP)).child(preview).into_any_element()
+}
+
+// A forwarded copy, as Discord draws it: the label, then behind a quote bar the original's text, media and
+// files and where it came from, which jumps to the original. A source outside your servers shows its time alone.
 pub(super) fn forward_quote(original: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     let faint = palette::faint(cx);
     let label = ui::row()
@@ -84,36 +116,23 @@ pub(super) fn forward_quote(original: &Message, ctx: &Rc<RowContext>, cx: &mut A
         }
         None => source,
     };
-    let card = ui::col()
-        .max_w(px(FORWARD_WIDTH))
-        .pt_2()
-        .px_3()
-        .pb_2p5()
-        .squircle(RADIUS_MD)
-        .bg(palette::strong(cx).opacity(0.05))
+    // Discord's forward: the label, then the original inside a quote bar, its source last.
+    let quoted = ui::col()
+        .min_w_0()
+        .flex_1()
         .gap_1()
-        .child(label)
         .children(content(original, ctx, cx))
         .children(media_grid(original, ctx, cx))
         .children(original.stickers.iter().map(|s| crate::stickers::in_chat(s, ctx.media.stickers.plays(false), cx)))
         .children(shown_embeds(original, ctx).iter().enumerate().map(|(i, e)| embed_card(e, None, None, format!("forward-embed-{}-{i}", original.id), ctx, cx)))
         .children(files(original, ctx, cx))
         .child(source);
-    div().pt_1().child(card).into_any_element()
+    let bar = div().w_1().flex_none().rounded_full().bg(palette::line_strong(cx));
+    let card = ui::col().max_w(px(FORWARD_WIDTH)).gap_1().child(label.italic()).child(ui::row().items_stretch().gap_3().child(bar).child(quoted));
+    div().pt(px(ACCESSORY_GAP)).child(card).into_any_element()
 }
 
 // What a reply without text quotes instead: the kind of attachment it carries.
-pub(super) fn attachment_kind(message: &Message) -> &'static str {
-    match message.media.first().map(|m| &m.kind) {
-        Some(MediaKind::Image) => "Image",
-        Some(MediaKind::Video { .. }) => "Video",
-        Some(MediaKind::Gif { .. }) => "GIF",
-        None if !message.stickers.is_empty() => "Sticker",
-        None if !message.files.is_empty() => "File",
-        None => "Attachment",
-    }
-}
-
 pub(super) fn attachment_glyph(message: &Message) -> Glyph {
     if message.media.is_empty() && !message.stickers.is_empty() {
         return Glyph::Sticker;
@@ -141,7 +160,7 @@ pub(crate) fn call_line(message: &Message, call: &crate::discord::CallRecord, ct
         (true, Some(lasted)) => (s.text("You missed a call from ").name(&message.author, ctx).text(&format!(" that lasted {lasted}.")), Some("Call back")),
         (true, None) => (s.text("You missed a call from ").name(&message.author, ctx).text("."), Some("Call back")),
         (false, Some(lasted)) => (s.name(&message.author, ctx).text(&format!(" started a call that lasted {lasted}.")), None),
-        (false, None) => (s.name(&message.author, ctx).text(" started a call."), Some("Join")),
+        (false, None) => (s.name(&message.author, ctx).text(" started a call."), Some("Join the call")),
     };
     let ink = if missed { palette::danger_ink(cx) } else { palette::positive_ink(cx) };
     let sentence = match action {
@@ -202,12 +221,15 @@ pub(crate) fn starter_message(parent: &Message, ctx: &Rc<RowContext>, cx: &mut A
         .children(parent.reply.as_ref().map(|reply| reply_preview(reply, parent.reply_to.clone(), ctx, cx)))
         .child(
             ui::row().items_stretch()
-                .gap_4()
+                .gap(px(GUTTER))
                 // lint-allow(raw-margin): optical, lines the avatar's top with the name's cap height
                 .child(profile_trigger(format!("starter-avatar-{}", parent.id), &parent.author, ctx).flex_none().mt_0p5().child(ui::avatar(parent.author.avatar.clone(), AVATAR)))
                 .child(body),
         )
 }
+
+// Discord's jumbo emoji: 3rem.
+const JUMBO_EMOJI: f32 = 48.;
 
 pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyElement> {
     if message.flags & Message::SOURCE_MESSAGE_DELETED != 0 {
@@ -217,10 +239,12 @@ pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Opti
     if message.content.is_empty() || (ctx.media.links && only_media_link(message)) {
         return None;
     }
-    // A message of only custom emoji renders them big, as Discord's "jumbo" emoji.
-    let emoji = custom_emoji(&message.content);
-    if !emoji.is_empty() && strip_emoji(&message.content).trim().is_empty() && emoji.len() <= 27 {
-        return Some(ui::row().items_stretch().flex_wrap().gap_1().children(emoji.iter().filter_map(|e| shown_emoji(e, ctx.media.emoji).url()).enumerate().map(|(i, url)| img(url).id(("jumbo", i)).size_12())).into_any_element());
+    if let Some(parts) = jumbo_parts(&message.content) {
+        let parts = parts.into_iter().enumerate().map(|(i, part)| match part {
+            JumboPart::Custom(e) => shown_emoji(&e, ctx.media.emoji).url().map_or_else(|| div().child(format!(":{}:", e.name)).into_any_element(), |url| img(url).id(("jumbo", i)).size_12().into_any_element()),
+            JumboPart::Unicode(e) => div().text_size(px(JUMBO_EMOJI)).line_height(px(JUMBO_EMOJI)).child(e).into_any_element(),
+        });
+        return Some(ui::row().items_stretch().flex_wrap().gap_1().children(parts).into_any_element());
     }
     // Spoilers stay covered until the message is clicked, unless the setting shows them; "-# " lines are
     // Discord's small grey subtext.
@@ -247,7 +271,7 @@ pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Opti
             })
             .children(blocks)
             .when(message.edited, |c| {
-                c.child(ui::row().flex_wrap().items_baseline().gap_x_1().children(last).child(div().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(faint).child("(edited)")))
+                c.child(ui::row().flex_wrap().items_baseline().gap_x_1().children(last).child(div().whitespace_nowrap().text_size(ui::TEXT_XXS).text_color(faint).child("(edited)")))
             })
             .into_any_element(),
     )
@@ -276,7 +300,7 @@ pub(super) fn send_failure(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
         .child(action(format!("discard-{}", message.id), "Delete message").on_click(move |_, _, cx| { cx.stop_propagation();
             delete_this.update(cx, |this, cx| this.delete(delete.clone(), cx)).ok();
         }));
-    div().pt_1().child(line).into_any_element()
+    div().pt(px(ACCESSORY_GAP)).child(line).into_any_element()
 }
 
 // The card under the message that started a thread: its name and how many messages it holds.
@@ -316,5 +340,5 @@ pub(super) fn thread_card(thread: &Channel, ctx: &Rc<RowContext>, cx: &App) -> A
             this.update(cx, |this, cx| this.open_channel(open.clone(), window, cx)).ok();
         })
         .into_any_element();
-    div().pt_2().child(card).into_any_element()
+    div().pt(px(ACCESSORY_GAP)).child(card).into_any_element()
 }

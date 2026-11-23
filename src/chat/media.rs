@@ -76,7 +76,7 @@ pub(crate) enum Paging {
 
 // The message's media, then its uploads as file rows where the setting keeps them out of line.
 pub(super) fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<AnyElement> {
-    let gallery = media_layout(message, &inline_media(message, &ctx.media), ctx.column.min(COLUMN), Paging::Feed, ctx, cx).map(|g| div().pt_2().child(g).into_any_element());
+    let gallery = media_layout(message, &inline_media(message, &ctx.media), ctx.column.min(COLUMN), Paging::Feed, ctx, cx).map(|g| div().pt(px(ACCESSORY_GAP)).child(g).into_any_element());
     if ctx.media.attachments || message.media_files.is_empty() {
         return gallery;
     }
@@ -409,7 +409,10 @@ pub(super) struct Tile {
     pub(super) h: f32,
 }
 
-// The gallery's height and its tiles for `count` items in the media column; past five, five tiles show.
+// Discord takes ten attachments; a "+N" tile shows only past that.
+const GALLERY_MAX: usize = 10;
+
+// The gallery's height and its tiles for `count` items in the media column, as Discord's mosaic.
 pub(super) fn gallery_layout(count: usize) -> (f32, Vec<Tile>) {
     let tile = |x, y, w, h| Tile { x, y, w, h };
     let half = (COLUMN - GALLERY_GAP) / 2.;
@@ -431,13 +434,16 @@ pub(super) fn gallery_layout(count: usize) -> (f32, Vec<Tile>) {
             let row = (h - GALLERY_GAP) / 2.;
             (h, [(0., 0.), (1., 0.), (0., 1.), (1., 1.)].map(|(c, r)| tile(c * (half + GALLERY_GAP), r * (row + GALLERY_GAP), half, row)).to_vec())
         }
-        _ => {
-            let h = COLUMN * 2. / 3.;
-            let top = (h - GALLERY_GAP) * 3. / 5.;
-            let (bottom, third) = (h - GALLERY_GAP - top, (COLUMN - 2. * GALLERY_GAP) / 3.);
-            let mut tiles = vec![tile(0., 0., half, top), tile(half + GALLERY_GAP, 0., half, top)];
-            tiles.extend((0..3).map(|i| tile(i as f32 * (third + GALLERY_GAP), top + GALLERY_GAP, third, bottom)));
-            (h, tiles)
+        // Discord's mosaic past four: a lead row (one wide or two halves, or none) over rows of three squares, up to ten.
+        n => {
+            let n = n.min(GALLERY_MAX);
+            let lead = [0, 2, 0, 1, 2, 0, 1][(n - 4).min(6)];
+            let third = (COLUMN - 2. * GALLERY_GAP) / 3.;
+            let lead_h = if lead == 1 { COLUMN * 9. / 16. } else { half };
+            let mut tiles: Vec<Tile> = (0..lead).map(|i| tile(i as f32 * (half + GALLERY_GAP), 0., if lead == 1 { COLUMN } else { half }, lead_h)).collect();
+            let top = if lead > 0 { lead_h + GALLERY_GAP } else { 0. };
+            tiles.extend((0..n - lead).map(|i| tile((i % 3) as f32 * (third + GALLERY_GAP), top + (i / 3) as f32 * (third + GALLERY_GAP), third, third)));
+            (top + ((n - lead) / 3) as f32 * (third + GALLERY_GAP) - GALLERY_GAP, tiles)
         }
     }
 }

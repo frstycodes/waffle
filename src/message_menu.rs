@@ -45,11 +45,11 @@ impl Waffle {
         out.push(Entry::Emojis { quick, more: std::rc::Rc::new(open_picker.clone()) });
         let mut more: Vec<Entry> = self.prefs.frequent_emojis(12, &QUICK_PAD).into_iter().map(|e| item(shortcode(&e), react(e.clone(), message)).emoji(e).entry()).collect();
         more.push(Entry::Separator);
-        more.push(item("All reactions", open_picker).icon(Glyph::Search).entry());
-        out.push(submenu("Add reaction", more).icon(Glyph::Emoji).entry());
+        more.push(item("View More", open_picker).icon(Glyph::Search).entry());
+        out.push(submenu("Add Reaction", more).icon(Glyph::Emoji).entry());
         if let Some(first) = crate::reactions::rail_order(&message.reactions).first() {
             let (m, emoji) = (message.clone(), first.emoji.clone());
-            out.push(item("View reactions", move |this, _, cx| this.open_reactions(&m, emoji.clone(), cx)).icon(Glyph::Users).entry());
+            out.push(item("View Reactions", move |this, _, cx| this.open_reactions(&m, emoji.clone(), cx)).icon(Glyph::Users).entry());
         }
         out.push(Entry::Separator);
 
@@ -63,16 +63,16 @@ impl Waffle {
         // G5: secondary.
         out.extend([MessageAction::CopyText, MessageAction::Pin, MessageAction::MarkUnread, MessageAction::Save].into_iter().filter_map(action));
         let m = message.clone();
-        out.push(item("Copy message link", move |this, _, cx| {
+        out.push(item("Copy Message Link", move |this, _, cx| {
             let link = this.message_link(&m);
             this.copy_text(link, cx)
         }).icon(Glyph::Link).entry());
         if let Some(url) = message.files.first().filter(|_| message.is_voice()).map(|f| f.url.clone()) {
-            out.push(item("Save file", move |_, _, cx| cx.open_url(&url)).icon(Glyph::Download).entry());
+            out.push(item("Save File", move |_, _, cx| cx.open_url(&url)).icon(Glyph::Download).entry());
         }
         if cfg!(target_os = "macos") && !message.content.is_empty() {
             let text = message.content.clone();
-            out.push(item("Speak message", move |this, _, _| speak(&text, this.prefs.tts_rate)).icon(Glyph::Soundboard).entry());
+            out.push(item("Speak Message", move |this, _, _| speak(&text, this.prefs.tts_rate)).icon(Glyph::Soundboard).entry());
         }
         out.push(Entry::Separator);
 
@@ -91,10 +91,10 @@ impl Waffle {
                     .entry()
                 })
                 .collect();
-            out.push(submenu("Remove reactions", per_emoji).danger().icon(Glyph::SmileyXEyes).entry());
+            out.push(submenu("Remove Reactions", per_emoji).danger().icon(Glyph::SmileyXEyes).entry());
             let m = message.clone();
             out.push(
-                item("Remove all reactions", move |this, _, cx| {
+                item("Remove All Reactions", move |this, _, cx| {
                     let m = m.clone();
                     this.confirm("Remove all reactions", "Are you sure you want to remove all the reactions on this message?", "Remove all", move |this, _, cx| {
                         this.reactions_optimistic(&m, format!("/channels/{}/messages/{}/reactions", m.channel_id, m.id), |_| false, cx);
@@ -108,7 +108,7 @@ impl Waffle {
         out.extend(action(MessageAction::Delete));
         if !facts.mine && message.call.is_none() {
             let m = message.clone();
-            out.push(item("Report message", move |this, _, cx| this.open_report(crate::report::ReportTarget::Message(Box::new(m.clone())), cx)).danger().icon(Glyph::Flag).entry());
+            out.push(item("Report Message", move |this, _, cx| this.open_report(crate::report::ReportTarget::Message(Box::new(m.clone())), cx)).danger().icon(Glyph::Flag).entry());
         }
         out.push(Entry::Separator);
 
@@ -191,17 +191,17 @@ impl MessageAction {
 
     pub const fn label(self) -> &'static str {
         match self {
-            Self::Edit => "Edit message",
+            Self::Edit => "Edit Message",
             Self::Reply => "Reply",
             Self::Forward => "Forward",
-            Self::Thread => "Create thread",
-            Self::React => "Add reaction",
-            Self::CopyText => "Copy text",
-            Self::Pin => "Pin message",
-            Self::MarkUnread => "Mark unread",
-            Self::Save => "Save message",
-            Self::Delete => "Delete message",
-            Self::CopyId => "Copy message ID",
+            Self::Thread => "Create Thread",
+            Self::React => "Add Reaction",
+            Self::CopyText => "Copy Text",
+            Self::Pin => "Pin Message",
+            Self::MarkUnread => "Mark Unread",
+            Self::Save => "Bookmark Message",
+            Self::Delete => "Delete Message",
+            Self::CopyId => "Copy Message ID",
         }
     }
 
@@ -241,8 +241,8 @@ impl Waffle {
             MessageAction::CopyId => Glyph::Id,
         };
         let label = match action {
-            MessageAction::Pin if message.pinned => "Unpin message",
-            MessageAction::Save if self.saved_ids.contains(&message.id) => "Remove from saved",
+            MessageAction::Pin if message.pinned => "Unpin Message",
+            MessageAction::Save if self.saved_ids.contains(&message.id) => "Remove Bookmark",
             _ => action.label(),
         };
         let m = message.clone();
@@ -273,7 +273,7 @@ impl Waffle {
             MessageAction::Save => self.toggle_saved(&m, cx),
             MessageAction::Delete if quick || m.state == SendState::Failed => self.delete(m, cx),
             MessageAction::Delete => {
-                self.confirm_delete("Delete message", crate::announcements::delete_body(&m), "Delete", move |this, _, cx| this.delete(m.clone(), cx), cx);
+                self.confirm_delete("Delete Message", crate::announcements::delete_body(&m), "Delete", move |this, _, cx| this.delete(m.clone(), cx), cx);
                 self.set_dialog_key(MessageAction::Delete.keys()[0]);
             }
             MessageAction::CopyId => self.copy_text(m.id, cx),

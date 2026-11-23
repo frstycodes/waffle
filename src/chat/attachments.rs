@@ -3,8 +3,10 @@ use super::*;
 // A spoiler's blur, a reaction's side padding (with the add pill's), the code copy button's side, and how far
 // the hover bar rides above its row.
 const SPOILER_BLUR: f32 = 8.;
-const REACTION_PAD: f32 = 9.;
-const REACTION_ADD_PAD: f32 = 7.;
+// Discord's reaction: 20px emoji, 2px above and below, 6px each side, inside a 1px border.
+const REACTION_PAD: f32 = 6.;
+const REACTION_HEIGHT: f32 = 26.;
+const REACTION_ADD_PAD: f32 = 6.;
 const COPY_BUTTON: f32 = 28.;
 const ACTIONS_LIFT: f32 = 18.;
 
@@ -80,7 +82,7 @@ pub(super) fn upload_cards(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
                         this.update(cx, |this, cx| this.delete(cancel.clone(), cx)).ok();
                     }))
                 });
-            div().pt_2().child(card).into_any_element()
+            div().pt(px(ACCESSORY_GAP)).child(card).into_any_element()
         })
         .collect()
 }
@@ -131,7 +133,7 @@ pub(crate) fn file_card(message: &Message, file: &crate::discord::File, cx: &App
                 .child(ui::row().gap_1p5().text_size(ui::TEXT_XS).text_color(faint).when(file.size > 0, |d| d.child(format_size(file.size))).when(file.spoiler, |d| d.child(ui::tag("Spoiler", cx)))),
         )
         .child(ui::icon_button(SharedString::from(format!("download-{}-{}", message.id, file.name)), Glyph::Download, "Download", cx).on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&download) }));
-    div().pt_2().child(card).into_any_element()
+    div().pt(px(ACCESSORY_GAP)).child(card).into_any_element()
 }
 
 // Sits in the corner of every code block; it turns to a check, in the online ink, for a moment after.
@@ -158,7 +160,7 @@ pub(super) fn reactions(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Op
         let card = crate::reactions::ReactorsCard::new(ctx.this.clone(), message, r);
         reaction_pill(SharedString::from(format!("react-{}-{}", message.id, r.emoji.name)), r.me, cx)
             .px(px(REACTION_PAD))
-            .child(emoji_face(&shown_emoji(&r.emoji, ctx.media.emoji), 18., 16.))
+            .child(emoji_face(&shown_emoji(&r.emoji, ctx.media.emoji), 20., 18.))
             .child(r.count.to_string())
             .on_hover(move |hovered, _, cx| {
                 if *hovered {
@@ -179,7 +181,7 @@ pub(super) fn reactions(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Op
         .on_click(move |_, window, cx| { cx.stop_propagation();
             this.update(cx, |this, cx| this.open_emoji_picker(EmojiTarget::Reaction(Box::new(msg.clone())), window, cx)).ok();
         });
-    Some(div().pt_1p5().child(ui::row().items_stretch().flex_wrap().gap_1p5().children(pills).child(add)).into_any_element())
+    Some(div().pt(px(REACTIONS_GAP)).child(ui::row().items_stretch().flex_wrap().gap(px(ACCESSORY_GAP)).children(pills).child(add)).into_any_element())
 }
 
 // A custom emoji's picture, or a unicode one drawn as text.
@@ -193,7 +195,7 @@ pub(super) fn emoji_face(emoji: &Emoji, image: f32, text: f32) -> AnyElement {
 pub(super) fn reaction_pill(id: SharedString, mine: bool, cx: &App) -> ui::Pressable {
     let edge = palette::line_strong(cx);
     ui::pressable(div().id(id), 0.92)
-        .h_7()
+        .h(px(REACTION_HEIGHT))
         .flex()
         .items_center()
         .gap_1p5()
@@ -201,13 +203,13 @@ pub(super) fn reaction_pill(id: SharedString, mine: bool, cx: &App) -> ui::Press
         .border_1()
         .cursor_pointer()
         .text_size(ui::TEXT_SM)
-        .font_weight(FontWeight::MEDIUM)
+        .font_weight(FontWeight::SEMIBOLD)
         .when(mine, |p| p.bg(palette::accent_soft(cx)).border_color(palette::accent().opacity(0.55)).text_color(palette::accent_ink(cx)))
         .when(!mine, |p| p.bg(palette::selected(cx)).border_color(gpui_kit::transparent_black()).text_color(palette::muted(cx)).hover(move |s| s.border_color(edge)))
 }
 
-// The hover toolbar: three quick reactions, then react, reply, thread and more. With Shift held, edit
-// and delete take the quick reactions' place behind a Shift keycap; the rest stay put.
+// The hover toolbar, in Discord's order: three quick reactions, then react, reply or edit, forward (or
+// create thread) and more. Shift lays the menu's direct actions out instead; a failed send offers Retry and Delete.
 pub(super) fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
     use crate::message_menu::MessageAction as A;
     let (hover, line) = (palette::hover(cx), palette::line(cx));
@@ -243,8 +245,8 @@ pub(super) fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &
             A::Pin if message.pinned => (Glyph::PinSlash, "Unpin Message"),
             A::Pin => (Glyph::Pin, "Pin Message"),
             A::MarkUnread => (Glyph::Envelope, "Mark Unread"),
-            A::Save if facts.saved => (Glyph::Bookmark, "Remove from Saved"),
-            A::Save => (Glyph::Bookmark, "Save Message"),
+            A::Save if facts.saved => (Glyph::Bookmark, "Remove Bookmark"),
+            A::Save => (Glyph::Bookmark, "Bookmark Message"),
             A::Delete => (Glyph::Trash, "Delete"),
             A::CopyId => (Glyph::Id, "Copy Message ID"),
         };
@@ -264,8 +266,13 @@ pub(super) fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &
     };
     let offer = |a: A| a.allowed(message, &facts).then_some(a);
     if !sent {
-        // A failed send: Delete (and the menu's Resend).
-        bar = bar.children(offer(A::Delete).map(|a| action(a, cx)));
+        // A failed send: Discord's Retry and Delete, nothing else.
+        let (this, msg) = (ctx.this.clone(), message.clone());
+        let retry = ui::icon_button(SharedString::from(format!("retry-{}", message.id)), Glyph::Retry, "Retry", cx).on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            this.update(cx, |this, cx| this.retry(msg.clone(), cx)).ok();
+        });
+        bar = bar.when(message.state == SendState::Failed, |b| b.child(retry)).children(offer(A::Delete).map(|a| action(a, cx)));
     } else if ctx.shift {
         // Shift: the menu's direct actions laid out on the bar, in Discord's order.
         let (this, msg) = (ctx.this.clone(), message.clone());
@@ -297,10 +304,14 @@ pub(super) fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &
                     }),
             );
         }
-        bar = bar.child(sep()).children([A::React, A::Edit, A::Reply, A::Forward, A::Thread].into_iter().filter_map(offer).map(|a| action(a, cx)));
+        // Discord's order: Reply on others' messages, Edit on yours, and Create Thread only where Forward isn't offered.
+        let forward = offer(A::Forward);
+        let reply = offer(A::Reply).filter(|_| !mine);
+        let thread = offer(A::Thread).filter(|_| forward.is_none());
+        bar = bar.child(sep()).children([offer(A::React), reply, offer(A::Edit), forward, thread].into_iter().flatten().map(|a| action(a, cx)));
         bar = bar.children(crate::announcements::publish_button(message, mine, &ctx.announce, ctx.this.clone(), cx));
     }
-    if !ctx.shift || !sent {
+    if !ctx.shift && sent {
         let (this, msg) = (ctx.this.clone(), message.clone());
         bar = bar.child(ui::icon_button(SharedString::from(format!("more-{}", message.id)), Glyph::MoreVertical, "More", cx).on_click(move |event, _, cx| { cx.stop_propagation();
             let at = event.position();
