@@ -42,7 +42,7 @@ mod render;
 mod boxes;
 mod listing;
 
-pub(crate) use self::{autocomplete::now_ms, boxes::{END_CHIP, OPTION_GAP}};
+pub(crate) use self::{autocomplete::now_ms, boxes::{END_CHIP, OPTION_GAP}, render::{RailTint, rail_slot}};
 use self::{autocomplete::*, listing::*};
 
 // The command rail's width.

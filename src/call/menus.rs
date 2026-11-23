@@ -155,7 +155,7 @@ impl Waffle {
                 .into_any_element(),
         );
         let viewport = window.viewport_size();
-        let card = ui::col()
+        let card = ui::col() // lint-allow(custom-badge, custom-mark, custom-surface): ui::surface lacks the stage-scoped menu card (stage colours, not palette)
             .id("device-menu")
             .occlude()
             .absolute()
@@ -371,11 +371,11 @@ pub(super) fn menu_label(text: &'static str, ink: &Inks) -> Div {
 
 // .devmenu hr
 pub(super) fn menu_rule(ink: &Inks) -> Div {
-    div().h(ui::HAIRLINE).mx_1().my_1().flex_none().bg(ink.line)
+    div().h(ui::HAIRLINE).mx_1().my_1().flex_none().bg(ink.line) // lint-allow(custom-divider, raw-margin): ui::divider lacks a stage-ink hairline; the margins inset it from the card edge like ui::inset_rule
 }
 
 // .choice.vrow: a 34px menu row holding a radio or a switch.
 pub(super) fn choice_row(id: impl Into<ElementId>, ink: &Inks) -> Stateful<Div> {
     let hover = ink.hover;
-    ui::row().id(id).min_h(px(CHOICE_ROW_HEIGHT)).px_2p5().py_1p5().squircle(RADIUS_SM).gap_2p5().cursor_pointer().hover(move |s| s.bg(hover))
+    ui::row().id(id).min_h(px(CHOICE_ROW_HEIGHT)).px_2p5().py_1p5().squircle(RADIUS_SM).gap_2p5().cursor_pointer().hover(move |s| s.bg(hover)) // lint-allow(custom-button): ui::menu_row lacks the stage ink and a trailing choice mark
 }

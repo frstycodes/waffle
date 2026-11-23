@@ -50,7 +50,7 @@ impl Waffle {
                 })
                 .ok();
             })
-            .detach();
+            .detach(); // lint-allow(detached-task): a one-shot fetch holding a WeakEntity; it ends when the response lands or the update fails
         }
     }
 
@@ -80,7 +80,7 @@ impl Waffle {
                 })
                 .ok();
             })
-            .detach();
+            .detach(); // lint-allow(detached-task): a one-shot colour fetch holding a WeakEntity; it ends when the response lands
         }
     }
 
@@ -129,7 +129,7 @@ impl Waffle {
                 cx.background_executor().timer(Duration::from_secs(if sent { 300 } else { 60 })).await;
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): the preview loop holds a WeakEntity and returns when the generation changes or the share ends
     }
 
     pub(crate) fn stream_preview(&self, user_id: &str) -> Option<String> {

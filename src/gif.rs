@@ -442,6 +442,7 @@ impl Render for GifLayer {
     // Paints the current frame of every playing GIF over its slot, clipped like the slot. Paint runs
     // after the app has placed this frame's slots, so positions are always current.
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("GifLayer");
         let players = self.players.clone();
         canvas(
             |_, _, _| {},

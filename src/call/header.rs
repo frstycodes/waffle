@@ -117,7 +117,7 @@ impl Waffle {
             None => self.activity_title(&call.channel.name, cx),
         };
         let glyph = Glyph::VolumeHigh;
-        let timer = ui::row()
+        let timer = ui::row() // lint-allow(custom-badge): ui::badge lacks a stage tone for the live timer
             .h(ui::LINE_LEAD)
             .px_2()
             .flex_none()
@@ -194,14 +194,14 @@ impl Waffle {
             .children(back)
             .children(stop)
             .child(who)
-            .child(div().w(ui::HAIRLINE).h_5().mx_0p5().flex_none().bg(stage::wash(0.14)))
+            .child(div().w(ui::HAIRLINE).h_5().mx_0p5().flex_none().bg(stage::wash(0.14))) // lint-allow(custom-divider, raw-margin): ui::divider lacks a vertical stage-washed rule; the margin is the optical gap between two groups
             .child(self.chat_toggle(cx))
             .into_any_element()
     }
 
     // The voice channel's chat: "Show Chat" / "Hide Chat", highlighted while mentions wait or for a
     // while after new messages, with the count on its corner (mentions, else unread).
-    pub(crate) fn chat_toggle(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+    pub(crate) fn chat_toggle(&self, cx: &mut Context<Self>) -> Stateful<Div> { // lint-allow(custom-component): ui::icon_button lacks a stage tone with a corner badge; this wraps it for the call header
         let open = self.call_chat_shown();
         keeps_chrome(stage_icon_button("call-chat", Glyph::ChatRound, if open { "Hide Chat" } else { "Show Chat" }, open || self.call_chat_highlighted()), cx)
             .relative()
@@ -218,13 +218,13 @@ impl Waffle {
             (0, unread) => ui::count_badge(unread),
             (mentions, _) => ui::count_badge(mentions),
         };
-        Some(div().absolute().right_neg_1().bottom_neg_1().rounded_full().border_2().border_color(stage::bg()).child(badge))
+        Some(div().absolute().right_neg_1().bottom_neg_1().rounded_full().border_2().border_color(stage::bg()).child(badge)) // lint-allow(custom-mark): ui::badged lacks a stage-ringed corner badge on a control
     }
 
     // The chevron above the filmstrip that folds it away and back, as Discord's.
-    pub(super) fn strip_toggle(&self, shown: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    pub(super) fn strip_toggle(&self, shown: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> { // lint-allow(custom-component): ui::icon_button lacks a stage tone with a corner badge; this wraps it for the call header
         let (glyph, tip) = if shown { (Glyph::ChevronDown, "Hide everyone") } else { (Glyph::ChevronUp, "Show everyone") };
-        ui::row()
+        ui::row() // lint-allow(custom-button): ui::round_button lacks a stage toggle with a corner badge
             .id("strip-toggle")
             .h(px(STRIP_TOGGLE))
             .px_2p5()

@@ -392,7 +392,7 @@ impl Waffle {
             let Some(path) = paths.into_iter().next() else { return };
             this.update_in(cx, |this, window, cx| this.attach_command_file(option, path, window, cx)).ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot file prompt holding a WeakEntity; it ends when the prompt resolves
     }
 
     pub(super) fn attach_command_file(&mut self, option: String, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
@@ -515,7 +515,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot upload holding a WeakEntity; it ends when the staged files return
         self.redraw(Column::Main, cx);
     }
 

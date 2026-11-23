@@ -14,7 +14,7 @@ impl AudioPlayer {
         let needs_length = duration.is_none() && matches!(self.stage, Stage::Idle);
         ui::row()
             .id(SharedString::from(format!("voice-{}", self.key)))
-            .mt_1p5()
+            .mt_1p5() // lint-allow(raw-margin): optical offset from the message text above; the parent is the chat row, outside this file
             .self_start()
             .max_w_full()
             .gap_3()
@@ -32,7 +32,7 @@ impl AudioPlayer {
             .child(div().flex_none().min_w_8().text_right().text_size(ui::TEXT_SM).font_features(tabular()).text_color(palette::muted(cx)).child(time))
             .child(
                 ui::pressable(
-                    ui::row()
+                    ui::row() // lint-allow(custom-button): ui::pressable lacks a bordered pill with a playing tint; this is the voice message's whole pill
                         .id(SharedString::from(format!("voice-rate-{}", self.key)))
                         .h_6()
                         .min_w_9()
@@ -71,7 +71,7 @@ impl AudioPlayer {
             .id(SharedString::from(format!("audio-{}", self.key)))
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| this.key_down(e, cx)))
-            .mt_2()
+            .mt_2() // lint-allow(raw-margin): optical offset from the message text above; the parent is the chat row, outside this file
             .w_full()
             .max_w(px(PLAYER_MAX))
             .p_3()
@@ -123,7 +123,7 @@ impl AudioPlayer {
         let glyph = if self.is_playing() { Glyph::Pause } else if ended && !self.voice { Glyph::ArrowCounterClockwise } else { Glyph::Play };
         let loading = matches!(self.stage, Stage::Loading { play: true });
         ui::pressable(
-            ui::row()
+            ui::row() // lint-allow(custom-button): ui::round_button lacks an accent-filled play button that swaps its glyph
                 .id(SharedString::from(format!("audio-play-{}", self.key)))
                 .size(px(side))
                 .flex_none()
@@ -193,7 +193,7 @@ impl AudioPlayer {
                 this.update(cx, |this, cx| this.set_volume(f, cx)).ok();
             }
         }, window, cx);
-        let card = div()
+        let card = div() // lint-allow(custom-surface): ui::surface lacks an in-flow card that holds itself open on hover
             .id(SharedString::from(format!("audio-volume-card-{}", self.key)))
             .occlude()
             .w(px(VOLUME_WIDTH))
@@ -213,7 +213,7 @@ impl AudioPlayer {
             .flex_none()
             .child(
                 ui::pressable(
-                    ui::row()
+                    ui::row() // lint-allow(custom-button): ui::icon_button lacks a hover that also holds the volume card open
                         .id(SharedString::from(format!("audio-mute-{}", self.key)))
                         .size_7()
                         .squircle(RADIUS_XS)

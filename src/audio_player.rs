@@ -412,6 +412,7 @@ impl AudioPlayer {
 
 impl Render for AudioPlayer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("AudioPlayer");
         let painted = self.unpainted_since.clone();
         let body = if self.voice { self.voice_pill(window, cx) } else { self.file_card(window, cx) };
         body.child(canvas(|_, _, _| {}, move |_, _, _, _| painted.set(None)).absolute().size_0())

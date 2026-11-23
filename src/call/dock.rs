@@ -86,12 +86,12 @@ impl Waffle {
             _ => "Click for connection details".into(),
         };
         let hover = palette::hover(cx);
-        let status = div()
+        let status = div() // lint-allow(custom-button): ui::round_button lacks a stage tone that grows its hit area with negative margins
             .id("voice-status")
             .flex_1()
             .min_w_0()
-            .mx_neg_1p5()
-            .my_neg_1()
+            .mx_neg_1p5() // lint-allow(raw-margin): negative margins widen the hit area of a small status mark without moving it
+            .my_neg_1() // lint-allow(raw-margin): negative margins widen the hit area of a small status mark without moving it
             .px_1p5()
             .py_1()
             .squircle(RADIUS_SM)
@@ -198,7 +198,7 @@ impl Waffle {
             .bg(palette::surface(palette::Level::Page, cx))
             .items_end()
             .gap_0p5()
-            .children(stats.last_pings.iter().map(|&p| div().flex_1().min_w_0p5().h(relative((p as f32 / peak).clamp(0.06, 1.))).rounded_t_xs().rounded_b(ui::HAIRLINE).bg(ping_color(p, cx))));
+            .children(stats.last_pings.iter().map(|&p| div().flex_1().min_w_0p5().h(relative((p as f32 / peak).clamp(0.06, 1.))).rounded_t_xs().rounded_b(ui::HAIRLINE).bg(ping_color(p, cx)))); // lint-allow(custom-divider): ui::progress_bar lacks a ping graph; these are data-sized bars, not dividers
         let swatch = |color: Hsla, text: &'static str| ui::row().gap_1().child(div().size_2().rounded_xs().bg(color)).child(text);
         let legend = ui::row().items_stretch()
             .flex_wrap()
@@ -221,7 +221,7 @@ impl Waffle {
             true => (palette::positive_ink(cx), "Voice and video in this call are end-to-end encrypted. Only the people in it can hear them."),
             false => (muted, "Voice and video are encrypted on the way to Discord's servers, not end to end."),
         };
-        let card = ui::col()
+        let card = ui::col() // lint-allow(custom-badge, custom-mark, custom-surface): ui::surface lacks the stage-scoped quality card (stage colours, not palette)
             .id("connection-card")
             .occlude()
             .absolute()
@@ -303,7 +303,7 @@ pub(super) fn panel_action(id: &'static str, glyph: Glyph, tip: &'static str, en
         true => (palette::accent(), palette::accent_hover(), palette::on_accent()),
         false => (palette::selected(cx), palette::press(cx), palette::strong(cx)),
     };
-    ui::row()
+    ui::row() // lint-allow(custom-button): ui::round_button lacks a labelled stage control with a split chevron
         .id(id)
         .flex_1()
         .h_8()

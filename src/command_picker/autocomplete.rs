@@ -136,7 +136,7 @@ impl Waffle {
                 this.update(cx, |this, cx| this.autocomplete_failed(&nonce, cx)).ok();
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot interact call holding a WeakEntity; it ends when the request returns
         self.redraw(Column::Main, cx);
     }
 

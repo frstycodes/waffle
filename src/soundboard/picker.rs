@@ -7,18 +7,9 @@ impl Waffle {
     pub(super) fn picker_content(&self, picker: &Picker, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let sections = self.sound_sections(cx);
         let muted = self.prefs.soundboard_volume <= 0.;
-        let volume = ui::row()
-            .id("soundboard-volume")
-            .size_7()
-            .flex_none()
-            .squircle(8.)
-            .justify_center()
-            .cursor_pointer()
-            .text_color(palette::muted(cx))
-            .hover(|s| s.bg(palette::hover(cx)).text_color(palette::strong(cx)))
-            .when(picker.volume_open, |b| b.bg(palette::selected(cx)).text_color(palette::strong(cx)))
-            .child(Icon::new(if muted { Glyph::VolumeOff } else { Glyph::VolumeHigh }).size(ui::ICON_MD))
-            .tooltip(|window, cx| ui::tip("Control volume", window, cx))
+        let volume = ui::icon_button("soundboard-volume", if muted { Glyph::VolumeOff } else { Glyph::VolumeHigh }, "Control volume", cx)
+            .sized(28.)
+            .toggled(picker.volume_open, cx)
             .on_click(cx.listener(|this, _, _, cx| {
                 if let Some(picker) = &mut this.soundboard.picker {
                     picker.volume_open = !picker.volume_open;
@@ -40,31 +31,21 @@ impl Waffle {
             .border_r_1()
             .border_color(palette::line(cx))
             .children(sections.iter().enumerate().flat_map(|(i, section)| {
-                let line = section.first_locked.then(|| div().w_5().h(ui::HAIRLINE).flex_none().bg(palette::line(cx)).into_any_element());
+                let line = section.first_locked.then(|| div().w_5().h(ui::HAIRLINE).flex_none().bg(palette::line(cx)).into_any_element()); // lint-allow(custom-divider): ui::divider lacks a short rule between the unlocked and locked tabs
                 let scroll = picker.scroll.clone();
                 let (selected, hover) = (palette::accent_soft(cx), palette::hover(cx));
                 let tip: SharedString = if section.locked { NITRO_LOCKED.into() } else { section.name.clone() };
-                let tab = ui::row()
-                    .id(("soundboard-tab", i))
-                    .size_9()
-                    .flex_none()
-                    .squircle(RADIUS_SM)
-                    .justify_center()
-                    .cursor_pointer()
-                    .text_color(if i == in_view { palette::accent_ink(cx) } else { palette::muted(cx) })
-                    .when(i == in_view, |d| d.bg(selected))
-                    .when(i != in_view, |d| d.bg(palette::selected(cx)).hover(move |s| s.bg(hover)))
+                let tint = crate::command_picker::RailTint { on_fill: selected, on_ink: palette::accent_ink(cx), off_fill: Some(palette::selected(cx)), off_ink: palette::muted(cx), hover };
+                let tab = crate::command_picker::rail_slot(("soundboard-tab", i), section.lead.render(cx), tip, tint, i == in_view)
                     .when(section.locked, |d| d.opacity(0.5))
-                    .child(section.lead.render(cx))
-                    .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
                     .on_click(cx.listener(move |_, _, _, cx| {
                         scroll.scroll_to_top_of_item(i);
                         cx.notify(); // lint-allow(global-notify): the soundboard picker is drawn by the root's overlays, over every column
                     }));
                 line.into_iter().chain([tab.into_any_element()])
             }));
-        let over_limit = picker.over_limit.then(|| ui::callout(ui::Notice::Warning, Glyph::Star, "Oh no!", format!("You cannot have more than {FAVORITES_LIMIT} favorites."), cx).mt_2());
-        let list = div()
+        let over_limit = picker.over_limit.then(|| ui::callout(ui::Notice::Warning, Glyph::Star, "Oh no!", format!("You cannot have more than {FAVORITES_LIMIT} favorites."), cx).mt_2()); // lint-allow(raw-margin): ui::callout has no spacing option; the margin separates it from the list under it
+        let list = div() // lint-allow(unvirtualized-list): a guild's soundboard, a few dozen sounds at most (the server's sound slots)
             .id("soundboard-list")
             .flex_1()
             .min_w_0()
@@ -92,7 +73,7 @@ impl Waffle {
     pub(super) fn volume_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let value = format!("{}%", perceptual(self.prefs.soundboard_volume).round() as i32);
         let slider = self.range("soundboard-picker-volume".into(), slider_fraction(self.prefs.soundboard_volume), Fill::Accent, |this, f, cx| this.update_prefs(cx, |p| p.soundboard_volume = amplitude(f * 100.)), cx);
-        ui::col()
+        ui::col() // lint-allow(custom-mark, custom-surface): ui::surface lacks an in-picker popover card anchored under the speaker
             .id("soundboard-volume-card")
             .occlude()
             .absolute()
@@ -125,7 +106,7 @@ impl Waffle {
             ui::row().items_stretch().gap_1p5().children(tiles.chain(fillers).collect::<Vec<_>>())
         }).collect::<Vec<_>>();
         div()
-            .when(section.first_locked, |d| d.mt_3().border_t_1().border_color(palette::line(cx)))
+            .when(section.first_locked, |d| d.mt_3().border_t_1().border_color(palette::line(cx))) // lint-allow(raw-margin): optical gap above the locked section's rule; ui::divider lacks a labelled break
             .when(section.locked, |d| d.opacity(0.5))
             .child(header)
             .child(ui::col().gap_1p5().children(rows))
@@ -134,13 +115,13 @@ impl Waffle {
 
     // .snd: emoji and name; hovered, Preview and the star over its right end on a fade into its fill. Playing
     // draws the accent edge. A locked sound only says why.
-    pub(super) fn sound_tile(&self, section: &str, sound: &SoundboardSound, locked: bool, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn sound_tile(&self, section: &str, sound: &SoundboardSound, locked: bool, cx: &mut Context<Self>) -> impl IntoElement { // lint-allow(custom-component): ui::card lacks a sound tile with a lock and a favourite toggle
         let group = SharedString::from(format!("snd-{section}-{}", sound.id));
         let overlay = palette::surface(palette::Level::Overlay, cx);
         let strong = palette::strong(cx);
         let (rest, hover) = (ui::mix(overlay, strong, 0.08), ui::mix(overlay, strong, 0.14));
         let edge = if self.soundboard.is_playing(&sound.id) { palette::accent() } else { gpui_kit::transparent_black() };
-        let tile = ui::row()
+        let tile = ui::row() // lint-allow(custom-badge): ui::badged lacks a sound tile with a lock mark and a name
             .id(group.clone())
             .group(group.clone())
             .relative()
@@ -280,7 +261,7 @@ pub(super) fn emoji_face(emoji: Option<&Emoji>, size: f32) -> AnyElement {
 // The 22px buttons over a hovered sound.
 pub(super) fn tool(id: String, glyph: Glyph, tip: &'static str, ink: Option<Hsla>, cx: &App) -> gpui_kit::Stateful<gpui_kit::Div> {
     let strong = palette::strong(cx);
-    ui::row()
+    ui::row() // lint-allow(custom-button): ui::menu_row lacks a favourite toggle at a tile's corner
         .id(SharedString::from(id))
         .size(px(TOOL_SIZE))
         .squircle(6.)

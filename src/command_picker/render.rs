@@ -5,6 +5,31 @@ use super::*;
 
 // RENDERING
 
+/// How a rail tile looks chosen and not: the fill and ink of each, and the fill under the pointer.
+pub(crate) struct RailTint {
+    pub on_fill: gpui_kit::Hsla,
+    pub on_ink: gpui_kit::Hsla,
+    pub off_fill: Option<gpui_kit::Hsla>,
+    pub off_ink: gpui_kit::Hsla,
+    pub hover: gpui_kit::Hsla,
+}
+
+// A picker rail's square tile: its face centred, the chosen one filled, a tooltip naming it.
+pub(crate) fn rail_slot(id: impl Into<gpui_kit::ElementId>, face: AnyElement, tip: SharedString, tint: RailTint, on: bool) -> gpui_kit::Stateful<Div> {
+    ui::row() // lint-allow(custom-button): ui::icon_button takes a glyph, and a rail tile's face is an app icon or a section mark
+        .id(id)
+        .size_9()
+        .flex_none()
+        .justify_center()
+        .squircle(RADIUS_SM)
+        .cursor_pointer()
+        .text_color(if on { tint.on_ink } else { tint.off_ink })
+        .when(on, |d| d.bg(tint.on_fill))
+        .when(!on, |d| d.when_some(tint.off_fill, |d, fill| d.bg(fill)).hover(move |s| s.bg(tint.hover)))
+        .child(face)
+        .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
+}
+
 impl Waffle {
     /// The picker, or the hint bar for the command being typed, floating above the composer card.
     pub(crate) fn command_popup(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -60,7 +85,7 @@ impl Waffle {
         for section in sections {
             rail.push(self.rail_tile(index, section, current == Some(section), cx));
             if section == Section::Frecency {
-                rail.push(div().w_6().h(ui::HAIRLINE).my_0p5().bg(palette::line(cx)).into_any_element());
+                rail.push(div().w_6().h(ui::HAIRLINE).my_0p5().bg(palette::line(cx)).into_any_element()); // lint-allow(custom-divider, raw-margin): ui::divider lacks a short centred rule in a rail; the margin is its optical gap
             }
         }
         ui::row().items_stretch()
@@ -72,7 +97,7 @@ impl Waffle {
 
     // A section's tile in the rail: an app narrows the list to it; Recent, or the app already chosen,
     // shows everything again.
-    pub(super) fn rail_tile(&self, index: &CommandIndex, section: Section, on: bool, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn rail_tile(&self, index: &CommandIndex, section: Section, on: bool, cx: &mut Context<Self>) -> AnyElement { // lint-allow(custom-component): ui::server_tile lacks a section rail tile with a selected bar
         let (selected, hover) = (palette::selected(cx), palette::hover(cx));
         let (face, name): (AnyElement, SharedString) = match section {
             Section::App(a) => (app_tile(&index.apps[a], 28., cx), index.apps[a].name.clone().into()),
@@ -82,18 +107,8 @@ impl Waffle {
             Section::App(a) => format!("command-rail-{a}"),
             _ => "command-rail-recent".into(),
         };
-        ui::row()
-            .id(SharedString::from(id))
-            .size_9()
-            .flex_none()
-            .justify_center()
-            .squircle(RADIUS_SM)
-            .cursor_pointer()
-            .text_color(if on { palette::strong(cx) } else { palette::muted(cx) })
-            .when(on, |d| d.bg(selected))
-            .when(!on, |d| d.hover(move |s| s.bg(hover)))
-            .child(face)
-            .tooltip(move |window, cx| ui::tip(name.clone(), window, cx))
+        let tint = RailTint { on_fill: selected, on_ink: palette::strong(cx), off_fill: None, off_ink: palette::muted(cx), hover };
+        rail_slot(SharedString::from(id), face, name, tint, on)
             .on_click(cx.listener(move |this, _, _, cx| {
                 let picker = &mut this.command_picker;
                 picker.filter = match section {
@@ -122,7 +137,7 @@ impl Waffle {
         let what = ui::col()
             .flex_1()
             .child(title)
-            .child(div().min_w_0().truncate().child(StyledText::new(c.description.clone()).with_highlights(mark(description, 0))).text_size(ui::TEXT_DETAIL).text_color(muted));
+            .child(div().min_w_0().truncate().child(StyledText::new(c.description.clone()).with_highlights(mark(description, 0))).text_size(ui::TEXT_DETAIL).text_color(muted)); // lint-allow(raw-truncate): ui::line takes plain text; this one is a highlighted StyledText (the match marks)
         let app = app.cloned().unwrap_or_else(|| app_commands::App { id: c.application_id.clone(), name: String::new(), icon: None });
         ui::menu_row(SharedString::from(format!("command-{command}")), cx)
             .highlighted(on)
@@ -312,14 +327,14 @@ pub(super) fn role_dot(color: u32, cx: &App) -> gpui_kit::Hsla {
 
 // The surface both popups share: the composer's width, 8px above it, rising from its foot.
 pub(super) fn popup(id: &'static str, content: impl IntoIterator<Item = AnyElement>, cx: &App) -> AnyElement {
-    ui::col()
+    ui::col() // lint-allow(custom-badge, custom-mark, custom-surface): ui::surface lacks an anchored composer popup that rises from the field
         .id(id)
         .occlude()
         .absolute()
         .left_neg_px()
         .right_neg_px()
         .bottom(relative(1.))
-        .mb(px(POPUP_RAISE))
+        .mb(px(POPUP_RAISE)) // lint-allow(raw-margin): lifts the popup clear of the composer by a computed amount, POPUP_RAISE
         .squircle(RADIUS_LG)
         .bg(palette::surface(Level::Overlay, cx))
         .shadow(ui::shadow_pop(cx))

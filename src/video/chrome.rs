@@ -5,7 +5,7 @@ use super::*;
 
 impl VideoPlayer {
     // The round play button over the poster, and over the last frame once the video ends.
-    pub(super) fn center_button(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn center_button(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement { // lint-allow(custom-component): ui::round_button lacks a video-tone centre play button that fades with the chrome
         let loading = matches!(self.stage, Stage::Loading);
         let size = self.press_frame(Control::Center, CENTER, window, cx);
         let lift = size.target().y_px();
@@ -82,7 +82,7 @@ impl VideoPlayer {
         *self.motions.frame_one(control, Motion::new(target).transition(pop()), window, cx)
     }
 
-    pub(super) fn icon_button(
+    pub(super) fn icon_button( // lint-allow(custom-component): ui::icon_button lacks the OnMedia tone with a toggled state
         &mut self,
         control: Control,
         glyph: Glyph,
@@ -165,7 +165,7 @@ impl VideoPlayer {
                     .bg(gpui_kit::white().opacity(0.24))
                     .child(div().h_full().w(played).rounded_xs().bg(palette::accent())),
             )
-            .child(div().absolute().top(px(KNOB_TOP - knob_side / 2.)).left(played).ml(px(-knob_side / 2.)).size(px(knob_side)).rounded_full().bg(gpui_kit::white()))
+            .child(div().absolute().top(px(KNOB_TOP - knob_side / 2.)).left(played).ml(px(-knob_side / 2.)).size(px(knob_side)).rounded_full().bg(gpui_kit::white())) // lint-allow(custom-mark, raw-margin): ui::slider_live lacks a scrubber with a knob sized by the hover; the margin centres the knob on its point
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
                 match *hovered {
                     true => this.hot = Some(Control::Scrubber),
@@ -244,7 +244,7 @@ impl VideoPlayer {
                     .bg(gpui_kit::white().opacity(0.24))
                     .child(canvas(move |bounds, _, _| record.set(bounds), |_, _, _, _| {}).absolute().size_full())
                     .child(div().absolute().bottom_0().left_0().right_0().h(level).rounded_xs().bg(palette::accent()))
-                    .child(div().absolute().bottom(level).left_neg_1().mb_neg_1p5().size_3().rounded_full().bg(gpui_kit::white())),
+                    .child(div().absolute().bottom(level).left_neg_1().mb_neg_1p5().size_3().rounded_full().bg(gpui_kit::white())), // lint-allow(custom-mark, raw-margin): ui::slider_live lacks a vertical volume slider; the margin centres the knob on its level
             )
             .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &gpui_kit::MouseDownEvent, _, cx| {
                 cx.stop_propagation();

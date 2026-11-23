@@ -8,7 +8,7 @@ const MARK_PAD: f32 = 3.;
 impl Waffle {
     // A watched stream that ended, in its card's place: that it ended and why, and Close stream to clear
     // it. While it's up, the streamer going live again brings us back in as a viewer, as Discord's does.
-    pub(super) fn ended_tile(&self, streamer: &str, size: TileSize, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn ended_tile(&self, streamer: &str, size: TileSize, cx: &mut Context<Self>) -> AnyElement { // lint-allow(custom-component): ui::empty_state lacks a compact stage tile with a close action
         let name = self.user_name(streamer);
         let line = match (self.participants().iter().any(|s| s.user_id == streamer), self.activity_name(streamer)) {
             (false, _) => format!("{name} left the call"),
@@ -20,7 +20,7 @@ impl Waffle {
     }
 
     // Discord's failed-stream screen: what went wrong, its error code, and Close, which stops watching.
-    pub(super) fn failed_tile(&self, streamer: &str, code: u16, size: TileSize, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn failed_tile(&self, streamer: &str, code: u16, size: TileSize, cx: &mut Context<Self>) -> AnyElement { // lint-allow(custom-component): ui::empty_state lacks a compact stage tile with a close action
         let close = streamer.to_owned();
         let line = format!("{} Error code: {code}", failure_line(code));
         self.stage_notice(format!("failed-{streamer}"), size, ("The stream couldn't start", line, "Close stream"), move |this, cx| {
@@ -58,7 +58,7 @@ impl Waffle {
         }
         card.child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(stage::strong()).child(heading))
             .child(div().text_size(ui::TEXT_XS).text_color(stage::muted()).child(line))
-            .child(div().mt_1p5().child(stage_button(SharedString::from(format!("{key}-close")), button).on_click(cx.listener(move |this, _, _, cx| {
+            .child(div().mt_1p5().child(stage_button(SharedString::from(format!("{key}-close")), button).on_click(cx.listener(move |this, _, _, cx| { // lint-allow(raw-margin): optical gap under a tile's message before its action; the column is built by the caller
                 cx.stop_propagation();
                 close(this, cx);
             }))))
@@ -225,7 +225,7 @@ impl Waffle {
         .when(small || fill, |n| n.opacity(0.).group_hover(STAGE_GROUP, |s| s.opacity(1.)));
         // With the name hidden on a strip card, a mute or deafen still shows, as a chip in its corner.
         let off_chip = (small && !is_stream && (muted || deafened || state.server_muted)).then(|| {
-            ui::row()
+            ui::row() // lint-allow(custom-mark): ui::media_label lacks a stage-tinted caption pinned over a tile
                 .absolute()
                 .left_1p5()
                 .bottom_1p5()
@@ -265,7 +265,7 @@ impl Waffle {
             .children(issue_chip)
             .when(!viewers.is_empty(), |d| d.child(viewer_chip(viewers, &state.user_id)))
             .when(watchable && !small, |d| {
-                d.child(ui::row().absolute().inset_0().when(!fill, |d| d.squircle(radius)).bg(gpui_kit::black().opacity(0.45)).justify_center().child(self.watch_actions(tile, alongside, cx)))
+                d.child(ui::row().absolute().inset_0().when(!fill, |d| d.squircle(radius)).bg(gpui_kit::black().opacity(0.45)).justify_center().child(self.watch_actions(tile, alongside, cx))) // lint-allow(custom-mark): ui::media_label lacks a full-tile scrim holding a centred action row
             })
             .child(name)
             .children(off_chip)
@@ -358,7 +358,7 @@ pub(super) fn effect_area(width: f32) -> (f32, f32) {
 // A soundboard sound gets its own ring, as Discord's, so it never reads as someone talking: honey,
 // the colour the picker marks a playing sound with. It outranks the speaking green while it plays.
 pub(super) fn tile_ring(speaking: bool, sounding: bool, local_muted: bool, radius: f32) -> Div {
-    let ring = div().absolute().inset_0().squircle(radius);
+    let ring = div().absolute().inset_0().squircle(radius); // lint-allow(custom-mark): ui::speaking_ring lacks a double ring sized by the tile's computed radius
     if !speaking && !sounding {
         return ring.border_1().border_color(stage::wash(0.06));
     }
@@ -368,7 +368,7 @@ pub(super) fn tile_ring(speaking: bool, sounding: bool, local_muted: bool, radiu
         (false, true) => stage::wash(0.42),
         (false, false) => palette::status(crate::discord::Status::Online),
     };
-    ring.border_2().border_color(color).child(div().absolute().inset_0().squircle((radius - 2.).max(0.)).border_2().border_color(stage::bg().opacity(0.6)))
+    ring.border_2().border_color(color).child(div().absolute().inset_0().squircle((radius - 2.).max(0.)).border_2().border_color(stage::bg().opacity(0.6))) // lint-allow(custom-mark): ui::speaking_ring lacks a double ring sized by the tile's computed radius
 }
 
 // .chrome over a focused stream: black fading out from the top (180deg) or bottom (0deg) edge.

@@ -53,7 +53,7 @@ pub(super) fn format_price(amount: u64, currency: &str) -> String {
 }
 
 // A field with the placeholder or the picks; clicking opens the options as a menu under it.
-pub(super) fn select_field(message: &Message, s: &Select, path: &str, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
+pub(super) fn select_field(message: &Message, s: &Select, path: &str, ctx: &Rc<RowContext>, cx: &App) -> AnyElement { // lint-allow(custom-component): ui::select lacks a message component's select bound to a message path
     let key = (message.id.clone(), s.custom_id.clone());
     let open = ctx.components.open.as_ref() == Some(&key);
     let busy = ctx.components.calls.get(&key).is_some_and(|c| c.failure.is_none());
@@ -84,7 +84,7 @@ pub(super) fn placeholder(s: &Select) -> String {
 }
 
 // The field with a canvas recording where it painted, so its menu opens under it.
-pub(super) fn anchored_field(anchors: Anchors, key: ControlKey, field: AnyElement) -> AnyElement {
+pub(super) fn anchored_field(anchors: Anchors, key: ControlKey, field: AnyElement) -> AnyElement { // lint-allow(custom-component): ui::dropdown lacks an anchor wrapper keyed by a control key
     let canvas = gpui_kit::canvas(
         move |b, _, _| {
             anchors.borrow_mut().insert(key.clone(), b);
@@ -174,7 +174,7 @@ pub(super) fn file(message: &Message, url: &str, name: Option<&str>, size: Optio
 }
 
 pub(super) fn separator(divider: bool, large: bool, cx: &App) -> AnyElement {
-    div().py(px(if large { 8. } else { 2. })).when(divider, |d| d.child(div().h(ui::HAIRLINE).bg(palette::line(cx)))).into_any_element()
+    div().py(px(if large { 8. } else { 2. })).when(divider, |d| d.child(div().h(ui::HAIRLINE).bg(palette::line(cx)))).into_any_element() // lint-allow(custom-divider): ui::divider lacks a bare hairline with its own padding that follows a component's size
 }
 
 // A raised card at Discord's padding and gap; the app's accent colour becomes a light tint and a tinted
