@@ -35,7 +35,7 @@ src/demo.rs	file-lines	2906
 src/demo.rs	raw-px	32
 src/design_system.rs	file-lines	827
 src/design_system.rs	raw-px	16
-src/discord.rs	file-lines	3390
+src/discord.rs	file-lines	3370
 src/dm_call.rs	global-notify	5
 src/dm_call.rs	raw-px	6
 src/drag.rs	global-notify	1
@@ -78,7 +78,7 @@ src/layout.rs	raw-px	9
 src/link_preview.rs	global-notify	1
 src/link_preview.rs	raw-px	1
 src/login.rs	raw-px	13
-src/main.rs	file-lines	3451
+src/main.rs	file-lines	3448
 src/main.rs	global-notify	71
 src/main.rs	raw-px	9
 src/menu.rs	file-lines	855

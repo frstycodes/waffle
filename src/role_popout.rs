@@ -131,7 +131,8 @@ impl Waffle {
         };
         let count = role.and_then(|r| self.role_popout.counts.get(&guild.id)?.1.get(&r.id).copied());
         let roles = self.member_roles.get(&guild.id);
-        let users = role_rows(self.members.get(&guild.id), roles, role.map(|r| r.id.as_str()));
+        // Members and their presence come with READY; before it, listing them would claim they're offline.
+        let users = role_rows(self.members.get(&guild.id).filter(|_| self.live()), roles, role.map(|r| r.id.as_str()));
         let shown = &users[..users.len().min(MAX_ROWS)];
         let more = more_count(count, shown.len());
         let title = role.map_or("@everyone", |r| r.name.as_str());

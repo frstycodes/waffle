@@ -31,6 +31,12 @@ fn from_env(token: &str) -> bool {
     std::env::var("DISCORD_TOKEN").is_ok_and(|t| t.trim() == token)
 }
 
+// Logging out: the account's snapshot, caches and last place go with its token.
+fn forget_caches(id: &str) {
+    crate::store::forget_account(id);
+    crate::home::forget_last_channel(id);
+}
+
 // Adds or refreshes `account`, keeping its place in the list.
 pub fn upsert(accounts: &mut Vec<Account>, account: Account) {
     match accounts.iter_mut().find(|a| a.id == account.id) {
@@ -63,6 +69,7 @@ impl Waffle {
         }
         let Some(id) = self.prefs.account.take() else { return };
         auth::forget_token(&id);
+        forget_caches(&id);
         remove(&mut self.prefs.accounts, &id);
         self.prefs.account = self.prefs.accounts.first().map(|a| a.id.clone());
         self.prefs.save();
@@ -102,6 +109,7 @@ impl Waffle {
             return;
         }
         auth::forget_token(&id);
+        forget_caches(&id);
         let next = remove(&mut self.prefs.accounts, &id);
         if self.prefs.account.as_deref() != Some(id.as_str()) {
             self.prefs.save();
@@ -133,8 +141,14 @@ impl Waffle {
         self.updates = updates;
         self.apply_prefs();
         match token {
-            Some(token) => self.connect(token, cx),
-            None => self.sign_in(cx),
+            Some(token) => {
+                self.launch_from_snapshot(window, cx);
+                self.connect(token, cx);
+            }
+            None => {
+                crate::store::set_account(None);
+                self.sign_in(cx);
+            }
         }
     }
 

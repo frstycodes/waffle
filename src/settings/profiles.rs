@@ -674,7 +674,7 @@ impl Waffle {
             (Some(guild), None) => format!("Preview for {}", guild.name),
             (None, _) => "Preview".to_owned(),
         };
-        let card = profile_preview(&user, &profile, self.preview_avatar(editor), Some(self.my_status.into()), cx);
+        let card = profile_preview(&user, &profile, self.preview_avatar(editor), self.my_mark().map(Into::into), cx);
         ui::settings_group(title, cx).flex_none().w(px(crate::profile::WIDTH)).child(card)
     }
 

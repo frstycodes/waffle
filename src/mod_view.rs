@@ -322,7 +322,7 @@ impl Waffle {
     }
 
     fn mod_view_who(&self, view: &ModView, user: &User, cx: &App) -> Div {
-        let status = self.presences.get(&user.id).map(|p| p.mark()).unwrap_or(Status::Offline.into());
+        let status = self.presence_of(&user.id).map(|p| p.mark());
         let surface = palette::surface(palette::Level::Sidebar, cx);
         let username = view.username.clone().unwrap_or_default();
         div()
@@ -330,7 +330,7 @@ impl Waffle {
             .items_center()
             .gap_3()
             .px_2()
-            .child(decorated_avatar(&user.avatar, None, 48., Some(status), surface))
+            .child(decorated_avatar(&user.avatar, None, 48., status, surface))
             .child(
                 div()
                     .flex_1()

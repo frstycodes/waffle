@@ -516,7 +516,7 @@ mod tests {
 
     #[test]
     fn unavailable_is_cached_and_not_refetched() {
-        let mut q: Query<Preview> = Query::at(None, Duration::from_secs(60));
+        let mut q: Query<Preview> = Query::memory_only(Duration::from_secs(60));
         assert!(q.should_fetch("m-22-333"));
         q.store("m-22-333", Preview::Unavailable);
         assert!(matches!(q.cached("m-22-333"), Some(Preview::Unavailable)));

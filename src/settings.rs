@@ -1069,7 +1069,7 @@ impl Waffle {
         let search = div().flex_none().pb_3().child(ui::search_field("settings-search", &self.settings_search, cx).on_sidebar());
         let me = (!searching).then(|| self.me.clone()).flatten().map(|me| {
             let sidebar = crate::material::sidebar_fill(cx);
-            let avatar = div().relative().flex_none().child(ui::avatar(me.avatar.clone(), 32.)).child(div().absolute().right_neg_0p5().bottom_neg_0p5().child(ui::status_mark(self.my_status, 12., sidebar, cx)));
+            let avatar = div().relative().flex_none().child(ui::avatar(me.avatar.clone(), 32.)).children(self.my_mark().map(|status| div().absolute().right_neg_0p5().bottom_neg_0p5().child(ui::status_mark(status, 12., sidebar, cx))));
             let text = div()
                 .flex_1()
                 .min_w_0()
@@ -1175,7 +1175,7 @@ impl Waffle {
             .relative()
             .flex_none()
             .child(ui::avatar(me.avatar.clone(), 100.).border(px(6.)).border_color(fill))
-            .child(div().absolute().right_1().bottom_1().p_0p5().rounded_full().bg(fill).child(ui::status_mark(self.my_status, 28., fill, cx)));
+            .children(self.my_mark().map(|status| div().absolute().right_1().bottom_1().p_0p5().rounded_full().bg(fill).child(ui::status_mark(status, 28., fill, cx))));
         let identity = div()
             .mt(px(-42.))
             .px_2p5()
