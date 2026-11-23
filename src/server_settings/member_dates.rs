@@ -153,7 +153,7 @@ impl DateMenu {
     pub fn new(window: &mut Window, cx: &mut Context<Waffle>) -> Self {
         let mut input = |placeholder: &'static str| {
             let state = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
-            cx.subscribe(&state, |_, _, _: &InputEvent, cx| cx.notify()).detach();
+            cx.subscribe(&state, |_, _, _: &InputEvent, cx| cx.notify()).detach(); // lint-allow(detached-task): the subscription ends when the input entity it watches is dropped with the settings state
             state
         };
         DateMenu { filter: DateFilter::Preset(Preset::All), after: input("YYYY-MM-DD"), before: input("YYYY-MM-DD"), custom_open: false, error: None }
@@ -189,7 +189,7 @@ impl Waffle {
         if let Some(menu) = self.date_menu(column) {
             (menu.custom_open, menu.error) = (open, None);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     fn apply_custom_range(&mut self, column: DateColumn, cx: &mut Context<Self>) {
@@ -209,7 +209,7 @@ impl Waffle {
         if let Some(menu) = self.date_menu(column) {
             menu.error = Some(error);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     // The column's header: a menu trigger naming the active filter for members with Manage server, plain

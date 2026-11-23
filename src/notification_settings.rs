@@ -34,6 +34,11 @@ const HIGHLIGHTS_DISABLED: u8 = 1;
 const HIGHLIGHTS_ENABLED: u8 = 2;
 // The mute-duration select's height: the dropdown hangs from its bottom edge.
 const SELECT_HEIGHT: f32 = 40.;
+// A select's width, the least height of a settings row and of an override row, and the channel list's cap.
+const SELECT_WIDTH: f32 = 220.;
+const ROW_MIN: f32 = 52.;
+const OVERRIDE_ROW_MIN: f32 = 56.;
+const PICK_LIST_MAX: f32 = 260.;
 
 pub(crate) struct NotificationSettings {
     guild_id: String,
@@ -60,15 +65,15 @@ struct OverrideRow {
 impl Waffle {
     pub(crate) fn open_notification_settings(&mut self, guild_id: String, window: &mut Window, cx: &mut Context<Self>) {
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search channels"));
-        cx.subscribe(&search, |_, _, _: &InputEvent, cx| cx.notify()).detach();
+        cx.subscribe(&search, |_, _, _: &InputEvent, cx| cx.notify()).detach(); // lint-allow(detached-task, global-notify): the input subscription ends with its entity, and the dialog it redraws is built by render_root
         self.menu = None;
         self.notification_settings = Some(NotificationSettings { guild_id, added: Vec::new(), open: None, search });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
     }
 
     fn close_notification_settings(&mut self, cx: &mut Context<Self>) {
         self.notification_settings = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
     }
 
     // Esc: the open dropdown first, then the dialog. False when the dialog isn't open.
@@ -77,7 +82,7 @@ impl Waffle {
         if view.open.take().is_none() {
             self.notification_settings = None;
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
         true
     }
 
@@ -90,14 +95,14 @@ impl Waffle {
                 s.focus(window, cx);
             });
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
     }
 
     fn close_popover(&mut self, cx: &mut Context<Self>) {
         if let Some(view) = self.notification_settings.as_mut() {
             view.open = None;
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
     }
 
     fn patch_open_guild(&mut self, body: Value, cx: &mut Context<Self>) {
@@ -172,7 +177,7 @@ impl Waffle {
         let dismiss = move |_: &mut Window, cx: &mut App| this.update(cx, |this, cx| this.close_popover(cx));
         let select = div()
             .relative()
-            .w(px(220.))
+            .w(px(SELECT_WIDTH))
             .flex_none()
             .child(ui::select("ns-mute-for", Some(Glyph::Clock), picked, open, cx).on_click(cx.listener(|this, _, window, cx| this.toggle_popover(Popover::MuteFor, window, cx))))
             .when(open, |d| d.child(ui::select_options("ns-mute-for-options", &options, &window_seconds.to_string(), SELECT_HEIGHT, on_choose, dismiss, cx)));
@@ -190,7 +195,7 @@ impl Waffle {
         let guild_muted = settings.is_muted();
         let card = ui::settings_card(cx);
         let card = if rows.is_empty() {
-            card.child(ui::settings_row("ns-override-empty", false, cx).min_h(px(52.)).text_color(palette::muted(cx)).child("Add a channel to override its default notification settings"))
+            card.child(ui::settings_row("ns-override-empty", false, cx).min_h(px(ROW_MIN)).text_color(palette::muted(cx)).child("Add a channel to override its default notification settings"))
         } else {
             card.children(rows.iter().enumerate().map(|(i, row)| ns_override_row(row, i > 0, guild_muted, window, cx)))
         };
@@ -202,7 +207,7 @@ impl Waffle {
         let query = view.search.read(cx).value().trim().to_lowercase();
         let sections = override_choices(guild, taken, &query);
         let muted = palette::muted(cx);
-        let mut list = ui::col().id("ns-pick-list").max_h(px(260.)).overflow_y_scroll().gap_px();
+        let mut list = ui::col().id("ns-pick-list").max_h(px(PICK_LIST_MAX)).overflow_y_scroll().gap_px();
         if sections.is_empty() {
             list = list.child(div().px_2p5().py_2().text_color(muted).child("No channels found"));
         }
@@ -228,7 +233,7 @@ impl Waffle {
             view.added.push(channel_id.to_owned());
         }
         view.open = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
     }
 
     fn remove_override(&mut self, channel_id: &str, cx: &mut Context<Self>) {
@@ -304,7 +309,7 @@ fn ns_push_card(settings: &GuildSettings, window: &mut Window, cx: &mut Context<
 #[allow(clippy::too_many_arguments)]
 fn switch_row(id: &'static str, title: impl Into<SharedString>, detail: Option<&'static str>, on: bool, enabled: bool, line: bool, window: &mut Window, cx: &mut App) -> Stateful<Div> {
     let switch = ui::switch_live(SharedString::from(format!("{id}-switch")), on, window, cx);
-    let row = ui::settings_row(id, line, cx).min_h(px(52.)).child(ui::settings_text(title, detail, cx));
+    let row = ui::settings_row(id, line, cx).min_h(px(ROW_MIN)).child(ui::settings_text(title, detail, cx));
     if !enabled {
         return row.opacity(0.45).child(switch);
     }
@@ -341,7 +346,7 @@ fn ns_override_row(row: &OverrideRow, line: bool, guild_muted: bool, window: &mu
         .aria_label(format!("Remove notification override for {name}"))
         .on_click(cx.listener(move |this, _, _, cx| this.remove_override(&id, cx)));
     ui::settings_row(SharedString::from(format!("ns-override-{}", row.channel.id)), line, cx)
-        .min_h(px(56.))
+        .min_h(px(OVERRIDE_ROW_MIN))
         .gap_3()
         .child(div().flex_none().text_color(muted).child(channel_icon(&row.channel).size(ui::ICON_LG)))
         .child(place)

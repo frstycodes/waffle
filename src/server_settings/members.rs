@@ -107,7 +107,7 @@ impl Members {
             InputEvent::PressEnter { .. } => this.apply_member_search(cx),
             _ => {}
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): holds a WeakEntity and ends when its work finishes or the update fails
         let (joined_menu, account_menu) = (DateMenu::new(window, cx), DateMenu::new(window, cx));
         Members { search, filter: MemberSearch::default(), rows: Load::Loading, total: 0, page: 0, page_size: PAGE_SIZES[0], indexing: false, more: false, pop: None, joined_menu, account_menu, selected: Vec::new(), bulk_busy: false, generation: 0, typed: 0 }
     }
@@ -315,7 +315,7 @@ impl Waffle {
         (m.rows, m.total, m.page, m.indexing, m.more) = (Load::Loading, 0, 0, false, false);
         let generation = m.generation;
         self.fetch_members(generation, None, 0, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     fn fetch_members(&mut self, generation: u64, after: Option<MemberCursor>, attempt: u8, cx: &mut Context<Self>) {
@@ -352,7 +352,7 @@ impl Waffle {
                 cx.background_executor().timer(wait).await;
                 this.update(cx, |this, cx| this.fetch_members(generation, after, attempt + 1, cx)).ok();
             })
-            .detach();
+            .detach(); // lint-allow(detached-task): holds a WeakEntity and ends when its work finishes or the update fails
             return;
         }
         (m.indexing, m.more) = (false, false);
@@ -388,14 +388,14 @@ impl Waffle {
     fn show_members_page(&mut self, page: usize, cx: &mut Context<Self>) {
         let Some(m) = self.members() else { return };
         m.page = page;
-        let Load::Ready(rows) = &m.rows else { return cx.notify() };
+        let Load::Ready(rows) = &m.rows else { return cx.notify() }; // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
         let needs_more = (page + 1) * m.page_size > rows.len() && (rows.len() as u64) < m.total && !m.more;
         if needs_more {
             let (after, generation) = (rows.last().map(cursor), m.generation);
             m.more = true;
             self.fetch_members(generation, after, 0, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     fn debounce_member_search(&mut self, cx: &mut Context<Self>) {
@@ -411,7 +411,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): holds a WeakEntity and ends when its work finishes or the update fails
     }
 
     fn apply_member_search(&mut self, cx: &mut Context<Self>) {
@@ -438,7 +438,7 @@ impl Waffle {
             m.filter.sort = sort;
             self.load_members(cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     fn pick_member_page_size(&mut self, size: usize, cx: &mut Context<Self>) {
@@ -451,7 +451,7 @@ impl Waffle {
         if let Some(m) = self.members() {
             m.pop = if pop.is_some() && m.pop == pop { None } else { pop };
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     fn edit_member_row(&mut self, user_id: &str, edit: impl FnOnce(&mut Load<Vec<Member>>, usize)) {
@@ -616,7 +616,7 @@ impl Waffle {
                         if let Some(m) = this.members() {
                             m.pop = Some(pop.clone());
                         }
-                        cx.notify();
+                        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
                     }))
                 });
             rows.push(row.into_any_element());
@@ -745,6 +745,7 @@ fn date_cell(key: String, text: String) -> AnyElement {
 // The highest role as a pill, then "+N"; every role's name is in the tooltip.
 fn roles_cell(member: &Member, guild_roles: &[Role], cx: &App) -> AnyElement {
     let mut roles: Vec<&Role> = guild_roles.iter().filter(|r| member.roles.contains(&r.id)).collect();
+    // lint-allow(render-work): one member's roles, a few dozen at most, sorted per visible row
     roles.sort_by_key(|r| std::cmp::Reverse(r.position));
     let Some(top) = roles.first() else { return div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("None").into_any_element() };
     let dark = cx.theme().is_dark();

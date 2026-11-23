@@ -268,6 +268,7 @@ impl Waffle {
     // Shown at once, saved to Discord after; if Discord refuses, `before` (the settings ahead of the change)
     // comes back with a toast.
     pub(super) fn save_account_settings(&mut self, before: crate::discord::AccountSettings, patch: serde_json::Value, cx: &mut Context<Self>) {
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
         let Some(client) = self.client.clone() else { return };
         cx.spawn(async move |this, cx| {
@@ -280,11 +281,13 @@ impl Waffle {
                 });
             }
         })
+        // lint-allow(detached-task): a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
         .detach();
     }
 
     // The same for a setting that lives only in the settings proto: `settings` is the base64 of the change.
     pub(super) fn save_settings_proto(&mut self, before: crate::discord::AccountSettings, settings: String, cx: &mut Context<Self>) {
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
         let Some(client) = self.client.clone() else { return };
         cx.spawn(async move |this, cx| {
@@ -295,6 +298,7 @@ impl Waffle {
                 });
             }
         })
+        // lint-allow(detached-task): a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
         .detach();
     }
 
@@ -338,11 +342,14 @@ impl Waffle {
             let _ = this.update(cx, |_, cx| {
                 if cx.try_global::<ui::SettingsHighlight>().and_then(|h| h.0.as_deref()) == Some(row) {
                     cx.set_global(ui::SettingsHighlight(None));
+                    // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
                     cx.notify();
                 }
             });
         })
+        // lint-allow(detached-task): a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
         .detach();
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 
@@ -373,6 +380,7 @@ impl Waffle {
             _ => return,
         }
         cx.stop_propagation();
+        // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
     }
 }

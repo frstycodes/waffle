@@ -14,6 +14,8 @@ use crate::{
 };
 
 const WIDTH: f32 = 260.;
+// How far the card keeps from the window edge and from the mention it opens beside.
+const EDGE: f32 = 8.;
 // Discord refetches a server's role counts after 120 s, and a role's member ids after 10 s.
 const COUNTS_FRESH: Duration = Duration::from_secs(120);
 const IDS_FRESH: Duration = Duration::from_secs(10);
@@ -28,7 +30,7 @@ pub(crate) struct RolePopouts {
     // The role whose member ids are loading; the card opens when they land, unless something else did.
     pending: Option<(String, String)>,
     counts: HashMap<String, (Instant, HashMap<String, u32>)>,
-    ids_fetched: HashMap<(String, String), Instant>,
+    ids_fetched: HashMap<(String, String), Instant>, // lint-allow(unbounded-growth): one entry per role card opened, a few dozen a session at most
 }
 
 struct Open {
@@ -83,12 +85,12 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one request that ends when the member ids land, holding only a WeakEntity
     }
 
     fn show_role_popout(&mut self, open: Open, cx: &mut Context<Self>) {
         self.role_popout.open = Some(open);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the role card is drawn by Overlays, which only redraws with the app
     }
 
     // Members land through GUILD_MEMBERS_CHUNK, which re-renders the open card.
@@ -115,11 +117,11 @@ impl Waffle {
             let Ok(counts) = client.role_member_counts(&guild_id).await else { return };
             this.update(cx, |this, cx| {
                 this.role_popout.counts.insert(guild_id, (Instant::now(), counts));
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the role card is drawn by Overlays, which only redraws with the app
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one request that ends when the counts land, holding only a WeakEntity
     }
 
     pub(crate) fn role_popout_overlay(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -176,7 +178,7 @@ impl Waffle {
         // lint-allow(raw-floating): placed inside the overlay backdrop, with a measured top margin floating_at can't take.
         let placed = gpui_kit::anchored()
             .position(open.at)
-            .snap_to_window_with_margin(gpui_kit::Edges { top: px(top), right: px(8.), bottom: px(8.), left: px(8.) })
+            .snap_to_window_with_margin(gpui_kit::Edges { top: px(top), right: px(EDGE), bottom: px(EDGE), left: px(EDGE) })
             .child(ui::rise(card, key, Duration::ZERO));
         Some(crate::overlays::backdrop("role-popout-backdrop", cx).child(placed).into_any_element())
     }
@@ -184,7 +186,7 @@ impl Waffle {
 
 /// Where the card opens for a mention drawn at `bounds`: just off its right edge, level with its top.
 pub(crate) fn beside(bounds: gpui_kit::Bounds<Pixels>) -> Point<Pixels> {
-    point(bounds.right() + px(8.), bounds.top())
+    point(bounds.right() + px(EDGE), bounds.top())
 }
 
 fn fresh(fetched: Option<&Instant>, ttl: Duration) -> bool {

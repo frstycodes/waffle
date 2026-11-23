@@ -20,8 +20,12 @@ use crate::{
         perms::{self, CREATE_GUILD_EXPRESSIONS, MANAGE_GUILD, MANAGE_GUILD_EXPRESSIONS, MANAGE_WEBHOOKS, Permission},
         view::{sentence_spans, snowflake_time},
     },
+    part::Column,
     ui::{self, Squircle},
 };
+
+// A skeleton pill's height, the loaded role chip's.
+const PILL_HEIGHT: f32 = 22.;
 
 // Wider than the member list: sections carry a label and a value side by side.
 pub(crate) const PANEL_WIDTH: f32 = 340.;
@@ -143,7 +147,7 @@ impl Waffle {
             Page::Info => self.right_panel = RightPanel::Members,
             _ => view.page = Page::Info,
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): Closing Mod View swaps the right panel, whose width every column lays out around
         true
     }
 
@@ -170,7 +174,7 @@ impl Waffle {
     pub(crate) fn mod_view_timed_out(&mut self, guild_id: &str, user_id: &str, until: Option<DateTime<Utc>>, cx: &mut Context<Self>) {
         let Some(member) = self.mod_view().filter(|v| v.guild_id == guild_id && v.user_id == user_id).and_then(|v| v.member.as_mut()) else { return };
         member.timed_out_until = until;
-        cx.notify();
+        self.redraw(Column::Panel, cx);
     }
 
     // Everything at once: the member over the gateway, and over REST the join source, the profile (for
@@ -215,11 +219,11 @@ impl Waffle {
                     if let Some(inviter) = inviter.filter(|i| this.members.get(&g).is_none_or(|m| !m.contains_key(i))) {
                         client.request_members(&g, vec![inviter]);
                     }
-                    cx.notify();
+                    this.redraw(Column::Panel, cx);
                 })
                 .ok();
             })
-            .detach();
+            .detach(); // lint-allow(detached-task): one request that ends when the reply lands, holding only a WeakEntity
         }
         let (g2, u2) = (g, u);
         cx.spawn(async move |this, cx| {
@@ -227,12 +231,12 @@ impl Waffle {
             this.update(cx, |this, cx| {
                 if let Some(view) = this.mod_view_at(&g2, &u2, load) {
                     view.settled = true;
-                    cx.notify();
+                    this.redraw(Column::Panel, cx);
                 }
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a single timer that ends after MEMBER_WAIT, holding only a WeakEntity
     }
 
     fn refresh_mod_view(&mut self, cx: &mut Context<Self>) {
@@ -240,7 +244,7 @@ impl Waffle {
         let fresh = ModView { page: view.page, load: view.load + 1, ..ModView::new(view.guild_id.clone(), view.user_id.clone()) };
         *view = fresh;
         self.load_mod_view(cx);
-        cx.notify();
+        self.redraw(Column::Panel, cx);
     }
 
     // The timeout counts down each second while Mod View stays open on this member.
@@ -254,7 +258,7 @@ impl Waffle {
                     .update(cx, |this, cx| {
                         let Some(view) = this.mod_view().filter(|v| v.guild_id == g && v.user_id == u) else { return false };
                         if view.member.as_ref().and_then(|m| m.timed_out_until).is_some_and(|t| t > Utc::now()) {
-                            cx.notify();
+                            this.redraw(Column::Panel, cx);
                         }
                         true
                     })
@@ -264,15 +268,15 @@ impl Waffle {
                 }
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): the loop breaks once Mod View closes or the member changes, and ends when the app entity drops
     }
 
     fn set_mod_view_page(&mut self, page: Page, cx: &mut Context<Self>) {
         if let Some(view) = self.mod_view() {
             view.page = page;
         }
-        self.panel_scroll.set_offset(gpui_kit::point(px(0.), px(0.)));
-        cx.notify();
+        self.panel_scroll.set_offset(Default::default());
+        self.redraw(Column::Panel, cx);
     }
 
     fn mod_view_user(&self, view: &ModView) -> Option<User> {
@@ -491,7 +495,7 @@ impl Waffle {
     // Mod View opened and never answered, so it holds its skeleton.
     pub(crate) fn demo_mod_view_loading(&mut self, guild_id: String, user_id: String, cx: &mut Context<Self>) {
         self.right_panel = RightPanel::ModView(Box::new(ModView::new(guild_id, user_id)));
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): swapping the right panel changes the panel width every column lays out around
     }
 
     pub(crate) fn demo_mod_view(&mut self, guild_id: String, user_id: String, audit: Value, cx: &mut Context<Self>) {
@@ -676,7 +680,7 @@ fn info_skeleton(cx: &App) -> Div {
         })
     };
     let pills = |key: &'static str, widths: &[f32]| {
-        widths.iter().enumerate().fold(ui::row().items_stretch().px_1p5().flex_wrap().gap_1(), |d, (i, &w)| d.child(ui::skeleton((key, i), ui::RADIUS_XS, cx).h(px(22.)).w(px(w))))
+        widths.iter().enumerate().fold(ui::row().items_stretch().px_1p5().flex_wrap().gap_1(), |d, (i, &w)| d.child(ui::skeleton((key, i), ui::RADIUS_XS, cx).h(px(PILL_HEIGHT)).w(px(w))))
     };
     let who = ui::row()
         .gap_3()

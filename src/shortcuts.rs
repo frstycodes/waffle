@@ -14,6 +14,7 @@ use crate::{
     icons::Glyph,
     message_menu::MessageAction,
     overlays::ComposerPicker,
+    part::Column,
     palette,
     settings::key_caps,
     ui::{self, Tone},
@@ -247,7 +248,7 @@ impl Waffle {
 
     pub(crate) fn set_keyboard_combos(&mut self, open: bool, cx: &mut Context<Self>) {
         self.keyboard_combos = open;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the Keyboard combos dialog is built by render_root, not by a column
     }
 
     // Something over the app that a shortcut mustn't reach under.
@@ -340,9 +341,9 @@ impl Waffle {
             return;
         }
         if self.pins.take().is_some() {
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the pins popover is drawn by Overlays, which only redraws with the app
         }
-        self.popover_at = point(px(self.pins_button_x.get()), px(0.));
+        self.popover_at = point(px(self.pins_button_x.get()), Default::default());
         self.open_pins(cx);
     }
 
@@ -351,7 +352,7 @@ impl Waffle {
             return;
         }
         self.right_panel = if matches!(self.right_panel, RightPanel::Members) { RightPanel::Hidden } else { RightPanel::Members };
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the right panel's width is laid out by every column
     }
 
     fn toggle_picker(&mut self, picker: ComposerPicker, window: &mut Window, cx: &mut Context<Self>) {
@@ -369,7 +370,7 @@ impl Waffle {
         }
         let page = f32::from(self.list.viewport_bounds().size.height) * 0.8;
         self.list.scroll_by(px(page * direction));
-        cx.notify();
+        self.redraw(Column::Main, cx);
     }
 
     fn jump_to_unread(&mut self, _: &JumpToUnread, _: &mut Window, cx: &mut Context<Self>) {

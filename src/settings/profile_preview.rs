@@ -27,6 +27,7 @@ pub(super) fn profile_preview(user: &User, profile: &Profile, avatar: PreviewAva
     let header = ui::col()
         .flex_none()
         .child(banner)
+        // lint-allow(raw-px, raw-margin): the avatar overlaps the banner by half its size plus its ring, offsets computed from those consts
         .child(ui::row().items_stretch().px(px(16. - AVATAR_RING)).mt(px(-(AVATAR / 2. + AVATAR_RING))).mb_2().child(div().p(px(AVATAR_RING)).rounded_full().bg(ink.top).child(face)));
     let body = ui::col()
         .px_4()

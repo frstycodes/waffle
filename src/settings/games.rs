@@ -24,6 +24,7 @@ impl Waffle {
                     if let Some(view) = &mut this.settings {
                         view.adding_game = (!open).then(crate::games::addable);
                     }
+                    // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
                     cx.notify();
                 }));
                 ui::settings_row("registered-games", false, cx).child(ui::settings_text("No game detected", Some("Not seeing your game?"), cx)).child(add)

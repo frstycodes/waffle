@@ -103,7 +103,7 @@ impl Waffle {
         };
         let page: Vec<&str> = page.iter().map(String::as_str).collect();
         edit(&mut m.selected, &page);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
     }
 
     pub(super) fn toggle_member_selected(&mut self, id: String, cx: &mut Context<Self>) {
@@ -152,11 +152,11 @@ impl Waffle {
             this.update(cx, |this, cx| {
                 this.bulk_settled(&done, change);
                 this.show_toast(outcome(verb, done.len(), asked), cx);
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): holds a WeakEntity and ends when its work finishes or the update fails
     }
 
     fn ask_bulk_ban(&mut self, cx: &mut Context<Self>) {

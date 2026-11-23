@@ -4,6 +4,14 @@
 Every place app code was let off a rule, and why. Before writing an exception, look here for the same kind of
 thing: a second copy of a one-off is a missing design-system component or variant, and belongs in src/ui/.
 
+## raw-px
+
+_Spacing: gpui's scale (gap_2, p_1p5, mt_3 … see ui/tokens.rs). Sizes: a ui token (TEXT_*, ICON_*, AVATAR_*, RADIUS_*, HAIRLINE) or a named const._
+
+- `src/settings/accessibility.rs` — the gap before a group is the user's message-spacing setting, a size computed from data
+- `src/settings/profile_preview.rs` — the avatar overlaps the banner by half its size plus its ring, offsets computed from those consts
+- `src/settings/profiles.rs` — the slide-in distance is computed from the animation progress
+
 ## raw-floating
 
 _Floating surface: ui::floating / ui::floating_at. They occlude, so nothing under them takes the pointer._
@@ -41,15 +49,273 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/activity_launcher.rs` — the launcher is drawn by the root, over the columns
 - `src/activity_launcher.rs` — the launcher is drawn by the root, over the columns
 - `src/call/fit.rs` — the stage is the main column's, or full screen the root's
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings.rs` — the input subscription ends with its entity, and the dialog it redraws is built by render_root
+- `src/channel_settings.rs` — the input subscription ends with its entity, and the dialog it redraws is built by render_root
+- `src/channel_settings.rs` — the input subscription ends with its entity, and the dialog it redraws is built by render_root
+- `src/channel_settings/pages.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings/pages.rs` — the dialog is built by render_root, not by a column
+- `src/channel_settings/pages.rs` — the dialog is built by render_root, not by a column
 - `src/forum.rs` — notifies the measured height's own entity, not Waffle
 - `src/forum.rs` — notifies the measured width's own entity, not Waffle
+- `src/mod_view.rs` — Closing Mod View swaps the right panel, whose width every column lays out around
+- `src/mod_view.rs` — swapping the right panel changes the panel width every column lays out around
+- `src/notification_settings.rs` — the dialog is built by render_root, not by a column
+- `src/notification_settings.rs` — the dialog is built by render_root, not by a column
+- `src/notification_settings.rs` — the dialog is built by render_root, not by a column
+- `src/notification_settings.rs` — the dialog is built by render_root, not by a column
+- `src/notification_settings.rs` — the dialog is built by render_root, not by a column
+- `src/notification_settings.rs` — the dialog is built by render_root, not by a column
+- `src/notification_settings.rs` — the input subscription ends with its entity, and the dialog it redraws is built by render_root
 - `src/overlays.rs` — notifies the hovered entry's own entity, not Waffle
 - `src/part.rs` — notifies the part alone
 - `src/part.rs` — notifies this part, following the app
 - `src/part.rs` — the part doesn't exist yet
 - `src/profile/dm_panel.rs` — showing or hiding the side panel resizes the main column beside it
+- `src/report.rs` — the report dialog is drawn by render_root, not by a column
+- `src/report.rs` — the report dialog is drawn by render_root, not by a column
+- `src/report.rs` — the report dialog is drawn by render_root, not by a column
+- `src/report.rs` — the report dialog is drawn by render_root, not by a column
+- `src/report.rs` — the report dialog is drawn by render_root, not by a column
+- `src/report.rs` — the report dialog is drawn by render_root, not by a column
+- `src/report.rs` — the report dialog is drawn by render_root, not by a column
+- `src/report.rs` — the report dialog is drawn by render_root, not by a column
+- `src/report.rs` — the report dialog is drawn by render_root, not by a column
+- `src/report.rs` — the report dialog is drawn by render_root, not by a column
+- `src/report.rs` — the report dialog is drawn by render_root, not by a column
+- `src/role_popout.rs` — the role card is drawn by Overlays, which only redraws with the app
+- `src/role_popout.rs` — the role card is drawn by Overlays, which only redraws with the app
+- `src/server_settings/lists.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/lists.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/lists.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/lists.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/lists/audit_page.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/member_bulk.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/member_bulk.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/member_dates.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/member_dates.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/members.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/members.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/members.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/members.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/members.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/members.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/roles.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/roles.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/roles.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/roles.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/roles.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/roles.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it; the subscription ends when the input entity it watches is dropped with the settings state
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it; the subscription ends when the input entity it watches is dropped with the settings state
+- `src/settings.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/games.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profile.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profile.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profile.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profile.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/profiles.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/view.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/view.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/view.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/view.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/view.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/voice_pages.rs` — a hotkey can toggle mute, deafen, sharing or the call chat, which the nav's voice bar, the call stage and the open page each draw
+- `src/settings/voice_pages.rs` — deafen shows on the nav's voice bar, the call stage and the settings window at once
+- `src/settings/voice_pages.rs` — mute shows on the nav's voice bar, the call stage and the settings window at once
+- `src/settings/voice_pages.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/voice_pages.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/voice_pages.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/voice_pages.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/voice_pages.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/voice_pages.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/voice_pages.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/voice_pages.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/voice_pages.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/voice_pages.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/voice_pages.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/voice_pages.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/voice_pages.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/settings/voice_pages.rs` — the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
+- `src/shortcuts.rs` — the Keyboard combos dialog is built by render_root, not by a column
+- `src/shortcuts.rs` — the pins popover is drawn by Overlays, which only redraws with the app
+- `src/shortcuts.rs` — the right panel's width is laid out by every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
+
+## custom-button
+
+_Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_row, ui::settings_choice or ui::pressable. Missing a look? Give the component a Tone, size or slot (src/ui/control.rs) and use it._
+
+- `src/settings.rs` — ui::settings_nav_item has no icon-less, indented sub-entry
+- `src/settings/voice_pages.rs` — ui::icon_button has no hover to the danger ink without the danger fill, which this quiet remove must not take
+- `src/settings/voice_pages.rs` — ui::icon_button rests with no fill; a preview button on the selected fill is a missing tone
+
+## custom-surface
+
+_Floating or raised surface: ui::surface, ui::floating, ui::floating_bar, ui::toast, ui::dialog or ui::settings_card. Missing a level, radius or inset? Add it as an option there._
+
+- `src/settings/profiles.rs` — ui::badged places marks on a face's corner but can't reveal one on hover, and ui::icon_button has no corner placement
+
+## custom-badge
+
+_Label: ui::badge, ui::tag, ui::count_badge, ui::pill or ui::role_chip; add a variant there if none fits._
+
+- `src/settings/accessibility.rs` — ui::settings_card has no body-font-size option; this card sets the preview's message size
+
+## custom-mark
+
+_A mark on a face's or control's corner: ui::badged with a Spot (it places the mark for the face's shape and cuts its ring). Missing a host shape or ring style? Add it to src/ui/face.rs._
+
+- `src/settings/meter.rs` — ui::badged marks a face's corner, this is a ring around a whole control, which it can't wrap
+- `src/settings/profiles.rs` — ui::badged places marks on a face's corner but can't reveal one on hover, and ui::icon_button has no corner placement
+
+## raw-margin
+
+_Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::row / ui::col / grid; space inside is the parent's padding; pushing to the end is flex_1 or justify_between. Margins stay near 0: an optical nudge carries lint-allow(raw-margin) with why._
+
+- `src/channel_settings.rs` — optical space around the inline ask in the nav list, whose column sets no gap
+- `src/channel_settings/pages.rs` — centres the 12px role dot on the 16px icon column, an optical nudge
+- `src/report.rs` — a negative margin lets the row's hover fill reach the dialog's text edge, which ui::pick_row has no option for
+- `src/report.rs` — a negative margin lets the row's hover fill reach the dialog's text edge, which ui::pick_row has no option for
+- `src/report.rs` — a negative margin lets the row's hover fill reach the dialog's text edge, which ui::pick_row has no option for
+- `src/report.rs` — a negative margin lets the row's hover fill reach the dialog's text edge, which ui::pick_row has no option for
+- `src/report.rs` — spacing from the footer's neighbouring button, whose row sets no gap
+- `src/settings.rs` — an optical nudge that tucks the Default note up under its name, tighter than the tile's gap
+- `src/settings.rs` — the avatar rides up over the banner, which only a negative margin does
+- `src/settings/accessibility.rs` — media aligns under the text, past the time column and avatar; no sibling gap does that
+- `src/settings/accessibility.rs` — the gap before a group is the user's message-spacing setting, a size computed from data
+- `src/settings/meter.rs` — the handle's centre sits on the threshold, so it shifts back half its width, which no gap or padding can do
+- `src/settings/profile_preview.rs` — the avatar overlaps the banner by half its size plus its ring, offsets computed from those consts
+
+## render-work
+
+_Work on the render path runs on every redraw: sort, parse, read files or build entities and subscriptions when their inputs change and keep the result in state (CLAUDE.md, Rendering). cx.new / cx.subscribe in render make a new entity or subscription every frame. A small bounded case carries lint-allow(render-work) saying how small._
+
+- `src/server_settings/members.rs` — one member's roles, a few dozen at most, sorted per visible row
+- `src/settings.rs` — one page's groups, a dozen at most
+
+## endless-animation
+
+_A repeating animation redraws every frame while it's on screen: run it only while its state holds (speaking, loading) and say when it stops in lint-allow(endless-animation)._
+
+- `src/settings/meter.rs` — shown only while a keybind is recording; the ring is dropped when recording ends
+
+## detached-task
+
+_A detached task outlives its view: keep the Task in the view so dropping the view cancels it (CLAUDE.md, Idiomatic Rust). Detach only a task that ends itself, and say how in lint-allow(detached-task); hold a WeakEntity, never an Entity, in it._
+
+- `src/channel_settings.rs` — one request that ends when Discord answers the save, holding only a WeakEntity
+- `src/channel_settings.rs` — one request that ends when the lists land, holding only a WeakEntity
+- `src/channel_settings.rs` — one timer that ends after the highlight fades, holding only a WeakEntity
+- `src/channel_settings.rs` — the input subscription ends with its entity, and the dialog it redraws is built by render_root
+- `src/channel_settings.rs` — the input subscription ends with its entity, and the dialog it redraws is built by render_root
+- `src/channel_settings.rs` — the input subscription ends with its entity, and the dialog it redraws is built by render_root
+- `src/mod_view.rs` — a single timer that ends after MEMBER_WAIT, holding only a WeakEntity
+- `src/mod_view.rs` — one request that ends when the reply lands, holding only a WeakEntity
+- `src/mod_view.rs` — the loop breaks once Mod View closes or the member changes, and ends when the app entity drops
+- `src/notification_settings.rs` — the input subscription ends with its entity, and the dialog it redraws is built by render_root
+- `src/report.rs` — one request that ends when the menu lands, holding only a WeakEntity
+- `src/report.rs` — one request that ends when the report is sent, holding only a WeakEntity
+- `src/role_popout.rs` — one request that ends when the counts land, holding only a WeakEntity
+- `src/role_popout.rs` — one request that ends when the member ids land, holding only a WeakEntity
+- `src/server_settings/lists.rs` — holds a WeakEntity and ends when its work finishes or the update fails
+- `src/server_settings/lists.rs` — the subscription ends when the input entity it watches is dropped with the settings state
+- `src/server_settings/member_bulk.rs` — holds a WeakEntity and ends when its work finishes or the update fails
+- `src/server_settings/member_dates.rs` — the subscription ends when the input entity it watches is dropped with the settings state
+- `src/server_settings/members.rs` — holds a WeakEntity and ends when its work finishes or the update fails
+- `src/server_settings/members.rs` — holds a WeakEntity and ends when its work finishes or the update fails
+- `src/server_settings/members.rs` — holds a WeakEntity and ends when its work finishes or the update fails
+- `src/server_settings/roles.rs` — the subscription ends when the input entity it watches is dropped with the settings state
+- `src/server_settings/view.rs` — holds a WeakEntity and ends when its work finishes or the update fails
+- `src/server_settings/view.rs` — holds a WeakEntity and ends when its work finishes or the update fails
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it; the subscription ends when the input entity it watches is dropped with the settings state
+- `src/server_settings/view.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it; the subscription ends when the input entity it watches is dropped with the settings state
+- `src/settings.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
+- `src/settings.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
+- `src/settings/advanced.rs` — ends after the one save-dialog answer and copy, and only updates the view if it is still alive
+- `src/settings/profile.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
+- `src/settings/profile.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
+- `src/settings/profile.rs` — the subscription ends with the entity it watches, which the view owns
+- `src/settings/profiles.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
+- `src/settings/profiles.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
+- `src/settings/profiles.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
+- `src/settings/profiles.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
+- `src/settings/profiles.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
+- `src/settings/profiles.rs` — the subscription ends with the entity it watches, which the view owns
+- `src/settings/profiles.rs` — the subscription ends with the entity it watches, which the view owns
+- `src/settings/view.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
+- `src/settings/view.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
+- `src/settings/view.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
+- `src/settings/voice_pages.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
+
+## unbounded-growth
+
+_A collection field that the app grows and never shrinks holds memory for the whole session: cap it (evict, truncate, an LRU), or clear it when what it's for goes away. A bound that holds by nature carries lint-allow(unbounded-growth) saying it ("one per joined server")._
+
+- `src/report.rs` — one pick per form element of the node on screen, a handful
+- `src/report.rs` — the reasons of one menu node, a few dozen at most
+- `src/role_popout.rs` — one entry per role card opened, a few dozen a session at most
+- `src/server_settings/audit.rs` — one fetched page of at most 50 entries, replaced by the next fetch
+- `src/server_settings/audit.rs` — the changes of one audit entry, a handful at most
+- `src/server_settings/lists.rs` — pages of 50 loaded on demand while the window is open, dropped when it closes
+- `src/settings/prefs.rs` — domains you chose to trust one by one, a few dozen at most
+- `src/settings/prefs.rs` — one entry per distinct emoji you have sent, a few hundred in practice
+- `src/settings/prefs.rs` — one entry per distinct emoji you have sent, a few hundred in practice, each keeping only its last FRECENCY_SAMPLES times
+- `src/settings/prefs.rs` — one entry per distinct sticker you have sent, a few dozen in practice
+- `src/settings/prefs.rs` — one volume per person whose volume you moved, a few dozen at most
+- `src/settings/prefs.rs` — the posts whose bump notice you hid, a few dozen at most

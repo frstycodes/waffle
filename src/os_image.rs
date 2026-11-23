@@ -148,15 +148,17 @@ mod platform {
             return None;
         }
         let (width, height) = (info.bmWidth.max(1) as u32, info.bmHeight.unsigned_abs().max(1));
-        let mut header = BITMAPINFO::default();
-        header.bmiHeader = BITMAPINFOHEADER {
-            biSize: size_of::<BITMAPINFOHEADER>() as u32,
-            biWidth: width as i32,
-            // Negative: rows top-down.
-            biHeight: -(height as i32),
-            biPlanes: 1,
-            biBitCount: 32,
-            biCompression: BI_RGB.0,
+        let mut header = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: width as i32,
+                // Negative: rows top-down.
+                biHeight: -(height as i32),
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let mut out = vec![0u8; (width * height * 4) as usize];

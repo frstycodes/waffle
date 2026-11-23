@@ -23,6 +23,8 @@ use crate::{
     ui::{self, Notice, Squircle, Tone},
 };
 
+mod pages;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
     Overview,
@@ -177,6 +179,11 @@ pub fn bitrate_cap(premium_tier: u8, stage: bool) -> u32 {
         _ => 384_000,
     }
 }
+
+// A select's width, the role and member list's, and an invite's expiry column.
+const SELECT_WIDTH: f32 = 220.;
+const TARGET_LIST_WIDTH: f32 = 200.;
+const EXPIRES_WIDTH: f32 = 90.;
 
 // Discord client's slowmode stops; the API takes 0-21600 seconds.
 const SLOWMODE: [(u32, &str); 14] = [
@@ -352,10 +359,10 @@ impl Waffle {
         name.update(cx, |s, cx| s.set_value(channel.name.clone(), window, cx));
         let topic = cx.new(|cx| TextareaState::new(window, cx).placeholder("Let everyone know how to use this channel"));
         topic.update(cx, |s, cx| s.set_value(channel.topic.clone().unwrap_or_default(), window, cx));
-        cx.subscribe(&name, |_, _, _: &InputEvent, cx| cx.notify()).detach();
-        cx.subscribe(&topic, |_, _, _: &InputEvent, cx| cx.notify()).detach();
+        cx.subscribe(&name, |_, _, _: &InputEvent, cx| cx.notify()).detach(); // lint-allow(detached-task, global-notify): the input subscription ends with its entity, and the dialog it redraws is built by render_root
+        cx.subscribe(&topic, |_, _, _: &InputEvent, cx| cx.notify()).detach(); // lint-allow(detached-task, global-notify): the input subscription ends with its entity, and the dialog it redraws is built by render_root
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search"));
-        cx.subscribe(&search, |_, _, _: &InputEvent, cx| cx.notify()).detach();
+        cx.subscribe(&search, |_, _, _: &InputEvent, cx| cx.notify()).detach(); // lint-allow(detached-task, global-notify): the input subscription ends with its entity, and the dialog it redraws is built by render_root
         let target = channel.overwrites.first().map(|o| o.id.clone());
         self.channel_settings = Some(ChannelSettings {
             guild_id: guild_id.clone(),
@@ -377,7 +384,7 @@ impl Waffle {
         });
         self.menu = None;
         self.load_channel_lists(&channel, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
     }
 
     fn load_channel_lists(&mut self, channel: &Channel, cx: &mut Context<Self>) {
@@ -398,11 +405,11 @@ impl Waffle {
                     .filter(|r| !r["deprecated"].as_bool().unwrap_or(false))
                     .filter_map(|r| Some((r["id"].as_str()?.to_owned(), r["name"].as_str()?.to_owned())))
                     .collect();
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one request that ends when the lists land, holding only a WeakEntity
     }
 
     fn current_draft(&self, cx: &App) -> Option<Draft> {
@@ -420,10 +427,10 @@ impl Waffle {
             if let Some(view) = &mut self.channel_settings {
                 view.closing = true;
             }
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
         }
         self.channel_settings = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
     }
 
     fn edit_draft(&mut self, cx: &mut Context<Self>, change: impl FnOnce(&mut Draft)) {
@@ -434,7 +441,7 @@ impl Waffle {
                 view.save = Save::Idle;
             }
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
     }
 
     fn reset_channel_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -444,7 +451,7 @@ impl Waffle {
         (view.save, view.closing) = (Save::Idle, false);
         view.name.update(cx, |s, cx| s.set_value(channel.name.clone(), window, cx));
         view.topic.update(cx, |s, cx| s.set_value(channel.topic.clone().unwrap_or_default(), window, cx));
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
     }
 
     // Sends the edits, then reads the channel back so what's shown is what Discord kept. Nothing changes
@@ -454,7 +461,7 @@ impl Waffle {
         let Some(view) = &mut self.channel_settings else { return };
         if draft.name.trim().is_empty() {
             view.save = Save::Failed("Channel name can't be empty.".into());
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
         }
         view.save = Save::Saving;
         let guild_id = view.guild_id.clone();
@@ -464,7 +471,7 @@ impl Waffle {
             requests.push((Method::PATCH, format!("/channels/{}", channel.id), Some(Value::Object(body))));
         }
         requests.extend(overwrite_ops(&channel.overwrites, &draft.overwrites).iter().map(|op| op.request(&channel.id)));
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
         cx.spawn(async move |this, cx| {
             let mut failed = None;
             for (method, path, body) in requests {
@@ -491,11 +498,11 @@ impl Waffle {
                         }
                     }
                 }
-                cx.notify();
+                cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one request that ends when Discord answers the save, holding only a WeakEntity
     }
 
     pub(crate) fn render_channel_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -548,9 +555,9 @@ impl Waffle {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         if let Some(view) = &mut this.channel_settings {
                             (view.page, view.select, view.asking_delete) = (page, None, false);
-                            view.scroll.set_offset(gpui_kit::point(px(0.), px(0.)));
+                            view.scroll.set_offset(Default::default());
                         }
-                        cx.notify();
+                        cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
                     }))
                     .into_any_element()
             })
@@ -566,11 +573,11 @@ impl Waffle {
                     if let Some(view) = &mut this.channel_settings {
                         view.asking_delete = !view.asking_delete;
                     }
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
                 }))
         });
         let ask = if view.asking_delete { Some(self.delete_ask(channel, cx).into_any_element()) } else { None };
-        let rule = div().h(ui::HAIRLINE).mx_2p5().my_2().flex_none().bg(palette::line(cx));
+        let rule = div().flex_none().px_2p5().py_2().child(ui::divider(None, cx));
         let search = div().flex_none().pb_3().child(ui::search_field("channel-settings-search", &view.search, cx));
         let query = view.search.read(cx).value().to_string();
         let items = if query.trim().is_empty() { items } else { self.channel_setting_results(channel, guild_id, &query, cx) };
@@ -612,7 +619,7 @@ impl Waffle {
     fn jump_to_channel_setting(&mut self, setting: &'static Setting<Page>, window: &mut Window, cx: &mut Context<Self>) {
         let Some(view) = &mut self.channel_settings else { return };
         (view.page, view.select, view.asking_delete) = (setting.page, None, false);
-        view.scroll.set_offset(gpui_kit::point(px(0.), px(0.)));
+        view.scroll.set_offset(Default::default());
         view.search.update(cx, |state, cx| state.set_value("", window, cx));
         let row = setting.row_id();
         cx.set_global(ui::SettingsHighlight(Some(SharedString::from(row))));
@@ -621,12 +628,12 @@ impl Waffle {
             let _ = this.update(cx, |_, cx| {
                 if cx.try_global::<ui::SettingsHighlight>().and_then(|h| h.0.as_deref()) == Some(row) {
                     cx.set_global(ui::SettingsHighlight(None));
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
                 }
             });
         })
-        .detach();
-        cx.notify();
+        .detach(); // lint-allow(detached-task): one timer that ends after the highlight fades, holding only a WeakEntity
+        cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
     }
 
     // Delete asks in place, as Log out does in settings: what goes, then Keep or Delete.
@@ -634,7 +641,7 @@ impl Waffle {
         let id = channel.id.clone();
         let what = if channel.kind == ChannelKind::Category { format!("Delete the {} category? Its channels stay, without a category.", channel.name) } else { format!("Delete #{}? Its messages go with it. This can't be undone.", channel.name) };
         ui::col()
-            .my_1()
+            .my_1() // lint-allow(raw-margin): optical space around the inline ask in the nav list, whose column sets no gap
             .p_2p5()
             .squircle(ui::RADIUS_MD)
             .bg(palette::danger().opacity(0.1))
@@ -647,7 +654,7 @@ impl Waffle {
                         if let Some(view) = &mut this.channel_settings {
                             view.asking_delete = false;
                         }
-                        cx.notify();
+                        cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
                     })))
                     .child(ui::button("cs-delete-yes", Tone::Danger, cx).small().flex_1().child("Delete").on_click(cx.listener(move |this, _, _, cx| {
                         let id = id.clone();
@@ -659,107 +666,6 @@ impl Waffle {
             )
     }
 
-    fn overview_page(&self, channel: &Channel, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let view = self.channel_settings.as_ref().expect("channel settings are open");
-        let props = view.draft.props.clone();
-        let voice = matches!(channel.raw_type, 2 | 13);
-        let category = channel.kind == ChannelKind::Category;
-        let forum = matches!(channel.raw_type, 15 | 16);
-        let mut out = Vec::new();
-
-        let name_focus = view.name.read(cx).focus_handle(cx);
-        let name = ui::field("Channel name", cx).child(ui::text_field("cs-name", Input::new(&view.name).appearance(false), &name_focus).leading(Icon::new(channel_glyph(channel)).size(ui::ICON_MD)));
-        let topic = (!voice && !category).then(|| {
-            let focus = view.topic.read(cx).focus_handle(cx);
-            let count = view.topic.read(cx).value().chars().count();
-            let cap = if forum { 4096 } else { 1024 };
-            ui::field(if forum { "Post guidelines" } else { "Topic" }, cx)
-                .child(ui::text_area("cs-topic", Textarea::new(&view.topic).appearance(false).px_0().text_size(ui::TEXT_SM), &focus).error(count > cap))
-                .child(ui::field_hint("Shows in the channel header.", Some(format!("{count} / {cap}").into()), cx))
-        });
-        out.push(ui::settings_group(if category || voice { "Name" } else { "Name and topic" }, cx).child(ui::settings_card(cx).p_4().gap_4().child(name).children(topic)).into_any_element());
-        if category {
-            return out;
-        }
-
-        if voice {
-            let cap = self.guilds.iter().find(|g| g.id == view.guild_id).map_or(96_000, |g| bitrate_cap(g.premium_tier, channel.raw_type == 13));
-            let bitrate = props.bitrate.clamp(8_000, cap);
-            let fraction = (bitrate - 8_000) as f32 / (cap - 8_000) as f32;
-            let bitrate_row = ui::settings_row("cs-bitrate", false, cx)
-                .flex_col()
-                .items_stretch()
-                .gap_3()
-                .child(ui::row().items_start().gap_4().child(ui::settings_text("Bitrate", Some("Higher sounds better and costs slow connections more"), cx)).child(value_text(format!("{} kbps", bitrate / 1000), cx)))
-                .child(self.range("cs-bitrate".into(), fraction, crate::settings::Fill::Accent, move |this, f, cx| {
-                    let kbps = (8. + f.clamp(0., 1.) * (cap - 8_000) as f32 / 1000.).round() as u32;
-                    this.edit_draft(cx, |d| d.props.bitrate = kbps * 1000);
-                }, cx));
-            let limit_max = if channel.raw_type == 13 { 10_000 } else { 99 };
-            let limit = props.user_limit.min(limit_max);
-            let limit_row = ui::settings_row("cs-limit", true, cx)
-                .flex_col()
-                .items_stretch()
-                .gap_3()
-                .child(ui::row().items_start().gap_4().child(ui::settings_text("User limit", Some("Members with Move members can still join"), cx)).child(value_text(if limit == 0 { "No limit".into() } else { limit.to_string() }, cx)))
-                .child(self.range("cs-limit".into(), limit as f32 / limit_max as f32, crate::settings::Fill::Accent, move |this, f, cx| {
-                    let n = (f.clamp(0., 1.) * limit_max as f32).round() as u32;
-                    this.edit_draft(cx, |d| d.props.user_limit = n);
-                }, cx));
-            let quality = ui::settings_row("cs-quality", true, cx)
-                .child(ui::settings_text("Video quality", Some("720p sends full quality to everyone watching"), cx))
-                .child(ui::segmented_live("cs-quality-seg", &["Auto", "720p"], props.video_full as usize, {
-                    let this = cx.entity();
-                    move |i, _, cx| this.update(cx, |this, cx| this.edit_draft(cx, |d| d.props.video_full = i == 1))
-                }, window, cx));
-            let mut regions = vec![(String::new(), "Automatic".to_owned())];
-            regions.extend(view.regions.iter().cloned());
-            let chosen = props.rtc_region.clone().unwrap_or_default();
-            let region_name = regions.iter().find(|(id, _)| *id == chosen).map_or(chosen.clone(), |(_, n)| n.clone());
-            let region = ui::settings_row("cs-region", true, cx)
-                .child(ui::settings_text("Region", Some("Where the voice server runs"), cx))
-                .child(div().w(px(220.)).flex_none().child(self.cs_select(Select::Region, &regions, &chosen, region_name, cx)));
-            out.push(ui::settings_group("Sound and video", cx).child(ui::settings_card(cx).child(bitrate_row).child(limit_row).child(quality).child(region)).into_any_element());
-        }
-
-        let slow_options: Vec<(String, String)> = SLOWMODE.iter().map(|(s, l)| (s.to_string(), (*l).to_owned())).collect();
-        let slow_name = SLOWMODE.iter().find(|(s, _)| *s == props.slowmode).map_or(format!("{} seconds", props.slowmode), |(_, l)| (*l).to_owned());
-        let slowmode = ui::settings_row("cs-slowmode", false, cx)
-            .child(ui::settings_text("Slowmode", Some("Each member sends one message and starts one thread per interval"), cx))
-            .child(div().w(px(220.)).flex_none().child(self.cs_select(Select::Slowmode, &slow_options, &props.slowmode.to_string(), slow_name, cx)));
-        let nsfw = ui::settings_switch("cs-nsfw", "Age-restricted", "People confirm they're over 18 before they see it", props.nsfw, true, window, cx).on_click(cx.listener(|this, _, _, cx| this.edit_draft(cx, |d| d.props.nsfw = !d.props.nsfw)));
-        let archive = (!voice).then(|| {
-            let options: Vec<(String, String)> = ARCHIVE.iter().map(|(m, l)| (m.to_string(), (*l).to_owned())).collect();
-            let current = if props.archive_after == 0 { 4320 } else { props.archive_after };
-            let label = ARCHIVE.iter().find(|(m, _)| *m == current).map_or("3 days", |(_, l)| l).to_owned();
-            ui::settings_row("cs-archive", true, cx)
-                .child(ui::settings_text("Hide threads after", Some("New threads close after this long without activity"), cx))
-                .child(div().w(px(220.)).flex_none().child(self.cs_select(Select::Archive, &options, &current.to_string(), label, cx)))
-        });
-        let announcement = self.announcement_toggle(channel, view.draft.announcement, window, cx);
-        let chat = ui::settings_card(cx).child(slowmode).child(nsfw).children(announcement.0).children(archive);
-        out.push(ui::settings_group(if voice { "Text chat" } else { "Chat" }, cx).child(chat).child(ui::settings_caption("Members with Bypass slowmode aren't slowed down.", cx)).children(announcement.1).into_any_element());
-        out
-    }
-
-    // Discord's Announcement Channel switch and its profile notice.
-    fn announcement_toggle(&self, channel: &Channel, on: bool, window: &mut Window, cx: &mut Context<Self>) -> (Option<AnyElement>, Option<AnyElement>) {
-        let shown = self.guilds.iter().find(|g| g.channel(&channel.id).is_some()).is_some_and(|g| crate::announcements::offers_announcement_switch(g, channel));
-        if !shown {
-            return (None, None);
-        }
-        let row = ui::settings_switch("cs-announcement", "Announcement Channel", "Users can Follow this channel in their own servers. Posts you \"Publish\" from this channel will appear in those servers.", on, true, window, cx)
-            .on_click(cx.listener(|this, _, _, cx| this.edit_draft(cx, |d| d.announcement = !d.announcement)));
-        let notice = ui::callout(
-            Notice::Info,
-            Glyph::Info,
-            "By creating an announcement channel, your server profile will be visible to others outside your server members.",
-            "You can control Profile privacy in Server Settings > Profile.",
-            cx,
-        );
-        (Some(row.into_any_element()), Some(div().mt_2().child(notice).into_any_element()))
-    }
-
     // A dropdown on this window: the trigger, and its list rising from it while open.
     fn cs_select(&self, select: Select, options: &[(String, String)], chosen: &str, value: String, cx: &mut Context<Self>) -> AnyElement {
         let open = self.channel_settings.as_ref().and_then(|v| v.select) == Some(select);
@@ -767,7 +673,7 @@ impl Waffle {
             if let Some(v) = &mut this.channel_settings {
                 v.select = if v.select == Some(select) { None } else { Some(select) };
             }
-            cx.notify();
+            cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
         }));
         let list = open.then(|| {
             let (this, close) = (cx.entity(), cx.entity());
@@ -776,7 +682,7 @@ impl Waffle {
                     if let Some(v) = &mut this.channel_settings {
                         v.select = None;
                     }
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
                 })
             };
             ui::select_options(SharedString::from(format!("cs-options-{select:?}")), options, chosen, 40., move |id, _, cx| this.update(cx, |this, cx| this.pick(select, &id, cx)), dismiss, cx)
@@ -801,180 +707,6 @@ impl Waffle {
                 }
             }
         }
-    }
-
-    fn permissions_page(&self, channel: &Channel, guild_id: &str, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let view = self.channel_settings.as_ref().expect("channel settings are open");
-        let Some(guild) = self.guilds.iter().find(|g| g.id == guild_id) else { return Vec::new() };
-        let overwrites = view.draft.overwrites.clone();
-        let mut out = Vec::new();
-
-        let parent = guild.channels.iter().find(|c| Some(&c.id) == channel.parent_id.as_ref());
-        if let Some(parent) = parent {
-            let notice = if synced(&overwrites, &parent.overwrites) {
-                ui::callout(Notice::Info, Glyph::Link, format!("Synced with {}", parent.name), "Changes to the category apply here too.", cx)
-            } else {
-                let parent_overwrites = parent.overwrites.clone();
-                let sync = ui::button("cs-sync", Tone::Secondary, cx).small().child(format!("Sync with {}", parent.name)).on_click(cx.listener(move |this, _, _, cx| {
-                    let next = parent_overwrites.clone();
-                    this.edit_draft(cx, |d| d.overwrites = next);
-                }));
-                ui::callout(Notice::Warning, Glyph::Link, format!("Not synced with {}", parent.name), "This channel's permissions differ from its category.", cx).child(div().flex_none().child(sync))
-            };
-            out.push(notice.into_any_element());
-        }
-
-        let (everyone, raw_type) = (guild.id.clone(), channel.raw_type);
-        let private_on = private(&overwrites, &everyone);
-        let private_row = ui::settings_switch("cs-private", "Private channel", "Only the roles and members you add can see it", private_on, false, window, cx).on_click(cx.listener(move |this, _, _, cx| {
-            let everyone = everyone.clone();
-            this.edit_draft(cx, |d| set_private(&mut d.overwrites, &everyone, raw_type, !private_on));
-        }));
-        out.push(ui::settings_card(cx).child(private_row).into_any_element());
-
-        // Targets: @everyone first, then roles highest first, then members.
-        let role = |id: &str| guild.roles.iter().find(|r| r.id == id);
-        // Discord always lists @everyone, overwrite or not; editing it creates one.
-        let mut shown = overwrites.clone();
-        if !shown.iter().any(|o| o.id == guild.id) {
-            shown.push(Overwrite { id: guild.id.clone(), ..Default::default() });
-        }
-        let mut targets: Vec<&Overwrite> = shown.iter().collect();
-        targets.sort_by_key(|o| (o.member, if o.id == guild.id { i64::MIN } else { -role(&o.id).map_or(0, |r| r.position) }));
-        let selected = view.target.clone().filter(|t| shown.iter().any(|o| &o.id == t)).or_else(|| targets.first().map(|o| o.id.clone()));
-        let name_of = |o: &Overwrite| -> String {
-            match role(&o.id) {
-                Some(r) => r.name.clone(),
-                None if o.member => self.overwrite_member_name(guild_id, &o.id),
-                None => "Unknown role".into(),
-            }
-        };
-        let dark = cx.theme().is_dark();
-        let rows: Vec<AnyElement> = targets
-            .iter()
-            .map(|o| {
-                let id = o.id.clone();
-                let color = role(&o.id).filter(|r| r.color != 0).map_or(palette::faint(cx), |r| palette::role_ink(r.color, dark));
-                let mark = if o.member { div().child(Icon::new(Glyph::User).size(ui::ICON_MD)).text_color(palette::muted(cx)) } else { div().size_3().m_0p5().rounded_full().bg(color) };
-                ui::menu_row(SharedString::from(format!("cs-target-{id}")), cx)
-                    .toggled(selected.as_deref() == Some(o.id.as_str()), cx)
-                    .child(mark.flex_none())
-                    .child(ui::line(name_of(o)).flex_1())
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        if let Some(view) = &mut this.channel_settings {
-                            view.target = Some(id.clone());
-                        }
-                        cx.notify();
-                    }))
-                    .into_any_element()
-            })
-            .collect();
-        let addable: Vec<(String, String)> = {
-            let mut roles: Vec<_> = guild.roles.iter().filter(|r| !overwrites.iter().any(|o| o.id == r.id)).collect();
-            roles.sort_by_key(|r| -r.position);
-            roles.into_iter().map(|r| (r.id.clone(), r.name.clone())).collect()
-        };
-        let add = (!addable.is_empty()).then(|| div().mt_2().child(self.cs_select(Select::AddRole, &addable, "", "Add a role".into(), cx)));
-        let list = ui::col()
-            .w(px(200.))
-            .flex_none()
-            .gap_0p5()
-            .child(div().px_1().pb_1().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Roles and members"))
-            .children(rows)
-            .children(add);
-
-        let editor = selected.and_then(|id| shown.iter().find(|o| o.id == id).cloned()).map(|target| {
-            let who = name_of(&target);
-            let groups: Vec<AnyElement> = permission_groups(channel.raw_type)
-                .into_iter()
-                .map(|(title, perms)| {
-                    let rows = perms.iter().enumerate().map(|(i, &(bit, label))| {
-                        let (id, member) = (target.id.clone(), target.member);
-                        ui::settings_row(SharedString::from(format!("cs-perm-{title}-{bit}")), i > 0, cx)
-                            .child(ui::settings_text(label, None::<&str>, cx))
-                            .child(ui::tri_state(SharedString::from(format!("cs-tri-{title}-{bit}")), tri(&overwrites, &target.id, bit), {
-                                let this = cx.entity();
-                                move |value, _, cx| {
-                                    let id = id.clone();
-                                    this.update(cx, |this, cx| this.edit_draft(cx, |d| set_tri(&mut d.overwrites, &id, member, bit, value)));
-                                }
-                            }, cx))
-                    });
-                    ui::settings_group(title, cx).child(ui::settings_card(cx).children(rows)).into_any_element()
-                })
-                .collect();
-            let remove_id = target.id.clone();
-            let remove = (target.id != guild.id).then(|| {
-                ui::button("cs-remove-target", Tone::Ghost, cx).small().child(Icon::new(Glyph::Trash).size(ui::ICON_MD)).child(format!("Remove {who}")).on_click(cx.listener(move |this, _, _, cx| {
-                    let id = remove_id.clone();
-                    this.edit_draft(cx, |d| d.overwrites.retain(|o| o.id != id));
-                }))
-            });
-            ui::col().flex_1().gap_6().children(groups).child(ui::row().items_stretch().justify_end().children(remove))
-        });
-        out.push(ui::row().items_start().gap_6().child(list).children(editor).into_any_element());
-        out
-    }
-
-    fn overwrite_member_name(&self, guild_id: &str, user_id: &str) -> String {
-        self.members.get(guild_id).and_then(|m| m.get(user_id)).map_or_else(|| "Member".into(), |u| u.name.clone())
-    }
-
-    fn invites_page(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let view = self.channel_settings.as_ref().expect("channel settings are open");
-        let invites = match &view.invites {
-            Load::Loading => return vec![loading_line("Loading invites…", cx)],
-            Load::Failed(error) => return vec![ui::callout(Notice::Danger, Glyph::WarningCircle, "Couldn't load invites", error.clone(), cx).into_any_element()],
-            Load::Ready(list) if list.is_empty() => return vec![ui::settings_caption("No invites to this channel yet. Invite people from the channel's menu.", cx).into_any_element()],
-            Load::Ready(list) => list.clone(),
-        };
-        let now = chrono::Utc::now();
-        let rows = invites.into_iter().enumerate().map(|(i, invite)| {
-            let uses = if invite.max_uses == 0 { invite.uses.to_string() } else { format!("{} of {}", invite.uses, invite.max_uses) };
-            let code = invite.code.clone();
-            ui::settings_row(SharedString::from(format!("cs-invite-{}", invite.code)), i > 0, cx)
-                .child(ui::settings_text(invite.code.clone(), Some(invite.inviter.clone()), cx))
-                .child(div().w_20().flex_none().text_color(palette::text(cx)).child(uses))
-                .child(div().w(px(90.)).flex_none().text_color(palette::muted(cx)).child(expires_label(invite.expires_at.as_deref(), now)))
-                .child(ui::button(SharedString::from(format!("cs-revoke-{}", invite.code)), Tone::Secondary, cx).small().child("Revoke").on_click(cx.listener(move |this, _, _, cx| {
-                    let code = code.clone();
-                    this.rest(Method::DELETE, format!("/invites/{code}"), None, move |this, cx| {
-                        if let Some(Load::Ready(list)) = this.channel_settings.as_mut().map(|v| &mut v.invites) {
-                            list.retain(|i| i.code != code);
-                        }
-                        cx.notify();
-                    }, cx);
-                })))
-        });
-        vec![ui::settings_card(cx).children(rows).into_any_element()]
-    }
-
-    fn webhooks_page(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let view = self.channel_settings.as_ref().expect("channel settings are open");
-        let hooks = match &view.webhooks {
-            Load::Loading => return vec![loading_line("Loading webhooks…", cx)],
-            Load::Failed(error) => return vec![ui::callout(Notice::Danger, Glyph::WarningCircle, "Couldn't load webhooks", error.clone(), cx).into_any_element()],
-            Load::Ready(list) if list.is_empty() => return vec![ui::settings_caption("No webhooks post here. Creating one stays in Discord for now.", cx).into_any_element()],
-            Load::Ready(list) => list.clone(),
-        };
-        let rows = hooks.into_iter().enumerate().map(|(i, hook)| {
-            let (id, url) = (hook.id.clone(), hook.url.clone());
-            let copy = url.map(|url| ui::button(SharedString::from(format!("cs-hook-copy-{}", hook.id)), Tone::Secondary, cx).small().child("Copy URL").on_click(cx.listener(move |this, _, _, cx| this.copy_text(url.clone(), cx))));
-            ui::settings_row(SharedString::from(format!("cs-hook-{}", hook.id)), i > 0, cx)
-                .child(ui::icon_tile(Glyph::AppWindow, palette::selected(cx), palette::strong(cx)).flex_none())
-                .child(ui::settings_text(hook.name.clone(), hook.by.as_ref().map(|by| format!("Made by {by}")), cx))
-                .children(copy)
-                .child(ui::icon_button(SharedString::from(format!("cs-hook-del-{}", hook.id)), Glyph::Trash, format!("Delete {}", hook.name), cx).on_click(cx.listener(move |this, _, _, cx| {
-                    let id = id.clone();
-                    this.rest(Method::DELETE, format!("/webhooks/{id}"), None, move |this, cx| {
-                        if let Some(Load::Ready(list)) = this.channel_settings.as_mut().map(|v| &mut v.webhooks) {
-                            list.retain(|h| h.id != id);
-                        }
-                        cx.notify();
-                    }, cx);
-                })))
-        });
-        vec![ui::settings_group("Webhooks", cx).child(ui::settings_card(cx).children(rows)).child(ui::settings_caption("Creating webhooks and following channels stay in Discord for now.", cx)).into_any_element()]
     }
 
     // Floats over the page bottom while there's something to save, saving, or a refusal to show.
@@ -1003,25 +735,16 @@ impl Waffle {
                 }
             }));
         let save = ui::button("cs-save", Tone::Primary, cx).loading(saving.then_some("Saving")).child("Save changes").on_click(cx.listener(move |this, _, _, cx| this.save_channel_settings(closing, cx)));
-        let bar = ui::row()
-            .w_full()
-            .max_w(px(ui::SETTINGS_WIDTH))
-            .py_2p5()
-            .pl_4()
-            .pr_2p5()
-            .squircle(ui::RADIUS_LG)
-            .bg(palette::surface(Level::Overlay, cx))
-            .shadow(ui::shadow_pop(cx))
-            .gap_3()
+        let bar = ui::floating_bar("cs-savebar", cx)
             .child(div().text_color(ink).flex_none().child(Icon::new(glyph).size(ui::ICON_XL)))
             .child(
                 ui::col()
                     .flex_1()
                     .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title))
-                    .children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(px(17.)).text_color(palette::muted(cx)).child(d))),
+                    .children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(gpui_kit::relative(ui::LEADING_BODY)).text_color(palette::muted(cx)).child(d))),
             )
             .child(ui::row().items_stretch().gap_2().flex_none().child(reset).child(save));
-        Some(ui::rise(div().absolute().bottom_4().left_10().right_10().child(bar), "cs-savebar-in", std::time::Duration::ZERO))
+        Some(ui::foot_dock(bar, "cs-savebar-in"))
     }
 }
 

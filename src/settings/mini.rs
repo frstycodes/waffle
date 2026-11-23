@@ -44,7 +44,7 @@ pub(super) fn mini_window(m: &Mini) -> Div {
         .child(bar(m.faint, 0.85))
         .child(bar(m.ink, 0.4))
         .child(bar(m.faint, 0.85))
-        .child(div().mt_1().h_3().w_full().squircle(4.).bg(palette::data_color(m.faint)));
+        .child(div().pt_1().w_full().child(div().h_3().w_full().squircle(4.).bg(palette::data_color(m.faint))));
     ui::row().items_stretch().w_full().h(px(MINI_HEIGHT)).squircle(ui::RADIUS_MD).bg(palette::data_color(m.page)).child(rail).child(side).child(content)
 }
 
