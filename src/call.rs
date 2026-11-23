@@ -12,6 +12,8 @@ use gpui_kit::{
     div, prelude::*, px, relative,
 };
 
+mod fit;
+
 use crate::{
     call_issues::{failure_line, issue_chip, issue_line},
     Waffle,
@@ -657,14 +659,19 @@ impl Waffle {
         let reveal = self.call_chat_reveal(window, cx);
         // Leaving shows another channel's messages, so only the call's own chat slides out.
         let on_call_channel = self.channel.as_ref().is_some_and(|c| c.id == call_channel.id);
+        let floats = self.call_chat_floats(window);
         let drawer = (reveal > 0.001 && on_call_channel).then(|| {
             let width = self.call_chat_width(window);
             let panel = self.call_chat_drawer(&call_channel, window, cx);
+            if floats {
+                return self.floating_chat(panel, width, reveal, window, cx);
+            }
             self.above_game(div().w(px(width * reveal)).flex_none().h_full().overflow_hidden().child(div().w(px(width)).h_full().child(panel)))
         });
+        let (floating, docked) = if floats { (drawer, None) } else { (None, drawer) };
         let call = self.render_call(window, cx)?;
         let previews = self.render_call_previews(cx).map(|p| self.above_game(p));
-        Some(div().size_full().flex().child(div().relative().flex_1().min_w_0().h_full().child(call).children(previews)).children(drawer).into_any_element())
+        Some(div().size_full().flex().child(div().relative().flex_1().min_w_0().h_full().child(call).children(previews).children(floating)).children(docked).into_any_element())
     }
 
     // 0 closed to 1 open. A critically damped spring keeps its velocity when re-targeted, so reversing
@@ -766,7 +773,7 @@ impl Waffle {
     // The stage's size in the window, beside the rail, the channel list and the call's chat.
     pub(crate) fn stage_size(&self, window: &mut Window, cx: &mut App) -> (f32, f32) {
         let viewport = window.viewport_size();
-        let chat = self.call_chat_width(window) * self.call_chat_reveal(window, cx);
+        let chat = if self.call_chat_floats(window) { 0. } else { self.call_chat_width(window) * self.call_chat_reveal(window, cx) };
         match self.call_fullscreen {
             true => (f32::from(viewport.width) - chat, f32::from(viewport.height)),
             false => (f32::from(viewport.width) - RAIL_WIDTH - self.channels_width - chat, f32::from(viewport.height) - 1.),
@@ -1537,128 +1544,6 @@ impl Waffle {
 
     fn stage_menu_open(&self, kind: DeviceKind) -> bool {
         self.device_menu.as_ref().is_some_and(|m| m.on_stage && m.kind == kind)
-    }
-
-    fn call_controls(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let call = self.call.as_ref().expect("in a call");
-        let connected = call.stage == Stage::Connected;
-        let (mic, camera, share) = (self.mic_control(cx), self.camera_control(cx), self.share_control(cx));
-        // While a game runs the control stays pressed, its app's icon in the corner.
-        let running = self.running_app_icon(cx);
-        let launcher = if self.activities.launcher.is_some() || running.is_some() { Control::Open } else { Control::Rest };
-        let activities = control("call-activities", Glyph::ActivitiesFill, "Activities", launcher, connected)
-            .relative()
-            .children(running)
-            .when(connected, |b| b.on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, window, cx| this.toggle_launcher(e.position, window, cx))));
-        let access = self.soundboard_access();
-        let soundboard = (access != soundboard::Access::Hidden).then(|| {
-            let on = connected && access == soundboard::Access::Ready;
-            control("call-soundboard", Glyph::Soundboard, access.tip(), if self.soundboard_open() { Control::Open } else { Control::Rest }, on)
-                .relative()
-                .child(self.soundboard_probe(soundboard::CALL_CONTROL))
-                .when(on, |b| b.on_click(cx.listener(|this, _, window, cx| this.open_soundboard(Some(soundboard::CALL_CONTROL), window, cx))))
-        });
-        let more = control("call-more", Glyph::More, "More options", Control::Rest, true).on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_call_more(e.position, cx)));
-        let leave = self.leave_control(cx);
-        // Full screen at the bar's right end, as Discord's.
-        let fullscreen = self.call_fullscreen;
-        let fullscreen = stage_icon_button("call-fullscreen", if fullscreen { Glyph::FullscreenExit } else { Glyph::Fullscreen }, if fullscreen { "Exit full screen (Esc)" } else { "Full screen" }, false)
-            .on_click(cx.listener(move |this, _, window, cx| this.set_call_fullscreen(!fullscreen, window, cx)));
-        // A focused stream's volume sits beside it, as Discord's.
-        let volume = self.focused_stream().filter(|id| call.watched(id).is_some()).map(|id| {
-            stage_icon_button("call-stream-volume", Glyph::VolumeHigh, "Stream volume", false).on_mouse_down(MouseButton::Left, cx.listener(move |this, e: &MouseDownEvent, _, cx| this.open_stream_volume(id.clone(), e.position, cx)))
-        });
-        // Floats over the focused card in Focus layout: without occluding, a press on any control
-        // also reached the card under it, whose toggle re-focused (and re-watched) what Stop watching ended.
-        keeps_chrome(div().id("call-controls"), cx)
-            .occlude()
-            .relative()
-            .h(px(CONTROLS_HEIGHT))
-            .flex()
-            .justify_center()
-            .items_center()
-            .gap_2()
-            .child(control_group().child(mic).child(camera))
-            .child(control_group().child(share).children(soundboard).child(activities).child(more))
-            .child(leave)
-            .child(div().absolute().right_0().top(px((CONTROLS_HEIGHT - 32.) / 2.)).flex().gap_1().children(volume).child(fullscreen))
-    }
-
-    // The one red button. Watching the stream shown big, it stops watching it rather than leaving, as
-    // Discord's. One element across both, so a press that spans the switch still lands, and the glyph
-    // cross-fades into the new action.
-    fn leave_control(&self, cx: &mut Context<Self>) -> ui::Pressable {
-        let call = self.call.as_ref().expect("in a call");
-        let me = self.me.as_ref().map(|m| m.id.as_str());
-        let watching = self.focused_stream().filter(|id| call.watched(id).is_some() && me != Some(id.as_str()));
-        let (glyph, tip) = match watching {
-            Some(_) => (Glyph::ScreenOff, "Stop watching"),
-            None => self.red_button_look(),
-        };
-        let icon = div().child(Icon::new(glyph).size(ui::ICON_XL)).with_animation(
-            ElementId::Name(SharedString::from(format!("call-leave-{tip}"))),
-            Animation::new(ui::DUR_POP).with_easing(|t| crate::motion::ease_out().sample(t)),
-            |icon, t| icon.opacity(t).scale(0.25 + 0.75 * t),
-        );
-        ui::pressable(div().id("call-leave"), 0.92)
-            .w(px(56.))
-            .h(px(CONTROLS_HEIGHT))
-            .flex_none()
-            .squircle(10. + DOCK_PAD)
-            .flex()
-            .items_center()
-            .justify_center()
-            .bg(palette::danger())
-            .text_color(gpui_kit::white())
-            .cursor_pointer()
-            .hover(|s| s.bg(palette::danger_hover()))
-            .child(icon)
-            .tooltip(move |window, cx| ui::tip(tip, window, cx))
-            .on_click(cx.listener(move |this, _, _, cx| match watching.clone() {
-                Some(id) => {
-                    this.call_focus = None;
-                    this.unwatch_stream(&id, cx);
-                }
-                None => this.press_red_button(cx),
-            }))
-    }
-
-    // More options: what didn't earn a button of its own.
-    fn open_call_more(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) {
-        cx.stop_propagation();
-        self.open_live_menu(
-            at,
-            |this| {
-                let Some(call) = &this.call else { return Vec::new() };
-                let mut entries = Vec::new();
-                if let Some(guild) = call.guild_id.clone() {
-                    let channel = call.channel.id.clone();
-                    entries.push(item("Invite to voice", move |this, window, cx| this.show_invite(guild.clone(), channel.clone(), window, cx)).icon(Glyph::GroupPlus).entry());
-                }
-                if this.soundboard_access() == soundboard::Access::Ready {
-                    entries.push(item("Soundboard", |this, window, cx| this.open_soundboard(Some(soundboard::CALL_CONTROL), window, cx)).icon(Glyph::Soundboard).entry());
-                }
-                if this.call_focus.is_some() {
-                    let hidden = this.call_strip_hidden;
-                    entries.push(
-                        item(if hidden { "Show everyone" } else { "Hide everyone" }, |this, _, cx| {
-                            this.call_strip_hidden = !this.call_strip_hidden;
-                            cx.notify();
-                        })
-                        .hint("The cards under the focused one")
-                        .icon(Glyph::Users)
-                        .entry(),
-                    );
-                }
-                if call.guild_id.is_some() {
-                    let id = call.channel.id.clone();
-                    let on = this.call_previews_enabled(&id);
-                    entries.push(item("Show New Message Previews", move |this, _, cx| this.toggle_call_previews(&id, cx)).checked(on).entry());
-                }
-                entries
-            },
-            cx,
-        );
     }
 
     pub(crate) fn open_device_menu(&mut self, kind: DeviceKind, at: Point<Pixels>, cx: &mut Context<Self>) {
