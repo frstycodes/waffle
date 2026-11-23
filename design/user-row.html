@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>User row</title>
+<meta name="description" content="The user area at the foot of the sidebar: every state Discord's has, beside Waffle's as built, plus a playground to configure and poke both.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&family=Noto+Sans:wght@400..700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="site.css">
+<link rel="stylesheet" href="css/primitives.css">
+<script>try{const p=JSON.parse(localStorage.getItem("waffle-ds")||"{}"),r=document.documentElement;if(p.theme)r.dataset.theme=p.theme}catch{}</script>
+<style>
+  main { max-width: 1320px; }
+  .src { font-size: var(--text-xs); color: var(--text-faint); }
+  .src code { font-family: var(--font-mono); font-size: 11px; }
+
+  /* Playground */
+  .play { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+  .knobs { display: grid; gap: var(--space-4); padding: var(--space-4); background: var(--bg-raised); border-radius: var(--radius-lg); position: sticky; top: var(--space-4); max-height: calc(100vh - 32px); overflow: auto; }
+  .knobs fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+  .knobs legend { font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--text-faint); margin-bottom: var(--space-1); }
+  .knobs label { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text); min-width: 0; }
+  .knobs label > span { flex: none; width: 86px; color: var(--text-muted); }
+  .knobs select, .knobs input[type="text"] { flex: 1; min-width: 0; height: 32px; padding: 0 var(--space-2); border-radius: var(--radius-xs); border: 1px solid var(--line-strong); background: var(--bg-page); color: var(--text-strong); font: inherit; }
+  .knobs input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+  .knobs input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+  .knobs .acts { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .knobs .acts button { height: 30px; padding: 0 var(--space-3); border-radius: var(--radius-xs); border: 0; background: var(--hover); color: var(--text-strong); font: inherit; font-size: var(--text-xs); font-weight: var(--weight-medium); cursor: pointer; }
+  .knobs .acts button:hover { background: var(--press); }
+  .stages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); min-width: 0; }
+  .stage { display: grid; gap: var(--space-2); min-width: 0; }
+  .stage h3 { margin: 0; font-size: var(--text-sm); color: var(--text-strong); }
+  .stage .frame { overflow: auto; padding-top: 220px; border-radius: var(--radius-lg); }
+  .log { margin: 0; padding: var(--space-3) var(--space-3) var(--space-3) 28px; min-height: 120px; background: var(--bg-raised); border-radius: var(--radius-md); font-size: var(--text-xs); line-height: 1.5; color: var(--text); }
+  .log li:first-child { color: var(--text-strong); font-weight: var(--weight-medium); }
+  @media (max-width: 960px) { .play { grid-template-columns: minmax(0, 1fr); } .knobs { position: static; max-height: none; } }
+  @media (max-width: 720px) { .stages { grid-template-columns: minmax(0, 1fr); } }
+
+  /* Case matrix */
+  .cases { display: grid; gap: var(--space-2); }
+  .case { display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: end; padding: var(--space-3) 0; border-top: 1px solid var(--line); }
+  .case h4 { margin: 0 0 var(--space-1); font-size: var(--text-sm); color: var(--text-strong); }
+  .case p { margin: 0; font-size: var(--text-xs); line-height: 1.45; color: var(--text-muted); text-wrap: pretty; }
+  .case .frame { overflow: hidden; min-width: 0; }
+  .case.pop .frame { padding-top: 200px; }
+  .case.tip .frame { padding-top: 44px; }
+  .colhead { display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--text-faint); position: sticky; top: 0; background: var(--bg-page); padding: var(--space-2) 0; z-index: 5; }
+  .case .ok { color: var(--online-ink); }
+  .case .gap { color: var(--danger-ink); }
+  @media (max-width: 900px) { .case, .colhead { grid-template-columns: minmax(0, 1fr); } .colhead { display: none; } .case .frame::before { content: attr(data-side); display: block; font-size: var(--text-xs); color: var(--text-faint); margin-bottom: 4px; } }
+
+  .gaps { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+  .gaps th, .gaps td { text-align: left; vertical-align: top; padding: var(--space-2) var(--space-3) var(--space-2) 0; border-top: 1px solid var(--line); line-height: 1.45; }
+  .gaps th { font-size: var(--text-xs); color: var(--text-faint); font-weight: var(--weight-semibold); }
+  .gaps td:first-child { color: var(--text-strong); font-weight: var(--weight-medium); white-space: nowrap; }
+  .gaps-wrap { overflow-x: auto; }
+
+  /* ── Discord: its own look, values read from discord.com's theme variables (2026-11-24). ── */
+  .dc { --d-side: hsl(240 7.1% 11%); --d-rail: hsl(240 5.3% 7.5%); --d-panel: hsl(240 5.9% 13.3%); --d-border: hsl(240 4% 60.8% / .04); --d-border-sub: hsl(240 4% 60.8% / .12);
+        --d-mod: hsl(240 4% 60.8% / .16); --d-mod-muted: hsl(240 4% 60.8% / .078); --d-sel: hsl(240 4% 60.8% / .2); --d-hover-text: hsl(0 0% 98.4%);
+        --d-icon: hsl(231.4 4.3% 68.4%); --d-red12: hsl(355.6 64.7% 50% / .12); --d-red24: hsl(355.6 64.7% 50% / .24); --d-muted-icon: hsl(357.7 67.8% 54.9%);
+        --d-critical: hsl(1.9 90% 72.5%); --d-positive: hsl(141.6 44.3% 42.9%); --d-danger: hsl(357.7 67.8% 54.9%); --d-strong: hsl(0 0% 98.4%); --d-text: hsl(240 6.7% 94.1%); --d-muted: hsl(232.5 4% 60.4%);
+        --d-float: hsl(240 5.9% 16.7%); --d-tip: hsl(240 5.3% 7.5%); --d-green-tip: hsl(151.4 100% 25.1%);
+        --d-ctl: hsl(240 4% 60.8% / .12); --d-ctl-hover: hsl(240 4% 60.8% / .16); --d-ctl-text: #fff; --d-mod-strong: hsl(240 4% 60.8% / .2); --d-green12: hsl(151 100% 26% / .12); --d-green24: hsl(151 100% 26% / .24); --d-green30: hsl(138.4 37.1% 55.1%); --d-green360: hsl(141.6 44.3% 42.9%); --d-fb-pos: hsl(137.1 42.5% 64.5%); --d-fb-warn: hsl(39.8 97.2% 57.5%); --d-fb-crit: hsl(3 100% 80.4%); --d-subtle: hsl(228 4.5% 78.2%);
+        --d-idle: #f0b232; --d-dnd: #f23f43; --d-offline: #80848e; --d-stream: #593695; --d-plate: hsl(28 70% 30% / .55); --d-plate-neutral: hsl(0 0% 0% / .3);
+        font: 500 14px/1.25 "gg sans", "Noto Sans", system-ui, sans-serif; color: var(--d-text); }
+  :root[data-theme="light"] .dc { --d-side: hsl(0 0% 98.4%); --d-rail: hsl(240 4.3% 95.5%); --d-panel: hsl(0 0% 98.4%); --d-border: hsl(240 4% 60.8% / .2); --d-border-sub: hsl(240 4% 60.8% / .28);
+        --d-mod: hsl(240 4% 60.8% / .16); --d-mod-muted: hsl(240 4% 60.8% / .078); --d-sel: hsl(240 4% 60.8% / .24); --d-hover-text: hsl(240 5.9% 16.7%);
+        --d-icon: hsl(234 5.3% 36.9%); --d-muted-icon: hsl(355.6 64.7% 50%); --d-critical: hsl(355 65% 43.9%); --d-positive: hsl(145.2 58.5% 35.9%); --d-danger: hsl(356.6 66.1% 52.5%);
+        --d-strong: hsl(240 5.9% 16.7%); --d-text: hsl(240 6.1% 19.2%); --d-muted: hsl(234 4.4% 44.3%); --d-float: #fff; --d-plate-neutral: hsl(0 0% 100% / .4); --d-ctl-text: hsl(240 5.9% 16.7%); --d-mod-strong: hsl(240 4% 60.8% / .24); --d-fb-pos: hsl(150.5 98.2% 22.4%); --d-fb-warn: hsl(33.6 100% 29%); --d-fb-crit: hsl(355 65.2% 43.9%); --d-subtle: hsl(234 5.3% 36.9%); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme]) .dc { --d-side: hsl(0 0% 98.4%); --d-rail: hsl(240 4.3% 95.5%); --d-panel: hsl(0 0% 98.4%); --d-border: hsl(240 4% 60.8% / .2); --d-border-sub: hsl(240 4% 60.8% / .28);
+        --d-sel: hsl(240 4% 60.8% / .24); --d-hover-text: hsl(240 5.9% 16.7%); --d-icon: hsl(234 5.3% 36.9%); --d-muted-icon: hsl(355.6 64.7% 50%); --d-critical: hsl(355 65% 43.9%); --d-positive: hsl(145.2 58.5% 35.9%);
+        --d-danger: hsl(356.6 66.1% 52.5%); --d-strong: hsl(240 5.9% 16.7%); --d-text: hsl(240 6.1% 19.2%); --d-muted: hsl(234 4.4% 44.3%); --d-float: #fff; --d-plate-neutral: hsl(0 0% 100% / .4); --d-ctl-text: hsl(240 5.9% 16.7%); --d-mod-strong: hsl(240 4% 60.8% / .24); --d-fb-pos: hsl(150.5 98.2% 22.4%); --d-fb-warn: hsl(33.6 100% 29%); --d-fb-crit: hsl(355 65.2% 43.9%); --d-subtle: hsl(234 5.3% 36.9%); } }
+
+  /* Discord's Ash theme (plain .theme-dark), picked from the playground; Dark (.theme-darker) is the default above. */
+  :root:not([data-theme="light"]) .ash .dc, :root:not([data-theme="light"]) .dc.ash { --d-side: hsl(231.4 6.5% 21%); --d-rail: hsl(230 6.4% 18.4%); --d-panel: hsl(232.5 6.9% 22.7%); --d-icon: hsl(228 4.5% 78.2%); --d-critical: hsl(3 100% 80.4%); --d-strong: hsl(0 0% 100%); --d-text: hsl(240 4.3% 95.5%); --d-muted: hsl(231.4 4.3% 68.4%); --d-float: hsl(233.3 7% 25.3%); --d-tip: hsl(230 6.4% 14%); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme]) .ash .dc { --d-side: hsl(0 0% 98.4%); --d-rail: hsl(240 4.3% 95.5%); --d-panel: hsl(0 0% 98.4%); --d-icon: hsl(234 5.3% 36.9%); --d-critical: hsl(355 65% 43.9%); --d-strong: hsl(240 5.9% 16.7%); --d-text: hsl(240 6.1% 19.2%); --d-muted: hsl(234 4.4% 44.3%); --d-float: #fff; } }
+
+  .d-side { position: relative; width: var(--w); box-sizing: border-box; padding: 16px 8px 8px;  background: linear-gradient(90deg, var(--d-rail) 72px, var(--d-side) 72px); border-radius: 8px; }
+  .d-panels { position: relative; width: 100%; box-sizing: border-box; border: 1px solid var(--d-border); border-radius: 8px; background: var(--d-panel); z-index: 1; }
+  .d-rtc { display: flex; align-items: center; gap: 8px; height: 50px; padding: 0 12px; border-bottom: 1px solid var(--d-border-sub); color: var(--d-positive); font-size: 14px; font-weight: 600; min-width: 0; }
+  .d-rtc small { display: block; color: var(--d-muted); font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .d-rtc > div { min-width: 0; }
+  .d-acct { position: relative; container-type: inline-size; display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 56px; padding: 8px; box-sizing: border-box; border-radius: 7px; margin-inline-start: -1px; }
+  .d-plate { position: absolute; inset: 0; border-radius: 7px; pointer-events: none; overflow: hidden; background: linear-gradient(100deg, transparent 30%, hsl(28 90% 55% / .35) 70%, hsl(330 80% 60% / .45)); background-size: 200% 100%; background-position: 100% 0; }
+  .d-acct:is(:hover, .hov) .d-plate { animation: plate 2.4s linear infinite; }
+  @keyframes plate { to { background-position: -100% 0; } }
+  .d-zone { position: relative; display: flex; align-items: center; gap: 8px; flex: 1 1 0%; min-width: 112px; margin-inline-start: -4px; padding: 5px 4px; border-radius: 4px; cursor: pointer; transition: background-color .2s; }
+  .d-zone:hover, .d-zone.open { background: var(--d-mod); }
+  .d-acct.plated .d-zone { background: none; } .d-acct.plated .d-zone:hover { background: var(--d-plate); }
+  @container (max-width: 260px) { .d-zone { min-width: 0; } }
+  @container (max-width: 100px) { .d-tag { display: none; } }
+  .d-tag { flex-grow: 1; min-width: 0; margin-inline-end: 4px; }
+  .d-title { margin: -1px 0 2px; color: var(--d-strong); font-size: 14px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .d-title.styled { line-height: 22px; font-family: "Figtree", sans-serif; font-weight: 800; background: linear-gradient(90deg, #ff8a3d, #ff4fa3, #ff8a3d); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .d-acct:is(:hover, .hov) .d-title.styled { animation: plate 1.6s linear infinite; }
+  .d-roll { position: relative; display: block; contain: paint; font-size: 12px; line-height: 1.33; color: var(--d-muted); }
+  .d-roll > span { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; transition: transform .22s, opacity .22s; }
+  .d-roll .hv { position: absolute; inset: 0; opacity: 0; transform: translateY(107%); }
+  .d-acct:is(:hover, .hov) .d-roll.rolls .df { opacity: 0; transform: translateY(-107%); }
+  .d-acct:is(:hover, .hov) .d-roll.rolls .hv { opacity: 1; transform: none; }
+  .d-line { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .d-line .ic { flex: none; font-size: 12px; color: var(--d-positive); }
+  .d-line .em { flex: none; font-size: 13px; line-height: 14px; }
+  .d-line .cem { flex: none; width: 14px; height: 14px; border-radius: 3px; background: linear-gradient(135deg, #ffb347, #ff5f6d); }
+  .d-line .tx { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .d-line .cnt { flex: none; }
+  .d-line .cnt.pos { color: var(--d-positive); }
+  .d-btns { display: flex; gap: 8px; flex: none; }
+  .d-grp { position: relative; display: flex; }
+  .d-btn { position: relative; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--d-icon); cursor: pointer; transition: background-color .2s; font: inherit; }
+  .d-btn > i { font-size: 20px; }
+  .d-btn:hover { background: var(--d-mod); color: var(--d-hover-text); }
+  .d-btn.glow { background: var(--d-red12); } .d-btn.glow:hover { background: var(--d-red24); }
+  .d-btn.glow > i { color: var(--d-muted-icon); }
+  .d-btn.deny > i { color: var(--d-critical); }
+  .d-btn:disabled { opacity: .4; cursor: not-allowed; } .d-btn:disabled:hover { background: none; }
+  .d-grp .main { border-start-end-radius: 0; border-end-end-radius: 0; }
+  .d-grp .chev { width: 16px; margin-inline-start: 1px; border-start-start-radius: 0; border-end-start-radius: 0; }
+  .d-grp .chev > i { font-size: 12px; }
+  .d-grp:not(.glow):is(:hover, .open) .d-btn { background: var(--d-mod-muted); }
+  .d-grp:not(.glow):is(:hover, .open) .d-btn:is(:hover, .open) { background: var(--d-sel); color: var(--d-hover-text); }
+  .d-acct.plated .d-btn { background: none; } .d-acct.plated .d-btn:hover { background: var(--d-plate); backdrop-filter: blur(4px); }
+  .d-acct.plated .d-btn.glow { background: var(--d-plate-neutral); backdrop-filter: blur(4px); }
+  .d-gear:hover > i { animation: spin .6s var(--ease-out); }
+  @keyframes spin { to { transform: rotate(90deg); } }
+  .d-ptt { position: absolute; right: 7px; bottom: 7px; width: 8px; height: 8px; box-sizing: border-box; border: 2px solid var(--d-danger); border-radius: 50%; }
+  .d-ptt.on { border-color: var(--d-positive); }
+  .slash { position: relative; }
+  .slash::after { content: ""; position: absolute; left: 50%; top: 50%; width: 24px; height: 2px; background: currentColor; transform: translate(-50%, -50%) rotate(-45deg); border-radius: 2px; box-shadow: 0 0 0 1.5px var(--d-panel); }
+  .deny-dot { position: absolute; right: 4px; bottom: 4px; font-size: 11px !important; color: var(--d-critical); background: var(--d-panel); border-radius: 50%; }
+
+  .av { position: relative; flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: #fff; font: 700 13px/1 "Figtree", sans-serif; background: linear-gradient(135deg, hsl(var(--h) 70% 62%), hsl(calc(var(--h) + 40) 65% 45%)); }
+  .av.speak { box-shadow: 0 0 0 2px var(--ring-bg), 0 0 0 4px var(--speak); }
+  .mark { position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; border-radius: 50%; border: 3px solid var(--ring-bg); background: var(--c); }
+  .mark.idle { background: radial-gradient(circle at 25% 25%, var(--ring-bg) 3px, var(--c) 3.5px); }
+  .mark.dnd { background: linear-gradient(var(--c), var(--c)) padding-box; }
+  .mark.dnd::after { content: ""; position: absolute; left: 2px; right: 2px; top: 4px; height: 2px; border-radius: 1px; background: var(--ring-bg); }
+  .mark.off { background: var(--ring-bg); box-shadow: inset 0 0 0 2.5px var(--c); }
+  .dc .av { --ring-bg: var(--d-panel); --speak: var(--d-positive); }
+
+  .d-tipf, .d-tip { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); padding: 6px 10px; border-radius: 8px; background: var(--d-tip); color: #fff; font-size: 14px; font-weight: 500; white-space: nowrap; box-shadow: 0 8px 16px hsl(0 0% 0% / .24); pointer-events: none; z-index: 20; }
+  .d-tipf { background: var(--d-green-tip); max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+  .d-tip { opacity: 0; transition: opacity .1s; }
+  [data-tipwrap]:hover > .d-tip { opacity: 1; }
+  .d-pop { position: absolute; bottom: calc(100% + var(--gap)); left: 0; z-index: 15; width: 260px; padding: 8px; border-radius: 8px; background: var(--d-float); border: 1px solid var(--d-border-sub); box-shadow: 0 12px 24px hsl(0 0% 0% / .24); animation: fade .15s; color: var(--d-text); font-size: 14px; }
+  .d-pop h5 { margin: 0 0 6px; font-size: 12px; color: var(--d-muted); font-weight: 600; }
+  .d-pop .mi { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; padding: 0 8px; border-radius: 4px; }
+  .d-pop .mi:hover { background: var(--d-mod); }
+  .d-pop .mi small { color: var(--d-muted); font-size: 12px; }
+  .d-pop .bar { height: 8px; border-radius: 4px; background: linear-gradient(90deg, #5865f2 60%, var(--d-mod) 60%); margin: 8px; }
+  @keyframes fade { from { opacity: 0; } }
+
+  /* Discord RTC panel (container_9U6LUN, rtcConnectionStatus_4LJE6I) */
+  .d-rtcp { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 8px; border-bottom: 1px solid var(--d-border-sub); border-radius: 8px 8px 0 0; }
+  .d-conn { display: flex; align-items: center; gap: 4px; height: 32px; min-width: 0; }
+  .d-conn .inner { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; }
+  .d-ping { flex: none; width: 16px; height: 16px; margin-inline-end: 4px; display: grid; place-items: center; cursor: pointer; }
+  .d-ping i { font-size: 16px; }
+  .d-ping.fine i { color: var(--d-fb-pos); } .d-ping.average i { color: var(--d-fb-warn); } .d-ping.bad i { color: var(--d-fb-crit); } .d-ping.unknown i { color: var(--d-muted); }
+  .d-cstat { min-width: 0; overflow: hidden; }
+  .d-cstat .d-roll { font-size: 14px; line-height: 20px; height: 20px; color: inherit; cursor: pointer; }
+  .d-cstat:hover .d-roll .df { opacity: 0; transform: translateY(-107%); } .d-cstat:hover .d-roll .hv { opacity: 1; transform: none; }
+  .d-cstat.ok { color: var(--d-fb-pos); } .d-cstat.wait { color: var(--d-fb-warn); } .d-cstat.err { color: var(--d-fb-crit); }
+  .d-chan { display: block; font-size: 12px; line-height: 16px; color: var(--d-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; font-weight: 500; }
+  .d-chan:hover { text-decoration: underline; }
+  .d-vbtns { display: flex; gap: 4px; flex: none; }
+  .d-acts { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; }
+  .d-act { height: 32px; border-radius: 8px; border: 1px solid transparent; background: var(--d-ctl); color: var(--d-ctl-text); display: flex; align-items: center; justify-content: center; gap: 8px; font: 500 14px/1 inherit; font-family: inherit; cursor: pointer; transition: background-color .1s ease-in-out; position: relative; min-width: 0; }
+  .d-act i { font-size: 20px; flex: none; }
+  .d-act:hover { background: var(--d-ctl-hover); }
+  .d-act.on { background: var(--d-green12); border-color: var(--d-green12); color: var(--d-green30); } .d-act.on:hover { background: var(--d-green24); }
+  .d-act.grey { background: var(--d-mod-strong); }
+  .d-act:disabled { opacity: .3; cursor: not-allowed; } .d-act:disabled:hover { background: var(--d-ctl); }
+  .d-users { display: flex; gap: 4px; align-items: center; padding: 2px 0 4px; }
+  .d-users .u { position: relative; width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(135deg, hsl(var(--h) 70% 62%), hsl(calc(var(--h) + 40) 65% 45%)); }
+  .d-users .u.sp { box-shadow: inset 0 0 0 2px var(--d-positive); }
+  .d-users .u i { position: absolute; right: -3px; bottom: -3px; font-size: 10px; background: var(--d-panel); border-radius: 50%; padding: 1px; color: var(--d-muted); }
+  .d-users .more { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; color: var(--d-icon); cursor: pointer; } .d-users .more:hover { background: var(--d-mod); }
+  .d-actp { display: flex; align-items: center; gap: 10px; padding: 8px; border-bottom: 1px solid var(--d-border-sub); }
+  .d-actp .ic { width: 32px; height: 32px; border-radius: 8px; flex: none; background: linear-gradient(135deg, #f7c948, #e8743b); }
+  .d-actp b { display: block; color: var(--d-strong); font-size: 14px; } .d-actp small { color: var(--d-muted); font-size: 12px; }
+  .d-actp > div { flex: 1; min-width: 0; }
+  .d-cpop { width: 290px; padding: 16px; display: grid; gap: 8px; }
+  .d-cpop .graph { height: 80px; border-radius: 4px; background: var(--d-panel); display: flex; align-items: flex-end; gap: 2px; padding: 4px; box-sizing: border-box; }
+  .d-cpop .graph span { flex: 1; background: #5865f2; border-radius: 1px; }
+  .d-cpop .host { font-size: 14px; font-weight: 600; color: var(--d-text); }
+  .d-cpop .stats { font-size: 12px; line-height: 1.5; font-weight: 400; } .d-cpop .stats b { font-weight: 700; }
+  .d-cpop .help { font-size: 12px; color: var(--d-muted); font-weight: 400; } .d-cpop .help a { color: #00a8fc; }
+  .d-cpop hr { border: 0; border-top: 1px solid var(--d-border-sub); margin: 4px 0; width: 100%; }
+  .d-cpop .btns { display: flex; gap: 8px; } .d-cpop .btns span { flex: 1; height: 32px; border-radius: 8px; background: var(--d-ctl); display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; }
+  .d-cpop .lock { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 8px; background: var(--d-green12); color: var(--d-fb-pos); font-size: 12px; }
+  .d-cpop .tabs { display: flex; gap: 16px; border-bottom: 1px solid var(--d-border-sub); font-size: 14px; } .d-cpop .tabs span { padding-bottom: 6px; } .d-cpop .tabs .on { box-shadow: inset 0 -2px #5865f2; color: var(--d-strong); }
+  .d-kpop { width: 244px; padding: 16px; display: grid; gap: 8px; font-size: 14px; font-weight: 400; }
+  .d-kpop .row { display: flex; justify-content: space-between; align-items: center; font-weight: 500; }
+  .d-kpop .sw { width: 40px; height: 24px; border-radius: 12px; background: var(--d-green360); position: relative; } .d-kpop .sw::after { content: ""; position: absolute; right: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; }
+  .d-kpop .sw.off { background: var(--d-mod-strong); } .d-kpop .sw.off::after { right: auto; left: 3px; }
+
+  /* Waffle voicebar (src/call/dock.rs voice_panel) */
+  .w-vb { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  .w-vb::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; border-bottom: 1px solid var(--line); }
+  .w-top { display: flex; align-items: center; gap: 8px; }
+  .w-status { position: relative; flex: 1; min-width: 0; margin: -4px -6px; padding: 4px 6px; border-radius: var(--radius-sm); cursor: pointer; }
+  .w-status:hover, .w-status.open { background: var(--hover); }
+  .w-status .l1 { display: flex; align-items: center; gap: 6px; height: 20px; font-size: var(--text-sm); font-weight: 500; color: var(--tone); }
+  .w-status .l1 span, .w-status .l2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .w-status .l2 { height: 18px; line-height: 18px; font-size: var(--text-xs); color: var(--tone2, var(--text-faint)); }
+  .w-status .l2.place:hover { text-decoration: underline; }
+  .w-bars { display: flex; align-items: flex-end; gap: 1.5px; height: 12px; flex: none; } .w-bars i { width: 3px; border-radius: 2px; background: var(--tone); } .w-bars i:nth-child(1) { height: 5px; } .w-bars i:nth-child(2) { height: 9px; } .w-bars i:nth-child(3) { height: 12px; }
+  .w-bars.weak i:not(:first-child) { opacity: .35; }
+  .w-bars.live i { animation: bars 1s ease-in-out infinite alternate; } .w-bars.live i:nth-child(2) { animation-delay: .2s; } .w-bars.live i:nth-child(3) { animation-delay: .4s; }
+  @keyframes bars { to { transform: scaleY(.4); } }
+  .w-hang { width: 32px; height: 32px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-strong); display: grid; place-items: center; cursor: pointer; position: relative; flex: none; }
+  .w-hang:hover { background: var(--hover); } .w-hang i { font-size: 20px; }
+  .w-acts { display: flex; gap: 6px; }
+  .w-act { position: relative; flex: 1; height: 32px; border: 0; border-radius: var(--radius-sm); background: var(--selected); color: var(--text-strong); display: grid; place-items: center; cursor: pointer; }
+  .w-act i { font-size: 18px; } .w-act:hover { background: var(--press); }
+  .w-act.cam { background: var(--text-strong); color: var(--bg-page); } .w-act.acc { background: var(--accent); color: var(--on-accent); } .w-act.press { background: var(--press); }
+  .w-act.off { opacity: .45; cursor: not-allowed; } .w-act.off:hover { background: var(--selected); }
+  .w-actrow { display: flex; align-items: center; gap: 10px; height: 36px; }
+  .w-actrow .ic { width: 36px; height: 36px; border-radius: var(--radius-sm); flex: none; background: linear-gradient(135deg, #f7c948, #e8743b); }
+  .w-actrow > div { flex: 1; min-width: 0; } .w-actrow b { display: block; font-weight: 600; color: var(--text-strong); } .w-actrow small { font-size: var(--text-xs); color: var(--text-muted); }
+  .w-cpop { width: 300px; padding: 16px; display: grid; gap: 12px; border-radius: var(--radius-lg); }
+  .w-cpop .head { display: flex; justify-content: space-between; align-items: baseline; } .w-cpop .head b { color: var(--text-strong); font-weight: 500; } .w-cpop .head small { font-weight: 500; }
+  .w-cpop .graph { height: 56px; padding: 6px; box-sizing: border-box; border-radius: var(--radius-sm); background: var(--bg-page); display: flex; align-items: flex-end; gap: 2px; }
+  .w-cpop .graph span { flex: 1; border-radius: 2px 2px 1px 1px; }
+  .w-cpop .row { display: flex; justify-content: space-between; min-height: 26px; align-items: center; } .w-cpop .row span:first-child { color: var(--text-muted); } .w-cpop .row b { color: var(--text-strong); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .w-cpop .sec { display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); font-size: var(--text-xs); color: var(--text-muted); }
+  .w-cpop .meta { font-size: var(--text-xs); color: var(--text-faint); }
+
+  /* ── Waffle, as built (src/layout.rs user_panel), in Waffle's tokens. ── */
+  .wf { font: 500 var(--text-sm)/1.2 var(--font-ui); color: var(--text); }
+  .w-side { position: relative; width: var(--w); box-sizing: border-box; padding: 16px 8px 8px;  background: linear-gradient(90deg, var(--bg-rail) 68px, var(--bg-sidebar) 68px); border-radius: var(--radius-sm); }
+  .w-card { position: relative; border-radius: var(--radius-md); background: oklch(1 0 0 / .08); }
+  :root[data-theme="light"] .w-card { background: oklch(1 0 0 / .55); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme]) .w-card { background: oklch(1 0 0 / .55); } }
+  .w-rtc { display: flex; align-items: center; gap: var(--space-2); height: 50px; padding: 0 var(--space-3); border-bottom: 1px solid var(--line); color: var(--online-ink); font-size: var(--text-sm); font-weight: 600; }
+  .w-rtc small { display: block; color: var(--text-faint); font-weight: 500; font-size: var(--text-xs); }
+  .w-row { position: relative; display: flex; align-items: center; gap: 4px; height: 54px; padding: 6px; box-sizing: border-box; }
+  .w-plate { position: absolute; inset: 0; border-radius: 0 0 var(--radius-md) var(--radius-md); pointer-events: none; background: linear-gradient(100deg, transparent 30%, hsl(28 90% 55% / .35) 70%, hsl(330 80% 60% / .45)); background-size: 200% 100%; background-position: 100% 0; }
+  .w-card:not(.rtcd) .w-plate { border-radius: var(--radius-md); }
+  .w-row:has(.w-who:hover) .w-plate { animation: plate 2.4s linear infinite; }
+  .w-who { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); height: 40px; padding: 4px; box-sizing: border-box; border-radius: var(--radius-sm); cursor: pointer; transition: background-color var(--dur-hover); }
+  .w-who:hover { background: var(--hover); } .w-who.open { background: var(--selected); }
+  .w-tag { min-width: 0; flex: 1; }
+  .w-name { color: var(--text-strong); line-height: var(--line-detail); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .w-sub { display: flex; align-items: center; gap: 4px; min-width: 0; line-height: var(--line-xs); font-size: var(--text-xs); color: var(--text-faint); }
+  .w-sub span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .w-sub.danger { color: var(--danger-ink); }
+  .w-sub i { flex: none; font-size: 14px; color: var(--online-ink); }
+  .w-ctrls { position: relative; display: flex; gap: var(--space-2); flex: none; }
+  .w-split { position: relative; display: flex; gap: 1px; }
+  .w-btn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-strong); cursor: pointer; font: inherit; transition: background-color var(--dur-hover); }
+  .w-btn > i { font-size: 20px; }
+  .w-btn:hover { background: var(--hover); }
+  .w-btn.on { color: var(--danger-ink); }
+  .w-btn.off { cursor: default; }
+  .w-split .w-btn:first-child { border-start-end-radius: 0; border-end-end-radius: 0; }
+  .w-chev { width: 16px; border-radius: var(--radius-xs); color: var(--text-faint); border-start-start-radius: 0 !important; border-end-start-radius: 0 !important; }
+  .w-chev > i { font-size: 12px; }
+  .w-chev:hover, .w-chev.open { color: var(--text-strong); } .w-chev.open { background: var(--selected); }
+  .w-plated .w-btn.on { background: oklch(0 0 0 / .22); }
+  .w-btn .slash::after { box-shadow: 0 0 0 1.5px var(--bg-sidebar); }
+  .wf .av { --ring-bg: var(--bg-sidebar); }
+  .w-tip { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); padding: 6px 10px; border-radius: var(--radius-xs); background: var(--text-strong); color: var(--bg-page); font-size: var(--text-xs); font-weight: 500; white-space: nowrap; opacity: 0; transition: opacity var(--dur-hover); pointer-events: none; z-index: 20; }
+  [data-tipwrap]:hover > .w-tip { opacity: 1; }
+  .w-pop { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 15; width: 240px; padding: 6px; border-radius: var(--radius-lg); background: var(--bg-overlay); box-shadow: var(--shadow-pop); animation: fade .15s; font-size: var(--text-sm); color: var(--text); }
+  .w-pop h5 { margin: 4px 8px 6px; font-size: var(--text-xs); color: var(--text-faint); font-weight: 600; }
+  .w-pop .mi { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px; border-radius: var(--radius-sm); }
+  .w-pop .mi:hover { background: var(--hover); }
+  .w-pop .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div class="layout">
+<nav class="toc" id="toc" aria-label="Design system"></nav>
+<main>
+<section id="user-row">
+  <h1>User row</h1>
+  <p class="lede">The user area at the foot of the sidebar. Discord's behaviour is read from its shipped client (discord.com bundle and CSS, 2026-11-24); Waffle's is <code>user_panel</code> in <code>src/layout.rs</code> as it stands on main. Both columns follow the page theme.</p>
+  <p class="src">Discord source: <code>container_g6VwXp</code>, <code>audioButtonParent_gKpIZP</code>, <code>button_Y-8oZW</code>, <code>hoverRoll_Dq3ch1</code>, the account panel class <code>r4</code> and its status renderer. Icons on both sides are Phosphor stand-ins. Not verified: camera, stop-streaming and activity tooltips, Discord's ping quality thresholds and ping mark colours, the activity panel's contents, which of Discord's dark themes is the default (Dark is drawn; Ash is in the playground), Discord's default sidebar width (its resize handle runs 264–432 and <code>--custom-guild-sidebar-width</code> is 268, so 268 is used; Waffle's is 68 + 240 = 308), idle, dnd and streaming mark colours, the gear's hover animation (Discord plays a Lottie), what the server-muted click shows.</p>
+</section>
+
+<section id="playground">
+  <h2>Playground</h2>
+  <p class="lede">Set the state on the left, then hover and click either panel. Clicks drive one shared state, so you see both apps answer the same action; each log says what that app does.</p>
+  <div class="play">
+    <form class="knobs" id="knobs" onsubmit="return false">
+      <fieldset><legend>Who</legend>
+        <label><span>Display name</span><input type="text" name="name" value="Frsty"></label>
+        <label><span>Username</span><input type="text" name="username" value="frsty"></label>
+        <label><input type="checkbox" name="legacy"> Legacy tag (name#1234)</label>
+        <label><input type="checkbox" name="styled"> Display name style</label>
+        <label><input type="checkbox" name="nameplate"> Nameplate</label>
+      </fieldset>
+      <fieldset><legend>Presence</legend>
+        <label><span>Status</span><select name="status"><option value="online">Online</option><option value="idle">Idle</option><option value="dnd">Do Not Disturb</option><option value="invisible">Invisible</option></select></label>
+        <label><span>Status emoji</span><select name="emoji"><option value="">None</option><option value="🍕">🍕 Unicode</option><option value=":custom:">Server emoji</option></select></label>
+        <label><span>Status text</span><input type="text" name="text" value=""></label>
+        <label><span>Activity</span><select name="activity"><option value="none">None</option><option value="playing">Playing Balatro</option><option value="listening">Listening to Spotify</option><option value="watching">Watching YouTube</option><option value="multi">Playing + Listening</option></select></label>
+      </fieldset>
+      <fieldset><legend>Voice</legend>
+        <label><span>Connected</span><select name="voice"><option value="none">Not connected</option><option value="server">Server voice</option><option value="dm">DM call</option><option value="stage">Stage</option></select></label>
+        <label><span>Connection</span><select name="conn"><option value="connected">Connected</option><option value="connecting">Connecting</option><option value="authenticating">Authenticating</option><option value="awaiting">Waiting for server</option><option value="rtc-connecting">RTC connecting</option><option value="ice">Checking route</option><option value="dtls">DTLS connecting</option><option value="no-route">No route</option><option value="rtc-disconnected">RTC disconnected</option><option value="disconnected">Disconnected</option></select></label>
+        <label><span>Ping (ms)</span><input type="range" name="ping" min="10" max="400" value="42"><output id="pout">42</output></label>
+        <label><span>Packet loss</span><select name="loss"><option value="0.2">0.2%</option><option value="6">6%</option><option value="12">12%</option></select></label>
+        <label><input type="checkbox" name="camera"> Camera on</label>
+        <label><input type="checkbox" name="streaming"> Sharing screen (Go Live)</label>
+        <label><input type="checkbox" name="inActivity"> In an activity (Balatro)</label>
+        <label><input type="checkbox" name="activitiesEnabled" checked> Activities allowed here</label>
+        <label><input type="checkbox" name="soundboard" checked> Soundboard available</label>
+        <label><input type="checkbox" name="krisp" checked> Noise suppression on</label>
+        <label><input type="checkbox" name="e2ee" checked> End-to-end encrypted</label>
+        <label><input type="checkbox" name="showUsers"> Show voice users (Discord setting)</label>
+        <label><input type="checkbox" name="noMicWarn"> Mic sends nothing (Waffle warning)</label>
+        <label><input type="checkbox" name="ptt"> Push to talk</label>
+        <label><input type="checkbox" name="speaking"> Speaking</label>
+        <label><input type="checkbox" name="selfMute"> Muted</label>
+        <label><input type="checkbox" name="selfDeaf"> Deafened</label>
+        <label><input type="checkbox" name="serverMute"> Server muted</label>
+        <label><input type="checkbox" name="serverDeaf"> Server deafened</label>
+        <label><input type="checkbox" name="suppress"> Suppressed (stage audience)</label>
+        <label><input type="checkbox" name="disabled"> Connecting to console</label>
+      </fieldset>
+      <fieldset><legend>Layout</legend>
+        <label><span>Discord dark</span><select name="dtheme"><option value="dark">Dark</option><option value="ash">Ash</option></select></label>
+        <label><span>Sidebar</span><input type="range" name="width" min="120" max="440" value="268"><output id="wout">268</output></label>
+        <label><input type="checkbox" name="hov"> Pin the hover</label>
+      </fieldset>
+      <fieldset><legend>Events</legend>
+        <div class="acts">
+          <button type="button" data-act="talk">Talk while muted</button>
+          <button type="button" data-act="in-switch">Input device switched</button>
+          <button type="button" data-act="out-switch">Output device switched</button>
+          <button type="button" data-act="defaults">Each app's default width</button>
+          <button type="button" data-act="reset">Reset</button>
+        </div>
+      </fieldset>
+    </form>
+    <div class="stages">
+      <div class="stage"><h3>Discord</h3><div class="frame" id="pd"></div><ol class="log" id="ld" reversed></ol></div>
+      <div class="stage"><h3>Waffle, as built</h3><div class="frame" id="pw"></div><ol class="log" id="lw" reversed></ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="cases">
+  <h2>Every case</h2>
+  <p class="lede">Each state Discord's panel can be in, frozen, with Waffle's beside it. Hover any panel; the rows marked hover are pinned.</p>
+  <div class="colhead"><span>Case</span><span>Discord</span><span>Waffle</span></div>
+  <div class="cases" id="caselist"></div>
+</section>
+
+<section id="gaps">
+  <h2>What to change in Waffle</h2>
+  <div class="gaps-wrap">
+  <table class="gaps">
+    <thead><tr><th>Area</th><th>Discord</th><th>Waffle today</th></tr></thead>
+    <tbody>
+      <tr><td>Hover roll</td><td>Hovering anywhere on the panel, buttons included, rolls the second line up and out (−107%, fade) as the username rolls in from below, 220ms. Hover state comes from the whole panel, not the name zone.</td><td>No roll; the username never shows.</td></tr>
+      <tr><td>Second line</td><td>Activity first (stream, then games and music, then voice: "In voice", "In a call", "In a stage"), green 12px icon + short name, "+N" when several, then " • " and the custom status. With custom status text, the activity drops to its icon. No activity: custom status (emoji + text, server emoji too). Neither: the status word. Invisible hides activities.</td><td>Custom status (unicode emoji only, server emoji dropped) or the status word. No activities, no voice line.</td></tr>
+      <tr><td>Server mute</td><td>Mic shows the deny icon in critical red on the red glow; tooltip "Server Muted". Second line unchanged.</td><td>Second line turns red: "Server muted by a moderator"; click disabled.</td></tr>
+      <tr><td>Server deafen, suppressed</td><td>Headphones deny icon, "Server Deafened"; stage audience mic deny, "Suppressed".</td><td>Not modelled: shows as unmuted.</td></tr>
+      <tr><td>Muted fill</td><td>Muted or deafened control and its chevron sit on red at 12%, 24% on hover. Icon in the voice-muted red.</td><td>Only the icon turns red (fill only over a nameplate).</td></tr>
+      <tr><td>Chevron pairing</td><td>Hovering either half fills both at the muted mod; the hovered half takes the selected fill. Open: both stay filled, the caret flips up. Popout above, left-aligned, 4px off, fade.</td><td>Chevron fills alone; caret never flips.</td></tr>
+      <tr><td>Name zone click</td><td>Account popout (profile, status, switch accounts) above, left-aligned, 14px off, fade. Aria label "Manage profile and status".</td><td>Status menu.</td></tr>
+      <tr><td>Settings</td><td>Opens Voice &amp; Video while connected, My Account otherwise. Right-click opens a settings menu. Gear animates on hover. Tooltip "User Settings".</td><td>Always Account; no right-click menu; tooltip "User settings".</td></tr>
+      <tr><td>Voice cues</td><td>Speaking ring on your avatar; push-to-talk ring on the mic (red idle, green speaking); "You are currently muted!" green tooltip for 2.5s when you talk muted, once per 2 minutes, never while hovering the mic; "Input switched to <b>name</b>" on the chevron for 5s.</td><td>None.</td></tr>
+      <tr><td>Streaming mark</td><td>Going live swaps your avatar's status mark for the streaming mark.</td><td>Status mark unchanged; second line says "Sharing their screen".</td></tr>
+      <tr><td>Narrow panel</td><td>Name zone keeps 112px until the panel is under 260px, then shrinks; under 100px the name and second line hide.</td><td>Name shrinks to nothing; no breakpoints.</td></tr>
+      <tr><td>Nameplate</td><td>Art animates while the whole panel is hovered. Controls lose their fill; hover tints them in the plate's colour with a 4px blur; muted ones sit on a neutral plate.</td><td>Art animates on name-zone hover only; muted controls on black 22%.</td></tr>
+      <tr><td>Voice status</td><td>Ping mark (fine, average, bad; tooltip “N ms”) then the state word in its ink: “Voice Connected” / “Video Connected” positive; Connecting, Authenticating, Waiting for Voice Server, RTC Connecting, Checking Route, DTLS Connecting in warning; No Route, RTC Disconnected, Disconnected in critical. Hovering rolls it to “Voice Details” / “Video Details”. Ping and word both open the popout.</td><td>Bars + “Connecting…”, “Voice connected”, “Poor connection”, “Reconnecting…”; whole block hovers and opens the card.</td></tr>
+      <tr><td>Voice second line</td><td>Always the channel link, “Channel / Server” (DM: the name), 12px subtle, underlined on hover; right-click opens the connection menu.</td><td>“Channel · Server”, replaced by poor-connection numbers, “Lost the connection, retrying”, or mic warnings.</td></tr>
+      <tr><td>Voice right buttons</td><td>Noise suppression (popout: toggle, mic test) then Disconnect; stage audience gets Mute Music and “Disconnect Quietly”.</td><td>Hang-up only.</td></tr>
+      <tr><td>Voice action buttons</td><td>Equal grid, 8px gap, 32px, secondary fill; active is a green tint with green ink; labels “Video”/“Screen” when only those two show; none for stage audience; usable while connecting.</td><td>6px gap; camera on = strong fill, sharing = honey; disabled until connected.</td></tr>
+      <tr><td>Connection popout</td><td>Graph 258×80 and short host, average ping, last ping, outbound loss, advice, Debug and Upload Logs, lock badge; E2EE calls get Connection / Privacy tabs with the verification code.</td><td>Own card: verdict, banded bars, ping, loss, server, encryption sentence.</td></tr>
+      <tr><td>Activity</td><td>A separate activity panel above the voice panel; Activities button turns green.</td><td>Row inside the voicebar.</td></tr>
+      <tr><td>Voice users</td><td>Optional strip of participants with mute marks.</td><td>None.</td></tr>
+      <tr><td>Disabled</td><td>While a console session connects, mic, deafen and chevrons are at 40% with "Disabled while connecting to console".</td><td>Not modelled (no console voice).</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+</main>
+</div>
+<script src="site.js"></script>
+<script>
+const BASE = { name: "Frsty", username: "frsty", legacy: false, styled: false, nameplate: false, status: "online", emoji: "", text: "", activity: "none",
+  voice: "none", streaming: false, ptt: false, speaking: false, selfMute: false, selfDeaf: false, serverMute: false, serverDeaf: false, suppress: false, disabled: false,
+  conn: "connected", ping: 42, loss: "0.2", camera: false, inActivity: false, activitiesEnabled: true, soundboard: true, krisp: true, e2ee: true, showUsers: false, noMicWarn: false,
+  dW: 268, wW: 308, hov: false, popout: null, tipMuted: false, tipDevice: null };
+const ACT = { playing: ["ph-game-controller", "Balatro"], listening: ["ph-music-notes", "Spotify"], watching: ["ph-television-simple", "YouTube"] };
+const WORD = { online: "Online", idle: "Idle", dnd: "Do Not Disturb", invisible: "Invisible" };
+const VOICE = { server: "In voice", dm: "In a call", stage: "In a stage" };
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const hue = n => [...n].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+
+// Discord's derived voice state: deafening also mutes; server mute and stage suppression deny the mic.
+function voiceState(s) {
+  const micDenied = s.serverMute || s.suppress, deaf = s.selfDeaf || s.serverDeaf;
+  return { micDenied, micOff: s.selfMute || deaf || micDenied, deaf, inVoice: s.voice !== "none" };
+}
+
+function avatar(s, { side, speaking, stream }) {
+  const st = s.status, c = side === "d" ? { online: "var(--d-positive)", idle: "var(--d-idle)", dnd: "var(--d-dnd)", invisible: "var(--d-offline)" }[st] : { online: "var(--online)", idle: "var(--idle)", dnd: "var(--dnd)", invisible: "var(--offline)" }[st];
+  const mark = stream ? `<span class="mark" style="--c:var(--d-stream)"></span>` : `<span class="mark ${{ idle: "idle", dnd: "dnd", invisible: "off" }[st] ?? ""}" style="--c:${c}"></span>`;
+  return `<span class="av${speaking ? " speak" : ""}" style="--h:${hue(s.name || "x")}" aria-hidden="true">${esc((s.name || "?")[0].toUpperCase())}${mark}</span>`;
+}
+
+function customStatus(s, cls = "d") {
+  const em = s.emoji === ":custom:" ? `<span class="cem" aria-label=":custom:"></span>` : s.emoji ? `<span class="em">${s.emoji}</span>` : "";
+  return em + (s.text ? `<span class="tx">${esc(s.text)}</span>` : "");
+}
+
+// Discord's renderStatus: activity line (+ custom status), else custom status, else the status word, else the legacy tag.
+function discordLine(s) {
+  const tag = s.legacy ? `${s.username}#1234` : s.username;
+  const hasCustom = !!(s.emoji || s.text.trim());
+  const acts = s.activity === "multi" ? ["playing", "listening"] : s.activity === "none" ? [] : [s.activity];
+  const lead = s.streaming ? ["ph-television-simple", "Sharing their screen"] : acts.length ? ACT[acts[0]] : s.voice !== "none" ? ["ph-speaker-high", VOICE[s.voice]] : null;
+  const count = acts.length + (s.streaming || s.voice !== "none" ? 1 : 0);
+  const showActivity = s.status !== "invisible" && lead;
+  let df;
+  if (showActivity) {
+    const iconOnly = !!s.text.trim();
+    const a = `<i class="ph-fill ${lead[0]} ic"></i>${iconOnly ? "" : `<span class="tx">${esc(lead[1])}</span>`}${count > 1 ? `<span class="cnt${iconOnly ? " pos" : ""}">+${count - 1}</span>` : ""}`;
+    df = `<span class="d-line">${a}${hasCustom ? `<span>•</span>${customStatus(s)}` : ""}</span>`;
+  } else if (hasCustom) df = `<span class="d-line">${customStatus(s)}</span>`;
+  else if (!s.legacy) df = `<span class="d-line"><span class="tx">${WORD[s.status]}</span></span>`;
+  else return `<span class="d-roll"><span class="df">${esc(tag)}</span></span>`;
+  return `<span class="d-roll rolls"><span class="df">${df}</span><span class="hv">${esc(tag)}</span></span>`;
+}
+
+// ── Voice panel ──
+const CONN = { connected: ["ok", "Voice Connected"], connecting: ["wait", "Connecting"], authenticating: ["wait", "Authenticating"], awaiting: ["wait", "Waiting for Voice Server"], "rtc-connecting": ["wait", "RTC Connecting"], ice: ["wait", "Checking Route"], dtls: ["wait", "DTLS Connecting"], "no-route": ["err", "No Route"], "rtc-disconnected": ["err", "RTC Disconnected"], disconnected: ["err", "Disconnected"] };
+const CONN_HELP = { awaiting: "We're waiting to connect for ya. If your connection gets stuck here, we may be experiencing a region outage. Check our <a>service status page</a>.", connecting: "A RTC server has been allocated for you and Discord is attempting to connect to it. Get ready to roll out.", authenticating: "Discord has connected to your real-time communication server and is securing the connection.", disconnected: "Discord's connection has been interrupted. Sorry about that, we'll attempt to re-establish the connection in a moment.", "rtc-connecting": "Locked and loaded! Discord has established a secure connection to your real-time communication server and is attempting to send data.", ice: "Shields Up! Discord has established a secure connection to your real-time communication server and is attempting to send data. If your browser connection is stuck in this step, check out <a>this swanky article</a>.", dtls: "Shields Up! Discord has established a secure connection to your real-time communication server and is attempting to send data. If your browser connection is stuck in this step, check out <a>this swanky article</a>.", "no-route": "Hm, Discord can't establish a connection. We'll try again in a moment. If Discord keeps getting stuck in this step, check out <a>this fancy article</a>.", "rtc-disconnected": "Discord's connection has been interrupted. Sorry about that, we'll attempt to re-establish the connection in a moment." };
+// Not verified: Discord's quality thresholds; its help text calls 250 ms "delayed".
+const quality = s => s.conn !== "connected" ? "unknown" : s.ping < 100 ? "fine" : s.ping < 250 ? "average" : "bad";
+const PINGS = [38, 41, 40, 44, 39, 52, 47, 42, 40, 41, 90, 46, 43, 41, 40, 39, 42, 44, 41, 42];
+const place = s => s.voice === "dm" ? ["mira", null] : s.voice === "stage" ? ["Town Hall", "Waffle HQ"] : ["General", "Waffle HQ"];
+
+function discordRtc(s) {
+  const open = s.popout, [kind, word] = CONN[s.conn], q = quality(s), video = s.camera || s.streaming;
+  const text = s.conn === "connected" && video ? "Video Connected" : word;
+  const [ch, guild] = place(s);
+  const stageAudience = s.voice === "stage" && s.suppress;
+  const iconOnly = s.inActivity || s.activitiesEnabled || s.soundboard;
+  const cpop = open === "conn" ? `<div class="d-pop d-cpop" style="--gap:8px">${s.e2ee && s.voice !== "stage" ? `<div class="tabs"><span class="on">Connection</span><span>Privacy</span></div>` : ""}${s.conn === "connected"
+      ? `<div class="graph">${PINGS.map(p => `<span style="height:${Math.min(100, p / 1.2)}%"></span>`).join("")}</div><div class="host">rotterdam8412</div><div class="stats">Average ping: <b>${s.ping} ms</b><br>Last ping: <b>${s.ping + 3} ms</b><br>Outbound packet loss rate: <b>${(+s.loss).toFixed(1)}%</b></div><div class="help">You may notice delayed audio at 250 ms or higher. You may sound robotic if your packet loss rate is over 10%. If the problem persists, disconnect and try again. See our <a>troubleshooting guide</a>.</div>`
+      : `<div class="help" style="font-size:14px">${CONN_HELP[s.conn]}</div>`}<hr><div class="btns"><span><i class="ph ph-bug"></i>Debug</span><span><i class="ph ph-upload-simple"></i>Upload Logs</span></div><div class="lock"><i class="ph-fill ph-lock"></i>${s.e2ee && s.voice !== "stage" ? "End-to-end encrypted" : "Secure Connection"}</div></div>` : "";
+  const kpop = open === "krisp" ? `<div class="d-pop d-kpop" style="--gap:4px;left:auto;right:0"><div class="row">Noise Suppression <span class="sw${s.krisp ? "" : " off"}"></span></div><div>Enable Krisp noise suppression! Make some noise—like clapping your hands—while speaking. Your friends will hear nothing but your beautiful voice.</div><h5>Mic Test</h5><div class="bar"></div><div class="row" style="font-size:12px;color:var(--d-muted)">Powered by Krisp <a style="color:#00a8fc">Learn More</a></div></div>` : "";
+  const btn = (hit, icon, label, cls, tip) => `<span data-tipwrap style="position:relative;display:flex;min-width:0"><button class="d-act${cls}" data-hit="${hit}" aria-label="${label}"><i class="ph-fill ${icon}"></i>${iconOnly || !tip ? "" : `<span>${tip}</span>`}</button>${dTip(label)}</span>`;
+  const sbOff = s.serverMute || s.suppress || s.selfDeaf || s.serverDeaf;
+  const sbTip = s.serverMute ? "Soundboard disabled when server muted" : s.suppress ? "Soundboard disabled when suppressed" : sbOff ? "Soundboard disabled when deafened" : "Open Soundboard";
+  const soundBtn = `<span data-tipwrap style="position:relative;display:flex;min-width:0"><button class="d-act${open === "sound" ? " grey" : ""}" data-hit="soundboard" aria-label="${sbTip}"${sbOff ? " disabled" : ""}><i class="ph-fill ph-speaker-simple-high"></i></button>${dTip(sbTip)}</span>`;
+  const users = s.showUsers ? `<div class="d-users">${["Mira", "Theo", "Ana", "Jun"].map((n, i) => `<span class="u${i === 0 && s.speaking ? " sp" : ""}" style="--h:${hue(n)}" title="${n}">${i === 2 ? `<i class="ph-fill ph-microphone-slash"></i>` : ""}</span>`).join("")}<span class="more" title="Show All Users"><i class="ph-bold ph-plus"></i></span></div>` : "";
+  const acts = stageAudience ? "" : `<div class="d-acts">${btn("camera", "ph-video-camera", s.camera ? "Turn Off Camera" : "Turn On Camera", s.camera ? " on" : "", "Video")}${btn("share", "ph-screencast", s.streaming ? "Stop Streaming" : "Share Your Screen", s.streaming ? " on" : "", "Screen")}${s.activitiesEnabled ? btn("activities", "ph-rocket-launch", "Start an Activity", s.inActivity ? " on" : "") : ""}${s.soundboard ? soundBtn : ""}</div>`;
+  const activity = s.inActivity ? `<div class="d-actp"><span class="ic"></span><div><b>Balatro</b><small>Activity · General</small></div><span data-tipwrap style="position:relative;display:flex"><button class="d-btn" data-hit="leave-activity" aria-label="Leave Activity"><i class="ph-bold ph-sign-out"></i></button>${dTip("Leave Activity")}</span></div>` : "";
+  const krispBtn = s.voice === "stage" && s.suppress
+    ? `<span data-tipwrap style="position:relative;display:flex"><button class="d-btn" data-hit="stage-music" aria-label="Mute Music"><i class="ph-fill ph-music-notes"></i></button>${dTip("Mute Music")}</span>`
+    : `<span data-tipwrap style="position:relative;display:flex"><button class="d-btn${open === "krisp" ? " open" : ""}" data-hit="krisp" aria-label="Noise Suppression"><i class="ph-bold ph-waveform${s.krisp ? "" : "-slash"}"></i></button>${open === "krisp" ? kpop : dTip("Noise Suppression powered by Krisp")}</span>`;
+  const leave = s.voice === "stage" ? "Disconnect Quietly" : "Disconnect";
+  return `${activity}<div class="d-rtcp">
+    <div class="d-conn"><div class="inner">${cpop}${s.conn === "connected" ? `<span data-tipwrap class="d-ping ${q}" data-hit="conn" style="position:relative"><i class="ph-fill ph-cell-signal-${q === "fine" ? "full" : q === "average" ? "medium" : "low"}"></i>${dTip(s.ping + " ms")}</span>` : ""}
+      <div class="d-cstat ${kind}"><span class="d-roll" data-hit="conn"><span class="df">${text}</span><span class="hv">${video ? "Video Details" : "Voice Details"}</span></span><span class="d-chan" data-hit="chan">${esc(ch)}${guild ? " / " + guild : ""}</span></div></div>
+      <div class="d-vbtns">${krispBtn}<span data-tipwrap style="position:relative;display:flex"><button class="d-btn" data-hit="hangup" aria-label="${leave}"><i class="ph-fill ph-phone-x"></i></button>${dTip(leave)}</span></div>
+    </div>${users}${acts}</div>`;
+}
+
+function waffleLink(s) {
+  const lost = s.conn === "no-route" || s.conn === "disconnected" || s.conn === "rtc-disconnected";
+  if (lost) return "lost";
+  if (s.conn !== "connected") return "connecting";
+  return s.ping > 120 || +s.loss >= 5 ? "poor" : "connected";
+}
+function waffleRtc(s) {
+  const link = waffleLink(s), open = s.popout, connected = link === "connected" || link === "poor";
+  const tone = { connecting: "var(--text-muted)", connected: "var(--online-ink)", poor: "var(--warning-ink)", lost: "var(--warning-ink)" }[link];
+  const label = { connecting: "Connecting…", connected: "Voice connected", poor: "Poor connection", lost: "Reconnecting…" }[link];
+  const [ch, guild] = place(s);
+  const second = link === "poor" ? `<div class="l2" style="color:var(--warning-ink)">${s.ping} ms ping, ${(+s.loss).toFixed(0)}% packet loss</div>`
+    : link === "lost" ? `<div class="l2" style="color:var(--warning-ink)">Lost the connection, retrying</div>`
+    : s.noMicWarn ? `<div class="l2 place" style="color:var(--warning-ink)">No audio detected from your mic</div>`
+    : `<div class="l2 place" data-hit="chan">${esc(ch)}${guild ? " · " + guild : ""}</div>`;
+  const bars = `<span class="w-bars${link === "poor" ? " weak" : ""}${link === "connecting" || link === "lost" ? " live" : ""}"><i></i><i></i><i></i></span>`;
+  const tip = connected ? `${s.ping} ms ping, ${s.ping < 80 ? "good" : s.ping <= 120 ? "fair" : "poor"} connection. Click for details` : "Click for connection details";
+  const wait = link === "lost" ? "Available once you're reconnected" : "Available once you're connected";
+  const act = (hit, icon, label, cls) => `<span data-tipwrap style="position:relative;display:flex;flex:1"><button class="w-act${cls}${connected ? "" : " off"}" data-hit="${hit}"><i class="ph-fill ${icon}"></i></button>${wTip(connected ? label : wait)}</span>`;
+  const verdict = connected ? (s.ping < 80 ? ["Good", "var(--online-ink)"] : s.ping <= 120 ? ["Fair", "var(--warning-ink)"] : ["Poor", "var(--warning-ink)"]) : link === "lost" ? ["Reconnecting", "var(--warning-ink)"] : ["Connecting", "var(--text-muted)"];
+  const pc = p => p < 80 ? "var(--online)" : p <= 120 ? "var(--idle)" : "var(--dnd)";
+  const cpop = open === "conn" ? `<div class="w-pop w-cpop"><div class="head"><b>Connection</b><small style="color:${verdict[1]}">${verdict[0]}</small></div><div><div class="graph">${PINGS.map(p => `<span style="height:${Math.max(6, p / 1.6)}%;background:${pc(p)}"></span>`).join("")}</div><div class="meta" style="display:flex;justify-content:space-between"><span>5 min ago</span><span>Now</span></div></div><div><div class="row"><span>Ping</span><b>${connected ? s.ping + " ms" : "—"}</b></div><div class="row"><span>Packet loss</span><b>${connected ? (+s.loss).toFixed(1) + "%" : "—"}</b></div><div class="row"><span>Server</span><b>${connected ? "rotterdam8412.discord.media" : "—"}</b></div></div><div class="sec"><i class="ph-fill ph-lock" style="color:${s.e2ee ? "var(--online-ink)" : "var(--text-muted)"}"></i>${s.e2ee ? "Voice and video in this call are end-to-end encrypted. Only the people in it can hear them." : "Voice and video are encrypted on the way to Discord's servers, not end to end."}</div><div class="meta">Updated every 2 seconds</div></div>` : "";
+  const activity = s.inActivity ? `<div class="w-actrow"><span class="ic"></span><div><b>Balatro</b><small>4:12 elapsed</small></div><span data-tipwrap style="position:relative;display:flex"><button class="w-hang" data-hit="leave-activity"><i class="ph-bold ph-sign-out"></i></button>${wTip("Leave Activity")}</span></div>` : "";
+  return `<div class="w-vb">${cpop}${activity}<div class="w-top"><div class="w-status${open === "conn" ? " open" : ""}" data-hit="conn" data-tipwrap style="--tone:${tone}"><div class="l1">${bars}<span>${label}</span></div>${second}${wTip(tip)}</div><span data-tipwrap style="position:relative;display:flex"><button class="w-hang" data-hit="hangup"><i class="ph-fill ph-phone-x"></i></button>${wTip(link === "connecting" ? "Cancel joining" : "Disconnect")}</span></div>
+    <div class="w-acts">${act("camera", "ph-video-camera", s.camera ? "Turn off camera" : "Turn on camera", s.camera ? " cam" : "")}${act("share", "ph-screencast", s.streaming ? "Stream options" : "Share your screen", s.streaming ? " acc" : "")}${s.soundboard ? act("soundboard", "ph-speaker-simple-high", "Soundboard", open === "sound" ? " press" : "") : ""}${act("activities", "ph-rocket-launch", "Activities", "")}</div></div>`;
+}
+
+function dTip(text, forced) { return forced ? `<span class="d-tipf" role="status">${forced}</span>` : `<span class="d-tip">${esc(text)}</span>`; }
+
+function discordPanel(s) {
+  const v = voiceState(s), open = s.popout;
+  const micTip = s.disabled ? "Disabled while connecting to console" : s.suppress ? "Suppressed" : s.serverMute ? "Server Muted" : v.micOff ? "Unmute" : "Mute";
+  const deafTip = s.disabled ? "Disabled while connecting to console" : s.serverDeaf ? "Server Deafened" : s.selfDeaf ? "Undeafen" : "Deafen";
+  const micIcon = v.micDenied ? `<i class="ph-fill ph-microphone-slash"></i><i class="ph-fill ph-prohibit deny-dot"></i>` : `<i class="ph-fill ${v.micOff ? "ph-microphone-slash" : "ph-microphone"}"></i>`;
+  const deafIcon = `<i class="ph-fill ph-headphones${v.deaf ? " slash" : ""}"></i>${s.serverDeaf ? `<i class="ph-fill ph-prohibit deny-dot"></i>` : ""}`;
+  const dis = s.disabled ? " disabled" : "";
+  const ptt = s.ptt && v.inVoice ? `<span class="d-ptt${s.speaking && !v.micOff ? " on" : ""}"></span>` : "";
+  const muteTip = s.tipMuted ? "You are currently muted!" : null;
+  const inTip = s.tipDevice === "input" ? "Input switched to <b>AirPods Pro</b>" : null, outTip = s.tipDevice === "output" ? "Output switched to <b>AirPods Pro</b>" : null;
+  const popName = open === "name" ? `<div class="d-pop" style="--gap:14px"><h5>Account popout</h5><div class="mi">Edit Profile</div><div class="mi">${WORD[s.status]} <small>status</small></div><div class="mi">Switch Accounts</div><div class="mi">Copy User ID</div></div>` : "";
+  const popIn = open === "input" ? `<div class="d-pop" style="--gap:4px"><h5>Input Device</h5><div class="mi">MacBook Pro Microphone <small>default</small></div><h5>Input Profile</h5><div class="mi">Voice Isolation</div><h5>Input Volume</h5><div class="bar"></div><div class="mi">Voice Settings</div></div>` : "";
+  const popOut = open === "output" ? `<div class="d-pop" style="--gap:4px"><h5>Output Device</h5><div class="mi">MacBook Pro Speakers <small>default</small></div><h5>Output Volume</h5><div class="bar"></div><div class="mi">Spatial Audio</div><div class="mi">Voice Settings</div></div>` : "";
+  const popSet = open === "settings" ? `<div class="d-pop" style="--gap:4px;left:auto;right:0;width:220px"><h5>User settings menu</h5><div class="mi">My Account</div><div class="mi">Profiles</div><div class="mi">Voice &amp; Video</div><div class="mi">Appearance</div></div>` : "";
+  const glowMic = v.micOff ? " glow" : "", glowDeaf = v.deaf ? " glow" : "";
+  return `<div class="dc"><div class="d-side${v.inVoice ? " rtc" : ""}" style="--w:${s.dW}px"><div class="d-panels">
+    ${v.inVoice ? discordRtc(s) : ""}
+    <div class="d-acct${s.hov ? " hov" : ""}${s.nameplate ? " plated" : ""}" style="${v.inVoice ? "border-top-left-radius:0;border-top-right-radius:0" : ""}">
+      ${s.nameplate ? `<span class="d-plate"></span>` : ""}
+      <div class="d-zone${open === "name" ? " open" : ""}" data-hit="name" role="button" aria-label="Manage profile and status">${popName}
+        ${avatar(s, { side: "d", speaking: v.inVoice && s.speaking && !v.micOff, stream: s.streaming && s.status !== "invisible" })}
+        <div class="d-tag"><div class="d-title${s.styled ? " styled" : ""}">${esc(s.name)}</div>${discordLine(s)}</div>
+      </div>
+      <div class="d-btns">
+        <div class="d-grp${glowMic}${open === "input" ? " open" : ""}">${popIn}
+          <span data-tipwrap style="position:relative;display:flex"><button class="d-btn main${glowMic}${v.micDenied ? " deny" : ""}" data-hit="mic" role="switch" aria-checked="${v.micOff}" aria-label="Mute"${dis}>${micIcon}${ptt}</button>${dTip(micTip, muteTip)}</span>
+          <span data-tipwrap style="position:relative;display:flex"><button class="d-btn chev${glowMic}${open === "input" ? " open" : ""}" data-hit="input" aria-label="Input Options"${dis}><i class="ph-bold ${open === "input" ? "ph-caret-up" : "ph-caret-down"}" style="${v.micOff ? "color:var(--d-muted-icon)" : ""}"></i></button>${open === "input" ? "" : dTip("Input Options", inTip)}</span>
+        </div>
+        <div class="d-grp${glowDeaf}${open === "output" ? " open" : ""}">${popOut}
+          <span data-tipwrap style="position:relative;display:flex"><button class="d-btn main${glowDeaf}${s.serverDeaf ? " deny" : ""}" data-hit="deaf" role="switch" aria-checked="${v.deaf}" aria-label="Deafen"${dis}>${deafIcon}</button>${dTip(deafTip)}</span>
+          <span data-tipwrap style="position:relative;display:flex"><button class="d-btn chev${glowDeaf}${open === "output" ? " open" : ""}" data-hit="output" aria-label="Output Options"${dis}><i class="ph-bold ${open === "output" ? "ph-caret-up" : "ph-caret-down"}" style="${v.deaf ? "color:var(--d-muted-icon)" : ""}"></i></button>${open === "output" ? "" : dTip("Output Options", outTip)}</span>
+        </div>
+        <span data-tipwrap style="position:relative;display:flex"><button class="d-btn d-gear" data-hit="settings" aria-label="User Settings"><i class="ph-fill ph-gear"></i></button>${popSet || dTip("User Settings")}</span>
+      </div>
+    </div></div></div></div>`;
+}
+
+// Waffle as built: user_panel + status_line (status_menu.rs). Server mute takes the second line; sharing shows its own line.
+function waffleLine(s) {
+  if (s.serverMute) return `<div class="w-sub danger"><span>Server muted by a moderator</span></div>`;
+  if (s.streaming && s.voice !== "none") return `<div class="w-sub"><i class="ph-fill ph-monitor-arrow-up"></i><span>Sharing their screen</span></div>`;
+  const emoji = s.emoji && s.emoji !== ":custom:" ? s.emoji : "";
+  const custom = [emoji, s.text].filter(Boolean).join(" ");
+  return `<div class="w-sub"><span>${esc(custom && (s.emoji || s.text) ? custom : WORD[s.status])}</span></div>`;
+}
+
+function wTip(t) { return `<span class="w-tip">${esc(t)}</span>`; }
+
+function wafflePanel(s) {
+  const v = { ...voiceState(s), deaf: s.selfDeaf, micDenied: s.serverMute };
+  v.micOff = s.selfMute || s.selfDeaf || s.serverMute;
+  const open = s.popout, plated = s.nameplate;
+  const micTip = s.serverMute ? "A moderator muted you here. Only they can unmute you." : v.micOff ? "Unmute" : "Mute";
+  const popName = open === "name" ? `<div class="w-pop"><h5>Status menu</h5>${["online", "idle", "dnd", "invisible"].map(k => `<div class="mi"><span class="dot" style="--c:var(--${k === "invisible" ? "offline" : k})"></span>${WORD[k]}</div>`).join("")}<div class="mi">Set a custom status</div></div>` : "";
+  const popIn = open === "input" ? `<div class="w-pop"><h5>Input device menu</h5><div class="mi">MacBook Pro Microphone</div><div class="mi">Input volume</div><div class="mi">Noise suppression</div></div>` : "";
+  const popOut = open === "output" ? `<div class="w-pop"><h5>Output device menu</h5><div class="mi">MacBook Pro Speakers</div><div class="mi">Output volume</div></div>` : "";
+  return `<div class="wf"><div class="w-side${v.inVoice ? " rtc" : ""}" style="--w:${s.wW}px"><div class="w-card${v.inVoice ? " rtcd" : ""}">
+    ${v.inVoice ? waffleRtc(s) : ""}
+    <div class="w-row${plated ? " w-plated" : ""}">
+      ${plated ? `<span class="w-plate"></span>` : ""}
+      <div class="w-who${open === "name" ? " open" : ""}" data-hit="name" role="button">
+        ${avatar(s, { side: "w" })}
+        <div class="w-tag"><div class="w-name">${esc(s.name)}</div>${waffleLine(s)}</div>
+      </div>
+      <div class="w-ctrls">
+        <div class="w-split">${popIn}
+          <span data-tipwrap style="position:relative;display:flex"><button class="w-btn${v.micOff ? " on" : ""}${s.serverMute ? " off" : ""}" data-hit="mic" aria-label="${v.micOff ? "Unmute" : "Mute"}"><i class="ph-fill ${v.micOff ? "ph-microphone-slash" : "ph-microphone"}"></i></button>${wTip(micTip)}</span>
+          <span data-tipwrap style="position:relative;display:flex"><button class="w-btn w-chev${open === "input" ? " open" : ""}" data-hit="input" aria-label="Input options"><i class="ph-bold ph-caret-down"></i></button>${wTip("Input options")}</span>
+        </div>
+        <div class="w-split">${popOut}
+          <span data-tipwrap style="position:relative;display:flex"><button class="w-btn${s.selfDeaf ? " on" : ""}" data-hit="deaf" aria-label="${s.selfDeaf ? "Undeafen" : "Deafen"}"><i class="ph-fill ph-headphones${s.selfDeaf ? " slash" : ""}"></i></button>${wTip(s.selfDeaf ? "Undeafen" : "Deafen")}</span>
+          <span data-tipwrap style="position:relative;display:flex"><button class="w-btn w-chev${open === "output" ? " open" : ""}" data-hit="output" aria-label="Output options"><i class="ph-bold ph-caret-down"></i></button>${wTip("Output options")}</span>
+        </div>
+        <span data-tipwrap style="position:relative;display:flex"><button class="w-btn" data-hit="settings" aria-label="User settings"><i class="ph-fill ph-gear"></i></button>${wTip("User settings")}</span>
+      </div>
+    </div></div>${popName}</div></div>`;
+}
+
+// ── Cases ──
+const C = (title, over, note, flags = "") => ({ title, s: { ...BASE, ...over }, note, flags });
+const CASES = [
+  C("Online, nothing set", {}, "Discord shows the status word and rolls to the username on hover. <span class='gap'>Waffle never rolls.</span>"),
+  C("Hovered", { hov: true }, "Discord: second line rolled to <code>frsty</code>. Hover is the whole panel, so pointing at mute rolls it too. <span class='gap'>Waffle: no roll.</span>"),
+  C("Idle", { status: "idle" }, "Moon mark, “Idle”. <span class='ok'>Same.</span>"),
+  C("Do Not Disturb", { status: "dnd" }, "Dash mark, “Do Not Disturb”. <span class='ok'>Same.</span>"),
+  C("Invisible", { status: "invisible", activity: "playing" }, "Hollow mark, “Invisible”; activities are hidden while invisible. <span class='ok'>Same line.</span>"),
+  C("Legacy tag", { legacy: true }, "A pre-username account shows <code>name#1234</code> as the line and doesn't roll. <span class='gap'>Waffle shows Online.</span>"),
+  C("Custom status: text", { text: "shipping the user row" }, "Text in muted ink. <span class='ok'>Same.</span>"),
+  C("Custom status: emoji + text", { emoji: "🍕", text: "brb, pizza" }, "Emoji 14px, 4px gap. <span class='ok'>Same text.</span>"),
+  C("Custom status: server emoji", { emoji: ":custom:", text: "raid night" }, "Server emoji rendered as an image. <span class='gap'>Waffle drops non-unicode emoji.</span>"),
+  C("Custom status: emoji only", { emoji: "🍕" }, "Only the emoji. <span class='ok'>Same.</span>"),
+  C("Custom status: long", { emoji: "🌙", text: "night owl, reply by morning, probably later than that honestly" }, "Truncates with an ellipsis. Both truncate."),
+  C("Playing", { activity: "playing" }, "Green controller + game name. <span class='gap'>Waffle shows Online.</span>"),
+  C("Listening", { activity: "listening" }, "Green music note + app. <span class='gap'>Missing.</span>"),
+  C("Watching", { activity: "watching" }, "Green TV + app. <span class='gap'>Missing.</span>"),
+  C("Two activities", { activity: "multi" }, "First activity, then “+1”. <span class='gap'>Missing.</span>"),
+  C("Activity + custom status", { activity: "playing", emoji: "🍕", text: "brb, pizza" }, "Activity drops to its icon, “•”, then the custom status. <span class='gap'>Waffle shows only the custom status.</span>"),
+  C("In voice", { voice: "server" }, "“In voice” with a speaker; panel joins the voice panel above (top corners square). <span class='gap'>Waffle: Online.</span>"),
+  C("In a DM call", { voice: "dm" }, "“In a call”. <span class='gap'>Missing.</span>"),
+  C("In a stage", { voice: "stage" }, "“In a stage”. <span class='gap'>Missing.</span>"),
+  C("Going live", { voice: "server", streaming: true }, "“Sharing their screen” with a TV, avatar takes the streaming mark, “+1” for the voice channel. <span class='gap'>Waffle: share icon line, normal mark.</span>"),
+  C("Speaking", { voice: "server", speaking: true }, "Green speaking ring on your avatar. <span class='gap'>Waffle has none.</span>"),
+  C("Muted", { selfMute: true }, "Mic slashed in red on a 12% red fill; tooltip “Unmute”. <span class='gap'>Waffle: red icon, no fill.</span>"),
+  C("Deafened", { selfDeaf: true }, "Mic and headphones both red on red fills; “Undeafen”. <span class='gap'>Waffle: red icons only.</span>"),
+  C("Server muted", { voice: "server", serverMute: true }, "Mic deny icon on the red fill, tooltip “Server Muted”, second line unchanged. <span class='gap'>Waffle repurposes the second line.</span>"),
+  C("Server deafened", { voice: "server", serverDeaf: true }, "Headphones deny icon, “Server Deafened”, mic shown muted. <span class='gap'>Not modelled.</span>"),
+  C("Suppressed", { voice: "stage", suppress: true }, "Stage audience: mic deny icon, “Suppressed”. <span class='gap'>Not modelled.</span>"),
+  C("Push to talk, idle", { voice: "server", ptt: true }, "8px red ring at the mic's corner. <span class='gap'>Missing.</span>"),
+  C("Push to talk, talking", { voice: "server", ptt: true, speaking: true }, "Ring turns green; avatar rings too. <span class='gap'>Missing.</span>"),
+  C("Talking while muted", { voice: "server", selfMute: true, tipMuted: true }, "Green tooltip “You are currently muted!” for 2.5s, at most every 2 minutes. <span class='gap'>Missing.</span>", "tip"),
+  C("Input switched", { voice: "server", tipDevice: "input" }, "Green tooltip on the input chevron for 5s. <span class='gap'>Missing.</span>", "tip"),
+  C("Input options open", { popout: "input" }, "Both halves filled, caret flips up, popout 4px above, left-aligned. <span class='gap'>Waffle fills only the chevron.</span>", "pop"),
+  C("Output options open", { popout: "output", selfDeaf: true }, "Deafened and open: the red fill wins. Output devices, volume, spatial audio.", "pop"),
+  C("Name zone open", { popout: "name" }, "Account popout 14px above. <span class='gap'>Waffle opens its status menu.</span>", "pop"),
+  C("Settings menu", { popout: "settings" }, "Right-click the gear. <span class='gap'>Waffle has no menu.</span>", "pop"),
+  C("Nameplate", { nameplate: true, selfMute: true, hov: true }, "Plate animates while the panel is hovered; muted control on a neutral plate. <span class='gap'>Waffle animates only on name hover.</span>"),
+  C("Display name style", { styled: true, hov: true }, "Styled name animates while the panel is hovered. <span class='gap'>Waffle shows the plain name.</span>"),
+  C("Console connecting", { disabled: true }, "Mic, deafen, chevrons at 40%, “Disabled while connecting to console”. Not in Waffle."),
+  C("Long name", { name: "Maximiliana Wolfeschlegelsteinhausen", emoji: "🌙", text: "night owl, reply by morning" }, "Both truncate the name."),
+  C("Voice: connected", { voice: "server" }, "Ping mark (tooltip “42 ms”), “Voice Connected” in the positive ink, “General / Waffle HQ” link; noise suppression and disconnect on the right; four equal icon buttons. <span class='gap'>Waffle: bars, “Voice connected”, “General · Waffle HQ”, no noise suppression button.</span>"),
+  C("Voice: status hovered", { voice: "server", hov: true }, "Hovering the status rolls it to “Voice Details” (hover it to see). <span class='gap'>Waffle has no roll.</span>"),
+  C("Voice: camera on", { voice: "server", camera: true }, "Status reads “Video Connected”; camera button in the green tint. <span class='gap'>Waffle: inverted strong fill, status unchanged.</span>"),
+  C("Voice: sharing", { voice: "server", streaming: true }, "Screen button green-tinted. <span class='gap'>Waffle: honey fill.</span>"),
+  C("Voice: labelled buttons", { voice: "dm", activitiesEnabled: false, soundboard: false }, "With only camera and screen, they carry labels: “Video”, “Screen”. <span class='gap'>Waffle: icons only, always.</span>"),
+  C("Voice: average ping", { voice: "server", ping: 180 }, "Ping mark turns warning; status stays “Voice Connected”. <span class='gap'>Waffle says “Poor connection” with the numbers.</span>"),
+  C("Voice: lossy", { voice: "server", ping: 60, loss: "12" }, "Discord doesn't change the panel for loss. <span class='gap'>Waffle flips to “Poor connection”.</span>"),
+  C("Voice: connecting", { voice: "server", conn: "rtc-connecting" }, "“RTC Connecting” in warning ink, no ping mark; buttons stay usable. <span class='gap'>Waffle: “Connecting…”, buttons disabled.</span>"),
+  C("Voice: waiting for server", { voice: "server", conn: "awaiting" }, "Each stage has its own word: Connecting, Authenticating, Waiting for Voice Server, Checking Route, DTLS Connecting. <span class='gap'>Waffle collapses them.</span>"),
+  C("Voice: no route", { voice: "server", conn: "no-route" }, "“No Route” in critical ink. <span class='gap'>Waffle: “Reconnecting…” amber.</span>"),
+  C("Voice: connection popout", { voice: "server", popout: "conn" }, "Graph, host, average and last ping, outbound loss, advice, Debug / Upload Logs, “End-to-end encrypted”, tabs for the verification code. <span class='gap'>Waffle's card differs in content and lacks Privacy.</span>", "pop"),
+  C("Voice: noise suppression", { voice: "server", popout: "krisp" }, "Its own popout: toggle, description, mic test, Krisp. <span class='gap'>Missing.</span>", "pop"),
+  C("Voice: in an activity", { voice: "server", inActivity: true }, "A separate activity panel above the voice panel; Activities button green. <span class='gap'>Waffle puts the row inside the voicebar.</span>"),
+  C("Voice: deafened", { voice: "server", selfDeaf: true }, "Soundboard disabled: “Soundboard disabled when deafened”. <span class='gap'>Waffle: check soundboard access.</span>"),
+  C("Voice: voice users", { voice: "server", showUsers: true, speaking: true }, "With the setting on, a strip of 24px faces with mute marks and a “Show All Users” toggle. <span class='gap'>Missing.</span>"),
+  C("Voice: stage audience", { voice: "stage", suppress: true }, "No action buttons; a music toggle replaces noise suppression; “Disconnect Quietly”. <span class='gap'>Waffle shows its normal buttons.</span>"),
+  C("Voice: DM call", { voice: "dm" }, "Link reads the person's name only. Waffle the same, “mira”."),
+  C("Narrow, 220px", { dW: 220, wW: 220 }, "Panel under 260px: the name zone gives up its 112px floor. Waffle squeezes the same way."),
+  C("Very narrow, 120px", { dW: 120, wW: 120 }, "Under 100px the name hides and only the avatar is left. <span class='gap'>Waffle overflows.</span>"),
+];
+document.getElementById("caselist").innerHTML = CASES.map(c => `<div class="case ${c.flags}"><div><h4>${c.title}</h4><p>${c.note}</p></div><div class="frame" data-side="Discord">${discordPanel(c.s)}</div><div class="frame" data-side="Waffle">${wafflePanel(c.s)}</div></div>`).join("");
+
+// ── Playground ──
+const form = document.getElementById("knobs");
+let S = { ...BASE };
+let lastMutedCue = -Infinity, timers = {};
+const logs = { d: [], w: [] };
+function log(d, w) {
+  if (d) logs.d.unshift(d); if (w) logs.w.unshift(w);
+  for (const k of ["d", "w"]) { logs[k].length = Math.min(logs[k].length, 7); document.getElementById("l" + k).innerHTML = logs[k].map(x => `<li>${x}</li>`).join(""); }
+}
+function render() {
+  document.getElementById("pd").innerHTML = discordPanel(S);
+  document.getElementById("pw").innerHTML = wafflePanel(S);
+  document.getElementById("wout").textContent = S.dW === S.wW ? S.dW : `${S.dW} / ${S.wW}`;
+}
+function readForm() {
+  const f = new FormData(form);
+  for (const k of ["name", "username", "status", "emoji", "text", "activity", "voice", "conn", "loss"]) S[k] = f.get(k);
+  document.getElementById("pd").classList.toggle("ash", f.get("dtheme") === "ash");
+  S.ping = +f.get("ping"); document.getElementById("pout").textContent = S.ping;
+  for (const k of ["legacy", "styled", "nameplate", "streaming", "ptt", "speaking", "selfMute", "selfDeaf", "serverMute", "serverDeaf", "suppress", "disabled", "hov", "camera", "inActivity", "activitiesEnabled", "soundboard", "krisp", "e2ee", "showUsers", "noMicWarn"]) S[k] = f.has(k);
+}
+function writeForm() {
+  for (const el of form.elements) if (el.name && el.name in S) el.type === "checkbox" ? el.checked = !!S[el.name] : el.name !== "width" && (el.value = S[el.name]); document.getElementById("pout").textContent = S.ping;
+}
+form.addEventListener("input", e => {
+  if (e.target.name === "width") { S.dW = S.wW = +e.target.value; render(); return; }
+  readForm(); render();
+});
+function flash(key, on, off, ms) { clearTimeout(timers[key]); on(); render(); timers[key] = setTimeout(() => { off(); render(); }, ms); }
+form.addEventListener("click", e => {
+  const act = e.target.closest("[data-act]")?.dataset.act; if (!act) return;
+  const v = voiceState(S);
+  if (act === "talk") {
+    const now = performance.now();
+    if (!v.inVoice || !v.micOff || v.micDenied) return log("No cue: needs voice, self-muted, not server-muted.", "No cue.");
+    if (now - lastMutedCue < 120000) return log(`No cue: shown ${Math.round((now - lastMutedCue) / 1000)}s ago (once per 2 min).`, "No cue.");
+    lastMutedCue = now;
+    flash("talk", () => S.tipMuted = true, () => S.tipMuted = false, 2500);
+    log("“You are currently muted!” for 2.5s.", "No cue: Waffle doesn't detect talking while muted.");
+  }
+  if (act === "in-switch" || act === "out-switch") {
+    const kind = act === "in-switch" ? "input" : "output";
+    if (!v.inVoice) return log("No tooltip: only shown while connected.", "No tooltip.");
+    flash("dev", () => S.tipDevice = kind, () => S.tipDevice = null, 5000);
+    log(`“${kind === "input" ? "Input" : "Output"} switched to AirPods Pro” on the chevron for 5s.`, "No tooltip.");
+  }
+  if (act === "defaults") { S.dW = 268; S.wW = 308; form.elements.width.value = 268; render(); }
+  if (act === "reset") { S = { ...BASE }; writeForm(); form.elements.width.value = 268; render(); log("Reset.", "Reset."); }
+});
+
+function hit(e) { if (e.target.closest(".d-pop, .w-pop")) return null; const b = e.target.closest("[data-hit]"); if (!b || b.disabled) return null; const side = e.target.closest("#pd") ? "d" : e.target.closest("#pw") ? "w" : null; return side && { what: b.dataset.hit, side }; }
+const stages = document.querySelector(".stages");
+stages.addEventListener("click", e => {
+  const h = hit(e);
+  if (!h) { if (S.popout && !e.target.closest(".d-pop, .w-pop")) { S.popout = null; render(); } return; }
+  const v = voiceState(S);
+  switch (h.what) {
+    case "name": S.popout = S.popout === "name" ? null : "name"; log("Account popout (Edit Profile, status, Switch Accounts).", "Status menu toggles; the row stays lit while open."); break;
+    case "mic":
+      if (S.disabled && h.side === "d") break;
+      if (v.micDenied) { log("Can't unmute: server muted or suppressed (Discord shows a notice; not verified which).", S.serverMute ? "Click ignored; tooltip explains the moderator mute." : "Toggles mute (suppression isn't modelled)."); if (S.serverMute) break; }
+      if (S.selfDeaf) { S.selfDeaf = false; S.selfMute = false; log("Unmuting while deafened undeafens too.", "Unmute while deafened: undeafens."); }
+      else { S.selfMute = !S.selfMute; log(S.selfMute ? "Muted: red fill, mute sound." : "Unmuted.", S.selfMute ? "Muted: icon turns red, glyph pops." : "Unmuted."); }
+      writeForm(); break;
+    case "deaf": S.selfDeaf = !S.selfDeaf; writeForm(); log(S.selfDeaf ? "Deafened: mic and headphones on red." : "Undeafened: mic back to its own state.", S.selfDeaf ? "Deafened: both icons red." : "Undeafened."); break;
+    case "input": case "output": S.popout = S.popout === h.what ? null : h.what; log(`${h.what === "input" ? "Input" : "Output"} options popout; caret flips up, both halves filled.`, `${h.what === "input" ? "Input" : "Output"} device menu; only the chevron fills.`); break;
+    case "conn": S.popout = S.popout === "conn" ? null : "conn"; log("Connection popout above the status: ping graph, host, average/last ping, packet loss, Debug / Upload Logs, encryption badge; Connection/Privacy tabs when E2EE.", "Connection card over the panel: verdict, ping bars, ping, loss, server, encryption line."); break;
+    case "chan": log("Jumps to the channel and scrolls the channel list to it.", S.voice === "dm" ? "Opens the DM." : "Opens the call stage."); break;
+    case "krisp": S.popout = S.popout === "krisp" ? null : "krisp"; log("Noise suppression popout: toggle, mic test, Krisp link.", "No such button (suppression lives in the input menu)."); break;
+    case "stage-music": log("Mutes the stage's music (audience only).", "No equivalent."); break;
+    case "hangup": log(S.voice === "stage" ? "Leaves the stage quietly." : "Disconnects.", waffleLink(S) === "connecting" ? "Cancels joining." : "Disconnects (asks first if you're sharing or in an activity)."); S.voice = "none"; S.popout = null; writeForm(); break;
+    case "camera": S.camera = !S.camera; writeForm(); log(S.camera ? "Camera on: button takes the green tint; status reads Video Connected." : "Camera off.", S.camera ? "Camera on: button fills with strong ink." : "Camera off."); break;
+    case "share": S.streaming = !S.streaming; writeForm(); log(S.streaming ? "Going live: Screen button green; stream menu on next click." : "Stopped streaming.", S.streaming ? "Sharing: button turns honey; next click opens stream options." : "Stopped sharing."); break;
+    case "activities": log("Opens the activity launcher.", "Opens the activity launcher at the pointer."); break;
+    case "soundboard": S.popout = S.popout === "sound" ? null : "sound"; log("Opens the soundboard popout; button goes grey-active.", "Opens the soundboard; button takes the pressed fill."); break;
+    case "leave-activity": S.inActivity = false; writeForm(); log("Leaves the activity.", "Leaves the activity (offers rejoin)."); break;
+    case "settings": log(v.inVoice ? "Opens User Settings › Voice & Video (you're connected)." : "Opens User Settings › My Account.", "Opens Settings › Account, connected or not."); S.popout = null; break;
+  }
+  render();
+});
+stages.addEventListener("contextmenu", e => {
+  const h = hit(e); if (!h) return;
+  e.preventDefault();
+  if (h.what === "settings") { S.popout = "settings"; log("Right-click gear: user settings menu.", "Right-click gear: nothing."); }
+  else if (h.what === "mic" || h.what === "input") { S.popout = "input"; log("Right-click mic: input options (same as the chevron).", "Right-click mic: input device menu at the pointer."); }
+  else if (h.what === "chan" || h.what === "conn") { log("Right-click channel: RTC connection menu.", "Right-click: nothing."); }
+  else if (h.what === "deaf" || h.what === "output") { S.popout = "output"; log("Right-click headphones: output options.", "Right-click headphones: output device menu at the pointer."); }
+  else return;
+  render();
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && S.popout) { S.popout = null; render(); } });
+render();
+</script>
+</body>
+</html>

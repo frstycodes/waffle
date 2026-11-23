@@ -1,0 +1,1231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Messages compared</title>
+<meta name="description" content="Every kind of chat message Discord can show, drawn as Discord draws it beside Waffle as built, with a playground and the list of what Waffle gets wrong or lacks.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&family=Noto+Sans:wght@400..700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="site.css">
+<link rel="stylesheet" href="css/primitives.css">
+<script>try{const p=JSON.parse(localStorage.getItem("waffle-ds")||"{}"),r=document.documentElement;if(p.theme)r.dataset.theme=p.theme}catch{}</script>
+<style>
+  main { max-width: 1360px; }
+  .src { font-size: var(--text-xs); color: var(--text-faint); }
+  .src code { font-family: var(--font-mono); font-size: 11px; }
+
+  /* Playground */
+  .play { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+  .knobs { display: grid; gap: var(--space-4); padding: var(--space-4); background: var(--bg-raised); border-radius: var(--radius-lg); position: sticky; top: var(--space-4); max-height: calc(100vh - 32px); overflow: auto; }
+  .knobs fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+  .knobs legend { font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--text-faint); margin-bottom: var(--space-1); }
+  .knobs label { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text); min-width: 0; }
+  .knobs label > span { flex: none; width: 86px; color: var(--text-muted); }
+  .knobs select { flex: 1; min-width: 0; height: 32px; padding: 0 var(--space-2); border-radius: var(--radius-xs); border: 1px solid var(--line-strong); background: var(--bg-page); color: var(--text-strong); font: inherit; }
+  .knobs input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+  .knobs .acts { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .knobs .acts button { height: 30px; padding: 0 var(--space-3); border-radius: var(--radius-xs); border: 0; background: var(--hover); color: var(--text-strong); font: inherit; font-size: var(--text-xs); font-weight: var(--weight-medium); cursor: pointer; }
+  .knobs .acts button:hover { background: var(--press); }
+  .stages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); min-width: 0; }
+  .stage { display: grid; gap: var(--space-2); min-width: 0; align-content: start; }
+  .stage h3 { margin: 0; font-size: var(--text-sm); color: var(--text-strong); }
+  .stage .frame { position: relative; border-radius: var(--radius-lg); overflow: hidden; }
+  .log { margin: 0; padding: var(--space-3) var(--space-3) var(--space-3) 28px; min-height: 120px; background: var(--bg-raised); border-radius: var(--radius-md); font-size: var(--text-xs); line-height: 1.5; color: var(--text); }
+  .log li:first-child { color: var(--text-strong); font-weight: var(--weight-medium); }
+  @media (max-width: 960px) { .play { grid-template-columns: minmax(0, 1fr); } .knobs { position: static; max-height: none; } }
+  @media (max-width: 760px) { .stages { grid-template-columns: minmax(0, 1fr); } }
+
+  /* Case matrix */
+  .cases { display: grid; gap: var(--space-2); }
+  .cases h3 { margin: var(--space-8) 0 0; font-size: var(--text-md); color: var(--text-strong); }
+  .case { display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; padding: var(--space-3) 0; border-top: 1px solid var(--line); }
+  .case h4 { margin: 0 0 var(--space-1); font-size: var(--text-sm); color: var(--text-strong); }
+  .case p { margin: 0; font-size: var(--text-xs); line-height: 1.45; color: var(--text-muted); text-wrap: pretty; }
+  .case .frame { overflow: hidden; min-width: 0; border-radius: var(--radius-md); }
+  .colhead { display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--text-faint); position: sticky; top: 0; background: var(--bg-page); padding: var(--space-2) 0; z-index: 5; }
+  .ok { color: var(--online-ink); }
+  .gap { color: var(--danger-ink); }
+  @media (max-width: 900px) { .case, .colhead { grid-template-columns: minmax(0, 1fr); } .colhead { display: none; } .case .frame::before { content: attr(data-side); display: block; font-size: var(--text-xs); color: var(--text-faint); padding: 4px 0; background: var(--bg-page); } }
+
+  .gaps { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+  .gaps th, .gaps td { text-align: left; vertical-align: top; padding: var(--space-2) var(--space-3) var(--space-2) 0; border-top: 1px solid var(--line); line-height: 1.45; }
+  .gaps th { font-size: var(--text-xs); color: var(--text-faint); font-weight: var(--weight-semibold); }
+  .gaps td:first-child { color: var(--text-strong); font-weight: var(--weight-medium); }
+  .gaps td.p { white-space: nowrap; font-weight: var(--weight-semibold); }
+  .gaps td.p1 { color: var(--danger-ink); } .gaps td.p2 { color: var(--warning-ink); } .gaps td.p3 { color: var(--text-muted); }
+  .gaps-wrap { overflow-x: auto; }
+  .gaps code { font-family: var(--font-mono); font-size: 12px; }
+
+  .face { position: relative; flex: none; width: 40px; height: 40px; border-radius: 50%; corner-shape: round; display: grid; place-items: center; color: #fff; font: 700 15px/1 "Figtree", sans-serif; background: linear-gradient(135deg, hsl(var(--h) 70% 62%), hsl(calc(var(--h) + 40) 65% 45%)); }
+  .face.s16 { width: 16px; height: 16px; font-size: 8px; } .face.s24 { width: 24px; height: 24px; font-size: 10px; } .face.s80 { width: 80px; height: 80px; font-size: 30px; }
+  .pic { display: block; position: relative; overflow: hidden; background: linear-gradient(135deg, hsl(var(--h, 30) 60% 62%), hsl(calc(var(--h, 30) + 50) 55% 38%)); }
+  .pic::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 70% 30%, hsl(0 0% 100% / .35) 0 12%, transparent 13%), linear-gradient(160deg, transparent 55%, hsl(0 0% 0% / .25) 56%); }
+  .cemoji { display: inline-block; width: 1.375em; height: 1.375em; vertical-align: bottom; border-radius: 30%; background: radial-gradient(circle at 35% 40%, #3a2614 0 8%, transparent 9%), radial-gradient(circle at 65% 40%, #3a2614 0 8%, transparent 9%), linear-gradient(135deg, #ffcf5a, #e8962b); }
+
+  /* ── Discord: its own look. Values read from discord.com's CSS (2026-11-24): .theme-darker is drawn as Dark, .theme-light as Light. ── */
+  .dc, .dc *, .dc *::before, .dc *::after { corner-shape: round; }
+  .dc { --d-bg: #1a1a1e; --d-text: #efeff1; --d-strong: #fbfbfb; --d-muted: #96979e; --d-subtle: #abacb2; --d-time: #81828a; --d-link: #4d96ee;
+        --d-surf: #242429; --d-surf3: #2c2d32; --d-lowest: #121214; --d-low: #202024; --d-bsub: rgb(151 151 159 / .122); --d-bnorm: rgb(151 151 159 / .2);
+        --d-spine: #474851; --d-hover: rgb(151 151 159 / .122); --d-mbg: rgb(248 163 0 / .078); --d-mbg-h: rgb(248 163 0 / .039); --d-mbar: #ea9800;
+        --d-hl: rgb(88 101 242 / .161); --d-brand: #5865f2; --d-brand-ink: #798df9; --d-eph: rgb(88 101 242 / .05); --d-eph-h: rgb(88 101 242 / .1);
+        --d-pill: rgb(88 101 242 / .239); --d-pill-fg: #a9bbff; --d-code: rgb(88 101 242 / .078); --d-codetx: #e4e4e6; --d-crit: #f87e7a; --d-notif: #d22d39;
+        --d-spoil: #666770; --d-spoil-h: #84858d; --d-modn: rgb(151 151 159 / .161); --d-rx: rgb(151 151 159 / .122); --d-rx-h: rgb(151 151 159 / .161);
+        --d-rx-me: rgb(88 101 242 / .239); --d-rx-me-t: #b9c8ff; --d-pos: #2dc770; --d-danger: #da3e44; --d-boost: #ff73fa; --d-auto: rgb(246 119 116 / .08);
+        --d-shadow: 0 4px 8px hsl(0 0% 0% / .16);
+        font: 400 16px/1.375rem "gg sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--d-text); }
+  :root[data-theme="light"] .dc { --d-bg: #fbfbfb; --d-text: #2e2e34; --d-strong: #28282d; --d-muted: #6c6d76; --d-subtle: #595a63; --d-time: #70717a; --d-link: #006dd4;
+        --d-surf: #fff; --d-surf3: #fff; --d-lowest: #f3f3f4; --d-low: #fbfbfb; --d-bsub: rgb(151 151 159 / .278); --d-bnorm: rgb(151 151 159 / .4); --d-spine: #c5c6ca;
+        --d-mbg-h: rgb(248 163 0 / .122); --d-mbar: #945300; --d-hl-h: rgb(88 101 242 / .2); --d-brand-ink: #525fe0; --d-pill-fg: #2e3c88; --d-code: rgb(88 101 242 / .039); --d-codetx: #36373e;
+        --d-crit: #b92733; --d-spoil: #8f9097; --d-spoil-h: #70717a; --d-rx-me-t: #273478; --d-pos: #1f8b4c; --d-danger: #d6363f; --d-boost: #c42fc0; --d-auto: rgb(218 62 68 / .05); --d-shadow: 0 4px 8px hsl(0 0% 0% / .08); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme]) .dc { --d-bg: #fbfbfb; --d-text: #2e2e34; --d-strong: #28282d; --d-muted: #6c6d76; --d-subtle: #595a63; --d-time: #70717a; --d-link: #006dd4;
+        --d-surf: #fff; --d-surf3: #fff; --d-lowest: #f3f3f4; --d-low: #fbfbfb; --d-bsub: rgb(151 151 159 / .278); --d-bnorm: rgb(151 151 159 / .4); --d-spine: #c5c6ca;
+        --d-mbg-h: rgb(248 163 0 / .122); --d-mbar: #945300; --d-brand-ink: #525fe0; --d-pill-fg: #2e3c88; --d-code: rgb(88 101 242 / .039); --d-codetx: #36373e;
+        --d-crit: #b92733; --d-spoil: #8f9097; --d-spoil-h: #70717a; --d-rx-me-t: #273478; --d-pos: #1f8b4c; --d-danger: #d6363f; --d-boost: #c42fc0; --d-auto: rgb(218 62 68 / .05); --d-shadow: 0 4px 8px hsl(0 0% 0% / .08); } }
+
+  .d-chat { position: relative; background: var(--d-bg); padding: 4px 0 16px; min-width: 0; }
+  .d-m { position: relative; padding: 2px 16px 2px 72px; min-height: 1.375rem; overflow-wrap: break-word; }
+  .d-m.start { margin-top: 1.0625rem; min-height: 2.75rem; }
+  .d-m.sys.start { min-height: 1.375rem; }
+  .d-m:is(:hover, .hov) { background: var(--d-hover); }
+  .d-m.ment, .d-m.eph, .d-m.hl, .d-m.auto { background: var(--d-mbg); }
+  .d-m.ment::before, .d-m.eph::before, .d-m.hl::before, .d-m.auto::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--d-mbar); pointer-events: none; }
+  .d-m.ment:is(:hover, .hov) { background: var(--d-mbg-h); }
+  .d-m.eph { background: var(--d-eph); } .d-m.eph::before { background: var(--d-brand); } .d-m.eph:is(:hover, .hov) { background: var(--d-eph-h); }
+  .d-m.hl { background: var(--d-hl); } .d-m.hl::before { background: var(--d-brand-ink); }
+  .d-m.auto { background: var(--d-auto); } .d-m.auto::before { background: var(--d-danger); }
+  .d-m.sending .d-body { opacity: .5; } .d-m.failed .d-mk { color: var(--d-crit); }
+  .d-av { position: absolute; left: 16px; margin-top: 2px; cursor: pointer; }
+  .d-h { display: block; line-height: 1.375rem; min-height: 1.375rem; color: var(--d-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .d-name { font-weight: 500; color: var(--d-strong); cursor: pointer; }
+  .d-name:hover { text-decoration: underline; }
+  .d-tag { display: inline-flex; align-items: center; gap: 2px; height: .9375rem; padding: 0 .275rem; margin-left: .25rem; border-radius: .1875rem; background: var(--d-brand); color: #fff; font-size: .625rem; font-weight: 600; line-height: .9375rem; vertical-align: .1rem; text-transform: uppercase; }
+  .d-tag.srv { background: var(--d-modn); color: var(--d-text); }
+  .d-time { margin-left: .25rem; font-size: .75rem; font-weight: 500; color: var(--d-time); }
+  .d-alt { position: absolute; left: 0; width: 56px; text-align: end; font-size: .6875rem; line-height: 1.375rem; color: var(--d-muted); opacity: 0; }
+  .d-m:is(:hover, .hov) .d-alt { opacity: 1; }
+  .d-edited { margin-left: .25rem; font-size: .625rem; line-height: 1; color: var(--d-muted); user-select: none; }
+  .d-rep { position: relative; display: flex; align-items: center; gap: 4px; margin-bottom: 4px; font-size: .875rem; line-height: 1.125rem; white-space: pre; min-width: 0; color: var(--d-text); }
+  .d-rep::before { content: ""; position: absolute; top: 50%; bottom: 0; left: -36px; right: 100%; margin: -1px 4px -2px -1px; border: 2px solid var(--d-spine); border-width: 2px 0 0 2px; border-top-left-radius: 6px; }
+  .d-rep .rn { flex: none; font-weight: 500; color: var(--d-strong); opacity: .64; }
+  .d-rep .rt { min-width: 0; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+  .d-rep .rt:hover { color: var(--d-strong); }
+  .d-rep .ph-i { font-style: italic; padding-right: 2px; }
+  .d-rep .badge { flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--d-lowest); display: grid; place-items: center; font-size: 10px; }
+  .d-exec { display: flex; align-items: center; gap: 4px; height: 18px; font-size: .875rem; line-height: 1.125rem; margin-bottom: 4px; position: relative; white-space: nowrap; }
+  .d-exec::before { content: ""; position: absolute; top: 50%; bottom: 0; left: -36px; width: 28px; margin-top: -1px; border: 2px solid var(--d-spine); border-width: 2px 0 0 2px; border-top-left-radius: 6px; }
+  .d-exec .un { color: var(--d-strong); font-weight: 500; } .d-exec .cmd { color: var(--d-link); font-weight: 500; }
+  .d-body { min-width: 0; }
+  .d-mk { white-space: break-spaces; }
+  .d-mk a { color: var(--d-link); text-decoration: none; } .d-mk a:hover { text-decoration: underline; }
+  .d-mk code.i { font: 85%/1.125rem "gg mono", "Roboto Mono", Consolas, monospace; background: var(--d-code); border: 1px solid var(--d-bnorm); border-radius: 4px; padding: 0 .2em; margin: -.2em 0; }
+  .d-mk pre { margin: 6px 0 0; max-width: 90%; white-space: pre-wrap; }
+  .d-mk pre code { display: block; padding: .5em; border: 1px solid var(--d-bnorm); border-radius: 4px; background: var(--d-code); color: var(--d-codetx); font: .875rem/1.125rem "gg mono", "Roboto Mono", Consolas, monospace; }
+  .d-mk .kw { color: #f290d0; } .d-mk .st { color: #7ed8a6; } .d-mk .nu { color: #ffb36b; } .d-mk .cm { color: var(--d-muted); }
+  :root[data-theme="light"] .d-mk .kw { color: #a3227d; } :root[data-theme="light"] .d-mk .st { color: #1d7a45; } :root[data-theme="light"] .d-mk .nu { color: #a65200; }
+  .d-mk .bq { display: flex; margin: 4px 0; } .d-mk .bq::before { content: ""; width: 4px; flex: none; border-radius: 4px; background: var(--d-spine); }
+  .d-mk .bq > div { padding: 0 8px 0 12px; max-width: 90%; }
+  .d-mk h1, .d-mk h2, .d-mk h3 { margin: 8px 0 8px; color: var(--d-strong); font-weight: 700; line-height: 1.375em; }
+  .d-mk h1 { font-size: 1.5rem; } .d-mk h2 { font-size: 1.25rem; } .d-mk h3 { font-size: 1rem; }
+  .d-mk small { display: block; font-size: .875rem; line-height: 1.20313rem; color: var(--d-subtle); }
+  .d-mk ul, .d-mk ol { margin: 4px 0 0 16px; padding: 0; } .d-mk li { margin-bottom: 4px; white-space: break-spaces; }
+  .d-mk .men { background: var(--d-pill); color: var(--d-pill-fg); border-radius: 3px; padding: 0 2px; font-weight: 500; cursor: pointer; }
+  .d-mk .men:hover { background: var(--d-brand); color: #fff; }
+  .d-mk .men.role { background: color-mix(in srgb, var(--rc) 10%, transparent); color: var(--rc); }
+  .d-mk .ts { background: var(--d-modn); border-radius: 3px; padding: 0 2px; }
+  .d-mk .sp { background: var(--d-spoil); color: transparent; border-radius: 4px; cursor: pointer; transition: background-color .2s; }
+  .d-mk .sp:hover { background: var(--d-spoil-h); } .d-mk .sp.open { background: var(--d-hover); color: inherit; cursor: auto; }
+  .d-mk .uem { font-size: 1.375em; line-height: 1; vertical-align: -.15em; }
+  .d-mk.jumbo .uem { font-size: 3rem; line-height: 3rem; } .d-mk.jumbo .cemoji { width: 3rem; height: 3rem; }
+  .d-acc { display: grid; gap: 4px; padding: 2px 0; justify-items: start; min-width: 0; }
+  .d-tr { font-size: .75rem; color: var(--d-muted); } .d-tr a { color: var(--d-link); cursor: pointer; }
+  .d-eph-foot { margin-top: 4px; font-size: 12px; color: var(--d-muted); display: flex; align-items: center; gap: 4px; }
+  .d-eph-foot a { color: var(--d-link); cursor: pointer; }
+  .d-fail { display: flex; align-items: center; gap: 8px; font-size: .875rem; color: var(--d-crit); }
+  .d-fail a { color: var(--d-link); cursor: pointer; }
+
+  .d-bar { position: absolute; top: -16px; right: 14px; z-index: 3; display: none; align-items: center; padding: 2px; gap: 0; background: var(--d-surf); border: 1px solid var(--d-bsub); border-radius: 8px; box-shadow: var(--d-shadow); }
+  .d-m:is(:hover, .hov) > .d-bar { display: flex; }
+  .d-bb { width: 32px; height: 32px; display: grid; place-items: center; border: 0; padding: 0; background: none; border-radius: 6px; color: var(--d-subtle); cursor: pointer; font-size: 20px; }
+  .d-bb:hover { background: var(--d-hover); color: var(--d-strong); } .d-bb.qr { font-size: 18px; } .d-bb.red { color: var(--d-crit); }
+  .d-sep { width: 1px; height: 24px; margin: 2px 4px; border-radius: 100px; background: var(--d-bsub); }
+
+  .d-menu { position: absolute; z-index: 6; width: 220px; padding: 6px 8px; background: var(--d-surf3); border: 1px solid var(--d-bsub); border-radius: 8px; box-shadow: 0 12px 24px hsl(0 0% 0% / .24); font-size: 14px; font-weight: 500; line-height: 18px; }
+  .d-menu .mi { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; padding: 6px 8px; border-radius: 4px; color: var(--d-text); cursor: pointer; }
+  .d-menu .mi:hover { background: var(--d-hover); color: var(--d-strong); } .d-menu .mi.red { color: var(--d-crit); } .d-menu .mi i { font-size: 18px; color: var(--d-subtle); }
+  .d-menu hr { border: 0; border-top: 1px solid var(--d-bsub); margin: 4px 8px; }
+  .d-menu .emo { display: flex; gap: 4px; padding: 4px 0 6px; } .d-menu .emo span { width: 40px; height: 40px; display: grid; place-items: center; font-size: 22px; border-radius: 8px; background: var(--d-lowest); cursor: pointer; }
+
+  .d-emb { display: grid; gap: 8px; max-width: 516px; width: 100%; box-sizing: border-box; padding: 8px 16px 16px 12px; background: var(--d-surf); border: 1px solid var(--d-bsub); border-left: 4px solid var(--bar, var(--d-bnorm)); border-radius: 4px; font-size: .875rem; line-height: 1.125rem; }
+  .d-emb.thumb { grid-template-columns: minmax(0, 1fr) auto; }
+  .d-emb.thumb > :not(.th) { grid-column: 1; } .d-emb .th { grid-column: 2; grid-row: 1 / 8; width: 80px; height: 80px; border-radius: 4px; margin: 0 0 0 16px; }
+  .d-emb .pv { font-size: .75rem; color: var(--d-subtle); } .d-emb .au { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--d-strong); } .d-emb .au .face { width: 24px; height: 24px; font-size: 10px; }
+  .d-emb .ti { font-size: 1rem; font-weight: 600; color: var(--d-link); } .d-emb .ds { color: var(--d-text); white-space: pre-line; }
+  .d-emb .fl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .d-emb .fl b { display: block; margin-bottom: 2px; font-weight: 600; color: var(--d-strong); }
+  .d-emb .im { border-radius: 4px; width: 100%; aspect-ratio: 16 / 9; margin-top: 8px; }
+  .d-emb .ft { display: flex; align-items: center; gap: 8px; font-size: .75rem; color: var(--d-text); } .d-emb .ft .face { width: 20px; height: 20px; font-size: 8px; }
+  .d-emb .play { position: absolute; inset: 0; margin: auto; width: 48px; height: 48px; border-radius: 50%; background: rgb(0 0 0 / .6); color: #fff; display: grid; place-items: center; font-size: 24px; z-index: 1; }
+  .d-media { border-radius: 8px; overflow: hidden; position: relative; }
+  .d-mos { display: grid; gap: 4px; width: min(100%, 550px); border-radius: 8px; overflow: hidden; }
+  .d-mos .pic { aspect-ratio: 1; min-width: 0; border-radius: 2px; }
+  .d-gif { position: absolute; top: 6px; left: 6px; z-index: 1; padding: 0 4px; border-radius: 4px; background: rgb(0 0 0 / .6); color: #fff; font: 700 12px/18px "gg sans", "Noto Sans", sans-serif; }
+  .d-spw { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; backdrop-filter: blur(44px); -webkit-backdrop-filter: blur(44px); cursor: pointer; }
+  .d-spw span { background: rgb(0 0 0 / .6); color: #ddd; border-radius: 20px; font: 600 15px/1 "gg sans", "Noto Sans", sans-serif; letter-spacing: .5px; text-transform: uppercase; padding: 8px 12px; }
+  .d-spw:hover span { background: rgb(0 0 0 / .88); color: #fff; }
+  .d-file { display: flex; align-items: center; gap: 12px; width: min(100%, 432px); box-sizing: border-box; padding: 16px; background: var(--d-low); border: 1px solid var(--d-bsub); border-radius: 8px; }
+  .d-file .ic { font-size: 36px; color: var(--d-brand-ink); flex: none; } .d-file > div { min-width: 0; flex: 1; } .d-file a { display: block; color: var(--d-link); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .d-file small { color: var(--d-muted); font-size: 12px; }
+  .d-file .dl { font-size: 22px; color: var(--d-subtle); flex: none; cursor: pointer; }
+  .d-audio { display: grid; gap: 8px; width: min(100%, 432px); box-sizing: border-box; padding: 16px; background: var(--d-low); border: 1px solid var(--d-bsub); border-radius: 8px; }
+  .d-audio .ctl { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 8px; background: rgb(0 0 0 / .4); color: #fff; font: 500 12px "gg mono", "Roboto Mono", monospace; }
+  .d-audio .ctl .tr { flex: 1; height: 4px; border-radius: 2px; background: rgb(255 255 255 / .3); }
+  .d-voice { display: flex; align-items: center; gap: 10px; width: min(100%, 300px); box-sizing: border-box; height: 48px; padding: 0 12px 0 8px; border-radius: 24px; background: var(--d-surf); border: 1px solid var(--d-bsub); }
+  .d-voice .pl { width: 32px; height: 32px; border-radius: 50%; background: var(--d-brand); color: #fff; display: grid; place-items: center; flex: none; cursor: pointer; }
+  .d-voice .wv { flex: 1; display: flex; align-items: center; gap: 2px; height: 24px; min-width: 0; overflow: hidden; } .d-voice .wv i { width: 3px; flex: none; border-radius: 2px; background: var(--d-muted); }
+  .d-voice small { font: 500 12px "gg mono", "Roboto Mono", monospace; color: var(--d-muted); flex: none; }
+  .d-sticker { width: 160px; height: 160px; border-radius: 16px; display: grid; place-items: center; font-size: 96px; }
+  .d-poll { display: grid; gap: 8px; width: min(100%, 440px); box-sizing: border-box; padding: 16px; background: var(--d-surf); border: 1px solid var(--d-bsub); border-radius: 8px; }
+  .d-poll .q { font-size: 1.125rem; font-weight: 600; color: var(--d-strong); } .d-poll .hint { font-size: .75rem; color: var(--d-muted); }
+  .d-poll .op { position: relative; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border-radius: 8px; background: var(--d-modn); border: 1px solid transparent; overflow: hidden; cursor: pointer; font-weight: 500; }
+  .d-poll .op:hover { background: var(--d-hover); border-color: var(--d-bnorm); } .d-poll .op.sel { border-color: var(--d-brand); }
+  .d-poll .op .fill { position: absolute; inset: 0 auto 0 0; background: var(--d-rx-me); } .d-poll .op > :not(.fill) { position: relative; } .d-poll .op .pct { margin-left: auto; font-weight: 600; }
+  .d-poll .op .rd { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--d-muted); box-sizing: border-box; margin-left: auto; } .d-poll .op.sel .rd { border: 5px solid var(--d-brand); }
+  .d-poll .foot { display: flex; align-items: center; gap: 8px; font-size: .875rem; color: var(--d-muted); } .d-poll .foot a { color: var(--d-link); cursor: pointer; } .d-poll .foot .sp { flex: 1; }
+  .d-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 16px; border: 0; border-radius: 8px; background: var(--d-brand); color: #fff; font: 500 14px/16px "gg sans", "Noto Sans", sans-serif; cursor: pointer; }
+  .d-btn.sec { background: var(--d-modn); color: var(--d-text); } .d-btn.ok { background: #00863a; } .d-btn.red { background: var(--d-danger); } .d-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .d-btn.sm { height: 24px; padding: 0 12px; font-size: 13px; }
+  .d-row { display: flex; flex-wrap: wrap; gap: 8px; } .d-sel { display: flex; align-items: center; justify-content: space-between; width: min(100%, 400px); height: 40px; box-sizing: border-box; padding: 0 12px; border-radius: 8px; background: var(--d-lowest); border: 1px solid var(--d-bsub); color: var(--d-muted); font-size: 14px; cursor: pointer; }
+  .d-ctr { display: grid; gap: 8px; width: min(100%, 500px); box-sizing: border-box; padding: 16px; background: var(--d-surf); border: 1px solid var(--d-bsub); border-radius: 8px; border-left: 4px solid var(--bar, var(--d-bsub)); }
+  .d-ctr .sec2 { display: flex; gap: 12px; align-items: center; } .d-ctr .sec2 > div { flex: 1; min-width: 0; } .d-ctr hr { border: 0; border-top: 1px solid var(--d-bsub); margin: 4px 0; width: 100%; }
+  .d-thread { display: grid; gap: 2px; width: min(100%, 432px); box-sizing: border-box; padding: 8px 12px; border-radius: 8px; background: var(--d-surf); border: 1px solid var(--d-bsub); font-size: .875rem; cursor: pointer; position: relative; }
+  .d-thread .t1 { display: flex; gap: 8px; font-weight: 600; color: var(--d-strong); } .d-thread .t1 a { color: var(--d-link); font-weight: 600; }
+  .d-thread .t2 { display: flex; align-items: center; gap: 6px; color: var(--d-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .d-m.has-thread::after { content: ""; position: absolute; left: 35px; top: 3rem; bottom: 29px; width: 32px; border-left: 2px solid var(--d-spine); border-bottom: 2px solid var(--d-spine); border-bottom-left-radius: 8px; }
+  .d-rxs { display: flex; flex-wrap: wrap; align-items: center; padding: 2px 0 2px; }
+  .d-rx { position: relative; display: inline-flex; align-items: center; padding: 2px 6px; margin: 0 4px 4px 0; border: 1px solid transparent; border-radius: 8px; background: var(--d-rx); cursor: pointer; isolation: isolate; }
+  .d-rx:hover { background: var(--d-rx-h); border-color: var(--d-bnorm); }
+  .d-rx .e { font-size: 18px; line-height: 24px; } .d-rx .n { margin-left: 6px; font-size: 14px; font-weight: 600; color: var(--d-subtle); }
+  .d-rx.me { background: var(--d-rx-me); border-color: var(--d-brand); } .d-rx.me .n { color: var(--d-rx-me-t); }
+  .d-rx.burst::before { content: ""; position: absolute; inset: 0; border-radius: 8px; background: var(--glow, #f5a623); opacity: .35; z-index: -1; } .d-rx.burst .e { filter: drop-shadow(0 0 3px var(--glow, #f5a623)); }
+  .d-rx.add { opacity: 0; padding: 4px 6px; color: var(--d-subtle); } .d-m:is(:hover, .hov) .d-rx.add { opacity: 1; }
+
+  .d-sys { display: flex; align-items: flex-start; gap: 0; color: var(--d-muted); }
+  .d-sys .si { position: absolute; left: 0; width: 72px; display: flex; justify-content: center; padding-top: 3px; font-size: 16px; }
+  .d-sys b { font-weight: 500; color: var(--d-strong); cursor: pointer; } .d-sys b:hover { text-decoration: underline; }
+  .d-sys a { color: var(--d-strong); font-weight: 500; cursor: pointer; } .d-sys a:hover { text-decoration: underline; }
+  .d-sys .d-time { margin-left: .25rem; }
+  .d-auto { display: grid; gap: 6px; }
+  .d-auto .card { padding: 8px 12px; border-radius: 8px; background: var(--d-surf); border: 1px solid var(--d-bsub); color: var(--d-text); }
+  .d-auto .card mark { background: rgb(253 184 51 / .3); color: inherit; border-radius: 2px; }
+  .d-auto .card .face { display: inline-grid; vertical-align: -2px; margin-right: 4px; }
+  .d-auto .meta { font-size: .75rem; color: var(--d-muted); }
+
+  .d-div { position: relative; display: flex; align-items: center; justify-content: center; height: 0; margin: 1.5rem .875rem .5rem 1rem; border-top: 1px solid var(--d-bsub); }
+  .d-div span { padding: 2px 4px; background: var(--d-bg); color: var(--d-muted); font-size: 12px; font-weight: 600; line-height: 13px; margin-top: -1px; }
+  .d-div.unread { border-color: var(--d-notif); } .d-div.unread span { color: var(--d-notif); }
+  .d-div .cap { position: absolute; right: 0; top: -7px; height: 13px; padding: 0 4px 0 1px; border-radius: 0 4px 4px 0; background: var(--d-notif); color: #fff; font-size: 10px; font-weight: 700; line-height: 13px; }
+  .d-div .cap::before { content: ""; position: absolute; right: 100%; top: 0; border: 6.5px solid transparent; border-right: 6px solid var(--d-notif); border-left: 0; }
+  .d-newbar { position: absolute; left: 8px; right: 16px; top: 0; z-index: 4; display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 16px; border-radius: 0 0 8px 8px; background: var(--d-brand); color: #fff; font-size: 14px; font-weight: 500; cursor: pointer; box-shadow: 0 1px 4px hsl(0 0% 0% / .14); }
+  .d-newbar span:last-child { display: flex; align-items: center; gap: 6px; }
+  .d-jump { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; margin: 12px 16px 0; padding: 8px 8px 8px 16px; background: var(--d-surf3); border: 1px solid var(--d-bnorm); border-radius: 16px; box-shadow: var(--d-shadow); font-size: 14px; color: var(--d-text); }
+  .d-typing { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 16px; margin-top: 8px; font-size: 14px; color: var(--d-text); }
+  .d-typing b { font-weight: 700; } .d-typing .dots { display: flex; gap: 2px; } .d-typing .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--d-text); animation: dot 1.2s infinite ease-in-out; } .d-typing .dots i:nth-child(2) { animation-delay: .15s; } .d-typing .dots i:nth-child(3) { animation-delay: .3s; }
+  @keyframes dot { 0%, 60%, 100% { opacity: .3; transform: none; } 30% { opacity: 1; transform: translateY(-2px); } }
+  .d-blk { display: flex; align-items: center; gap: 8px; padding: 2px 16px 2px 72px; position: relative; margin-top: 1.0625rem; }
+  .d-blk i { position: absolute; left: 0; width: 72px; text-align: center; color: var(--d-muted); font-size: 16px; } .d-blk:hover i { color: var(--d-crit); }
+  .d-blk a { color: var(--d-muted); cursor: pointer; } .d-blk:hover a { color: var(--d-link); } .d-blk a:hover { text-decoration: underline; }
+  .d-welcome { margin: 16px; display: grid; justify-items: start; }
+  .d-welcome .ico { width: 68px; height: 68px; margin-top: 16px; border-radius: 50%; background: rgb(151 151 159 / .078); display: grid; place-items: center; font-size: 40px; color: var(--d-strong); }
+  .d-welcome h2 { margin: 8px 0; font-size: 2rem; line-height: 2.5rem; font-weight: 700; color: var(--d-strong); }
+  .d-welcome p { margin: 0; color: var(--d-text); } .d-welcome .acts { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .d-welcome .un { font-size: 1.25rem; color: var(--d-strong); font-weight: 500; margin-bottom: 8px; }
+  .d-welcome .mut { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 14px; color: var(--d-muted); }
+
+  /* ── Waffle, as built (src/chat.rs, src/chat/*, src/system_message.rs), in Waffle's tokens. ── */
+  .wf { font: 400 var(--text-md)/1.45 var(--font-ui); color: var(--text); --boost: #f07cf5; }
+  :root[data-theme="light"] .wf { --boost: #b21fc4; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme]) .wf { --boost: #b21fc4; } }
+  .w-chat { position: relative; background: var(--bg-page); padding: 4px 8px 16px; min-width: 0; }
+  .w-m { position: relative; display: flex; gap: 16px; padding: 2px 16px; border-radius: var(--radius-sm); min-width: 0; }
+  .w-m.start { margin-top: 16px; padding-top: 6px; }
+  .w-m:is(:hover, .hov) { background: var(--hover); }
+  .w-m.ment { background: oklch(0.78 0.15 75 / 0.096); border-radius: 0; margin: 0 -8px; padding-left: 24px; padding-right: 24px; }
+  .w-m.ment::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent); }
+  .w-m.ment:is(:hover, .hov) { background: oklch(0.78 0.15 75 / 0.136); }
+  .w-m.eph { background: color-mix(in oklch, var(--text-strong) 4%, transparent); }
+  .w-m.sending .w-mk { color: var(--text-faint); } .w-m.failed .w-mk { color: var(--text-muted); }
+  .w-gut { flex: none; width: 40px; text-align: center; font-size: var(--text-xs); line-height: 23px; color: var(--text-faint); opacity: 0; }
+  .w-m:is(:hover, .hov) .w-gut, .w-gut.keep { opacity: 1; }
+  .w-col { flex: 1; min-width: 0; }
+  .w-h { display: flex; align-items: baseline; gap: 8px; min-width: 0; line-height: 22px; white-space: nowrap; }
+  .w-name { font-weight: var(--weight-medium); color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; min-width: 0; cursor: pointer; }
+  .w-name:hover { text-decoration: underline; }
+  .w-tag { flex: none; display: inline-flex; align-items: center; gap: 2px; height: 16px; padding: 0 5px; border-radius: var(--radius-xs); background: var(--accent-soft); color: var(--accent-ink); font-size: 10px; font-weight: 700; align-self: center; }
+  .w-time { flex: none; font-size: var(--text-xs); color: var(--text-faint); }
+  .w-h i.pin { color: var(--text-faint); font-size: 14px; align-self: center; }
+  .w-edited { margin-left: 4px; font-size: var(--text-xs); color: var(--text-faint); }
+  .w-rep { position: relative; display: flex; align-items: center; gap: 6px; height: 22px; margin-left: 56px; font-size: var(--text-sm); color: var(--text-faint); white-space: nowrap; min-width: 0; cursor: pointer; }
+  .w-rep::before { content: ""; position: absolute; left: -36px; top: 11px; width: 30px; height: 12px; border: 2px solid var(--line-strong); border-width: 2px 0 0 2px; border-top-left-radius: 6px; }
+  .w-rep b { font-weight: var(--weight-medium); color: var(--text-muted); flex: none; } .w-rep span { min-width: 0; overflow: hidden; text-overflow: ellipsis; } .w-rep:hover span { color: var(--text); }
+  .w-wrap.start { margin-top: 16px; } .w-wrap.start .w-m.start { margin-top: 0; }
+  .w-exec { display: flex; align-items: center; gap: 6px; margin-left: 56px; font-size: var(--text-detail); color: var(--text-muted); line-height: 20px; white-space: nowrap; }
+  .w-exec b { color: var(--text-strong); font-weight: var(--weight-medium); } .w-exec .cmd { color: var(--accent-ink); font-weight: var(--weight-medium); }
+  .w-mk { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .w-mk a { color: var(--accent-ink); text-decoration: none; } .w-mk a:hover { text-decoration: underline; }
+  .w-mk code.i { font: 0.875em var(--font-mono); background: var(--selected); border-radius: 5px; padding: 1px 4px; }
+  .w-mk .code { position: relative; margin: 4px 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--bg-sidebar); font: 14px/1.5 var(--font-mono); white-space: pre-wrap; }
+  .w-mk .code .cp { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: var(--radius-xs); color: var(--text-faint); background: var(--bg-raised); font-size: 14px; }
+  .w-mk .kw { color: #e98fd0; } .w-mk .st { color: #8fd49a; } .w-mk .nu { color: #f3b36d; } .w-mk .cm { color: var(--text-faint); }
+  :root[data-theme="light"] .w-mk .kw { color: #9c2477; } :root[data-theme="light"] .w-mk .st { color: #1f7a3c; } :root[data-theme="light"] .w-mk .nu { color: #9a5200; }
+  .w-mk blockquote { margin: 2px 0; padding-left: 12px; border-left: 3px solid var(--line-strong); color: var(--text-muted); }
+  .w-mk h1, .w-mk h2, .w-mk h3 { margin: 6px 0 2px; color: var(--text-strong); font-weight: 700; line-height: 1.3; }
+  .w-mk h1 { font-size: 1.5em; } .w-mk h2 { font-size: 1.25em; } .w-mk h3 { font-size: 1em; }
+  .w-mk small { display: block; font-size: var(--text-detail); color: var(--text-muted); }
+  .w-mk ul, .w-mk ol { margin: 2px 0 2px 20px; padding: 0; }
+  .w-mk .men { background: var(--accent-soft); color: var(--accent-ink); border-radius: 4px; padding: 0 3px; font-weight: var(--weight-medium); cursor: pointer; }
+  .w-mk .men:hover { background: color-mix(in oklch, var(--accent) 26%, transparent); }
+  .w-mk .ts { font: 0.875em var(--font-mono); background: var(--selected); border-radius: 5px; padding: 1px 4px; }
+  .w-mk .sp { cursor: pointer; } .w-mk .sp .real { display: none; } .w-mk .sp.open .mask { display: none; } .w-mk .sp.open .real { display: inline; }
+  .w-mk .sp .mask { font: 0.875em var(--font-mono); background: var(--selected); border-radius: 5px; padding: 1px 4px; color: var(--text-faint); letter-spacing: -1px; }
+  .w-mk.jumbo .cemoji { width: 48px; height: 48px; }
+  .w-acc { display: grid; gap: 6px; padding: 4px 0 2px; justify-items: start; min-width: 0; }
+  .w-eph-foot { font-size: var(--text-xs); color: var(--text-faint); } .w-eph-foot a { color: var(--info-ink); cursor: pointer; }
+  .w-fail { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: var(--text-sm); color: var(--danger-ink); }
+  .w-fail button { height: 26px; padding: 0 8px; border: 0; border-radius: var(--radius-xs); background: none; color: var(--text); font: inherit; font-size: var(--text-xs); font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  .w-fail button:hover { background: var(--hover); }
+
+  .w-bar { position: absolute; top: -18px; right: 12px; z-index: 3; display: none; align-items: center; gap: 2px; padding: 3px; border-radius: var(--radius-md); background: var(--bg-overlay); box-shadow: var(--shadow-pop); }
+  .w-m.ment > .w-bar { right: 20px; }
+  .w-m:is(:hover, .hov) > .w-bar { display: flex; }
+  .w-bb { width: 32px; height: 32px; display: grid; place-items: center; border: 0; padding: 0; background: none; border-radius: var(--radius-sm); color: var(--text-muted); cursor: pointer; font-size: 18px; }
+  .w-bb:hover { background: var(--hover); color: var(--text-strong); } .w-bb.qr { font-size: 17px; }
+  .w-sep { width: 1px; height: 20px; margin: 0 3px; background: var(--line); }
+  .w-menu { position: absolute; z-index: 6; width: 230px; padding: 6px; border-radius: var(--radius-lg); background: var(--bg-overlay); box-shadow: var(--shadow-pop); font-size: var(--text-sm); }
+  .w-menu .mi { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; padding: 0 8px; border-radius: var(--radius-sm); color: var(--text); cursor: pointer; }
+  .w-menu .mi:hover { background: var(--hover); color: var(--text-strong); } .w-menu .mi.red { color: var(--danger-ink); } .w-menu .mi kbd { font: 11px var(--font-mono); color: var(--text-faint); }
+  .w-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 6px; }
+  .w-menu .emo { display: flex; gap: 4px; padding: 2px 2px 6px; } .w-menu .emo span { width: 36px; height: 36px; display: grid; place-items: center; font-size: 20px; border-radius: var(--radius-sm); background: var(--hover); cursor: pointer; }
+
+  .w-emb { display: grid; gap: 6px; width: min(100%, 520px); box-sizing: border-box; padding: 10px 14px 12px 14px; border-radius: var(--radius-md); background: var(--bg-sidebar); border-left: 4px solid var(--bar, var(--line-strong)); font-size: var(--text-sm); }
+  .w-emb.thumb { grid-template-columns: minmax(0, 1fr) auto; } .w-emb.thumb > :not(.th) { grid-column: 1; } .w-emb .th { grid-column: 2; grid-row: 1 / 8; width: 80px; height: 80px; border-radius: var(--radius-sm); margin-left: 12px; }
+  .w-emb .pv { font-size: var(--text-xs); color: var(--text-faint); } .w-emb .au { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text-strong); } .w-emb .au .face { width: 20px; height: 20px; font-size: 8px; }
+  .w-emb .ti { font-weight: 700; color: var(--accent-ink); } .w-emb .ds { color: var(--text); white-space: pre-line; }
+  .w-emb .fl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .w-emb .fl b { display: block; font-weight: 600; color: var(--text-strong); }
+  .w-emb .im { border-radius: var(--radius-sm); width: 100%; aspect-ratio: 16 / 9; }
+  .w-emb .ft { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text-faint); }
+  .w-emb .play { position: absolute; inset: 0; margin: auto; width: 48px; height: 48px; border-radius: 50%; background: #08090b; opacity: .85; color: #fff; display: grid; place-items: center; font-size: 22px; z-index: 1; }
+  .w-media { border-radius: var(--radius-lg); overflow: hidden; position: relative; }
+  .w-gal { display: grid; gap: 4px; width: min(100%, 432px); border-radius: var(--radius-lg); overflow: hidden; }
+  .w-gal .pic { min-width: 0; border-radius: 2px; }
+  .w-gal .more { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; background: rgb(8 9 11 / .55); color: #fff; font: 700 22px var(--font-ui); }
+  .w-gif { position: absolute; top: 8px; left: 8px; z-index: 1; padding: 0 6px; border-radius: var(--radius-xs); background: rgb(8 9 11 / .7); color: #fff; font: 700 11px/18px var(--font-ui); }
+  .w-spw { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); cursor: pointer; }
+  .w-spw span { background: rgb(8 9 11 / .7); color: #fff; border-radius: var(--radius-full); font: 700 12px/1 var(--font-ui); padding: 7px 12px; letter-spacing: .04em; }
+  .w-file { display: flex; align-items: center; gap: 12px; width: min(100%, 432px); box-sizing: border-box; padding: 12px; border-radius: var(--radius-md); background: var(--bg-sidebar); }
+  .w-file .ic { font-size: 30px; color: var(--text-muted); flex: none; } .w-file > div { min-width: 0; flex: 1; } .w-file a { display: block; color: var(--accent-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; } .w-file small { color: var(--text-faint); font-size: var(--text-xs); }
+  .w-file button { height: 30px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: var(--selected); color: var(--text-strong); font: inherit; font-size: var(--text-xs); font-weight: 500; cursor: pointer; }
+  .w-audio { display: grid; gap: 8px; width: min(100%, 432px); box-sizing: border-box; padding: 12px; border-radius: var(--radius-md); background: var(--bg-sidebar); }
+  .w-audio .ctl { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; } .w-audio .ctl .tr { flex: 1; height: 4px; border-radius: 2px; background: var(--line-strong); }
+  .w-audio .pb { width: 30px; height: 30px; border-radius: 50%; background: var(--text-strong); color: var(--bg-page); display: grid; place-items: center; flex: none; }
+  .w-voice { display: flex; align-items: center; gap: 10px; width: min(100%, 320px); box-sizing: border-box; height: 48px; padding: 0 8px; border-radius: var(--radius-full); background: var(--bg-sidebar); }
+  .w-voice .pl { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; flex: none; cursor: pointer; }
+  .w-voice .wv { flex: 1; display: flex; align-items: center; gap: 4px; height: 32px; min-width: 0; overflow: hidden; } .w-voice .wv i { width: 2px; flex: none; border-radius: 1px; background: var(--text-faint); }
+  .w-voice small { font-size: var(--text-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; } .w-voice .spd { padding: 2px 6px; border-radius: var(--radius-full); background: var(--selected); font-size: 11px; font-weight: 700; color: var(--text-strong); }
+  .w-sticker { width: 160px; height: 160px; display: grid; place-items: center; font-size: 96px; }
+  .w-sticker.dash { border: 2px dashed var(--line-strong); border-radius: var(--radius-lg); font-size: var(--text-sm); color: var(--text-faint); text-align: center; padding: 12px; box-sizing: border-box; }
+  .w-poll { display: grid; gap: 8px; width: min(100%, 432px); box-sizing: border-box; padding: 14px; border-radius: var(--radius-md); background: var(--bg-sidebar); }
+  .w-poll .q { font-weight: 600; color: var(--text-strong); } .w-poll .hint { font-size: var(--text-xs); color: var(--text-faint); }
+  .w-poll .op { position: relative; display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; border-radius: var(--radius-sm); background: var(--hover); cursor: pointer; overflow: hidden; }
+  .w-poll .op:hover { background: var(--selected); } .w-poll .op .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent-soft); } .w-poll .op > :not(.fill) { position: relative; }
+  .w-poll .op .rd { width: 16px; height: 16px; border-radius: 50%; corner-shape: round; border: 2px solid var(--text-faint); box-sizing: border-box; } .w-poll .op.sel .rd { border: 5px solid var(--accent); } .w-poll .op .pct { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .w-poll .foot { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); color: var(--text-faint); } .w-poll .foot .sp { flex: 1; }
+  .w-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: var(--radius-sm); background: var(--selected); color: var(--text-strong); font: 500 var(--text-sm) var(--font-ui); cursor: pointer; }
+  .w-btn.pri { background: var(--accent); color: var(--on-accent); } .w-btn.ok { background: var(--success, #1f9d55); color: #fff; } .w-btn.red { background: var(--danger); color: #fff; } .w-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .w-btn.ghost { background: none; color: var(--text); } .w-btn.ghost:hover { background: var(--hover); } .w-btn.sm { height: 26px; font-size: var(--text-xs); }
+  .w-row { display: flex; flex-wrap: wrap; gap: 8px; } .w-sel { display: flex; align-items: center; justify-content: space-between; width: min(100%, 400px); height: 38px; box-sizing: border-box; padding: 0 12px; border-radius: var(--radius-sm); background: var(--bg-sidebar); color: var(--text-faint); font-size: var(--text-sm); cursor: pointer; }
+  .w-ctr { display: grid; gap: 8px; width: min(100%, 520px); box-sizing: border-box; padding: 14px; border-radius: var(--radius-md); background: var(--bg-raised); box-shadow: inset 0 0 0 1px var(--line); }
+  .w-ctr .sec2 { display: flex; gap: 12px; align-items: center; } .w-ctr .sec2 > div { flex: 1; min-width: 0; } .w-ctr hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; width: 100%; }
+  .w-thread { display: flex; align-items: center; gap: 8px; width: min(100%, 432px); box-sizing: border-box; padding: 8px 12px; border-radius: var(--radius-md); background: var(--bg-sidebar); font-size: var(--text-sm); cursor: pointer; }
+  .w-thread b { color: var(--text-strong); font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .w-thread span { color: var(--text-faint); white-space: nowrap; }
+  .w-rxs { display: flex; flex-wrap: wrap; gap: 4px; }
+  .w-rx { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: var(--radius-sm); background: var(--hover); box-shadow: inset 0 0 0 1px transparent; cursor: pointer; font-size: var(--text-sm); font-weight: 600; color: var(--text-muted); }
+  .w-rx:hover { background: var(--selected); } .w-rx .e { font-size: 16px; }
+  .w-rx.me { background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 55%, transparent); color: var(--accent-ink); }
+  .w-rx.add { color: var(--text-faint); font-size: 16px; }
+  .w-fwd { display: grid; gap: 4px; width: min(100%, 520px); box-sizing: border-box; padding: 8px 12px; border-radius: var(--radius-md); background: color-mix(in oklch, var(--text-strong) 5%, transparent); }
+  .w-fwd .lb { display: flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--text-faint); font-style: italic; } .w-fwd .src { font-size: var(--text-xs); color: var(--text-faint); cursor: pointer; }
+  .w-notice { display: flex; gap: 16px; align-items: flex-start; padding: 2px 16px; border-radius: var(--radius-sm); position: relative; }
+  .w-notice:is(:hover, .hov) { background: var(--hover); }
+  .w-notice .si { flex: none; width: 40px; display: flex; justify-content: center; padding-top: 2px; font-size: 18px; }
+  .w-notice .tx { flex: 1; min-width: 0; font-size: var(--text-sm); line-height: 1.45; color: var(--text-muted); }
+  .w-notice .tx b { color: var(--text-strong); font-weight: 600; cursor: pointer; } .w-notice .tx a { color: var(--accent-ink); cursor: pointer; font-weight: 500; }
+  .w-notice .tx .w-time { margin-left: 6px; }
+  .w-notice .tx .w-btn { margin-top: 6px; }
+  .w-dropped { margin: 6px 16px; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px dashed var(--line-strong); font-size: var(--text-xs); color: var(--text-faint); }
+  .w-auto { display: grid; gap: 6px; } .w-auto .card { padding: 8px 12px; border-radius: var(--radius-md); background: var(--bg-sidebar); } .w-auto mark { background: color-mix(in oklch, var(--warning-ink) 26%, transparent); color: inherit; border-radius: 3px; } .w-auto .meta { font-size: var(--text-xs); color: var(--text-faint); }
+  .w-shield { width: 40px; height: 40px; border-radius: 50%; corner-shape: round; background: oklch(0.5 0.13 245); color: #fff; display: grid; place-items: center; font-size: 20px; flex: none; }
+
+  .w-div { display: flex; align-items: center; gap: 8px; padding: 16px 16px 8px; font-size: var(--text-xs); color: var(--text-faint); white-space: nowrap; }
+  .w-div::before, .w-div::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+  .w-new { position: relative; display: flex; align-items: center; margin: 8px 16px; border-top: 1px solid var(--alert); }
+  .w-new span { position: absolute; right: 0; top: -8px; height: 16px; padding: 0 6px 0 10px; background: var(--alert); color: #fff; font: 700 11px/16px var(--font-ui); clip-path: polygon(6px 0, 100% 0, 100% 100%, 6px 100%, 0 50%); border-radius: 0 3px 3px 0; }
+  .w-newbar { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 4; display: flex; align-items: center; justify-content: space-between; min-height: 36px; padding: 0 6px 0 12px; border-radius: var(--radius-md); background: color-mix(in oklch, var(--accent) 16%, var(--bg-page)); color: var(--text-strong); font-size: var(--text-sm); font-weight: 500; }
+  .w-newbar button { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: none; color: inherit; font: inherit; cursor: pointer; } .w-newbar button:hover { background: var(--hover); }
+  .w-jump { display: flex; justify-content: center; margin-top: 12px; } .w-jump span { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: var(--radius-full); background: var(--bg-overlay); box-shadow: var(--shadow-pop); font-size: var(--text-sm); font-weight: 500; color: var(--text-strong); cursor: pointer; }
+  .w-typing { display: inline-flex; align-items: center; gap: 8px; margin: 10px 16px 0; height: 28px; padding: 0 12px; border-radius: var(--radius-full); background: color-mix(in oklch, var(--bg-raised) 80%, transparent); box-shadow: inset 0 0 0 1px var(--line); font-size: var(--text-xs); color: var(--text-muted); }
+  .w-typing .bars { display: flex; gap: 2px; align-items: flex-end; height: 10px; } .w-typing .bars i { width: 3px; height: 100%; border-radius: 2px; background: var(--text-muted); animation: wbar 1s ease-in-out infinite alternate; } .w-typing .bars i:nth-child(2) { animation-delay: .2s; } .w-typing .bars i:nth-child(3) { animation-delay: .4s; }
+  @keyframes wbar { to { transform: scaleY(.4); } }
+  .w-fold { display: flex; align-items: center; gap: 10px; padding: 4px 16px; margin-top: 16px; font-size: var(--text-sm); color: var(--text-muted); }
+  .w-fold i { width: 40px; text-align: center; font-size: 18px; } .w-fold button { height: 26px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--info-ink); font: inherit; font-weight: 500; cursor: pointer; } .w-fold button:hover { background: var(--hover); }
+  .w-start { display: grid; justify-items: start; gap: 4px; padding: 16px; }
+  .w-start h2 { margin: 8px 0 0; font-size: 28px; font-weight: 700; color: var(--text-strong); line-height: 1.2; } .w-start p { margin: 0; color: var(--text-muted); font-size: var(--text-sm); } .w-start .acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .w-empty { display: grid; justify-items: center; gap: 4px; padding: 32px 16px; text-align: center; } .w-empty b { color: var(--text-strong); } .w-empty span { font-size: var(--text-sm); color: var(--text-muted); }
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div class="layout">
+<nav class="toc" id="toc" aria-label="Design system"></nav>
+<main>
+<section id="messages-compare">
+  <h1>Messages compared</h1>
+  <p class="lede">Every kind of message Discord can put in a chat, drawn the way Discord draws it, beside Waffle as it renders today. Discord's side is read from its shipped web client (discord.com bundle, CSS and English strings, 2026-11-24); Waffle's from <code>src/chat.rs</code>, <code>src/chat/</code>, <code>src/system_message.rs</code>, <code>src/discord/parse.rs</code> and the components, poll, embed and audio code on main. Both columns follow the page theme; Discord's dark side is its Dark theme (<code>.theme-darker</code>).</p>
+  <p class="src" id="srcnote"></p>
+</section>
+
+<section id="playground">
+  <h2>Playground</h2>
+  <p class="lede">Build a message on the left. Both chats are live: hover a row for its toolbar, click reactions, spoilers, replies, poll options and buttons, right-click a row for its menu. Each log says what that app does.</p>
+  <div class="play">
+    <form class="knobs" id="knobs" onsubmit="return false">
+      <fieldset><legend>Message</legend>
+        <label><span>Kind</span><select name="kind">
+          <option value="default">Default</option><option value="reply">Reply</option><option value="forward">Forwarded</option><option value="eph">Ephemeral (bot)</option>
+          <option value="cmd">Slash command reply</option><option value="thinking">Bot is thinking</option><option value="ifail">Interaction failed</option><option value="webhook">Webhook</option>
+          <option value="crosspost">Crossposted</option><option value="poll">Poll</option><option value="comps">Buttons + select</option><option value="v2">Components V2</option><option value="sticker">Sticker</option>
+          <option value="jumbo">Emoji only</option><option value="code">Code block</option><option value="markdown">Markdown</option><option value="system">System message</option></select></label>
+        <label><span>Author</span><select name="author"><option value="mira">Mira</option><option value="you">You</option><option value="bot">Bot (APP)</option><option value="long">Long name</option></select></label>
+        <label><span>Grouping</span><select name="group"><option value="new">New group</option><option value="follow">Follow-up, 2 min later</option><option value="gap">Same author, 8 min later</option></select></label>
+        <label><span>Reply to</span><select name="reply"><option value="text">A message</option><option value="deleted">A deleted message</option><option value="att">An image-only message</option></select></label>
+        <label><span>System type</span><select name="sys" id="syssel"></select></label>
+        <label><span>State</span><select name="state"><option value="">Sent</option><option value="sending">Sending</option><option value="failed">Failed</option></select></label>
+      </fieldset>
+      <fieldset><legend>Content</legend>
+        <label><span>Mentions</span><select name="ment"><option value="">None</option><option value="me">@you</option><option value="role">@role you hold</option><option value="everyone">@everyone</option><option value="other">Someone else</option></select></label>
+        <label><span>Attachments</span><select name="att"><option value="">None</option><option value="image">Image</option><option value="m2">2 images</option><option value="m3">3 images</option><option value="m5">5 images</option><option value="m7">7 images</option><option value="video">Video</option><option value="gif">GIF</option><option value="voice">Voice message</option><option value="audio">Audio file</option><option value="file">File</option><option value="spoiler">Spoiler image</option></select></label>
+        <label><span>Embed</span><select name="emb"><option value="">None</option><option value="link">Link preview</option><option value="rich">Rich (bot)</option><option value="video">Video (YouTube)</option><option value="suppressed">Link, embeds suppressed</option></select></label>
+        <label><span>Reactions</span><select name="rx"><option value="">None</option><option value="some">Some</option><option value="mine">Including yours</option><option value="burst">Super reactions</option></select></label>
+        <label><input type="checkbox" name="edited"> Edited</label>
+        <label><input type="checkbox" name="pinned"> Pinned</label>
+        <label><input type="checkbox" name="thread"> Thread started from it</label>
+        <label><input type="checkbox" name="longtext"> Long text</label>
+        <label><input type="checkbox" name="spoiler"> Spoiler text</label>
+      </fieldset>
+      <fieldset><legend>Around it</legend>
+        <label><input type="checkbox" name="date" checked> Date divider</label>
+        <label><input type="checkbox" name="unread"> Unread line before it</label>
+        <label><input type="checkbox" name="newbar"> New-messages bar</label>
+        <label><input type="checkbox" name="typing"> Someone typing</label>
+        <label><input type="checkbox" name="blocked"> A blocked user posted before it</label>
+        <label><span>Theme</span><select name="theme"><option value="">Page</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
+      </fieldset>
+      <fieldset><legend>Events</legend>
+        <div class="acts">
+          <button type="button" data-act="send">Send it now</button>
+          <button type="button" data-act="fail">Make it fail</button>
+          <button type="button" data-act="type">Someone starts typing</button>
+          <button type="button" data-act="reset">Reset</button>
+        </div>
+      </fieldset>
+    </form>
+    <div class="stages">
+      <div class="stage"><h3>Discord</h3><div class="frame" id="pd"></div><ol class="log" id="ld" reversed></ol></div>
+      <div class="stage"><h3>Waffle, as built</h3><div class="frame" id="pw"></div><ol class="log" id="lw" reversed></ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="cases">
+  <h2>Every case</h2>
+  <p class="lede">Each kind of message, frozen, Discord left and Waffle right. Rows marked hovered are pinned in their hover state. A dashed box on Waffle's side means it drops that message.</p>
+  <div class="colhead"><span>Case</span><span>Discord</span><span>Waffle</span></div>
+  <div class="cases" id="caselist"></div>
+</section>
+
+<section id="types">
+  <h2>Every message type</h2>
+  <p class="lede">Discord's message-type enum, read from its client, with what each app shows.</p>
+  <div class="gaps-wrap"><table class="gaps" id="typetable"><thead><tr><th>Type</th><th>Discord shows</th><th>Waffle today</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="gaps">
+  <h2>What to change in Waffle</h2>
+  <p class="lede">Ranked by how often someone would run into it. P1: every session; P2: weekly; P3: rare.</p>
+  <div class="gaps-wrap">
+  <table class="gaps">
+    <thead><tr><th>Area</th><th>Discord</th><th>Waffle today</th><th>Priority</th></tr></thead>
+    <tbody id="gapbody"></tbody>
+  </table>
+  </div>
+</section>
+</main>
+</div>
+<script src="site.js"></script>
+<script id="mc">
+// ── Shared ──
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const escT = t => String(t).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+const hue = n => [...n].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+const face = (n, cls = "") => `<span class="face ${cls}" style="--h:${hue(n)}" aria-hidden="true">${esc(n[0].toUpperCase())}</span>`;
+const pic = (h, style = "") => `<span class="pic" style="--h:${h};${style}"></span>`;
+
+const AU = {
+  mira: { name: "Mira" }, theo: { name: "Theo", color: "#3ba55d" }, ana: { name: "Ana" }, jun: { name: "Jun" }, rosa: { name: "Rosa" },
+  you: { name: "Frsty", me: true }, bot: { name: "Waffle Bot", bot: true }, hook: { name: "GitHub", bot: true, hook: true },
+  news: { name: "Waffle HQ #announcements", cross: true }, long: { name: "Maximiliana Wolfeschlegelsteinhausen-Bergerdorff the Third" },
+  grumpy: { name: "Grumpy" },
+};
+const ROLES = { mods: { name: "Moderators", color: "#e67e22", mine: true }, raid: { name: "Raid Team", color: "#9b59b6" } };
+const CHANS = { general: "general", clips: "clips" };
+// Clock: minutes after 9:00 PM.
+const clock = min => { const t = 21 * 60 + min, h = Math.floor(t / 60) % 24, m = t % 60; return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
+const shortClock = min => clock(min).replace(/ [AP]M$/, "");
+// Discord's header stamp: LT today, "Yesterday at LT", else "L LT" (web.js date helper O). Waffle's format_stamp: "Today at …".
+const dStamp = m => m.day === "y" ? `Yesterday at ${clock(m.min)}` : m.day === "old" ? `11/14/2026 ${clock(m.min)}` : clock(m.min);
+const wStamp = m => m.day === "y" ? `Yesterday at ${clock(m.min)}` : m.day === "old" ? `November 14, 2026 at ${clock(m.min)}` : `Today at ${clock(m.min)}`;
+const TS = { R: "in 2 hours", F: "Tuesday, November 24, 2026 11:00 PM", t: "11:00 PM", D: "November 24, 2026" };
+
+// ── Markdown, per app ──
+function mention(kind, id, side) {
+  const c = side === "d" ? "men" : "men";
+  if (kind === "user") return `<span class="${c}" data-hit="mention">@${esc((AU[id] || { name: "unknown-user" }).name)}</span>`;
+  if (kind === "chan") return `<span class="${c}" data-hit="mention">${side === "d" ? `<i class="ph-bold ph-hash" style="font-size:.85em"></i>` : "#"}${esc(CHANS[id] || id)}</span>`;
+  if (kind === "role") { const r = ROLES[id]; return side === "d" ? `<span class="men role" style="--rc:${r.color}" data-hit="mention">@${esc(r.name)}</span>` : `<span class="men" data-hit="mention">@${esc(r.name)}</span>`; }
+  return `<span class="${c}" data-hit="mention">@${id}</span>`;
+}
+function inline(raw, side) {
+  const keep = [], K = h => (keep.push(h), `\u0001${keep.length - 1}\u0002`);
+  let t = raw.replace(/`([^`]+)`/g, (_, c) => K(`<code class="i">${escT(c)}</code>`))
+    .replace(/<t:(\w)>/g, (_, f) => K(`<span class="ts">${TS[f]}</span>`))
+    .replace(/<@&(\w+)>/g, (_, r) => K(mention("role", r, side)))
+    .replace(/<@(\w+)>/g, (_, u) => K(mention("user", u, side)))
+    .replace(/<#(\w+)>/g, (_, c) => K(mention("chan", c, side)))
+    .replace(/@(everyone|here)\b/g, (_, e) => K(mention("all", e, side)))
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, (_, l, u) => K(`<a href="#" data-hit="link" title="${esc(u)}">${escT(l)}</a>`))
+    .replace(/https?:\/\/[^\s)]+/g, u => K(`<a href="#" data-hit="link">${escT(u)}</a>`))
+    .replace(/:(\w+):/g, (_, n) => K(`<span class="cemoji" role="img" aria-label=":${n}:"></span>`));
+  t = escT(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/__(.+?)__/g, side === "d" ? "<u>$1</u>" : "<b>$1</b>").replace(/\*(.+?)\*/g, "<i>$1</i>").replace(/~~(.+?)~~/g, "<s>$1</s>");
+  t = t.replace(/\|\|(.+?)\|\|/g, (_, s) => side === "d" ? `<span class="sp" data-hit="spoiler">${s}</span>`
+    : `<span class="sp" data-hit="spoiler"><code class="mask">${"█".repeat(Math.min(14, s.replace(/<[^>]+>|\u0001\d+\u0002/g, "x").length))}</code><span class="real">${s}</span></span>`);
+  if (side === "d") t = t.replace(/(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*)/gu, '<span class="uem">$1</span>');
+  return t.replace(/\u0001(\d+)\u0002/g, (_, i) => keep[i]);
+}
+const hl = s => escT(s).replace(/(\/\/.*$)|("[^"\n]*")|\b(fn|let|const|return|if|else|match|pub|use|for|in|mut)\b|\b(\d+)\b/gm,
+  (x, c, st, kw, nu) => c ? `<span class="cm">${c}</span>` : st ? `<span class="st">${st}</span>` : kw ? `<span class="kw">${kw}</span>` : `<span class="nu">${nu}</span>`);
+function md(src, side) {
+  const L = src.split("\n"), out = []; let i = 0, para = [];
+  const il = x => inline(x, side);
+  const flush = () => { if (para.length) out.push(para.map(il).join("\n")); para = []; };
+  while (i < L.length) {
+    const l = L[i];
+    if (l.startsWith("```")) {
+      flush(); const body = []; i++;
+      while (i < L.length && !L[i].startsWith("```")) body.push(L[i++]);
+      i++;
+      out.push(side === "d" ? `<pre><code>${hl(body.join("\n"))}</code></pre>` : `<div class="code">${hl(body.join("\n"))}<span class="cp" aria-label="Copy code"><i class="ph ph-copy"></i></span></div>`);
+      continue;
+    }
+    if (l.startsWith(">>> ")) {
+      flush(); const rest = [l.slice(4), ...L.slice(i + 1)];
+      out.push(side === "d" ? `<div class="bq"><div>${md(rest.join("\n"), side)}</div></div>` : `<blockquote><blockquote><blockquote>${rest.map(il).join("\n")}</blockquote></blockquote></blockquote>`);
+      break;
+    }
+    if (l.startsWith("> ")) {
+      flush(); const q = [];
+      while (i < L.length && L[i].startsWith("> ")) q.push(L[i++].slice(2));
+      out.push(side === "d" ? `<div class="bq"><div>${q.map(il).join("\n")}</div></div>` : `<blockquote>${q.map(il).join("\n")}</blockquote>`);
+      continue;
+    }
+    const h = l.match(/^(#{1,3}) (.*)/);
+    if (h) { flush(); out.push(`<h${h[1].length}>${il(h[2])}</h${h[1].length}>`); i++; continue; }
+    if (l.startsWith("-# ")) { flush(); out.push(`<small>${il(l.slice(3))}</small>`); i++; continue; }
+    if (/^[-*] /.test(l) || /^\d+\. /.test(l)) {
+      flush(); const ord = /^\d/.test(l), it = [];
+      while (i < L.length && (ord ? /^\d+\. /.test(L[i]) : /^[-*] /.test(L[i]))) it.push(L[i++].replace(/^([-*]|\d+\.) /, ""));
+      out.push(`<${ord ? "ol" : "ul"}>${it.map(x => `<li>${il(x)}</li>`).join("")}</${ord ? "ol" : "ul"}>`);
+      continue;
+    }
+    para.push(l); i++;
+  }
+  flush();
+  return out.join("");
+}
+// Discord: only emoji (unicode, custom) and whitespace, at most 30, are jumbo. Waffle: only custom emoji, at most 27.
+const EMOJI_ONLY = /^(?:\s|:\w+:|\p{Extended_Pictographic}|️|‍|\p{Emoji_Modifier})+$/u;
+const emojiCount = t => (t.match(/:\w+:|\p{Extended_Pictographic}/gu) || []).length;
+const dJumbo = t => !!t && EMOJI_ONLY.test(t) && emojiCount(t) <= 30;
+const wJumbo = t => !!t && /^(?:\s|:\w+:)+$/.test(t) && emojiCount(t) <= 27;
+const mentionsMe = t => /<@you>|@everyone|@here|<@&mods>/.test(t || "");
+
+// ── Grouping ──
+// Discord (lazy 42834, 7 min): new group after a non-message, on another author, ≥7 min, another day, a reply, a command, a system message after a user one, blocked flips, ephemeral flips.
+function dStarts(prev, m) {
+  if (!prev || !prev.a || prev.chrome) return true;
+  if (m.cmd || m.thread) return true;
+  if (m.sys) return !prev.sys;
+  if (m.reply) return true;
+  if (prev.sys) return true;
+  return prev.a !== m.a || prev.day !== m.day || m.min - prev.min >= 7 || !!prev.eph !== !!m.eph;
+}
+// Waffle (chat.rs:374, format.rs:271): new group on a new day, a reply, after a notice, or unless same author, not an app-command answer and under 420 s.
+function wStarts(prev, m) {
+  if (!prev || !prev.a || (prev.chrome && prev.chrome !== "unread")) return true;
+  if (m.sys || prev.sys) return true;
+  if (m.reply && m.reply.kind !== "deleted") return true;
+  return prev.a !== m.a || prev.day !== m.day || !!m.cmd || m.min - prev.min >= 7;
+}
+
+// ── Discord renderer ──
+const D_QUICK = ["💯", "😆", "💖"], W_QUICK = ["💯", "👍", "👎"];
+function dToolbar(m) {
+  if (m.state === "failed") return `<div class="d-bar" role="toolbar" aria-label="Message Actions">${dBB("retry", "ph-arrow-clockwise", "Retry")}${dBB("delete", "ph-trash", "Delete", "red")}</div>`;
+  const own = AU[m.a]?.me;
+  const quick = D_QUICK.map(e => `<button class="d-bb qr" data-hit="qr" data-e="${e}" title="Click to react">${e}</button>`).join("");
+  return `<div class="d-bar" role="toolbar" aria-label="Message Actions">${quick}<span class="d-sep"></span>${dBB("react", "ph-smiley", "Add Reaction")}${own ? dBB("edit", "ph-pencil-simple", "Edit") : dBB("reply", "ph-arrow-bend-up-left", "Reply")}${dBB("forward", "ph-arrow-bend-up-right", "Forward")}${dBB("more", "ph-dots-three", "More")}</div>`;
+}
+const dBB = (a, ic, label, cls = "") => `<button class="d-bb ${cls}" data-hit="tb" data-a="${a}" aria-label="${label}" title="${label}"><i class="ph-fill ${ic}"></i></button>`;
+
+function dReply(m) {
+  const r = m.reply;
+  if (r.kind === "deleted") return `<div class="d-rep"><span class="badge"><i class="ph-fill ph-arrow-bend-up-left"></i></span><span class="rt ph-i" data-hit="reply">Original message was deleted</span></div>`;
+  if (r.kind === "blocked") return `<div class="d-rep"><span class="badge"><i class="ph-fill ph-prohibit"></i></span><span class="rt ph-i">Blocked message</span></div>`;
+  const au = AU[r.a];
+  const body = r.att ? `<span class="rt ph-i" data-hit="reply">Click to see attachment</span><i class="ph-fill ph-image" style="flex:none;font-size:16px"></i>` : `<span class="rt" data-hit="reply">${inline(r.text, "d")}</span>`;
+  return `<div class="d-rep">${face(au.name, "s16")}<span class="rn">@${esc(au.name)}</span>${body}</div>`;
+}
+function dHeader(m) {
+  const au = AU[m.a];
+  const tag = au.cross ? `<span class="d-tag">Server</span>` : au.bot ? `<span class="d-tag"><i class="ph-bold ph-check"></i>App</span>` : "";
+  return `${face(au.name).replace('class="face ', 'class="face d-av ').replace("aria-hidden", 'data-hit="avatar" aria-hidden')}<h3 class="d-h" style="margin:0;font:inherit;line-height:1.375rem"><span class="d-name" data-hit="name"${au.color ? ` style="color:${au.color}"` : ""}>${esc(au.name)}</span>${tag}<time class="d-time">${dStamp(m)}</time></h3>`;
+}
+function dMosaic(n, h0 = 20) {
+  const ROWS = { 2: [2], 4: ["2x2"], 5: [2, 3], 6: [3, 3], 7: [1, 3, 3], 8: [2, 3, 3], 9: [3, 3, 3], 10: [1, 3, 3, 3] };
+  let k = 0; const p = () => pic(h0 + 37 * k++, "height:100%;width:100%");
+  if (n === 3) return `<div class="d-mos" style="display:flex;max-height:350px;height:300px"><div style="flex:2;min-width:0">${p()}</div><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px"><div style="flex:1;min-height:0">${p()}</div><div style="flex:1;min-height:0">${p()}</div></div></div>`;
+  return `<div class="d-mos">${ROWS[n].map(r => r === "2x2" ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">${[0, 1, 2, 3].map(() => `<div style="aspect-ratio:1.4">${p()}</div>`).join("")}</div>`
+    : `<div style="display:grid;grid-template-columns:repeat(${r},minmax(0,1fr));gap:4px">${Array.from({ length: r }, () => `<div style="aspect-ratio:${r === 1 ? "16/9" : r === 2 ? "1.2" : "1"}">${p()}</div>`).join("")}</div>`).join("")}</div>`;
+}
+const WAVE = [6, 10, 16, 22, 14, 8, 12, 20, 24, 18, 10, 6, 9, 15, 21, 17, 11, 7, 12, 19, 23, 16, 9, 6, 8, 13, 18, 12, 8, 5];
+function dAtt(a) {
+  switch (a.k) {
+    case "image": return `<div class="d-media" style="width:min(100%,400px);aspect-ratio:${a.r || "4/3"}">${pic(a.h ?? 30, "width:100%;height:100%")}${a.spoiler ? `<div class="d-spw" data-hit="spw"><span>Spoiler</span></div>` : ""}</div>`;
+    case "gif": return `<div class="d-media" style="width:min(100%,300px);aspect-ratio:1">${pic(300, "width:100%;height:100%")}<span class="d-gif">GIF</span></div>`;
+    case "video": return `<div class="d-media" style="width:min(100%,400px);aspect-ratio:16/9">${pic(200, "width:100%;height:100%")}<span class="d-emb"><span class="play" style="position:absolute"><i class="ph-fill ph-play"></i></span></span></div>`;
+    case "mosaic": return dMosaic(a.n);
+    case "file": return `<div class="d-file"><i class="ph-fill ph-file-text ic"></i><div><a href="#" data-hit="file">${esc(a.name)}</a><small>${a.size}</small></div><i class="ph ph-download-simple dl" data-hit="file" aria-label="Download"></i></div>`;
+    case "audio": return `<div class="d-audio"><div style="display:flex;gap:12px;align-items:center;min-width:0"><i class="ph-fill ph-file-audio" style="font-size:36px;color:var(--d-brand-ink);flex:none"></i><div style="min-width:0"><a href="#" data-hit="file" style="color:var(--d-link);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}</a><small style="color:var(--d-muted);font-size:12px">${a.size}</small></div></div><div class="ctl"><i class="ph-fill ph-play" data-hit="play"></i><span>0:00 / 3:12</span><span class="tr"></span><i class="ph-fill ph-speaker-high"></i></div></div>`;
+    case "voice": return `<div class="d-voice" aria-label="Voice Message"><span class="pl" data-hit="play" aria-label="Play voice message"><i class="ph-fill ph-play"></i></span><span class="wv">${WAVE.map(h => `<i style="height:${h}px"></i>`).join("")}</span><small>0:14</small></div>`;
+  }
+}
+function dEmbed(e) {
+  if (e.k === "rich") return `<div class="d-emb thumb" style="--bar:#5865f2">${pic(80, "").replace('class="pic"', 'class="pic th"')}<div class="au">${face("Waffle Bot")}Raid planner</div><div class="ti">Friday night raid</div><div class="ds">Sign up below. Bring flasks, food and **patience**.</div><div class="fl"><div><b>Tanks</b>2 / 2</div><div><b>Healers</b>1 / 3</div><div><b>DPS</b>7 / 15</div></div><div class="ft">${face("Waffle Bot")}Waffle Bot • Today at 9:00 PM</div></div>`;
+  if (e.k === "video") return `<div class="d-emb" style="--bar:#ff0000"><div class="pv">YouTube</div><div class="au" style="font-size:.875rem">Waffle Clips</div><a class="ti" href="#" data-hit="link">Clutch 1v4 on Ascent, no utility left</a><div style="position:relative;width:400px;max-width:100%">${pic(10, "aspect-ratio:16/9;border-radius:4px;width:100%")}<span class="play" data-hit="play" style="position:absolute;inset:0;margin:auto;width:48px;height:48px;border-radius:50%;background:rgb(0 0 0 / .6);color:#fff;display:grid;place-items:center;font-size:24px"><i class="ph-fill ph-play"></i></span></div></div>`;
+  return `<div class="d-emb" style="--bar:#e5a00d"><div class="pv">The Verge</div><a class="ti" href="#" data-hit="link">Discord adds polls, forwarding and a new look to its desktop app</a><div class="ds">Polls can run for up to two weeks and allow up to ten answers, with emoji.</div>${pic(210, "").replace('class="pic"', 'class="pic im"')}</div>`;
+}
+function dPoll(p) {
+  const total = p.opts.reduce((s, o) => s + o.v, 0) + (p.voted != null ? 1 : 0);
+  const show = p.results || p.voted != null || p.ended;
+  const ops = p.opts.map((o, i) => { const v = o.v + (p.voted === i ? 1 : 0), pct = total ? Math.round(v / total * 100) : 0;
+    return `<div class="op${p.pick === i ? " sel" : ""}" data-hit="poll" data-i="${i}">${show ? `<span class="fill" style="width:${pct}%"></span>` : ""}<span>${o.e}</span><span>${esc(o.t)}</span>${show ? `<span class="pct">${pct}%</span>${p.voted === i ? `<i class="ph-fill ph-check-circle" title="You voted for this answer"></i>` : ""}` : `<span class="rd"></span>`}</div>`; }).join("");
+  const left = p.ended ? "Poll closed" : "23h left";
+  const btn = p.ended ? "" : p.voted != null ? `<button class="d-btn sec" data-hit="unvote">Remove Vote</button>` : p.results ? `<button class="d-btn sec" data-hit="results">Go back to vote</button>` : `<button class="d-btn" data-hit="vote"${p.pick == null ? " disabled" : ""}>Vote</button>`;
+  return `<div class="d-poll"><div class="q">${esc(p.q)}</div><div class="hint">Select one answer</div>${ops}<div class="foot"><span>${total} vote${total === 1 ? "" : "s"}</span><span>•</span><span>${left}</span>${!show ? `<span>•</span><a data-hit="results">Show results</a>` : ""}<span class="sp"></span>${btn}</div></div>`;
+}
+function dComps(c, m) {
+  if (c === "v2") return `<div class="d-ctr" style="--bar:#5865f2"><div class="d-mk"><h3 style="margin:0">Weekly digest</h3></div><div class="sec2"><div class="d-mk">Three new maps, one balance patch and the raid calendar for December.</div>${pic(40, "width:85px;height:85px;border-radius:8px;flex:none")}</div><hr><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">${[1, 2, 3].map(i => pic(60 * i, "aspect-ratio:1;border-radius:4px")).join("")}</div><div class="d-row"><button class="d-btn" data-hit="cbtn">Read more</button><button class="d-btn sec" data-hit="cbtn">Unsubscribe</button></div></div>`;
+  return `<div style="display:grid;gap:8px;width:100%"><div class="d-row"><button class="d-btn" data-hit="cbtn">Roll again</button><button class="d-btn sec" data-hit="cbtn">Keep</button><button class="d-btn ok" data-hit="cbtn">Join raid</button><button class="d-btn red" data-hit="cbtn">Leave</button><button class="d-btn sec" data-hit="link">Docs <i class="ph-bold ph-arrow-square-out"></i></button></div><div class="d-sel" data-hit="select">Pick a class <i class="ph-bold ph-caret-down"></i></div>${m.ifail ? `<div class="d-fail"><i class="ph-fill ph-warning-circle"></i>This interaction failed</div>` : ""}</div>`;
+}
+function dReactions(rx) {
+  return `<div class="d-rxs">${rx.map((r, i) => `<span class="d-rx${r.me ? " me" : ""}${r.burst ? " burst" : ""}" style="${r.glow ? `--glow:${r.glow}` : ""}" data-hit="rx" data-i="${i}" role="button" aria-pressed="${!!r.me}"><span class="e">${r.e}</span><span class="n">${r.n}</span></span>`).join("")}<span class="d-rx add" data-hit="rx-add" aria-label="Add Reaction"><i class="ph-fill ph-smiley"></i></span></div>`;
+}
+function dRow(m, start, o) {
+  if (m.chrome) return dChrome(m, o);
+  if (m.sys) return dSysRow(m, start);
+  if (m.blocked && !m.shown) return "";
+  const au = AU[m.a], cls = ["d-m"];
+  if (start) cls.push("start");
+  if (m.eph) cls.push("eph"); else if (mentionsMe(m.text) && !au.me) cls.push("ment");
+  if (m.hov) cls.push("hov"); if (m.flash) cls.push("hl");
+  if (m.state) cls.push(m.state); if (m.thread) cls.push("has-thread");
+  const text = m.text || "", jumbo = dJumbo(text);
+  const tr = m.translated ? `<div class="d-tr">Translated · <a data-hit="translate">See Original</a></div>` : "";
+  const body = m.thinking ? `<div class="d-mk" style="color:var(--d-muted)">${esc(au.name)} is thinking...</div>`
+    : m.fwd ? dForward(m.fwd)
+    : text ? `<div class="d-mk${jumbo ? " jumbo" : ""}">${md(text, "d")}${m.edited ? `<span class="d-edited" title="Today at 9:52 PM">(edited)</span>` : ""}</div>` : "";
+  const acc = [];
+  if (m.fwd && m.text) acc.push(`<div class="d-mk">${md(m.text, "d")}</div>`);
+  if (m.att) acc.push(...m.att.map(dAtt));
+  if (m.emb && !m.suppress) acc.push(dEmbed(m.emb));
+  if (m.sticker) acc.push(`<div class="d-sticker" title="${m.sticker}">${m.stickerE || "🧇"}</div>`);
+  if (m.poll) acc.push(dPoll(m.poll));
+  if (m.comps) acc.push(dComps(m.comps, m));
+  if (m.thread) acc.push(`<div class="d-thread" data-hit="thread"><div class="t1"><span>${esc(m.thread.name)}</span><a>${m.thread.n} Messages ›</a></div><div class="t2">${face("Ana", "s16")}<b style="color:var(--d-strong);font-weight:500">Ana</b> no promises but I'll try · 2m ago</div></div>`);
+  if (m.rx?.length) acc.push(dReactions(m.rx));
+  if (m.eph) acc.push(`<div class="d-eph-foot"><i class="ph-fill ph-eye"></i>Only you can see this • <a data-hit="dismiss">Dismiss message</a></div>`);
+  const head = start ? (m.reply ? dReply(m) : "") + (m.cmd ? `<div class="d-exec">${face(AU.you.name, "s16")}<span class="un">${esc(AU.you.name)}</span> used <span class="cmd">${esc(m.cmd)}</span></div>` : "") + dHeader(m) : `<span class="d-alt">${shortClock(m.min)}</span>`;
+  return `<div class="${cls.join(" ")}" data-mid="${m.id}" role="article">${head}<div class="d-body">${body}${tr}${acc.length ? `<div class="d-acc">${acc.join("")}</div>` : ""}</div>${o.static && !m.hov ? "" : dToolbar(m)}${o.menu === m.id ? dMenu(m, o) : ""}</div>`;
+}
+function dForward(f) {
+  return `<div style="display:grid;gap:4px"><div style="display:flex;align-items:center;gap:4px;font-size:.875rem;color:var(--d-muted);font-style:italic"><i class="ph-bold ph-arrow-bend-up-right"></i>Forwarded</div><div class="bq d-mk" style="margin:0"><div style="display:grid;gap:4px;padding-left:12px">${f.text ? `<div>${md(f.text, "d")}</div>` : ""}${f.att ? f.att.map(dAtt).join("") : ""}<div style="font-size:.75rem;color:var(--d-muted)"><i class="ph-bold ph-hash"></i> clips • Yesterday at 8:02 PM <i class="ph-bold ph-caret-right"></i></div></div></div></div>`;
+}
+function dMenu(m, o) {
+  const own = AU[m.a]?.me, I = (t, ic = "", cls = "") => `<div class="mi ${cls}" data-hit="mi" data-t="${t}">${t}${ic ? `<i class="ph${ic.includes("caret") ? "-bold" : "-fill"} ${ic}"></i>` : ""}</div>`;
+  if (m.state === "failed") return `<div class="d-menu" style="${o.menuPos}">${I("Resend message", "ph-arrow-clockwise")}${I("Delete Message", "ph-trash", "red")}</div>`;
+  return `<div class="d-menu" style="${o.menuPos}"><div class="emo">${["👍", "😂", "💖", "🔥"].map(e => `<span data-hit="qr" data-e="${e}">${e}</span>`).join("")}</div>${I("Add Reaction", "ph-caret-right")}${m.rx?.length ? I("View Reactions", "ph-smiley") : ""}<hr>${own ? I("Edit Message", "ph-pencil-simple") : ""}${I("Reply", "ph-arrow-bend-up-left")}${I("Forward", "ph-arrow-bend-up-right")}${I("Create Thread", "ph-chats-circle")}<hr>${I("Copy Text", "ph-copy")}${I("Translate", "ph-translate")}${I("Pin Message", "ph-push-pin")}${I("Apps", "ph-caret-right")}${I("Mark Unread", "ph-chat-circle-dots")}${I("Copy Message Link", "ph-link")}${I("Speak Message", "ph-speaker-high")}<hr>${own ? I("Delete Message", "ph-trash", "red") : I("Report Message", "ph-flag", "red")}<hr>${I("Copy Message ID", "ph-identification-card")}</div>`;
+}
+function dChrome(m, o) {
+  switch (m.chrome) {
+    case "date": return `<div class="d-div" role="separator"><span>November 24, 2026</span></div>`;
+    case "unread": return `<div class="d-div unread" role="separator" style="margin-top:.5rem;margin-bottom:-1px"><span class="cap">NEW</span></div>`;
+    case "unread-date": return `<div class="d-div unread" role="separator"><span>November 24, 2026</span><span class="cap">NEW</span></div>`;
+    case "newbar": return `<div class="d-newbar" data-hit="newbar"><span>4 new messages since 9:32 PM</span><span data-hit="markread">Mark As Read <i class="ph-fill ph-chat-circle-check"></i></span></div><div style="height:28px"></div>`;
+    case "jump": return `<div class="d-jump"><span>You're Viewing Older Messages</span><button class="d-btn" data-hit="jump">Jump To Present</button></div>`;
+    case "typing": return `<div class="d-typing"><span class="dots"><i></i><i></i><i></i></span><span>${m.who.length > 3 ? "<b>Several people</b> are typing..." : m.who.length === 3 ? `<b>${m.who[0]}</b>, <b>${m.who[1]}</b>, and <b>${m.who[2]}</b> are typing...` : m.who.length === 2 ? `<b>${m.who[0]}</b> and <b>${m.who[1]}</b> are typing...` : `<b>${m.who[0]}</b> is typing...`}</span></div>`;
+    case "blocked": return `<div class="d-blk"><i class="ph-fill ph-prohibit"></i><span>${m.n} ${m.ignored ? "ignored" : "blocked"} message${m.n === 1 ? "" : "s"}</span><a data-hit="show-blocked">${m.open ? "Hide" : "Show"}</a></div>`;
+    case "start-ch": return `<div class="d-welcome"><span class="ico"><i class="ph-bold ph-hash"></i></span><h2>Welcome to #general!</h2><p>This is the start of the #general channel.</p><div class="acts"><button class="d-btn sec sm" data-hit="cbtn"><i class="ph-fill ph-pencil-simple"></i>Edit Channel</button></div></div>`;
+    case "start-dm": return `<div class="d-welcome">${face("Mira", "s80")}<h2 style="margin-bottom:0">Mira</h2><div class="un">mira</div><p>This is the beginning of your direct message history with <b>mira</b>.</p><div class="mut"><span>2 Mutual Servers</span><button class="d-btn sec sm" data-hit="cbtn">Remove Friend</button><button class="d-btn sec sm" data-hit="cbtn">Block</button></div></div>`;
+  }
+  return "";
+}
+
+// ── Waffle renderer ──
+function wToolbar(m) {
+  if (m.state === "failed") return `<div class="w-bar" role="toolbar">${wBB("delete", "ph-trash", "Delete message")}${wBB("more", "ph-dots-three", "More")}</div>`;
+  if (m.state === "sending") return "";
+  const own = AU[m.a]?.me;
+  return `<div class="w-bar" role="toolbar">${W_QUICK.map(e => `<button class="w-bb qr" data-hit="qr" data-e="${e}" title="Click to react">${e}</button>`).join("")}<span class="w-sep"></span>${wBB("react", "ph-smiley", "Add Reaction")}${own ? wBB("edit", "ph-pencil-simple", "Edit") : ""}${wBB("reply", "ph-arrow-bend-up-left", "Reply")}${wBB("forward", "ph-arrow-bend-up-right", "Forward")}${wBB("thread", "ph-chats-circle", "Create Thread")}${wBB("more", "ph-dots-three", "More")}</div>`;
+}
+const wBB = (a, ic, label) => `<button class="w-bb" data-hit="tb" data-a="${a}" aria-label="${label}" title="${label}"><i class="ph-fill ${ic}"></i></button>`;
+function wReply(m) {
+  const r = m.reply;
+  if (!r || r.kind === "deleted") return "";
+  if (r.kind === "blocked") return `<div class="w-rep"><span>a blocked message</span></div>`;
+  const au = AU[r.a];
+  return `<div class="w-rep" data-hit="reply">${face(au.name, "s16")}<b>${esc(au.name)}</b><span>${r.att ? `<i class="ph-fill ph-image"></i> Image` : esc(r.text.replace(/[*_|`~]/g, ""))}</span></div>`;
+}
+function wAtt(a) {
+  switch (a.k) {
+    case "image": return `<div class="w-media" style="width:min(100%,400px);aspect-ratio:${a.r || "4/3"};max-height:320px">${pic(a.h ?? 30, "width:100%;height:100%")}${a.spoiler ? `<div class="w-spw" data-hit="spw"><span>SPOILER</span></div>` : ""}</div>`;
+    case "gif": return `<div class="w-media" style="width:min(100%,300px);aspect-ratio:1">${pic(300, "width:100%;height:100%")}<span class="w-gif">GIF</span></div>`;
+    case "video": return `<div class="w-media" style="width:min(100%,400px);aspect-ratio:16/9">${pic(200, "width:100%;height:100%")}<span class="w-emb" style="all:unset"><span class="play" style="position:absolute;inset:0;margin:auto;width:48px;height:48px;border-radius:50%;background:#08090b;color:#fff;display:grid;place-items:center;font-size:22px;opacity:.85"><i class="ph-fill ph-play"></i></span></span></div>`;
+    case "mosaic": return wGallery(a.n);
+    case "file": return `<div class="w-file"><i class="ph-fill ph-file-text ic"></i><div><a href="#" data-hit="file">${esc(a.name)}</a><small>${a.size}</small></div><button data-hit="file">Download</button></div>`;
+    case "audio": return `<div class="w-audio"><div style="display:flex;gap:10px;align-items:center;min-width:0"><span class="pb" data-hit="play"><i class="ph-fill ph-play"></i></span><div style="min-width:0;flex:1"><a href="#" data-hit="file" style="color:var(--text-strong);font-weight:500;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none">${esc(a.name)}</a><small style="color:var(--text-faint);font-size:var(--text-xs)">${a.size}</small></div></div><div class="ctl"><span>0:00 / 3:12</span><span class="tr"></span><i class="ph-fill ph-speaker-high"></i></div></div>`;
+    case "voice": return `<div class="w-voice"><span class="pl" data-hit="play"><i class="ph-fill ph-play"></i></span><span class="wv">${WAVE.map(h => `<i style="height:${Math.round(h * 1.25)}px"></i>`).join("")}</span><small>0:14</small><span class="spd">1×</span><i class="ph-fill ph-speaker-high" style="color:var(--text-faint)"></i></div>`;
+  }
+}
+// gallery_layout (media.rs:413): 2 side by side, 3 = wide left + two stacked, 4 = 2×2, 5+ = two over three, "+N" on the fifth.
+function wGallery(n, h0 = 20) {
+  let k = 0; const p = () => pic(h0 + 37 * k++, "position:absolute;inset:0");
+  const T = (x, y, w, h, extra = "") => `<div style="position:absolute;left:${x}%;top:${y}%;width:${w}%;height:${h}%;border-radius:2px;overflow:hidden">${p()}${extra}</div>`;
+  const g = 0.93;
+  const L = n === 2 ? { ar: "2/1", t: [T(0, 0, 50 - g / 2, 100), T(50 + g / 2, 0, 50 - g / 2, 100)] }
+    : n === 3 ? { ar: "3/2", t: [T(0, 0, 66 - g / 2, 100), T(66 + g / 2, 0, 34 - g / 2, 50 - g), T(66 + g / 2, 50 + g, 34 - g / 2, 50 - g)] }
+    : n === 4 ? { ar: "4/3", t: [T(0, 0, 50 - g / 2, 50 - g), T(50 + g / 2, 0, 50 - g / 2, 50 - g), T(0, 50 + g, 50 - g / 2, 50 - g), T(50 + g / 2, 50 + g, 50 - g / 2, 50 - g)] }
+    : { ar: "3/2", t: [T(0, 0, 50 - g / 2, 60 - g), T(50 + g / 2, 0, 50 - g / 2, 60 - g), T(0, 60 + g, 33.3 - g, 40 - g), T(33.3 + g / 2, 60 + g, 33.3 - g, 40 - g), T(66.6 + g, 60 + g, 33.4 - g, 40 - g, n > 5 ? `<span class="more">+${n - 5}</span>` : "")] };
+  return `<div class="w-gal" style="position:relative;aspect-ratio:${L.ar};display:block">${L.t.join("")}</div>`;
+}
+function wEmbed(e) {
+  if (e.k === "rich") return `<div class="w-emb thumb" style="--bar:#5865f2">${pic(80, "").replace('class="pic"', 'class="pic th"')}<div class="au">${face("Waffle Bot")}Raid planner</div><div class="ti">Friday night raid</div><div class="ds">${inline("Sign up below. Bring flasks, food and **patience**.", "w")}</div><div class="fl"><div><b>Tanks</b>2 / 2</div><div><b>Healers</b>1 / 3</div></div><div class="fl" style="grid-template-columns:1fr"><div><b>DPS</b>7 / 15</div></div><div class="ft">Waffle Bot · Today at 9:00 PM</div></div>`;
+  if (e.k === "video") return `<div class="w-emb" style="--bar:#ff0000"><div class="pv">YouTube</div><div class="au">Waffle Clips</div><div class="ti">Clutch 1v4 on Ascent, no utility left</div><div style="position:relative">${pic(10, "aspect-ratio:16/9;border-radius:var(--radius-sm);width:100%")}<span class="play" data-hit="play"><i class="ph-fill ph-play"></i></span></div><button class="w-btn sm" data-hit="link" style="justify-self:start">Open Link</button></div>`;
+  return `<div class="w-emb" style="--bar:#e5a00d"><div class="pv">The Verge</div><div class="ti" data-hit="link" style="cursor:pointer">Discord adds polls, forwarding and a new look to its desktop app</div><div class="ds">Polls can run for up to two weeks and allow up to ten answers, with emoji.</div>${pic(210, "").replace('class="pic"', 'class="pic im"')}</div>`;
+}
+function wPoll(p) {
+  const total = p.opts.reduce((s, o) => s + o.v, 0) + (p.voted != null ? 1 : 0);
+  const show = p.results || p.voted != null || p.ended;
+  const ops = p.opts.map((o, i) => { const v = o.v + (p.voted === i ? 1 : 0), pct = total ? Math.round(v / total * 100) : 0;
+    return `<div class="op${p.pick === i ? " sel" : ""}" data-hit="poll" data-i="${i}">${show ? `<span class="fill" style="width:${pct}%"></span>` : `<span class="rd"></span>`}<span>${o.e}</span><span>${esc(o.t)}</span>${show ? `<span class="pct">${pct}%</span>${p.voted === i ? `<i class="ph-fill ph-check-circle"></i>` : ""}` : ""}</div>`; }).join("");
+  const btn = p.ended ? "" : p.voted != null ? `<button class="w-btn sm" data-hit="unvote">Remove vote</button>` : p.results ? `<button class="w-btn sm" data-hit="results">Back to vote</button>` : `<button class="w-btn ghost sm" data-hit="results">Show results</button><button class="w-btn pri sm" data-hit="vote"${p.pick == null ? " disabled" : ""}>Vote</button>`;
+  return `<div class="w-poll"><div class="q">${esc(p.q)}</div><div class="hint">${p.ended ? "Final results" : "Select one answer"}</div>${ops}<div class="foot"><span>${total} vote${total === 1 ? "" : "s"} · ${p.ended ? "Poll closed" : "Ends in 23 hours"}</span><span class="sp"></span>${btn}</div></div>`;
+}
+function wComps(c, m) {
+  if (c === "v2") return `<div class="w-ctr"><div class="w-mk"><h3 style="margin:0">Weekly digest</h3></div><div class="sec2"><div>Three new maps, one balance patch and the raid calendar for December.</div>${pic(40, "width:85px;height:85px;border-radius:var(--radius-sm);flex:none")}</div><hr><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">${[1, 2, 3].map(i => pic(60 * i, "aspect-ratio:1;border-radius:2px")).join("")}</div><div class="w-row"><button class="w-btn pri" data-hit="cbtn">Read more</button><button class="w-btn" data-hit="cbtn">Unsubscribe</button></div></div>`;
+  return `<div style="display:grid;gap:8px;width:100%"><div class="w-row"><button class="w-btn pri" data-hit="cbtn">Roll again</button><button class="w-btn" data-hit="cbtn">Keep</button><button class="w-btn ok" data-hit="cbtn">Join raid</button><button class="w-btn red" data-hit="cbtn">Leave</button><button class="w-btn" data-hit="link">Docs <i class="ph-bold ph-arrow-square-out"></i></button></div><div class="w-sel" data-hit="select">Pick a class <i class="ph-bold ph-caret-down"></i></div>${m.ifail ? `<div class="w-fail"><i class="ph-fill ph-warning-circle"></i>This interaction failed</div>` : ""}</div>`;
+}
+function wReactions(rx) {
+  return `<div class="w-rxs">${rx.map((r, i) => `<span class="w-rx${r.me ? " me" : ""}" data-hit="rx" data-i="${i}" role="button" aria-pressed="${!!r.me}"><span class="e">${r.e}</span>${r.n}</span>`).join("")}<span class="w-rx add" data-hit="rx-add" aria-label="Add Reaction"><i class="ph-fill ph-smiley"></i></span></div>`;
+}
+function wRow(m, start, o) {
+  if (m.chrome) return wChrome(m, o);
+  if (m.sys) return wSysRow(m);
+  if (m.blocked && !m.shown) return "";
+  const au = AU[m.a], cls = ["w-m"];
+  if (start) cls.push("start");
+  if (m.eph) cls.push("eph"); else if (mentionsMe(m.text) && !au.me) cls.push("ment");
+  if (m.hov) cls.push("hov"); if (m.state) cls.push(m.state);
+  const text = m.text || "", jumbo = wJumbo(text);
+  const stamp = start ? "" : `<span class="w-gut${m.state === "sending" ? " keep" : ""}">${m.state === "sending" ? `<i class="ph ph-clock" aria-label="Sending"></i>` : shortClock(m.min)}</span>`;
+  const tag = au.cross ? `<span class="w-tag">Server</span>` : au.bot ? `<span class="w-tag"><i class="ph-bold ph-check"></i>APP</span>` : "";
+  const head = start ? `<div class="w-h"><span class="w-name" data-hit="name"${au.color ? ` style="color:${au.color}"` : ""}>${esc(au.name)}</span>${tag}<span class="w-time">${wStamp(m)}</span>${m.pinned ? `<i class="ph-fill ph-push-pin pin" aria-label="Pinned"></i>` : ""}</div>` : "";
+  const body = m.thinking ? `<div class="w-mk" style="color:var(--text-muted);display:flex;align-items:center;gap:8px"><span class="w-typing" style="all:unset;display:flex"><span class="bars" style="display:flex;gap:2px;align-items:flex-end;height:10px"><i style="width:3px;height:100%;border-radius:2px;background:var(--text-muted);animation:wbar 1s ease-in-out infinite alternate"></i><i style="width:3px;height:100%;border-radius:2px;background:var(--text-muted);animation:wbar 1s .2s ease-in-out infinite alternate"></i><i style="width:3px;height:100%;border-radius:2px;background:var(--text-muted);animation:wbar 1s .4s ease-in-out infinite alternate"></i></span></span>${esc(au.name)} is thinking...</div>`
+    : m.fwd ? wForward(m.fwd)
+    : text ? `<div class="w-mk${jumbo ? " jumbo" : ""}">${md(text, "w")}${m.edited ? `<span class="w-edited">(edited)</span>` : ""}</div>` : "";
+  const acc = [];
+  if (m.fwd && m.text) acc.push(`<div class="w-mk">${md(m.text, "w")}</div>`);
+  if (m.att) acc.push(...m.att.map(a => (a.k === "image" && m.attCount > 1) ? "" : wAtt(a)));
+  if (m.emb && !m.suppress) acc.push(wEmbed(m.emb));
+  if (m.sticker) acc.push(m.lottie ? `<div class="w-sticker dash">Can't play :${m.sticker}: here</div>` : `<div class="w-sticker">${m.stickerE || "🧇"}</div>`);
+  if (m.poll) acc.push(wPoll(m.poll));
+  if (m.comps) acc.push(wComps(m.comps, m));
+  if (m.thread) acc.push(`<div class="w-thread" data-hit="thread"><i class="ph-fill ph-chats-circle" style="color:var(--text-faint)"></i><b>${esc(m.thread.name)}</b><span>${m.thread.n} messages</span><i class="ph-bold ph-caret-right" style="color:var(--text-faint)"></i></div>`);
+  if (m.rx?.length) acc.push(wReactions(m.rx.map(r => ({ ...r }))));
+  if (m.eph) acc.push(`<div class="w-eph-foot">Only you can see this • <a data-hit="dismiss">Dismiss message</a></div>`);
+  if (m.state === "failed") acc.push(`<div class="w-fail"><i class="ph-fill ph-warning-circle"></i>Not sent.<button data-hit="retry"><i class="ph-bold ph-arrow-clockwise"></i>Resend message</button><button data-hit="tb" data-a="delete">Delete message</button></div>`);
+  const exec = start && m.cmd ? `<div class="w-exec">${face(AU.you.name, "s16")}<b>You</b> used <span class="cmd">${esc(m.cmd)}</span></div>` : "";
+  const avatar = start ? face(au.name).replace('class="face ', 'class="face w-avt ').replace("aria-hidden", 'data-hit="avatar" aria-hidden') : stamp;
+  const row = `<div class="${cls.join(" ")}" data-mid="${m.id}" role="article">${avatar}<div class="w-col">${head}${body}${acc.filter(Boolean).length ? `<div class="w-acc">${acc.join("")}</div>` : ""}</div>${o.static && !m.hov ? "" : wToolbar(m)}${o.menu === m.id ? wMenu(m, o) : ""}</div>`;
+  const pre = start ? exec + wReply(m) : "";
+  return pre ? `<div class="w-wrap start">${pre}${row}</div>` : row;
+}
+function wForward(f) {
+  return `<div class="w-fwd"><div class="lb"><i class="ph-bold ph-arrow-bend-up-right"></i>Forwarded</div>${f.text ? `<div class="w-mk">${md(f.text, "w")}</div>` : ""}${f.att ? f.att.map(wAtt).join("") : ""}<div class="src" data-hit="fwd-src"># clips · Yesterday at 8:02 PM</div></div>`;
+}
+function wMenu(m, o) {
+  const own = AU[m.a]?.me, I = (t, k = "", cls = "") => `<div class="mi ${cls}" data-hit="mi" data-t="${t}">${t}${k ? `<kbd>${k}</kbd>` : ""}</div>`;
+  if (m.state === "failed") return `<div class="w-menu" style="${o.menuPos}">${I("Resend message")}${I("Delete message", "", "red")}</div>`;
+  return `<div class="w-menu" style="${o.menuPos}"><div class="emo">${["💯", "👍", "👎", "😆"].map(e => `<span data-hit="qr" data-e="${e}">${e}</span>`).join("")}<span data-hit="rx-add"><i class="ph-fill ph-smiley"></i></span></div>${I("Add reaction", "A")}${m.rx?.length ? I("View reactions") : ""}<hr>${own ? I("Edit message", "E") : ""}${I("Reply", "R")}${I("Forward", "F")}${I("Create thread", "T")}<hr>${I("Copy text", "C")}${I("Pin message", "P")}${I("Mark unread", "⌥↵")}${I("Save message", "S")}${I("Copy message link")}${I("Speak message")}<hr>${own ? I("Delete message", "D", "red") : I("Report message", "", "red")}<hr>${I("Copy message ID")}</div>`;
+}
+function wChrome(m, o) {
+  switch (m.chrome) {
+    case "date": return `<div class="w-div" role="separator">Tuesday, November 24, 2026</div>`;
+    case "unread": return `<div class="w-new" role="separator"><span>NEW</span></div>`;
+    case "unread-date": return `<div class="w-div" role="separator">Tuesday, November 24, 2026</div><div class="w-new" role="separator"><span>NEW</span></div>`;
+    case "newbar": return `<div class="w-newbar"><button data-hit="newbar"><i class="ph-bold ph-arrow-up"></i>4 new messages since 9:32 PM</button><button data-hit="markread">Mark as read <i class="ph-bold ph-check"></i></button></div><div style="height:40px"></div>`;
+    case "jump": return `<div class="w-jump"><span data-hit="jump">Jump to present <i class="ph-bold ph-arrow-down"></i></span></div>`;
+    case "typing": return `<div class="w-typing"><span class="bars"><i></i><i></i><i></i></span>${m.who.length > 3 ? "Several people are typing…" : m.who.length === 3 ? `${m.who[0]}, ${m.who[1]} and ${m.who[2]} are typing…` : m.who.length === 2 ? `${m.who[0]} and ${m.who[1]} are typing…` : `${m.who[0]} is typing…`}</div>`;
+    case "blocked": return `<div class="w-fold"><i class="ph-fill ph-${m.ignored ? "eye-slash" : "prohibit"}"></i><span>${m.n} ${m.ignored ? "ignored" : "blocked"} message${m.n === 1 ? "" : "s"}</span><button data-hit="show-blocked">${m.open ? "Hide" : "Show"}</button></div>`;
+    case "start-ch": return `<div class="w-empty"><b>No messages yet</b><span>Be the first to say something.</span></div>`;
+    case "start-dm": return `<div class="w-start">${face("Mira", "s80")}<h2>Mira</h2><p style="color:var(--text-muted);font-size:var(--text-md)">mira</p><p>This is the start of your messages with Mira.</p><p>2 mutual servers</p><div class="acts"><span class="w-btn sm"><i class="ph-fill ph-check"></i>Friends</span><button class="w-btn sm" data-hit="cbtn">Block</button></div></div>`;
+  }
+  return "";
+}
+
+// ── System messages ──
+// Discord: lazy 975933.js (type → component), strings from the en-US locale. Waffle: system_message.rs shape()/row().
+const B = n => `<b data-hit="name">${esc(n)}</b>`;
+const WB = n => `<b data-hit="name">${esc(n)}</b>`;
+const JOIN_LINES = ["{u} joined the party.", "{u} is here.", "Welcome, {u}. We hope you brought pizza.", "A wild {u} appeared.", "{u} just landed.", "{u} just slid into the server.", "{u} just showed up!", "Welcome {u}. Say hi!", "{u} hopped into the server.", "Everyone welcome {u}!", "Glad you're here, {u}.", "Good to see you, {u}.", "Yay you made it, {u}!"];
+// One row per message type: [num, NAME, Discord icon, Discord html, Waffle icon|null, Waffle html|null (null = dropped), note]
+const IN = ["ph-arrow-right", "var(--d-pos)"], OUT = ["ph-arrow-left", "var(--d-danger)"];
+const WIN = ["ph-arrow-right", "var(--online-ink)"], WOUT = ["ph-arrow-left", "var(--danger-ink)"];
+const SYS = {
+  add: [1, "RECIPIENT_ADD", IN, `${B("Mira")} added ${B("Theo")} to the group.`, WIN, `${WB("Mira")} added ${WB("Theo")} to the group.`],
+  remove: [2, "RECIPIENT_REMOVE", OUT, `${B("Mira")} removed ${B("Theo")} from the group.`, WOUT, `${WB("Mira")} removed ${WB("Theo")} from the group.`],
+  leave: [2, "RECIPIENT_REMOVE (left)", OUT, `${B("Theo")} left the group.`, WOUT, `${WB("Theo")} left the group.`],
+  call: [3, "CALL (ended)", ["ph-phone", "var(--d-pos)"], `${B("Mira")} started a call that lasted 42 minutes.`, ["ph-phone", "var(--online-ink)"], `${WB("Mira")} started a call that lasted 42 minutes.`],
+  callLive: [3, "CALL (ongoing)", ["ph-phone", "var(--d-pos)"], `${B("Mira")} started a call.<div style="margin-top:6px"><button class="d-btn ok sm" data-hit="cbtn">Join the call</button></div>`, ["ph-phone", "var(--online-ink)"], `${WB("Mira")} started a call. — <a data-hit="cbtn">Join</a>`],
+  missed: [3, "CALL (missed)", ["ph-phone-x", "var(--d-danger)"], `You missed a call from ${B("Mira")} that lasted 3 minutes.`, ["ph-phone-x", "var(--danger-ink)"], `You missed a call from ${WB("Mira")} that lasted 3 minutes. — <a data-hit="cbtn">Call back</a>`],
+  rename: [4, "CHANNEL_NAME_CHANGE", ["ph-pencil-simple", "var(--d-muted)"], `${B("Mira")} changed the group name: <b style="cursor:auto">Friday raiders</b>. <a data-hit="cbtn">Edit Group</a>`, ["ph-pencil-simple", "var(--text-faint)"], `${WB("Mira")} changed the group name: Friday raiders.`],
+  icon: [5, "CHANNEL_ICON_CHANGE", ["ph-pencil-simple", "var(--d-muted)"], `${B("Mira")} changed the group icon. <a data-hit="cbtn">Edit Group</a>`, ["ph-pencil-simple", "var(--text-faint)"], `${WB("Mira")} changed the group icon.`],
+  pin: [6, "CHANNEL_PINNED_MESSAGE", ["ph-push-pin", "var(--d-muted)"], `${B("Mira")} pinned <a data-hit="cbtn">a message</a> to this channel. See all <a data-hit="cbtn">pinned messages</a>.`, ["ph-push-pin", "var(--text-faint)"], `${WB("Mira")} pinned <a data-hit="cbtn">a message</a> to this channel. See all <a data-hit="cbtn">pinned messages</a>.`],
+  join: [7, "USER_JOIN", IN, `${JOIN_LINES[3].replace("{u}", B("Jun"))}<div style="margin-top:6px"><button class="d-btn sec sm" data-hit="wave">👋 Wave to say hi!</button></div>`, WIN, `${JOIN_LINES[3].replace("{u}", WB("Jun"))}<div><button class="w-btn sm" data-hit="wave">👋 Wave to say hi!</button></div>`],
+  joinBot: [7, "USER_JOIN (app)", IN, `${B("Mira")} has added ${B("Waffle Bot")}<span class="d-tag"><i class="ph-bold ph-check"></i>App</span> to the server.`, WIN, `${WB("Mira")} has added ${WB("Waffle Bot")} <span class="w-tag">APP</span> to the server.`],
+  joinFold: [7, "USER_JOIN ×4 in a row", IN, `${JOIN_LINES[0].replace("{u}", B("Jun"))}`, WIN, `${WB("Jun")}, ${WB("Rosa")} and 2 others joined the server.`],
+  boost: [8, "GUILD_BOOST", ["ph-diamond", "var(--d-boost)"], `${B("Ana")} just boosted the server!`, ["ph-diamond", "var(--boost)"], `${WB("Ana")} just boosted the server!`],
+  tier: [10, "GUILD_BOOST_TIER_2", ["ph-diamond", "var(--d-boost)"], `${B("Ana")} just boosted the server <b style="cursor:auto">3</b> times! Waffle HQ has achieved <b style="cursor:auto">Level 2!</b>`, ["ph-diamond", "var(--boost)"], `${WB("Ana")} just boosted the server 3 times! Waffle HQ has achieved Level 2!`],
+  follow: [12, "CHANNEL_FOLLOW_ADD", IN, `${B("Mira")} has added <b style="cursor:auto">Valorant #patch-notes</b> to this channel. Its most important updates will show up here.`, ["ph-megaphone", "var(--text-faint)"], `${WB("Mira")} has added Valorant #patch-notes to this channel. Its most important updates will show up here.`],
+  stream: [13, "GUILD_STREAM", ["ph-screencast", "var(--d-muted)"], `${B("Theo")} is live! Now streaming Balatro. <a data-hit="cbtn">Join Stream</a>`, null, null],
+  disq: [14, "GUILD_DISCOVERY_DISQUALIFIED", ["ph-compass", "var(--d-danger)"], `<a data-hit="cbtn">Waffle HQ</a> has been removed from Server Discovery because it no longer passes all the requirements. Check <a data-hit="cbtn">Server Settings</a> for more details.`, ["ph-compass", "var(--danger-ink)"], `Waffle HQ has been removed from Server Discovery because it no longer passes all the requirements. Check <a data-hit="cbtn">Server Settings</a> for more details.`],
+  requal: [15, "GUILD_DISCOVERY_REQUALIFIED", ["ph-compass", "var(--d-pos)"], `This server is eligible for Server Discovery again and has been automatically relisted!`, ["ph-compass", "var(--online-ink)"], `This server is eligible for Server Discovery again and has been automatically relisted!`],
+  grace1: [16, "GUILD_DISCOVERY_GRACE_PERIOD_INITIAL_WARNING", ["ph-warning-circle", "var(--d-muted)"], `<a data-hit="cbtn">Waffle HQ</a> has failed Discovery activity requirements for 1 week. If it fails for 4 weeks in a row, it will be automatically removed from Discovery.`, ["ph-warning-circle", "var(--text-faint)"], `Waffle HQ has failed Discovery activity requirements for 1 week. If it fails for 4 weeks in a row, it will be automatically removed from Discovery.`],
+  grace3: [17, "GUILD_DISCOVERY_GRACE_PERIOD_FINAL_WARNING", ["ph-warning-circle", "var(--d-muted)"], `<a data-hit="cbtn">Waffle HQ</a> has failed Discovery activity requirements for 3 weeks in a row. If it fails for 1 more week, it will be removed from Discovery.`, ["ph-warning-circle", "var(--text-faint)"], `Waffle HQ has failed Discovery activity requirements for 3 weeks in a row. If it fails for 1 more week, it will be removed from Discovery.`],
+  thread: [18, "THREAD_CREATED", ["ph-chats-circle", "var(--d-muted)"], `${B("Ana")} started a thread: <a data-hit="thread">raid comps</a>. See all <a data-hit="cbtn">threads</a>.`, ["ph-chats-circle", "var(--text-faint)"], `${WB("Ana")} started a thread: <a data-hit="thread">raid comps</a>. See all <a data-hit="cbtn">threads</a>.`],
+  invite: [22, "GUILD_INVITE_REMINDER", ["ph-user-plus", "var(--d-muted)"], `Wondering who to invite? Start by inviting anyone who can help you build the server!`, null, null],
+  roleSub: [25, "ROLE_SUBSCRIPTION_PURCHASE", IN, `${B("Rosa")} joined <b style="cursor:auto">Waffle Club</b> as a subscriber of <a data-hit="cbtn">Waffle HQ</a>!`, null, null],
+  stageStart: [27, "STAGE_START", ["ph-broadcast", "var(--d-muted)"], `${B("Mira")} started <b style="cursor:auto">Patch night Q&amp;A</b>`, ["ph-broadcast", "var(--text-faint)"], `${WB("Mira")} started Patch night Q&amp;A`],
+  stageEnd: [28, "STAGE_END", ["ph-broadcast", "var(--d-muted)"], `${B("Mira")} ended <b style="cursor:auto">Patch night Q&amp;A</b>`, ["ph-broadcast", "var(--text-faint)"], `${WB("Mira")} ended Patch night Q&amp;A`],
+  speaker: [29, "STAGE_SPEAKER", ["ph-microphone", "var(--d-muted)"], `${B("Theo")} is now a speaker.`, ["ph-microphone", "var(--text-faint)"], `${WB("Theo")} is now a speaker.`],
+  hand: [30, "STAGE_RAISE_HAND", ["ph-hand", "var(--d-muted)"], `${B("Theo")} requested to speak. <a data-hit="cbtn">Invite to Speak</a>`, ["ph-hand", "var(--text-faint)"], `${WB("Theo")} requested to speak.`],
+  topic: [31, "STAGE_TOPIC", ["ph-broadcast", "var(--d-muted)"], `${B("Mira")} changed the Stage topic: <b style="cursor:auto">Ranked reset</b>`, ["ph-broadcast", "var(--text-faint)"], `${WB("Mira")} changed the Stage topic: Ranked reset`],
+  appPremium: [32, "GUILD_APPLICATION_PREMIUM_SUBSCRIPTION", ["ph-ticket", "var(--d-muted)"], `${B("Ana")} upgraded Waffle Bot to premium for this server! 🎉`, null, null],
+  alertOn: [36, "GUILD_INCIDENT_ALERT_MODE_ENABLED", ["ph-shield-warning", "var(--d-muted)"], `${B("Mira")} enabled security actions until 11:00 PM.`, "auto", `enabled security actions until 11:00 PM.`],
+  alertOff: [37, "GUILD_INCIDENT_ALERT_MODE_DISABLED", ["ph-shield", "var(--d-muted)"], `${B("Mira")} disabled security actions.`, "auto", `disabled security actions.`],
+  raid: [38, "GUILD_INCIDENT_REPORT_RAID", ["ph-shield-warning", "var(--d-danger)"], `${B("Mira")} reported a raid in Waffle HQ.`, "auto", `reported a raid in Waffle HQ.`],
+  falseAlarm: [39, "GUILD_INCIDENT_REPORT_FALSE_ALARM", ["ph-shield-check", "var(--d-muted)"], `${B("Mira")} resolved an Activity Alert.`, "auto", `resolved an Activity Alert.`],
+  purchase: [44, "PURCHASE_NOTIFICATION", IN, `${B("Rosa")} has purchased <a data-hit="cbtn">Golden Spatula</a>!<div class="d-auto" style="margin-top:6px"><div class="card">Thank you, ${B("Rosa")}</div></div>`, null, null],
+  pollEnd: [46, "POLL_RESULT", ["ph-chart-bar", "var(--d-muted)"], `${B("Mira")}'s poll <a data-hit="cbtn">Pizza or tacos tonight?</a> has closed.<div class="d-poll" style="margin-top:6px;gap:4px"><div class="hint">Winning answer</div><div style="display:flex;align-items:center;gap:8px;font-weight:600;color:var(--d-strong)">🍕 Pizza <span style="margin-left:auto;font-weight:500;color:var(--d-muted)">5 votes · 62%</span></div><div class="foot"><span class="sp"></span><button class="d-btn sec sm" data-hit="cbtn">View Poll</button></div></div>`, ["ph-chart-bar", "var(--text-faint)"], `${WB("Mira")}'s poll Pizza or tacos tonight? has closed.<div class="w-poll" style="margin-top:6px"><div style="display:flex;gap:8px;align-items:center;font-weight:600;color:var(--text-strong)">🍕 Pizza</div><div class="hint">Won with 5 votes · 62%</div><div class="foot"><span class="sp"></span><button class="w-btn sm" data-hit="cbtn">View poll</button></div></div>`],
+  nitro: [48, "NITRO_NOTIFICATION", ["ph-bell", "var(--d-muted)"], `Powered by Nitro <button class="d-btn sm" data-hit="cbtn">Get Nitro</button>`, null, null],
+  lobby: [49, "CHANNEL_LINKED_TO_LOBBY", ["ph-arrows-clockwise", "var(--d-muted)"], `${B("Mira")} has linked this channel to Balatro. Messages are now syncing. <a data-hit="cbtn">Learn More</a>`, null, null],
+  gifting: [50, "GIFTING_PROMPT", ["ph-gift", "var(--d-muted)"], `Celebrate your friendship anniversary! 2-year anniversary <button class="d-btn sm" data-hit="cbtn">Send Gift</button>`, null, null],
+  inGame: [51, "IN_GAME_MESSAGE_NUX", ["ph-game-controller", "var(--d-muted)"], `${B("Mira")} messaged you from Balatro. In-game chat may not include rich messaging features such as images, polls, or apps. <a data-hit="cbtn">Learn More</a>`, null, null],
+  joinOk: [52, "GUILD_JOIN_REQUEST_ACCEPT_NOTIFICATION", IN, `${B("Jun")}'s application to <a data-hit="cbtn">Waffle HQ</a> was approved! Welcome!`, null, null],
+  joinNo: [53, "GUILD_JOIN_REQUEST_REJECT_NOTIFICATION", OUT, `${B("Jun")}'s application to <a data-hit="cbtn">Waffle HQ</a> was rejected.`, null, null],
+  joinWd: [54, "GUILD_JOIN_REQUEST_WITHDRAWN_NOTIFICATION", OUT, `${B("Jun")}'s application to <a data-hit="cbtn">Waffle HQ</a> has been withdrawn.`, null, null],
+  hangout: [65, "VOICE_SESSION", ["ph-speaker-high", "var(--d-pos)"], `${B("Mira")} started <a data-hit="cbtn">a voice hangout</a>.`, null, null],
+  friend: [67, "FRIEND_REQUEST_ACCEPTED", ["ph-user-check", "var(--d-muted)"], `${B("Mira")} accepted your friend request.`, null, null],
+};
+// The stamp follows the sentence, before any button or card under it.
+const withTime = (html, t) => { const i = html.indexOf("<div"); return i < 0 ? html + t : html.slice(0, i) + t + html.slice(i); };
+function dSysRow(m, start) {
+  const [, , ic, html] = SYS[m.sys];
+  return `<div class="d-m sys${start ? " start" : ""}${m.hov ? " hov" : ""}" data-mid="${m.id}" role="article"><div class="d-sys"><span class="si"><i class="ph-fill ${ic[0]}" style="color:${ic[1]}"></i></span><div style="min-width:0">${withTime(html, `<time class="d-time">${clock(m.min)}</time>`)}</div></div></div>`;
+}
+function wSysRow(m) {
+  const [, name, , , ic, html] = SYS[m.sys];
+  if (html === null) return `<div class="w-dropped" data-mid="${m.id}">Dropped: <code>${name}</code> renders as an empty row (Shape::Hidden).</div>`;
+  if (ic === "auto") return `<div class="w-m start" data-mid="${m.id}"><span class="w-shield"><i class="ph-fill ph-shield"></i></span><div class="w-col"><div class="w-h"><span class="w-name">AutoMod</span><span class="w-tag">System</span><span class="w-time">Today at ${clock(m.min)}</span></div><div class="w-mk">${WB("Mira")} ${html}</div></div></div>`;
+  return `<div class="w-notice${m.hov ? " hov" : ""}" data-mid="${m.id}" style="margin-top:8px"><span class="si"><i class="ph-fill ${ic[0]}" style="color:${ic[1]}"></i></span><div class="tx">${withTime(html, `<span class="w-time">${clock(m.min)}</span>`)}</div></div>`;
+}
+// AutoMod blocked/flagged (type 24) is its own card on both sides.
+function dAutomod(m) {
+  return `<div class="d-m start auto" data-mid="${m.id}" role="article"><span class="face d-av" style="background:#5865f2"><i class="ph-fill ph-shield" style="font-size:20px"></i></span><h3 class="d-h" style="margin:0;font:inherit;line-height:1.375rem"><span class="d-name">AutoMod</span><span class="d-tag"><i class="ph-bold ph-check"></i>App</span><time class="d-time">${clock(m.min)}</time></h3><div class="d-auto"><div class="d-mk">AutoMod has ${m.flag ? "flagged" : "blocked"} a message in <span class="men"><i class="ph-bold ph-hash" style="font-size:.85em"></i>general</span></div><div class="card">${face("Grumpy", "s16")} <b style="color:var(--d-strong);font-weight:500">Grumpy</b> buy cheap <mark>gold</mark> at shady dot site</div><div class="meta">Keyword: gold · Rule: No spam</div><div class="d-row"><button class="d-btn sec sm" data-hit="cbtn">Actions</button><button class="d-btn sec sm" data-hit="cbtn">Jump to Surrounding</button><button class="d-btn sec sm" data-hit="cbtn">Report Issues</button></div></div></div>`;
+}
+function wAutomod(m) {
+  return `<div class="w-m start" data-mid="${m.id}"><span class="w-shield"><i class="ph-fill ph-shield"></i></span><div class="w-col"><div class="w-h"><span class="w-name">AutoMod</span><span class="w-tag">System</span><span class="w-time">Today at ${clock(m.min)}</span></div><div class="w-auto"><div class="w-mk">has ${m.flag ? "flagged" : "blocked"} a message in <span class="men">#general</span></div><div class="card"><b style="color:var(--text-strong)">Grumpy</b> buy cheap <mark>gold</mark> at shady dot site</div><div class="meta">Keyword: gold · Rule: No spam</div><div class="w-row"><button class="w-btn sm" data-hit="cbtn">Actions</button><button class="w-btn sm" data-hit="cbtn">Jump to Surrounding</button><button class="w-btn sm" data-hit="cbtn">Delete User's Message</button></div></div></div></div>`;
+}
+
+// ── Lists ──
+function chat(side, msgs, o = {}) {
+  let prev = null, rows = "";
+  for (const m of msgs) {
+    if (m.automod) { rows += side === "d" ? dAutomod(m) : wAutomod(m); prev = m; continue; }
+    const start = !m.chrome && (side === "d" ? dStarts(prev, m) : wStarts(prev, m));
+    rows += side === "d" ? dRow(m, start, o) : wRow(m, start, o);
+    if (!(m.blocked && !m.shown)) prev = m;
+  }
+  return side === "d" ? `<div class="dc"><div class="d-chat" style="${o.pad ? `padding-bottom:${o.pad}px` : ""}">${rows}</div></div>` : `<div class="wf"><div class="w-chat" style="${o.pad ? `padding-bottom:${o.pad}px` : ""}">${rows}</div></div>`;
+}
+
+// ── Cases ──
+let uid = 0;
+const M = (a, min, text, x = {}) => ({ id: "m" + uid++, a, min, text, ...x });
+const CHAT = [M("theo", 30, "anyone up for ranked after dinner?")];
+const POLL = () => ({ q: "Pizza or tacos tonight?", opts: [{ e: "🍕", t: "Pizza", v: 5 }, { e: "🌮", t: "Tacos", v: 3 }, { e: "🥗", t: "Salad", v: 0 }], pick: null, voted: null, results: false });
+const RX = () => [{ e: "🔥", n: 3 }, { e: "😂", n: 1, me: true }, { e: "👀", n: 2 }];
+const G = (group, title, msgs, note, o = {}) => ({ group, title, msgs, note, o });
+const sysCase = (k, note, pre = CHAT) => G("System messages", `${SYS[k][1]} (${SYS[k][0]})`, [...pre, { id: "s" + uid++, sys: k, min: 41 }], note);
+const CASES = [
+  G("Ordinary messages", "Default", [M("mira", 41, "anyone up for a few rounds after dinner?")], "Cozy row: 40px avatar, name, time. Discord stamps today as just the time; Waffle writes “Today at”. <span class='gap'>Waffle: squircle row inset 8px, hover fill white 5% vs Discord's grey 12%.</span>"),
+  G("Ordinary messages", "Grouped follow-ups", [M("mira", 41, "anyone up for a few rounds after dinner?"), M("mira", 42, "bringing snacks this time, promise", { hov: true }), M("mira", 47, "ranked or chill, your call")], "Same author under 7 minutes: no header, time in the gutter on hover. <span class='ok'>Same rule (7 min).</span>"),
+  G("Ordinary messages", "New group: 7 minutes", [M("mira", 41, "anyone up for a few rounds after dinner?"), M("mira", 48, "ok who's in")], "Discord starts a new group at ≥ 7 minutes, measured to the previous message. <span class='ok'>Same.</span>"),
+  G("Ordinary messages", "New group: other author", [M("mira", 41, "anyone up for a few rounds after dinner?"), M("theo", 42, "me, after 9")], "Another author always starts a group, 17px above (group spacing 16). <span class='ok'>Same rule</span>; Waffle's gap 16px."),
+  G("Ordinary messages", "Reply", [...CHAT, M("mira", 41, "count me in", { reply: { a: "theo", text: "anyone up for ranked after dinner?" } })], "Reply line with a spine from the avatar, 16px face, @name at 64%, one-line text; a reply always starts a group. <span class='gap'>Waffle: no “@” before the name; faint text.</span>"),
+  G("Ordinary messages", "Reply to a deleted message", [...CHAT, M("theo", 32, "nvm"), M("theo", 33, "found a group", { reply: { kind: "deleted" } })], "Reply badge + italic “Original message was deleted”. <span class='gap'>Waffle drops the reply (reply stays None), so the row joins Theo's group with no reference at all.</span>"),
+  G("Ordinary messages", "Reply to an attachment", [M("rosa", 38, "", { att: [{ k: "image", h: 120 }] }), M("theo", 41, "where is this??", { reply: { a: "rosa", att: true } })], "Italic “Click to see attachment” then an image icon. <span class='gap'>Waffle: icon + “Image”.</span>"),
+  G("Ordinary messages", "Forwarded", [M("ana", 41, "you two need to see this", { fwd: { text: "caught this on stream last night", att: [{ k: "image", h: 200, r: "16/10" }] } })], "“Forwarded” label, the original inside a quote bar, then “#clips • time ›”; the note follows. Hover: “Message originally sent in…”. <span class='gap'>Waffle: filled card instead of the quote bar; note above, not below.</span>"),
+  G("Ordinary messages", "Edited", [M("mira", 41, "actually make it 8:30", { edited: true })], "“(edited)” 10px after the text, tooltip with the edit time. <span class='gap'>Waffle: 12px, no tooltip.</span>"),
+  G("Ordinary messages", "Pinned", [M("mira", 41, "raid starts at 8:30, be on time", { pinned: true })], "Not verified: Discord marks nothing on a pinned message's row; the pin shows as a system line. <span class='gap'>Waffle adds a pin icon to the header.</span>"),
+  G("Ordinary messages", "Ephemeral", [M("bot", 41, "Your roll: **17**", { eph: true, cmd: "/roll" })], "Brand tint 5% with a 2px brand bar, eye icon, “Only you can see this • Dismiss message”. <span class='gap'>Waffle: grey 4% tint, no bar, no eye.</span>"),
+  G("Ordinary messages", "Sending", [M("you", 41, "on my way"), M("you", 41, "grabbing the controller", { state: "sending" })], "Whole message at 50% opacity until confirmed. <span class='gap'>Waffle: faint ink and a clock in the gutter.</span>"),
+  G("Ordinary messages", "Failed to send", [M("you", 41, "two minutes", { state: "failed", hov: true })], "Text turns critical red; the toolbar shrinks to Retry and Delete; right-click has “Resend message”. Not verified: any inline text on web. <span class='gap'>Waffle: muted text plus an inline red “Not sent.” line with Resend / Delete buttons.</span>"),
+  G("Ordinary messages", "Mentions you", [M("jun", 41, "<@you> send me the clip when you're back")], "Row tinted amber 7.8% with a 2px warning bar; the pill is blurple. <span class='gap'>Waffle: honey tint and bar, row widened 8px each side, honey pill.</span>"),
+  G("Ordinary messages", "Role mention", [M("jun", 41, "<@&mods> can someone check #reports")], "Role pill takes the role's colour (text + 10% tint); the row highlights if you hold the role. <span class='gap'>Waffle: honey pill for every role.</span>"),
+  G("Ordinary messages", "@everyone", [M("mira", 41, "@everyone server maintenance at 11")], "Highlights for everyone. <span class='ok'>Same behaviour.</span>"),
+  G("Ordinary messages", "Spoiler text", [M("ana", 41, "the ending: ||he was the waffle all along||")], "Grey block hides the text; click reveals on a subtle fill. <span class='gap'>Waffle: █ run in a code span until clicked.</span> Click both."),
+  G("Ordinary messages", "Code block", [M("theo", 41, "try this:\n```rust\nfn main() {\n    let n = 42; // answer\n    println!(\"{n}\");\n}\n```")], "Bordered block at 90% width, highlight.js colours, copy on hover. <span class='gap'>Waffle: full width on the sidebar tone, copy always shown, no language header.</span>"),
+  G("Ordinary messages", "Markdown", [M("mira", 41, "# Raid night\n## Bring\n- flasks\n- **food**, *patience*, __snacks__, ~~excuses~~\n> no excuses\n-# subtext like this\n[sign-up sheet](https://waffle.gg/raid) and `inline code`")], "Headings 24/20/16, lists, quote bar, -# subtext, masked links. <span class='gap'>__underline__ is bold in Waffle (CommonMark, not verified in gpui-base).</span>"),
+  G("Ordinary messages", "Block quote >>>", [M("mira", 41, ">>> everything after this\nis quoted\nto the end")], "Discord: one quote to the end of the message. <span class='gap'>Waffle: no >>> rule; CommonMark nests three quotes (Not verified how gpui-base draws it).</span>"),
+  G("Ordinary messages", "Timestamps", [M("mira", 41, "raid at <t:t> (<t:R>), full: <t:F>")], "Grey pill, local time. <span class='gap'>Waffle: monospace code chip.</span>"),
+  G("Ordinary messages", "Long text and long name", [M("long", 41, "Lorem ipsum dolor sit amet, consectetur adipiscing elit, a very long message that keeps going so it has to wrap over several lines in both apps without spilling past the column, plus anunbreakablestringthatgoesonandonandonforeverandever.")], "Both wrap; Discord's header clips the name. <span class='ok'>Both hold.</span>"),
+  G("Ordinary messages", "Emoji only (unicode)", [M("rosa", 41, "🧇🍯🔥")], "Up to 30 emoji and nothing else → jumbo, 48px. <span class='gap'>Waffle: unicode stays text size.</span>"),
+  G("Ordinary messages", "Emoji only (server emoji)", [M("rosa", 41, ":waffle: :honey:")], "Jumbo 48px. <span class='ok'>Same (Waffle: ≤27 custom emoji).</span>"),
+
+  G("Media and rich content", "Image", [M("rosa", 41, "", { att: [{ k: "image", h: 120 }] })], "Up to 400×350-ish, 8px corners. <span class='gap'>Waffle: 20px corners, 400×320 box.</span>"),
+  G("Media and rich content", "Two images", [M("rosa", 41, "", { att: [{ k: "mosaic", n: 2 }] })], "oneByTwo: side by side, 4px gap, max 280 tall. <span class='ok'>Same shape.</span>"),
+  G("Media and rich content", "Three images", [M("rosa", 41, "", { att: [{ k: "mosaic", n: 3 }] })], "Solo item flex 2 + two stacked flex 1. <span class='ok'>Same shape (2/3 + 1/3).</span>"),
+  G("Media and rich content", "Five images", [M("rosa", 41, "", { att: [{ k: "mosaic", n: 5 }] })], "Two over three. <span class='ok'>Same shape.</span>"),
+  G("Media and rich content", "Seven images", [M("rosa", 41, "", { att: [{ k: "mosaic", n: 7 }] })], "Discord shows all ten max: one wide, then a 3×3 grid. Not verified: the exact split per count. <span class='gap'>Waffle stops at five tiles with “+2”.</span>"),
+  G("Media and rich content", "Video", [M("rosa", 41, "", { att: [{ k: "video" }] })], "Inline player. <span class='ok'>Inline tile.</span>"),
+  G("Media and rich content", "GIF", [M("rosa", 41, "", { att: [{ k: "gif" }] })], "GIF tag top-left, plays per setting. <span class='ok'>Same.</span>"),
+  G("Media and rich content", "Spoiler image", [M("rosa", 41, "", { att: [{ k: "image", h: 330, spoiler: true }] })], "44px blur and a “Spoiler” pill (uppercase by CSS, Not verified). <span class='ok'>Blur + SPOILER pill.</span> Click both."),
+  G("Media and rich content", "Voice message", [M("mira", 41, "", { att: [{ k: "voice" }] })], "Pill: play, waveform, time. Not verified: the web pill's exact layout. <span class='gap'>Waffle adds a speed pill and volume inline.</span>"),
+  G("Media and rich content", "Audio file", [M("theo", 41, "", { att: [{ k: "audio", name: "intro-theme.mp3", size: "4.2 MB" }] })], "432px card, name link, size, player bar on black 40%. <span class='gap'>Waffle: own card, no dark control bar.</span>"),
+  G("Media and rich content", "File", [M("theo", 41, "", { att: [{ k: "file", name: "raid-roster-final-v3.xlsx", size: "18.4 KB" }] })], "Icon, name link, size, download icon. <span class='gap'>Waffle: a Download button instead of the icon.</span>"),
+  G("Media and rich content", "Link preview", [M("jun", 41, "https://www.theverge.com/discord-polls", { emb: { k: "link" } })], "Surface card, 4px colour bar, 516 max, provider, title link, description, image. <span class='gap'>Waffle: 520 wide, sidebar tone, title in honey.</span>"),
+  G("Media and rich content", "Rich embed (bot)", [M("bot", 41, "", { emb: { k: "rich" } })], "Author, title, description, inline fields three across, thumbnail, footer. <span class='ok'>Same parts</span>; <span class='gap'>Waffle puts only two fields beside a thumbnail.</span>"),
+  G("Media and rich content", "Video embed", [M("jun", 41, "https://youtu.be/xyz", { emb: { k: "video" } })], "Play disc plays inline. <span class='gap'>Waffle's play opens the browser; “Open Link” button.</span>"),
+  G("Media and rich content", "Embeds suppressed", [M("jun", 41, "https://www.theverge.com/discord-polls", { emb: { k: "link" }, suppress: true })], "SUPPRESS_EMBEDS: link only. <span class='ok'>Honoured.</span>"),
+  G("Media and rich content", "Sticker", [M("ana", 41, "", { sticker: "wave", stickerE: "👋" })], "160px sticker. <span class='ok'>160px</span>; Lottie stickers show “Can't play” in Waffle."),
+  G("Media and rich content", "Lottie sticker", [M("ana", 41, "", { sticker: "wumpus_dance", stickerE: "🕺", lottie: true })], "Discord plays Lottie stickers. <span class='gap'>Waffle: dashed card “Can't play :name: here”.</span>"),
+  G("Media and rich content", "Poll", [M("mira", 41, "", { poll: POLL() })], "Question, “Select one answer”, options with radio, “8 votes • 23h left • Show results”, Vote. Click an option, then Vote. <span class='gap'>Waffle: “Ends in 23 hours”, Show results as a button, sentence-case “Remove vote”.</span>"),
+  G("Media and rich content", "Poll, voted", [M("mira", 41, "", { poll: { ...POLL(), voted: 0 } })], "Bars with %, check on yours, “Remove Vote”. <span class='ok'>Same parts.</span>"),
+  G("Media and rich content", "Buttons and select", [...CHAT, M("bot", 41, "Rolled **17**", { comps: "v1", cmd: "/roll" })], "Action rows: primary, secondary, success, danger, link; select menu. <span class='ok'>All styles</span>; Waffle maps primary to honey."),
+  G("Media and rich content", "Interaction failed", [M("bot", 41, "Rolled **17**", { comps: "v1", ifail: true })], "Red “This interaction failed” under the components. <span class='ok'>Same copy.</span>"),
+  G("Media and rich content", "Components V2", [M("bot", 41, "", { comps: "v2" })], "Container with accent bar, sections, thumbnail, separator, gallery, buttons. <span class='gap'>Waffle: raised card, accent as tint not bar.</span>"),
+  G("Media and rich content", "Slash command reply", [...CHAT, M("bot", 41, "Rolled **17**", { cmd: "/roll" })], "“Frsty used /roll” line with a spine, command in link blue. <span class='gap'>Waffle: “You used”, 13px, no spine.</span>"),
+  G("Media and rich content", "Bot is thinking", [...CHAT, M("bot", 41, "", { cmd: "/roll", thinking: true })], "“Waffle Bot is thinking...”. <span class='ok'>Same copy</span> with Waffle's bars."),
+  G("Media and rich content", "App / bot", [M("bot", 41, "Daily reminder: water your plants 🌱")], "APP tag (verified check for verified apps). <span class='ok'>APP tag.</span>"),
+  G("Media and rich content", "Webhook", [M("hook", 41, "**[waffle/main]** 3 new commits")], "APP tag; webhooks with another username start a new group. Not verified: whether Waffle gets <code>bot: true</code> for webhook authors. <span class='gap'>Waffle ignores <code>webhook_id</code>, so a new webhook name may group under the last one.</span>"),
+  G("Media and rich content", "Crossposted", [M("news", 41, "Patch 9.3 is live. Notes: https://waffle.gg/patch")], "Source server as author, SERVER tag. <span class='ok'>Server tag.</span>"),
+  G("Media and rich content", "Thread from a message", [M("ana", 41, "who wants to plan comps?", { thread: { name: "raid comps", n: 12 } })], "Spine from the avatar to a card: name, “12 Messages ›”, the latest reply. <span class='gap'>Waffle: one-line card, no latest reply, no spine.</span>"),
+  G("Media and rich content", "Reactions", [M("theo", 41, "we won 13-2", { rx: RX(), hov: true })], "8px pills, 20px emoji, 14px semibold count; yours in blurple with border; add button on hover. Click them. <span class='ok'>Same model</span>, honey for yours."),
+  G("Media and rich content", "Super reactions", [M("theo", 41, "we won 13-2", { rx: [{ e: "❤️", n: 2, burst: true, glow: "#ff5c8a" }, { e: "🔥", n: 3 }] })], "Burst pill glows in the emoji's colour and animates. <span class='gap'>Waffle: counted as a plain reaction.</span>"),
+  G("Media and rich content", "Translated", [M("ana", 41, "on y va ce soir ?", { translated: true })], "Menu “Translate”; line “Translated · See Original”. <span class='gap'>Waffle: absent.</span>"),
+
+  G("System messages", "AUTO_MODERATION_ACTION (24)", [{ id: "am1", automod: true, min: 41 }], "AutoMod card: keyword highlight, rule, buttons. <span class='gap'>Waffle: “System” tag, “Delete User's Message” instead of “Report Issues”.</span>"),
+  sysCase("join", "13 random lines (id timestamp mod 13) plus “Wave to say hi!”. <span class='ok'>Same lines and button.</span>"),
+  sysCase("joinBot", "An app join. <span class='ok'>Same.</span>"),
+  { ...sysCase("joinFold", "Discord shows each join. <span class='gap'>Waffle folds 3+ same-day joins into one line.</span>"), msgs: [{ id: "jf", sys: "joinFold", min: 41 }] },
+  sysCase("boost", "Pink gem. <span class='ok'>Same.</span>"),
+  sysCase("tier", "Tier reached. <span class='ok'>Same text.</span>"),
+  sysCase("pin", "Links “a message” and “pinned messages”. <span class='ok'>Same.</span>"),
+  sysCase("call", "DM call ended, with its length. <span class='ok'>Same.</span>"),
+  sysCase("callLive", "Ongoing call: “Join the call” button. <span class='gap'>Waffle: “ — Join” inline link.</span>"),
+  sysCase("missed", "Red phone. <span class='gap'>Waffle adds “ — Call back”.</span>"),
+  sysCase("rename", "Name in bold + “Edit Group”. <span class='gap'>No Edit Group link.</span>"),
+  sysCase("icon", "<span class='gap'>No Edit Group link.</span>"),
+  sysCase("add", "Group DM add. <span class='ok'>Same.</span>"),
+  sysCase("remove", "Group DM remove. <span class='ok'>Same.</span>"),
+  sysCase("leave", "<span class='ok'>Same.</span>"),
+  sysCase("thread", "Thread created. <span class='ok'>Same.</span>"),
+  sysCase("follow", "Channel follow. <span class='gap'>Waffle: megaphone icon, not the join arrow.</span>"),
+  sysCase("stream", "Go Live notice with Join Stream. <span class='gap'>Dropped.</span>"),
+  sysCase("stageStart", "<span class='ok'>Same.</span>"), sysCase("stageEnd", "<span class='ok'>Same.</span>"), sysCase("speaker", "<span class='ok'>Same.</span>"),
+  sysCase("hand", "<span class='gap'>No Invite to Speak.</span>"), sysCase("topic", "<span class='ok'>Same.</span>"),
+  sysCase("disq", "<span class='ok'>Same.</span>"), sysCase("requal", "<span class='ok'>Same.</span>"), sysCase("grace1", "<span class='ok'>Same.</span>"), sysCase("grace3", "<span class='ok'>Same.</span>"),
+  sysCase("raid", "Incident report. <span class='gap'>Waffle draws it as an AutoMod row.</span>"), sysCase("alertOn", "<span class='gap'>AutoMod row.</span>"), sysCase("alertOff", "<span class='gap'>AutoMod row.</span>"), sysCase("falseAlarm", "<span class='gap'>AutoMod row.</span>"),
+  sysCase("pollEnd", "Poll closed + winner card + “View Poll”. <span class='ok'>Same parts</span>; sentence-case button."),
+  sysCase("roleSub", "<span class='gap'>Dropped.</span>"), sysCase("purchase", "<span class='gap'>Dropped.</span>"), sysCase("appPremium", "<span class='gap'>Dropped.</span>"),
+  sysCase("invite", "<span class='gap'>Dropped.</span>"), sysCase("hangout", "<span class='gap'>Dropped.</span>"), sysCase("friend", "<span class='gap'>Dropped (DMs).</span>"),
+  sysCase("joinOk", "<span class='gap'>Dropped.</span>"), sysCase("lobby", "<span class='gap'>Dropped.</span>"), sysCase("inGame", "<span class='gap'>Dropped.</span>"), sysCase("gifting", "<span class='gap'>Dropped.</span>"), sysCase("nitro", "<span class='gap'>Dropped.</span>"),
+
+  G("Chrome around messages", "Date divider", [M("theo", 30, "gm", { day: "y" }), { id: "c1", chrome: "date" }, M("mira", 41, "morning")], "Hairline with “November 24, 2026” (12px semibold, Not verified size). <span class='gap'>Waffle: “Tuesday, November 24, 2026” with its own lines.</span>"),
+  G("Chrome around messages", "Unread line", [...CHAT, { id: "c2", chrome: "unread" }, M("mira", 41, "new stuff below")], "Red hairline, “NEW” cap on the right with an arrow. <span class='ok'>Same shape</span> (Waffle red #DB2B33)."),
+  G("Chrome around messages", "New-messages bar", [{ id: "c3", chrome: "newbar" }, ...CHAT, M("mira", 41, "…")], "Blurple bar on top: “4 new messages since 9:32 PM”, “Mark As Read”. <span class='gap'>Waffle: honey 16%, “Mark as read”.</span>"),
+  G("Chrome around messages", "Jump to present", [...CHAT, { id: "c4", chrome: "jump" }], "“You're Viewing Older Messages” bar with “Jump To Present”. <span class='gap'>Waffle: a lone capsule, “Jump to present”.</span>"),
+  G("Chrome around messages", "Typing", [...CHAT, { id: "c5", chrome: "typing", who: ["Mira"] }], "“Mira is typing...”, bold names; 2, 3, then “Several people”. <span class='ok'>Same ladder</span>, Waffle in a pill with an ellipsis character."),
+  G("Chrome around messages", "Typing, four people", [...CHAT, { id: "c6", chrome: "typing", who: ["Mira", "Theo", "Ana", "Jun"] }], "<span class='ok'>Same copy.</span>"),
+  G("Chrome around messages", "Hover toolbar", [M("mira", 41, "anyone up for a few rounds?", { hov: true })], "💯 😆 💖 by default | Add Reaction, Reply, Forward, More. <span class='gap'>Waffle adds Create Thread and Edit/Reply both; defaults 💯 👍 👎.</span>"),
+  G("Chrome around messages", "Your own message's toolbar", [M("you", 41, "on my way", { hov: true })], "Own message: Edit instead of Reply. <span class='gap'>Waffle shows Edit and Reply.</span>"),
+  G("Chrome around messages", "Message menu", [M("mira", 41, "anyone up for a few rounds?", { rx: RX() })], "Emoji row (Not verified), Add Reaction ›, View Reactions | Reply, Forward, Create Thread | Copy Text, Translate, Pin, Apps ›, Mark Unread, Copy Message Link, Speak | Report | Copy Message ID. <span class='gap'>Waffle: sentence case, no Translate or Apps; adds Save message.</span>", { menu: true }),
+  G("Chrome around messages", "Blocked messages", [...CHAT, { id: "c7", chrome: "blocked", n: 2 }, M("grumpy", 40, "lol", { blocked: true }), M("grumpy", 40, "whatever", { blocked: true }), M("mira", 41, "anyway")], "Prohibit icon, “2 blocked messages”, “Show” link. <span class='ok'>Same copy</span>; Waffle's toggle is a button."),
+  G("Chrome around messages", "Ignored messages", [...CHAT, { id: "c8", chrome: "blocked", n: 1, ignored: true }, M("mira", 41, "anyway")], "“1 ignored message”. <span class='ok'>Same.</span>"),
+  G("Chrome around messages", "Start of channel", [{ id: "c9", chrome: "start-ch" }], "68px # disc, “Welcome to #general!”, “This is the start of the #general channel.”, Edit Channel. <span class='gap'>Waffle has no header; an empty channel says “No messages yet”.</span>"),
+  G("Chrome around messages", "Start of DM", [{ id: "c10", chrome: "start-dm" }], "80px face, name, username, “This is the beginning of your direct message history with **mira**.”, mutual servers, actions. <span class='gap'>Waffle: “This is the start of your messages with Mira.”</span>"),
+];
+
+// ── Type table ──
+const TYPE_ROWS = [
+  [0, "DEFAULT", "User message", "<span class='ok'>Message row</span>"],
+  ...Object.values(SYS).filter((v, i, a) => a.findIndex(x => x[0] === v[0]) === i).map(([n, name, , d, , w]) => [n, name, d.replace(/<div[\s\S]*$/, "").replace(/<[^>]+>/g, ""), w === null ? "<span class='gap'>Dropped (empty row)</span>" : `<span class='ok'>${w === "auto" ? "AutoMod row" : "System line"}</span>`]),
+  [19, "REPLY", "User message with a reply line", "<span class='ok'>Message row</span>"],
+  [20, "CHAT_INPUT_COMMAND", "Message with “used /cmd”", "<span class='ok'>Message row + “You used”</span>"],
+  [21, "THREAD_STARTER_MESSAGE", "The parent message; “Original message was deleted” if gone", "<span class='ok'>Parent + Jump</span>"],
+  [23, "CONTEXT_MENU_COMMAND", "Like 20 (Not verified)", "<span class='ok'>Message row</span>"],
+  [24, "AUTO_MODERATION_ACTION", "AutoMod card", "<span class='ok'>AutoMod row</span>"],
+  [26, "INTERACTION_PREMIUM_UPSELL", "Not verified: rendered outside the system map", "<span class='ok'>Message row</span>"],
+  [33, "PRIVATE_CHANNEL_INTEGRATION_ADDED", "App added to a group DM (Not verified: text)", "<span class='gap'>Dropped</span>"],
+  [34, "PRIVATE_CHANNEL_INTEGRATION_REMOVED", "App removed (Not verified: text)", "<span class='gap'>Dropped</span>"],
+  [35, "PREMIUM_REFERRAL", "Nitro referral card", "<span class='gap'>Dropped</span>"],
+  [40, "GUILD_DEADCHAT_REVIVE_PROMPT", "Not verified: rendered outside the system map", "<span class='gap'>Dropped</span>"],
+  [41, "CUSTOM_GIFT", "Gift as a user message", "<span class='ok'>Message row</span> (gift not drawn)"],
+  [42, "GUILD_GAMING_STATS_PROMPT", "Not verified", "<span class='gap'>Dropped</span>"],
+  [45, "VOICE_HANGOUT_INVITE", "User message (Not verified: its card)", "<span class='ok'>Message row</span>"],
+  [47, "CHANGELOG", "User message (Not verified: its card)", "<span class='ok'>Message row</span>"],
+  [55, "HD_STREAMING_UPGRADED", "Not verified", "<span class='gap'>Dropped</span>"],
+  [56, "CHAT_WALLPAPER_SET", "Not verified", "<span class='gap'>Dropped</span>"],
+  [57, "CHAT_WALLPAPER_REMOVED", "Not verified", "<span class='gap'>Dropped</span>"],
+  [58, "REPORT_TO_MOD_DELETED_MESSAGE … 62 CLOSED_REPORT", "Moderator report-resolution cards (Not verified: text)", "<span class='gap'>Dropped</span>"],
+  [63, "EMOJI_ADDED", "Not verified", "<span class='gap'>Dropped</span>"],
+  [64, "PREMIUM_GROUP_INVITE", "Nitro group-invite card", "<span class='gap'>Dropped</span>"],
+  [68, "MEDIA_MENTION_MESSAGE", "User message (Not verified)", "<span class='ok'>Message row</span>"],
+  [69, "GUILD_SPACE_MESSAGE", "Card with “Check it out”", "<span class='gap'>Dropped</span>"],
+].sort((a, b) => a[0] - b[0]);
+document.querySelector("#typetable tbody").innerHTML = TYPE_ROWS.map(r => `<tr><td>${r[0]} <code>${r[1]}</code></td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join("");
+
+// ── Gaps ──
+const GAPS = [
+  ["P1", "Reply to a deleted message", "Badge + italic “Original message was deleted”; the reply still starts a group.", "Reply dropped entirely (<code>reply</code> stays None); the row can merge into the previous group."],
+  ["P1", "Header timestamp", "Today: “9:41 PM”; yesterday: “Yesterday at 9:41 PM”; older: “11/14/2026 9:41 PM”; tooltip with the full date.", "“Today at 9:41 PM”; no tooltip."],
+  ["P1", "Hover toolbar", "Quick reactions default 💯 😆 💖; Add Reaction, Reply (others) or Edit (own), Forward, More. Create Thread only when Forward isn't offered.", "Defaults 💯 👍 👎; Edit and Reply together, plus Create Thread every time."],
+  ["P1", "Unicode jumbo emoji", "Any message of ≤ 30 emoji (unicode or custom) and nothing else renders at 48px.", "Only custom emoji go jumbo; unicode stays text size."],
+  ["P1", "Menu and toolbar copy", "Title case: “Add Reaction”, “Edit Message”, “Copy Message Link”, “Remove Vote”, “Mark As Read”, “Jump To Present”, “View Poll”.", "Sentence case throughout; Discord's copy is the rule."],
+  ["P1", "Mention highlight", "Amber 7.8% (hover 3.9%) with a 2px warning bar; role pills take the role colour.", "Honey tint and bar (fine, Waffle's look), but every role pill is honey and the row widens 8px."],
+  ["P2", "Start-of-channel header", "68px # disc, “Welcome to #general!”, “This is the start of the #general channel.” + topic, Edit Channel.", "None; an empty channel says “No messages yet”."],
+  ["P2", "Start-of-DM copy", "“This is the beginning of your direct message history with **mira**.”", "“This is the start of your messages with Mira.”"],
+  ["P2", "Forwarded layout", "Label, quote bar around the original, “#channel • time ›” below, the note after.", "Filled card; the note sits as message text above it."],
+  ["P2", "Failed send", "Red text; toolbar only Retry + Delete; menu “Resend message”.", "Muted text plus an inline “Not sent.” line with buttons."],
+  ["P2", "Sending", "Message at 50% opacity.", "Faint ink + clock in the gutter."],
+  ["P2", "Ephemeral", "Blurple 5% tint, 2px brand bar, eye icon before the footer.", "Grey 4% tint, no bar, no icon."],
+  ["P2", "Slash command header", "“Frsty used /roll” with a spine to the avatar, command in link colour, 14px.", "“You used /roll”, 13px, no spine; missing in compact mode."],
+  ["P2", "Thread card", "Spine from the avatar, name + “12 Messages ›”, latest reply with face and age.", "One-line card with the count."],
+  ["P2", "Message menu", "Has Translate and Apps ›; Report Message for others.", "No Translate, no Apps; adds Save message."],
+  ["P2", "New-messages bar / jump", "Full-width blurple bar; jump is a bar with “You're Viewing Older Messages”.", "Honey bar; a lone “Jump to present” capsule."],
+  ["P2", "More than five images", "Up to ten tiles: one or two wide rows over a 3×3 grid.", "Five tiles, “+N” on the fifth."],
+  ["P2", "Video embeds", "Play inline.", "Play opens the browser."],
+  ["P2", "Webhooks", "Different webhook usernames start new groups.", "<code>webhook_id</code> unparsed: they group under the previous author id."],
+  ["P2", "Group DM rename / icon", "“Edit Group” link after the line.", "No link."],
+  ["P2", "Ongoing DM call", "“Join the call” button under the line.", "Inline “ — Join” link."],
+  ["P3", "Super reactions", "Burst pill with a glow in the emoji's colour; “Add Super Reaction”.", "Counted as plain reactions."],
+  ["P3", "Translation", "Translate in the menu; “Translated · See Original”.", "Absent."],
+  ["P3", ">>> quotes", "Quote to the end of the message.", "No rule (CommonMark nesting)."],
+  ["P3", "__underline__", "Underline.", "Bold (CommonMark; Not verified in gpui-base)."],
+  ["P3", "Dropped system types", "GUILD_STREAM (13), INVITE_REMINDER (22), ROLE_SUBSCRIPTION_PURCHASE (25), APP_PREMIUM (32), PURCHASE (44), NITRO (48), LOBBY (49), GIFTING (50), IN_GAME (51), JOIN_REQUEST_* (52–54), VOICE_SESSION (65), FRIEND_REQUEST_ACCEPTED (67) and the rest have text or cards.", "Rendered as an empty div; nothing shows."],
+  ["P3", "Incident alerts (36–39)", "System lines with a shield, actor first.", "AutoMod-styled rows with a “System” tag."],
+  ["P3", "Join folding", "Each join is its own line.", "3+ same-day joins fold into one line (Waffle's own choice)."],
+  ["P3", "Stage raise hand", "“Invite to Speak” link.", "None."],
+  ["P3", "Pinned marker", "Not verified: nothing on the row.", "Pin icon in the header."],
+  ["P3", "Lottie stickers", "Play.", "“Can't play :name: here” card."],
+];
+document.getElementById("gapbody").innerHTML = GAPS.map(([p, a, d, w]) => `<tr><td>${a}</td><td>${d}</td><td>${w}</td><td class="p p${p[1]}">${p}</td></tr>`).join("");
+
+// Case list, grouped.
+let lastGroup = "";
+document.getElementById("caselist").innerHTML = CASES.map(c => {
+  const head = c.group !== lastGroup ? `<h3>${c.group}</h3>` : ""; lastGroup = c.group;
+  const o = { static: true, pad: c.o.menu ? 580 : 0 };
+  if (c.o.menu) { o.menu = c.msgs.at(-1).id; o.menuPos = "top:24px;right:16px"; }
+  return `${head}<div class="case"><div><h4>${c.title}</h4><p>${c.note}</p></div><div class="frame" data-side="Discord">${chat("d", c.msgs, o)}</div><div class="frame" data-side="Waffle">${chat("w", c.msgs, o)}</div></div>`;
+}).join("");
+// Clicks inside the case list: spoilers and reactions answer locally so each app's behaviour shows.
+document.getElementById("caselist").addEventListener("click", e => {
+  const sp = e.target.closest(".sp, .d-spw, .w-spw");
+  if (sp) { sp.classList.contains("sp") ? sp.classList.add("open") : sp.remove(); return; }
+  const rx = e.target.closest(".d-rx:not(.add), .w-rx:not(.add)");
+  if (rx) { const me = rx.classList.toggle("me"), n = rx.querySelector(".n") || rx; const num = +((n.textContent.match(/\d+/) || [0])[0]) + (me ? 1 : -1); if (rx.querySelector(".n")) rx.querySelector(".n").textContent = num; else rx.lastChild.textContent = num; }
+});
+
+document.getElementById("srcnote").innerHTML = `Discord source: message list <code>524434</code> (<code>.message_SY_P2T</code>, <code>groupStart</code>, <code>mentioned</code>, <code>ephemeral</code>), <code>738015</code> (cozy layout, reply spine, executed command), reactions <code>17256</code>, mosaics <code>635014</code>, embeds <code>198496</code>, markup <code>44141</code>, dividers and bars <code>996969</code>, blocked rows <code>727139</code>, channel welcome <code>274698</code>, the system-message map in lazy chunk <code>975933</code>, the grouping rule in <code>42834</code> (7 minutes), the toolbar and menu in <code>695221</code> / <code>964898</code>, the en-US strings. Icons on both sides are Phosphor stand-ins; images are gradient stand-ins. Not verified: the date divider's type size, the hover bar's exact box (only its button and separator rules were found), the voice-message pill, the poll card, sticker, forwarded, thread and V2 container boxes (their strings are verified, their CSS was not found), the context menu's emoji row, Discord's in-message pin marker (none drawn), the time-left wording a poll uses, which formatter the header calls for “today” (the LT branch is drawn), and webhook authors' <code>bot</code> flag in Waffle.`;
+
+// ── Playground ──
+const form = document.getElementById("knobs");
+document.getElementById("syssel").innerHTML = Object.entries(SYS).map(([k, v]) => `<option value="${k}">${v[0]} ${v[1].toLowerCase().replace(/_/g, " ")}</option>`).join("");
+const BASE = { kind: "default", author: "mira", group: "new", reply: "text", sys: "join", state: "", ment: "", att: "", emb: "", rx: "", edited: false, pinned: false, thread: false, longtext: false, spoiler: false, date: true, unread: false, newbar: false, typing: false, blocked: false, theme: "" };
+let S = { ...BASE };
+let R = { d: {}, w: {} };
+const logs = { d: [], w: [] };
+function log(d, w) {
+  if (d) logs.d.unshift(d); if (w) logs.w.unshift(w);
+  for (const k of ["d", "w"]) { logs[k].length = Math.min(logs[k].length, 8); document.getElementById("l" + k).innerHTML = logs[k].map(x => `<li>${x}</li>`).join(""); }
+}
+const ATT = { image: [{ k: "image", h: 120 }], m2: [{ k: "mosaic", n: 2 }], m3: [{ k: "mosaic", n: 3 }], m5: [{ k: "mosaic", n: 5 }], m7: [{ k: "mosaic", n: 7 }], video: [{ k: "video" }], gif: [{ k: "gif" }], voice: [{ k: "voice" }], audio: [{ k: "audio", name: "intro-theme.mp3", size: "4.2 MB" }], file: [{ k: "file", name: "raid-roster-final-v3.xlsx", size: "18.4 KB" }], spoiler: [{ k: "image", h: 330, spoiler: true }] };
+const RXS = { some: () => [{ e: "🔥", n: 3 }, { e: "👀", n: 2 }], mine: RX, burst: () => [{ e: "❤️", n: 2, burst: true, glow: "#ff5c8a" }, { e: "🔥", n: 3 }] };
+function build(side) {
+  const r = R[side], list = [];
+  const a = S.kind === "eph" || S.kind === "cmd" || S.kind === "thinking" || S.kind === "ifail" || S.kind === "comps" || S.kind === "v2" ? "bot" : S.kind === "webhook" ? "hook" : S.kind === "crosspost" ? "news" : S.author;
+  if (S.date) list.push({ id: "pd", chrome: "date" });
+  if (S.newbar && !r.read) list.unshift({ id: "pn", chrome: "newbar" });
+  list.push({ id: "p0", a: "theo", min: 30, text: "anyone up for ranked after dinner?", flash: r.flash === "p0", rx: r.rx0 });
+  if (S.blocked) { list.push({ id: "pb", chrome: "blocked", n: 2, open: r.shown }, { id: "pb1", a: "grumpy", min: 31, text: "lol", blocked: true, shown: r.shown }, { id: "pb2", a: "grumpy", min: 31, text: "whatever", blocked: true, shown: r.shown }); }
+  const min = S.group === "follow" ? 41 : S.group === "gap" ? 47 : 41;
+  if (S.group !== "new") list.push({ id: "pp", a, min: S.group === "follow" ? 39 : 39, text: "ok one sec" });
+  if (S.unread) list.push({ id: "pu", chrome: "unread" });
+  if (S.kind === "system") { list.push({ id: "pm", sys: S.sys, min }); }
+  else if (!r.dismissed) {
+    let text = { jumbo: "🧇🍯🔥", code: "```rust\nfn main() {\n    let n = 42; // answer\n}\n```", markdown: "# Raid night\n- **food**, *patience*, __snacks__\n> no excuses\n-# subtext\n[sign-up](https://waffle.gg/raid)", eph: "Your roll: **17**", cmd: "Rolled **17**", ifail: "Rolled **17**", comps: "Rolled **17**", webhook: "**[waffle/main]** 3 new commits", crosspost: "Patch 9.3 is live." }[S.kind] ?? "count me in, bringing snacks";
+    if (S.ment) text = { me: "<@you> ", role: "<@&mods> ", everyone: "@everyone ", other: "<@theo> " }[S.ment] + text;
+    if (S.spoiler) text += " ||the boss has a second phase||";
+    if (S.longtext) text += " — and a long tail of text that has to wrap over a few lines in both apps without spilling past the column, plus anunbreakablestringthatgoesonandonandonforever.";
+    if (S.emb === "link" || S.emb === "suppressed" || S.emb === "video") text += S.emb === "video" ? " https://youtu.be/xyz" : " https://www.theverge.com/discord-polls";
+    if (["poll", "sticker", "v2", "thinking"].includes(S.kind)) text = S.ment ? text.split(" ")[0] : "";
+    const m = { id: "pm", a: a === "mira" && S.author === "long" ? "long" : a, min, text, state: r.state ?? (S.state || undefined), edited: S.edited, pinned: S.pinned,
+      eph: S.kind === "eph", cmd: ["eph", "cmd", "thinking", "ifail", "comps"].includes(S.kind) ? "/roll" : undefined, thinking: S.kind === "thinking", ifail: S.kind === "ifail" || r.ifail,
+      comps: S.kind === "comps" || S.kind === "ifail" ? "v1" : S.kind === "v2" ? "v2" : undefined, poll: S.kind === "poll" ? (r.poll ||= POLL()) : undefined,
+      sticker: S.kind === "sticker" ? "wave" : undefined, stickerE: "👋", att: ATT[S.att], emb: S.emb ? { k: S.emb === "suppressed" ? "link" : S.emb } : undefined, suppress: S.emb === "suppressed",
+      rx: r.rx ?? (S.rx ? RXS[S.rx]() : undefined), thread: S.thread ? { name: "raid comps", n: 12 } : undefined };
+    if (S.kind === "reply") m.reply = S.reply === "deleted" ? { kind: "deleted" } : S.reply === "att" ? { a: "rosa", att: true } : { a: "theo", text: "anyone up for ranked after dinner?" };
+    if (S.kind === "forward") { m.fwd = { text: "caught this on stream last night", att: [{ k: "image", h: 200, r: "16/10" }] }; }
+    list.push(m);
+  }
+  if (S.typing || r.typing) list.push({ id: "pt", chrome: "typing", who: r.typing ? ["Mira", "Ana"] : ["Mira"] });
+  return list;
+}
+function render() {
+  for (const side of ["d", "w"]) {
+    const o = { pad: R[side].menu ? 580 : 0 };
+    if (R[side].menu) { o.menu = R[side].menu.id; o.menuPos = R[side].menu.pos; }
+    document.getElementById("p" + side).innerHTML = chat(side, build(side), o);
+  }
+}
+function readForm() {
+  const f = new FormData(form);
+  for (const k of Object.keys(BASE)) S[k] = typeof BASE[k] === "boolean" ? f.has(k) : f.get(k) ?? BASE[k];
+  if (S.theme) document.documentElement.dataset.theme = S.theme; else { try { const p = JSON.parse(localStorage.getItem("waffle-ds") || "{}"); p.theme ? document.documentElement.dataset.theme = p.theme : delete document.documentElement.dataset.theme; } catch { delete document.documentElement.dataset.theme; } }
+}
+form.addEventListener("input", () => { readForm(); R = { d: {}, w: {} }; render(); });
+const timers = {};
+form.addEventListener("click", e => {
+  const act = e.target.closest("[data-act]")?.dataset.act; if (!act) return;
+  if (act === "reset") { S = { ...BASE }; for (const el of form.elements) if (el.name in BASE) el.type === "checkbox" ? el.checked = BASE[el.name] : el.value = BASE[el.name]; readForm(); R = { d: {}, w: {} }; render(); log("Reset.", "Reset."); return; }
+  if (act === "send") {
+    for (const s of ["d", "w"]) R[s].state = "sending"; render();
+    log("Your message appears at 50% opacity until the server confirms it.", "Your message appears in faint ink with a clock in the gutter until confirmed.");
+    clearTimeout(timers.send); timers.send = setTimeout(() => { for (const s of ["d", "w"]) R[s].state = ""; render(); log("Confirmed: full opacity.", "Confirmed: normal ink, clock gone."); }, 1400);
+  }
+  if (act === "fail") { for (const s of ["d", "w"]) R[s].state = "failed"; render(); log("Send failed: text turns red; the toolbar offers only Retry and Delete; right-click has Resend message.", "Send failed: muted text, a red “Not sent.” line with Resend message and Delete message."); }
+  if (act === "type") {
+    for (const s of ["d", "w"]) R[s].typing = true; render();
+    log("“Mira and Ana are typing...” under the composer, names bold.", "“Mira and Ana are typing…” in a glass pill above the composer.");
+    clearTimeout(timers.type); timers.type = setTimeout(() => { for (const s of ["d", "w"]) R[s].typing = false; render(); }, 6000);
+  }
+});
+const stages = document.querySelector(".stages");
+function sideOf(el) { return el.closest("#pd") ? "d" : el.closest("#pw") ? "w" : null; }
+const TB = {
+  react: ["Opens the emoji picker beside the toolbar.", "Opens the emoji picker."], reply: ["Starts a reply: a bar above the composer, mention on.", "Starts a reply above the composer."],
+  edit: ["Turns the message into an inline editor.", "Turns the row into its inline editor."], forward: ["Opens Forward: pick channels or people, add a message.", "Opens “Forward message” with search and an optional note."],
+  thread: ["Not on Discord's default bar when Forward is there.", "Opens a thread from the message."], more: ["Opens the message menu beside the toolbar.", "Opens the message menu."],
+  retry: ["Resends the message.", "No Retry on the toolbar; Resend is inline."], delete: ["Deletes the unsent message.", "Deletes the unsent message."],
+};
+stages.addEventListener("click", e => {
+  const side = sideOf(e.target); if (!side) return;
+  const b = e.target.closest("[data-hit]");
+  const r = R[side], other = side === "d" ? "w" : "d";
+  if (!b) { if (r.menu) { r.menu = null; render(); } return; }
+  const hit = b.dataset.hit, say = (d, w) => side === "d" ? log(d, null) : log(null, w);
+  e.preventDefault();
+  switch (hit) {
+    case "spoiler": b.classList.add("open"); say("Spoiler revealed on a subtle fill; stays open.", "The █ mask gives way to the text."); return;
+    case "spw": b.remove(); say("Blur lifts; the image opens on the next click.", "Veil lifts; the next click opens the viewer."); return;
+    case "rx": case "qr": {
+      const list = r.rx ?? (build(side).find(m => m.id === "pm")?.rx || []).map(x => ({ ...x }));
+      const e2 = hit === "qr" ? b.dataset.e : list[+b.dataset.i]?.e;
+      const at = list.findIndex(x => x.e === e2);
+      if (at < 0) list.push({ e: e2, n: 1, me: true }); else { const x = list[at]; x.me = !x.me; x.n += x.me ? 1 : -1; if (!x.n) list.splice(at, 1); }
+      r.rx = list; r.menu = null; render();
+      say(`${e2} ${at < 0 || list[at]?.me ? "added" : "removed"}: pill in blurple with a border while it's yours.`, `${e2} ${at < 0 || list[at]?.me ? "added" : "removed"}: pill in honey with a 55% border while it's yours.`);
+      return;
+    }
+    case "rx-add": say("Emoji picker; Shift-click keeps it open, Super Reactions tab for Nitro.", "Emoji picker opens."); return;
+    case "tb": say(...TB[b.dataset.a]); if (b.dataset.a === "more") { r.menu = { id: b.closest("[data-mid]").dataset.mid, pos: "top:20px;right:16px" }; render(); } return;
+    case "reply": r.flash = "p0"; render(); setTimeout(() => { r.flash = null; render(); }, 1200); say("Scrolls to the original and flashes it blurple.", "Scrolls to the original and flashes its row."); return;
+    case "dismiss": r.dismissed = true; render(); say("Ephemeral message dismissed; it is gone for good.", "Dismissed."); return;
+    case "retry": r.state = "sending"; render(); setTimeout(() => { r.state = ""; render(); }, 900); say("Retry: sends again.", "Resend message: sends again."); return;
+    case "poll": { const p = build(side).find(m => m.poll)?.poll; if (!p || p.voted != null || p.ended) return; p.pick = +b.dataset.i; r.poll = p; render(); say("Option selected; Vote enables.", "Option selected; Vote enables."); return; }
+    case "vote": { const p = r.poll; if (!p || p.pick == null) return; p.voted = p.pick; render(); say("Voted: bars and percentages, check on yours, “Remove Vote”.", "Voted: bars, check on yours, “Remove vote”."); return; }
+    case "unvote": r.poll.voted = null; r.poll.pick = null; render(); say("Vote removed.", "Vote removed."); return;
+    case "results": { const p = r.poll || (r.poll = build(side).find(m => m.poll)?.poll); if (!p) return; p.results = !p.results; render(); say(p.results ? "Results shown; “Go back to vote”." : "Back to voting.", p.results ? "Results shown; “Back to vote”." : "Back to voting."); return; }
+    case "cbtn": r.ifail = true; render(); say("Button spins, then after 3 s with no answer: “This interaction failed”.", "Button waits, then “This interaction failed” (or “{app} didn't respond in time”)."); return;
+    case "select": say("Select menu opens below with its options.", "Select popup opens with search for long lists."); return;
+    case "wave": say("Sends a wave sticker as a reply to the join.", "Sends one of six wave stickers."); return;
+    case "show-blocked": r.shown = !r.shown; render(); say(r.shown ? "Blocked messages expand on a hover-tint background." : "Collapsed again.", r.shown ? "Shown at 72% opacity." : "Hidden again."); return;
+    case "name": case "avatar": say("Profile popout beside the name.", "Profile popout."); return;
+    case "mention": say("User/role popout; role mention shows the role.", "Profile or role popout; @here does nothing."); return;
+    case "link": say("Unknown links ask “Leaving Discord” first (Not verified here).", "Opens the link (Not verified: a leave-site confirm)."); return;
+    case "thread": say("Opens the thread in a side pane.", "Opens the thread."); return;
+    case "markread": r.read = true; render(); say("Marked as read; bar gone.", "Marked as read; bar gone."); return;
+    case "newbar": say("Jumps to the first unread message.", "Jumps to the first unread message."); return;
+    case "play": say("Plays inline.", "Plays inline (a video embed opens the browser)."); return;
+    case "file": say("Downloads the file.", "Downloads the file."); return;
+    case "translate": say("Shows the original text.", "Not in Waffle."); return;
+    case "mi": r.menu = null; render(); say(`“${b.dataset.t}”.`, `“${b.dataset.t}”.`); return;
+  }
+});
+stages.addEventListener("contextmenu", e => {
+  const side = sideOf(e.target); if (!side) return;
+  const row = e.target.closest("[data-mid]"); if (!row || row.dataset.mid.startsWith("pd")) return;
+  e.preventDefault();
+  const frame = document.getElementById("p" + side).getBoundingClientRect(), rr = row.getBoundingClientRect();
+  const x = Math.max(8, Math.min(e.clientX - frame.left, frame.width - 240)), y = e.clientY - rr.top;
+  R[side].menu = { id: row.dataset.mid, pos: `left:${x - (rr.left - frame.left)}px;top:${y}px` };
+  render();
+  side === "d" ? log("Message menu at the pointer: emoji row, Add Reaction ›, Reply, Forward, Create Thread, Copy Text, Translate, Pin Message, Apps ›, Mark Unread, Copy Message Link, Speak Message, Report/Delete, Copy Message ID.", null)
+    : log(null, "Message menu at the pointer: emoji row, Add reaction, Reply, Forward, Create thread, Copy text, Pin message, Mark unread, Save message, Copy message link, Speak message, Report/Delete, Copy message ID.");
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && (R.d.menu || R.w.menu)) { R.d.menu = R.w.menu = null; render(); } });
+render();
+</script>
+</body>
+</html>
