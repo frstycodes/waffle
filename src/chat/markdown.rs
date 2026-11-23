@@ -25,6 +25,7 @@ pub(super) fn text_blocks(id: &str, text: &str, body: f32, ctx: &RowContext, cx:
 // Mentions, role and channel links draw as badges (messages.css `.at`): accent ink on the soft fill.
 pub(super) struct MentionBadges {
     this: WeakEntity<Waffle>,
+    role_inks: std::sync::Arc<HashMap<String, Hsla>>,
     fill: Hsla,
     hover: Hsla,
     ink: Hsla,
@@ -52,10 +53,13 @@ impl MarkdownPlugin for MentionBadges {
 
     fn render_inline(&self, node: &MarkdownNode, _: &InlineRenderContext, _: &mut Window, _: &mut App) -> Option<InlineElement> {
         let mention = node.data::<Mention>()?.clone();
-        let (this, hover) = (self.this.clone(), self.hover);
+        // Discord tints a role mention with the role's colour (not verified: the fill's alpha; 10% here, 20% on hover).
+        let role = mention.url.strip_prefix("waffle://role/").and_then(|id| self.role_inks.get(id)).copied();
+        let (fill, ink, hover) = role.map_or((self.fill, self.ink, self.hover), |ink| (ink.opacity(0.1), ink, ink.opacity(0.2)));
+        let this = self.this.clone();
         let bounds = Rc::new(Cell::new(None));
         let measured = bounds.clone();
-        let badge = mention_badge(mention.label.into(), self.fill, self.ink)
+        let badge = mention_badge(mention.label.into(), fill, ink)
             .id(SharedString::from(format!("at-{}", mention.url)))
             .relative()
             .cursor_pointer()
@@ -112,7 +116,8 @@ pub(super) fn option_key(label: SharedString, height: Pixels, fill: Hsla, ink: H
 pub(super) fn markdown(id: SharedString, text: String, body: f32, ctx: &RowContext) -> TextView {
     let this = ctx.this.clone();
     let (copy_target, copied) = (ctx.this.clone(), ctx.copied.clone());
-    let badges = MentionBadges { this: ctx.this.clone(), fill: ctx.mention_fill, hover: ctx.mention_hover, ink: ctx.mention_ink };
+    let badges = MentionBadges { this: ctx.this.clone(), role_inks: ctx.role_inks.clone(), fill: ctx.mention_fill, hover: ctx.mention_hover, ink: ctx.mention_ink };
+    let text = discord_underline(&discord_quote_rest(&text));
     let text = if ctx.underline_links { underline_links(&text) } else { text };
     TextView::markdown(id, discord_breaks(&text))
         // Constant: the plugin only changes how mentions draw, never what parses.
@@ -217,6 +222,49 @@ pub(super) fn underline_links(markdown: &str) -> String {
         out.push_str(rest);
         out
     })
+}
+
+// Discord's `__text__` underlines; CommonMark would make it bold.
+pub(super) fn discord_underline(text: &str) -> String {
+    outside_code(text, |part| {
+        let mut out = String::with_capacity(part.len());
+        let mut rest = part;
+        while let Some(start) = rest.find("__") {
+            let inner = &rest[start + 2..];
+            match inner.find("__").filter(|&end| !inner[..end].trim().is_empty() && !inner[..end].contains('\n')) {
+                Some(end) => {
+                    out.push_str(&rest[..start]);
+                    out.push_str(&format!("<u>{}</u>", &inner[..end]));
+                    rest = &inner[end + 2..];
+                }
+                None => {
+                    out.push_str(&rest[..start + 2]);
+                    rest = inner;
+                }
+            }
+        }
+        out.push_str(rest);
+        out
+    })
+}
+
+// Discord's `>>> `: everything from that line to the end of the message is one quote.
+pub(super) fn discord_quote_rest(text: &str) -> String {
+    let mut fenced = false;
+    let mut out: Vec<String> = Vec::new();
+    let mut lines = text.split('\n');
+    while let Some(line) = lines.next() {
+        if line.trim_start().starts_with("```") {
+            fenced = !fenced;
+        }
+        if let Some(first) = line.strip_prefix(">>> ").filter(|_| !fenced) {
+            out.push(format!("> {first}"));
+            out.extend(lines.map(|l| format!("> {l}")));
+            break;
+        }
+        out.push(line.to_owned());
+    }
+    out.join("\n")
 }
 
 // The next web link in `text`: its byte range and whether it's a bare address. A masked `[label](url)`

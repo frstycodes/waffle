@@ -219,6 +219,18 @@ impl Waffle {
 
 pub(crate) fn row(messages: &[Message], ix: usize, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     let message = &messages[ix];
+    let drawn = message.call.is_some() || message.pin_notice || !matches!(shape(message), Shape::Message | Shape::Hidden);
+    if !drawn || (shape(message) == Shape::Line && matches!(join_fold(messages, ix), Fold::Tail)) {
+        return nothing();
+    }
+    // Discord groups a run of system messages: the gap comes before the first only.
+    let starts = ix == 0 || !is_notice(&messages[ix - 1]);
+    // lint-allow(raw-margin): the gap between groups is the reader's setting, and rows are list items with no parent gap to carry it
+    div().when(starts, |d| d.mt(px(chat::group_gap(ctx)))).child(notice(messages, ix, ctx, cx)).into_any_element()
+}
+
+fn notice(messages: &[Message], ix: usize, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+    let message = &messages[ix];
     if let Some(call) = &message.call {
         return chat::call_line(message, call, ctx, cx);
     }
@@ -311,10 +323,9 @@ pub(crate) fn notice_line(id: &str, glyph: Glyph, ink: Hsla, sentence: Sentence,
         .id(SharedString::from(format!("msg-{id}")))
         .w_full()
         .px_4()
-        .pt_1p5()
-        .pb_1()
+        .py_0p5()
         .gap_4()
-        .text_size(ui::TEXT_SM)
+        .text_size(ui::TEXT_MD)
         .child(ui::row().w(px(AVATAR)).h(ui::LINE_LEAD).flex_none().justify_center().child(Icon::new(glyph).size(ui::ICON_LG).text_color(ink)))
         .child(ui::col().min_h_0().flex_1().child(sentence_line(sentence, stamp, cx)).children(under));
     chat::inset(row.into_any_element(), false)

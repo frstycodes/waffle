@@ -47,7 +47,7 @@ const DEMO_SELECT_X: f32 = 80.;
 // Where the demo scene opens a select.
 const DEMO_SELECT_Y: f32 = 400.;
 // The height of the line naming who used a component.
-const CAPTION_HEIGHT: f32 = 22.;
+const CAPTION_HEIGHT: f32 = 18.;
 // The row the eye mark sits in, one text line.
 const SEEN_ICON_HEIGHT: f32 = 18.;
 
@@ -584,7 +584,7 @@ pub(crate) fn message_components(message: &Message, ctx: &Rc<RowContext>, cx: &m
     let room = Room { width, reduced: false };
     let children: Vec<AnyElement> = message.components.iter().enumerate().map(|(i, c)| component(message, c, i.to_string(), room, ctx, cx)).collect();
     // lint-allow(raw-margin): the gap under the message body, whose row is stacked in chat.rs outside this component
-    Some(ui::col().mt_2().w_full().max_w(px(width)).gap_2().children(children).into_any_element())
+    Some(ui::col().mt_1().w_full().max_w(px(width)).gap_2().children(children).into_any_element())
 }
 
 // `path` keeps element ids apart: each component's index, from the top level down.

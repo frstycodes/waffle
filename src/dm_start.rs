@@ -16,6 +16,8 @@ use crate::{
     ui::{self, Tone},
 };
 
+pub(crate) mod channel_start;
+
 const FACE: f32 = 80.;
 
 #[derive(Clone)]
@@ -81,19 +83,21 @@ impl Waffle {
                 status: None,
                 name: channel.name.clone().into(),
                 subtitle: Some(format!("{} members", channel.recipients.len() + 1).into()),
-                line: vec![("Welcome to the start of ".into(), false), (channel.name.clone(), true), (".".into(), false)],
+                line: vec![("Welcome to the beginning of the ".into(), false), (channel.name.clone(), true), (" group.".into(), false)],
                 mutual: None,
                 person: None,
                 next: Next::Nothing,
             });
         };
         let profile = self.profiles.peek(&profile_key(&person.id, None));
+        // Discord names the handle here, the display name above it.
+        let handle = profile.as_ref().map(|p| p.username.clone()).filter(|u| !u.is_empty()).unwrap_or_else(|| person.name.clone());
         Some(DmStart {
             face: channel.face(),
             status: self.presences.get(&person.id).map(|p| p.mark()),
             name: person.name.clone().into(),
             subtitle: profile.as_ref().map(|p| p.username.clone()).filter(|u| !u.is_empty()).map(Into::into),
-            line: vec![("This is the start of your messages with ".into(), false), (person.name.clone(), true), (".".into(), false)],
+            line: vec![("This is the beginning of your direct message history with ".into(), false), (handle, true), (".".into(), false)],
             mutual: profile.map(|p| mutual_servers(p.mutual_server_count).into()),
             next: next_step(self.relation(&person.id), person.bot),
             person: Some(person),

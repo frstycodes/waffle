@@ -716,6 +716,7 @@ _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::r
 - `src/status_menu.rs` — the avatar row pulls up over the banner's foot, which padding can't do.
 - `src/system_message.rs` — optical, sets the time 2px clear of the sentence beyond the row's word gap
 - `src/system_message.rs` — pulls a glued word back over the row's gap_x, which a gap can't take away from one child
+- `src/system_message.rs` — the gap between groups is the reader's setting, and rows are list items with no parent gap to carry it
 - `src/system_message/automod.rs` — optical, lines the shield's top with the name's cap height
 
 ## custom-component

@@ -43,6 +43,7 @@ pub(super) fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowCon
         .text_size(px(ctx.font_size))
         .text_color(ink)
         .children(message.reply.as_ref().filter(|_| ctx.compact).map(|reply| reply_preview(reply, message.reply_to.clone(), ctx, cx)))
+        .when(ctx.compact && message.reply_deleted, |b| b.child(deleted_reply_preview(ctx, cx)))
         .children(lead)
         .children(components::interaction_status(message, ctx, cx))
         .children(crate::announcements::publish_bump(message, mine, &ctx.announce, ctx.this.clone(), cx))
@@ -72,8 +73,9 @@ pub(super) fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowCon
         .px(px(if mention { 24. } else { 16. }))
         .py_0p5()
         .squircle(RADIUS_SM)
-        .line_height(gpui_kit::relative(1.45))
-        .when(ephemeral, |r| r.bg(components::ephemeral_tint(cx)))
+        .line_height(gpui_kit::relative(1.375))
+        // Ephemeral: Discord's tint with a 2px bar, in Waffle's info ink so it never reads as a mention.
+        .when(ephemeral && !mention, |r| r.rounded_none().bg(components::ephemeral_tint(cx)).child(div().absolute().left_0().top_0().bottom_0().w_0p5().bg(palette::info_ink(cx))))
         // Mentioning you: the tint and a 2px accent bar down the left edge, square like Discord's.
         // `hovered` too: the toolbar occludes the row, so the row's own `.hover` drops while the pointer is on it.
         .when(mention, |r| r.rounded_none().bg(rest.unwrap_or(if hovered { mention_hover } else { soft })).hover(move |s| s.bg(rest.unwrap_or(mention_hover))).child(div().absolute().left_0().top_0().bottom_0().w_0p5().bg(palette::accent())))
@@ -84,7 +86,7 @@ pub(super) fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowCon
     if ctx.compact {
         let line = ui::row().items_stretch().gap_2().child(compact_time(message, ctx, cx)).child(body);
         // lint-allow(raw-margin): the gap between groups is the reader's setting, and rows are list items with no parent gap to carry it
-        return inset(with_message_menu(row.when(starts_group, |r| r.mt(px(ctx.group_spacing))).child(line).children(toolbar), message, ctx), mention);
+        return inset(with_message_menu(row.when(starts_group, |r| r.mt(px(group_gap(ctx)))).child(line).children(toolbar), message, ctx), mention);
     }
     if !starts_group {
         let gutter = ui::row().items_stretch()
@@ -104,9 +106,9 @@ pub(super) fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowCon
     }
     let row = row
         // lint-allow(raw-margin): the gap between groups is the reader's setting, and rows are list items with no parent gap to carry it
-        .mt(px(ctx.group_spacing))
-        .pt_1()
+        .mt(px(group_gap(ctx)))
         .children(message.reply.as_ref().map(|reply| reply_preview(reply, message.reply_to.clone(), ctx, cx)))
+        .when(message.reply_deleted, |r| r.child(deleted_reply_preview(ctx, cx)))
         .children(components::used_command(message, ctx, cx))
         .child(
             ui::row().items_stretch()
@@ -184,7 +186,7 @@ pub(crate) fn search_hit(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) 
     let body = ui::col().min_h_0()
         .flex_1()
         .text_size(ui::TEXT_LEAD)
-        .line_height(gpui_kit::relative(1.45))
+        .line_height(gpui_kit::relative(1.375))
         .text_color(palette::text(cx))
         .child(message_head(message, ctx, cx))
         .children(content(message, ctx, cx))
@@ -218,7 +220,7 @@ pub(super) fn hit_media(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -
             div().flex_none().w(px(w)).h(px(h)).child(media_tile(message, i, (w, h), ui::all(RADIUS_MD), Paging::Feed, ctx, cx)).into_any_element()
         })
         .collect();
-    Some(ui::row().items_stretch().pt_2().flex_wrap().gap_1().children(tiles).into_any_element())
+    Some(ui::row().items_stretch().pt_1().flex_wrap().gap_1().children(tiles).into_any_element())
 }
 
 // The frame for a picture of `size` within `max`: its own shape, never larger than it is, with the shape
@@ -405,4 +407,9 @@ pub(super) fn plain_click(event: &gpui_kit::ClickEvent) -> bool {
     let gpui_kit::ClickEvent::Mouse(click) = event else { return false };
     let moved = click.up.position - click.down.position;
     click.up.click_count == 1 && f32::from(moved.x).abs() < 4. && f32::from(moved.y).abs() < 4.
+}
+
+// Discord's gap above a group: the reader's group spacing plus 1px (1.0625rem at the default 16).
+pub(crate) fn group_gap(ctx: &RowContext) -> f32 {
+    ctx.group_spacing + 1.
 }

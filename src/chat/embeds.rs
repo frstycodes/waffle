@@ -51,7 +51,7 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
     let fill = palette::surface(Level::Sidebar, cx);
     let bar = embed.color.map_or(palette::line_strong(cx), palette::data_color);
     let width = EMBED_WIDTH.min(ctx.column);
-    let inner = width - 2. * EMBED_PAD.1 - EMBED_BAR - 2.;
+    let inner = width - EMBED_PAD.1 - EMBED_PAD.3 - EMBED_BAR - 2.;
     let md = |part: &str, text: &str| markdown(SharedString::from(format!("{key}-{part}")), readable(text, ctx), EMBED_TEXT, ctx);
     let open = |url: String| {
         let this = ctx.this.clone();
@@ -196,17 +196,18 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
         .when(full, |d| d.w(px(width)))
         .when(!full, |d| d.self_start().min_w(px(EMBED_MIN.min(width))))
         .max_w(px(width))
-        .py(px(EMBED_PAD.0))
-        .pl(px(EMBED_PAD.1 + EMBED_BAR))
+        .pt(px(EMBED_PAD.0))
         .pr(px(EMBED_PAD.1))
-        .gap_3()
+        .pb(px(EMBED_PAD.2))
+        .pl(px(EMBED_PAD.3 + EMBED_BAR))
+        .gap_2()
         .bg(fill)
         .text_size(ui::TEXT_SM)
-        .line_height(gpui_kit::relative(1.45))
+        .line_height(px(EMBED_LINE))
         .child(strip)
         .children(sections.into_iter().flatten())
         .children(row.filter(|m| !embed.inline() && remove_embeds_shown(m, ctx)).map(|m| remove_embeds_button(m, &key, ctx, cx)));
-    div().pt_2().child(card).into_any_element()
+    div().pt_1().child(card).into_any_element()
 }
 
 // While the row is hovered or keyboard-focused.
@@ -233,10 +234,12 @@ pub(super) fn remove_embeds_button(message: &Message, key: &str, ctx: &RowContex
         .into_any_element()
 }
 
-pub(super) const EMBED_WIDTH: f32 = 520.;
+pub(super) const EMBED_WIDTH: f32 = 516.;
 pub(super) const EMBED_MIN: f32 = 240.;
-// Vertical, horizontal.
-pub(super) const EMBED_PAD: (f32, f32) = (14., 16.);
+// Discord's embed: top, right, bottom, left (its 2px grid padding plus the first section's 8px margin on top),
+// sections 8px apart, 14px text on an 18px line.
+pub(super) const EMBED_PAD: (f32, f32, f32, f32) = (10., 16., 16., 12.);
+pub(super) const EMBED_LINE: f32 = 18.;
 pub(super) const EMBED_BAR: f32 = 4.;
 // Wide enough to hold both left corners, so the bar's shape is the card's.
 pub(super) const EMBED_BAR_STRIP: f32 = 2. * RADIUS_LG;
@@ -387,12 +390,12 @@ pub(super) fn poll_result(poll: &crate::discord::PollResult, poll_message: Optio
                 ),
         )
         .when_some(target, |d, id| {
-            d.child(ui::button(SharedString::from(format!("{key}-view-poll")), ui::Tone::Secondary, cx).small().child("View poll").on_click(move |_, _, cx| {
+            d.child(ui::button(SharedString::from(format!("{key}-view-poll")), ui::Tone::Secondary, cx).small().child("View Poll").on_click(move |_, _, cx| {
                 cx.stop_propagation();
                 this.update(cx, |this, cx| this.jump_to(id.clone(), cx)).ok();
             }))
         });
-    div().pt_2().child(card).into_any_element()
+    div().pt_1().child(card).into_any_element()
 }
 
 // A live poll (design/messages.html `.poll`): pick and Vote, or its results once you've voted, peeked or it closed.
@@ -421,8 +424,8 @@ pub(super) fn poll_card(message: &Message, poll: &Poll, ctx: &RowContext, cx: &A
     };
     // lint-allow(raw-margin): pushes the buttons to the end of a wrapping footer, where flex_1 would take the footer's text space
     let actions = ui::row().items_stretch().ml_auto().gap_2().when(!pending && !closed, |d| match (voted, results) {
-        (true, _) => d.child(ui::button(key("remove"), ui::Tone::Ghost, cx).small().child("Remove vote").on_click(act(Vec::new()))),
-        (false, true) => d.child(ui::button(key("back"), ui::Tone::Ghost, cx).small().child("Back to vote").on_click(peek)),
+        (true, _) => d.child(ui::button(key("remove"), ui::Tone::Ghost, cx).small().child("Remove Vote").on_click(act(Vec::new()))),
+        (false, true) => d.child(ui::button(key("back"), ui::Tone::Ghost, cx).small().child("Go back to vote").on_click(peek)),
         (false, false) => d
             .child(ui::button(key("peek"), ui::Tone::Ghost, cx).small().child("Show results").on_click(peek))
             .child(ui::button(key("vote"), ui::Tone::Primary, cx).small().disabled(picks.is_empty()).child("Vote").on_click(act(picks.clone()))),
@@ -445,7 +448,7 @@ pub(super) fn poll_card(message: &Message, poll: &Poll, ctx: &RowContext, cx: &A
         )
         .child(ui::col().gap_1p5().children(options))
         .child(ui::row().flex_wrap().gap_2().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(poll.foot(now)).child(actions));
-    div().pt_2().child(card).into_any_element()
+    div().pt_1().child(card).into_any_element()
 }
 
 // An answer to pick before voting: its radio (a check where several may be picked), emoji and text.

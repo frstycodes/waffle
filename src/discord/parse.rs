@@ -311,6 +311,8 @@ pub fn parse_message(m: &Value) -> Option<Message> {
     let is_crosspost = m["flags"].as_u64().unwrap_or(0) & Message::IS_CROSSPOST != 0;
     let is_reply = !is_crosspost && matches!(m["message_reference"]["type"].as_u64(), None | Some(0));
     let reply = (is_reply && m["referenced_message"].is_object()).then(|| parse_message(&m["referenced_message"])).flatten().map(Box::new);
+    // Discord sends the key with null when the original was deleted, and leaves it out when it wasn't loaded.
+    let reply_deleted = is_reply && m["message_reference"].is_object() && m.get("referenced_message").is_some_and(serde_json::Value::is_null);
     Some(Message {
         id: m["id"].as_str()?.to_owned(),
         channel_id: m["channel_id"].as_str()?.to_owned(),
@@ -330,6 +332,7 @@ pub fn parse_message(m: &Value) -> Option<Message> {
             .flatten()
             .map(|r| Reaction { emoji: parse_emoji(&r["emoji"]), count: r["count"].as_u64().unwrap_or(1) as u32, me: r["me"].as_bool().unwrap_or(false) })
             .collect(),
+        reply_deleted,
         reply_to: m["message_reference"]["message_id"].as_str().filter(|_| is_reply).map(str::to_owned),
         reply,
         mentions: m["mentions"].as_array().into_iter().flatten().map(parse_user).collect(),

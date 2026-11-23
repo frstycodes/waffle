@@ -285,7 +285,7 @@ fn card(id: String, width: f32, cx: &App) -> Stateful<gpui_kit::Div> {
     ui::row().items_stretch()
         .id(SharedString::from(id))
         // lint-allow(raw-margin): the gap under the message text, whose parent is the feed row in chat.rs outside this module
-        .mt_2()
+        .mt_1()
         .w_full()
         .max_w(px(width))
         .py_3()

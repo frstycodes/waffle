@@ -72,7 +72,7 @@ pub(crate) const CONTENT_INSET: f32 = AVATAR + 16.;
 // The unread bar's room at the feed's top: 8 above it, its 36, 8 below.
 const UNREAD_BAR_SPACE: f32 = 52.;
 // A reply preview's line, above the message it answers.
-const REPLY_HEIGHT: f32 = 22.;
+const REPLY_HEIGHT: f32 = 18.;
 // A forwarded copy's card, as the design's `.fwd`.
 const FORWARD_WIDTH: f32 = 520.;
 
@@ -90,12 +90,11 @@ impl Waffle {
         // the NEW line sits just under the bar.
         let top = if unread_bar.is_some() { UNREAD_BAR_SPACE } else { 0. };
         let body = match self.feeds.get(&channel.id) {
-            Some(Feed { loaded: true, messages, .. }) if messages.is_empty() && channel.kind == ChannelKind::Dm => match self.dm_start(&channel, false) {
+            Some(Feed { loaded: true, messages, .. }) if messages.is_empty() => match self.history_start(&channel, false) {
                 // Nothing said yet: the header rests at the foot of the feed, where the first message will land.
-                Some(start) => ui::col().size_full().justify_end().pt(px(top)).pb(px(self.composer_height.get() + 32.)).child(crate::dm_start::dm_start_header(&start, cx.weak_entity(), cx)).into_any_element(),
+                Some(start) => ui::col().size_full().justify_end().pt(px(top)).pb(px(self.composer_height.get() + 32.)).child(crate::dm_start::channel_start::history_start_header(&start, cx.weak_entity(), cx)).into_any_element(),
                 None => empty_state("empty", Mood::Happy, "No messages yet", "Be the first to say something.", cx),
             },
-            Some(Feed { loaded: true, messages, .. }) if messages.is_empty() => empty_state("empty", Mood::Happy, "No messages yet", "Be the first to say something.", cx),
             Some(Feed { loaded: true, .. }) => self.render_messages(top, cx).into_any_element(),
             Some(Feed { error: Some(error), .. }) => empty_state("failed", crate::illustration::Illustration::LoadFailed, "Couldn't load messages", error.clone(), cx),
             _ => skeleton(cx),
@@ -342,7 +341,7 @@ impl Waffle {
                         .on_click(cx.listener(move |this, _, _, cx| this.jump_to(first_id.clone(), cx))),
                 )
                 // Read now; the NEW line stays until the channel is left or you post, as Discord's does.
-                .child(button("unread-read").child("Mark as read").child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD)).on_click(cx.listener(move |this, _, _, cx| {
+                .child(button("unread-read").child("Mark As Read").child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD)).on_click(cx.listener(move |this, _, _, cx| {
                     this.mark_channel_read(&channel_id, cx);
                     // lint-allow(global-notify): reading a channel clears its unread bar here and its dot in the nav column
                     cx.notify();
@@ -371,14 +370,14 @@ impl Waffle {
             let message = &messages[ix];
             let previous = ix.checked_sub(1).map(|i| &messages[i]);
             let new_day = day(&message.timestamp) != previous.and_then(|p| day(&p.timestamp));
-            let starts_group = new_day || message.reply.is_some() || previous.is_none_or(|p| crate::system_message::is_notice(p) || !continues(p, message));
+            let starts_group = new_day || message.reply.is_some() || message.reply_deleted || previous.is_none_or(|p| crate::system_message::is_notice(p) || !continues(p, message));
             let row = match crate::hidden::run_at(&folds, ix) {
                 None => feed_row(&messages, ix, starts_group, &ctx, cx),
                 Some(run) => folded_row(&messages, ix, run, starts_group, &ctx, cx),
             };
             // One accent line above the first message after your read position.
             let first_unread = ctx.unread_marker.is_some_and(|read| crate::order(&message.id) > read && previous.is_none_or(|p| crate::order(&p.id) <= read));
-            let start = ctx.dm_start.as_ref().filter(|_| ix == 0).map(|s| crate::dm_start::dm_start_header(s, ctx.this.clone(), cx));
+            let start = ctx.history_start.as_ref().filter(|_| ix == 0).map(|s| crate::dm_start::channel_start::history_start_header(s, ctx.this.clone(), cx));
             let row = match new_day || first_unread || start.is_some() {
                 false => row,
                 true => ui::col()
@@ -488,6 +487,7 @@ impl Waffle {
             hidden_replies: messages.iter().filter_map(|m| m.reply.as_deref()).filter_map(|r| Some((r.id.clone(), self.hidden_author(&r.author.id)?))).collect(),
             channel_names: self.guild().into_iter().flat_map(|g| &g.channels).map(|c| (c.id.clone(), c.name.clone())).chain(self.forward_sources(messages)).collect(),
             role_names: self.guild().map(|g| g.roles.iter().map(|r| (r.id.clone(), r.name.clone())).collect()).unwrap_or_default(),
+            role_inks: std::sync::Arc::new(self.guild().map(|g| g.roles.iter().filter(|r| r.color != 0).map(|r| (r.id.clone(), palette::role_ink(r.color, cx.theme().is_dark()))).collect()).unwrap_or_default()),
             mention_fill: palette::accent_soft(cx),
             mention_hover: palette::accent().opacity(0.26),
             mention_ink: palette::accent_ink(cx),
@@ -506,9 +506,9 @@ impl Waffle {
             unread_marker: self.unread_marker,
             this: cx.weak_entity(),
             has_more,
-            dm_start: channel.and_then(|c| self.dm_start(c, has_more)),
+            history_start: channel.and_then(|c| self.history_start(c, has_more)),
             column,
-            quick_reactions: self.prefs.frequent_emojis(3, &["💯", "👍", "👎"]),
+            quick_reactions: self.prefs.frequent_emojis(3, &["💯", "😆", "💖"]),
             shift: self.shift_held,
             manage_messages: channel.is_some_and(|c| self.can_in(&c.id, crate::discord::perm::MANAGE_MESSAGES)),
             facts: crate::message_menu::Facts {
@@ -566,8 +566,8 @@ impl RowContext {
     }
 
     // The body's first line box (the row's 1.45 line height), which the time beside it centres in.
-    fn body_line(&self) -> f32 {
-        (self.font_size * 1.45).round()
+    pub(crate) fn body_line(&self) -> f32 {
+        (self.font_size * 1.375).round()
     }
 
     fn role_marks(&self, user_id: &str) -> (Option<Hsla>, Option<Hsla>) {
@@ -616,6 +616,8 @@ pub(crate) struct RowContext {
     hidden_replies: HashMap<String, Hidden>,
     pub(crate) channel_names: HashMap<String, String>, // lint-allow(unbounded-growth): a per-frame snapshot of this server's channels
     role_names: HashMap<String, String>, // lint-allow(unbounded-growth): a per-frame snapshot of this server's roles
+    // A role mention wears its role's colour, as Discord's; roles without one keep the mention badge.
+    role_inks: std::sync::Arc<HashMap<String, Hsla>>,
     mention_fill: Hsla,
     mention_hover: Hsla,
     mention_ink: Hsla,
@@ -639,7 +641,7 @@ pub(crate) struct RowContext {
     // What each activity a message posts is doing now, for its live card.
     activity_cards: Rc<crate::activities::ChatCards>,
     has_more: bool,
-    dm_start: Option<crate::dm_start::DmStart>,
+    history_start: Option<crate::dm_start::channel_start::HistoryStart>,
     // The toolbar's three quick reactions: most used, padded with 💯 😆 💖.
     quick_reactions: Vec<Emoji>,
     shift: bool,
@@ -741,8 +743,13 @@ mod tests {
         assert!(emoji_image(":blob:1", true).unwrap().contains("/emojis/1.webp"));
         assert!(emoji_image("a:dance:2", false).unwrap().contains("/emojis/2.webp"));
         assert_eq!(emoji_image(":bad:x1", true), None);
-        assert!(strip_emoji("<:blob:1> <a:dance:2>").trim().is_empty());
-        assert_eq!(strip_emoji("hi <:blob:1> <@5>"), "hi  <@5>");
+        let jumbo = |t: &str| jumbo_parts(t).map(|p| p.len());
+        assert_eq!(jumbo("🧇 🍯<:blob:1>"), Some(3));
+        assert_eq!(jumbo("👨‍👩‍👧"), Some(1));
+        assert_eq!(jumbo("hi 🧇"), None);
+        assert_eq!(jumbo("<@5> 🧇"), None);
+        assert_eq!(jumbo(&"🧇".repeat(30)), Some(30));
+        assert_eq!(jumbo(&"🧇".repeat(31)), None);
     }
 
     #[test]
@@ -808,15 +815,15 @@ mod tests {
 
     #[test]
     fn galleries_fill_the_column_with_four_round_corners() {
-        for count in 2..=7 {
+        for count in 2..=12 {
             let (height, tiles) = gallery_layout(count);
-            assert_eq!(tiles.len(), count.min(5), "{count} items");
+            assert_eq!(tiles.len(), count.min(10), "{count} items");
             for t in &tiles {
                 assert!(t.x >= 0. && t.y >= 0. && t.x + t.w <= COLUMN + 0.01 && t.y + t.h <= height + 0.01, "{count}: {t:?} spills");
             }
             // Tiles and their gaps cover the column: nothing overlaps, nothing is left empty but the gaps.
             let area: f32 = tiles.iter().map(|t| t.w * t.h).sum();
-            assert!(area < COLUMN * height && area > (COLUMN - 2. * GALLERY_GAP) * (height - GALLERY_GAP) * 0.95, "{count}: area {area}");
+            assert!(area < COLUMN * height && area > COLUMN * height * 0.9, "{count}: area {area}");
             let round = tiles.iter().map(|t| gallery_corners(*t, COLUMN, height, RADIUS_LG)).flat_map(|c| [c.top_left, c.top_right, c.bottom_left, c.bottom_right]).filter(|r| *r == px(RADIUS_LG)).count();
             assert_eq!(round, 4, "{count} items");
         }
@@ -833,12 +840,12 @@ mod tests {
     }
 
     #[test]
-    fn stamps_read_like_the_design() {
+    fn stamps_read_like_discords_header() {
         let now = Local::now();
-        assert!(format_stamp(&now.to_rfc3339()).starts_with("Today at "));
+        assert_eq!(format_stamp(&now.to_rfc3339()), clock(&now.to_rfc3339()));
         assert!(format_stamp(&(now - chrono::TimeDelta::days(1)).to_rfc3339()).starts_with("Yesterday at "));
-        let old = format_stamp(&(now - chrono::TimeDelta::days(30)).to_rfc3339());
-        assert!(old.contains(", 20") && old.contains(" at "), "{old}");
+        let old = now - chrono::TimeDelta::days(30);
+        assert_eq!(format_stamp(&old.to_rfc3339()), format!("{} {}", old.format("%m/%d/%Y"), clock(&old.to_rfc3339())));
         assert!(!gutter_clock(&now.to_rfc3339()).contains('M'));
     }
 
@@ -855,6 +862,13 @@ mod tests {
         assert_eq!(fit_frame((400., 4000.), max), (88., 220.));
         assert_eq!(fit_frame((0., 0.), max), (220., 220.));
     }
+    #[test]
+    fn discord_underline_and_quote_rest() {
+        assert_eq!(discord_underline("a __b__ `__c__` ____ __d"), "a <u>b</u> `__c__` ____ __d");
+        assert_eq!(discord_quote_rest("hi\n>>> one\ntwo"), "hi\n> one\n> two");
+        assert_eq!(discord_quote_rest("```\n>>> x\n```"), "```\n>>> x\n```");
+    }
+
     #[test]
     fn links_are_underlined_outside_code() {
         assert_eq!(underline_links("see https://a.io/x. ok"), "see <u><https://a.io/x></u>. ok");

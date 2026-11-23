@@ -3,24 +3,27 @@ use crate::ui;
 
 use super::*;
 
-// The line above an app's reply: "[avatar] Mira used /play". A component's reply names no command.
+// The line above an app's reply: "[avatar] Mira used /play", 14px with the command in link ink, joined to
+// the avatar by the reply spine. A component's reply names no command.
 pub(crate) fn used_command(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyElement> {
     let meta = message.interaction.as_ref()?;
     let command = meta.command.as_ref()?;
-    let you = ctx.me.as_ref().is_some_and(|me| me.id == meta.user.id);
-    let name = if you { "You".to_owned() } else { ctx.name_of(&meta.user) };
+    // Discord names whoever used it, you included.
+    let name = ctx.name_of(&meta.user);
     let strong = palette::strong(cx);
     Some(
         ui::row()
+            .relative()
             .pl(px(chat::CONTENT_INSET))
+            .child(chat::reply_spine(cx))
             .h(px(CAPTION_HEIGHT))
             .gap_1p5()
-            .text_size(ui::TEXT_DETAIL)
+            .text_size(ui::TEXT_SM)
             .text_color(palette::muted(cx))
             .child(ui::avatar(meta.user.avatar.clone(), 16.))
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(name))
             .child(div().flex_none().child("used"))
-            .child(ui::line(format!("/{command}")).font_weight(FontWeight::SEMIBOLD).text_color(palette::accent_ink(cx)))
+            .child(ui::line(format!("/{command}")).font_weight(FontWeight::MEDIUM).text_color(palette::accent_ink(cx)))
             .into_any_element(),
     )
 }
@@ -56,9 +59,9 @@ pub(crate) fn is_failed_stand_in(message: &Message) -> bool {
     message.state == SendState::Failed && interactions::is_stand_in(message)
 }
 
-// An ephemeral reply's tint: a 4% wash of the strong ink.
+// An ephemeral reply's tint: Discord's 5% wash of its brand, here the info ink.
 pub(crate) fn ephemeral_tint(cx: &App) -> Hsla {
-    palette::strong(cx).opacity(0.04)
+    palette::info_ink(cx).opacity(0.05)
 }
 
 // Discord's footer: "Only you can see this • Dismiss message", or with `ephemerality_reason` "Only you
@@ -83,7 +86,7 @@ pub(crate) fn only_you(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Any
         None => line("Only you can see this"),
     };
     ui::row()
-        .mt_1p5() // lint-allow(raw-margin): optical gap under the component's body; the parent is a message row in another file
+        .mt_1() // lint-allow(raw-margin): optical gap under the component's body; the parent is a message row in another file
         .items_start()
         .gap_1p5()
         .text_size(ui::TEXT_XS)

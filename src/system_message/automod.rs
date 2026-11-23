@@ -1,8 +1,8 @@
 // AutoMod's notices: its row, what it flagged and the actions offered under it.
 use super::*;
 
-// AutoMod's notices look like messages (types 24 and 36 to 39): its shield, its name and a SYSTEM tag, then
-// what happened.
+// AutoMod's notices look like messages (types 24 and 36 to 39): its shield, its name in the brand ink and
+// Discord's OFFICIAL tag, then what happened.
 pub(super) fn automod_row(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     let muted = palette::muted(cx);
     let s = Sentence::new(&message.id, cx);
@@ -19,8 +19,8 @@ pub(super) fn automod_row(message: &Message, ctx: &Rc<RowContext>, cx: &mut App)
     let head = ui::row()
         .gap_2()
         .line_height(ui::LINE_LEAD)
-        .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("AutoMod"))
-        .child(ui::tag("System", cx))
+        .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(palette::accent_ink(cx)).child("AutoMod"))
+        .child(ui::tag_with(Glyph::Checkmark, "OFFICIAL", cx))
         .child(div().relative().top_px().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(chat::format_stamp(&message.timestamp)));
     let avatar = ui::row()
         .size(px(AVATAR))
@@ -36,8 +36,7 @@ pub(super) fn automod_row(message: &Message, ctx: &Rc<RowContext>, cx: &mut App)
         .id(SharedString::from(format!("msg-{}", message.id)))
         .w_full()
         .px_4()
-        .pt_4()
-        .pb_0p5()
+        .py_0p5()
         .gap_4()
         .text_size(ui::TEXT_SM)
         .text_color(muted)
@@ -46,9 +45,10 @@ pub(super) fn automod_row(message: &Message, ctx: &Rc<RowContext>, cx: &mut App)
     chat::inset(row.into_any_element(), false)
 }
 
-// Not verified: the format of `content`. Discord passes it to `new Date()`; read here as RFC 3339.
+// Not verified: the format of `content`. Discord passes it to `new Date()`, read here as RFC 3339, and
+// prints it as 2-digit month and day, numeric year, hour and minute ("11/24/2026, 11:00 PM" in en-US).
 pub(super) fn security_until(content: &str) -> String {
-    chrono::DateTime::parse_from_rfc3339(content).map(|t| t.with_timezone(&chrono::Local).format("%b %-d, %Y, %-I:%M %p").to_string()).unwrap_or_else(|_| content.to_owned())
+    chrono::DateTime::parse_from_rfc3339(content).map(|t| t.with_timezone(&chrono::Local).format("%m/%d/%Y, %-I:%M %p").to_string()).unwrap_or_else(|_| content.to_owned())
 }
 
 pub(super) fn automod_field<'a>(message: &'a Message, name: &str) -> Option<&'a str> {
@@ -66,7 +66,7 @@ pub(super) fn automod_action(message: &Message, ctx: &Rc<RowContext>, cx: &mut A
     let channel_id = field("channel_id").map(str::to_owned);
     let channel = channel_id.as_ref().and_then(|id| ctx.channel_names.get(id)).map_or("unknown-channel".to_owned(), |name| name.clone());
     // Not verified: the outcome's values; anything but "flagged" reads as blocked.
-    let verb = if field("decision_outcome") == Some("flagged") { "has flagged a message in" } else { "has blocked a message in" };
+    let verb = if field("decision_outcome") == Some("flagged") { "has flagged a message in " } else { "has blocked a message in " };
     // GAP: app messages, modals, voice channel statuses, nicknames, quarantines and guests have their own headers.
     let header = sentence_line(Sentence::new(&message.id, cx).text(verb).strong(&format!("#{channel}")), None, cx);
     let flagged = message.embeds.first().and_then(|e| e.description.clone()).unwrap_or_default();
@@ -136,14 +136,45 @@ pub(super) fn automod_actions(message: &Message, channel_id: Option<String>, fla
             this.update(cx, |this, cx| this.open_message(guild_id.clone(), &channel_id, id.clone(), window, cx)).ok();
         })
     });
+    let report = {
+        let (this, alert) = (ctx.this(), message.clone());
+        ui::button(SharedString::from(format!("automod-report-{key}")), ui::Tone::Secondary, cx).small().child("Report Issues").on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            let alert = alert.clone();
+            this.update(cx, |this, cx| this.report_automod(alert, cx)).ok();
+        })
+    };
     // GAP: Discord hides Delete once `alert_actions_execution` says the message is gone; that field isn't read yet.
-    let delete = target.filter(|(channel_id, _)| ctx.notices.moderated.contains(channel_id)).map(|(channel_id, id)| {
-        let this = ctx.this();
+    let delete = target.filter(|(channel_id, _)| ctx.notices.moderated.contains(channel_id)).map(|_| {
+        let (this, alert) = (ctx.this(), message.clone());
         ui::button(SharedString::from(format!("automod-delete-{key}")), ui::Tone::Secondary, cx).small().child("Delete User's Message").on_click(move |_, _, cx| {
             cx.stop_propagation();
-            let flagged = Message { id: id.clone(), channel_id: channel_id.clone(), ..Default::default() };
-            this.update(cx, |this, cx| this.delete(flagged, cx)).ok();
+            this.update(cx, |this, cx| this.automod_alert_action(&alert, AlertAction::DeleteUserMessage, cx)).ok();
         })
     });
-    ui::row().items_stretch().pt_2().flex_wrap().gap_2().child(actions).children(jump).children(delete).into_any_element()
+    ui::row().items_stretch().pt_2().flex_wrap().gap_2().child(actions).children(jump).child(report).children(delete).into_any_element()
+}
+
+// Discord's alert actions on an AutoMod notice (POST /guilds/{id}/auto-moderation/alert-action), values from its client.
+#[derive(Clone, Copy)]
+pub(crate) enum AlertAction {
+    DeleteUserMessage = 3,
+    SubmitFeedback = 4,
+}
+
+impl Waffle {
+    pub(crate) fn automod_alert_action(&mut self, alert: &Message, action: AlertAction, cx: &mut Context<Self>) {
+        let Some(guild_id) = alert.guild_id.clone() else { return };
+        let body = serde_json::json!({ "message_id": alert.id, "channel_id": alert.channel_id, "alert_action_type": action as u8 });
+        self.rest(reqwest::Method::POST, format!("/guilds/{guild_id}/auto-moderation/alert-action"), Some(body), |_, _| {}, cx);
+    }
+
+    // Report Issues: Discord's "Did we get it wrong?" confirm, then the feedback alert action.
+    fn report_automod(&mut self, alert: Message, cx: &mut Context<Self>) {
+        let body = "Let us know if this message shouldn\u{2019}t have been caught so we can improve AutoMod for the future. By doing this, you are also sending the flagged message to Discord.";
+        self.confirm("Did we get it wrong?", body, "Yes", move |this, _, cx| this.automod_alert_action(&alert, AlertAction::SubmitFeedback, cx), cx);
+        if let Some(dialog) = &mut self.dialog {
+            dialog.danger = false;
+        }
+    }
 }
