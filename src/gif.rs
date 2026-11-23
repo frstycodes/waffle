@@ -177,8 +177,13 @@ fn placeholder(key: String, url: &str, poster: &str, cell: gpui_kit::Size<Pixels
                     // then painted over the next message), cause not found; the cell's size bounds it.
                     let bounds = Bounds { origin: bounds.origin, size: bounds.size.min(&cell) };
                     let slot = Slot { url: url.clone(), bounds, mask: window.content_mask().bounds.intersect(&bounds), corners, top, moving };
-                    LAYOUT.with(|l| l.borrow_mut().slots.insert(key.clone(), slot));
+                    let moved = LAYOUT.with(|l| l.borrow_mut().slots.insert(key.clone(), slot).is_none_or(|old| old.bounds != bounds || old.mask != window.content_mask().bounds.intersect(&bounds)));
                     wake(cx);
+                    // The layer is a view of its own, drawn again from its last frame unless it changed; a
+                    // slot that moved (the feed scrolled) must repaint it, or its GIF stays where it was.
+                    if moved {
+                        follow(cx);
+                    }
                 },
             )
             .absolute()
@@ -187,6 +192,12 @@ fn placeholder(key: String, url: &str, poster: &str, cell: gpui_kit::Size<Pixels
             .size_full(),
         )
         .into_any_element()
+}
+
+// Redraws the layer on the next frame, so its GIFs follow slots that moved this one.
+fn follow(cx: &mut App) {
+    let Some(layer) = LAYER.with(|l| l.borrow().as_ref().and_then(WeakEntity::upgrade)) else { return };
+    cx.defer(move |cx| layer.update(cx, |_, cx| cx.notify()));
 }
 
 // Starts the layer's ticker if it's idle (a new slot may want playing).
