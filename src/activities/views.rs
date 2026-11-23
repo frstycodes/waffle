@@ -544,7 +544,7 @@ impl Waffle {
                 .flex_none()
                 .gap_2p5()
                 .child(ui::server_tile(app.and_then(|a| a.icon.as_deref()), &name, AVATAR_XL, cx))
-                .child(ui::col().flex_1().child(ui::line(name).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(palette::strong(cx))).child(ui::line(elapsed).text_size(TEXT_XS).text_color(palette::muted(cx))))
+                .child(ui::col().min_h_0().flex_1().child(ui::line(name).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(palette::strong(cx))).child(ui::line(elapsed).text_size(TEXT_XS).text_color(palette::muted(cx))))
                 .child(ui::icon_button("panel-leave-activity", Glyph::DoorExit, "Leave Activity", cx).flex_none().on_click(cx.listener(|this, _, _, cx| this.leave_with_rejoin(cx))))
                 .into_any_element(),
         )

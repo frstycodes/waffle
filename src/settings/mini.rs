@@ -33,7 +33,7 @@ pub(super) fn mini_window(m: &Mini) -> Div {
         .child(div().w(relative(0.6)).h_3p5().squircle(4.).bg(palette::accent()))
         .child(div().w(relative(0.6)).h_3p5().squircle(4.).bg(palette::data_color(m.faint)));
     let side = ui::col().w(relative(0.28)).h_full().bg(palette::data_color(m.side)).py_2().px_1p5().gap(px(MINI_GAP)).child(bar(m.faint, 1.)).child(bar(m.ink, 0.8)).child(bar(m.faint, 0.6)).child(bar(m.faint, 1.));
-    let content = ui::col()
+    let content = ui::col().min_h_0()
         .flex_1()
         .h_full()
         .py_2p5()

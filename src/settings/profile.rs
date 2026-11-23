@@ -165,7 +165,7 @@ impl Waffle {
             return super::field_text(label, value, cx).into_any_element();
         };
         let id = if field == ProfileField::Username { "edit-username" } else { "edit-name" };
-        ui::col()
+        ui::col().min_h_0()
             .flex_1()
             .gap_1p5()
             .child(super::field_label(label, cx))

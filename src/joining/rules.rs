@@ -209,7 +209,7 @@ fn rules_head(guild: &Guild, applies: bool, cx: &mut Context<Waffle>) -> impl In
         .gap_3()
         .child(ui::server_tile(guild.icon.as_deref(), &guild.name, 48., cx))
         .child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .gap_0p5()
                 .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))

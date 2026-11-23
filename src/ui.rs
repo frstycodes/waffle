@@ -166,12 +166,17 @@ pub fn more_below(scroll: &gpui_kit::ScrollHandle, fill: Hsla) -> Div {
 
 /// A vertical scroll area moving `list` on `scroll`, with the kit's scrollbar over it. Not `overflow_y_scrollbar`: that
 /// tracks a handle of its own, which nothing outside can read.
-pub fn scroll_area(list: Stateful<Div>, scroll: &gpui_kit::ScrollHandle) -> Div {
+/// The list sits in a block that scrolls rather than scrolling itself: a flex column that scrolls lays its items
+/// out to its own height, so items that may shrink (`ui::col`, `min_h_0`) squeeze together and overlap instead of
+/// overflowing, and nothing scrolls. In a block the list keeps its content's height.
+pub fn scroll_area(mut list: Stateful<Div>, scroll: &gpui_kit::ScrollHandle) -> Div {
+    let id = list.interactivity().element_id.clone().unwrap_or_else(|| "scroll-area".into());
+    let scroller = div().id(ElementId::NamedChild(std::sync::Arc::new(id), "scroller".into()));
     div()
         .relative()
         .flex_1()
         .min_h_0()
-        .child(list.size_full().overflow_y_scroll().lock_scroll_axis().track_scroll(scroll))
+        .child(scroller.size_full().overflow_y_scroll().lock_scroll_axis().track_scroll(scroll).child(list.w_full()))
         .vertical_scrollbar(scroll)
 }
 

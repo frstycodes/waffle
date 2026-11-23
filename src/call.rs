@@ -302,7 +302,7 @@ impl Waffle {
             return Some(self.focus_stage(big, &tiles, shown, cx));
         }
         let body = self.card_stage(tiles, cx);
-        let stage = ui::col().flex_1().gap(px(STAGE_GAP)).pt(px(STAGE_GAP)).px(px(STAGE_PAD)).pb(px(STAGE_PAD));
+        let stage = ui::col().min_h_0().flex_1().gap(px(STAGE_GAP)).pt(px(STAGE_GAP)).px(px(STAGE_PAD)).pb(px(STAGE_PAD));
         Some(
             self.stage_root(cx)
                 .flex()

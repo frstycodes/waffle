@@ -173,7 +173,7 @@ impl Waffle {
             n => format!(" · {n} hands raised"),
         };
         let faces: Vec<AnyElement> = room.audience.iter().map(|(state, place)| self.audience_face(state, *place, cx).into_any_element()).collect();
-        ui::col()
+        ui::col().min_h_0()
             .id("stage-body")
             .flex_1()
             .overflow_y_scroll()
@@ -220,7 +220,7 @@ impl Waffle {
             false => ("Waiting for the Stage to start", "What will you be talking about today?"),
         };
         let (guild_id, channel_id) = (room.guild.id.clone(), room.channel.id.clone());
-        ui::col()
+        ui::col().min_h_0()
             .flex_1()
             .items_center()
             .justify_center()
@@ -332,7 +332,7 @@ impl Waffle {
             true => requests_empty().into_any_element(),
             false => {
                 let rows: Vec<AnyElement> = asks.into_iter().map(|(state, place)| self.request_row(room, state, place, cx).into_any_element()).collect();
-                ui::col().id("stage-requests-list").flex_1().overflow_y_scroll().gap_0p5().children(rows).into_any_element()
+                ui::col().min_h_0().id("stage-requests-list").flex_1().overflow_y_scroll().gap_0p5().children(rows).into_any_element()
             }
         };
         // lint-allow(custom-surface, custom-mark): ui::surface is the app's overlay and ring, and this card is the stage's own dark overlay

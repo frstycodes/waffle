@@ -419,7 +419,7 @@ impl Waffle {
             window,
             cx,
         );
-        let field = |label: &'static str, control: Div| ui::col().flex_1().gap_1p5().child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(label)).child(control);
+        let field = |label: &'static str, control: Div| ui::col().min_h_0().flex_1().gap_1p5().child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(label)).child(control);
         ui::row().items_stretch().gap_4().child(field("Resolution", resolutions)).child(field("Frame rate", rates))
     }
 

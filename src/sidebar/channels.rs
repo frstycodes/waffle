@@ -145,7 +145,7 @@ pub(super) fn channel_label(channel: &Channel, topic: Option<String>, cx: &App) 
     let name = ui::truncating(format!("channel-name-{}", channel.id), channel.name.clone()).flex_1();
     let Some(topic) = topic else { return name.into_any_element() };
     let topic = ui::line(topic).text_size(ui::TEXT_XS).line_height(ui::LINE_XS).font_weight(FontWeight::NORMAL).text_color(palette::muted(cx));
-    ui::col().flex_1().child(name).child(topic).into_any_element()
+    ui::col().min_h_0().flex_1().child(name).child(topic).into_any_element()
 }
 
 // The DM list's header: a field-shaped button that opens the quick switcher.

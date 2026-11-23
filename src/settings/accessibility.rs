@@ -329,7 +329,7 @@ impl PreviewLook {
             let time = div().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(format!("Today at {}", sample.time));
             ui::row().items_baseline().gap_2().child(self.name(sample, cx)).child(time)
         });
-        let body = ui::col().flex_1().children(who).child(self.text(sample, cx)).children(media);
+        let body = ui::col().min_h_0().flex_1().children(who).child(self.text(sample, cx)).children(media);
         row.flex().gap_3p5().child(face).child(body)
     }
 

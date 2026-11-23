@@ -355,7 +355,7 @@ impl Waffle {
         let me = (!searching).then(|| self.me.clone()).flatten().map(|me| {
             let sidebar = crate::material::sidebar_fill(cx);
             let avatar = ui::badged(ui::avatar(me.avatar.clone(), ui::AVATAR_LG), ui::AVATAR_LG, ui::Shape::Round, sidebar).status(self.my_mark());
-            let text = ui::col()
+            let text = ui::col().min_h_0()
                 .flex_1()
                 .line_height(ui::LINE_DETAIL)
                 .child(ui::line(me.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
@@ -795,7 +795,7 @@ fn stack_row(id: &'static str, line: bool, cx: &App) -> Stateful<Div> {
 
 // A label over its value, as Account info lists them.
 pub(super) fn field_text(label: &'static str, value: impl Into<SharedString>, cx: &App) -> Div {
-    ui::col()
+    ui::col().min_h_0()
         .flex_1()
         .gap_0p5()
         .child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(label))

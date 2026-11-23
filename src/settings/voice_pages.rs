@@ -235,7 +235,7 @@ impl Waffle {
         // The mic test's "isn't detecting any input", or in a call the No audio detected warning.
         let in_call_silent = prefs.silence_warning && self.call.as_ref().is_some_and(|c| c.session.input_detected() == Some(false));
         let no_input = if testing { view.mic_input == Some(false) } else { in_call_silent };
-        let column = |label: &'static str, field: AnyElement, cx: &App| ui::col().flex_1().gap_1p5().child(field_label(label, cx)).child(field);
+        let column = |label: &'static str, field: AnyElement, cx: &App| ui::col().min_h_0().flex_1().gap_1p5().child(field_label(label, cx)).child(field);
         let percent = |v: f32| format!("{}%", (v * 100.).round() as i32);
         let devices = ui::row().items_stretch()
             .gap_6()
@@ -455,7 +455,7 @@ impl Waffle {
         let header = ui::row()
             .items_start()
             .gap_4()
-            .child(ui::col().flex_1().gap_1().child(ui::settings_title("Keybinds", cx)).child(div().text_color(palette::muted(cx)).child("Shortcuts that work everywhere, even while another app is in front.")))
+            .child(ui::col().min_h_0().flex_1().gap_1().child(ui::settings_title("Keybinds", cx)).child(div().text_color(palette::muted(cx)).child("Shortcuts that work everywhere, even while another app is in front.")))
             .child(ui::button("add-keybind", Tone::Primary, cx).child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("Add a keybind").on_click(cx.listener(|this, _, _, cx| {
                 this.update_prefs(cx, |p| p.keybinds.push(Keybind { action: Action::Unassigned, keys: None }));
                 let index = this.prefs.keybinds.len() - 1;
@@ -724,7 +724,7 @@ impl Waffle {
         let text = if enabled {
             ui::settings_text(title, detail, cx)
         } else {
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .gap_0p5()
                 .child(ui::line(title).font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)))

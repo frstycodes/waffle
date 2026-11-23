@@ -541,7 +541,7 @@ impl Waffle {
             .pb_3()
             .child(ui::icon_tile(channel_glyph(channel), palette::selected(cx), palette::strong(cx)).size_10().flex_none())
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .line_height(ui::LINE_DETAIL)
                     .child(ui::line(channel.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
@@ -604,7 +604,7 @@ impl Waffle {
                     .h_auto()
                     .py_1p5()
                     .child(
-                        ui::col()
+                        ui::col().min_h_0()
                             .flex_1()
                             .child(ui::line(setting.title).text_color(palette::strong(cx)))
                             .child(ui::line(place).text_size(ui::TEXT_XS).text_color(palette::muted(cx))),
@@ -738,7 +738,7 @@ impl Waffle {
         let bar = ui::floating_bar("cs-savebar", cx)
             .child(div().text_color(ink).flex_none().child(Icon::new(glyph).size(ui::ICON_XL)))
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title))
                     .children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(gpui_kit::relative(ui::LEADING_BODY)).text_color(palette::muted(cx)).child(d))),

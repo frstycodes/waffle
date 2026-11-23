@@ -210,7 +210,7 @@ impl Waffle {
                     this.edit_draft(cx, |d| d.overwrites.retain(|o| o.id != id));
                 }))
             });
-            ui::col().flex_1().gap_6().children(groups).child(ui::row().items_stretch().justify_end().children(remove))
+            ui::col().min_h_0().flex_1().gap_6().children(groups).child(ui::row().items_stretch().justify_end().children(remove))
         });
         out.push(ui::row().items_start().gap_6().child(list).children(editor).into_any_element());
         out

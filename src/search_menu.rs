@@ -399,7 +399,7 @@ impl Waffle {
             Row::Filter(key) => base
                 .child(lead(key_glyph(*key)))
                 .child(
-                    ui::col()
+                    ui::col().min_h_0()
                         .flex_1()
                         .child(ui::line(key.title()).text_color(strong))
                         .child(ui::row().gap_1().text_size(ui::TEXT_XS).text_color(muted).child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("{}:", key.word()))).child(ui::line(key.takes()))),
@@ -407,7 +407,7 @@ impl Waffle {
                 .into_any_element(),
             Row::More => base
                 .child(lead(Glyph::Filter))
-                .child(ui::col().flex_1().child(div().text_color(strong).child("More filters")).child(ui::line("dates, author type, and more").text_size(ui::TEXT_XS).text_color(muted)))
+                .child(ui::col().min_h_0().flex_1().child(div().text_color(strong).child("More filters")).child(ui::line("dates, author type, and more").text_size(ui::TEXT_XS).text_color(muted)))
                 .child(div().text_color(palette::faint(cx)).child(Icon::new(if self.search_more { Glyph::ChevronUp } else { Glyph::ChevronDown }).size(ui::ICON_MD)))
                 .into_any_element(),
             Row::Recent(i) => {

@@ -140,7 +140,7 @@ pub(super) fn mosaic_view(urls: &[String], height: f32, gap: f32, cx: &Context<W
     let frame = ui::row().items_stretch().h(px(height)).gap(px(gap));
     Some(match layout {
         Mosaic::One | Mosaic::Pair => frame.children(urls.iter().map(tile)),
-        Mosaic::OneTwo => frame.child(tile(&urls[0])).child(ui::col().flex_1().gap(px(gap)).children(urls[1..3].iter().map(tile))),
+        Mosaic::OneTwo => frame.child(tile(&urls[0])).child(ui::col().min_h_0().flex_1().gap(px(gap)).children(urls[1..3].iter().map(tile))),
         Mosaic::Grid => frame.flex_col().child(row(&urls[0..2])).child(row(&urls[2..4])),
     })
 }

@@ -130,7 +130,7 @@ impl Waffle {
             .items_start()
             .gap_2()
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .gap_1()
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(strong).child(title))

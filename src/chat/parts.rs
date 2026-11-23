@@ -185,7 +185,7 @@ pub(crate) fn poll_results(message: &Message, ctx: &RowContext, cx: &App) -> Vec
 
 // A thread starter's parent message, whole but inert: no toolbar, reactions or thread chip, as Discord draws it.
 pub(crate) fn starter_message(parent: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Div {
-    let body = ui::col()
+    let body = ui::col().min_h_0()
         .flex_1()
         .text_size(ui::TEXT_MD)
         .text_color(palette::text(cx))

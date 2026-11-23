@@ -473,7 +473,7 @@ impl Waffle {
         let surface = palette::surface(palette::Level::Raised, cx);
         let check = if matches!(state, RowState::Picked | RowState::Member) { Check::On } else { Check::Off };
         let detail = (state == RowState::Member).then(|| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("Already in the group"));
-        let text = ui::col().flex_1().child(ui::line(user.name.clone()).text_color(palette::strong(cx))).children(detail);
+        let text = ui::col().min_h_0().flex_1().child(ui::line(user.name.clone()).text_color(palette::strong(cx))).children(detail);
         let row = ui::menu_row(SharedString::from(format!("group-pick-{}", user.id)), cx)
             .disabled(matches!(state, RowState::Member | RowState::Full))
             .child(avatar_with_status(&user.avatar, ROW_AVATAR, self.presences.get(&user.id).map(|p| p.mark()), surface))
@@ -600,7 +600,7 @@ fn leave_body(leave: &LeaveGroup, window: &mut Window, cx: &mut Context<Waffle>)
 }
 
 fn dialog_head(title: impl Into<SharedString>, subtitle: Option<SharedString>, cx: &mut Context<Waffle>) -> gpui_kit::Div {
-    let text = ui::col()
+    let text = ui::col().min_h_0()
         .flex_1()
         .gap_1()
         .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.into()))

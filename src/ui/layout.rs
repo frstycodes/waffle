@@ -18,9 +18,11 @@ pub fn row() -> Div {
     div().flex().flex_row().items_center().min_w_0()
 }
 
-/// A vertical flex column, able to shrink below its content on both axes.
+/// A vertical flex column, able to shrink below its content's width (so its text truncates) but keeping its
+/// content's height: a column that may shrink in height squeezes its items together and overlaps them inside a
+/// scrolling list. The column that stretches to fill a bounded parent adds `.flex_1().min_h_0()`.
 pub fn col() -> Div {
-    div().flex().flex_col().min_w_0().min_h_0()
+    div().flex().flex_col().min_w_0()
 }
 
 /// One line of styled text (a match highlight, bold runs) that ends in an ellipsis: `ui::line` for anything that

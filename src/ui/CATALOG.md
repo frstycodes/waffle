@@ -194,7 +194,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 ## src/ui/layout.rs
 
 - `ui::row` — A horizontal flex row, children centred on the cross axis, able to shrink below its content.
-- `ui::col` — A vertical flex column, able to shrink below its content on both axes.
+- `ui::col` — A vertical flex column, able to shrink below its content's width (so its text truncates) but keeping its content's height: a column that may
 - `ui::rich_line` — One line of styled text (a match highlight, bold runs) that ends in an ellipsis: `ui::line` for anything that isn't plain text.
 - `ui::line` — One line of text that ends in an ellipsis when it doesn't fit.
 - `ui::floating` — A surface floating over everything after it, placed by its parent's position and kept inside the window.

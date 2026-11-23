@@ -441,7 +441,7 @@ impl Waffle {
         let page = self.forum_page(&forum, cx);
         let toolbar = self.forum_toolbar(&forum, &page, &search, cx);
         let body = self.forum_body(&forum, &page, window, cx);
-        ui::col()
+        ui::col().min_h_0()
             .flex_1()
             .h_full()
             .bg(palette::surface(Level::Page, cx))
@@ -709,7 +709,7 @@ impl Waffle {
             .cursor_pointer()
             .hover(move |s| s.bg(lifted).border_color(edge))
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .gap_1p5()
                     .children(tags)
@@ -772,7 +772,7 @@ impl Waffle {
         let measure = measured.clone();
         div()
             .w_full()
-            .child(ui::row().w_full().items_start().gap_4().children(stacks.into_iter().map(|cards| ui::col().flex_1().gap_4().children(cards))))
+            .child(ui::row().w_full().items_start().gap_4().children(stacks.into_iter().map(|cards| ui::col().min_h_0().flex_1().gap_4().children(cards))))
             .on_children_prepainted(move |bounds, _, cx| {
                 let Some(row) = bounds.first() else { return };
                 let next = f32::from(row.size.width);

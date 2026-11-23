@@ -443,7 +443,7 @@ impl Waffle {
                 let width = SHEET_WIDTH.min(f32::from(window.viewport_size().width) - 2. * SPLASH_INSET);
                 ui::dialog("onboarding-card", width, card, window, cx).into_any_element()
             }
-            false => ui::col()
+            false => ui::col().min_h_0()
                 .relative()
                 .w_full()
                 .flex_1()
@@ -640,7 +640,7 @@ fn option_grid(guild: &Guild, prompt: &Prompt, picked: &HashSet<String>, cx: &mu
             let ink = if on { palette::accent_ink(cx) } else { palette::muted(cx) };
             let gets = adds.channels.iter().map(|c| ui::line(format!("#{c}")).max_w_full().into_any_element()).chain(adds.roles.iter().map(|(name, color)| ui::role_chip(name.clone(), role_color(*color, cx), cx).into_any_element()));
             let gets: Vec<AnyElement> = gets.enumerate().flat_map(|(i, el)| (i > 0).then(|| div().child("·").into_any_element()).into_iter().chain(iter::once(el))).collect();
-            let text = ui::col()
+            let text = ui::col().min_h_0()
                 .flex_1()
                 .gap_0p5()
                 .child(div().text_size(ui::TEXT_LEAD).line_height(px(TITLE_LINE)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(option.title.clone()))

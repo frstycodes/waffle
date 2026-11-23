@@ -318,7 +318,7 @@ impl Waffle {
                     .h_auto()
                     .py_1p5()
                     .child(
-                        ui::col()
+                        ui::col().min_h_0()
                             .flex_1()
                             .child(ui::line(setting.title).text_color(palette::strong(cx)))
                             .child(ui::line(place).text_size(ui::TEXT_XS).text_color(palette::muted(cx))),

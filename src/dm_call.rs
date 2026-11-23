@@ -312,7 +312,7 @@ impl Waffle {
                     .with_animation("ringing-pulse", Animation::new(Duration::from_millis(1400)).repeat(), |d, t| d.opacity(0.6 + 0.4 * (t * std::f32::consts::TAU).cos().abs())), // lint-allow(endless-animation): pulses only while the ringing card is up; answering or declining removes it
             )
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .gap_0p5()
                     .child(ui::line(self.dm_caller(channel_id)).text_size(ui::TEXT_LEAD).font_weight(FontWeight::SEMIBOLD))
@@ -554,7 +554,7 @@ fn window_head(title: String, sub: String) -> Div {
         .pr_1p5()
         .gap_1p5()
         .child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .child(ui::line(title).text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD))
                 .child(ui::line(sub).text_size(ui::TEXT_XS).text_color(stage::muted()).font_features(crate::call::tabular())),

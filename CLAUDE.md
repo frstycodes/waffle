@@ -20,7 +20,7 @@ These rules bind every session. Hand-written UI values and app-wide redraws are 
 
 A flex child's minimum size is its content's, so long text pushes its row past its parent instead of shrinking. Build every layout as if the data were worst-case.
 
-- Rows and columns are `ui::row()` / `ui::col()`, which shrink (`min_w_0`, `min_h_0`). A raw flex container that holds text or anything data-sized needs `min_w_0` (`min_h_0` for columns).
+- Rows and columns are `ui::row()` / `ui::col()`, which shrink across (`min_w_0`) so their text truncates. A column keeps its content's height: one that may shrink in height squeezes its items together inside a scrolling list. The column that stretches to fill a bounded parent is `ui::col().min_h_0().flex_1()`. Scrolling content goes through `ui::scroll_area`, which keeps the list at its content's height.
 - In a row, the piece that stretches is `flex_1()` + `min_w_0()`; fixed pieces (icons, avatars, badges, buttons, counts) are `flex_none()`.
 - Text that must stay on one line is `ui::line(text)`, or `ui::truncating(key, text)` when the cut text should show in a tooltip. Running text wraps inside a width-bounded parent. Never let a name, title, channel or server label size its container.
 - Anything with a variable number of children scrolls: a bounded height (`flex_1` + `min_h_0`, or `max_h`), then `ui::scroll_area` or `list`/`uniform_list`. Popovers cap their height and scroll inside; `ui::floating` keeps them in the window.

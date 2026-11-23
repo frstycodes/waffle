@@ -169,7 +169,7 @@ impl Waffle {
             .text_color(strong)
             .child(Icon::new(Glyph::Settings).size(ui::ICON_XL).text_color(strong))
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .child(div().font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Server Settings"))
                     .child(div().text_size(ui::TEXT_DETAIL).text_color(muted).child("You can customize these at any time")),

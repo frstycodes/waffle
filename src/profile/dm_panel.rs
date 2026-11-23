@@ -23,7 +23,7 @@ impl Waffle {
         let profile = card.profile.clone().unwrap_or_default();
         let ink = Ink::new(profile.theme, cx);
         let content = ui::col().id("dm-profile").child(self.profile_header(&card, &profile, ui::RADIUS_LG, hovered, ink, cx)).child(self.profile_sections(&card, &profile, ink, cx));
-        let panel = ui::col().id("dm-profile-panel").flex_1().squircle(ui::RADIUS_LG).on_hover(on_hover);
+        let panel = ui::col().min_h_0().id("dm-profile-panel").flex_1().squircle(ui::RADIUS_LG).on_hover(on_hover);
         let panel = match ink.border {
             Some(_) => panel.bg(linear_gradient(180., linear_color_stop(ink.top, 0.), linear_color_stop(ink.bottom, 1.))),
             None => panel.bg(palette::surface(palette::Level::Sidebar, cx)),

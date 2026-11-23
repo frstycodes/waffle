@@ -123,7 +123,7 @@ impl Waffle {
         let view = self.notification_settings.as_ref()?;
         let guild = self.guilds.iter().find(|g| g.id == view.guild_id)?;
         let settings = self.settings_for(&view.guild_id);
-        let scroller = ui::col()
+        let scroller = ui::col().min_h_0()
             .id("ns-scroll")
             .flex_1()
             .overflow_y_scroll()
@@ -253,7 +253,7 @@ fn ns_head(guild: &Guild, cx: &mut Context<Waffle>) -> Div {
         .pb_3()
         .child(ui::server_tile(guild.icon.as_deref(), &guild.name, 40., cx))
         .child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .gap_0p5()
                 .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Notification Settings"))
@@ -321,7 +321,7 @@ fn ns_override_row(row: &OverrideRow, line: bool, guild_muted: bool, window: &mu
     let id = row.channel.id.clone();
     let name = row.channel.name.clone();
     let (strong, muted) = (palette::strong(cx), palette::muted(cx));
-    let place = ui::col()
+    let place = ui::col().min_h_0()
         .flex_1()
         .gap_px()
         .child(ui::line(name.clone()).text_color(strong))

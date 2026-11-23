@@ -64,7 +64,7 @@ impl Waffle {
             .child(div().flex_1())
             .child(self.caption_clearance(true));
         let column = ui::col().w_full().items_center().child(ui::col().w_full().max_w(px(PAGE_WIDTH)).gap_6().child(banner(guild)).child(body));
-        ui::col()
+        ui::col().min_h_0()
             .relative()
             .flex_1()
             .h_full()
@@ -106,7 +106,7 @@ impl Waffle {
                 .bg(palette::surface(Level::Group, cx))
                 .child(ui::avatar(avatar, 40.))
                 .child(
-                    ui::col()
+                    ui::col().min_h_0()
                         .flex_1()
                         .gap_1()
                         .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(name))
@@ -324,7 +324,7 @@ fn todo_row(guild: &Guild, todo: &MemberAction, done: bool, cx: &mut Context<Waf
         .aria_label(format!("{}, {status}", todo.title))
         .child(emoji_tile(todo.emoji.as_ref(), cx))
         .child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .child(ui::line(todo.title.clone()).font_weight(FontWeight::SEMIBOLD).text_color(title_ink))
                 .child(ui::line(name).text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx))),

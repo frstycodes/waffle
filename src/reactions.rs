@@ -381,7 +381,7 @@ impl Waffle {
             .px_2()
             .gap_0p5()
             .children(tabs);
-        let people = ui::col()
+        let people = ui::col().min_h_0()
             .id("reactions-people")
             .flex_1()
             .h_full()
@@ -427,7 +427,7 @@ impl Waffle {
     fn reactor_row(&self, user: &crate::discord::User, name: String, detail: String, removable: bool, cx: &mut Context<Self>) -> AnyElement {
         let id = user.id.clone();
         let hover_id = id.clone();
-        let who = ui::col()
+        let who = ui::col().min_h_0()
             .flex_1()
             .child(ui::line(name).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
             .when(!detail.is_empty(), |w| w.child(ui::line(detail).text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx))));

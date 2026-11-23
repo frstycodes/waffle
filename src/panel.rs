@@ -305,7 +305,7 @@ impl Waffle {
             .cursor_pointer()
             .hover(move |s| s.bg(hover))
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .gap_px()
                     .child(ui::row().gap_1p5().text_size(ui::TEXT_XS).child(ui::avatar(member.user.avatar.clone(), 14.).flex_none()).child(ui::line(member.user.name.clone()).text_color(name_ink)))
@@ -666,7 +666,7 @@ fn members_loading(cx: &App) -> Div {
     let bar = move |w: f32, h: f32| div().w(gpui_kit::relative(w)).h(px(h)).squircle(ui::RADIUS_XS).bg(fill);
     // GAP: the design sweeps one shimmer band across all skeletons; these hold still.
     let row = move |name: f32, line: Option<f32>| {
-        ui::row().h_11().px_2().gap_2p5().child(div().size_8().flex_none().rounded_full().bg(fill)).child(ui::col().flex_1().gap_1p5().child(bar(name, 12.)).children(line.map(|w| bar(w, 8.))))
+        ui::row().h_11().px_2().gap_2p5().child(div().size_8().flex_none().rounded_full().bg(fill)).child(ui::col().min_h_0().flex_1().gap_1p5().child(bar(name, 12.)).children(line.map(|w| bar(w, 8.))))
     };
     ui::col()
         .gap_0p5()

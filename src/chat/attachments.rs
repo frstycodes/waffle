@@ -67,7 +67,7 @@ pub(super) fn upload_cards(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
                 .border_color(palette::line(cx))
                 .child(picture)
                 .child(
-                    ui::col()
+                    ui::col().min_h_0()
                         .flex_1()
                         .gap_1p5()
                         .child(ui::row().items_baseline().gap_2().child(ui::line(file.name.clone()).flex_1().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(strong)).child(div().flex_none().text_size(ui::TEXT_XS).text_color(faint).child(status)))
@@ -115,7 +115,7 @@ pub(crate) fn file_card(message: &Message, file: &crate::discord::File, cx: &App
         .when(message.state != SendState::Sent, |d| d.opacity(0.6))
         .child(ui::row().items_stretch().w_10().flex_none().justify_center().text_color(muted).child(Icon::new(Glyph::File).size_9()))
         .child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .child(
                     ui::line(file.name.clone())

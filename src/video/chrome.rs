@@ -68,7 +68,7 @@ impl VideoPlayer {
                     .child(play)
                     // The time sits above the scrubber so even a narrow video shows it whole; volume
                     // and full screen live in the top corners (see `corners`).
-                    .child(ui::col().flex_1().gap_0p5().child(time).child(scrubber)),
+                    .child(ui::col().min_h_0().flex_1().gap_0p5().child(time).child(scrubber)),
             )
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_click(|_, _, cx| cx.stop_propagation())

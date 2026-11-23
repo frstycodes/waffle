@@ -62,7 +62,7 @@ impl Waffle {
                 .flex_1()
                 .min_h_0()
                 .child(rail)
-                .child(ui::col().flex_1().h_full().relative().children(over_limit).child(list).child(gpui_kit::component::scroll::Scrollbar::vertical(&picker.scroll)))
+                .child(ui::col().min_h_0().flex_1().h_full().relative().children(over_limit).child(list).child(gpui_kit::component::scroll::Scrollbar::vertical(&picker.scroll)))
                 .into_any_element(),
         ];
         content.extend(volume_card);

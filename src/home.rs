@@ -377,7 +377,7 @@ impl Waffle {
             .child(Icon::new(Glyph::Inbox).size(ui::ICON_XL).text_color(palette::faint(cx)))
             .child("Inbox")
             .child(ui::row().flex_1().justify_end().child(self.caption_clearance(true)));
-        ui::col()
+        ui::col().min_h_0()
             .relative()
             .flex_1()
             .h_full()
@@ -479,7 +479,7 @@ impl Waffle {
         };
         // The list stops under the header, a hard edge (the main view's never takes a hairline).
         let page = palette::surface(palette::Level::Page, cx);
-        ui::col()
+        ui::col().min_h_0()
             .relative()
             .flex_1()
             .h_full()

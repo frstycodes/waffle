@@ -279,7 +279,7 @@ fn preview_card(preview: &Preview, ctx: &std::rc::Rc<crate::chat::RowContext>) -
         .gap_2()
         .child(ui::avatar(message.author.avatar.clone(), AVATAR))
         .child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .gap_0p5()
                 .child(ui::line(message.author.name.clone()).text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()))

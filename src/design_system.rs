@@ -668,7 +668,7 @@ fn glyph(glyph: Glyph) -> impl IntoElement {
 fn colour(cx: &App) -> impl IntoElement {
     let page = palette::surface(Level::Page, cx);
     let surface = |name: &'static str, token: &'static str, level: Level| {
-        ui::col().flex_1().h(px(SWATCH_HEIGHT)).p_2p5().bg(palette::surface(level, cx)).justify_end().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(name)).child(token)
+        ui::col().min_h_0().flex_1().h(px(SWATCH_HEIGHT)).p_2p5().bg(palette::surface(level, cx)).justify_end().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(name)).child(token)
     };
     let ink = |name: &'static str, color: Hsla, use_: &'static str| {
         ui::row()

@@ -80,7 +80,7 @@ impl Waffle {
             .gap_3()
             .w_full()
             .child(div().pt_0p5().text_color(ink).flex_none().child(Icon::new(glyph).size(ui::ICON_LG)))
-            .child(ui::col().flex_1().gap_0p5().child(sentence_spans(&audit::sentence(e, names), cx)).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(snowflake_time(&e.id))))
+            .child(ui::col().min_h_0().flex_1().gap_0p5().child(sentence_spans(&audit::sentence(e, names), cx)).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(snowflake_time(&e.id))))
             .children(chevron);
         let body = open.then(|| {
             ui::col().pl(px(DETAIL_INDENT)).pt_2().gap_1().children(details.into_iter().map(|d| {

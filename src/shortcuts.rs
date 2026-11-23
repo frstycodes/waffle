@@ -429,7 +429,7 @@ impl Waffle {
             .child(ui::icon_button("combos-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.set_keyboard_combos(false, cx))));
         let blurb = div().text_color(palette::muted(cx)).child("Master these to be the greatest Waffle Waffle Revolution player");
         let app: &App = cx;
-        let column = |groups: &[Group]| ui::col().flex_1().gap_5().children(groups.iter().map(|&g| dialog_group(g, app)));
+        let column = |groups: &[Group]| ui::col().min_h_0().flex_1().gap_5().children(groups.iter().map(|&g| dialog_group(g, app)));
         let columns = match wide {
             true => ui::row().items_start().gap_6().child(column(&Group::ALL[..2])).child(column(&Group::ALL[2..])),
             false => column(&Group::ALL),

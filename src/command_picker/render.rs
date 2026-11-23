@@ -74,7 +74,7 @@ impl Waffle {
                 self.tts_row(name.clone(), chosen == Some(row), pick, cx).into_any_element()
             }
         });
-        let list = ui::col().id("command-list").flex_1().max_h(px(LIST_HEIGHT)).p_1p5().gap_0p5().overflow_y_scroll().track_scroll(&self.command_picker.scroll).children(list);
+        let list = ui::col().min_h_0().id("command-list").flex_1().max_h(px(LIST_HEIGHT)).p_1p5().gap_0p5().overflow_y_scroll().track_scroll(&self.command_picker.scroll).children(list);
         if !query.is_empty() {
             return list.into_any_element();
         }
@@ -134,7 +134,7 @@ impl Waffle {
             .gap_1p5()
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(StyledText::new(format!("/{}", c.display_name())).with_highlights(mark(name, 1))))
             .when(!args.is_empty(), |d| d.child(ui::line(args.join(" ")).text_size(ui::TEXT_DETAIL).text_color(faint)));
-        let what = ui::col()
+        let what = ui::col().min_h_0()
             .flex_1()
             .child(title)
             .child(div().min_w_0().truncate().child(StyledText::new(c.description.clone()).with_highlights(mark(description, 0))).text_size(ui::TEXT_DETAIL).text_color(muted)); // lint-allow(raw-truncate): ui::line takes plain text; this one is a highlighted StyledText (the match marks)
@@ -161,7 +161,7 @@ impl Waffle {
             .gap_1p5()
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(StyledText::new(send_options::TTS).with_highlights(name)))
             .child(ui::line("message").text_size(ui::TEXT_DETAIL).text_color(faint));
-        let what = ui::col().flex_1().child(title).child(ui::line(send_options::TTS_DESCRIPTION).text_size(ui::TEXT_DETAIL).text_color(muted));
+        let what = ui::col().min_h_0().flex_1().child(title).child(ui::line(send_options::TTS_DESCRIPTION).text_size(ui::TEXT_DETAIL).text_color(muted));
         ui::menu_row("command-tts", cx)
             .highlighted(on)
             .min_h_11()
@@ -181,7 +181,7 @@ impl Waffle {
             .gap_3()
             .child(div().text_color(palette::danger_ink(cx)).child(Icon::new(Glyph::WarningCircle).size(ui::ICON_XL)))
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Couldn't load this server's commands"))
                     .child(ui::line(error.to_owned()).text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx))),

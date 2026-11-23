@@ -316,7 +316,7 @@ pub(crate) fn notice_line(id: &str, glyph: Glyph, ink: Hsla, sentence: Sentence,
         .gap_4()
         .text_size(ui::TEXT_SM)
         .child(ui::row().w(px(AVATAR)).h(ui::LINE_LEAD).flex_none().justify_center().child(Icon::new(glyph).size(ui::ICON_LG).text_color(ink)))
-        .child(ui::col().flex_1().child(sentence_line(sentence, stamp, cx)).children(under));
+        .child(ui::col().min_h_0().flex_1().child(sentence_line(sentence, stamp, cx)).children(under));
     chat::inset(row.into_any_element(), false)
 }
 

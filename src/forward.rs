@@ -153,7 +153,7 @@ impl Waffle {
             .items_start()
             .gap_3()
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .gap_1()
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Forward message"))
@@ -194,7 +194,7 @@ impl Waffle {
     // The place's mark, name and where it is, then its check, or a lock where you can't post.
     fn place_row(&self, place: Place, on: bool, full: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let id = place.channel.id.clone();
-        let text = ui::col()
+        let text = ui::col().min_h_0()
             .flex_1()
             .child(ui::line(place.channel.name.clone()))
             .child(ui::line(place.detail.clone()).text_size(ui::TEXT_XS).text_color(palette::muted(cx)));

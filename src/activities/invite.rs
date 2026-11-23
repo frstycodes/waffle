@@ -121,7 +121,7 @@ pub(crate) fn activity_message_card(message: &discord::Message, activity: &disco
             ui::row()
                 .gap_4()
                 .child(ui::server_tile(activity.app_icon.as_deref(), &name, ICON, cx))
-                .child(ui::col().flex_1().gap_0p5().child(ui::line(name).text_size(TEXT_MD).font_weight(gpui_kit::FontWeight::BOLD)).child(div().text_size(TEXT_SM).text_color(palette::stage::text()).child(line))),
+                .child(ui::col().min_h_0().flex_1().gap_0p5().child(ui::line(name).text_size(TEXT_MD).font_weight(gpui_kit::FontWeight::BOLD)).child(div().text_size(TEXT_SM).text_color(palette::stage::text()).child(line))),
         )
         .child(button)
         .into_any_element()

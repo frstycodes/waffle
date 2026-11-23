@@ -308,7 +308,7 @@ fn message_card(id: String, guild: &str, channel: &str, message: &Message, ctx: 
         MediaKind::Image => m.url.clone(),
         MediaKind::Video { poster } | MediaKind::Gif { poster } => poster.clone(),
     });
-    let text = ui::col()
+    let text = ui::col().min_h_0()
         .flex_1()
         .gap_1()
         .text_size(ui::TEXT_SM)
@@ -373,14 +373,14 @@ fn invite_card(id: String, code: &str, invite: &Invite, ctx: &CardContext, cx: &
         }),
     };
     let name = ui::line(invite.name.clone()).text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx));
-    let row = div().child(icon).child(ui::col().flex_1().gap_0p5().child(name).child(counts)).child(div().flex_none().child(action));
+    let row = div().child(icon).child(ui::col().min_h_0().flex_1().gap_0p5().child(name).child(counts)).child(div().flex_none().child(action));
     invite_frame(id, row, cx)
 }
 
 fn invalid_invite(id: String, cx: &App) -> AnyElement {
     let tile = ui::row().size(px(INVITE_ICON)).flex_none().squircle(RADIUS_MD).bg(palette::selected(cx)).justify_center().text_color(palette::faint(cx)).child(Icon::new(Glyph::Prohibit).size(px(DEAD_ICON)));
     let row = div().child(tile).child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .gap_0p5()
                 .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Invalid invite"))
@@ -408,7 +408,7 @@ fn skeleton(id: String, invite: bool, cx: &App) -> AnyElement {
             ui::row()
                 .gap_3()
                 .child(shimmer(1, RADIUS_MD).size(px(INVITE_ICON)).flex_none())
-                .child(ui::col().flex_1().gap_2().child(bar(2, 160., 14.)).child(bar(3, 180., 10.)))
+                .child(ui::col().min_h_0().flex_1().gap_2().child(bar(2, 160., 14.)).child(bar(3, 180., 10.)))
                 .child(shimmer(4, RADIUS_SM).w_16().h_9().flex_none()),
         ),
         false => card(id.clone(), MESSAGE_WIDTH, cx)

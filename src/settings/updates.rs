@@ -34,7 +34,7 @@ impl Waffle {
             Status::Downloading { total: None, .. } => Some(ui::progress_indeterminate("update-progress", cx)),
             _ => None,
         };
-        let text = ui::col()
+        let text = ui::col().min_h_0()
             .flex_1()
             .gap_0p5()
             .child(ui::line(format!("Waffle {CURRENT}")).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))

@@ -37,7 +37,7 @@ pub(super) fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowCon
         true => compact_line(message, starts_group, text, ctx, cx),
         false => text,
     };
-    let body = ui::col()
+    let body = ui::col().min_h_0()
         .relative()
         .flex_1()
         .text_size(px(ctx.font_size))
@@ -119,7 +119,7 @@ pub(super) fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowCon
                     None,
                     palette::surface(Level::Page, cx),
                 )))
-                .child(ui::col().flex_1().child(message_head(message, ctx, cx)).child(body)),
+                .child(ui::col().min_h_0().flex_1().child(message_head(message, ctx, cx)).child(body)),
         )
         .children(toolbar);
     inset(with_message_menu(row, message, ctx), mention)
@@ -181,7 +181,7 @@ pub(super) fn fold_line(first_id: &str, run: &Run, ctx: &Rc<RowContext>, cx: &Ap
 // toolbar, reactions or reply chrome, on a card that jumps to it.
 pub(crate) fn search_hit(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Div {
     let media = hit_media(message, ctx, cx);
-    let body = ui::col()
+    let body = ui::col().min_h_0()
         .flex_1()
         .text_size(ui::TEXT_LEAD)
         .line_height(gpui_kit::relative(1.45))

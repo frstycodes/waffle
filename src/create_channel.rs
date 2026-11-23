@@ -467,7 +467,7 @@ fn dialog_head(title: &'static str, icon: Option<Icon>, sub: Option<SharedString
     let sub = sub.map(|text| ui::row().gap_1().text_size(ui::TEXT_SM).text_color(muted).children(icon.map(|i| i.size(ui::ICON_SM))).child(text));
     ui::row()
         .items_start()
-        .child(ui::col().flex_1().gap_0p5().child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(title)).children(sub))
+        .child(ui::col().min_h_0().flex_1().gap_0p5().child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(title)).children(sub))
         .child(ui::icon_button("create-channel-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_create_channel(cx))))
 }
 
@@ -499,7 +499,7 @@ fn private_row(on: bool, window: &mut Window, cx: &mut Context<Waffle>) -> impl 
         .gap_4()
         .cursor_pointer()
         .child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .gap_0p5()
                 .child(ui::row().gap_1p5().text_color(strong).child(Icon::new(Glyph::HashtagLock).size(ui::ICON_MD)).child(div().font_weight(FontWeight::MEDIUM).child("Private channel")))
@@ -540,7 +540,7 @@ fn candidate_row(candidate: Candidate, on: bool, window: &mut Window, cx: &mut C
             ui::row().size_8().flex_none().rounded_full().bg(palette::selected(cx)).justify_center().child(div().size_3().rounded_full().bg(dot)).into_any_element()
         }
     };
-    let text = ui::col()
+    let text = ui::col().min_h_0()
         .flex_1()
         .child(ui::line(candidate.pick.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
         .child(ui::line(candidate.detail).text_size(ui::TEXT_XS).text_color(palette::muted(cx)));

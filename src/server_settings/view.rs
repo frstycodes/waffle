@@ -388,7 +388,7 @@ impl Waffle {
             .px_1p5()
             .pb_3()
             .child(icon)
-            .child(ui::col().flex_1().line_height(ui::LINE_DETAIL).child(ui::line(name).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx))).child(ui::line("Server settings").text_size(ui::TEXT_XS).text_color(palette::muted(cx))));
+            .child(ui::col().min_h_0().flex_1().line_height(ui::LINE_DETAIL).child(ui::line(name).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx))).child(ui::line("Server settings").text_size(ui::TEXT_XS).text_color(palette::muted(cx))));
         let search = ui::search_field("ss-search", &view.search, cx).into_any_element();
         let query = view.search.read(cx).value().to_string();
         let mut out = vec![head.into_any_element(), div().pb_2().child(search).into_any_element()];
@@ -428,7 +428,7 @@ impl Waffle {
                 ui::menu_row(SharedString::from(format!("ss-result-{}", setting.id)), cx)
                     .h_auto()
                     .py_1p5()
-                    .child(ui::col().flex_1().child(ui::line(setting.title).text_color(palette::strong(cx))).child(ui::line(place).text_size(ui::TEXT_XS).text_color(palette::muted(cx))))
+                    .child(ui::col().min_h_0().flex_1().child(ui::line(setting.title).text_color(palette::strong(cx))).child(ui::line(place).text_size(ui::TEXT_XS).text_color(palette::muted(cx))))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         if let Some(view) = &this.server_settings {
                             view.search.update(cx, |s, cx| s.set_value("", window, cx));
@@ -700,7 +700,7 @@ impl Waffle {
         let save = ui::button("ss-save", Tone::Primary, cx).loading(saving.then_some("Saving")).child("Save changes").on_click(cx.listener(move |this, _, _, cx| this.save_server_settings(closing, cx)));
         let bar = ui::floating_bar("ss-savebar", cx)
             .child(div().text_color(ink).flex_none().child(Icon::new(glyph).size(ui::ICON_XL)))
-            .child(ui::col().flex_1().child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title)).children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(px(DETAIL_LINE)).text_color(palette::muted(cx)).child(d))))
+            .child(ui::col().min_h_0().flex_1().child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title)).children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(px(DETAIL_LINE)).text_color(palette::muted(cx)).child(d))))
             .child(ui::row().items_stretch().gap_2().flex_none().child(reset).child(save));
         Some(ui::foot_dock(bar, "ss-savebar-in"))
     }

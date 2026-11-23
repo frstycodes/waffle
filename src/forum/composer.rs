@@ -184,7 +184,7 @@ impl Waffle {
             .items_start()
             .gap_1()
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .gap_0p5()
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("New post"))

@@ -42,7 +42,7 @@ pub(super) fn automod_row(message: &Message, ctx: &Rc<RowContext>, cx: &mut App)
         .text_size(ui::TEXT_SM)
         .text_color(muted)
         .child(avatar)
-        .child(ui::col().flex_1().child(head).children(body));
+        .child(ui::col().min_h_0().flex_1().child(head).children(body));
     chat::inset(row.into_any_element(), false)
 }
 
@@ -94,7 +94,7 @@ pub(super) fn flagged_card(message: &Message, text: &str, matched: Option<&str>,
         .gap_2p5()
         .child(ui::avatar(message.author.avatar.clone(), 24.).flex_none())
         .child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .child(div().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(ctx.name_of(&message.author)))
                 .child(div().text_color(palette::text(cx)).child(StyledText::new(text.to_owned()).with_highlights(highlights))),

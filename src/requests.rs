@@ -139,7 +139,7 @@ impl Waffle {
                 ui::col().gap_0p5().child(label).children(rows).into_any_element()
             }
         };
-        ui::col()
+        ui::col().min_h_0()
             .relative()
             .flex_1()
             .h_full()
@@ -174,7 +174,7 @@ impl Waffle {
             .hover(move |s| s.bg(hover))
             .child(ui::dm_face(&dm.face(), 40., page))
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .child(
                         ui::row()

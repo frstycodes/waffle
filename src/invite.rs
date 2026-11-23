@@ -348,7 +348,7 @@ impl Waffle {
             Some(group) => Some(members(group.recipients.len() + 1)),
             None => self.username(&row),
         };
-        let text = ui::col()
+        let text = ui::col().min_h_0()
             .flex_1()
             .child(ui::truncating(format!("invite-name-{}", row.key), row.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
             .children(detail.map(|d| ui::line(d).text_size(ui::TEXT_XS).text_color(palette::muted(cx))));
@@ -424,7 +424,7 @@ fn invite_head(guild: &Guild, channel: &Channel, cx: &mut Context<Waffle>) -> An
         .items_start()
         .gap_3()
         .child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .gap_1()
                 .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("Invite friends to {}", guild.name)))

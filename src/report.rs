@@ -441,7 +441,7 @@ impl Waffle {
                 .gap_3()
                 .p_2()
                 .child(ui::icon_tile(glyph, palette::selected(cx), palette::strong(cx)))
-                .child(ui::col().flex_1().child(ui::line(title).text_color(palette::strong(cx))).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail)))
+                .child(ui::col().min_h_0().flex_1().child(ui::line(title).text_color(palette::strong(cx))).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail)))
                 .child(button)
                 .into_any_element(),
         )
@@ -531,7 +531,7 @@ fn key(id: &Value) -> String {
 }
 
 fn head(title: SharedString, subheader: Option<AnyElement>, close: ui::Control, cx: &mut Context<Waffle>) -> gpui_kit::Div {
-    let text = ui::col()
+    let text = ui::col().min_h_0()
         .flex_1()
         .gap_1()
         .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))

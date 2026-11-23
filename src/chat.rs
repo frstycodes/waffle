@@ -80,7 +80,7 @@ const FORWARD_WIDTH: f32 = 520.;
 
 impl Waffle {
     pub fn render_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let main = ui::col().relative().flex_1().h_full().bg(palette::surface(Level::Page, cx));
+        let main = ui::col().min_h_0().relative().flex_1().h_full().bg(palette::surface(Level::Page, cx));
         let Some(channel) = self.channel.clone() else {
             return main.child(empty_state("idle", Mood::Idle, "No channel open", "Pick a server on the left, then a channel to start reading.", cx));
         };
@@ -106,7 +106,7 @@ impl Waffle {
             None => self.render_composer(window, cx).into_any_element(),
         };
         let (inline, above) = self.place_header(header);
-        let chat = ui::col()
+        let chat = ui::col().min_h_0()
             .relative()
             .flex_1()
             .h_full()

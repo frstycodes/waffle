@@ -623,7 +623,7 @@ pub(crate) fn menu_item_row(id: SharedString, item: &Item, sub_open: bool, lead_
         .disabled(item.disabled)
         .children(lead.map(|lead| ui::row().size(px(LEAD)).flex_none().justify_center().child(lead)))
         .child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .child(ui::line(item.label.clone()))
                 .children(item.hint.clone().map(|text| {
@@ -693,7 +693,7 @@ fn menu_header(lead: &HeadLead, title: SharedString, subtitle: Option<SharedStri
         .gap_2p5()
         .child(div().flex_none().child(lead))
         .child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .child(ui::line(title).text_size(ui::TEXT_SM).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
                 .children(subtitle.map(|s| ui::line(s).text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::muted(cx)))),

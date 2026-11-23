@@ -332,7 +332,7 @@ impl Waffle {
             .px_2()
             .child(decorated_avatar(&user.avatar, None, 48., status, surface))
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .child(ui::line(user.name.clone()).text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
                     .child(ui::line(username).text_color(palette::muted(cx))),
@@ -830,7 +830,7 @@ fn audit_page(view: &ModView, cx: &App) -> AnyElement {
             .items_start()
             .py_1p5()
             .child(div().pt_0p5().flex_none().text_color(ink).child(Icon::new(glyph).size(ui::ICON_MD)))
-            .child(ui::col().flex_1().gap_0p5().child(sentence_spans(&audit::sentence(e, names), cx)).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(meta)))
+            .child(ui::col().min_h_0().flex_1().gap_0p5().child(sentence_spans(&audit::sentence(e, names), cx)).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(meta)))
     });
     ui::col().gap_0p5().children(rows).into_any_element()
 }

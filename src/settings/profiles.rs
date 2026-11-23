@@ -481,7 +481,7 @@ impl Waffle {
             (Some(_), None) if editor.tab == ProfileTab::Main => (self.main_profile_groups(editor, cx), MAIN_GROUP),
             (Some(_), None) => (self.server_profile_groups(editor, cx), SERVER_GROUP),
         };
-        let fields = ui::col().flex_1().gap_6().child(tabs).children(groups);
+        let fields = ui::col().min_h_0().flex_1().gap_6().child(tabs).children(groups);
         let body = ui::row().items_start().gap_8().child(fields).children(editor.saved.is_some().then(|| self.profile_preview_column(editor, cx)));
         vec![Section::keyed(group, body)]
     }

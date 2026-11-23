@@ -108,7 +108,7 @@ pub(super) fn section(message: &Message, children: &[Component], accessory: Opti
     let row = ui::row()
         .items_start()
         .gap_3p5()
-        .child(ui::col().flex_1().gap_1().text_color(palette::strong(cx)).children(text))
+        .child(ui::col().min_h_0().flex_1().gap_1().text_color(palette::strong(cx)).children(text))
         .children(accessory.map(|a| div().flex_none().child(a)));
     ui::col().child(row).children(failed).into_any_element()
 }

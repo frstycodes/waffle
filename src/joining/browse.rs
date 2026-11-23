@@ -58,7 +58,7 @@ impl Waffle {
             BrowseTab::Customize => self.customize_tab(guild, cx),
             BrowseTab::Browse => self.browse_tab(guild, window, cx),
         };
-        ui::col()
+        ui::col().min_h_0()
             .relative()
             .flex_1()
             .h_full()
@@ -286,7 +286,7 @@ impl Waffle {
         let hover = palette::hover(cx);
         let why = if rules { Some("Everyone sees this channel.") } else if under_followed { Some(UNDER_FOLLOWED) } else { None };
         let (guild_id, id) = (guild.id.clone(), channel.id.clone());
-        let text = ui::col()
+        let text = ui::col().min_h_0()
             .flex_1()
             .child(ui::line(channel.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
             .when_some(channel.topic.clone().filter(|t| !t.is_empty()), |d, topic| d.child(ui::line(topic).text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx))));

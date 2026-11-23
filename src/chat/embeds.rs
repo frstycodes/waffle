@@ -142,7 +142,7 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
         ui::col().pt_1().gap_2p5().children(field_rows(&embed.fields, embed.thumbnail.is_some()).into_iter().map(|row| {
             ui::row().items_stretch().gap_4().children(row.into_iter().map(|i| {
                 let (name, value, _) = &embed.fields[i];
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .flex_basis(Pixels::ZERO)
                     .gap_0p5()
@@ -155,7 +155,7 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
         let url = crate::discord::sized_image(&m.url, EMBED_THUMB, EMBED_THUMB, (m.width, m.height));
         img(url).size(px(EMBED_THUMB)).flex_none().squircle(RADIUS_SM).object_fit(gpui_kit::ObjectFit::Cover)
     });
-    let text = ui::col()
+    let text = ui::col().min_h_0()
         .flex_1()
         .gap_1p5()
         .children(provider)
@@ -378,7 +378,7 @@ pub(super) fn poll_result(poll: &crate::discord::PollResult, poll_message: Optio
         .border_color(palette::line(cx))
         .child(mark)
         .child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .child(ui::line(headline).text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
                 .child(

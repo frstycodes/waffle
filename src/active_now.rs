@@ -233,7 +233,7 @@ impl Waffle {
             Subtitle::Text(text) => text,
             Subtitle::Since(start) => clock_since(start),
         });
-        let who = ui::col()
+        let who = ui::col().min_h_0()
             .flex_1()
             .child(ui::line(title(&names)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
             .children(sub.map(|s| ui::line(s).text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx))));
@@ -265,7 +265,7 @@ impl Waffle {
             .disabled(joined)
             .child(if joined { "Joined" } else { "Join" })
             .on_click(cx.listener(move |this, _, _, cx| this.join_voice_in(Some(guild_id.clone()), channel.clone(), cx)));
-        let meta = ui::col()
+        let meta = ui::col().min_h_0()
             .flex_1()
             .child(
                 ui::row()
@@ -315,7 +315,7 @@ fn art(image: Option<&String>, fallback: Icon, cx: &App) -> AnyElement {
 fn activity_section(rich: &RichPresence, cx: &App) -> Div {
     let line = |text: String| ui::line(text).text_size(ui::TEXT_XS).text_color(palette::muted(cx));
     let name = |text: String| ui::line(text).text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx));
-    let meta = ui::col().flex_1().gap_0p5();
+    let meta = ui::col().min_h_0().flex_1().gap_0p5();
     if is_spotify(rich) {
         let artists = rich.state.as_ref().map(|s| format!("by {}", s.replace("; ", ", ")));
         let track = rich.started.zip(rich.ends).map(|(start, end)| {

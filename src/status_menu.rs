@@ -427,7 +427,7 @@ impl Waffle {
         let current = self.me.as_ref().is_some_and(|me| me.id == account.id);
         let status = if current { self.my_status } else { account.status };
         let ring = if current { palette::selected(cx) } else { palette::surface(palette::Level::Overlay, cx) };
-        let name = ui::col()
+        let name = ui::col().min_h_0()
             .flex_1()
             .line_height(ui::LINE_DETAIL)
             .child(ui::line(account.name.clone()).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
@@ -457,7 +457,7 @@ impl Waffle {
             .items_start()
             .gap_3()
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .gap_1()
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Set your status"))
@@ -557,7 +557,7 @@ fn presence_choice(status: Status, label: &'static str, detail: &'static str, on
         .when(on, |r| r.bg(palette::selected(cx)))
         .child(ui::status_mark(status, 14., palette::surface(palette::Level::Raised, cx), cx).border_0())
         .child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(label))
                 .when(!detail.is_empty(), |d| d.child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail))),

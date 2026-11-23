@@ -74,7 +74,7 @@ impl Waffle {
             call_line.map(|(glyph, label, ink)| div().child(Icon::new(glyph).size(ui::ICON_SM).flex_none().text_color(ink)).child(div().text_color(ink).child(label))).or(line)
         };
         let names = |key: &str| {
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .child(ui::line(channel.name.clone()).font_weight(if unread { FontWeight::MEDIUM } else { FontWeight::NORMAL }))
                 .children(line(key).map(|l| l.flex().items_center().gap_1().min_w_0().text_size(ui::TEXT_XS).text_color(faint)))

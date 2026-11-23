@@ -491,7 +491,7 @@ impl Waffle {
                 .text_size(ui::TEXT_SM)
                 .child(div().flex_none().pt_1p5().px_2p5().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(muted).child(heading))
                 // The rows scroll inside the popup's height rather than spilling out over the composer.
-                .child(ui::col().id("autocomplete-list").flex_1().gap_0p5().overflow_y_scroll().track_scroll(&self.autocomplete_scroll).children(rows))
+                .child(ui::col().min_h_0().id("autocomplete-list").flex_1().gap_0p5().overflow_y_scroll().track_scroll(&self.autocomplete_scroll).children(rows))
                 .transform_origin(point(gpui_kit::relative(0.5), gpui_kit::relative(1.)))
                 .with_animation("autocomplete", Animation::new(ui::DUR_POP).with_easing(gpui_kit::ease_out_quint()), |el, t| el.opacity(t).scale(0.95 + 0.05 * t)),
         )

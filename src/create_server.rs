@@ -436,7 +436,7 @@ fn head(title: &'static str, subtitle: &'static str, cx: &mut Context<Waffle>) -
         .items_start()
         .gap_3()
         .child(
-            ui::col()
+            ui::col().min_h_0()
                 .flex_1()
                 .gap_1()
                 .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
@@ -477,7 +477,7 @@ fn template_fill(hue: f32) -> Hsla {
 // A bordered row leading to the next step: the tile, the label (and a line under it), a chevron.
 fn card_row(id: &'static str, tile: impl IntoElement, label: &'static str, detail: Option<&'static str>, off: bool, cx: &App) -> Stateful<Div> {
     let hover = palette::hover(cx);
-    let text = ui::col()
+    let text = ui::col().min_h_0()
         .flex_1()
         .gap_0p5()
         .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(label))
@@ -533,7 +533,7 @@ fn template_row(i: usize, template: &Template, expanded: bool, off: bool, cx: &m
         .py_2p5()
         .squircle(ui::RADIUS_LG)
         .child(ui::icon_tile(template.glyph, template_fill(template.hue), gpui_kit::white()))
-        .child(ui::col().flex_1().pt_0p5().items_start().gap_1().child(div().font_weight(FontWeight::MEDIUM).text_color(strong).child(template.label)).child(chips).children(more))
+        .child(ui::col().min_h_0().flex_1().pt_0p5().items_start().gap_1().child(div().font_weight(FontWeight::MEDIUM).text_color(strong).child(template.label)).child(chips).children(more))
         .child(div().flex_none().pt_2p5().text_color(faint).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)))
         .when(off, |r| r.opacity(0.5).cursor_not_allowed())
         .when(!off, |r| r.cursor_pointer().hover(move |s| s.bg(hover)).on_click(cx.listener(move |this, _, window, cx| this.pick_create_server_template(Some(i), window, cx))))

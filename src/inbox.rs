@@ -236,7 +236,7 @@ impl Waffle {
             .hover(|s| s.bg(palette::hover(cx)))
             .child(ui::avatar(m.author.avatar.clone(), 24.))
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .child(ui::row().items_baseline().gap_2().child(ui::line(m.author.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx))).child(div().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(crate::chat::format_stamp(&m.timestamp))))
                     .child(div().text_size(ui::TEXT_SM).line_clamp(2).text_color(palette::text(cx)).child(text)),

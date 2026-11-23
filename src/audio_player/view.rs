@@ -85,7 +85,7 @@ impl AudioPlayer {
                     .gap_3()
                     .child(ui::row().size_10().flex_none().squircle(RADIUS_XS).bg(palette::surface(Level::Raised, cx)).text_color(palette::muted(cx)).justify_center().child(Icon::new(Glyph::File).size(ui::ICON_XL)))
                     .child(
-                        ui::col()
+                        ui::col().min_h_0()
                             .flex_1()
                             .child(
                                 ui::line(self.file.name.clone())

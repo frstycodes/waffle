@@ -207,7 +207,7 @@ impl Waffle {
             .text_color(muted)
             .child(div().flex_none().child(Icon::new(glyph).size(ui::ICON_XL)))
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .py(px(LOCKED_PAD_Y))
                     .gap_0p5()

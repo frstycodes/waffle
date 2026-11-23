@@ -482,7 +482,7 @@ impl Waffle {
             .items_start()
             .gap_3()
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .gap_0p5()
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
@@ -665,7 +665,7 @@ pub(super) fn when_column(when: &When, repeat: Option<String>, ink: Hsla, cx: &g
         .children(when.lead.clone().map(|lead| div().font_weight(FontWeight::SEMIBOLD).text_color(ink).child(lead)))
         .when(when.lead.is_some() && when.rest.is_some(), |d| d.child("·"))
         .children(when.rest.clone());
-    ui::col()
+    ui::col().min_h_0()
         .flex_1()
         .text_size(ui::TEXT_SM)
         .line_height(ui::LINE_SM)

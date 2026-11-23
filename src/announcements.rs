@@ -776,7 +776,7 @@ impl Waffle {
             return None;
         }
         let source = channel.clone();
-        let text = ui::col()
+        let text = ui::col().min_h_0()
             .flex_1()
             .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Follow to get this channel's updates in your own server."))
             .children(following_line(self.follower_stats(&channel.id)).map(|line| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(line)));

@@ -222,7 +222,7 @@ pub(super) fn skeleton(cx: &App) -> AnyElement {
             .gap_4()
             .child(ui::skeleton_circle(("skeleton-avatar", i), AVATAR, cx))
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .gap_2()
                     .pt_1()

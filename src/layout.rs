@@ -433,7 +433,7 @@ impl Waffle {
                 false => decorated_avatar(&me.avatar, me.decoration.as_deref(), 32., self.my_mark().map(Into::into), ring),
             })
             .child(
-                ui::col()
+                ui::col().min_h_0()
                     .flex_1()
                     .child(ui::truncating("me-name", me.name.clone()).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
                     .child(div().line_height(ui::LINE_XS).text_size(ui::TEXT_XS).text_color(faint).child(status_line)),
