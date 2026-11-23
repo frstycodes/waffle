@@ -333,6 +333,10 @@ mod compose {
                 // SAFETY: the surface's NSView and Wry's WKWebView are live, on the main thread.
                 unsafe {
                     let _: () = msg_send![parent as *mut AnyObject, addSubview: &*view];
+                    // Wry makes the webview follow its parent's size, which would lay the page out again on
+                    // every frame of a resize; it takes its size from `resize` alone.
+                    let _: () = msg_send![&*view, setAutoresizingMask: 0usize];
+                    let _: () = msg_send![parent as *mut AnyObject, setAutoresizesSubviews: false];
                 }
                 Ok(parent)
             })();
