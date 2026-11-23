@@ -52,6 +52,19 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
         "login" => return waffle.status = Status::SignedOut(Login::qr("https://discord.com/ra/demo-fingerprint-0123456789abcdef")),
         "scanned" => return waffle.status = Status::SignedOut(Login::Scanned(Box::new(me))),
         "failed" => return waffle.status = Status::SignedOut(Login::Failed("Invalid ticket".into())),
+        // Sign-in offering a newer build: downloading and downloaded after a failed sign-in, and ready on the code screen.
+        "failed-update" | "failed-update-ready" | "login-update-ready" => {
+            use crate::updater::{Staged, Status as Update};
+            waffle.updates.status = match scene {
+                "failed-update" => Update::Downloading { version: "0.17.0".into(), done: 13 << 20, total: Some(31 << 20) },
+                _ => Update::Ready(Staged::demo("0.17.0")),
+            };
+            let login = match scene {
+                "login-update-ready" => Login::qr("https://discord.com/ra/demo-fingerprint-0123456789abcdef"),
+                _ => Login::Failed("Invalid remote authentication ticket".into()),
+            };
+            return waffle.status = Status::SignedOut(login);
+        }
         _ => {}
     }
     let load = scene == "load";

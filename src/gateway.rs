@@ -82,7 +82,18 @@ impl Waffle {
                 cx.open_url(&url);
                 Login::Captcha(url.into())
             }
-            auth::AuthEvent::Failed(error) => Login::Failed(error.into()),
+            auth::AuthEvent::Failed(error) => {
+                // A failed sign-in may be ours to fix, and a build that can't sign in can't be updated from inside:
+                // look for a newer Waffle now and fetch it straight away, whatever the automatic-download setting.
+                // Download checks first when nothing is known; one already on its way or ready isn't fetched again.
+                use crate::updater::{Command, Status as Update};
+                if let Some(updater) = &self.updates.updater
+                    && !matches!(self.updates.status, Update::Checking | Update::Downloading { .. } | Update::Ready(_))
+                {
+                    updater.send(Command::Download);
+                }
+                Login::Failed(error.into())
+            }
         };
         self.status = Status::SignedOut(login);
         // lint-allow(global-notify): a sign-in step changes the login screen, which replaces every column
