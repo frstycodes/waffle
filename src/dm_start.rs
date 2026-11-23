@@ -122,18 +122,18 @@ pub(crate) fn dm_start_header(start: &DmStart, this: WeakEntity<Waffle>, cx: &Ap
         .pb_4()
         .items_start()
         .gap_1()
-        .child(div().mb_2().child(face))
+        .child(div().pb_2().child(face))
         .child(ui::line(start.name.clone()).max_w_full().text_size(ui::TEXT_XL).line_height(relative(1.2)).font_weight(FontWeight::BOLD).text_color(palette::strong(cx)))
         .children(start.subtitle.clone().map(|s| ui::line(s).max_w_full().text_size(ui::TEXT_MD).text_color(palette::muted(cx))))
-        .child(div().mt_1p5().text_size(ui::TEXT_MD).text_color(palette::muted(cx)).child(emphasised(&start.line, palette::strong(cx))))
-        .children(start.mutual.clone().map(|m| ui::row().mt_0p5().gap_1p5().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::Users).size(ui::ICON_MD)).child(m)))
+        .child(div().pt_1p5().text_size(ui::TEXT_MD).text_color(palette::muted(cx)).child(emphasised(&start.line, palette::strong(cx))))
+        .children(start.mutual.clone().map(|m| ui::row().pt_0p5().gap_1p5().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::Users).size(ui::ICON_MD)).child(m)))
         .children(actions(start, this, cx))
         .into_any_element()
 }
 
 fn actions(start: &DmStart, this: WeakEntity<Waffle>, cx: &App) -> Option<AnyElement> {
     let person = start.person.clone()?;
-    let row = ui::row().mt_3().flex_wrap().gap_2();
+    let row = ui::row().pt_3().flex_wrap().gap_2();
     let act = move |id: &'static str, tone: Tone, label: &'static str, glyph: Option<Glyph>, run: fn(&mut Waffle, User, &mut Context<Waffle>)| {
         let (this, person) = (this.clone(), person.clone());
         ui::button(id, tone, cx)

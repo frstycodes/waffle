@@ -3,9 +3,9 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui_kit::{
-    Animation, AnimationExt, AnyElement, App, BoxShadow, Context, Corners, Div, ElementId, FontWeight, HighlightStyle, SharedString, StyledText, Window,
+    Animation, AnimationExt, AnyElement, App, Context, Corners, Div, ElementId, FontWeight, HighlightStyle, SharedString, StyledText, Window,
     component::Icon,
-    canvas, div, fill, linear_color_stop, linear_gradient, point, prelude::*, px, relative, size, svg,
+    canvas, div, fill, point, prelude::*, px, size, svg,
 };
 use qrcode::{EcLevel, QrCode};
 
@@ -118,7 +118,7 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Win
         .child(ui::line(title).max_w_full().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
         .child(div().max_w(px(TEXT_WIDTH)).text_color(muted).child(detail))
         .children(reason)
-        .children(card.map(|card| div().mt_1().child(card)))
+        .children(card.map(|card| div().pt_1().child(card)))
         .children(after)
         .children(back.map(|account| {
             let label = format!("Back to {}", account.name);
@@ -150,32 +150,18 @@ fn first_name(name: &str) -> &str {
 
 // The code card while Discord prepares a code: its final size, shimmering.
 fn blank_card(cx: &App) -> AnyElement {
-    // --shimmer: white at 6% on dark, 60% on light.
-    let band = gpui_kit::white().opacity(if cx.theme_dark() { 0.06 } else { 0.6 });
-    let sweep = div().absolute().top_0().bottom_0().w_full().bg(linear_gradient(90., linear_color_stop(gpui_kit::transparent_black(), 0.), linear_color_stop(band, 0.5))).with_animation(
-        "qr-shimmer",
-        Animation::new(Duration::from_millis(2300)).repeat().with_easing(gpui_kit::ease_in_out),
-        |band, t| band.left(relative(-1. + 2. * t)),
-    );
-    div()
-        .relative()
-        .size(px(QR_SIDE))
-        .squircle(ui::RADIUS_LG)
-        .bg(palette::selected(cx))
-        // GAP: gpui clips to rectangles, so the sweep's corners show faintly past the card's rounding.
-        .overflow_hidden()
-        .child(sweep)
-        .into_any_element()
+    ui::skeleton("qr-shimmer", ui::RADIUS_LG, cx).size(px(QR_SIDE)).flex_none().into_any_element()
 }
 
 // Graphite ink squircles on white, finder patterns as rounded rings, the waffle mark in the cleared centre.
+// lint-allow(custom-component): ui::card is a clickable raised card; this is the sign-in QR code painted on white in both themes.
 fn qr_card(modules: Rc<Modules>, cx: &App) -> AnyElement {
     let inner = QR_SIDE - 2. * QR_PAD;
     let module = inner / modules.width as f32;
     let clear = centre_clear(modules.width);
     let shadow = vec![
-        BoxShadow { color: palette::line_strong(cx), offset: point(px(0.), px(0.)), blur_radius: px(0.), spread_radius: px(1.), inset: false },
-        BoxShadow { color: palette::shade(cx).opacity(0.18), offset: point(px(0.), px(8.)), blur_radius: px(24.), spread_radius: px(0.), inset: false },
+        ui::shadow(palette::line_strong(cx), 0., 0., 0., 1., false),
+        ui::shadow(palette::shade(cx).opacity(0.18), 0., 8., 24., 0., false),
     ];
     let mark = (clear.end - clear.start) as f32 * module * 0.78;
     let code = canvas(
@@ -201,6 +187,7 @@ fn qr_card(modules: Rc<Modules>, cx: &App) -> AnyElement {
         },
     )
     .size(px(inner));
+    // lint-allow(custom-surface): ui::surface is the theme's overlay fill; the code sits on white in both themes so phones can read it.
     div()
         .relative()
         .size(px(QR_SIDE))
@@ -234,11 +221,11 @@ fn steps(cx: &App) -> Div {
         let range = before.len()..before.len() + bold.len();
         ui::row()
             .gap_2()
-            .child(ui::row().size_5().flex_none().squircle(ui::RADIUS_XS).bg(palette::selected(cx)).text_color(strong).text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).justify_center().child(n))
+            .child(ui::badge(palette::selected(cx), strong).size_5().justify_center().child(n))
             .child(StyledText::new(text).with_highlights([(range, HighlightStyle { color: Some(strong), font_weight: Some(FontWeight::MEDIUM), ..Default::default() })]))
     };
     ui::col()
-        .mt_1()
+        .pt_1()
         .gap_1p5()
         .text_color(palette::text(cx))
         .child(step("1", "In Discord, open ", "Settings", ""))
@@ -254,6 +241,7 @@ fn waiting(id: &'static str, text: &'static str, cx: &App) -> Div {
 
 // The account that scanned springs in from half size, the phone it's approving on badged at its foot.
 fn avatar_pop(user: &User, cx: &App) -> AnyElement {
+    // lint-allow(custom-mark, custom-surface): ui::badged marks a corner with a count or a status; this is the 32px phone chip, ringed by a hairline.
     let badge = ui::row()
         .absolute()
         .right_neg_0p5()
@@ -262,7 +250,7 @@ fn avatar_pop(user: &User, cx: &App) -> AnyElement {
         .rounded_full()
         .bg(palette::surface(palette::Level::Page, cx))
         .text_color(palette::strong(cx))
-        .shadow(vec![BoxShadow { color: palette::line_strong(cx), offset: point(px(0.), px(0.)), blur_radius: px(0.), spread_radius: px(1.), inset: false }])
+        .shadow(vec![ui::shadow(palette::line_strong(cx), 0., 0., 0., 1., false)])
         .justify_center()
         .child(Icon::new(Glyph::DeviceMobile).size(ui::ICON_LG));
     let spring = motion::ease_spring();
@@ -281,20 +269,10 @@ fn arrive(id: impl Into<ElementId>, card: impl IntoElement) -> AnyElement {
     div()
         .child(card)
         .with_animation(id, Animation::new(Duration::from_millis(260)).with_easing(move |t| spring.sample(t)), |el, t| {
+            // lint-allow(raw-px): the rise's distance is computed from the animation's progress.
             el.translate_y(px(12. * (1. - t))).scale(0.97 + 0.03 * t).opacity(t.clamp(0., 1.))
         })
         .into_any_element()
-}
-
-trait ThemeDark {
-    fn theme_dark(&self) -> bool;
-}
-
-impl ThemeDark for App {
-    fn theme_dark(&self) -> bool {
-        use gpui_kit::component::ActiveTheme;
-        self.theme().is_dark()
-    }
 }
 
 #[cfg(test)]

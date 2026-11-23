@@ -38,6 +38,7 @@ pub fn mascot_at(id: impl Into<ElementId>, mood: Mood, scale: f32, cx: &App) -> 
     div()
         .size(px(size))
         .flex_none()
+        // lint-allow(endless-animation): plays only while the mascot is drawn, and reduce-motion gets the still mark above.
         .with_animation(id, Animation::new(Duration::from_secs_f32(period)).repeat(), move |el, t| el.child(mark(size, ink, pose(mood, t))))
         .into_any_element()
 }
@@ -51,6 +52,7 @@ pub fn loader(id: impl Into<ElementId>, size: f32, ink: Hsla, cx: &App) -> AnyEl
     div()
         .size(px(size))
         .flex_none()
+        // lint-allow(endless-animation): plays only while a loader is drawn, and reduce-motion gets the still mark above.
         .with_animation(id, Animation::new(DRIP_CYCLE).repeat(), move |el, t| el.child(mark(size, ink, Pose { drips: loader_drips(t), ..Pose::REST })))
         .into_any_element()
 }

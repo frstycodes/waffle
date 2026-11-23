@@ -56,12 +56,14 @@ impl Waffle {
         };
         let waffle = cx.entity();
         let part = slot.get_or_insert_with(|| {
+            // lint-allow(render-work): made once, on the column's first draw (get_or_insert_with), then kept.
             cx.new(|cx: &mut Context<Part>| Part {
                 waffle: waffle.downgrade(),
                 render,
                 name,
                 images: crate::images::new_cache(cx),
-                _observe: cx.observe(&waffle, |_, _, cx| cx.notify()), // lint-allow(global-notify): notifies this part, following the app
+                // lint-allow(render-work, global-notify): subscribed once with the part, which notifies itself, following the app.
+                _observe: cx.observe(&waffle, |_, _, cx| cx.notify()),
             })
         });
         AnyView::from(part.clone()).cached(style).into_any_element()
@@ -82,10 +84,21 @@ impl Waffle {
         }
     }
 
+    // Re-renders the popovers and pickers (`Overlays`) alone, for state only they draw. The menu and the
+    // dialogs are built by the root, so they still take the app's redraw.
+    pub fn redraw_overlays(&mut self, cx: &mut Context<Self>) {
+        match self.parts.overlays.clone() {
+            Some(overlays) => overlays.update(cx, |_, cx| cx.notify()), // lint-allow(global-notify): notifies the overlay layer alone
+            // Not drawn yet: nothing to keep, so the app's redraw draws it.
+            None => cx.notify(), // lint-allow(global-notify): the overlay layer doesn't exist yet
+        }
+    }
+
     // The popovers (overlays.rs) as a view of their own, so a list scrolling or a hover style in one
     // notifies this view rather than the app.
     pub fn overlays(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let waffle = cx.entity().downgrade();
+        // lint-allow(render-work): made once, on the first draw (get_or_insert_with), then kept.
         self.parts.overlays.get_or_insert_with(|| cx.new(|_| Overlays { waffle })).clone().into_any_element()
     }
 }
