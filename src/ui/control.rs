@@ -102,6 +102,15 @@ pub fn icon_button(id: impl Into<ElementId>, glyph: Glyph, tooltip: impl Into<Sh
     control.tooltip(move |window: &mut Window, cx: &mut App| super::tip(tooltip.clone(), window, cx))
 }
 
+// An icon button whose face is any element instead of a glyph (a server's tile in a picker's category rail, an
+// svg nav icon): the same size, fills, hover and `.toggled` look as `icon_button`. Add the face with `.child`.
+// Keywords: icon slot, category tab, rail tab, tile button, custom icon button, picker tab
+pub fn icon_slot(id: impl Into<ElementId>, tooltip: impl Into<SharedString>, cx: &App) -> Control {
+    let look = Look { rest: gpui_kit::transparent_black(), hover: palette::hover(cx), press: palette::press(cx), ink: palette::muted(cx), ink_hover: palette::strong(cx), edge: None };
+    let tooltip: SharedString = tooltip.into();
+    Control::new(id, Kind::Icon, look).tooltip(move |window: &mut Window, cx: &mut App| super::tip(tooltip.clone(), window, cx))
+}
+
 // A round icon button over video or the call stage (`size` 28 or 40).
 pub fn round_button(id: impl Into<ElementId>, glyph: Glyph, tooltip: impl Into<SharedString>, size: f32) -> Control {
     let white = gpui_kit::white();

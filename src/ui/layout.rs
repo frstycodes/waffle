@@ -23,7 +23,14 @@ pub fn col() -> Div {
     div().flex().flex_col().min_w_0().min_h_0()
 }
 
-/// One line of text that ends in an ellipsis when it doesn't fit. `ui::truncating` also shows the cut
+/// One line of styled text (a match highlight, bold runs) that ends in an ellipsis: `ui::line` for anything that
+// isn't plain text.
+// Keywords: truncate styled text, rich text line, highlighted line, ellipsis element
+pub fn rich_line(text: impl IntoElement) -> Div {
+    div().min_w_0().truncate().child(text)
+}
+
+// One line of text that ends in an ellipsis when it doesn't fit. `ui::truncating` also shows the cut
 /// text in a tooltip.
 pub fn line(text: impl Into<SharedString>) -> Div {
     div().min_w_0().truncate().child(text.into())

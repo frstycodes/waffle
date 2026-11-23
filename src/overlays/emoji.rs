@@ -146,22 +146,13 @@ impl Waffle {
             .border_r_1()
             .border_color(palette::line(cx))
             .children(sections.iter().enumerate().flat_map(|(i, section)| {
-                let (selected, hover, strong) = (palette::selected(cx), palette::hover(cx), palette::strong(cx));
                 let scroll = scroll.clone();
                 // A line sets the server's own emoji apart from the Unicode groups after them.
                 let after_server = i > 0 && matches!(sections[i - 1].lead, SectionLead::Server { .. }) && !matches!(section.lead, SectionLead::Server { .. });
                 let line = after_server.then(|| ui::col().py_1().items_center().flex_none().child(ui::divider(None, cx).w_5()).into_any_element());
-                // lint-allow(custom-button): ui::icon_button takes a Glyph; a category tab shows a server's tile or a glyph, and marks the one in view.
-                let tab = ui::row()
-                    .id(("emoji-cat", i))
-                    .size_9()
-                    .flex_none()
-                    .squircle(RADIUS_SM)
-                    .justify_center()
-                    .cursor_pointer()
-                    .text_color(if i == in_view { strong } else { palette::muted(cx) })
-                    .when(i == in_view, |d| d.bg(selected))
-                    .when(i != in_view, |d| d.hover(move |s| s.bg(hover).text_color(strong)))
+                let tab = ui::icon_slot(("emoji-cat", i), section.name.clone(), cx)
+                    .sized(36.)
+                    .toggled(i == in_view, cx)
                     .child(section.lead.render(cx))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         scroll.scroll_to_top_of_item(i);

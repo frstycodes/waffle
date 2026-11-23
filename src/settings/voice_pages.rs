@@ -694,20 +694,9 @@ impl Waffle {
     // A sound cue: its preview button beside its switch.
     pub(super) fn cue_row(&self, id: &'static str, title: &'static str, cue: Cue, line: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let on = !self.prefs.silenced_cues.contains(&cue);
-        let (selected, press) = (palette::selected(cx), palette::press(cx));
-        // lint-allow(custom-button): ui::icon_button rests with no fill; a preview button on the selected fill is a missing tone
-        let play = ui::row()
-            .id(SharedString::from(format!("preview-{id}")))
-            .size_9()
-            .flex_none()
-            .squircle(ui::RADIUS_MD)
-            .bg(selected)
-            .text_color(palette::strong(cx))
-            .justify_center()
-            .cursor_pointer()
-            .hover(move |s| s.bg(press))
-            .child(Icon::new(Glyph::Play).size(ui::ICON_MD))
-            .tooltip(move |window, cx| ui::tip(format!("Preview {title}"), window, cx))
+        let play = ui::icon_button(SharedString::from(format!("preview-{id}")), Glyph::Play, format!("Preview {title}"), cx)
+            .tone(Tone::Secondary, cx)
+            .sized(36.)
             .on_click(move |_, _, cx| {
                 cx.stop_propagation();
                 sounds::preview(cue);

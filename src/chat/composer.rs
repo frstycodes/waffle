@@ -85,8 +85,7 @@ impl Waffle {
                 .text_size(ui::TEXT_XS)
                 .text_color(muted)
                 .child(ui::bars("typing", palette::accent_ink(cx), 12.))
-                // lint-allow(raw-truncate): ui::line takes plain text, and this line carries bold runs
-                .child(div().min_w_0().truncate().child(emphasised(&typing_parts(&names), strong)))
+                .child(ui::rich_line(emphasised(&typing_parts(&names), strong)))
         });
         let (height, this) = (self.composer_height.clone(), cx.weak_entity());
         let measure = gpui_kit::canvas(

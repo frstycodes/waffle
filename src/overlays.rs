@@ -448,11 +448,7 @@ fn picker_frame(id: &'static str, height: f32, cx: &App) -> gpui_kit::Stateful<g
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
 }
 
-// One line of styled text (a match highlight, emphasised runs) that ends in an ellipsis when it doesn't fit.
-pub(crate) fn rich_line(text: impl IntoElement) -> gpui_kit::Div {
-    // lint-allow(raw-truncate): ui::line takes plain text only; this one takes styled runs, so ui::line could take any element.
-    div().min_w_0().truncate().child(text)
-}
+pub(crate) use crate::ui::rich_line;
 
 pub(crate) fn backdrop(id: &'static str, cx: &mut Context<Waffle>) -> gpui_kit::Stateful<gpui_kit::Div> {
     div().id(id).absolute().inset_0().occlude().on_mouse_down(

@@ -80,6 +80,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::Control`
 - `ui::button` — A text button, 36px tall (`.large()` 44, `.small()` 30).
 - `ui::icon_button` — A square icon-only button that fills on hover, with its tooltip: 32px (`.small()` 24, `.large()` 40).
+- `ui::icon_slot` — An icon button whose face is any element instead of a glyph (a server's tile in a picker's category rail, an svg nav icon): the same size, f
 - `ui::round_button` — A round icon button over video or the call stage (`size` 28 or 40).
 - `ui::card` — A clickable card (a template, a post, a launcher entry, a theme): a quiet fill on the page that deepens on hover, rounded large; `.toggled` 
 - `ui::chip` — A filter or toggle chip; pressed takes the accent tint and a half-accent edge.
@@ -194,6 +195,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 
 - `ui::row` — A horizontal flex row, children centred on the cross axis, able to shrink below its content.
 - `ui::col` — A vertical flex column, able to shrink below its content on both axes.
+- `ui::rich_line` — One line of styled text (a match highlight, bold runs) that ends in an ellipsis: `ui::line` for anything that isn't plain text.
 - `ui::line` — One line of text that ends in an ellipsis when it doesn't fit.
 - `ui::floating` — A surface floating over everything after it, placed by its parent's position and kept inside the window.
 - `ui::floating_at` — `floating` with its `corner` pinned to the window point `at` (a click, a button's edge).

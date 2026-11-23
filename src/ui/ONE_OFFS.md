@@ -471,7 +471,6 @@ _Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_ro
 - `src/joining/rules.rs` — ui::card has no toggled accent-tint look with a state edge (agreed, nudged)
 - `src/overlays.rs` — ui::card is a 20px-radius row; a mention card is an 8px-radius column that stacks its place, author and text.
 - `src/overlays/emoji.rs` — ui::icon_button is a square taking a Glyph; an emoji cell is a ninth of the grid's width.
-- `src/overlays/emoji.rs` — ui::icon_button takes a Glyph; a category tab shows a server's tile or a glyph, and marks the one in view.
 - `src/overlays/switcher.rs` — ui::list_row titles are plain text; the switcher highlights the part of the name that matched.
 - `src/panel.rs` — ui::card is a raised fill with 12px padding; a feed card sits on the page fill with a hairline edge and art at its end.
 - `src/panel.rs` — ui::list_row is a flat 48px row; a member row also carries a nameplate, its fade and a per-row hover plate.
@@ -482,7 +481,6 @@ _Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_ro
 - `src/requests.rs` — ui::list_row is 48px with one title line; a request is 64px with the time beside the name and two buttons.
 - `src/settings.rs` — ui::settings_nav_item has no icon-less, indented sub-entry
 - `src/settings/voice_pages.rs` — ui::icon_button has no hover to the danger ink without the danger fill, which this quiet remove must not take
-- `src/settings/voice_pages.rs` — ui::icon_button rests with no fill; a preview button on the selected fill is a missing tone
 - `src/sidebar/channels.rs` — ui::button(Tone::Ghost) is 36px with a 14px label; this one is the header's full-width name button, 16px semibold.
 - `src/sidebar/channels.rs` — ui::icon_button fills on hover and takes a Glyph; a row's action only strengthens its ink.
 - `src/sidebar/channels.rs` — ui::icon_button fills on hover and takes a Glyph; this action only strengthens its ink and sits at the head's end.
@@ -598,11 +596,9 @@ _A mark on a face's or control's corner: ui::badged with a Spot (it places the m
 
 _One-line text: ui::line(text), or ui::truncating(key, text) when the cut text should show in a tooltip._
 
-- `src/chat/composer.rs` — ui::line takes plain text, and this line carries bold runs
 - `src/chat/format.rs` — ui::line takes plain text, and this label carries bold runs
 - `src/command_picker/render.rs` — ui::line takes plain text; this one is a highlighted StyledText (the match marks)
 - `src/forum/helpers.rs` — ui::line clamps to one line; a post's title clamps to two
-- `src/overlays.rs` — ui::line takes plain text only; this one takes styled runs, so ui::line could take any element.
 - `src/profile.rs` — ui::line takes plain text; this is the user's name set in their chosen name font and styled runs.
 
 ## raw-margin

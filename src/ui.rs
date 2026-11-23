@@ -49,7 +49,7 @@ mod face;
 mod kit;
 pub mod prelude;
 
-pub use control::{Control, Pressable, button, card, chip, chip_lead, hover_fade, hover_state, icon_button, menu_row, pressable, round_button, swatch, tip};
+pub use control::{Control, Pressable, button, card, icon_slot, chip, chip_lead, hover_fade, hover_state, icon_button, menu_row, pressable, round_button, swatch, tip};
 pub use date::{date_field, time_field};
 pub use dialog::{dialog, dialog_body, dialog_scroll, modal};
 pub use feedback::{progress_bar, meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
@@ -63,7 +63,7 @@ pub use tunnel::{TUNNEL_GRACE, Tunnel};
 pub use tokens::*;
 pub use kit::{Heading, RowHeight, dialog_header, list_row, media_label, section_label, toolbar};
 pub use face::{Badge, MarkFill, Shape, Spot, app_tile, avatar, badge_of, badged, dm_face, gap, monogram, name_hue, server_tile, status_mark};
-pub use layout::{col, floating, floating_at, line, row, sized, visible_rows};
+pub use layout::{rich_line, col, floating, floating_at, line, row, sized, visible_rows};
 
 /// Rounds an element with the design's soft squircle.
 pub trait Squircle: Styled + Sized {
