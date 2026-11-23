@@ -33,12 +33,26 @@ use crate::{
     icons::Glyph,
     illustration::Illustration,
     menu::{Entry, emoji_face, item, label, submenu},
+    part::Column,
     palette::{self, Level},
     ui::{self, Squircle},
 };
 
 // Discord's limits: tags on a post, title length, search debounce, posts per unread-count request, the
 // "(N New)" cap, the guidelines' height before Expand, and pictures in a card's mosaic.
+mod composer;
+mod helpers;
+mod tags;
+
+use helpers::*;
+
+// The widest the forum's toolbar and post list grow, a post's picture thumbnail, the composer preview's
+// heading size, a filename's widest, and a tag or reaction chip's height.
+const CONTENT_WIDTH: f32 = 880.;
+const THUMB: f32 = 72.;
+const PREVIEW_HEADING: f32 = 18.;
+const FILE_NAME_WIDTH: f32 = 180.;
+const TAG_HEIGHT: f32 = 22.;
 const MAX_TAGS: usize = 5;
 const MAX_UNREAD_REQUEST: usize = 180;
 const UNREAD_CAP: u32 = 25;
@@ -54,8 +68,8 @@ const DISCORD_EPOCH: i64 = 1_420_070_400_000;
 #[derive(Default)]
 pub struct ForumState {
     archived: Vec<Channel>,
-    previews: HashMap<String, Message>,
-    requested: HashSet<String>,
+    previews: HashMap<String, Message>, // lint-allow(unbounded-growth): bounded by the posts loaded from one forum, 25 per page of scrolling
+    requested: HashSet<String>, // lint-allow(unbounded-growth): bounded by the posts loaded from one forum, 25 per page of scrolling
     has_more: bool,
     loading: bool,
     error: Option<SharedString>,
@@ -68,8 +82,8 @@ pub struct ForumState {
     found: Option<Found>,
     composer: Option<Composer>,
     // FORUM_UNREADS counts, and the ack each post was last asked about.
-    unread_counts: HashMap<String, u32>,
-    unreads_asked: HashMap<String, u64>,
+    unread_counts: HashMap<String, u32>, // lint-allow(unbounded-growth): bounded by the posts loaded from one forum, 25 per page of scrolling
+    unreads_asked: HashMap<String, u64>, // lint-allow(unbounded-growth): bounded by the posts loaded from one forum, 25 per page of scrolling
     // Other people's new posts, kept out of the list until "N New Posts" resorts it.
     held_back: Vec<String>,
     guidelines_seen: bool,
@@ -195,11 +209,11 @@ impl Waffle {
                 }
                 this.load_forum_previews(&forum_id, cx);
                 this.request_forum_unreads(&forum_id);
-                cx.notify();
+                this.redraw(Column::Main, cx);
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends itself once its request or timer resolves, and holds only a weak handle
     }
 
     // Unread counts for the posts we've read before that have newer messages, each asked once per ack.
@@ -244,7 +258,7 @@ impl Waffle {
         if let Some(state) = self.forums.get_mut(forum_id) {
             state.held_back.clear();
         }
-        cx.notify();
+        self.redraw(Column::Main, cx);
     }
 
     // First messages for posts that don't have one yet, ten per request.
@@ -266,11 +280,11 @@ impl Waffle {
                             state.previews.insert(id.clone(), first);
                         }
                     }
-                    cx.notify();
+                    this.redraw(Column::Main, cx);
                 })
                 .ok();
             })
-            .detach();
+            .detach(); // lint-allow(detached-task): ends itself once its request or timer resolves, and holds only a weak handle
         }
     }
 
@@ -286,7 +300,7 @@ impl Waffle {
                 this.queue_forum_search(&id, cx);
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): the subscription ends when the search entity, held in ForumState, drops
         self.forums.entry(forum_id.to_owned()).or_default().search = Some(search.clone());
         search
     }
@@ -300,7 +314,7 @@ impl Waffle {
         let state = self.forums.entry(forum_id.to_owned()).or_default();
         state.pending += 1;
         let (pending, id) = (state.pending, forum_id.to_owned());
-        cx.notify();
+        self.redraw(Column::Main, cx);
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(SEARCH_DEBOUNCE).await;
             this.update(cx, |this, cx| {
@@ -310,7 +324,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends itself once its request or timer resolves, and holds only a weak handle
     }
 
     fn search_forum(&mut self, forum_id: &str, cx: &mut Context<Self>) {
@@ -321,14 +335,14 @@ impl Waffle {
         let state = self.forums.entry(forum_id.to_owned()).or_default();
         if key.query.is_empty() && key.tags.is_empty() {
             state.found = None;
-            return cx.notify();
+            return self.redraw(Column::Main, cx);
         }
         if state.found.as_ref().is_some_and(|f| f.key == key) {
             return;
         }
         let Some(client) = client.filter(|_| history) else { return };
         state.found = Some(Found { key: key.clone(), posts: Vec::new(), loading: true });
-        cx.notify();
+        self.redraw(Column::Main, cx);
         let (guild_id, id) = (self.guild_id.clone().unwrap_or_default(), forum_id.to_owned());
         cx.spawn(async move |this, cx| {
             let result = client.call(Method::GET, search_path(&id, &key), None).await;
@@ -336,15 +350,15 @@ impl Waffle {
                 let Some(state) = this.forums.get_mut(&id) else { return };
                 let Some(found) = state.found.as_mut().filter(|f| f.key == key) else { return };
                 found.loading = false;
-                let Ok(body) = result else { return cx.notify() };
+                let Ok(body) = result else { return this.redraw(Column::Main, cx) };
                 found.posts = body["threads"].as_array().into_iter().flatten().filter_map(|t| parse_thread(t, &guild_id)).collect();
                 insert_previews(state, &body);
                 this.load_forum_previews(&id, cx);
-                cx.notify();
+                this.redraw(Column::Main, cx);
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends itself once its request or timer resolves, and holds only a weak handle
     }
 
     fn toggle_forum_filter(&mut self, forum_id: &str, tag_id: &str, cx: &mut Context<Self>) {
@@ -432,14 +446,15 @@ impl Waffle {
             .h_full()
             .bg(palette::surface(Level::Page, cx))
             .child(self.forum_header(&forum, cx))
-            .child(toolbar)
-            .child(div().id("forum-scroll").flex_1().min_h_0().overflow_y_scrollbar().child(body))
+            .child(ui::col().flex_none().w_full().items_center().child(toolbar))
+            .child(div().id("forum-scroll").flex_1().min_h_0().overflow_y_scrollbar().child(ui::col().w_full().items_center().child(body)))
             .into_any_element()
     }
 
     fn forum_header(&self, forum: &Channel, cx: &mut Context<Self>) -> Div {
         let (strong, faint) = (palette::strong(cx), palette::faint(cx));
         ui::row()
+            .justify_between()
             .h_12()
             .flex_none()
             .pl_3()
@@ -462,7 +477,7 @@ impl Waffle {
                     .child(crate::ui::truncating("header-forum-name", forum.name.clone())),
             )
             .children(forum.topic.clone().map(|t| ui::line(t).flex_1().pl_3().border_l_1().border_color(palette::line_strong(cx)).text_size(ui::TEXT_SM).text_color(faint)))
-            .child(div().ml_auto().child(self.caption_clearance(true)))
+            .child(self.caption_clearance(true))
     }
 
     // The search box, Sort & View and New post; under them the search status and the tag row.
@@ -483,8 +498,7 @@ impl Waffle {
         ui::col()
             .flex_none()
             .w_full()
-            .max_w(px(880.))
-            .mx_auto()
+            .max_w(px(CONTENT_WIDTH))
             .px_4()
             .pt_4()
             .pb_1()
@@ -546,9 +560,10 @@ impl Waffle {
                 this.open_live_menu(window.mouse_position(), move |this| this.tag_filter_entries(&id), cx);
             }));
         ui::row()
-            .gap_1p5()
+            .gap_2()
             .child(ui::row().items_stretch().gap_1p5().overflow_hidden().children(chips))
-            .child(div().flex_none().w(ui::HAIRLINE).h_5().mx_0p5().bg(palette::line_strong(cx)))
+            // lint-allow(custom-divider): ui::divider is a horizontal rule; this is the vertical one between the tag chips and Select Tags
+            .child(div().flex_none().w(ui::HAIRLINE).h_5().bg(palette::line_strong(cx)))
             .child(all)
     }
 
@@ -620,7 +635,7 @@ impl Waffle {
             let button = ui::button("forum-new-posts", ui::Tone::Primary, cx).small().child(Icon::new(Glyph::ArrowUp).size(ui::ICON_SM)).child(new_posts_label(held));
             ui::row().items_stretch().justify_center().child(button.on_click(cx.listener(move |this, _, _, cx| this.show_held_back(&id, cx))))
         });
-        let column = ui::col().w_full().max_w(px(880.)).mx_auto().px_4().pt_2().pb_4().gap_3().children(error).children(new_posts);
+        let column = ui::col().w_full().max_w(px(CONTENT_WIDTH)).px_4().pt_2().pb_4().gap_3().children(error).children(new_posts);
         if is_empty {
             return column.child(self.forum_empty(forum, page, cx)).children(no_history);
         }
@@ -646,9 +661,9 @@ impl Waffle {
             };
             let id = forum.id.clone();
             let clear = ui::button("forum-empty-clear", ui::Tone::Secondary, cx).child("Clear all").on_click(cx.listener(move |this, _, _, cx| this.clear_forum_filter(&id, cx)));
-            return ui::empty_state("forum-empty", Illustration::ForumEmpty, title, body, cx).child(div().mt_2().child(clear));
+            return ui::empty_state("forum-empty", Illustration::ForumEmpty, title, body, cx).child(div().pt_2().child(clear));
         }
-        let new_post = page.can_post.then(|| div().mt_2().child(self.new_post_button("forum-empty-new", &forum.id, cx)));
+        let new_post = page.can_post.then(|| div().pt_2().child(self.new_post_button("forum-empty-new", &forum.id, cx)));
         ui::empty_state("forum-empty", Illustration::ForumEmpty, "Make the first post!", "Be the first to start the conversation!", cx).children(new_post)
     }
 
@@ -703,7 +718,7 @@ impl Waffle {
                     .children(excerpt)
                     .child(footer),
             )
-            .children(mosaic_view(&first.map(post_media).unwrap_or_default(), 72., 2., cx).map(|m| m.w(px(72.)).flex_none()))
+            .children(mosaic_view(&first.map(post_media).unwrap_or_default(), THUMB, 2., cx).map(|m| m.w(px(THUMB)).flex_none()))
             .on_click(cx.listener(move |this, _, window, cx| this.open_channel(open.clone(), window, cx)))
             .on_mouse_down(MouseButton::Right, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_thread_menu(menu_post.clone(), guild_id.clone(), e.position, cx)))
             .into_any_element()
@@ -788,7 +803,7 @@ impl Waffle {
             .children(first.map(|m| ui::avatar(m.author.avatar.clone(), 20.)))
             .children(first.map(|m| ui::line(m.author.name.clone()).font_weight(FontWeight::SEMIBOLD).text_color(palette::text(cx))))
             .child(div().flex_none().child(if page.media { age } else { format!("posted {age}") }))
-            .children(self.is_new_post(&forum.id, post).then(|| ui::badge(palette::accent(), palette::on_accent()).ml_auto().child("New")));
+            .when(self.is_new_post(&forum.id, post), |row| row.child(div().flex_1()).child(ui::badge(palette::accent(), palette::on_accent()).child("New")));
         let picture = media.and_then(|(urls, height)| mosaic_view(&urls, height, 4., cx)).map(|m| m.w_full());
         let text = picture.is_none().then(|| first.map(|m| div().line_clamp(5).text_size(ui::TEXT_SM).text_color(muted).child(m.content.clone()))).flatten();
         let footer = (!page.media).then(|| {
@@ -821,845 +836,10 @@ impl Waffle {
             .on_mouse_down(MouseButton::Right, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_thread_menu(menu_post.clone(), guild_id.clone(), e.position, cx)))
             .into_any_element()
     }
-
-    // New Post: a title, the opening message (starting as the forum's template), files and up to five
-    // tags. Post Guidelines open by themselves the first time per forum.
-    fn open_new_post(&mut self, forum_id: String, window: &mut Window, cx: &mut Context<Self>) {
-        let (template, has_guidelines) = self.forum_channel(&forum_id).map_or((String::new(), false), |f| (f.props.template.trim().to_owned(), guidelines_text(f).is_some()));
-        let title = cx.new(|cx| InputState::new(window, cx).placeholder("Title").validate(|text, _| text.chars().count() <= MAX_TITLE));
-        let body = cx.new(|cx| TextareaState::new(window, cx).placeholder("Message").default_value(template));
-        cx.subscribe(&title, |_, _, _: &InputEvent, cx| cx.notify()).detach();
-        cx.subscribe(&body, |_, _, _: &InputEvent, cx| cx.notify()).detach();
-        title.update(cx, |s, cx| s.focus(window, cx));
-        self.menu = None;
-        for state in self.forums.values_mut() {
-            state.composer = None;
-        }
-        let state = self.forums.entry(forum_id).or_default();
-        let guidelines = has_guidelines && !state.guidelines_seen;
-        state.guidelines_seen = true;
-        state.composer = Some(Composer { title, body, tags: Vec::new(), files: Vec::new(), guidelines, guidelines_full: false, previewing: false, error: None, sending: false });
-        cx.notify();
-    }
-
-    fn open_guidelines(&mut self, forum_id: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_new_post(forum_id, window, cx);
-        self.change_composer(|c| c.guidelines = true, cx);
-    }
-
-    fn open_composer(&self) -> Option<(&str, &Composer)> {
-        self.forums.iter().find_map(|(id, s)| Some((id.as_str(), s.composer.as_ref()?)))
-    }
-
-    fn composer_mut(&mut self) -> Option<&mut Composer> {
-        self.forums.values_mut().find_map(|s| s.composer.as_mut())
-    }
-
-    fn change_composer(&mut self, change: impl FnOnce(&mut Composer), cx: &mut Context<Self>) {
-        if let Some(composer) = self.composer_mut() {
-            change(composer);
-        }
-        cx.notify();
-    }
-
-    fn close_new_post(&mut self, cx: &mut Context<Self>) {
-        for state in self.forums.values_mut() {
-            state.composer = None;
-        }
-        cx.notify();
-    }
-
-    fn toggle_post_draft_tag(&mut self, tag_id: &str, cx: &mut Context<Self>) {
-        let Some(composer) = self.composer_mut() else { return };
-        match composer.tags.iter().position(|t| t == tag_id) {
-            Some(at) => drop(composer.tags.remove(at)),
-            None if composer.tags.len() < MAX_TAGS => composer.tags.push(tag_id.to_owned()),
-            None => {}
-        }
-        composer.error = None;
-        cx.notify();
-    }
-
-    fn pick_post_files(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let paths = cx.prompt_for_paths(gpui_kit::PathPromptOptions { files: true, directories: false, multiple: true, prompt: None });
-        cx.spawn_in(window, async move |this, cx| {
-            let Ok(Ok(Some(paths))) = paths.await else { return };
-            this.update(cx, |this, cx| this.add_post_files(paths, cx)).ok();
-        })
-        .detach();
-    }
-
-    // The chat composer's caps: your upload limit per file and ten files.
-    fn add_post_files(&mut self, paths: Vec<PathBuf>, cx: &mut Context<Self>) {
-        let limit = crate::discord::upload_limit(self.my_account.premium_type, self.guild().map_or(0, |g| g.premium_tier));
-        let files = paths.into_iter().filter_map(PendingFile::new).collect();
-        self.change_composer(|c| c.error = crate::attachments::admit(&mut c.files, files, limit).map(Into::into), cx);
-    }
-
-    fn cooldown_left(&self, forum_id: &str) -> Option<Duration> {
-        let until = self.forums.get(forum_id)?.cooldown_until?;
-        until.checked_duration_since(Instant::now()).filter(|left| !left.is_zero())
-    }
-
-    // Not verified: that Manage Messages or Manage Channel skip a forum's post slowmode, as they do a channel's.
-    fn skips_slowmode(&self, forum_id: &str) -> bool {
-        self.can_in(forum_id, perm::MANAGE_MESSAGES) || self.can_in(forum_id, perm::MANAGE_CHANNELS)
-    }
-
-    // After a post, the forum's slowmode runs down, ticking the composer's clock each second.
-    fn start_post_cooldown(&mut self, forum_id: &str, cx: &mut Context<Self>) {
-        let slowmode = self.forum_channel(forum_id).map_or(0, |f| f.props.slowmode);
-        if slowmode == 0 || self.skips_slowmode(forum_id) {
-            return;
-        }
-        self.forums.entry(forum_id.to_owned()).or_default().cooldown_until = Some(Instant::now() + Duration::from_secs(slowmode.into()));
-        let id = forum_id.to_owned();
-        cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor().timer(Duration::from_secs(1)).await;
-                let ticking = this.update(cx, |this, cx| {
-                    cx.notify();
-                    this.cooldown_left(&id).is_some()
-                });
-                if !ticking.unwrap_or(false) {
-                    break;
-                }
-            }
-        })
-        .detach();
-    }
-
-    fn submit_new_post(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some((forum_id, composer)) = self.open_composer().map(|(id, c)| (id.to_owned(), c)) else { return };
-        if composer.sending || self.cooldown_left(&forum_id).is_some() {
-            return;
-        }
-        let (name, content, tags) = (composer.title.read(cx).value().trim().to_owned(), composer.body.read(cx).value().trim().to_owned(), composer.tags.clone());
-        let files: Vec<crate::discord::Upload> = composer.files.iter().map(PendingFile::upload).collect();
-        let (require_tag, archive_after) = self.forum_channel(&forum_id).map_or((false, 0), |f| (f.props.require_tag, f.props.archive_after));
-        if let Some(error) = post_error(&name, !content.is_empty() || !files.is_empty(), require_tag && tags.is_empty()) {
-            return self.change_composer(|c| c.error = Some(error.into()), cx);
-        }
-        let Some(client) = self.client.clone() else { return };
-        self.change_composer(|c| c.sending = true, cx);
-        let guild_id = self.guild_id.clone().unwrap_or_default();
-        let body = post_body(&name, &content, &tags, &files, if archive_after > 0 { archive_after } else { ARCHIVE_AFTER });
-        cx.spawn_in(window, async move |this, cx| {
-            let path = format!("/channels/{forum_id}/threads?use_nested_fields=true");
-            let created = match files.is_empty() {
-                true => client.call(Method::POST, path, Some(body)).await,
-                false => client.call_files(path, body, files).await,
-            };
-            this.update_in(cx, |this, window, cx| {
-                let post = match created {
-                    Ok(thread) => parse_thread(&thread, &guild_id),
-                    Err(error) => return this.change_composer(|c| (c.sending, c.error) = (false, Some(error.into())), cx),
-                };
-                this.close_new_post(cx);
-                this.start_post_cooldown(&forum_id, cx);
-                let Some(post) = post else { return this.show_toast("Couldn't open the new post", cx) };
-                this.on_event(crate::discord::Event::ChannelUpsert { guild_id: guild_id.clone(), channel: post.clone() }, cx);
-                this.open_channel(post, window, cx);
-            })
-            .ok();
-        })
-        .detach();
-    }
-
-    pub(crate) fn render_new_post(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let (forum_id, composer) = self.open_composer()?;
-        let forum = self.forum_channel(forum_id)?;
-        let (strong, muted) = (palette::strong(cx), palette::muted(cx));
-        let guidelines = composer.guidelines.then(|| self.guidelines_panel(forum, composer.guidelines_full, window, cx)).flatten();
-        let fields = match composer.previewing {
-            true => vec![self.post_preview(forum, composer, cx)],
-            false => self.post_fields(forum, composer, cx),
-        };
-        let error = composer.error.clone().map(|e| ui::field_error(e, cx));
-        let cooling = self.cooldown_left(forum_id);
-        let slowmode = (forum.props.slowmode > 0 && !self.skips_slowmode(forum_id)).then(|| slowmode_clock(cooling.map_or(forum.props.slowmode.into(), |left| left.as_secs() + 1), cx));
-        let preview = ui::button("new-post-preview", ui::Tone::Ghost, cx)
-            .child(Icon::new(if composer.previewing { Glyph::EyeSlash } else { Glyph::Eye }).size(ui::ICON_MD))
-            .child(if composer.previewing { "Exit Preview" } else { "Preview" })
-            .on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.previewing = !c.previewing, cx)));
-        let actions = ui::row()
-            .gap_2()
-            .child(preview)
-            .children(slowmode)
-            .child(div().flex_1())
-            .child(ui::button("new-post-cancel", ui::Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_new_post(cx))))
-            .child(
-                ui::button("new-post-submit", ui::Tone::Primary, cx)
-                    .loading(composer.sending.then_some("Posting"))
-                    .disabled(cooling.is_some())
-                    .child("Post")
-                    .on_click(cx.listener(|this, _, window, cx| this.submit_new_post(window, cx))),
-            );
-        let reopen = (!composer.guidelines && guidelines_text(forum).is_some())
-            .then(|| ui::icon_button("new-post-guidelines", Glyph::BookOpen, "Post Guidelines", cx).on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.guidelines = true, cx))));
-        let head = ui::row()
-            .items_start()
-            .gap_1()
-            .child(
-                ui::col()
-                    .flex_1()
-                    .gap_0p5()
-                    .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("New post"))
-                    .child(ui::line(format!("in {}", forum.name)).text_size(ui::TEXT_SM).text_color(muted)),
-            )
-            .children(reopen)
-            .child(ui::icon_button("new-post-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_new_post(cx))));
-        let body = ui::dialog_body()
-            .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
-                if e.keystroke.key == "escape" {
-                    this.close_new_post(cx);
-                }
-            }))
-            .child(head)
-            .child(ui::dialog_scroll("new-post-scroll", guidelines.map(IntoElement::into_any_element).into_iter().chain(fields).chain(error.map(IntoElement::into_any_element)), window, cx))
-            .child(actions);
-        let backdrop = div().id("new-post-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_new_post(cx)));
-        Some(ui::modal(backdrop, ui::dialog("new-post", 520., body, window, cx), cx))
-    }
-
-    // Title, tags, message and files, as you write them.
-    fn post_fields(&self, forum: &Channel, composer: &Composer, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let manage = self.can_in(&forum.id, perm::MANAGE_THREADS);
-        let full = composer.tags.len() >= MAX_TAGS;
-        let title_focus = composer.title.read(cx).focus_handle(cx);
-        let title_count = composer.title.read(cx).value().chars().count();
-        let title = ui::field("Title", cx)
-            .child(ui::text_field("new-post-title", Input::new(&composer.title).appearance(false), &title_focus))
-            .child(ui::field_hint("", Some(format!("{title_count} / {MAX_TITLE}").into()), cx));
-        let body_focus = composer.body.read(cx).focus_handle(cx);
-        let message = ui::field("Message", cx).child(ui::text_area("new-post-body", Textarea::new(&composer.body).appearance(false).px_0().text_size(ui::TEXT_SM), &body_focus));
-        let usable: Vec<&ForumTag> = forum.props.tags.iter().filter(|t| manage || !t.moderated).collect();
-        let tags = (!usable.is_empty()).then(|| {
-            let chips: Vec<AnyElement> = usable
-                .iter()
-                .map(|tag| {
-                    let (on, tag_id) = (composer.tags.contains(&tag.id), tag.id.clone());
-                    let chip = tag_chip(SharedString::from(format!("new-post-tag-{}", tag.id)), tag, on, cx).disabled(full && !on);
-                    chip.on_click(cx.listener(move |this, _, _, cx| this.toggle_post_draft_tag(&tag_id, cx))).into_any_element()
-                })
-                .collect();
-            ui::field(format!("Tags \u{b7} pick up to {MAX_TAGS}"), cx).child(ui::row().items_stretch().flex_wrap().gap_1p5().children(chips))
-        });
-        let files: Vec<AnyElement> = composer
-            .files
-            .iter()
-            .enumerate()
-            .map(|(i, file)| {
-                let path = file.path.clone();
-                let remove = ui::icon_button(SharedString::from(format!("new-post-file-remove-{i}")), Glyph::X, "Remove", cx)
-                    .on_click(cx.listener(move |this, _, _, cx| this.change_composer(|c| c.files.retain(|f| f.path != path), cx)));
-                file_chip(file, cx).child(remove).into_any_element()
-            })
-            .collect();
-        let add = ui::button("new-post-attach", ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::Upload).size(ui::ICON_SM)).child("Add files").on_click(cx.listener(|this, _, window, cx| this.pick_post_files(window, cx)));
-        let attachments = ui::field("Files", cx).child(ui::row().flex_wrap().gap_1p5().children(files).child(add));
-        [Some(title.into_any_element()), tags.map(IntoElement::into_any_element), Some(message.into_any_element()), Some(attachments.into_any_element())].into_iter().flatten().collect()
-    }
-
-    // The post as its card will read: tags, title, the message rendered, and its files.
-    fn post_preview(&self, forum: &Channel, composer: &Composer, cx: &mut Context<Self>) -> AnyElement {
-        let (title, content) = (composer.title.read(cx).value().trim().to_owned(), composer.body.read(cx).value().to_string());
-        let tags: Vec<Div> = forum.props.tags.iter().filter(|t| composer.tags.contains(&t.id)).map(|t| post_tag_badge(t.emoji.as_ref(), t.name.clone(), false, cx)).collect();
-        let (heading, ink) = match title.is_empty() {
-            true => ("Untitled post".to_owned(), palette::faint(cx)),
-            false => (title, palette::strong(cx)),
-        };
-        ui::col()
-            .p_4()
-            .gap_2()
-            .squircle(ui::RADIUS_LG)
-            .bg(palette::surface(Level::Sidebar, cx))
-            .border_1()
-            .border_color(palette::line(cx))
-            .child(ui::row().items_stretch().flex_wrap().gap_1p5().children(tags))
-            .child(div().text_size(px(18.)).font_weight(FontWeight::SEMIBOLD).text_color(ink).child(heading))
-            .child(TextView::markdown("new-post-preview-body", crate::chat::discord_breaks(&content)).selectable(true))
-            .child(ui::row().items_stretch().flex_wrap().gap_1p5().children(composer.files.iter().map(|f| file_chip(f, cx).pr_2p5())))
-            .into_any_element()
-    }
-
-    // Post Guidelines: the forum's topic as markdown, 220px tall until expanded; its pencil opens the
-    // forum's settings for Manage Channels.
-    fn guidelines_panel(&self, forum: &Channel, full: bool, window: &mut Window, cx: &mut Context<Self>) -> Option<Div> {
-        let topic = guidelines_text(forum)?;
-        let edit = self.can_in(&forum.id, perm::MANAGE_CHANNELS).then(|| {
-            let (channel, guild_id) = (forum.clone(), self.guild_id.clone().unwrap_or_default());
-            ui::icon_button("new-post-guidelines-edit", Glyph::Pen, "Edit Post Guidelines", cx).on_click(cx.listener(move |this, _, window, cx| {
-                this.close_new_post(cx);
-                this.open_channel_settings(channel.clone(), guild_id.clone(), window, cx);
-            }))
-        });
-        let close = ui::icon_button("new-post-guidelines-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.guidelines = false, cx)));
-        let measured = window.use_keyed_state(SharedString::from(format!("new-post-guidelines-{}", forum.id)), cx, |_, _| 0f32);
-        let overflows = *measured.read(cx) > GUIDELINES_HEIGHT;
-        let measure = measured.clone();
-        let text = div()
-            .max_h(px(if full { GUIDELINES_HEIGHT * 2. } else { GUIDELINES_HEIGHT }))
-            .child(div().child(TextView::markdown("new-post-guidelines-markdown", crate::chat::discord_breaks(topic)).selectable(true)))
-            .on_children_prepainted(move |bounds, _, cx| {
-                let Some(content) = bounds.first() else { return };
-                let next = f32::from(content.size.height);
-                measure.update(cx, |h, cx| {
-                    if (*h - next).abs() > 0.5 {
-                        *h = next;
-                        cx.notify(); // lint-allow(global-notify): notifies the measured height's own entity, not Waffle
-                    }
-                });
-            })
-            .id("new-post-guidelines-text")
-            .overflow_y_scrollbar();
-        let expand = overflows.then(|| {
-            ui::button("new-post-guidelines-expand", ui::Tone::Link, cx)
-                .child(if full { "Collapse" } else { "Expand" })
-                .on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.guidelines_full = !c.guidelines_full, cx)))
-        });
-        let head = ui::row()
-            .gap_1()
-            .child(Icon::new(Glyph::BookOpen).size(ui::ICON_MD).text_color(palette::muted(cx)))
-            .child(div().flex_1().ml_1().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Post Guidelines"))
-            .children(edit)
-            .child(close);
-        Some(
-            ui::col()
-                .p_3()
-                .gap_2()
-                .squircle(ui::RADIUS_MD)
-                .bg(palette::surface(Level::Sidebar, cx))
-                .border_1()
-                .border_color(palette::line(cx))
-                .child(head)
-                .child(text)
-                .children(expand),
-        )
-    }
-
-    // Edit Tags on a post's menu, for its author and Manage Threads: each tick saves at once, and at
-    // five the unticked ones are disabled.
-    pub(crate) fn edit_tags_entry(&self, post: &Channel, manage: bool, owner: bool) -> Option<Entry> {
-        if !(manage || owner) {
-            return None;
-        }
-        let forum = self.forum_channel(post.parent_id.as_deref()?).filter(|f| f.kind == ChannelKind::Forum)?;
-        let applied = post.thread.as_ref().map(|t| t.applied_tags.clone()).unwrap_or_default();
-        let full = applied.len() >= MAX_TAGS;
-        let rows: Vec<Entry> = forum
-            .props
-            .tags
-            .iter()
-            .filter(|t| manage || !t.moderated)
-            .map(|tag| {
-                let on = applied.contains(&tag.id);
-                let (post_id, tag_id) = (post.id.clone(), tag.id.clone());
-                let row = tag_item(tag, move |this, _, cx| this.toggle_post_tag(&post_id, &tag_id, cx)).checked(on);
-                (if full && !on { row.disabled() } else { row }).entry()
-            })
-            .collect();
-        (!rows.is_empty()).then(|| submenu("Edit Tags", rows).icon(Glyph::Tag).entry())
-    }
-
-    fn toggle_post_tag(&mut self, post_id: &str, tag_id: &str, cx: &mut Context<Self>) {
-        let Some(post) = self.forum_post(post_id).or_else(|| self.channel.clone().filter(|c| c.id == post_id)) else { return };
-        let meta = post.thread.clone().unwrap_or_default();
-        let mut tags = meta.applied_tags.clone();
-        match tags.iter().position(|t| t == tag_id) {
-            Some(at) => drop(tags.remove(at)),
-            None if tags.len() < MAX_TAGS => tags.push(tag_id.to_owned()),
-            None => return,
-        }
-        self.set_post_tags(post_id, meta.applied_tags, tags, meta.archived, cx);
-    }
-
-    // Discord reopens an archived post before changing its tags (unarchiveThreadIfNecessary).
-    fn set_post_tags(&mut self, post_id: &str, before: Vec<String>, tags: Vec<String>, archived: bool, cx: &mut Context<Self>) {
-        let Some(client) = self.client.clone() else { return };
-        let applied = tags.clone();
-        self.update_post(post_id, |p| {
-            if let Some(meta) = p.thread.as_mut() {
-                meta.applied_tags = applied.clone();
-                meta.archived = false;
-            }
-        });
-        cx.notify();
-        let id = post_id.to_owned();
-        cx.spawn(async move |this, cx| {
-            let path = format!("/channels/{id}");
-            let reopened = match archived {
-                true => client.call(Method::PATCH, path.clone(), Some(json!({ "archived": false }))).await.map(|_| ()),
-                false => Ok(()),
-            };
-            let result = match reopened {
-                Ok(()) => client.call(Method::PATCH, path, Some(json!({ "applied_tags": tags }))).await.map(|_| ()),
-                Err(error) => Err(error),
-            };
-            let Err(error) = result else { return };
-            this.update(cx, |this, cx| {
-                this.update_post(&id, |p| {
-                    if let Some(meta) = p.thread.as_mut() {
-                        meta.applied_tags = before.clone();
-                        meta.archived = archived;
-                    }
-                });
-                this.show_toast(error, cx);
-            })
-            .ok();
-        })
-        .detach();
-    }
-}
-
-fn insert_previews(state: &mut ForumState, body: &Value) {
-    for m in body["first_messages"].as_array().into_iter().flatten().filter_map(parse_message) {
-        state.previews.insert(m.channel_id.clone(), m);
-    }
-}
-
-// Not verified: that the server takes an empty `name` with only tags; Discord's client sends both.
-fn search_path(forum_id: &str, key: &SearchKey) -> String {
-    let mut url = reqwest::Url::parse("https://x/").expect("static URL");
-    {
-        let mut query = url.query_pairs_mut();
-        query.append_pair("name", &key.query);
-        if !key.tags.is_empty() {
-            query.append_pair("tag", &key.tags.join(","));
-        }
-        query.append_pair("tag_setting", if key.match_all { "match_all" } else { "match_some" });
-    }
-    format!("/channels/{forum_id}/threads/search?{}", url.query().unwrap_or_default())
-}
-
-// The posts to show, Discord's way: tag filter and sort over everything loaded, pinned first, then
-// archived ones under Older Posts. A text search also matches the opening messages we hold, adds
-// Discord's own hits, and drops the Older Posts split.
-fn arrange(posts: Vec<Channel>, found: &[Channel], view: ForumView, filter: &[String], query: &str, previews: &HashMap<String, Message>) -> Listing {
-    let words = words(query);
-    let mut posts: Vec<Channel> = posts.into_iter().filter(|p| tags_match(p, filter, view.match_all) && words_match(p, previews.get(&p.id), &words)).collect();
-    for hit in found.iter().filter(|h| tags_match(h, filter, view.match_all)) {
-        if !posts.iter().any(|p| p.id == hit.id) {
-            posts.push(hit.clone());
-        }
-    }
-    posts.sort_by_key(|p| Reverse((p.thread.as_ref().is_some_and(|t| t.pinned), sort_key(p, view.by_creation))));
-    if !words.is_empty() {
-        return Listing { active: posts, older: Vec::new() };
-    }
-    let (older, active) = posts.into_iter().partition(|p| p.thread.as_ref().is_some_and(|t| t.archived));
-    Listing { active, older }
-}
-
-// Match Some: any picked tag; Match All: every one. A post without tags never matches a filter.
-fn tags_match(post: &Channel, filter: &[String], match_all: bool) -> bool {
-    if filter.is_empty() {
-        return true;
-    }
-    let applied = post.thread.as_ref().map_or(&[][..], |t| t.applied_tags.as_slice());
-    match match_all {
-        true => filter.iter().all(|t| applied.contains(t)),
-        false => filter.iter().any(|t| applied.contains(t)),
-    }
-}
-
-fn words(query: &str) -> Vec<String> {
-    query.split_whitespace().map(str::to_lowercase).collect()
-}
-
-fn words_match(post: &Channel, first: Option<&Message>, words: &[String]) -> bool {
-    let haystack = format!("{} {}", post.name, first.map_or("", |m| m.content.as_str())).to_lowercase();
-    words.iter().all(|w| haystack.contains(w.as_str()))
-}
-
-// Recently Active: the last message, or the post itself; Date Posted: the post's own id.
-fn sort_key(post: &Channel, by_creation: bool) -> u64 {
-    match by_creation {
-        true => snowflake(&post.id),
-        false => post.last_message_id.as_deref().map_or_else(|| snowflake(&post.id), snowflake),
-    }
-}
-
-fn snowflake(id: &str) -> u64 {
-    id.parse().unwrap_or(0)
-}
-
-fn snowflake_ms(id: &str) -> i64 {
-    (snowflake(id) >> 22) as i64 + DISCORD_EPOCH
-}
-
-fn ago(id: &str) -> String {
-    crate::panel::ago(chrono::Utc::now().timestamp_millis() - snowflake_ms(id))
-}
-
-fn post_age(post: &Channel) -> String {
-    ago(&post.id)
-}
-
-// The card's time: last activity, or the post's age when sorted by Date Posted. Its tooltip says when it was posted.
-fn post_time(post: &Channel, by_creation: bool) -> Stateful<Div> {
-    let since = if by_creation { post.id.as_str() } else { post.last_message_id.as_deref().unwrap_or(&post.id) };
-    let posted = chrono::DateTime::from_timestamp_millis(snowflake_ms(&post.id)).map(|t| t.with_timezone(&chrono::Local).format("%-d %B %Y %H:%M").to_string()).unwrap_or_default();
-    div().id(SharedString::from(format!("post-time-{}", post.id))).child(ago(since)).tooltip(move |window, cx| ui::tip(format!("Posted {posted}"), window, cx))
-}
-
-// The first message's pictures, four at most: its images and videos' posters, else an embed's thumbnail.
-fn post_media(first: &Message) -> Vec<String> {
-    let attached: Vec<String> = first
-        .media
-        .iter()
-        .take(MOSAIC_MAX)
-        .map(|media| match &media.kind {
-            MediaKind::Image => media.url.clone(),
-            MediaKind::Video { poster } | MediaKind::Gif { poster } => poster.clone(),
-        })
-        .collect();
-    if !attached.is_empty() {
-        return attached;
-    }
-    first.embeds.iter().find_map(|e| e.images.first().or(e.thumbnail.as_ref())).map(|m| m.url.clone()).into_iter().collect()
-}
-
-// How a card lays out its pictures: one, two side by side, one beside a stack of two, or two by two.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Mosaic {
-    One,
-    Pair,
-    OneTwo,
-    Grid,
-}
-
-impl Mosaic {
-    fn of(count: usize) -> Option<Self> {
-        match count {
-            0 => None,
-            1 => Some(Self::One),
-            2 => Some(Self::Pair),
-            3 => Some(Self::OneTwo),
-            _ => Some(Self::Grid),
-        }
-    }
-}
-
-fn mosaic_view(urls: &[String], height: f32, gap: f32, cx: &Context<Waffle>) -> Option<Div> {
-    let layout = Mosaic::of(urls.len())?;
-    let radius = if layout == Mosaic::One { ui::RADIUS_MD } else { ui::RADIUS_XS };
-    let fill = palette::selected(cx);
-    let tile = |url: &String| div().flex_1().min_w_0().min_h_0().child(ui::media(url.clone(), ui::all(radius)).size_full().bg(fill).object_fit(gpui_kit::ObjectFit::Cover));
-    let row = |urls: &[String]| ui::row().items_stretch().flex_1().min_h_0().gap(px(gap)).children(urls.iter().map(tile));
-    let frame = ui::row().items_stretch().h(px(height)).gap(px(gap));
-    Some(match layout {
-        Mosaic::One | Mosaic::Pair => frame.children(urls.iter().map(tile)),
-        Mosaic::OneTwo => frame.child(tile(&urls[0])).child(ui::col().flex_1().gap(px(gap)).children(urls[1..3].iter().map(tile))),
-        Mosaic::Grid => frame.flex_col().child(row(&urls[0..2])).child(row(&urls[2..4])),
-    })
-}
-
-// Discord's "(N New)" count: capped at 25+, and 1+ while the count is unknown.
-fn new_count_label(count: Option<u32>) -> String {
-    match count {
-        Some(n) if n >= UNREAD_CAP => format!("{UNREAD_CAP}+"),
-        Some(n) if n > 0 => n.to_string(),
-        _ => "1+".to_owned(),
-    }
-}
-
-fn new_posts_label(count: usize) -> String {
-    match count {
-        1 => "1 New Post".to_owned(),
-        n => format!("{n} New Posts"),
-    }
-}
-
-fn guidelines_text(forum: &Channel) -> Option<&str> {
-    forum.topic.as_deref().map(str::trim).filter(|t| !t.is_empty())
-}
-
-// Slowmode's clock: m:ss, or h:mm:ss from an hour.
-fn countdown(secs: u64) -> String {
-    let (h, m, s) = (secs / 3600, secs / 60 % 60, secs % 60);
-    match h {
-        0 => format!("{m}:{s:02}"),
-        _ => format!("{h}:{m:02}:{s:02}"),
-    }
-}
-
-// The most-used reaction on the opening message, else the forum's default reaction with no count.
-// GAP: Discord's burst (super) reactions aren't parsed, so only normal counts rank.
-fn top_reaction(first: Option<&Message>, forum: &Channel) -> Option<(Emoji, Option<u32>)> {
-    let top = first.and_then(|m| m.reactions.iter().max_by_key(|r| r.count));
-    match top {
-        Some(r) => Some((r.emoji.clone(), Some(r.count))),
-        None => forum.props.default_reaction.clone().map(|e| (e, None)),
-    }
-}
-
-// Title, two lines at most; search words light up.
-fn post_title(post: &Channel, words: &[String], ink: gpui_kit::Hsla, size: f32, cx: &Context<Waffle>) -> Div {
-    let hit = HighlightStyle { background_color: Some(palette::accent_soft(cx)), color: Some(palette::accent_ink(cx)), ..Default::default() };
-    let ranges = hits(&post.name, words);
-    div().line_clamp(2).text_ellipsis().text_size(px(size)).font_weight(FontWeight::MEDIUM).text_color(ink).child(StyledText::new(post.name.clone()).with_highlights(ranges.into_iter().map(|r| (r, hit))))
-}
-
-// Byte ranges of each search word in `text`, case-insensitively; none where lowercasing changes lengths.
-fn hits(text: &str, words: &[String]) -> Vec<Range<usize>> {
-    let lower = text.to_lowercase();
-    if lower.len() != text.len() {
-        return Vec::new();
-    }
-    let mut ranges: Vec<Range<usize>> = words.iter().flat_map(|w| lower.match_indices(w.as_str()).map(|(at, m)| at..at + m.len()).collect::<Vec<_>>()).collect();
-    ranges.sort_by_key(|r| r.start);
-    ranges.dedup_by(|next, kept| next.start < kept.end);
-    ranges
-}
-
-// Discord's media layout: columns = max(floor(t + (w/320 − t)/2), 1) where t = w/450.
-fn gallery_columns(width: f32) -> usize {
-    let t = width / 450.;
-    ((t + (width / 320. - t) / 2.).floor() as usize).max(1)
-}
-
-// `has_message`: text or files.
-fn post_error(name: &str, has_message: bool, missing_tag: bool) -> Option<&'static str> {
-    match () {
-        _ if name.is_empty() => Some("A title is required"),
-        _ if !has_message => Some("A message is required"),
-        _ if missing_tag => Some("A tag is required to create a post in this channel"),
-        _ => None,
-    }
-}
-
-// Discord's create-post body; files go alongside as `files[n]`, each named here by its index.
-fn post_body(name: &str, content: &str, tags: &[String], files: &[crate::discord::Upload], archive_after: u32) -> Value {
-    let mut message = json!({ "content": content });
-    if !files.is_empty() {
-        message["attachments"] = files.iter().enumerate().map(|(i, f)| attachment_entry(i, f)).collect();
-    }
-    json!({ "name": name, "auto_archive_duration": archive_after, "applied_tags": tags, "message": message })
-}
-
-// Discord's serializer, as for chat uploads: alt text only when set, `is_spoiler` only when true.
-fn attachment_entry(index: usize, file: &crate::discord::Upload) -> Value {
-    let mut entry = json!({ "id": index.to_string(), "filename": file.name });
-    if let Some(description) = &file.description {
-        entry["description"] = json!(description);
-    }
-    if file.spoiler {
-        entry["is_spoiler"] = json!(true);
-    }
-    entry
-}
-
-// A file waiting in the composer: its kind, name and size; callers add the remove button.
-fn file_chip(file: &PendingFile, cx: &Context<Waffle>) -> Div {
-    let glyph = match file.kind() {
-        FileKind::Image => Glyph::Image,
-        FileKind::Video => Glyph::Video,
-        FileKind::Other => Glyph::File,
-    };
-    ui::row()
-        .h_8()
-        .pl_2p5()
-        .pr_0p5()
-        .gap_1p5()
-        .squircle(ui::RADIUS_SM)
-        .bg(palette::selected(cx))
-        .text_size(ui::TEXT_DETAIL)
-        .text_color(palette::text(cx))
-        .child(Icon::new(glyph).size(ui::ICON_SM).text_color(palette::muted(cx)))
-        .child(ui::line(file.name.clone()).max_w(px(180.)))
-        .child(div().flex_none().text_color(palette::faint(cx)).child(crate::chat::format_size(file.size)))
-}
-
-fn slowmode_clock(secs: u64, cx: &Context<Waffle>) -> Stateful<Div> {
-    ui::row()
-        .id("new-post-slowmode")
-        .gap_1()
-        .text_size(ui::TEXT_XS)
-        .text_color(palette::muted(cx))
-        .child(Icon::new(Glyph::Timer).size(ui::ICON_SM))
-        .child(countdown(secs))
-        .tooltip(|window, cx| ui::tip("Slowmode is enabled", window, cx))
-}
-
-fn tag_chip(id: SharedString, tag: &ForumTag, on: bool, cx: &Context<Waffle>) -> ui::Control {
-    ui::chip_lead(id, tag.emoji.as_ref().map(|e| emoji_face(e, 16.)), tag.name.clone(), on, cx)
-}
-
-fn tag_item(tag: &ForumTag, act: impl Fn(&mut Waffle, &mut Window, &mut Context<Waffle>) + 'static) -> crate::menu::Item {
-    let row = item(tag.name.clone(), act);
-    match tag.emoji.clone() {
-        Some(emoji) => row.emoji(emoji),
-        None => row,
-    }
-}
-
-// A tag on a card; one being filtered by takes the accent.
-fn post_tag_badge(emoji: Option<&Emoji>, name: impl Into<SharedString>, hit: bool, cx: &Context<Waffle>) -> Div {
-    let (fill, ink) = if hit { (palette::accent_soft(cx), palette::accent_ink(cx)) } else { (palette::selected(cx), palette::text(cx)) };
-    ui::badge(fill, ink).h(px(22.)).gap_1().children(emoji.map(|e| emoji_face(e, 14.))).child(name.into())
-}
-
-fn reaction_chip(emoji: Emoji, count: Option<u32>, cx: &Context<Waffle>) -> Div {
-    ui::badge(palette::selected(cx), palette::text(cx)).h(px(22.)).gap_1().child(emoji_face(&emoji, 14.)).children(count.map(|c| c.to_string()))
-}
-
-fn no_history_notice(forum: &Channel, cx: &Context<Waffle>) -> Div {
-    let name = format!("#{}", forum.name);
-    let text = format!("You do not have permission to view the post history of {name}.");
-    let bold = HighlightStyle { font_weight: Some(FontWeight::SEMIBOLD), color: Some(palette::strong(cx)), ..Default::default() };
-    let at = text.find(&name).unwrap_or(0);
-    ui::col()
-        .gap_2()
-        .child(ui::divider(Some("Older Posts"), cx))
-        .child(div().text_center().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(StyledText::new(text.clone()).with_highlights([(at..at + name.len(), bold)])))
 }
 
 #[cfg(debug_assertions)]
-pub(crate) mod demo {
-    use gpui_kit::{Context, Window};
-    use serde_json::{Value, json};
-
-    use super::{DISCORD_EPOCH, ForumState, PendingFile};
-    use crate::{
-        Waffle,
-        discord::{ReadState, parse_channel, parse_message},
-    };
-
-    // (hours ago, title, author id, author, tags, pinned, archived, replies, opening message, pictures)
-    type PostFixture = (i64, &'static str, &'static str, &'static str, &'static [&'static str], bool, bool, u32, &'static str, &'static [&'static str]);
-
-    // How far we've read each post: all of it, behind with FORUM_UNREADS' count, or behind before it
-    // answers. Posts without one read as New when they're newer than the forum's read state.
-    #[derive(Clone, Copy)]
-    enum Read {
-        All,
-        Behind(Option<u32>),
-        Never,
-    }
-
-    const READS: [Read; 8] = [Read::All, Read::Behind(Some(31)), Read::Never, Read::Behind(Some(4)), Read::All, Read::Behind(None), Read::All, Read::All];
-
-    // A snowflake from `hours` ago, so cards show believable times.
-    fn id_ago(hours: i64, salt: u64) -> String {
-        let ms = chrono::Utc::now().timestamp_millis() - hours * 3_600_000;
-        ((((ms - DISCORD_EPOCH) as u64) << 22) + salt).to_string()
-    }
-
-    fn tag(id: &str, name: &str, emoji: Option<&str>, moderated: bool) -> Value {
-        json!({ "id": id, "name": name, "emoji_id": null, "emoji_name": emoji, "moderated": moderated })
-    }
-
-    // `forum` (list) and `forum-gallery`: a forum with six tags, guidelines, a template and eight posts,
-    // previews and unread counts filled in; `forum-search`, `forum-sort` and `forum-new-post` open its
-    // search, Sort & View and New post (with the guidelines and a file).
-    pub(crate) fn open(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
-        let forum_json = json!({
-            "id": "forum", "type": 15, "name": "game-feedback", "parent_id": "c0", "position": 1,
-            "topic": "Ideas and bugs for the next patch. One post per idea, tag it.\n\n## Before you post\n- Search first: add to an existing post instead of starting a new one.\n- **Bugs**: say what you did, what happened and what you expected.\n- **Ideas**: one per post, so they can be ranked by reactions.\n\nPosts without a tag are closed after a day.",
-            "template": "**What happened?**\n\n**What did you expect?**\n",
-            "rate_limit_per_user": 600,
-            "flags": 16, "default_forum_layout": (if scene == "forum-gallery" { 2 } else { 1 }),
-            "default_reaction_emoji": { "emoji_id": null, "emoji_name": "\u{1f44d}" },
-            "available_tags": [
-                tag("t-bug", "Bug", Some("\u{1f41b}"), false),
-                tag("t-idea", "Idea", Some("\u{1f4a1}"), false),
-                tag("t-balance", "Balance", Some("\u{2696}\u{fe0f}"), false),
-                tag("t-ranked", "Ranked", None, false),
-                tag("t-maps", "Maps", None, false),
-                tag("t-solved", "Solved", Some("\u{2705}"), true),
-            ],
-        });
-        let Some(forum) = parse_channel(&forum_json, "1") else { return };
-        let posts: [PostFixture; 8] = [
-            (72, "Read me: how ideas get triaged before every patch", "4194304", "kiwi", &["t-idea"], true, false, 12, "Every week we pick the top five ideas by reactions. Tag yours or it won't be seen.", &[]),
-            (2, "Show the healer's ult range on the minimap while it charges, and on the scoreboard after a wipe so people can see who stood outside", "8388608", "Wren", &["t-idea", "t-ranked", "t-maps", "t-balance", "t-bug"], false, false, 48, "Half our wipes are people standing one step outside the ring. A faint circle would fix most of it.", &["demo/banner.png"]),
-            (5, "Tank shield uptime is out of hand", "12582912", "moss lantern", &["t-balance", "t-ranked"], false, false, 9, "Shield uptime went from 40% to 85% and every ranked match is now a staring contest.", &[]),
-            (20, "Night versions of every map", "16777216", "toma reed", &["t-maps", "t-idea"], false, false, 17, "Fog and torches on the big ones. Mockups attached.", &["brand/icons/blueprint.png", "brand/icons/riso.png", "brand/icons/paper.png", "demo/banner.png"]),
-            (30, "Crash when alt-tabbing during the loading screen", "20971520", "ferris", &["t-bug"], false, false, 4, "Happens every time on the second map load. Logs below.", &["brand/icons/riso.png"]),
-            (50, "Queue times for duo above Diamond", "8388608", "Wren", &[], false, false, 2, "Forty minutes last night. Anyone else?", &[]),
-            (400, "Ping the minimap when a teammate is downed", "12582912", "moss lantern", &["t-ranked", "t-solved"], false, true, 1, "Archived after 3 days without replies. Reply to bring it back.", &[]),
-            (900, "Audio cuts out after 2 hours of play", "16777216", "toma reed", &["t-bug"], false, true, 6, "Restarting the game fixes it until the next long session.", &["brand/icons/paper.png"]),
-        ];
-        let mut state = ForumState::default();
-        let mut active = Vec::new();
-        for (i, (hours, title, author_id, author, tags, pinned, archived, replies, content, pictures)) in posts.into_iter().enumerate() {
-            let id = id_ago(hours, i as u64);
-            let last = id_ago(hours / 3, 100 + i as u64);
-            let post_json = json!({
-                "id": id, "type": 11, "name": title, "parent_id": "forum", "guild_id": "1", "owner_id": author_id,
-                "last_message_id": last, "message_count": replies, "applied_tags": tags, "flags": (if pinned { 2 } else { 0 }),
-                "thread_metadata": { "archived": archived, "locked": false },
-            });
-            let Some(post) = parse_channel(&post_json, "1") else { continue };
-            let attachments: Vec<Value> = pictures.iter().enumerate().map(|(n, url)| json!({ "id": format!("a{i}-{n}"), "filename": "shot.png", "url": url, "proxy_url": url, "width": 1200, "height": 800, "content_type": "image/png" })).collect();
-            let face = ["\u{1f525}", "\u{1f44d}", "\u{2764}\u{fe0f}"][i % 3];
-            let reactions = if i % 3 == 2 { json!([]) } else { json!([{ "emoji": { "id": null, "name": face }, "count": 3 + i * 7, "me": false }]) };
-            let first = json!({
-                "id": id, "channel_id": id, "guild_id": "1", "content": content, "timestamp": "2026-11-20T10:00:00Z", "type": 0,
-                "author": { "id": author_id, "username": author, "global_name": author, "avatar": null },
-                "attachments": attachments, "embeds": [], "reactions": reactions,
-            });
-            if let Some(message) = parse_message(&first) {
-                state.previews.insert(post.id.clone(), message);
-            }
-            let read = match READS[i] {
-                Read::All => Some(last.parse().unwrap_or(0)),
-                Read::Behind(_) => Some(id.parse().unwrap_or(0)),
-                Read::Never => None,
-            };
-            if let Some(last_read) = read {
-                waffle.read_states.insert(post.id.clone(), ReadState { last_read, mentions: 0 });
-            }
-            if let Read::Behind(Some(count)) = READS[i] {
-                state.unread_counts.insert(post.id.clone(), count);
-            }
-            match archived {
-                true => state.archived.push(post),
-                false => active.push(post),
-            }
-        }
-        let forum_read = id_ago(10, 0).parse().unwrap_or(0);
-        waffle.read_states.insert("forum".into(), ReadState { last_read: forum_read, mentions: 0 });
-        waffle.forums.insert("forum".into(), state);
-        if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
-            guild.channels.push(forum.clone());
-            guild.threads.extend(active);
-        }
-        waffle.open_channel(forum, window, cx);
-        match scene {
-            "forum-search" => {
-                let search = waffle.ensure_forum_search("forum", window, cx);
-                search.update(cx, |s, cx| s.set_value("minimap", window, cx));
-                waffle.forums.entry("forum".into()).or_default().filter = vec!["t-idea".into()];
-            }
-            "forum-sort" => waffle.open_live_menu(gpui_kit::point(gpui_kit::px(1000.), gpui_kit::px(110.)), |this| this.sort_view_entries("forum"), cx),
-            "forum-new-post" => {
-                waffle.open_new_post("forum".into(), window, cx);
-                if let Some(composer) = waffle.composer_mut() {
-                    composer.tags = vec!["t-idea".into()];
-                    composer.files = vec![PendingFile { path: "brand/icons/blueprint.png".into(), name: "night-map-mockup.png".into(), size: 184_320, spoiler: false, description: None }];
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-// A post card still loading: title, two lines of its opening message, and the foot.
-fn post_skeleton(i: usize, cx: &gpui_kit::App) -> AnyElement {
-    let line = |part: &str, width: f32| ui::skeleton(SharedString::from(format!("post-skel-{part}-{i}")), 4., cx).h_3().w(gpui_kit::relative(width));
-    ui::col()
-        .p_4()
-        .gap_2p5()
-        .squircle(ui::RADIUS_MD)
-        .bg(palette::surface(Level::Sidebar, cx))
-        .child(line("title", [0.5, 0.35, 0.6, 0.42][i % 4]).h_4())
-        .child(line("body", 0.9))
-        .child(line("body2", 0.7))
-        .child(line("foot", 0.25))
-        .into_any_element()
-}
+pub(crate) mod demo;
 
 #[cfg(test)]
 mod tests {

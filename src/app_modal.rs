@@ -83,7 +83,7 @@ impl Waffle {
         let initial: Vec<FieldValue> = modal.fields().iter().map(|f| self.field_initial(&modal.channel_id, f)).collect();
         let count = initial.len();
         self.app_modal = Some(AppModal { modal, editors: Vec::new(), built: false, values: initial.clone(), initial, problems: vec![None; count], sent: None, files: HashMap::new(), staging: false });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the app modal is drawn by the Overlays view, which re-renders only with the app
     }
 
     fn build_app_modal_editors(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -115,7 +115,7 @@ impl Waffle {
                 m.problems = problems;
             }
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the app modal is drawn by the Overlays view, which re-renders only with the app
     }
 
     // A field's starting value; a user, role, channel or mentionable select starts at its `default_values`
@@ -168,7 +168,7 @@ impl Waffle {
             if let Some(m) = self.app_modal.as_mut() {
                 m.problems = problems;
             }
-            return cx.notify();
+            return cx.notify(); // lint-allow(global-notify): the app modal is drawn by the Overlays view, which re-renders only with the app
         }
         // Discord uploads the form's files first, then sends the submit naming them.
         let uploads: Vec<_> = (0..values.len()).flat_map(|ix| m.files.get(&ix).into_iter().flatten()).map(PendingFile::upload).collect();
@@ -194,14 +194,14 @@ impl Waffle {
                     Err(_) => {
                         let failed = PendingInteraction { channel_id, app: modal.application.clone(), id: None, kind: InteractionKind::Modal, failure: Some(MODAL_FAILED.to_owned()) };
                         this.interactions.insert(nonce, failed);
-                        cx.notify();
+                        cx.notify(); // lint-allow(global-notify): the app modal is drawn by the Overlays view, which re-renders only with the app
                     }
                 }
             })
             .ok();
         })
-        .detach();
-        cx.notify();
+        .detach(); // lint-allow(detached-task): ends itself once its upload or file prompt resolves, and holds only a weak handle
+        cx.notify(); // lint-allow(global-notify): the app modal is drawn by the Overlays view, which re-renders only with the app
     }
 
     fn send_app_modal(&mut self, modal: &Modal, values: &[FieldValue], uploads: &[app_commands::CommandAttachment], nonce: String, cx: &mut Context<Self>) {
@@ -219,7 +219,7 @@ impl Waffle {
             let Ok(Ok(Some(paths))) = paths.await else { return };
             this.update(cx, |this, cx| this.add_app_modal_files(ix, max, paths, cx)).ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends itself once its upload or file prompt resolves, and holds only a weak handle
     }
 
     fn add_app_modal_files(&mut self, ix: usize, max: usize, paths: Vec<PathBuf>, cx: &mut Context<Self>) {
@@ -276,7 +276,7 @@ impl Waffle {
 
     fn close_app_modal(&mut self, cx: &mut Context<Self>) {
         self.take_app_modal();
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the app modal is drawn by the Overlays view, which re-renders only with the app
     }
 
     // Not verified: whether Discord's modal closes on a click outside (its generic modal layer wasn't
@@ -403,7 +403,7 @@ fn editor(field: &TextInput, window: &mut Window, cx: &mut Context<Waffle>) -> E
             }
             this.on_app_modal_change(cx);
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): the subscription ends when the editor entity, held in AppModal, drops
         return Editor::Paragraph(state);
     }
     let state = cx.new(|cx| {
@@ -419,7 +419,7 @@ fn editor(field: &TextInput, window: &mut Window, cx: &mut Context<Waffle>) -> E
         InputEvent::Change => this.on_app_modal_change(cx),
         _ => {}
     })
-    .detach();
+    .detach(); // lint-allow(detached-task): the subscription ends when the editor entity, held in AppModal, drops
     Editor::Line(state)
 }
 
@@ -445,7 +445,7 @@ fn notice(app: &str, cx: &gpui_kit::App) -> impl IntoElement {
         .bg(palette::hover(cx))
         .text_size(ui::TEXT_SM)
         .text_color(palette::text(cx))
-        .child(div().flex_none().mt_0p5().text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::Warning).size(ui::ICON_MD)))
+        .child(div().flex_none().pt_0p5().text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::Warning).size(ui::ICON_MD)))
         .child(div().min_w_0().child(StyledText::new(text).with_highlights(vec![(lead.len()..lead.len() + app.len(), bold)])))
 }
 

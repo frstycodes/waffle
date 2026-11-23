@@ -30,9 +30,26 @@ use crate::{
     ui::{self, Check, Notice, Squircle, Tone},
 };
 
+// The design page's window, and the widest its content grows before it centres, and the room under it.
+const WINDOW_SIZE: (f32, f32) = (1180., 860.);
+const PAGE_WIDTH: f32 = 1032.;
+const PAGE_FOOT: f32 = 120.;
+// The logo in the header, and the glyphs on the icon board.
+const MARK_SIZE: f32 = 22.;
+// The password field's toggle slot.
+const TOGGLE_SLOT: f32 = 22.;
+// The skeleton's block placeholder.
+const SKELETON_BLOCK: (f32, f32) = (240., 140.);
+// An illustration's size on the empty-state board.
+const ART_SIZE: (f32, f32) = (200., 150.);
+// A lede's widest line, a surface swatch's height and the demo menus' width.
+const LEDE_WIDTH: f32 = 520.;
+const SWATCH_HEIGHT: f32 = 92.;
+const MENU_WIDTH: f32 = 248.;
+
 pub fn open(cx: &mut App) {
     let options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(gpui_kit::Bounds::centered(None, size(px(1180.), px(860.)), cx))),
+        window_bounds: Some(WindowBounds::Windowed(gpui_kit::Bounds::centered(None, size(px(WINDOW_SIZE.0), px(WINDOW_SIZE.1)), cx))),
         titlebar: Some(gpui_kit::TitlebarOptions { title: Some("Waffle Design System".into()), ..Default::default() }),
         ..Default::default()
     };
@@ -198,7 +215,7 @@ impl Render for DesignSystem {
             .text_size(ui::TEXT_SM)
             .line_height(relative(1.45))
             .child(header)
-            .child(ui::col().max_w(px(1032.)).mx_auto().px_6().pb(px(120.)).children(sections))
+            .child(ui::col().w_full().items_center().child(ui::col().w_full().max_w(px(PAGE_WIDTH)).px_6().pb(px(PAGE_FOOT)).children(sections)))
     }
 }
 
@@ -211,7 +228,7 @@ impl DesignSystem {
             .py_2p5()
             .border_b_1()
             .border_color(palette::line(cx))
-            .child(svg().path(MARK).size(px(22.)).text_color(palette::logo_ink(cx)))
+            .child(svg().path(MARK).size(px(MARK_SIZE)).text_color(palette::logo_ink(cx)))
             .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Waffle"))
             .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::NORMAL).text_color(palette::faint(cx)).child("Design system"))
             .child(div().flex_1())
@@ -237,12 +254,13 @@ impl DesignSystem {
                     })
                     .ok();
                 })
+                // lint-allow(detached-task): ends itself after the 1.4s timer, and holds only a weak handle
                 .detach();
             })
         };
         div()
             .child(div().pt_8().text_size(ui::TEXT_XL).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Primitives"))
-            .child(lede("The small parts every screen is built from. Everything here is live: hover, press, Tab to focus, toggle.", cx).mt_1().mb_4())
+            .child(lede("The small parts every screen is built from. Everything here is live: hover, press, Tab to focus, toggle.", cx).pt_1().pb_4())
             .child(
                 section("Buttons", "Verb plus object, sentence case. One primary per surface; secondary is the quiet fill, ghost for low-stakes actions in dense rows, danger only for the destructive step itself.", cx)
                     .pt_0()
@@ -402,7 +420,7 @@ impl DesignSystem {
             this.fields.password.update(cx, |state, cx| state.set_masked(masked, window, cx));
             cx.notify();
         }));
-        div().w(px(22.)).h_7().child(toggle)
+        div().w(px(TOGGLE_SLOT)).h_7().child(toggle)
     }
 
     fn choices(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -525,7 +543,7 @@ impl DesignSystem {
                         .flex_1()
                         .child(ui::skeleton((id, 1usize), ui::RADIUS_XS, cx).h_3().w(px(widths.0)))
                         .child(ui::skeleton((id, 2usize), ui::RADIUS_XS, cx).h_3().w(relative(widths.1)))
-                        .when(block, |d| d.child(ui::skeleton((id, 3usize), ui::RADIUS_LG, cx).w(px(240.)).h(px(140.)))),
+                        .when(block, |d| d.child(ui::skeleton((id, 3usize), ui::RADIUS_LG, cx).w(px(SKELETON_BLOCK.0)).h(px(SKELETON_BLOCK.1)))),
                 )
         };
         let strong = |text: &'static str, cx: &App| div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(text);
@@ -556,10 +574,10 @@ impl DesignSystem {
                         .grid()
                         .grid_cols(3)
                         .gap_4()
-                        .child(div().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Page, cx)).child(ui::empty_state("empty-idle", Mood::Idle, "No one's around", "None of your friends are online. Invite someone to play.", cx).child(ui::button("e-add", Tone::Primary, cx).mt_2().child("Add friend"))))
+                        .child(div().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Page, cx)).child(ui::empty_state("empty-idle", Mood::Idle, "No one's around", "None of your friends are online. Invite someone to play.", cx).child(div().pt_2().child(ui::button("e-add", Tone::Primary, cx).child("Add friend")))))
                         .child(div().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Page, cx)).child(ui::empty_state("empty-wait", Mood::Waiting, "Loading messages…", "Fetching the last 50 messages in #general.", cx))),
                 )
-                .child(ui::row().items_stretch().flex_wrap().gap_4().children(crate::illustration::Illustration::ALL.map(|art| div().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Page, cx)).child(gpui_kit::img(art.path()).w(px(200.)).h(px(150.))))))
+                .child(ui::row().items_stretch().flex_wrap().gap_4().children(crate::illustration::Illustration::ALL.map(|art| div().squircle(ui::RADIUS_LG).bg(palette::surface(Level::Page, cx)).child(gpui_kit::img(art.path()).w(px(ART_SIZE.0)).h(px(ART_SIZE.1))))))
                 .child(ui::col().items_center().gap_2().child(ui::toast("toast", Glyph::Checkmark, palette::positive_ink(cx), "Invite link copied", None, cx))),
         )
     }
@@ -594,6 +612,7 @@ impl DesignSystem {
                 .child(note(detail, cx))
                 .child(
                     div().relative().h_10().squircle(ui::RADIUS_MD).bg(palette::surface(Level::Page, cx)).child(
+                        // lint-allow(custom-mark): ui::badged places marks on faces; this is a motion demo's track and moving block
                         div().absolute().top_2().left_2().right_8().h_6().child(div().absolute().top_0().left(relative(at)).size_6().squircle(8.).bg(palette::accent())),
                     ),
                 )
@@ -612,12 +631,12 @@ fn section(title: &'static str, lede_text: &'static str, cx: &App) -> gpui_kit::
         .py_8()
         .border_b_1()
         .border_color(palette::line(cx))
-        .child(div().text_size(ui::TEXT_LG).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).mb_1().child(title))
-        .child(lede(lede_text, cx).mb_4())
+        .child(div().text_size(ui::TEXT_LG).line_height(relative(1.2)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).pb_1().child(title))
+        .child(lede(lede_text, cx).pb_4())
 }
 
 fn lede(text: &'static str, cx: &App) -> gpui_kit::Div {
-    div().max_w(px(520.)).text_color(palette::muted(cx)).child(text)
+    div().max_w(px(LEDE_WIDTH)).text_color(palette::muted(cx)).child(text)
 }
 
 // The design page's board: the sidebar fill, a hairline, the card radius, 24px in.
@@ -649,7 +668,7 @@ fn glyph(glyph: Glyph) -> impl IntoElement {
 fn colour(cx: &App) -> impl IntoElement {
     let page = palette::surface(Level::Page, cx);
     let surface = |name: &'static str, token: &'static str, level: Level| {
-        ui::col().flex_1().h(px(92.)).p_2p5().bg(palette::surface(level, cx)).justify_end().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(name)).child(token)
+        ui::col().flex_1().h(px(SWATCH_HEIGHT)).p_2p5().bg(palette::surface(level, cx)).justify_end().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(name)).child(token)
     };
     let ink = |name: &'static str, color: Hsla, use_: &'static str| {
         ui::row()
@@ -719,7 +738,7 @@ fn edge_top(el: gpui_kit::Div) -> gpui_kit::Div {
 }
 
 fn h3(text: &'static str, cx: &App) -> gpui_kit::Div {
-    div().mt_6().mb_3().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(text)
+    div().pt_6().pb_3().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(text)
 }
 
 // "4.62:1 AA", the way the page labels each ink against what it sits on.
@@ -761,7 +780,7 @@ fn icons(cx: &App) -> impl IntoElement {
         Glyph::Crown,
     ];
     section("Icons", "Reicon's filled weight, like Discord; line-only glyphs (#, +, arrows) stay lines. The full set is design/icons.html.", cx)
-        .child(board(cx).child(row().gap_4().text_color(palette::text(cx)).children(set.map(|g| Icon::new(g).size(px(22.))))))
+        .child(board(cx).child(row().gap_4().text_color(palette::text(cx)).children(set.map(|g| Icon::new(g).size(px(MARK_SIZE))))))
 }
 
 
@@ -781,13 +800,13 @@ fn layout(cx: &App) -> impl IntoElement {
             )
             .child(
                 ui::surface(cx)
-                    .w(px(248.))
+                    .w(px(MENU_WIDTH))
                     .child(ui::menu_row("m-reply", cx).child(div().text_color(palette::muted(cx)).child(glyph(Glyph::Reply))).child(div().flex_1().child("Reply")))
                     .child(ui::menu_row("m-react", cx).child(div().text_color(palette::muted(cx)).child(glyph(Glyph::EmojiAdd))).child(div().flex_1().child("Add reaction")))
                     .child(ui::menu_row("m-copy", cx).child(div().text_color(palette::muted(cx)).child(glyph(Glyph::Copy))).child(div().flex_1().child("Copy text")))
-                    .child(ui::menu_row("m-mark", cx).child(div().flex_1().child("Mark as unread")).child(ui::check(Check::On, cx).size(px(18.))))
+                    .child(ui::menu_row("m-mark", cx).child(div().flex_1().child("Mark as unread")).child(ui::check(Check::On, cx).size(ui::ICON_LG)))
                     .child(ui::menu_row("m-mode", cx).child(div().flex_1().child("Push to talk")).child(ui::radio_with(false, 18., palette::line_strong(cx))))
-                    .child(div().my_1().mx_2().h(ui::HAIRLINE).bg(palette::line(cx)))
+                    .child(div().px_2().py_1().child(ui::divider(None, cx)))
                     .child(ui::menu_row("m-delete", cx).danger(cx).child(glyph(Glyph::Trash)).child("Delete message")),
             )
             .child(overflow(cx)),
@@ -799,7 +818,7 @@ fn layout(cx: &App) -> impl IntoElement {
 fn overflow(cx: &App) -> impl IntoElement {
     let name = "an unreasonably long display name that never fits in a sidebar row";
     ui::col()
-        .w(px(248.))
+        .w(px(MENU_WIDTH))
         .gap_1()
         .p_2()
         .border_1()

@@ -50,6 +50,10 @@ const STAGE_MODERATOR: u64 = perm::MANAGE_CHANNELS | perm::MUTE_MEMBERS | perm::
 // GAP: rows past this many members aren't listed; searching narrows to the rest.
 const MEMBER_CAP: usize = 100;
 const ACCESS_LIST_HEIGHT: f32 = 320.;
+// The leading of the small notes under a section.
+const NOTE_LEADING: f32 = 17.;
+// A picked member's or role's pill height.
+const PILL_HEIGHT: f32 = 26.;
 
 pub(crate) struct CreateChannel {
     guild_id: String,
@@ -116,22 +120,22 @@ impl Waffle {
                     this.shape_channel_name(window, cx);
                 }
             }),
-            cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify()),
+            cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify()), // lint-allow(global-notify): the create-channel dialog is drawn by the app's own render, outside the columns
         ];
         self.create_channel = Some(CreateChannel { guild_id, parent, category, kind, private: false, picked: Vec::new(), choosing_access: false, search, _subscriptions: subscriptions });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the create-channel dialog is drawn by the app's own render, outside the columns
     }
 
     fn close_create_channel(&mut self, cx: &mut Context<Self>) {
         self.create_channel = None;
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the create-channel dialog is drawn by the app's own render, outside the columns
     }
 
     // Normalizes the name as typed, as Discord does on every keystroke.
     fn shape_channel_name(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(kind) = self.create_channel.as_ref().map(|f| f.kind) else { return };
         self.dialog_input.update(cx, |state, cx| reshape(state, kind, window, cx));
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the create-channel dialog is drawn by the app's own render, outside the columns
     }
 
     fn set_channel_kind(&mut self, kind: u64, window: &mut Window, cx: &mut Context<Self>) {
@@ -144,7 +148,7 @@ impl Waffle {
             state.set_placeholder(placeholder(kind), window, cx);
             reshape(state, kind, window, cx);
         });
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the create-channel dialog is drawn by the app's own render, outside the columns
     }
 
     fn toggle_create_private(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -154,7 +158,7 @@ impl Waffle {
         if to_text {
             return self.set_channel_kind(TEXT, window, cx);
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the create-channel dialog is drawn by the app's own render, outside the columns
     }
 
     fn toggle_access(&mut self, pick: Pick, cx: &mut Context<Self>) {
@@ -163,7 +167,7 @@ impl Waffle {
             Some(at) => _ = form.picked.remove(at),
             None => form.picked.push(pick),
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the create-channel dialog is drawn by the app's own render, outside the columns
     }
 
     // The first step's primary action: Next into the access step for a private channel or a Stage,
@@ -176,14 +180,14 @@ impl Waffle {
         }
         form.choosing_access = true;
         form.search.update(cx, |state, cx| state.focus(window, cx));
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the create-channel dialog is drawn by the app's own render, outside the columns
     }
 
     fn back_to_channel_info(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(form) = self.create_channel.as_mut() else { return };
         form.choosing_access = false;
         self.dialog_input.update(cx, |state, cx| state.focus(window, cx));
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the create-channel dialog is drawn by the app's own render, outside the columns
     }
 
     pub(crate) fn submit_create_channel(&mut self, cx: &mut Context<Self>) {
@@ -292,13 +296,15 @@ impl Waffle {
         let head = section_label(if stage { "Moderators" } else { "Members and roles" }, cx)
             .flex()
             .items_baseline()
-            .child(div().ml_auto().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(muted).child(access_count(form.picked.len(), stage)));
+            .justify_between()
+            .child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(muted).child(access_count(form.picked.len(), stage)));
         let explainer = stage.then(|| {
-            div().text_size(ui::TEXT_XS).line_height(px(17.)).text_color(muted).child("Stage moderators are Speakers who can add and remove other Speakers. They can also start the Stage event. Stage moderators don't have to be mods of the server.")
+            div().text_size(ui::TEXT_XS).line_height(px(NOTE_LEADING)).text_color(muted).child("Stage moderators are Speakers who can add and remove other Speakers. They can also start the Stage event. Stage moderators don't have to be mods of the server.")
         });
         let pills = (!form.picked.is_empty()).then(|| ui::row().items_stretch().flex_wrap().gap_1p5().children(form.picked.iter().map(|p| pick_pill(p, cx).into_any_element())));
         let list: AnyElement = match candidates.is_empty() {
             true => div().py_4().text_center().text_color(muted).child(format!("No members or roles match “{}”", query.trim())).into_any_element(),
+            // lint-allow(unvirtualized-list): at most 100 members plus the server's roles, a few hundred rows
             false => ui::col()
                 .id("create-channel-access")
                 .gap_0p5()
@@ -474,30 +480,15 @@ fn section_label(text: &'static str, cx: &Context<Waffle>) -> gpui_kit::Div {
 }
 
 fn announcement_note(cx: &Context<Waffle>) -> impl IntoElement {
-    div().text_size(ui::TEXT_XS).line_height(px(17.)).text_color(palette::muted(cx)).child("Users can Follow this channel in their own servers. Posts you \"Publish\" from this channel will appear in those servers.")
+    div().text_size(ui::TEXT_XS).line_height(px(NOTE_LEADING)).text_color(palette::muted(cx)).child("Users can Follow this channel in their own servers. Posts you \"Publish\" from this channel will appear in those servers.")
 }
 
 // One type: radio, then the glyph inline with its name and its line under; the chosen one carries the selected fill.
 fn type_row(kind: u64, private: bool, on: bool, window: &mut Window, cx: &mut Context<Waffle>) -> impl IntoElement {
-    let (selected, hover, strong, muted) = (palette::selected(cx), palette::hover(cx), palette::strong(cx), palette::muted(cx));
     let (name, hint) = type_label(kind);
-    ui::row()
-        .id(SharedString::from(format!("create-channel-type-{kind}")))
-        .gap_3()
-        .px_3()
-        .py_2p5()
-        .squircle(ui::RADIUS_MD)
-        .cursor_pointer()
-        .when(on, |r| r.bg(selected))
-        .when(!on, |r| r.hover(move |s| s.bg(hover)))
-        .child(ui::radio_live(SharedString::from(format!("create-channel-radio-{kind}")), on, window, cx))
-        .child(
-            ui::col()
-                .flex_1()
-                .gap_0p5()
-                .child(ui::row().gap_1p5().text_color(strong).child(type_icon(kind, private && allows_private(kind)).size(ui::ICON_LG)).child(div().font_weight(FontWeight::MEDIUM).child(name)))
-                .child(div().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(muted).child(hint)),
-        )
+    let radio = ui::radio_live(SharedString::from(format!("create-channel-radio-{kind}")), on, window, cx);
+    ui::pick_row_icon(SharedString::from(format!("create-channel-type-{kind}")), radio, type_icon(kind, private && allows_private(kind)), name, Some(hint.into()), cx)
+        .toggled(on, cx)
         .on_click(cx.listener(move |this, _, window, cx| this.set_channel_kind(kind, window, cx)))
 }
 
@@ -512,7 +503,7 @@ fn private_row(on: bool, window: &mut Window, cx: &mut Context<Waffle>) -> impl 
                 .flex_1()
                 .gap_0p5()
                 .child(ui::row().gap_1p5().text_color(strong).child(Icon::new(Glyph::HashtagLock).size(ui::ICON_MD)).child(div().font_weight(FontWeight::MEDIUM).child("Private channel")))
-                .child(div().text_size(ui::TEXT_XS).line_height(px(17.)).text_color(muted).child("Only selected members and roles will be able to view this channel.")),
+                .child(div().text_size(ui::TEXT_XS).line_height(px(NOTE_LEADING)).text_color(muted).child("Only selected members and roles will be able to view this channel.")),
         )
         .child(ui::switch_live("create-channel-private-switch", on, window, cx))
         .on_click(cx.listener(|this, _, window, cx| this.toggle_create_private(window, cx)))
@@ -520,8 +511,9 @@ fn private_row(on: bool, window: &mut Window, cx: &mut Context<Waffle>) -> impl 
 
 fn pick_pill(pick: &Pick, cx: &mut Context<Waffle>) -> impl IntoElement {
     let remove = pick.clone();
+    // lint-allow(custom-badge): ui::chip's removable look is an outlined chip, not this filled selected-tone pill
     ui::row()
-        .h(px(26.))
+        .h(px(PILL_HEIGHT))
         .pl_2()
         .pr_px()
         .gap_0p5()

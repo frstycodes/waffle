@@ -1,6 +1,6 @@
 // The rows atop a server's channel list: Get Started, Finish joining, Server Guide, Channels & Roles
 // (design/explore-joining.html §3).
-use gpui_kit::{AnyElement, Context, FontWeight, SharedString, Stateful, Div, Window, component::Icon, div, prelude::*, relative};
+use gpui_kit::{AnyElement, Context, FontWeight, SharedString, Stateful, Div, Window, component::Icon, div, prelude::*};
 
 use super::{GuildPage, browse::page_title, features, settings_flags::OPT_IN_CHANNELS_ON};
 use crate::{
@@ -9,7 +9,7 @@ use crate::{
     icons::Glyph,
     palette,
     sidebar::{RowState, channel_row},
-    ui::{self, Squircle},
+    ui,
 };
 
 impl Waffle {
@@ -38,7 +38,7 @@ impl Waffle {
             rows.push(self.page_row("channels-roles", Glyph::Search, page_title(has_prompts), GuildPage::ChannelsRoles, cx));
         }
         if !rows.is_empty() {
-            rows.push(div().h(ui::HAIRLINE).mx_2p5().my_1p5().bg(palette::line(cx)).into_any_element());
+            rows.push(div().px_2p5().py_1p5().child(ui::divider(None, cx)).into_any_element());
         }
         rows
     }
@@ -60,28 +60,25 @@ impl Waffle {
 // The new member's to-dos: a raised card with the count and a success-coloured bar; opens the Server Guide.
 fn get_started(done: usize, total: usize, cx: &mut Context<Waffle>) -> AnyElement {
     let fraction = done as f32 / total as f32;
-    let (line, hover) = (palette::line(cx), palette::hover(cx));
-    ui::col()
-        .id("get-started")
+    ui::card("get-started", cx)
+        .bordered(cx)
+        .flex_col()
+        .items_stretch()
         .flex_none()
+        // lint-allow(raw-margin): spaces the card from the neighbouring channel rows, whose list (sidebar.rs) owns no gap
         .mt_0p5()
+        // lint-allow(raw-margin): spaces the card from the neighbouring channel rows, whose list (sidebar.rs) owns no gap
         .mb_1p5()
         .px_3()
         .py_2p5()
         .gap_2()
-        .squircle(ui::RADIUS_MD)
-        .bg(palette::surface(palette::Level::Raised, cx))
-        .border_1()
-        .border_color(line)
-        .cursor_pointer()
-        .hover(move |s| s.bg(hover))
         .child(
             ui::row()
                 .justify_between()
                 .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Get Started"))
                 .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(format!("{done} of {total}"))),
         )
-        .child(div().h_1p5().w_full().rounded_full().bg(palette::line_strong(cx)).child(div().h_full().w(relative(fraction)).rounded_full().bg(palette::positive_ink(cx))))
+        .child(ui::progress_bar(fraction, cx).fill(palette::positive_ink(cx)).joined())
         .on_click(cx.listener(|this, _, _, cx| this.open_guild_page(GuildPage::Guide, cx)))
         .into_any_element()
 }

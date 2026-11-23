@@ -20,6 +20,18 @@ use crate::{
 };
 
 const BANNER_HEIGHT: f32 = 140.;
+// The widest the guide's column grows before it centres.
+const PAGE_WIDTH: f32 = 720.;
+// The banner's title size, between the type scale's 20 and 28.
+const BANNER_TITLE: f32 = 24.;
+// A to-do's state mark (a ring, or a tick on green), and the ring's width.
+const STATE_MARK: f32 = 22.;
+const STATE_RING: f32 = 1.5;
+// A to-do row's minimum height.
+const TODO_HEIGHT: f32 = 56.;
+// The skeleton's welcome and to-do blocks.
+const SKELETON_WELCOME: f32 = 88.;
+const SKELETON_TODOS: f32 = 180.;
 
 #[derive(Default)]
 pub struct GuideView {
@@ -49,8 +61,9 @@ impl Waffle {
             .text_color(palette::strong(cx))
             .child(Icon::new(Glyph::Signature).size(ui::ICON_XL).text_color(palette::faint(cx)))
             .child(ui::line(format!("{} Server Guide", guild.name)))
-            .child(div().ml_auto().child(self.caption_clearance(true)));
-        let column = ui::col().w_full().max_w(px(720.)).mx_auto().gap_6().child(banner(guild)).child(body);
+            .child(div().flex_1())
+            .child(self.caption_clearance(true));
+        let column = ui::col().w_full().items_center().child(ui::col().w_full().max_w(px(PAGE_WIDTH)).gap_6().child(banner(guild)).child(body));
         ui::col()
             .relative()
             .flex_1()
@@ -133,8 +146,10 @@ impl Waffle {
         let empty = HashSet::new();
         let done = self.join.done_actions.get(&guild.id).unwrap_or(&empty);
         let (strong, ink) = (palette::strong(cx), palette::accent_ink(cx));
+        // lint-allow(custom-badge): ui::callout puts its actions under the text; this bar keeps its button at the row's end
         let bar = ui::row()
             .id("guide-action-bar")
+            // lint-allow(raw-margin): insets the bar from the composer column it is returned into, which has no padding of its own
             .mx_4()
             .min_h_11()
             .pl_3p5()
@@ -234,7 +249,7 @@ impl Waffle {
             return;
         }
         self.server_call(api::complete_action(guild_id, channel_id), |_, _, _| {}, cx);
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the nav's Get Started row, the guide page and the action bar over the composer all draw the to-do's progress
     }
 }
 
@@ -279,7 +294,7 @@ fn banner(guild: &Guild) -> impl IntoElement + use<> {
                 .left_5()
                 .right_5()
                 .bottom_4()
-                .text_size(px(24.))
+                .text_size(px(BANNER_TITLE))
                 .font_weight(FontWeight::BOLD)
                 .text_color(gpui_kit::white())
                 ,
@@ -295,13 +310,13 @@ fn todo_row(guild: &Guild, todo: &MemberAction, done: bool, cx: &mut Context<Waf
     let name = channel.as_ref().map(|c| format!("#{}", c.name)).unwrap_or_default();
     let status = if done { "completed" } else { "not completed" };
     let title_ink = if done { palette::muted(cx) } else { palette::strong(cx) };
-    let state = ui::row().size(px(22.)).flex_none().rounded_full().justify_center();
+    let state = ui::row().size(px(STATE_MARK)).flex_none().rounded_full().justify_center();
     let state = match done {
         true => state.bg(cx.theme().success).text_color(gpui_kit::white()).child(Icon::new(Glyph::Checkmark).size(ui::ICON_SM)),
-        false => state.border(px(1.5)).border_color(palette::line_strong(cx)),
+        false => state.border(px(STATE_RING)).border_color(palette::line_strong(cx)),
     };
     ui::menu_row(SharedString::from(format!("guide-todo-{}", todo.channel_id)), cx)
-        .min_h(px(56.))
+        .min_h(px(TODO_HEIGHT))
         .px_3()
         .py_2()
         .gap_3()
@@ -318,11 +333,12 @@ fn todo_row(guild: &Guild, todo: &MemberAction, done: bool, cx: &mut Context<Waf
         .when_some(channel, |row, channel| row.on_click(cx.listener(move |this, _, window, cx| this.open_channel(channel.clone(), window, cx))))
 }
 
+// lint-allow(custom-component): ui::icon_tile only holds a glyph, not an emoji's image or text
 fn emoji_tile(emoji: Option<&OptionEmoji>, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
     let tile = ui::row().size_9().flex_none().squircle(RADIUS_SM).bg(palette::surface(Level::Raised, cx)).justify_center();
     match (emoji.and_then(OptionEmoji::url), emoji.and_then(|e| e.name.clone())) {
         (Some(url), _) => tile.child(img(url).size_5()),
-        (None, Some(name)) => tile.text_size(px(18.)).child(name),
+        (None, Some(name)) => tile.text_size(ui::TEXT_LG).child(name),
         (None, None) => tile.text_color(palette::faint(cx)).child(Icon::new(Glyph::Hashtag).size(ui::ICON_LG)),
     }
 }
@@ -347,8 +363,8 @@ fn resource_card(ix: usize, channel: &Channel, title: &str, description: Option<
 fn guide_skeleton(cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
     ui::col()
         .gap_3()
-        .child(ui::skeleton("guide-skeleton-welcome", RADIUS_LG, cx).h(px(88.)).w_full())
-        .child(ui::skeleton("guide-skeleton-todos", RADIUS_LG, cx).h(px(180.)).w_full())
+        .child(ui::skeleton("guide-skeleton-welcome", RADIUS_LG, cx).h(px(SKELETON_WELCOME)).w_full())
+        .child(ui::skeleton("guide-skeleton-todos", RADIUS_LG, cx).h(px(SKELETON_TODOS)).w_full())
 }
 
 fn guide_failed(guild_id: String, error: String, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
