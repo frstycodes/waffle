@@ -10,6 +10,9 @@
 # and puts the nearest matches in its block message.
 import os, re, sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ui_style import S, wrap
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ITEM = re.compile(r"^pub (fn|const|struct|enum|trait|static) ([A-Za-z_][A-Za-z0-9_]*)")
 IMPL = re.compile(r"^impl(?:<[^>]*>)? ([A-Z][A-Za-z0-9_]*)\b[^{]*\{")
@@ -115,7 +118,7 @@ def search(text, limit=5):
     for name, at, doc, keys, methods in items():
         s = score(query, name, doc, keys, methods)
         if s > 0:
-            first = (doc.split(". ")[0] + ("." if ". " in doc else "")).strip()[:160]
+            first = (doc.split(". ")[0] + ("." if ". " in doc else "")).strip()
             ranked.append((s, name, at, first, methods))
     ranked.sort(key=lambda r: -r[0])
     return ranked[:limit]
@@ -135,18 +138,18 @@ def main(args):
         return 2
     results = search(text, limit=50 if show_all else 6)
     if not results:
-        print(f"Nothing in the design system matches \"{text}\". Check src/ui/CATALOG.md by eye; if it's truly missing, add it to src/ui/ (CLAUDE.md, rule 2).")
+        print(f"{S.yellow(S.mark('warn'))} Nothing in the design system matches \"{text}\". Check src/ui/CATALOG.md by eye; if it's truly missing, add it to src/ui/ (CLAUDE.md, rule 2).")
     for s, name, at, first, methods in results:
-        print(f"{name}  ({at})")
+        print(f"{S.bold(S.green(name))}  {S.dim(at)}")
         if first:
-            print(f"    {first}")
+            print("    " + wrap(first, 4))
         if methods:
-            print(f"    options: {', '.join('.' + m + '()' for m in methods)}")
+            print("    " + wrap("options: " + ", ".join("." + m + "()" for m in methods), 4, S.cyan))
     offs = search_one_offs(text)
     if offs:
-        print("\nOne-offs of this kind already in app code (a second copy belongs in src/ui/):")
+        print("\n" + S.bold("One-offs of this kind already in app code") + S.dim(" (a second copy belongs in src/ui/):"))
         for rule, entry in offs:
-            print(f"  [{rule}] {entry}")
+            print(f"  {S.yellow(rule)}  " + wrap(entry.lstrip("- "), len(rule) + 4, S.dim))
     return 0
 
 

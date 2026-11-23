@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ui_chains
 import ui_find
 import ui_perf
+from ui_style import S, wrap
 
 # Scopes whose rules ui_lint's line loop leaves to a later pass over the whole file.
 WHOLE_FILE = ("file", "chain", "fn", "render", "ui-thread", "hot-notify", "growth", "probe")
@@ -283,14 +284,45 @@ def nearest(rule, new_lines):
     kind = rule.replace("custom-", "").replace("component", "")
     found = {}
     for _, line in new_lines[:3]:
-        for score, name, at, first, options in ui_find.search(f"{kind} {line}", 3):
-            found.setdefault(name, (at, first, options))
+        # Components only: a token the line happens to name (ui::RADIUS_SM) isn't what to use instead.
+        for score, name, at, first, options in ui_find.search(f"{kind} {line}", 8):
+            if not name.split("::")[-1].isupper():
+                found.setdefault(name, (at, first, options))
     if not found:
         return ""
-    out = "\n  Nearest in the design system (tools/ui_find.py) — use one, or give it the option you need:"
+    out = "\n" + label("use", S.green) + S.dim("nearest in the design system (tools/ui_find.py); use one, or give it the option you need:")
     for name, (at, first, options) in list(found.items())[:4]:
-        out += f"\n    {name} ({at}) {first}" + (f" Options: {', '.join('.' + o + '()' for o in options)}." if options else "")
+        out += "\n" + " " * LABEL + S.green(name) + " " + S.dim(at)
+        if first:
+            out += "\n" + " " * (LABEL + 2) + wrap(first, LABEL + 2, S.dim)
+        if options:
+            out += "\n" + " " * (LABEL + 2) + wrap("options: " + ", ".join("." + o + "()" for o in options), LABEL + 2, S.dim)
     return out
+
+
+# Problems print as a head line, then labelled lines indented under it.
+LABEL = 8
+
+
+def label(text, color):
+    return "  " + color(text.ljust(LABEL - 2))
+
+
+def head(mark, rule, where, detail):
+    return f"{mark} {S.bold(S.red(rule))}  {S.cyan(where)}  {S.dim(detail)}"
+
+
+def fail(rule, where, detail, fix_text, body=""):
+    """One blocking problem: what broke where, the offending lines, and what to do instead."""
+    out = head(S.red(S.mark("fail")), rule, where, detail) + body
+    if fix_text:
+        out += "\n" + label("fix", S.yellow) + wrap(fix_text, LABEL, lambda t: t)
+    return out
+
+
+def note(text, color=None):
+    color = color or S.yellow
+    return f"{color(S.mark('warn'))} " + wrap(text, 2, lambda t: t)
 
 
 def new_components(ref):
@@ -307,12 +339,12 @@ def new_components(ref):
         if not name.startswith("ui::") or raw in names_then or raw.isupper():
             continue
         if not doc:
-            problems.append(f"{name} ({at}) is new and has no description: add the one-sentence comment above it (it's its catalog line).")
+            problems.append(fail("new-component", f"{name} ({at})", "no description", "Add the one-sentence comment above it; it's its catalog line."))
         if not keys and raw[:1].islower():
-            problems.append(f"{name} ({at}) is new and has no `// Keywords:` line: add the words someone would search for it by (tools/ui_find.py).")
+            problems.append(fail("new-component", f"{name} ({at})", "no `// Keywords:` line", "Add the words someone would search for it by (tools/ui_find.py)."))
         near = [r for r in ui_find.search(f"{raw} {doc} {keys}", 8) if r[1].split("::", 1)[1] in names_then][:3]
         if near and raw[:1].islower():
-            notes.append(f"{name} is new. Close to it: " + "; ".join(f"{n} ({a})" for _, n, a, _, _ in near) + ". If one of these could take an option instead, prefer that.")
+            notes.append(note(f"{S.green(name)} is new. Close to it: " + "; ".join(f"{S.green(n)} {S.dim(a)}" for _, n, a, _, _ in near) + ". If one of these could take an option instead, prefer that.", S.blue))
     return problems, notes
 
 
@@ -421,26 +453,35 @@ def file_report(rel, hits, baseline, rules):
     problems, warnings = [], []
     for rule, count, allowed_count in over(rel, hits, baseline):
         if rule in limits:
-            problems.append(f"{rule} in {rel}: {count} lines of code, allowed {allowed_count or limits[rule]}. {fix[rule]}")
+            problems.append(fail(rule, rel, f"{count} lines of code, allowed {allowed_count or limits[rule]}", fix[rule]))
             continue
-        lines = "\n".join(f"  {rel}:{n}: {l.strip()}" for n, l in added_lines(rel, hits[rule])[:20])
-        problems.append(f"{rule} in {rel}: {count}, allowed {allowed_count}. {fix[rule]}")
+        new = added_lines(rel, hits[rule])
+        shown = "".join("\n" + label("at", S.dim) + S.cyan(f"{rel}:{n}") + "  " + l.strip()[: max(20, width_left(rel, n))] for n, l in new[:20])
+        if len(new) > 20:
+            shown += "\n" + " " * LABEL + S.dim(f"... and {len(new) - 20} more")
+        detail = f"{count - allowed_count} new" + (f" {S.mark('dot')} {allowed_count} allowed from before" if allowed_count else "")
+        extra = ""
         if rule == LIST_RULE:
-            problems[-1] += " " + list_stats()
+            extra += "\n" + label("lists", S.blue) + list_stats()
         if any(r["name"] == rule and needs_reference(r) for r in rules):
-            problems[-1] += nearest(rule, added_lines(rel, hits[rule]))
-        problems[-1] += f"\n{lines}"
+            extra += nearest(rule, new)
+        problems.append(fail(rule, rel, detail, fix[rule], shown) + extra)
     debt = ", ".join(f"{baseline[(rel, r)]} {r}" for r in fix if baseline[(rel, r)] and r not in limits)
     if debt:
         warnings.append(
             f"Careful: {rel} still has {debt} from before the rules. Don't add to them; migrate the lines you touch "
-            f"(src/ui/CATALOG.md has the replacements). A line that can't comply takes `// lint-allow(<rule>): <reason>`."
+            f"(tools/ui_find.py finds the replacements). A line that can't comply takes `// lint-allow(<rule>): <reason>`."
         )
     for rule, limit in limits.items():
         if hits.code_lines >= limit * WARN_AT:
             cap = baseline[(rel, rule)] or limit
             warnings.append(f"Careful: {rel} has {hits.code_lines} lines of code; it may not pass {cap}. {fix[rule]}")
     return problems, " ".join(warnings)
+
+
+def width_left(rel, n):
+    import ui_style
+    return ui_style.width() - LABEL - len(f"{rel}:{n}") - 2
 
 
 def summary(tree, rules):
@@ -452,11 +493,19 @@ def summary(tree, rules):
             totals[r] += 1 if r in limits else len(h)
             by_file[rel] += 0 if r in limits else len(h)
     fix = fixes(rules)
-    out = ["Hand-written UI values and app-wide redraws left (warnings; each count may only fall):"]
-    out += [f"  {totals[r]:>5}  {r}: {fix[r]}" for r in fix if totals[r]]
-    out.append(list_stats())
-    out.append("Most in:")
-    out += [f"  {c:>5}  {f}" for f, c in by_file.most_common(12)]
+    left = [(r, totals[r]) for r in fix if totals[r]]
+    out = [S.bold("What's left from before the rules") + S.dim(" (each count may only fall; src/ui/rules.baseline)")]
+    if not left:
+        out.append(f"  {S.green(S.mark('ok'))} nothing: every file is clean.")
+    name_w = max([len(r) for r, _ in left] + [10])
+    for r, c in sorted(left, key=lambda rc: -rc[1]):
+        out.append(f"  {S.yellow(str(c).rjust(5))}  {S.cyan(r.ljust(name_w))}  " + wrap(fix[r], name_w + 11, S.dim))
+    out += ["", f"  {S.blue(S.mark('arrow'))} {list_stats()}"]
+    if by_file:
+        out += ["", S.bold("Most in")]
+        out += [f"  {S.yellow(str(c).rjust(5))}  {S.cyan(f)}" for f, c in by_file.most_common(12) if c]
+    allows = sum(len(h.allows) for h in tree.values())
+    out += ["", S.dim(f"{allows} lint-allow comments, each listed with its reason in {ONE_OFFS}.")]
     return "\n".join(out)
 
 
@@ -532,10 +581,8 @@ def duplicates(tree, rules):
             for name in names & component:
                 for other_rel, other_n, other in seen[name]:
                     if ui_chains.similarity(methods, other) >= DUPLICATE_AT:
-                        problems.append(
-                            f"{name}: {rel}:{n} is the same element as {other_rel}:{other_n} (allowed twice). Two copies make a"
-                            " component: move it into src/ui/ (or give the closest ui:: item the option) and use it in both."
-                        )
+                        problems.append(fail(name, f"{rel}:{n}", f"the same element as {other_rel}:{other_n}, allowed twice",
+                            "Two copies make a component: move it into src/ui/ (or give the closest ui:: item the option) and use it in both."))
                 seen[name].append((rel, n, methods))
     return problems
 
@@ -545,13 +592,13 @@ def check(rules):
     problems = [p for rel, hits in tree.items() for p in file_report(rel, hits, baseline, rules)[0]]
     problems += duplicates(tree, rules)
     if not os.path.exists(os.path.join(ROOT, ONE_OFFS)) or open(os.path.join(ROOT, ONE_OFFS), encoding="utf-8").read() != one_offs(tree, rules):
-        problems.append(f"{ONE_OFFS} is stale: run `python3 tools/ui_lint.py --update`.")
+        problems.append(fail("stale", ONE_OFFS, "out of date", "Run `py -3 tools/ui_lint.py --update` (python3 where it's on PATH)."))
     counts = Counter({(rel, r): len(h) for rel, hits in tree.items() for r, h in hits.items()})
     fell = [f"{f}:{r}" for (f, r), c in baseline.items() if counts[(f, r)] < c]
     if fell:
-        problems.append(f"Counts fell (good): lock them in with `python3 tools/ui_lint.py --update`: {', '.join(fell)}")
+        problems.append(fail("counts-fell", f"{len(fell)} files", "good news: lock them in", "Run `py -3 tools/ui_lint.py --update`: " + ", ".join(fell)))
     if open(os.path.join(ROOT, CATALOG), encoding="utf-8").read() != catalog():
-        problems.append("src/ui/CATALOG.md is stale: run `python3 tools/ui_lint.py --update`.")
+        problems.append(fail("stale", CATALOG, "out of date", "Run `py -3 tools/ui_lint.py --update` (python3 where it's on PATH)."))
     return problems
 
 
@@ -562,7 +609,7 @@ def update(rules):
     known = {r for _, r in baseline}
     rose = [f"{f}:{r} {c} > {baseline[(f, r)]}" for (f, r), c in counts.items() if c > baseline[(f, r)] and r in known]
     if rose:
-        sys.exit("The baseline only falls; these rose (fix them instead):\n  " + "\n  ".join(rose))
+        sys.exit(f"{S.red(S.mark('fail'))} {S.bold('The baseline only falls; these rose (fix them instead):')}\n  " + "\n  ".join(S.cyan(r) for r in rose))
     with open(os.path.join(ROOT, BASELINE), "w", encoding="utf-8") as f:
         f.write("# Left from before the rules (tools/ui_lint.py). Only ever lower: `python3 tools/ui_lint.py --update`.\n")
         for (rel, r), c in sorted(counts.items()):
@@ -589,11 +636,11 @@ def against(ref):
     names = lambda text: {l.split("\t")[0] for l in text.splitlines() if l.strip() and not l.startswith("#")}
     dropped = names(base_rules) - names(open(os.path.join(ROOT, RULES), encoding="utf-8").read())
     if dropped:
-        problems.append(f"Rules dropped from {RULES}: {', '.join(sorted(dropped))}. Rules are only ever added or tightened.")
+        problems.append(fail("rule-dropped", RULES, ", ".join(sorted(dropped)), "Rules are only ever added or tightened."))
     before, now = _sum(base_baseline or ""), _sum(open(os.path.join(ROOT, BASELINE), encoding="utf-8").read())
     for rule, count in sorted(now.items()):
         if rule in before and count > before[rule]:
-            problems.append(f"{BASELINE}: {rule} rose from {before[rule]} to {count} against {ref}. Fix the new hits instead.")
+            problems.append(fail("baseline-rose", BASELINE, f"{rule}: {before[rule]} {S.mark('arrow')} {count} against {ref}", "Fix the new hits instead of raising the baseline."))
     return problems
 
 
@@ -624,9 +671,18 @@ def hook(event, rules):
     return 0
 
 
+def status(problems, ok_text):
+    """The closing line: what failed, or that nothing did."""
+    if not problems:
+        return f"{S.green(S.mark('ok'))} {S.bold('ui_lint:')} {ok_text}"
+    return f"{S.red(S.mark('fail'))} {S.bold('ui_lint:')} {S.red(f'{len(problems)} problem' + ('s' if len(problems) != 1 else ''))}"
+
+
 def main(args):
     rules = load_rules()
     if args[:1] == ["--hook"]:
+        import ui_style
+        ui_style.plain()
         return hook(args[1], rules)
     if args == ["--update"]:
         return update(rules)
@@ -634,20 +690,20 @@ def main(args):
         problems = against(args[1])
         new, notes = new_components(args[1])
         problems += new
-        for note in notes:
-            print(note)
-        print("\n\n".join(problems) if problems else f"ui_lint: the ratchet held against {args[1]}.")
+        for n in notes:
+            print(n)
+        print("\n\n".join(problems + [status(problems, f"the ratchet held against {args[1]}.")]))
         return 1 if problems else 0
     if args == ["--check"]:
         problems = check(rules)
-        print("\n\n".join(problems) if problems else "ui_lint: nothing new.")
+        print("\n\n".join(problems + [status(problems, "nothing new.")]))
         return 1 if problems else 0
     if args:
         baseline, failed = load_baseline(), False
         for path in args:
             rel = os.path.relpath(os.path.abspath(path), ROOT).replace(os.sep, "/")
             problems, warning = file_report(rel, scan(rel, open(path, encoding="utf-8").read(), rules), baseline, rules)
-            print("\n\n".join(problems + [warning]).strip() or f"{rel}: clean")
+            print("\n\n".join(problems + ([note(warning)] if warning else [])).strip() or f"{S.green(S.mark('ok'))} {S.cyan(rel)}: clean")
             failed |= bool(problems)
         return 1 if failed else 0
     print(summary(scan_tree(rules), rules))

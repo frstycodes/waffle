@@ -766,7 +766,7 @@ _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::r
 
 ## custom-component
 
-_A function named like a component builds it from the design system: wrap the ui:: component (a domain wrapper is fine), or add the component to src/ui/ first (src/ui/CATALOG.md lists what exists)._
+_A function named like a component builds it from the design system: wrap the ui:: component (a domain wrapper is fine), or add the component to src/ui/ first (tools/ui_find.py searches what exists)._
 
 - `src/audio_player.rs` — ui::pill is a label, not a player; this wraps a cached AudioPlayer entity and builds no design-system piece itself
 - `src/call.rs` — ui::button with Tone::Overlay needs an id and a cx, and its callers in sidebar.rs and call/tiles.rs add their own
