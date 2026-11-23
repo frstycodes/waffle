@@ -18,7 +18,8 @@ const CLOSE: u64 = 2;
 // RPC close code for a handshake from a frame we didn't open.
 const CLOSE_UNSUPPORTED: u64 = 4000;
 const ACTIVITY_HOST: &str = "discordsays.com";
-// How long the slot must hold its size before the page is laid out at it.
+// How long the slot must hold its size before the page is laid out at it, when no column drag says when the
+// resize ends (the window resized).
 #[cfg(target_os = "macos")]
 const RESIZE_SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
 // Some activities check for a browser they know; WKWebView's own agent names none.
@@ -43,8 +44,10 @@ pub struct ActivityFrame {
     subscriptions: HashSet<String>,
     #[cfg(target_os = "macos")]
     composed: Option<compose::Composed>,
-    // Waits for a resize to pause before the page takes the new size.
-    #[cfg(target_os = "macos")]
+    // The slot is changing size; the page is scaled to it until the resize ends, then laid out once.
+    resizing: bool,
+    // A column drag is on: the resize ends when it does, not at a pause.
+    held: bool,
     _settle: Option<Task<()>>,
     _inbox: Task<()>,
 }
@@ -58,9 +61,17 @@ impl ActivityFrame {
         let base = format!("https://{app_id}.{ACTIVITY_HOST}/");
         let query = params.into_iter().chain([("frame_id", frame_id.clone()), ("platform", "desktop".into())]);
         let url = reqwest::Url::parse_with_params(&base, query).map(String::from).unwrap_or(base);
+        Self::open(app_id, frame_id, wry::WebViewBuilder::new().with_html(host_page(&url)), window, cx)
+    }
+
+    // A frame on any page, for the demo scenes: nothing on the other end speaks the SDK.
+    pub fn demo(url: &str, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::open("demo".into(), String::new(), wry::WebViewBuilder::new().with_url(url), window, cx)
+    }
+
+    fn open(app_id: String, frame_id: String, page: wry::WebViewBuilder, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let (tx, mut rx) = mpsc::unbounded::<String>();
-        let webview = wry::WebViewBuilder::new()
-            .with_html(host_page(&url))
+        let webview = page
             .with_user_agent(USER_AGENT)
             .with_background_color((0, 0, 0, 255))
             .with_visible(false)
@@ -87,7 +98,8 @@ impl ActivityFrame {
             subscriptions: HashSet::new(),
             #[cfg(target_os = "macos")]
             composed,
-            #[cfg(target_os = "macos")]
+            resizing: false,
+            held: false,
             _settle: None,
             _inbox: inbox,
         }
@@ -195,14 +207,16 @@ impl ActivityFrame {
         let Some(webview) = &self.webview else { return };
         #[cfg(target_os = "macos")]
         if let Some(composed) = &self.composed {
-            // While its slot changes size (the sidebar dragged), the page keeps its size and is scaled to fit:
-            // laying the game out again every frame is what made the drag stutter. It takes the new size once
-            // the slot holds still.
+            // While its slot changes size, the page keeps its size and is scaled to fit; it's laid out once
+            // the resize ends.
             if composed.place(webview, bounds, scale) {
-                self._settle = Some(cx.spawn(async move |this, cx| {
-                    cx.background_executor().timer(RESIZE_SETTLE).await;
-                    _ = this.update(cx, |frame, _| frame.settle());
-                }));
+                self.resizing = true;
+                if !self.held {
+                    self._settle = Some(cx.spawn(async move |this, cx| {
+                        cx.background_executor().timer(RESIZE_SETTLE).await;
+                        _ = this.update(cx, |frame, _| frame.settle());
+                    }));
+                }
             }
             return self.apply_visibility();
         }
@@ -215,8 +229,25 @@ impl ActivityFrame {
         self.apply_visibility();
     }
 
-    #[cfg(target_os = "macos")]
+    // A column drag holds a resize open until it ends.
+    pub fn set_held(&mut self, held: bool) {
+        if self.held == held {
+            return;
+        }
+        self.held = held;
+        if !held && self.resizing {
+            self.settle();
+        }
+    }
+
+    // The resize is over: the page is laid out at the slot's size and shows again.
     fn settle(&mut self) {
+        if self.held {
+            return;
+        }
+        self.resizing = false;
+        self._settle = None;
+        #[cfg(target_os = "macos")]
         if let (Some(composed), Some(webview), Some(bounds)) = (&self.composed, &self.webview, self.placed) {
             composed.resize(webview, bounds.size);
         }
@@ -427,3 +458,4 @@ mod compose {
         window.refresh();
     }
 }
+

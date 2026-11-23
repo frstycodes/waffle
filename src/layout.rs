@@ -76,14 +76,7 @@ impl Waffle {
             }))
             .on_mouse_down(MouseButton::Navigate(NavigationDirection::Back), cx.listener(|this, _, window, cx| this.navigate(false, window, cx)))
             .on_mouse_down(MouseButton::Navigate(NavigationDirection::Forward), cx.listener(|this, _, window, cx| this.navigate(true, window, cx)))
-            .on_mouse_move(cx.listener(Self::on_drag_move))
-            .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
-                let Some(drag) = this.drag.take() else { return };
-                if drag.edge == Edge::CallChat {
-                    this.prefs.save();
-                }
-                cx.notify();
-            }));
+            .when(self.drag.is_some(), |root| root.child(window_drag(cx, Self::on_drag_move, Self::end_drag)));
         let root = self.listen_shortcuts(root, cx);
         self.restore_last_channel(window, cx);
         if let Status::SignedOut(login) = &self.status {
@@ -118,6 +111,14 @@ impl Waffle {
         } else {
             let nav = self.part(Column::Nav, StyleRefinement::default().w(px(sidebar_width)).h_full().flex_none(), cx);
             let main = self.part(Column::Main, StyleRefinement::default().flex_1().min_w_0().h_full(), cx);
+            // With a game open, the sidebar draws after the app, over the game's webview: the webview moves a
+            // frame behind on a quick resize, and covered the sidebar's edge. Deferred content isn't drawn from a
+            // scroll layer, so only then.
+            let nav = match self.activities.frame.is_some() {
+                // lint-allow(raw-floating): the sidebar in its own place; its elements take the pointer themselves
+                true => gpui_kit::deferred(nav).into_any_element(),
+                false => nav,
+            };
             body.child(nav).child(main)
         };
         // Anything drawn over the chat pauses its GIFs (the GIF layer paints above the whole app).
@@ -320,14 +321,15 @@ impl Waffle {
         // the close button, which sits below the caption buttons.
         let drag = div().absolute().top_0().left_0().right_0().h(px(TITLE_HEIGHT)).window_control_area(gpui_kit::WindowControlArea::Drag);
         let main = div().relative().flex_1().min_w_0().h_full().flex().child(main).child(drag);
-        ui::settings_window(id, nav, main, cx).on_mouse_move(cx.listener(Self::on_drag_move)).on_mouse_up(
-            MouseButton::Left,
-            cx.listener(|this, _, _, cx| {
-                if this.drag.take().is_some() {
-                    cx.notify();
-                }
-            }),
-        )
+        ui::settings_window(id, nav, main, cx)
+    }
+
+    fn end_drag(&mut self, cx: &mut Context<Self>) {
+        let Some(drag) = self.drag.take() else { return };
+        if drag.edge == Edge::CallChat {
+            self.prefs.save();
+        }
+        cx.notify();
     }
 
     fn on_drag_move(&mut self, event: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -805,4 +807,33 @@ fn me_button(id: &'static str, glyph: Nav, on: bool, label: &'static str, cx: &A
 fn over_the_game(layer: impl Iterator<Item = AnyElement>) -> gpui_kit::Deferred {
     // lint-allow(raw-floating): a transparent full-window layer must not occlude; each overlay in it occludes itself
     gpui_kit::deferred(div().absolute().inset_0().children(layer))
+}
+
+// A drag's moves and its release, heard by the window wherever the pointer is: element listeners hear only while
+// their element is hovered, and over a native view (an activity's webview) nothing of the app's is, so a drag
+// stalled whenever the pointer crossed onto the game. Rendered only while the drag is on.
+pub(crate) fn window_drag(
+    cx: &mut Context<Waffle>,
+    on_move: impl Fn(&mut Waffle, &MouseMoveEvent, &mut Window, &mut Context<Waffle>) + 'static,
+    on_up: impl Fn(&mut Waffle, &mut Context<Waffle>) + 'static,
+) -> impl IntoElement {
+    let this = cx.weak_entity();
+    gpui_kit::canvas(
+        |_, _, _| {},
+        move |_, _, window, _| {
+            let moved = this.clone();
+            window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                if phase == gpui_kit::DispatchPhase::Bubble {
+                    _ = moved.update(cx, |this, cx| on_move(this, event, window, cx));
+                }
+            });
+            window.on_mouse_event(move |event: &gpui_kit::MouseUpEvent, phase, _, cx| {
+                if phase == gpui_kit::DispatchPhase::Bubble && event.button == MouseButton::Left {
+                    _ = this.update(cx, |this, cx| on_up(this, cx));
+                }
+            });
+        },
+    )
+    .absolute()
+    .size_0()
 }

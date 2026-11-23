@@ -244,20 +244,22 @@ impl Waffle {
             .child(ui::col().h(relative(split)).flex_none().child(self.activity_bar(&app_id, cx)).child(div().flex_1().min_h_0().child(game)))
             .child(handle)
             .child(div().flex_1().min_h_0().flex().child(chat))
-            // AppKit keeps sending a drag to the view it began in, so the split follows over the game too.
-            .on_mouse_move(cx.listener(|this, e: &gpui_kit::MouseMoveEvent, _, cx| {
-                let Some(b) = this.activities.split_bounds.get().filter(|_| this.activities.splitting && e.pressed_button == Some(MouseButton::Left)) else { return };
-                let at = f32::from(e.position.y - b.origin.y) / f32::from(b.size.height).max(1.);
-                this.activities.chat_split = Some(at.clamp(SPLIT_MIN, SPLIT_MAX));
-                this.redraw(Column::Main, cx);
-            }))
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(|this, _, _, cx| {
-                    this.activities.splitting = false;
-                    this.redraw(Column::Main, cx);
-                }),
-            )
+            // The split follows the pointer over the game too, which the window hears and the elements don't.
+            .when(self.activities.splitting, |d| {
+                d.child(crate::layout::window_drag(
+                    cx,
+                    |this, e, _, cx| {
+                        let Some(b) = this.activities.split_bounds.get() else { return };
+                        let at = f32::from(e.position.y - b.origin.y) / f32::from(b.size.height).max(1.);
+                        this.activities.chat_split = Some(at.clamp(SPLIT_MIN, SPLIT_MAX));
+                        this.redraw(Column::Main, cx);
+                    },
+                    |this, cx| {
+                        this.activities.splitting = false;
+                        this.redraw(Column::Main, cx);
+                    },
+                ))
+            })
             .into_any_element()
     }
 

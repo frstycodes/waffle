@@ -535,6 +535,24 @@ impl Waffle {
         .detach();
     }
 
+    // The demo scenes' game: `url` playing on the call's stage, as an activity of our own would.
+    pub(crate) fn demo_activity(&mut self, url: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(call) = self.call.as_ref() else { return };
+        let me = discord::ActivityParticipant { user_id: "4194304".into(), session_id: "demo".into() };
+        self.activities.instances.push(ActivityInstance {
+            application_id: "demo".into(),
+            launch_id: "demo".into(),
+            instance_id: "demo".into(),
+            location_id: "demo".into(),
+            channel_id: call.channel.id.clone(),
+            guild_id: call.guild_id.clone(),
+            participants: vec![me],
+        });
+        self.activities.frame = Some(cx.new(|cx| ActivityFrame::demo(url, window, cx)));
+        self.activities.running = Some(("demo".into(), Instant::now()));
+        self.call_focus = Some(activity_key("demo"));
+    }
+
     fn close_frame(&mut self, cx: &mut Context<Self>) {
         let Some(frame) = self.activities.frame.take() else { return };
         let app_id = frame.read(cx).app_id.clone();
@@ -571,6 +589,8 @@ impl Waffle {
     pub(crate) fn sync_activity_frame(&self, cx: &mut Context<Self>) {
         let Some(frame) = &self.activities.frame else { return };
         let (app_id, composed) = frame.read_with(cx, |frame, _| (frame.app_id.clone(), frame.composed()));
+        let held = self.drag.is_some();
+        frame.update(cx, |frame, _| frame.set_held(held));
         let covered = !composed && (self.menu.is_some()
             || self.dialog.is_some()
             || self.device_menu.is_some()

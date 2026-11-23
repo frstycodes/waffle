@@ -31,7 +31,7 @@ src/create_channel.rs	global-notify	9
 src/create_channel.rs	raw-px	4
 src/create_server.rs	global-notify	10
 src/create_server.rs	raw-px	4
-src/demo.rs	file-lines	2950
+src/demo.rs	file-lines	2906
 src/demo.rs	raw-px	32
 src/design_system.rs	file-lines	827
 src/design_system.rs	raw-px	16
@@ -73,7 +73,7 @@ src/joining/onboarding.rs	global-notify	6
 src/joining/onboarding.rs	raw-px	12
 src/joining/rules.rs	global-notify	5
 src/joining/rules.rs	raw-px	3
-src/layout.rs	global-notify	8
+src/layout.rs	global-notify	7
 src/layout.rs	raw-px	9
 src/link_preview.rs	global-notify	1
 src/link_preview.rs	raw-px	1

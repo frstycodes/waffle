@@ -1,5 +1,5 @@
 // Worst-case fixture data for checking each screen without a Discord account (debug builds only):
-// WAFFLE_DEMO=chat | chat-compact | chat-large-text | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | keyboard-combos | appearance | appearance-scrolled | settings-accessibility | notifications | content-social | chat-settings | settings-contrast | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | notification-settings | notification-settings-muted | inbox-mark-read | mark-unread | home | add-friend | create-channel | create-channel-private | create-channel-community | create-channel-stage | create-server | create-server-template | create-server-customize | create-server-join | create-server-limit | invite | invite-sent | invite-settings | invite-vanity | invite-paused | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | app-replies | components | components-users | components-v2 | command-picker | command-picker-search | command-options | command-options-loading | command-options-failed | command-options-empty | command-options-tab | command-options-errors | app-modal | app-modal-error | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | call-streams-failed | call-streams-reconnecting | call-streams-issues | call-streams-hidden | inbox-saved | games | stage | stage-audience | stage-requests | stage-invited | stage-waiting | stage-start | stage-start-dialog | stage-edit | stage-end | stage-full | requests | requests-spam | requests-empty | request-open | active-now | active-now-empty | group-dm | group-picker | group-edit | group-leave | profile-stranger | profile-editor | profile-editor-server | activity-privacy | embed-suppress | system-messages | system-messages-open | chat-media-settings | voice-messages | sidebar-voice-chat | call-previews | call-previews-unread | call-chat | soundboard | soundboard-effect | voice-status | voice-status-set | voice-status-dialog | voice-status-dialog-long | updating (the launch splash alone). | send-options | tts | blocked-messages | blocked-messages-shown | guard-slowmode | guard-slowmode-counting | guard-slowmode-queued | guard-immune | guard-no-permission | guard-timeout | guard-blocked-dm
+// WAFFLE_DEMO=chat | chat-compact | chat-large-text | busy | message-focus | message-focus-menu | message-focus-delete | message-menu-theirs | user-menu-voice | user-menu-voice-denied | mention | mention-tab | mention-enter | reactors | reactions-dialog | text-files | text-expanded | text-viewer | link-previews | activity | activity-all | rail-dms | rail-dms-live | gallery | viewer | viewer-video | pins | header-search | search | search-from | search-date | search-results | search-filters | search-dm | search-dm-results | profile | profile-plain | emoji | switcher | settings | voice-settings | keybinds | keyboard-combos | appearance | appearance-scrolled | settings-accessibility | notifications | content-social | chat-settings | settings-contrast | settings-search | status | status-custom | status-durations | status-editor | stickers | stickers-chat | accounts | unread | emoji-suggest | emoji-accept | notify-bell | jump | inbox | inbox-unreads | notification-settings | notification-settings-muted | inbox-mark-read | mark-unread | home | add-friend | create-channel | create-channel-private | create-channel-community | create-channel-stage | create-server | create-server-template | create-server-customize | create-server-join | create-server-limit | invite | invite-sent | invite-settings | invite-vanity | invite-paused | advanced | zoom | home-presence | folder | stream-card | call-streams | call-streams-ended | call-streams-focus | call-streams-strip | call-streams-full | voice-elsewhere | call-incoming | call-banner | call-joinable | call-dm | call-dm-camera | sidebar-resize | sidebar-voice | sidebar-voice-error | sidebar-voice-solid | sidebar-voice-fullscreen | dm-empty | group-empty | group-start | login | scanned | failed | empty | update-ready | updates | updates-downloading | updates-ready | channel-settings | channel-settings-search | channel-settings-perms | channel-settings-voice | channel-settings-voice-perms | channel-settings-invites | channel-settings-dirty | load | server-settings | server-settings-engagement | server-settings-roles | server-settings-role | server-settings-role-perms | server-settings-audit | server-settings-bans | server-settings-automod | server-settings-invites | server-settings-dirty | attachments | attachments-drop | forwarded | forward-dialog | poll | poll-creator | app-replies | components | components-users | components-v2 | command-picker | command-picker-search | command-options | command-options-loading | command-options-failed | command-options-empty | command-options-tab | command-options-errors | app-modal | app-modal-error | drafts | friends-empty | friends-all-empty | friends-pending-empty | friends-blocked-empty | pins-empty | search-empty | inbox-empty | inbox-unreads-empty | forum-empty | load-failed | invite | invite-plain | invite-invalid | onboarding | onboarding-question | onboarding-dropdown | onboarding-rules | onboarding-required | onboarding-plain | rules | rules-dialog | rules-error | rules-long | roles | roles-browse | roles-list | guide | guide-done | guide-channel | guide-next | call-streams-failed | call-streams-reconnecting | call-streams-issues | call-streams-hidden | call-activity | inbox-saved | games | stage | stage-audience | stage-requests | stage-invited | stage-waiting | stage-start | stage-start-dialog | stage-edit | stage-end | stage-full | requests | requests-spam | requests-empty | request-open | active-now | active-now-empty | group-dm | group-picker | group-edit | group-leave | profile-stranger | profile-editor | profile-editor-server | activity-privacy | embed-suppress | system-messages | system-messages-open | chat-media-settings | voice-messages | sidebar-voice-chat | call-previews | call-previews-unread | call-chat | soundboard | soundboard-effect | voice-status | voice-status-set | voice-status-dialog | voice-status-dialog-long | updating (the launch splash alone). | send-options | tts | blocked-messages | blocked-messages-shown | guard-slowmode | guard-slowmode-counting | guard-slowmode-queued | guard-immune | guard-no-permission | guard-timeout | guard-blocked-dm
 use gpui_kit::{
     Context, Window,
     component::input::{InlineToken, InputContent},
@@ -14,6 +14,9 @@ use crate::{
     },
     login::Login,
 };
+
+mod guard;
+use guard::demo_guard;
 
 // The launch splash mid-download, without the main window.
 pub fn updating_splash(cx: &mut gpui_kit::App) {
@@ -886,6 +889,12 @@ pub fn load(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Cont
             if scene == "call-streams-full" {
                 waffle.set_call_fullscreen(true, window, cx);
             }
+        }
+        // A game on the call's stage, for checking what draws over it and how it resizes: a WebGL scene that
+        // answers every pointer move, as a game does.
+        "call-activity" => {
+            demo_call(waffle);
+            waffle.demo_activity("https://threejs.org/examples/webgl_animation_keyframes.html", window, cx);
         }
         // Text chat in the voice channel we're in: the sidebar's rows, the stage's message previews (with a
         // mention, or unread only) and the chat open beside the call.
@@ -3210,57 +3219,6 @@ fn demo_events(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut C
 
 // The composer's guard, one state per scene. Wren owns Night Owls here, so our permissions are @everyone's
 // (and Council's, for the immune scene).
-fn demo_guard(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
-    use crate::discord::{Overwrite, VIEW_CHANNEL, perm};
-    if scene == "guard-blocked-dm" {
-        let wren = user("8388608", "Wren");
-        waffle.relationships.push(Relationship { user: wren, kind: Relation::Blocked, since: None });
-        let dm = waffle.dms.iter().find(|c| c.id == "dm").cloned();
-        waffle.feeds.insert("dm".into(), Feed { loaded: true, ..Default::default() });
-        waffle.restore = None;
-        waffle.guild_id = None;
-        if let Some(dm) = dm {
-            waffle.open_channel(dm, window, cx);
-        }
-        return;
-    }
-    let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") else { return };
-    guild.owner_id = Some("8388608".into());
-    for role in guild.roles.iter_mut() {
-        role.permissions = match role.id.as_str() {
-            "1" => VIEW_CHANNEL | perm::SEND_MESSAGES,
-            "r1" => perm::MANAGE_MESSAGES,
-            _ => 0,
-        };
-    }
-    if scene == "guard-timeout" {
-        guild.timed_out_until = Some(chrono::Utc::now() + chrono::Duration::minutes(52));
-    }
-    if scene == "guard-immune" {
-        guild.my_roles = vec!["r1".into()];
-    }
-    let Some(general) = guild.channels.iter_mut().find(|c| c.id == "general") else { return };
-    match scene {
-        "guard-no-permission" => general.overwrites = vec![
-            Overwrite { id: "1".into(), allow: 0, deny: perm::SEND_MESSAGES, member: false },
-            Overwrite { id: "r1".into(), allow: perm::SEND_MESSAGES, deny: 0, member: false },
-            Overwrite { id: "r2".into(), allow: perm::SEND_MESSAGES, deny: 0, member: false },
-        ],
-        "guard-timeout" => {}
-        _ => general.props.slowmode = 120,
-    }
-    let Some(general) = guild.channels.iter().find(|c| c.id == "general").cloned() else { return };
-    waffle.open_channel(general, window, cx);
-    if scene == "guard-slowmode-counting" || scene == "guard-slowmode-queued" {
-        waffle.start_countdown("general", std::time::Duration::from_secs(118), cx);
-    }
-    if scene == "guard-slowmode-queued" {
-        waffle.drafts.set("general", Draft::new(&InputContent::new("gg, rematch at 9?"), None));
-        waffle.restore_draft(window, cx);
-        waffle.hold_for_slowmode("general", cx);
-    }
-}
-
 const VEX: &str = "33554432";
 const DUNE: &str = "41943040";
 
