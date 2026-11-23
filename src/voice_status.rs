@@ -167,7 +167,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot request that ends when it returns, holding a WeakEntity
     }
 
     // The menu's Clear Channel Status: an empty status, with Discord's refusal as a toast.
@@ -184,7 +184,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot request that ends when it returns, holding a WeakEntity
     }
 
     // The emoji picker's pick, at the caret.
@@ -272,7 +272,6 @@ impl Waffle {
             .children(remaining);
         let actions = ui::row().items_stretch()
             .gap_2()
-            .mt_1()
             .child(ui::button("voice-status-cancel", Tone::Secondary, cx).flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_voice_status(cx))))
             .child(
                 ui::button("voice-status-submit", Tone::Primary, cx)
@@ -293,11 +292,11 @@ impl Waffle {
                 }
             }))
             .child(div().text_center().text_size(ui::TEXT_LG).line_height(px(PROMPT_LINE)).font_weight(FontWeight::BOLD).text_color(strong).child("What are we chatting about?"))
-            .child(div().mb_3().text_center().text_color(muted).child("Let others know what you're up to in the voice channel!"))
+            .child(div().pb_3().text_center().text_color(muted).child("Let others know what you're up to in the voice channel!"))
             .child(div().font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Status"))
             .child(field)
             .child(meta)
-            .child(actions);
+            .child(div().pt_1().child(actions));
         let card = ui::col().child(hero).child(body);
         let card = div().id("voice-status").occlude().child(ui::dialog("voice-status-dialog", WIDTH, card, window, cx));
         Some(ui::modal(backdrop("voice-status-backdrop", cx), card, cx))

@@ -162,7 +162,7 @@ impl Waffle {
                 cx.notify(); // lint-allow(global-notify): the consent dialog is drawn by the root, over the columns
             });
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot request that ends when it returns, holding a WeakEntity
     }
 
     pub(super) fn ask_activity(&mut self, ask: Ask, nonce: Value, cmd: &str, cx: &mut Context<Self>) {
@@ -214,7 +214,7 @@ impl Waffle {
                 _ = this.update(cx, |this, cx| this.show_toast(format!("Couldn't share it: {error}"), cx));
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot send that ends when the request returns, holding a WeakEntity
     }
 
     pub(super) fn toggle_link_trust(&mut self, cx: &mut Context<Self>) {
@@ -235,7 +235,8 @@ impl Waffle {
                 None => Err((RPC_UNKNOWN, "No image picked".to_owned())),
                 Some(path) => {
                     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "image.png".into());
-                    match std::fs::read(&path) {
+                    let file = path.clone();
+                    match cx.background_executor().spawn(async move { std::fs::read(&file) }).await {
                         Err(e) => Err((RPC_UNKNOWN, e.to_string())),
                         Ok(bytes) => client
                             .call_form(format!("/applications/{app_id}/attachment"), Vec::new(), name, bytes)
@@ -247,7 +248,7 @@ impl Waffle {
             };
             _ = this.update(cx, |_, cx| frame.read(cx).reply(nonce, "INITIATE_IMAGE_UPLOAD", result));
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot upload that ends when the request returns, holding a WeakEntity
     }
 
     // Friends, for apps granted relationships.read. Discord's own RPC answers the same list.
@@ -291,6 +292,7 @@ impl Waffle {
                 format!("{app} wants to open a link"),
                 ui::col()
                     .gap_3()
+                    // lint-allow(custom-badge): ui::callout leads with an icon and a title, and this is a plain well for a URL
                     .child(div().p_3().squircle(RADIUS_MD).bg(palette::surface(palette::Level::Page, cx)).text_size(TEXT_SM).text_color(palette::strong(cx)).child(url.clone()))
                     .child(ui::pick_row("ask-trust", ui::check(if *trust { ui::Check::On } else { ui::Check::Off }, cx), format!("Open {domain} links without asking"), None, cx).on_click(cx.listener(|this, _, _, cx| this.toggle_link_trust(cx))))
                     .into_any_element(),
@@ -338,7 +340,7 @@ impl Waffle {
             let code = client.oauth_authorize(&consent.request).await;
             _ = this.update(cx, |_, cx| frame.read(cx).reply(consent.nonce, "AUTHORIZE", code.map(|code| json!({ "code": code })).map_err(|e| (RPC_OAUTH_DENIED, e))));
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot request that ends when it returns, holding a WeakEntity
     }
 
     pub(super) fn authenticate_activity(&mut self, frame: Entity<ActivityFrame>, nonce: Value, args: &Value, cx: &mut Context<Self>) {
@@ -351,7 +353,7 @@ impl Waffle {
             });
             _ = this.update(cx, |_, cx| frame.read(cx).reply(nonce, "AUTHENTICATE", me.map_err(|e| (RPC_OAUTH_DENIED, e))));
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot request that ends when it returns, holding a WeakEntity
     }
 
     pub(super) fn sdk_participants(&self, instance: &ActivityInstance) -> Vec<Value> {

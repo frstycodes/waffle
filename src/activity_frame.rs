@@ -443,7 +443,7 @@ mod compose {
             let (id, window) = (self.surface.id(), self.window);
             self.cx
                 .spawn(async move |cx| _ = window.update(cx, |_, window, _| remove(window, id)))
-                .detach();
+                .detach(); // lint-allow(detached-task): a one-shot turn of the main thread that ends when it runs, holding no entity
         }
     }
 

@@ -111,7 +111,7 @@ impl Waffle {
                 cx.notify(); // lint-allow(global-notify): the launcher is drawn by the root, over the columns
             });
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot fetch that ends when the request returns, holding a WeakEntity
     }
 
     // Starting one puts it first among your recent apps.

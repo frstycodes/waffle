@@ -8,7 +8,7 @@ use std::{
 };
 
 use gpui_kit::{
-    Animation, AnimationExt, AnyElement, Context, Div, FontWeight, Hsla, ImageSource, RenderImage, SharedString, Stateful,
+    Animation, AnimationExt, AnyElement, App, Context, Div, FontWeight, Hsla, ImageSource, RenderImage, SharedString, Stateful,
     component::Icon,
     div, prelude::*, px,
 };
@@ -232,7 +232,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends after its one timer fires, holding a WeakEntity
     }
 
     // Opens the DM's call as the server voice stage, with the DM under it for Back to chat.
@@ -309,7 +309,7 @@ impl Waffle {
                     .flex_none()
                     .rounded_full()
                     .child(face)
-                    .with_animation("ringing-pulse", Animation::new(Duration::from_millis(1400)).repeat(), |d, t| d.opacity(0.6 + 0.4 * (t * std::f32::consts::TAU).cos().abs())),
+                    .with_animation("ringing-pulse", Animation::new(Duration::from_millis(1400)).repeat(), |d, t| d.opacity(0.6 + 0.4 * (t * std::f32::consts::TAU).cos().abs())), // lint-allow(endless-animation): pulses only while the ringing card is up; answering or declining removes it
             )
             .child(
                 ui::col()
@@ -376,7 +376,7 @@ impl Waffle {
         let size = (width, HEAD + middle + if note.is_some() { NOTE } else { 0. } + BAR);
         let stage_channel = channel.clone();
         let head = window_head(title, sub).child(
-            window_icon_button("call-window-stage", Glyph::Fullscreen, "Open stage")
+            window_icon_button("call-window-stage", Glyph::Fullscreen, "Open stage", cx)
                 .on_click(cx.listener(move |this, _, window, cx| this.open_dm_stage(stage_channel.clone(), window, cx))),
         );
         let middle = div().h(px(middle)).flex_none().child(match body {
@@ -399,10 +399,10 @@ impl Waffle {
             match note {
                 Note::RingAgain => {
                     let id = channel.id.clone();
-                    row.child(stage_wash_button("call-window-ring", Glyph::Phone, "Ring again".into()).on_click(cx.listener(move |this, _, _, cx| this.ring_dm(id.clone(), cx))))
+                    row.child(stage_wash_button("call-window-ring", Glyph::Phone, "Ring again".into(), cx).on_click(cx.listener(move |this, _, _, cx| this.ring_dm(id.clone(), cx))))
                 }
                 Note::Watch { streamer, name } => row.child(
-                    stage_wash_button("call-window-watch", Glyph::ShareScreen, format!("Watch {name}'s screen").into()).on_click(cx.listener(move |this, _, _, cx| this.watch_stream(streamer.clone(), cx))),
+                    stage_wash_button("call-window-watch", Glyph::ShareScreen, format!("Watch {name}'s screen").into(), cx).on_click(cx.listener(move |this, _, _, cx| this.watch_stream(streamer.clone(), cx))),
                 ),
             }
         });
@@ -504,13 +504,13 @@ impl Waffle {
         let id = channel.id.clone();
         let names = others.iter().map(|v| v.user.as_ref().map_or_else(|| self.user_name(&v.user_id), |u| u.name.clone())).collect::<Vec<_>>().join(", ");
         Some(
-            ui::row()
+            ui::row() // lint-allow(custom-badge): ui::pill is a label, and this holds a face stack and the Join button
                 .id("dm-join-pill")
                 .occlude()
                 .h_8()
                 .pl_1p5()
                 .pr(px(CHEVRON_PAD))
-                .mr_1()
+                .mr_1() // lint-allow(raw-margin): the pill sits a step off the header's next control, which the caller's row doesn't gap
                 .flex_none()
                 .gap_2()
                 .squircle(RADIUS_MD)
@@ -561,30 +561,15 @@ fn window_head(title: String, sub: String) -> Div {
         )
 }
 
-fn window_icon_button(id: &'static str, glyph: Glyph, tip: &'static str) -> Stateful<Div> {
-    ui::row()
-        .id(id)
-        .size_8()
-        .flex_none()
-        .squircle(11.)
-        .justify_center()
-        .cursor_pointer()
-        .text_color(stage::muted())
-        .hover(|s| s.bg(stage::wash(0.08)).text_color(stage::strong()))
-        .child(Icon::new(glyph).size(ui::ICON_LG))
-        .tooltip(move |window, cx| ui::tip(tip, window, cx))
+fn window_icon_button(id: &'static str, glyph: Glyph, tip: &'static str, cx: &App) -> ui::Control {
+    ui::icon_button(id, glyph, tip, cx).text_color(stage::muted()).hover(|s| s.bg(stage::wash(0.08)).text_color(stage::strong()))
 }
 
-fn stage_wash_button(id: &'static str, glyph: Glyph, label: SharedString) -> Stateful<Div> {
-    ui::row()
-        .id(id)
+fn stage_wash_button(id: &'static str, glyph: Glyph, label: SharedString, cx: &App) -> ui::Control {
+    ui::button(id, Tone::Stage, cx)
         .h(px(WASH_BUTTON))
         .px_3()
         .gap_1p5()
-        .squircle(11.)
-        .cursor_pointer()
-        .bg(stage::wash(0.1))
-        .hover(|s| s.bg(stage::wash(0.16)))
         .text_size(ui::TEXT_DETAIL)
         .font_weight(FontWeight::SEMIBOLD)
         .child(Icon::new(glyph).size(ui::ICON_SM))
@@ -629,11 +614,12 @@ fn faces_grid(faces: Vec<Face>, duo: bool) -> AnyElement {
     let size = if duo { DUO_FACE } else { GROUP_FACE };
     let cells = faces.into_iter().enumerate().map(|(i, f)| {
         // Speaking keeps presence green, as the stage's tiles do: a 2px ring 2px off the face.
+        // lint-allow(custom-mark): ui::speaking_ring is the accent shadow ring, and this one is the stage's presence green
         let ring = f.speaking.then(|| div().absolute().top_neg_1().left_neg_1().size(px(size + 8.)).rounded_full().border_2().border_color(stage::online()));
         let avatar = div().relative().size(px(size)).flex_none().rounded_full().child(ui::avatar(f.avatar, size)).children(ring);
         let avatar = match (f.pending, f.gone) {
             (true, _) => avatar
-                .with_animation(SharedString::from(format!("call-window-ring-{i}")), Animation::new(Duration::from_millis(1400)).repeat(), |d, t| d.opacity(0.45 + 0.4 * (t * std::f32::consts::TAU).cos().abs()))
+                .with_animation(SharedString::from(format!("call-window-ring-{i}")), Animation::new(Duration::from_millis(1400)).repeat(), |d, t| d.opacity(0.45 + 0.4 * (t * std::f32::consts::TAU).cos().abs())) // lint-allow(endless-animation): pulses only on a face still being rung (pending); it stops when they answer
                 .into_any_element(),
             (_, true) => avatar.opacity(0.35).into_any_element(),
             _ => avatar.into_any_element(),
@@ -666,6 +652,7 @@ fn video(frame: Arc<RenderImage>, radius: f32) -> AnyElement {
 
 // A small picture in the corner: our own camera over theirs, or the sharer's camera over their screen.
 fn inset(picture: AnyElement, width: f32, aspect: f32) -> Div {
+    // lint-allow(custom-mark): ui::badged marks a face's corner, and this is a picture inset in a video's corner
     div()
         .absolute()
         .right_2()

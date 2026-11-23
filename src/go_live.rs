@@ -119,7 +119,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot lookup that ends when it returns, holding a WeakEntity
     }
 
     // Goes live through `start_share`, then remembers the source once the stream is really up.
@@ -152,8 +152,8 @@ pub struct SharePicker {
     tab: ShareTab,
     windows: Option<Result<Vec<ShareableWindow>, SharedString>>,
     screens: Option<Result<Vec<ShareableScreen>, SharedString>>,
-    thumbs: Vec<(ShareSource, Arc<RenderImage>)>,
-    icons: Vec<(i32, Arc<RenderImage>)>,
+    thumbs: Vec<(ShareSource, Arc<RenderImage>)>, // lint-allow(unbounded-growth): one per shareable screen or window, a few dozen at most, dropped with the picker
+    icons: Vec<(i32, Arc<RenderImage>)>, // lint-allow(unbounded-growth): one per app with a shareable window, a few dozen at most, dropped with the picker
     // Whether the user has picked; the preselection lands without motion.
     picked: bool,
 }
@@ -215,7 +215,7 @@ impl Waffle {
                 }
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends when the thumbnails are all captured or the picker is closed, holding a WeakEntity
     }
 
     pub(crate) fn empty_share_picker(&mut self, cx: &mut Context<Self>) {
@@ -342,7 +342,8 @@ impl Waffle {
             ShareTab::Devices => note("No capture devices found".into(), muted),
         };
         // Bled 4px past the column so a tile's hover fill and selection ring aren't clipped by the scroller.
-        div().id("share-list").max_h(px(SOURCES_HEIGHT)).mx_neg_1().overflow_y_scroll().child(div().p_1().child(body))
+        div().id("share-list").max_h(px(SOURCES_HEIGHT)).mx_neg_1() // lint-allow(raw-margin): an optical bleed, so a tile's hover fill and ring aren't clipped by the scroller
+            .overflow_y_scroll().child(div().p_1().child(body))
     }
 
     // .src: a 16:10 still under a hairline; picked, it's ringed in accent and its name turns strong.
@@ -370,10 +371,10 @@ impl Waffle {
             Some(image) => img(image).size_4().flex_none().into_any_element(),
             None => Icon::new(glyph(source)).size(ui::ICON_MD).flex_none().text_color(muted).into_any_element(),
         };
-        ui::col()
+        ui::col() // lint-allow(custom-button): ui::card fills at rest and pads 12px, and this tile is clear until hovered
             .id(SharedString::from(format!("share-{key}")))
             .p_1()
-            .m_neg_1()
+            .m_neg_1() // lint-allow(raw-margin): an optical bleed, so the hover fill sits past the still's edge as the ring does
             .squircle(ui::RADIUS_LG)
             .gap_1p5()
             .cursor_pointer()
@@ -481,16 +482,18 @@ fn glyph(source: ShareSource) -> Glyph {
 // .src[aria-pressed] .shot: a 2px gap in the dialog's colour, then a 2px accent ring. A user's pick
 // springs out from the still's edge, overshooting a touch; the preselection lands still.
 fn selection_ring(key: &str, animate: bool, gap: Hsla) -> AnyElement {
-    let ring = div().absolute().border_2().border_color(palette::accent()).child(div().absolute().inset_0().squircle(ui::RADIUS_MD + 2.).border_2().border_color(gap));
+    let ring = div().absolute().inset_0();
     if !animate {
-        return place_ring(ring, 1., 1.).into_any_element();
+        return place_ring(ring, gap, 1., 1.).into_any_element();
     }
-    ring.with_animation(SharedString::from(format!("ring-{key}")), Animation::new(ui::DUR_POP), |ring, t| place_ring(ring, crate::motion::back_out(t), (t / 0.4).min(1.))).into_any_element()
+    ring.with_animation(SharedString::from(format!("ring-{key}")), Animation::new(ui::DUR_POP), move |ring, t| place_ring(ring, gap, crate::motion::back_out(t), (t / 0.4).min(1.))).into_any_element()
 }
 
-fn place_ring(ring: Div, grow: f32, alpha: f32) -> Div {
+fn place_ring(ring: Div, gap: Hsla, grow: f32, alpha: f32) -> Div {
     let offset = 1. - 5. * grow;
-    ring.top(px(offset)).left(px(offset)).right(px(offset)).bottom(px(offset)).squircle(ui::RADIUS_MD - offset).opacity(alpha)
+    // lint-allow(custom-mark): ui::speaking_ring is a shadow ring that would paint over the still from above, and this one springs out from its edge
+    let edge = |inset: f32, color: Hsla| div().absolute().top(px(inset)).left(px(inset)).right(px(inset)).bottom(px(inset)).squircle(ui::RADIUS_MD - inset).border_2().border_color(color);
+    ring.opacity(alpha).child(edge(offset, palette::accent())).child(edge(offset + 2., gap))
 }
 
 #[cfg(test)]

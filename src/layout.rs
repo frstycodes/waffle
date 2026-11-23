@@ -1,7 +1,7 @@
 // Waffle's frame (design/navigation.html): the rail, channel list, chat and side panel run to the window's
 // top, each column's own header doubling as the title bar; the user area sits at the foot of the channel list.
 use gpui_kit::{
-    Animation, AnimationExt, AnyElement, App, Context, Div, FontWeight, Hsla, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, NavigationDirection,
+    AnyElement, App, Context, Div, FontWeight, Hsla, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, NavigationDirection,
     Render, SharedString, Stateful, StyleRefinement, Window,
     component::{ActiveTheme, Icon},
     div, img, linear_color_stop, linear_gradient, prelude::*, px,
@@ -13,7 +13,6 @@ use crate::{
     icons::Glyph,
     login, palette,
     part::Column,
-    sidebar::Nav,
     ui::{self, Squircle},
 };
 
@@ -70,7 +69,7 @@ impl Waffle {
             .on_modifiers_changed(cx.listener(|this, e: &gpui_kit::ModifiersChangedEvent, _, cx| {
                 if this.shift_held != e.modifiers.shift {
                     this.shift_held = e.modifiers.shift;
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): shift swaps the actions on message rows (main), menus and popovers (overlays, which only follow the app)
                 }
             }))
             .on_mouse_down(MouseButton::Navigate(NavigationDirection::Back), cx.listener(|this, _, window, cx| this.navigate(false, window, cx)))
@@ -183,30 +182,25 @@ impl Waffle {
             crate::NoticeWhy::Elsewhere => (palette::danger(), gpui_kit::white(), "Your voice has been disconnected because you connected at another location.".to_owned()),
             crate::NoticeWhy::Restarted => (palette::accent(), palette::on_accent(), format!("You left {} when Waffle restarted.", notice.channel.name)),
         };
-        let reconnect = ui::row()
-            .id("voice-notice-reconnect")
+        let reconnect = ui::button("voice-notice-reconnect", ui::Tone::Ghost, cx)
+            .small()
             .h_6()
             .px_2p5()
-            .squircle(crate::ui::RADIUS_XS)
             .border_1()
             .border_color(ink.opacity(0.6))
+            .text_size(ui::TEXT_SM)
+            .text_color(ink)
             .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-            .cursor_pointer()
             .hover(move |s| s.bg(ink.opacity(0.12)))
             .child("Reconnect")
             .on_click(cx.listener(|this, _, _, cx| this.reconnect_voice(cx)));
-        let close = ui::row()
-            .id("voice-notice-close")
-            .size_6()
-            .justify_center()
-            .squircle(crate::ui::RADIUS_XS)
-            .cursor_pointer()
+        let close = ui::icon_button("voice-notice-close", crate::icons::Glyph::X, "Dismiss", cx)
+            .small()
+            .text_color(ink)
             .hover(move |s| s.bg(ink.opacity(0.12)))
-            .child(gpui_kit::component::Icon::new(crate::icons::Glyph::X).size(ui::ICON_MD))
-            .tooltip(|window, cx| ui::tip("Dismiss", window, cx))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.voice_notice = None;
-                cx.notify();
+                this.redraw(Column::Main, cx);
             }));
         Some(
             ui::row()
@@ -277,7 +271,7 @@ impl Waffle {
         // Esc closes the voice channel's chat once its messages are scrolled to the bottom, as Discord's.
         if keystroke.key == "escape" && self.call_view && self.call_chat_shown() && !self.scrolled_up {
             self.call_chat = false;
-            cx.notify();
+            self.redraw(Column::Main, cx);
             return cx.stop_propagation();
         }
         // Esc with nothing else to close marks the channel read and returns to the newest message, as Discord does.
@@ -314,7 +308,7 @@ impl Waffle {
         if drag.edge == Edge::CallChat {
             self.prefs.save();
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): the root's layout sizes every column, so a finished drag redraws them all
     }
 
     fn on_drag_move(&mut self, event: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -327,7 +321,7 @@ impl Waffle {
             Edge::Settings => self.settings_width = (drag.start_width + dx).clamp(SETTINGS_RANGE.0, SETTINGS_RANGE.1),
             Edge::CallChat => self.prefs.call_chat_width = crate::call::chat_width(drag.start_width - dx, f32::from(window.viewport_size().width)),
         }
-        cx.notify();
+        cx.notify(); // lint-allow(global-notify): a dragged edge resizes columns the root's layout sizes, so all of them redraw
     }
 
     /// An 8px grab strip over a column's edge drawing a 2px line: accent at 60% on hover, full while
@@ -336,7 +330,7 @@ impl Waffle {
         let active = self.drag.as_ref().is_some_and(|d| d.edge == edge);
         let grows_left = matches!(edge, Edge::Panel | Edge::CallChat);
         let accent = palette::accent();
-        div()
+        ui::row()
             .id(match edge {
                 Edge::Channels => "resize-channels",
                 Edge::Panel => "resize-panel",
@@ -351,7 +345,8 @@ impl Waffle {
             .when(grows_left, |h| h.left_neg_1())
             .group("resize-grip")
             .cursor_col_resize()
-            .child(div().ml(px(3.)).w_0p5().h_full().rounded_xs().when(active, |l| l.bg(accent)).when(!active, |l| l.group_hover("resize-grip", |l| l.bg(accent.opacity(0.6)))))
+            .justify_center()
+            .child(div().w_0p5().h_full().rounded_xs().when(active, |l| l.bg(accent)).when(!active, |l| l.group_hover("resize-grip", |l| l.bg(accent.opacity(0.6)))))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, event: &MouseDownEvent, window, cx| {
@@ -363,7 +358,7 @@ impl Waffle {
                     };
                     this.drag = Some(Drag { edge, start_x: f32::from(event.position.x), start_width });
                     cx.stop_propagation();
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): a dragged edge resizes columns the root's layout sizes, so all of them redraw
                 }),
             )
     }
@@ -395,11 +390,11 @@ impl Waffle {
             (false, true) => ui::row().gap_1().child(Icon::new(Glyph::ShareScreen).size(ui::ICON_SM).text_color(palette::positive_ink(cx))).child(ui::line("Sharing their screen")).into_any_element(),
             (false, false) => ui::truncating("me-status", self.status_line()).into_any_element(),
         };
-        let mic = me_button("mic", if muted { Nav::MicOff } else { Nav::Mic }, muted, if server_muted { "A moderator muted you here. Only they can unmute you." } else if muted { "Unmute" } else { "Mute" }, cx)
+        let mic = me_button("mic", if muted { Glyph::MicOff } else { Glyph::Mic }, muted, if server_muted { "A moderator muted you here. Only they can unmute you." } else if muted { "Unmute" } else { "Mute" }, cx)
             .when(!server_muted, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_mute(cx))))
             .on_mouse_down(MouseButton::Right, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_device_menu(crate::call::DeviceKind::Input, e.position, cx)))
             .when_some(plate(muted), |b, fill| b.bg(fill));
-        let headphones = me_button("deafen", if deafened { Nav::HeadphonesOff } else { Nav::Headphones }, deafened, if deafened { "Undeafen" } else { "Deafen" }, cx)
+        let headphones = me_button("deafen", if deafened { Glyph::HeadphonesOff } else { Glyph::Headphones }, deafened, if deafened { "Undeafen" } else { "Deafen" }, cx)
             .on_click(cx.listener(|this, _, _, cx| this.toggle_deafen(cx)))
             .on_mouse_down(MouseButton::Right, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_device_menu(crate::call::DeviceKind::Output, e.position, cx)))
             .when_some(plate(deafened), |b, fill| b.bg(fill));
@@ -412,13 +407,14 @@ impl Waffle {
         let output_options = me_chevron("output-options", "Output options", menu_open(crate::call::DeviceKind::Output), cx)
             .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_device_menu(crate::call::DeviceKind::Output, e.position, cx)))
             .when_some(plate(deafened), |b, fill| b.bg(fill));
-        let settings = me_button("settings", Nav::Settings, false, "User settings", cx).on_click(cx.listener(|this, _, window, cx| this.open_settings(crate::settings::Page::Account, window, cx)));
+        let settings = me_button("settings", Glyph::Settings, false, "User settings", cx).on_click(cx.listener(|this, _, window, cx| this.open_settings(crate::settings::Page::Account, window, cx)));
         // The card's bottom corners, and its top ones too when nothing sits above; outside them, the sidebar.
         let stacked = self.panel_stack_height() > PANEL_HEIGHT;
         let top = if stacked { 0. } else { ui::RADIUS_MD };
         let corners = [top, top, ui::RADIUS_MD, ui::RADIUS_MD];
         let nameplate = me.nameplate.as_ref().map(|plate| nameplate(plate, palette::surface(palette::Level::Sidebar, cx), corners, cx.theme().is_dark(), animate));
         let hover = palette::hover(cx);
+        // lint-allow(custom-button): ui::list_row has fixed 36/48/60px heights, none the 40px user-panel row's
         let who = ui::row()
             .id("me")
             .flex_1()
@@ -441,7 +437,7 @@ impl Waffle {
                     .child(div().line_height(ui::LINE_XS).text_size(ui::TEXT_XS).text_color(faint).child(status_line)),
             );
         let voice = self.voice_panel(cx);
-        ui::col()
+        ui::col() // lint-allow(custom-badge, custom-mark): ui::surface adds a ring and shadow this docked card doesn't draw
             .absolute()
             .left_2()
             .right_2()
@@ -488,7 +484,7 @@ impl Waffle {
     pub(crate) fn user_panel_clearance(&self) -> gpui_kit::Pixels {
         match self.me.is_some() {
             true => px(self.panel_stack_height() + 16.),
-            false => px(0.),
+            false => gpui_kit::Pixels::ZERO,
         }
     }
 
@@ -531,14 +527,14 @@ impl Waffle {
             while let Some(status) = futures::StreamExt::next(&mut statuses).await {
                 let shown = this.update(cx, |this, cx| {
                     this.updates.apply(status, std::time::SystemTime::now());
-                    cx.notify();
+                    cx.notify(); // lint-allow(global-notify): the update row (nav) and the Updates settings page (an overlay, which only follows the app) both show the status
                 });
                 if shown.is_err() {
                     return;
                 }
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends when the updater's status stream closes or the app is gone, holding a WeakEntity
     }
 }
 
@@ -566,7 +562,7 @@ pub fn nameplate_tint(plate: &discord::Nameplate, dark: bool) -> Hsla {
 // `animate` swaps in the moving art while it loads and plays, the still standing in until then.
 // It carries an id either way, since gpui animates only an image with one; the still has one frame.
 pub fn nameplate_art(plate: &discord::Nameplate, height: f32, top_right: gpui_kit::Pixels, bottom_right: gpui_kit::Pixels, animate: bool) -> Stateful<gpui_kit::Img> {
-    let corners = gpui_kit::Corners { top_left: px(0.), top_right, bottom_right, bottom_left: px(0.) };
+    let corners = gpui_kit::Corners { top_left: gpui_kit::Pixels::ZERO, top_right, bottom_right, bottom_left: gpui_kit::Pixels::ZERO };
     let still = plate.art.clone();
     let Some(animated) = plate.animated.clone().filter(|_| animate) else {
         return ui::edge(img(still).absolute().top_0().right_0().h(px(height)), corners).id("nameplate-art");
@@ -589,30 +585,28 @@ pub fn avatar_with_status(url: &str, size: f32, status: Option<discord::Mark>, s
 /// The same, with the user's avatar decoration framing it (drawn at 1.2× the avatar, as Discord does).
 /// An animated avatar or decoration holds its first frame; `playing_avatar` moves them.
 pub fn decorated_avatar(url: &str, decoration: Option<&str>, size: f32, status: Option<discord::Mark>, surface: Hsla) -> AnyElement {
-    avatar_frame(url, decoration, size, status, surface, None)
+    ui::badged(avatar_frame(url, decoration, size, None), size, ui::Shape::Round, surface).status(status).into_any_element()
 }
 
 /// `decorated_avatar` with its avatar and decoration swapped for their animated versions, playing, keyed
 /// by `key` (gpui animates only an image with an id). `url` and `decoration` are the stills, which stay
 /// up until the animated ones have loaded, so starting to play never flashes.
 pub fn playing_avatar(key: &str, url: &str, decoration: Option<&str>, size: f32, status: Option<discord::Mark>, surface: Hsla) -> AnyElement {
-    avatar_frame(url, decoration, size, status, surface, Some(key))
+    ui::badged(avatar_frame(url, decoration, size, Some(key)), size, ui::Shape::Round, surface).status(status).into_any_element()
 }
 
-fn avatar_frame(url: &str, decoration: Option<&str>, size: f32, status: Option<discord::Mark>, surface: Hsla, key: Option<&str>) -> AnyElement {
+fn avatar_frame(url: &str, decoration: Option<&str>, size: f32, key: Option<&str>) -> Div {
     let picture = |still: &str, part: &str, look: fn(gpui_kit::Img) -> gpui_kit::Img| match key {
         Some(key) => playing_image(still, SharedString::from(format!("{key}-{part}")), look).into_any_element(),
         None => look(img(still.to_owned())).into_any_element(),
     };
     let frame = size * 1.2;
-    let face = div()
+    div()
         .relative()
         .size(px(size))
         .flex_none()
         .child(picture(url, "avatar", |i| i.size_full().rounded_full()))
-        .children(decoration.map(|d| div().absolute().size(px(frame)).left(px((size - frame) / 2.)).top(px((size - frame) / 2.)).child(picture(d, "decoration", |i| i.size_full()))));
-    ui::badged(face, size, ui::Shape::Round, surface).status(status)
-        .into_any_element()
+        .children(decoration.map(|d| div().absolute().size(px(frame)).left(px((size - frame) / 2.)).top(px((size - frame) / 2.)).child(picture(d, "decoration", |i| i.size_full()))))
 }
 
 // The animated version of `still`, playing, with `still` standing in from the first frame until it has
@@ -631,7 +625,11 @@ fn playing_image(still: &str, key: SharedString, look: fn(gpui_kit::Img) -> gpui
 }
 
 /// Where the traffic lights sit at 100%: centred in the 36px title strip, leaving the first 72px to them.
-pub const TRAFFIC_LIGHTS: gpui_kit::Point<gpui_kit::Pixels> = gpui_kit::point(px(12.), px(18.));
+pub const TRAFFIC_LIGHTS: gpui_kit::Point<gpui_kit::Pixels> = gpui_kit::point(px(TRAFFIC_LIGHTS_X), px(TRAFFIC_LIGHTS_Y));
+const TRAFFIC_LIGHTS_X: f32 = 12.;
+const TRAFFIC_LIGHTS_Y: f32 = 18.;
+// The user area's narrow controls: its chevrons' and buttons' height.
+const ME_CONTROL: f32 = 30.;
 
 /// The traffic lights at `zoom`. They are AppKit's and never scale, so their offset follows the zoomed
 /// header instead: down by half the header's growth so they stay centred on it, across by half the
@@ -686,7 +684,7 @@ fn history_step(keystroke: &gpui_kit::Keystroke) -> Option<bool> {
 // A user area control (.me .iconbtn): 30px; `on` (muted, deafened) turns it coral. The glyph pops in on
 // every flip, keyed by state.
 // A control and its chevron as one split pill: round on the outside, square where they meet, 1px apart.
-fn split_control(button: Stateful<Div>, chevron: Stateful<Div>) -> Div {
+fn split_control(button: impl Styled + IntoElement, chevron: impl Styled + IntoElement) -> Div {
     ui::row()
         .gap_px()
         .child(button.rounded_tr_none().rounded_br_none())
@@ -697,10 +695,10 @@ fn split_control(button: Stateful<Div>, chevron: Stateful<Div>) -> Div {
 // control, so it is quieter and half as wide.
 fn me_chevron(id: &'static str, label: &'static str, open: bool, cx: &App) -> Stateful<Div> {
     let (hover, strong, selected) = (palette::hover(cx), palette::strong(cx), palette::selected(cx));
-    ui::row()
+    ui::row() // lint-allow(custom-button): ui::icon_button is square, and this chevron is a 16px sliver joined to its control
         .id(id)
         .w_4()
-        .h(px(30.))
+        .h(px(ME_CONTROL))
         .flex_none()
         .squircle(ui::RADIUS_XS)
         .justify_center()
@@ -712,20 +710,8 @@ fn me_chevron(id: &'static str, label: &'static str, open: bool, cx: &App) -> St
         .tooltip(move |window, cx| ui::tip(label, window, cx))
 }
 
-fn me_button(id: &'static str, glyph: Nav, on: bool, label: &'static str, cx: &App) -> Stateful<Div> {
-    let (hover, strong) = (palette::hover(cx), palette::strong(cx));
-    let icon = glyph.icon().size_5().with_animation(SharedString::from(format!("{id}-{on}")), Animation::new(ui::DUR_POP).with_easing(crate::motion::back_out), |icon, t| icon.size(px(20. * (0.7 + 0.3 * t))));
-    ui::row()
-        .id(id)
-        .size(px(30.))
-        .flex_none()
-        .squircle(ui::RADIUS_SM)
-        .justify_center()
-        .cursor_pointer()
-        .text_color(if on { palette::danger_ink(cx) } else { strong })
-        .hover(move |s| s.bg(hover))
-        .child(icon)
-        .tooltip(move |window, cx| ui::tip(label, window, cx))
+fn me_button(id: &'static str, glyph: Glyph, on: bool, label: &'static str, cx: &App) -> ui::Control {
+    ui::icon_button(id, glyph, label, cx).sized(ME_CONTROL).text_color(if on { palette::danger_ink(cx) } else { palette::strong(cx) })
 }
 
 // What draws over the app (dialogs, settings, the viewer, menus, toasts), as one deferred layer after it: an

@@ -19,7 +19,7 @@ pub(crate) struct ChatCards {
 }
 
 struct LiveCard {
-    players: Vec<User>,
+    players: Vec<User>, // lint-allow(unbounded-growth): a card's players, built from one activity's participants on each render and never kept
     me_in: bool,
     max: Option<u32>,
 }
@@ -66,7 +66,7 @@ impl Waffle {
                 this.redraw(Column::Main, cx);
             });
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): a one-shot icon load that ends when it returns, holding a WeakEntity
     }
 
     // Joining from a chat card: into its voice channel's call and the game, or the game over that chat.
@@ -108,7 +108,7 @@ pub(crate) fn activity_message_card(message: &discord::Message, activity: &disco
         _ = this.update(cx, |this, cx| this.join_from_chat(&channel_id, guild_id.as_deref(), app_id.clone(), window, cx));
     });
     ui::col()
-        .mt_1()
+        .mt_1() // lint-allow(raw-margin): the card hangs a step under a message's text, which the message's own column doesn't gap
         .w_full()
         .max_w(px(CARD_WIDTH))
         .p_4()

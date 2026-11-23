@@ -53,6 +53,7 @@ impl Waffle {
     pub(super) fn floating_chat(&self, panel: AnyElement, width: f32, reveal: f32, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let width = width.min(self.call_stage_room(window) - FLOAT_INSET * 2.);
         self.above_game(
+            // lint-allow(custom-surface, custom-mark): ui::surface insets its content and rings it, and this card's own panel fills it and slides in by a computed offset
             div()
                 .id("call-chat-float")
                 .occlude()

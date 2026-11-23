@@ -26,7 +26,6 @@ const REQUEST_BADGE_TOP: f32 = 3.;
 const REQUEST_BADGE_RIGHT: f32 = 5.;
 const EMPTY_ART: f32 = 56.;
 const OPTION_ROW: f32 = 34.;
-const HAND_BADGE_RIGHT: f32 = 9.;
 const HAND_BADGE_PAD: f32 = 5.;
 
 // The foot bar: 12px over its 48px controls, 16px under.
@@ -163,7 +162,7 @@ impl Waffle {
             )
             .when(live, |d| d.child(ui::live_badge()))
             .when(manage, |d| d.child(edit).child(requests))
-            .child(div().w(ui::HAIRLINE).h_5().mx_0p5().flex_none().bg(stage::wash(0.14)))
+            .child(ui::seam(cx).bg(stage::wash(0.14)))
             .child(self.chat_toggle(cx))
     }
 
@@ -199,6 +198,7 @@ impl Waffle {
             (None, OnStage::Invited) => Some("Invited".to_owned()),
             _ => None,
         };
+        // lint-allow(custom-button): ui::card fills with the app's raised surface; this face is a bare wash in the stage's ink
         ui::col()
             .id(SharedString::from(format!("stage-face-{id}")))
             .w(px(FACE_CELL))
@@ -208,7 +208,7 @@ impl Waffle {
             .items_center()
             .gap_1()
             .hover(|s| s.bg(stage::wash(0.05)))
-            .child(div().relative().size(px(FACE)).child(ui::avatar(avatar, FACE)).children(place.map(hand_badge)))
+            .child(ui::badged(ui::avatar(avatar, FACE), FACE, ui::Shape::Round, stage::bg()).when_some(place, |face, place| face.mark(ui::Spot::TopRight, ui::badge_of(hand_badge(place)))))
             .child(ui::line(name).max_w(relative(1.)).text_size(ui::TEXT_XS).text_color(stage::text()))
             .children(why.map(|why| div().text_size(ui::TEXT_XXS).font_weight(FontWeight::SEMIBOLD).text_color(palette::accent()).font_features(tabular()).child(why)))
             .on_mouse_down(MouseButton::Right, cx.listener(move |this, e: &MouseDownEvent, _, cx| this.voice_user_menu(&id, e.position, cx)))
@@ -225,11 +225,11 @@ impl Waffle {
             .items_center()
             .justify_center()
             .gap_2()
-            .child(ui::icon_tile(Glyph::Stage, stage::wash(0.08), stage::strong()).size(px(EMPTY_ART)).mb_1())
+            .child(div().pb_1().child(ui::icon_tile(Glyph::Stage, stage::wash(0.08), stage::strong()).size(px(EMPTY_ART))))
             .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(title))
             .child(div().text_size(ui::TEXT_DETAIL).text_color(stage::muted()).child(body))
             .when(room.moderator, |d| {
-                d.child(ui::button("stage-start", ui::Tone::Primary, cx).mt_2().child("Start Stage").on_click(cx.listener(move |this, _, window, cx| this.open_stage_topic(guild_id.clone(), channel_id.clone(), window, cx))))
+                d.child(div().pt_2().child(ui::button("stage-start", ui::Tone::Primary, cx).child("Start Stage").on_click(cx.listener(move |this, _, window, cx| this.open_stage_topic(guild_id.clone(), channel_id.clone(), window, cx)))))
             })
     }
 
@@ -308,6 +308,7 @@ impl Waffle {
     fn requests_popover(&self, room: &Room, stage_height: f32, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let allowed = requests_allowed(room.guild, &room.channel.overwrites);
         let (guild_id, channel_id) = (room.guild.id.clone(), room.channel.id.clone());
+        // lint-allow(custom-button): ui::toggle_row draws in the app's colours, and this row's wash and ink are the stage's
         let allow = ui::row()
             .id("stage-allow-requests")
             .min_h(px(OPTION_ROW))
@@ -334,6 +335,7 @@ impl Waffle {
                 ui::col().id("stage-requests-list").flex_1().overflow_y_scroll().gap_0p5().children(rows).into_any_element()
             }
         };
+        // lint-allow(custom-surface, custom-mark): ui::surface is the app's overlay and ring, and this card is the stage's own dark overlay
         let card = ui::col()
             .id("stage-requests")
             .occlude()
@@ -361,7 +363,8 @@ impl Waffle {
                     .when(room.hands > 0, |d| d.child(ui::count_badge(room.hands as u32))),
             )
             .child(allow)
-            .child(div().h(ui::HAIRLINE).mx_2p5().my_1().flex_none().bg(stage::wash(0.08)))
+            // lint-allow(custom-divider): ui::divider has no colour option, and this rule takes the stage's own wash
+            .child(div().px_2p5().py_1().child(div().h(ui::HAIRLINE).flex_none().bg(stage::wash(0.08))))
             .child(list);
         // It hangs from the header's hand button, so it grows from its top right.
         ui::rise(card.transform_origin(gpui_kit::point(relative(1.), relative(0.))), "stage-requests", Duration::ZERO).into_any_element()
@@ -417,6 +420,7 @@ impl Waffle {
         let width = (stage_width - 24.).min(INVITE_WIDTH);
         let (guild_id, channel_id) = (room.guild.id.clone(), room.channel.id.clone());
         let (accept_guild, accept_channel) = (guild_id.clone(), channel_id.clone());
+        // lint-allow(custom-surface, custom-mark): ui::surface is the app's overlay and ring, and this card is the stage's own dark overlay
         let card = ui::row()
             .id("stage-invite")
             .occlude()
@@ -471,20 +475,13 @@ fn section(glyph: Glyph, label: String) -> Div {
 
 // The raised hand on a face, carrying its place in line.
 fn hand_badge(place: usize) -> Div {
-    ui::row()
-        .absolute()
-        .top_neg_1()
-        .right(px(-HAND_BADGE_RIGHT))
+    ui::badge(palette::accent(), palette::on_accent())
         .h(ui::LINE_LEAD)
         .min_w(ui::LINE_LEAD)
         .pl(px(HAND_BADGE_PAD))
         .pr_1p5()
         .rounded_full()
         .gap_0p5()
-        .bg(palette::accent())
-        .border_2()
-        .border_color(stage::bg())
-        .text_color(palette::on_accent())
         .text_size(ui::TEXT_XS)
         .font_weight(FontWeight::BOLD)
         .font_features(tabular())

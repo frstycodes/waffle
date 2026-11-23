@@ -116,7 +116,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends after its one timer fires, holding a WeakEntity
     }
 
     // Redraws once cards that just left have faded, to take them out.
@@ -132,7 +132,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends after its one timer fires, holding a WeakEntity
     }
 
     // Discord's Open Chat: in that call, the chat opens beside it; otherwise the channel opens on its own.
@@ -266,6 +266,7 @@ fn preview_card(preview: &Preview, ctx: &std::rc::Rc<crate::chat::RowContext>) -
         let (glyph, label) = crate::forward::attachment_summary(message)?;
         Some(ui::row().gap_1p5().text_color(stage::muted()).child(Icon::new(glyph).size(ui::ICON_MD)).child(label).into_any_element())
     });
+    // lint-allow(custom-surface): ui::surface rings and shadows in the app's overlay colours, and this card is the call stage's own dark overlay
     ui::row().items_stretch()
         .id(SharedString::from(format!("call-preview-{}", message.id)))
         .relative()
