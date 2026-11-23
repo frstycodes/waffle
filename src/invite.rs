@@ -295,9 +295,9 @@ impl Waffle {
         // The wide layout has room for the link's settings, so they show without Edit invite link.
         let always = friends.is_some() && invite.url().is_some();
         let draft = invite.draft.or(always.then_some(invite.settings));
-        let link = div().flex().flex_col().gap_5().child(link_section(invite, paused, !always, cx)).children(draft.map(|draft| settings_panel(invite, draft, always, window, cx)));
+        let link = ui::col().gap_5().child(link_section(invite, paused, !always, cx)).children(draft.map(|draft| settings_panel(invite, draft, always, window, cx)));
         let (columns, width) = match friends {
-            Some(friends) => (div().flex().items_start().gap_8().child(div().flex_1().min_w_0().child(friends)).child(link.flex_1().min_w_0()), WIDE),
+            Some(friends) => (ui::row().items_start().gap_8().child(div().flex_1().min_w_0().child(friends)).child(link.flex_1().min_w_0()), WIDE),
             None => (link, WIDTH),
         };
         let body = ui::dialog_body()
@@ -328,11 +328,11 @@ impl Waffle {
             true => div().py_4().text_center().text_color(palette::muted(cx)).child("No results found").into_any_element(),
             false => {
                 let items: Vec<AnyElement> = rows.into_iter().map(|row| self.invite_friend_row(row, invite, can_send, cx)).collect();
-                let list = div().id("invite-friends").flex().flex_col().gap_0p5().max_h(px(LIST_HEIGHT)).overflow_y_scroll().track_scroll(&invite.friends_scroll).children(items);
+                let list = ui::col().id("invite-friends").gap_0p5().max_h(px(LIST_HEIGHT)).overflow_y_scroll().track_scroll(&invite.friends_scroll).children(items);
                 div().relative().child(list).child(ui::more_below(&invite.friends_scroll, palette::surface(palette::Level::Raised, cx))).into_any_element()
             }
         };
-        Some(div().flex().flex_col().gap_2().child(ui::search_field("invite-search", &invite.search, cx)).child(list).into_any_element())
+        Some(ui::col().gap_2().child(ui::search_field("invite-search", &invite.search, cx)).child(list).into_any_element())
     }
 
     fn invite_friend_row(&self, row: Row, invite: &Invite, can_send: bool, cx: &mut Context<Self>) -> AnyElement {
@@ -345,18 +345,13 @@ impl Waffle {
             Some(group) => Some(members(group.recipients.len() + 1)),
             None => self.username(&row),
         };
-        let text = div()
+        let text = ui::col()
             .flex_1()
-            .min_w_0()
-            .flex()
-            .flex_col()
             .child(ui::truncating(format!("invite-name-{}", row.key), row.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
-            .children(detail.map(|d| div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(d)));
+            .children(detail.map(|d| ui::line(d).text_size(ui::TEXT_XS).text_color(palette::muted(cx))));
         let send = invite.sends.get(&row.key).copied();
         let button = invite_button(row, send, can_send, cx);
-        div()
-            .flex()
-            .items_center()
+        ui::row()
             .gap_3()
             .px_2()
             .py_1p5()
@@ -415,26 +410,19 @@ fn invite_rows(dms: &[Channel], relationships: &[Relationship]) -> Vec<Row> {
 // "Invite friends to Night Owls", then the channel they'll land in with its glyph.
 fn invite_head(guild: &Guild, channel: &Channel, cx: &mut Context<Waffle>) -> AnyElement {
     let (strong, muted) = (palette::strong(cx), palette::muted(cx));
-    let land = div()
-        .flex()
-        .items_center()
+    let land = ui::row()
         .gap_1()
-        .min_w_0()
         .text_size(ui::TEXT_SM)
         .text_color(muted)
         .child(crate::sidebar::channel_glyph(channel).size_4())
         .child(div().flex_none().child("Recipients will land in"))
-        .child(div().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(channel.name.clone()));
-    div()
-        .flex()
+        .child(ui::line(channel.name.clone()).font_weight(FontWeight::SEMIBOLD).text_color(strong));
+    ui::row()
         .items_start()
         .gap_3()
         .child(
-            div()
+            ui::col()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .gap_1()
                 .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("Invite friends to {}", guild.name)))
                 .child(land),
@@ -444,8 +432,7 @@ fn invite_head(guild: &Guild, channel: &Channel, cx: &mut Context<Waffle>) -> An
 }
 
 fn private_warning(cx: &App) -> AnyElement {
-    div()
-        .flex()
+    ui::row()
         .items_start()
         .gap_2()
         .text_size(ui::TEXT_SM)
@@ -471,7 +458,7 @@ fn link_section(invite: &Invite, paused: bool, editable: bool, cx: &mut Context<
     let url = invite.url();
     let (strong, faint) = (palette::strong(cx), palette::faint(cx));
     let value: AnyElement = match &url {
-        Some(url) => div().flex_1().min_w_0().truncate().text_color(if paused { faint } else { strong }).child(url.clone()).into_any_element(),
+        Some(url) => ui::line(url.clone()).flex_1().text_color(if paused { faint } else { strong }).into_any_element(),
         None => div().flex_1().min_w_0().child(ui::skeleton("invite-link-loading", ui::RADIUS_XS, cx).h_3p5().w(px(180.))).into_any_element(),
     };
     let copy_off = paused || url.is_none();
@@ -494,10 +481,8 @@ fn link_section(invite: &Invite, paused: bool, editable: bool, cx: &mut Context<
         .hover(|s| s.underline())
         .child("Edit invite link")
         .on_click(cx.listener(|this, _, _, cx| this.edit_invite_dialog(|i| (i.draft, i.select) = (Some(i.settings), None), cx)));
-    let hint = div().flex().flex_wrap().gap_x_1().text_size(ui::TEXT_DETAIL).line_height(ui::LINE_DETAIL).text_color(palette::muted(cx)).child(line).when(url.is_some() && editable, |d| d.child(edit));
-    div()
-        .flex()
-        .flex_col()
+    let hint = ui::row().items_stretch().flex_wrap().gap_x_1().text_size(ui::TEXT_DETAIL).line_height(ui::LINE_DETAIL).text_color(palette::muted(cx)).child(line).when(url.is_some() && editable, |d| d.child(edit));
+    ui::col()
         .gap_2()
         .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Or, send a server invite link to a friend"))
         .child(field)
@@ -529,8 +514,7 @@ fn settings_panel(invite: &Invite, draft: LinkSettings, always: bool, window: &m
             cx,
         )
     }));
-    let actions = div()
-        .flex()
+    let actions = ui::row().items_stretch()
         .justify_end()
         .gap_2()
         .when(cancellable, |d| d.child(ui::button("invite-settings-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.edit_invite_dialog(|i| (i.draft, i.select) = (None, None), cx)))))
@@ -544,14 +528,12 @@ fn settings_panel(invite: &Invite, draft: LinkSettings, always: bool, window: &m
                     }
                 })),
         );
-    div()
-        .flex()
-        .flex_col()
+    ui::col()
         .gap_4()
         .p_4()
         .squircle(RADIUS_LG)
         .bg(palette::hover(cx))
-        .child(div().flex().gap_3().child(div().flex_1().min_w_0().child(ui::field("Expire after", cx).child(age))).child(div().flex_1().min_w_0().child(ui::field("Max number of uses", cx).child(uses))))
+        .child(ui::row().items_stretch().gap_3().child(div().flex_1().min_w_0().child(ui::field("Expire after", cx).child(age))).child(div().flex_1().min_w_0().child(ui::field("Max number of uses", cx).child(uses))))
         .child(temporary.mx_neg_3())
         .child(actions)
         .into_any_element()

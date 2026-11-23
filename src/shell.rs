@@ -25,6 +25,7 @@ impl Render for Shell {
     // all: incoming events keep updating the app's data, but nothing is laid out, decoded or touched
     // until the window can be seen again, so memory given back in the background stays given back.
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("Shell");
         if crate::presence::out_of_sight() && !crate::video::is_playing(cx) && !crate::gif::forced() {
             return div().into_any_element();
         }

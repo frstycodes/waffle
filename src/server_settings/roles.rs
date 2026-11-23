@@ -229,7 +229,7 @@ impl Waffle {
                 let count = counts.get(&r.id).map(|n| plural(*n, "member", "members"));
                 let id = r.id.clone();
                 // A grip on the rows that drag; the rest keep its slot so every name lines up.
-                let grip = div().w_4().flex_none().flex().justify_center().when(draggable, |g| g.cursor_grab().text_color(palette::faint(cx)).child(Icon::new(Glyph::Grip).size(ui::ICON_MD)));
+                let grip = ui::row().items_stretch().w_4().flex_none().justify_center().when(draggable, |g| g.cursor_grab().text_color(palette::faint(cx)).child(Icon::new(Glyph::Grip).size(ui::ICON_MD)));
                 let row = ui::settings_row(SharedString::from(format!("ss-role-{}", r.id)), i > 0 || default_shown(&list, &guild_id), cx)
                     .child(grip)
                     .child(div().size_3().m_0p5().rounded_full().bg(color).flex_none())
@@ -256,7 +256,7 @@ impl Waffle {
         let empty = rows.is_empty().then(|| ui::settings_caption(if query.is_empty() { "No roles yet. Create one to group members and give them permissions." } else { "No roles match." }, cx));
         vec![
             ui::settings_card(cx).children(default).into_any_element(),
-            div().flex().gap_3().items_center().child(div().flex_1().child(search)).child(create).into_any_element(),
+            ui::row().gap_3().child(div().flex_1().child(search)).child(create).into_any_element(),
             ui::settings_group("Roles", cx).child(ui::settings_card(cx).id("ss-roles").children(rows)).children(empty).child(ui::settings_caption("Members use the colour of their highest role. You can only move roles below your own highest role.", cx)).into_any_element(),
         ]
     }
@@ -350,7 +350,7 @@ impl Waffle {
             }
             cx.notify();
         }));
-        let title = div().text_size(ui::TEXT_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).truncate().child(if is_everyone { "@everyone".to_owned() } else { format!("Edit role · {}", row.role.name) });
+        let title = ui::line(if is_everyone { "@everyone".to_owned() } else { format!("Edit role · {}", row.role.name) }).text_size(ui::TEXT_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx));
         let mut tabs = vec![ui::Tab::new("Permissions")];
         if !is_everyone {
             tabs.insert(0, ui::Tab::new("Display"));
@@ -369,7 +369,7 @@ impl Waffle {
                 cx.notify();
             })
         }, window, cx);
-        let mut out = vec![div().flex().flex_col().gap_2().child(div().flex().items_center().gap_2().child(back).child(title)).child(strip).into_any_element()];
+        let mut out = vec![ui::col().gap_2().child(ui::row().gap_2().child(back).child(title)).child(strip).into_any_element()];
         if let Some(reason) = lock.reason().filter(|_| lock == RoleLock::Above) {
             out.push(ui::callout(Notice::Info, Glyph::Shield, "View only", reason, cx).into_any_element());
         }
@@ -395,7 +395,7 @@ impl Waffle {
             let none = ui::swatch(SharedString::from(format!("ss-swatch-{slot}-none")), palette::faint(cx), current.is_none_or(|c| c == 0), ring).on_click(cx.listener(move |this, _, _, cx| this.edit_role_draft(cx, |d| set_color(d, slot, None))));
             let rest = COLORS.map(|c| ui::swatch(SharedString::from(format!("ss-swatch-{slot}-{c:06x}")), palette::data_color(c), current == Some(c), ring).on_click(cx.listener(move |this, _, _, cx| this.edit_role_draft(cx, |d| set_color(d, slot, Some(c))))).into_any_element());
             // Ten to a row, as Discord lays them out.
-            div().max_w(px(400.)).flex().flex_wrap().gap_2().child(none).children(rest)
+            ui::row().items_stretch().max_w(px(400.)).flex_wrap().gap_2().child(none).children(rest)
         };
         let primary = swatches(0, Some(draft.color), cx);
         let mut colour = ui::settings_card(cx).p_4().gap_3().child(ui::settings_text("Colour", Some("Members show the colour of their highest coloured role"), cx)).child(primary);
@@ -449,7 +449,7 @@ impl Waffle {
             }, cx);
         }));
         let count = self.server_settings.as_ref().and_then(|v| v.roles.counts.get(&row.id).copied()).unwrap_or(0);
-        ui::callout_with(Notice::Danger, Glyph::Trash, format!("Delete {}?", row.role.name), format!("{} lose it. This can't be undone.", plural(count, "member", "members")), div().flex().gap_2().child(keep).child(delete), cx).into_any_element()
+        ui::callout_with(Notice::Danger, Glyph::Trash, format!("Delete {}?", row.role.name), format!("{} lose it. This can't be undone.", plural(count, "member", "members")), ui::row().items_stretch().gap_2().child(keep).child(delete), cx).into_any_element()
     }
 
     fn ss_role_permissions(&mut self, editable: bool, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
@@ -459,7 +459,7 @@ impl Waffle {
         let query = view.roles.perm_search.read(cx).value().to_string();
         let search = ui::search_field("ss-perm-search", &view.roles.perm_search, cx);
         let clear = ui::button("ss-perm-clear", Tone::Ghost, cx).small().disabled(!editable || bits == 0).child("Clear permissions").on_click(cx.listener(|this, _, _, cx| this.edit_role_draft(cx, |d| d.permissions = 0)));
-        let mut out = vec![div().flex().items_center().gap_3().child(div().flex_1().child(search)).child(clear).into_any_element()];
+        let mut out = vec![ui::row().gap_3().child(div().flex_1().child(search)).child(clear).into_any_element()];
         let groups = perms::search(&query);
         if groups.is_empty() {
             out.push(ui::settings_caption("No permissions match.", cx).into_any_element());

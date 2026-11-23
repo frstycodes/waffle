@@ -1,0 +1,33 @@
+# Every PR, Python only (no Rust build, so it finishes in seconds; clippy and `cargo test` stay local, `make check`):
+# - tools/ui_lint.py --check: hand-written values, component lookalikes, margins, unvirtualized lists, app-wide
+#   redraws, file lengths, and stale generated files (src/ui/CATALOG.md, src/ui/ONE_OFFS.md);
+# - the lint's own tests;
+# - the ratchet against the base branch: no rule dropped, no rule's baseline total raised.
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Design-system ratchet
+        run: python3 tools/ui_lint.py --check
+      - name: The lint's own tests
+        run: python3 tools/test_ui_lint.py
+      # The baseline only falls: no rule dropped and no rule's total raised against the branch this merges into.
+      - name: Ratchet held against the base branch
+        run: python3 tools/ui_lint.py --against "origin/${{ github.base_ref || 'main' }}"

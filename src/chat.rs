@@ -63,7 +63,7 @@ const FORWARD_WIDTH: f32 = 520.;
 
 impl Waffle {
     pub fn render_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let main = div().relative().flex_1().min_w_0().h_full().flex().flex_col().bg(palette::surface(Level::Page, cx));
+        let main = ui::col().relative().flex_1().h_full().bg(palette::surface(Level::Page, cx));
         let Some(channel) = self.channel.clone() else {
             return main.child(empty_state("idle", Mood::Idle, "No channel open", "Pick a server on the left, then a channel to start reading.", cx));
         };
@@ -75,7 +75,7 @@ impl Waffle {
         let body = match self.feeds.get(&channel.id) {
             Some(Feed { loaded: true, messages, .. }) if messages.is_empty() && channel.kind == ChannelKind::Dm => match self.dm_start(&channel, false) {
                 // Nothing said yet: the header rests at the foot of the feed, where the first message will land.
-                Some(start) => div().size_full().flex().flex_col().justify_end().pt(px(top)).pb(px(self.composer_height.get() + 32.)).child(crate::dm_start::dm_start_header(&start, cx.weak_entity(), cx)).into_any_element(),
+                Some(start) => ui::col().size_full().justify_end().pt(px(top)).pb(px(self.composer_height.get() + 32.)).child(crate::dm_start::dm_start_header(&start, cx.weak_entity(), cx)).into_any_element(),
                 None => empty_state("empty", Mood::Happy, "No messages yet", "Be the first to say something.", cx),
             },
             Some(Feed { loaded: true, messages, .. }) if messages.is_empty() => empty_state("empty", Mood::Happy, "No messages yet", "Be the first to say something.", cx),
@@ -89,13 +89,10 @@ impl Waffle {
             None => self.render_composer(window, cx).into_any_element(),
         };
         let (inline, above) = self.place_header(header);
-        let chat = div()
+        let chat = ui::col()
             .relative()
             .flex_1()
-            .min_w_0()
             .h_full()
-            .flex()
-            .flex_col()
             .key_context("Chat")
             .on_action(cx.listener(Self::focus_search))
             // The feed stops under the header, a hard edge. A DM's profile sits under the header instead of beside it.
@@ -105,7 +102,7 @@ impl Waffle {
         // The members column beside the feed runs to the window's top with a header of its own on the same line.
         let panel = self.panel_column_width().map(|w| self.part(crate::part::Column::Panel, gpui_kit::StyleRefinement::default().w(px(w)).h_full().flex_none(), cx));
         let drop_zone = self.drop_zone(&channel, cx);
-        main.children(above).child(div().flex_1().min_h_0().flex().child(chat.child(drop_zone)).children(panel))
+        main.children(above).child(ui::row().items_stretch().flex_1().min_h_0().child(chat.child(drop_zone)).children(panel))
     }
 
     // Where you are as breadcrumbs, the topic, then the channel's tools (design: navigation.html's chanbar).
@@ -123,12 +120,9 @@ impl Waffle {
             _ if channel.raw_type == 5 => Icon::new(Glyph::Megaphone).size(ui::ICON_XL).text_color(faint).into_any_element(),
             _ => Icon::new(Glyph::Hashtag).size(ui::ICON_XL).text_color(faint).into_any_element(),
         };
-        let here = div()
+        let here = ui::row()
             .h_8()
             .px_1p5()
-            .min_w_0()
-            .flex()
-            .items_center()
             .gap_1p5()
             .text_size(ui::TEXT_MD)
             .font_weight(FontWeight::SEMIBOLD)
@@ -136,12 +130,9 @@ impl Waffle {
             .child(lead)
             .child(ui::truncating("header-channel-name", channel.name.clone()));
         // Thread names are often whole sentences: the crumbs cap at 60% and truncate rather than push the tools off.
-        let crumbs = div()
+        let crumbs = ui::row()
             .flex_none()
             .max_w(gpui_kit::relative(0.6))
-            .min_w_0()
-            .flex()
-            .items_center()
             .gap_0p5()
             .when_some(parent, |c, parent| c.child(parent).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_SM).text_color(faint)))
             .child(here);
@@ -195,19 +186,17 @@ impl Waffle {
         let members = self.members_toggle(channel, cx);
         let search = Some(self.channel_search(window, cx));
         // Occludes, like the composer: the feed scrolls under the header and must not take its hover or clicks.
-        let bar = div()
+        let bar = ui::row()
             .occlude()
             .h(px(HEADER_HEIGHT))
             .pl_2()
             .pr_2()
-            .flex()
-            .items_center()
             .gap_2()
             // Drag area: every control inside it occludes it, or Windows' caption takes its clicks.
             .window_control_area(WindowControlArea::Drag)
             .child(crumbs)
             .children(topic)
-            .child(div().ml_auto().flex_none().flex().items_center().gap_0p5().children(self.follow_button(channel, cx)).children(join).children(calls.into_iter().flatten()).children(threads).children(bell).child(pins).children(add_members).children(members).children(search))
+            .child(ui::row().ml_auto().flex_none().gap_0p5().children(self.follow_button(channel, cx)).children(join).children(calls.into_iter().flatten()).children(threads).children(bell).child(pins).children(add_members).children(members).children(search))
             .child(self.caption_clearance(!self.panel_shown()));
         ui::hard_edge(|| false, cx).child(bar)
     }
@@ -298,10 +287,10 @@ impl Waffle {
         let label = unread_label(fresh.len(), estimated, &first.timestamp);
         let tint = ui::mix(palette::surface(Level::Page, cx), palette::accent(), 0.16);
         let press = palette::accent().opacity(0.14);
-        let button = move |id: &'static str| div().id(id).h_7().px_2().flex().items_center().gap_1p5().squircle(RADIUS_XS).cursor_pointer().hover(move |s| s.bg(press));
+        let button = move |id: &'static str| ui::row().id(id).h_7().px_2().gap_1p5().squircle(RADIUS_XS).cursor_pointer().hover(move |s| s.bg(press));
         let (first_id, channel_id) = (first.id.clone(), channel_id.to_owned());
         Some(
-            div()
+            ui::row()
                 .id("unread-bar")
                 // Floats over the feed: the messages under it must not take its hover or clicks.
                 .occlude()
@@ -312,8 +301,6 @@ impl Waffle {
                 .min_h_9()
                 .pl_3()
                 .pr_1()
-                .flex()
-                .items_center()
                 .gap_2()
                 .squircle(RADIUS_SM)
                 .bg(tint)
@@ -326,7 +313,7 @@ impl Waffle {
                         .min_w_0()
                         .ml_neg_2()
                         .child(Icon::new(Glyph::ArrowUp).size(ui::ICON_MD))
-                        .child(div().min_w_0().truncate().child(label))
+                        .child(ui::line(label))
                         // Discord's body only jumps to the first unread; reading it there is what marks it read.
                         .on_click(cx.listener(move |this, _, _, cx| this.jump_to(first_id.clone(), cx))),
                 )
@@ -369,10 +356,8 @@ impl Waffle {
             let start = ctx.dm_start.as_ref().filter(|_| ix == 0).map(|s| crate::dm_start::dm_start_header(s, ctx.this.clone(), cx));
             let row = match new_day || first_unread || start.is_some() {
                 false => row,
-                true => div()
+                true => ui::col()
                     .w_full()
-                    .flex()
-                    .flex_col()
                     .children(start)
                     .when(new_day, |d| d.child(day_divider(&message.timestamp, cx)))
                     .when(first_unread, |d| d.child(unread_line()))
@@ -536,11 +521,10 @@ impl Waffle {
         let open_picker = self.composer_picker();
         // The draft stays in `composer` underneath; the input row comes back when the guard lifts.
         let locked = self.locked_row(cx);
-        let row = div()
+        let row = ui::row()
             .min_h_12()
             .py(px(7.))
             .px_1p5()
-            .flex()
             .items_end()
             .gap_1()
             .child(ui::icon_button("attach", Glyph::PlusCircle, "Upload a file or create a poll", cx).on_click(cx.listener(|this, _, window, cx| this.open_menu(window.mouse_position(), this.attach_entries(), cx))))
@@ -553,11 +537,9 @@ impl Waffle {
             // Not verified: the tooltip; Discord's chat box shows its button only when this setting is on.
             .when(self.prefs.send_button, |r| r.child(ui::icon_button("composer-send", Glyph::PaperPlane, "Send Message", cx).disabled(!self.has_draft).on_click(cx.listener(|this, _, window, cx| this.submit(false, window, cx)))))
             .child(self.composer_activities_button(cx));
-        let card = div()
+        let card = ui::col()
             .relative()
             .mx_4()
-            .flex()
-            .flex_col()
             .squircle(RADIUS_LG)
             // Glass: the feed shows through, blurred, as it scrolls under.
             .bg(palette::surface(Level::Raised, cx).opacity(0.72))
@@ -591,7 +573,7 @@ impl Waffle {
         // A glass pill just above the composer, out of the flow, so the box never moves when someone types.
         // Out of the way while suggestions, Hold Up! or the command picker are open, which rise over the same spot.
         let typing = (!names.is_empty() && self.autocomplete.is_none() && self.hold_up.is_none() && !self.command_picker.is_open() && !self.command_typed(cx)).then(|| {
-            div().absolute().left_7().top_neg_7().max_w(gpui_kit::relative(0.6)).h_6().px_2p5().flex().items_center().gap_2().rounded_full()
+            ui::row().absolute().left_7().top_neg_7().max_w(gpui_kit::relative(0.6)).h_6().px_2p5().gap_2().rounded_full()
                 .bg(palette::surface(Level::Raised, cx).opacity(0.72))
                 .backdrop_blur(px(16.))
                 .text_size(ui::TEXT_XS)
@@ -613,13 +595,11 @@ impl Waffle {
         .absolute()
         .inset_0();
         let note = self.send_error.clone().map(|error| div().mx_4().mt_1p5().text_size(ui::TEXT_XS).text_color(palette::danger_ink(cx)).child(error));
-        div()
+        ui::col()
             .absolute()
             .left_0()
             .right_0()
             .bottom_0()
-            .flex()
-            .flex_col()
             .capture_key_down(cx.listener(Self::on_composer_key))
             // Before the text field's own Tab, which indents and would never reach on_composer_key.
             .capture_action(cx.listener(|this, _: &gpui_kit::component::input::IndentInline, window, cx| {
@@ -657,7 +637,7 @@ impl Waffle {
             .children(self.jump_to_present(cx))
             // Occludes: the composer floats over the feed, which must not take the hover or the click under it.
             // A Server Guide to-do bar rides on top, inside the measured stack so the feed leaves room for it.
-            .child(div().relative().occlude().flex().flex_col().gap_2().children(guide_bar).child(card).children(typing))
+            .child(ui::col().relative().occlude().gap_2().children(guide_bar).child(card).children(typing))
             .children(note)
             // 8px off the window's foot, level with the user card in the left column.
             .child(div().h_2())
@@ -725,7 +705,7 @@ impl Waffle {
                 this.scrolled_up = false;
                 cx.notify();
             }));
-        Some(div().absolute().left_0().right_0().top_neg_11().flex().justify_center().child(capsule).with_animation(
+        Some(ui::row().items_stretch().absolute().left_0().right_0().top_neg_11().justify_center().child(capsule).with_animation(
             "jump-to-present-in",
             Animation::new(ui::DUR_POP).with_easing(gpui_kit::ease_out_quint()),
             |d, t| d.opacity(t).mt(px((1. - t) * 8.)),
@@ -740,7 +720,7 @@ impl Waffle {
             (_, Some(_)) => emphasised(&[("Editing message".into(), true)], strong),
             _ => return None,
         };
-        let bar = bar_row(cx).child(div().flex_1().min_w_0().truncate().child(label));
+        let bar = bar_row(cx).child(div().min_w_0().truncate().child(label).flex_1());
         let bar = match self.replying.is_some() {
             true => bar.child(self.ping_toggle(cx)),
             false => bar.child(ui::key_hint(ui::kbd("Esc", cx), "Cancel", cx)).child(ui::key_hint(ui::kbd("Enter", cx), "Save", cx)),
@@ -752,12 +732,10 @@ impl Waffle {
     fn ping_toggle(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let on = self.reply_ping;
         let hover = palette::hover(cx);
-        div()
+        ui::row()
             .id("reply-ping")
             .h_7()
             .px_2()
-            .flex()
-            .items_center()
             .gap_1()
             .squircle(RADIUS_XS)
             .cursor_pointer()
@@ -782,7 +760,7 @@ impl Waffle {
             return None;
         }
         let cards: Vec<AnyElement> = self.pending_files.iter().enumerate().map(|(i, file)| self.tray_card(i, file, cx)).collect();
-        Some(div().id("composer-tray").flex().items_end().gap_2().p_2p5().overflow_x_scroll().border_b_1().border_color(palette::line(cx)).children(cards))
+        Some(ui::row().id("composer-tray").items_end().gap_2().p_2p5().overflow_x_scroll().border_b_1().border_color(palette::line(cx)).children(cards))
     }
 
     fn tray_card(&self, i: usize, file: &crate::attachments::PendingFile, cx: &mut Context<Self>) -> AnyElement {
@@ -792,15 +770,14 @@ impl Waffle {
         let picture = self.file_previews.get(&file.path).cloned().flatten();
         let veiled = file.spoiler && file.kind() != crate::attachments::FileKind::Other;
         let has_alt = file.description.as_deref().is_some_and(|d| !d.is_empty());
-        let tags = div()
+        let tags = ui::row().items_stretch()
             .absolute()
             .left_1p5()
             .bottom_1p5()
-            .flex()
             .gap(px(3.))
             .when(has_alt, |t| t.child(media_label("Alt")))
             .when(file.spoiler, |t| t.child(media_label("Spoiler")));
-        let well = div()
+        let well = ui::row()
             .relative()
             .h(px(140.))
             .flex_none()
@@ -808,8 +785,6 @@ impl Waffle {
             .squircle(RADIUS_MD)
             .bg(palette::surface(Level::Raised, cx))
             .text_color(palette::muted(cx))
-            .flex()
-            .items_center()
             .justify_center()
             .map(|w| match picture {
                 // Thumbnails fill the well; icons keep their own transparent margins.
@@ -818,14 +793,11 @@ impl Waffle {
             })
             .when(veiled, |w| w.child(spoiler_veil()))
             .child(tags);
-        let meta = div()
+        let meta = ui::col()
             .px_1p5()
             .pb_0p5()
-            .min_w_0()
-            .flex()
-            .flex_col()
             .gap_px()
-            .child(div().truncate().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(file.name.clone()))
+            .child(ui::line(file.name.clone()).text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
             .child(div().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(format_size(file.size)));
         let (spoiler_glyph, spoiler_tip) = match file.spoiler {
             true => (Glyph::EyeSlash, "Remove Spoiler"),
@@ -840,14 +812,12 @@ impl Waffle {
                 .child(ui::icon_button(SharedString::from(format!("modify-file-{i}")), Glyph::Pen, "Modify Attachment", cx).small().on_click(cx.listener(move |this, _, window, cx| this.open_modify_pending(i, window, cx))))
                 .child(ui::icon_button(SharedString::from(format!("remove-file-{i}")), Glyph::X, "Remove Attachment", cx).small().on_click(cx.listener(move |this, _, _, cx| this.remove_file(i, cx))))
         });
-        div()
+        ui::col()
             .id(SharedString::from(format!("tray-card-{i}")))
             .relative()
             .w(px(184.))
             .flex_none()
             .p_1p5()
-            .flex()
-            .flex_col()
             .gap_1p5()
             .squircle(RADIUS_LG)
             .bg(palette::selected(cx))
@@ -863,10 +833,8 @@ impl Waffle {
     fn drop_zone(&self, channel: &Channel, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let limit = format_size(crate::discord::upload_limit(self.my_account.premium_type, self.guild().map_or(0, |g| g.premium_tier)));
         let accent = palette::accent_ink(cx);
-        let card = div()
+        let card = ui::col()
             .size_full()
-            .flex()
-            .flex_col()
             .items_center()
             .justify_center()
             .gap_2()
@@ -930,7 +898,7 @@ impl Waffle {
         }));
         let send = ui::button("hold-up-send", ui::Tone::Primary, cx).gap_2().child("Send Now").child(ui::kbd("Enter", cx)).on_click(cx.listener(|this, _, window, cx| this.submit(true, window, cx)));
         Some(
-            div()
+            ui::col()
                 .id("hold-up")
                 .occlude()
                 .absolute()
@@ -940,8 +908,6 @@ impl Waffle {
                 .mb(px(9.))
                 .py_4()
                 .px(px(18.))
-                .flex()
-                .flex_col()
                 .gap_2p5()
                 .squircle(RADIUS_LG)
                 .bg(palette::surface(Level::Overlay, cx))
@@ -949,13 +915,13 @@ impl Waffle {
                 .text_size(ui::TEXT_SM)
                 .text_color(palette::text(cx))
                 .child(
-                    div().flex().items_center().gap_2().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(strong)
+                    ui::row().gap_2().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(strong)
                         .child(div().text_color(palette::accent_ink(cx)).child(Icon::new(Glyph::Megaphone).size(ui::ICON_XL)))
                         .child("Hold Up!"),
                 )
                 .child(div().line_height(ui::LINE_SM).child(body))
-                .child(div().flex().items_center().gap_1p5().text_size(ui::TEXT_XS).text_color(muted).child(Icon::new(Glyph::Info).size(ui::ICON_SM)).child("Maybe try mentioning a role or individual users instead?"))
-                .child(div().flex().flex_wrap().gap_2().child(edit).child(send))
+                .child(ui::row().gap_1p5().text_size(ui::TEXT_XS).text_color(muted).child(Icon::new(Glyph::Info).size(ui::ICON_SM)).child("Maybe try mentioning a role or individual users instead?"))
+                .child(ui::row().items_stretch().flex_wrap().gap_2().child(edit).child(send))
                 .transform_origin(point(gpui_kit::relative(0.5), gpui_kit::relative(1.)))
                 .with_animation("hold-up", Animation::new(ui::DUR_POP).with_easing(gpui_kit::ease_out_quint()), |el, t| el.opacity(t).scale(0.95 + 0.05 * t)),
         )
@@ -972,14 +938,12 @@ impl Waffle {
         };
         let rows = auto.items.iter().enumerate().map(|(i, item)| {
             let lead = suggest_lead(&item.lead, cx);
-            let detail = item.detail.clone().map(|d| div().flex_none().max_w(px(180.)).truncate().text_size(ui::TEXT_XS).text_color(muted).child(d));
-            div()
+            let detail = item.detail.clone().map(|d| ui::line(d).flex_none().max_w(px(180.)).text_size(ui::TEXT_XS).text_color(muted));
+            ui::row()
                 .id(SharedString::from(format!("suggest-{i}")))
                 .min_h_10()
                 .py_1p5()
                 .px_2p5()
-                .flex()
-                .items_center()
                 .gap_2p5()
                 .squircle(RADIUS_SM)
                 .cursor_pointer()
@@ -987,7 +951,7 @@ impl Waffle {
                 .when(i == auto.selected, |r| r.bg(selected))
                 .when(i != auto.selected, |r| r.hover(move |s| s.bg(hover)))
                 .child(lead)
-                .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::MEDIUM).text_color(strong).child(item.label.clone()))
+                .child(ui::line(item.label.clone()).flex_1().font_weight(FontWeight::MEDIUM).text_color(strong))
                 .children(detail)
                 .on_click(cx.listener(move |this, _, window, cx| {
                     if let Some(auto) = &mut this.autocomplete {
@@ -998,15 +962,13 @@ impl Waffle {
         });
         // msg-pop: it grows from 95% at its bottom centre as it fades in.
         Some(
-            div()
+            ui::col()
                 .absolute()
                 .left_neg_px()
                 .right_neg_px()
                 .bottom(gpui_kit::relative(1.))
                 .mb(px(9.))
                 .p_1p5()
-                .flex()
-                .flex_col()
                 .gap_0p5()
                 .max_h(px(340.))
                 .squircle(RADIUS_LG)
@@ -1015,7 +977,7 @@ impl Waffle {
                 .text_size(ui::TEXT_SM)
                 .child(div().flex_none().pt_1p5().px_2p5().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(muted).child(heading))
                 // The rows scroll inside the popup's height rather than spilling out over the composer.
-                .child(div().id("autocomplete-list").flex_1().min_h_0().flex().flex_col().gap_0p5().overflow_y_scroll().track_scroll(&self.autocomplete_scroll).children(rows))
+                .child(ui::col().id("autocomplete-list").flex_1().gap_0p5().overflow_y_scroll().track_scroll(&self.autocomplete_scroll).children(rows))
                 .transform_origin(point(gpui_kit::relative(0.5), gpui_kit::relative(1.)))
                 .with_animation("autocomplete", Animation::new(ui::DUR_POP).with_easing(gpui_kit::ease_out_quint()), |el, t| el.opacity(t).scale(0.95 + 0.05 * t)),
         )
@@ -1176,12 +1138,9 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         true => compact_line(message, starts_group, text, ctx, cx),
         false => text,
     };
-    let body = div()
+    let body = ui::col()
         .relative()
         .flex_1()
-        .min_w_0()
-        .flex()
-        .flex_col()
         .text_size(px(ctx.font_size))
         .text_color(ink)
         .children(message.reply.as_ref().filter(|_| ctx.compact).map(|reply| reply_preview(reply, message.reply_to.clone(), ctx, cx)))
@@ -1205,7 +1164,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .when(ephemeral, |b| b.child(components::only_you(message, ctx, cx)))
         // Where a jump landed: a squiggle under the message, gone with the flash.
         .when(landed, |b| b.child(div().absolute().left_0().right_0().bottom_neg_1p5().h_2().child(ui::squiggle(SharedString::from(format!("squiggle-{}", message.id)), message.id.parse().unwrap_or(0), palette::accent_ink(cx), JUMP_FLASH))));
-    let row = div()
+    let row = ui::col()
         .id(group.clone())
         .group(group.clone())
         .relative()
@@ -1214,8 +1173,6 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .px(px(if mention { 24. } else { 16. }))
         .py_0p5()
         .squircle(RADIUS_SM)
-        .flex()
-        .flex_col()
         .line_height(gpui_kit::relative(1.45))
         .when(ephemeral, |r| r.bg(components::ephemeral_tint(cx)))
         // Mentioning you: the tint and a 2px accent bar down the left edge, square like Discord's.
@@ -1226,14 +1183,13 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
     // Last, so it paints over the message's own content where it overlaps it.
     let toolbar = hovered.then(|| actions(message, mine, ctx, cx));
     if ctx.compact {
-        let line = div().flex().gap_2().child(compact_time(message, ctx, cx)).child(body);
+        let line = ui::row().items_stretch().gap_2().child(compact_time(message, ctx, cx)).child(body);
         return inset(with_message_menu(row.when(starts_group, |r| r.mt(px(ctx.group_spacing))).child(line).children(toolbar), message, ctx), mention);
     }
     if !starts_group {
-        let gutter = div()
+        let gutter = ui::row().items_stretch()
             .w(px(AVATAR))
             .flex_none()
-            .flex()
             .justify_end()
             .line_height(px(ctx.body_line()))
             .text_size(ui::TEXT_XS)
@@ -1243,7 +1199,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
                 SendState::Sending => g.child(Icon::new(Glyph::Clock).size(ui::ICON_SM).mt_1()),
                 _ => g.when(hovered, |g| g.child(gutter_clock(&message.timestamp))),
             });
-        return inset(with_message_menu(row.child(div().flex().gap_4().child(gutter).child(body)).children(toolbar), message, ctx), mention);
+        return inset(with_message_menu(row.child(ui::row().items_stretch().gap_4().child(gutter).child(body)).children(toolbar), message, ctx), mention);
     }
     let row = row
         .mt(px(ctx.group_spacing))
@@ -1251,8 +1207,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
         .children(message.reply.as_ref().map(|reply| reply_preview(reply, message.reply_to.clone(), ctx, cx)))
         .children(components::used_command(message, ctx, cx))
         .child(
-            div()
-                .flex()
+            ui::row().items_stretch()
                 .gap_4()
                 .child(author_trigger(format!("avatar-{}", message.id), message, ctx).flex_none().mt_0p5().child(crate::layout::decorated_avatar(
                     &message.author.avatar,
@@ -1261,7 +1216,7 @@ fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: 
                     None,
                     palette::surface(Level::Page, cx),
                 )))
-                .child(div().flex_1().min_w_0().flex().flex_col().child(message_head(message, ctx, cx)).child(body)),
+                .child(ui::col().flex_1().child(message_head(message, ctx, cx)).child(body)),
         )
         .children(toolbar);
     inset(with_message_menu(row, message, ctx), mention)
@@ -1305,13 +1260,11 @@ fn fold_line(first_id: &str, run: &Run, ctx: &Rc<RowContext>, cx: &App) -> AnyEl
             cx.stop_propagation();
             this.update(cx, |this, cx| this.toggle_fold(key.clone(), cx)).ok();
         });
-    let line = div()
+    let line = ui::row()
         .mt_1p5()
         .min_h_8()
         .pl(px(16. + CONTENT_INSET))
         .pr_4()
-        .flex()
-        .items_center()
         .gap_2()
         .text_size(ui::TEXT_SM)
         .text_color(palette::faint(cx))
@@ -1325,11 +1278,8 @@ fn fold_line(first_id: &str, run: &Run, ctx: &Rc<RowContext>, cx: &App) -> AnyEl
 // toolbar, reactions or reply chrome, on a card that jumps to it.
 pub(crate) fn search_hit(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Div {
     let media = hit_media(message, ctx, cx);
-    let body = div()
+    let body = ui::col()
         .flex_1()
-        .min_w_0()
-        .flex()
-        .flex_col()
         .text_size(ui::TEXT_LEAD)
         .line_height(gpui_kit::relative(1.45))
         .text_color(palette::text(cx))
@@ -1339,8 +1289,7 @@ pub(crate) fn search_hit(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) 
         .children(media.map(|m| div().flex_none().child(m)))
         .children(message.embeds.iter().enumerate().map(|(i, e)| embed_card(e, None, message.reply_to.as_deref(), format!("hit-embed-{}-{i}", message.id), ctx, cx)))
         .children(files(message, ctx, cx));
-    div()
-        .flex()
+    ui::row().items_stretch()
         .gap_3()
         .child(ui::avatar(message.author.avatar.clone(), 36.).flex_none().mt_0p5())
         .child(body)
@@ -1365,7 +1314,7 @@ fn hit_media(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<An
             div().flex_none().w(px(w)).h(px(h)).child(media_tile(message, i, (w, h), ui::all(RADIUS_MD), Paging::Feed, ctx, cx)).into_any_element()
         })
         .collect();
-    Some(div().mt_2().flex().flex_wrap().gap_1().children(tiles).into_any_element())
+    Some(ui::row().items_stretch().mt_2().flex_wrap().gap_1().children(tiles).into_any_element())
 }
 
 // The frame for a picture of `size` within `max`: its own shape, never larger than it is, with the shape
@@ -1388,11 +1337,8 @@ pub(crate) fn inset(row: AnyElement, flush: bool) -> AnyElement {
 pub(crate) fn message_head(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> impl IntoElement + use<> {
     // GAP: gpui text reports no baseline to taffy, so `items_baseline` would line up box bottoms and
     // lift the name. One line box, centred, with the smaller time nudged 1px, shares a baseline.
-    div()
-        .flex()
-        .items_center()
+    ui::row()
         .gap_2()
-        .min_w_0()
         .line_height(px(ctx.name_line()))
         .child(author(message, ctx, cx))
         .when(message.silent(), |h| h.child(silent_mark(&message.id, cx)))
@@ -1412,11 +1358,8 @@ fn author(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Div {
     let name = ctx.name_of(&message.author);
     let style = message.author.name_style.as_ref().filter(|_| ctx.name_styles);
     let runs = ctx.style_ground.zip(style).map(|(ground, style)| name_runs(&name, style, ground)).unwrap_or_default();
-    div()
-        .flex()
-        .items_center()
+    ui::row()
         .gap_2()
-        .min_w_0()
         .child(
             crate::name_fonts::styled(author_trigger(format!("name-{}", message.id), message, ctx).min_w_0().truncate().text_size(px(ctx.font_size)).font_weight(FontWeight::MEDIUM), style)
                 .text_color(ink.unwrap_or(palette::strong(cx)))
@@ -1436,11 +1379,9 @@ const COMPACT_AVATAR: f32 = 18.;
 
 // Compact's time column: every message shows its own time, so names and text line up down the feed.
 fn compact_time(message: &Message, ctx: &RowContext, cx: &App) -> Div {
-    div()
+    ui::row()
         .w(px(COMPACT_TIME))
         .flex_none()
-        .flex()
-        .items_center()
         .h(px(ctx.body_line()))
         .whitespace_nowrap()
         .text_size(ui::TEXT_XS)
@@ -1460,11 +1401,9 @@ fn compact_line(message: &Message, starts_group: bool, text: Option<AnyElement>,
     let line = ctx.body_line();
     let avatar = ctx.compact_avatars.then(|| profile_trigger(format!("avatar-{}", message.id), &message.author, ctx).flex_none().h(px(line)).flex().items_center().child(ui::avatar(message.author.avatar.clone(), COMPACT_AVATAR)));
     Some(
-        div()
-            .flex()
+        ui::row()
             .items_start()
             .gap_1p5()
-            .min_w_0()
             .children(avatar)
             .child(author(message, ctx, cx).flex_none().max_w(gpui_kit::relative(0.4)).h(px(line)))
             .children(text.map(|text| div().flex_1().min_w_0().child(text)))
@@ -1587,20 +1526,17 @@ fn reply_preview(reply: &Message, target: Option<String>, ctx: &Rc<RowContext>, 
         Hidden::Ignored => "an ignored message",
     });
     let quote: Vec<AnyElement> = match hidden {
-        Some(label) => vec![div().min_w_0().truncate().child(label).into_any_element()],
+        Some(label) => vec![ui::line(label).into_any_element()],
         None => vec![ui::avatar(reply.author.avatar.clone(), 16.).into_any_element(), div().flex_none().font_weight(FontWeight::MEDIUM).text_color(muted).child(ctx.name_of(&reply.author)).into_any_element(), reply_snippet(reply, ctx, cx)],
     };
     let this = ctx.this.clone();
-    div()
+    ui::row()
         .id(SharedString::from(format!("reply-{}", reply.id)))
         .relative()
         .h(px(REPLY_HEIGHT))
         // Compact draws it in the text column, with no avatar for the spine to reach.
         .when(!ctx.compact, |r| r.pl(px(CONTENT_INSET)).child(reply_spine(cx)))
         .mb_0p5()
-        .min_w_0()
-        .flex()
-        .items_center()
         .gap_1p5()
         .cursor_pointer()
         .text_size(ui::TEXT_SM)
@@ -1616,8 +1552,8 @@ fn reply_preview(reply: &Message, target: Option<String>, ctx: &Rc<RowContext>, 
 
 fn reply_snippet(reply: &Message, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
     match reply.content.is_empty() {
-        true => div().flex_none().flex().items_center().gap_1().text_color(palette::muted(cx)).child(Icon::new(attachment_glyph(reply)).size(ui::ICON_SM)).child(attachment_kind(reply)).into_any_element(),
-        false => div().min_w_0().truncate().child(plain(&readable_with(&reply.content, ctx, false))).into_any_element(),
+        true => ui::row().flex_none().gap_1().text_color(palette::muted(cx)).child(Icon::new(attachment_glyph(reply)).size(ui::ICON_SM)).child(attachment_kind(reply)).into_any_element(),
+        false => ui::line(plain(&readable_with(&reply.content, ctx, false))).into_any_element(),
     }
 }
 
@@ -1625,9 +1561,7 @@ fn reply_snippet(reply: &Message, ctx: &Rc<RowContext>, cx: &App) -> AnyElement 
 // where it came from, which jumps to the original. A source outside your servers shows its time alone.
 fn forward_card(original: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     let faint = palette::faint(cx);
-    let label = div()
-        .flex()
-        .items_center()
+    let label = ui::row()
         .gap_1p5()
         .text_size(ui::TEXT_XS)
         .font_weight(FontWeight::SEMIBOLD)
@@ -1637,10 +1571,8 @@ fn forward_card(original: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyEl
     let name = ctx.channel_names.get(&original.channel_id).cloned();
     let glyph = if original.guild_id.is_some() { Glyph::Hashtag } else { Glyph::User };
     let stamp = format_stamp(&original.timestamp);
-    let source = div()
+    let source = ui::row()
         .id(SharedString::from(format!("forward-source-{}", original.id)))
-        .flex()
-        .items_center()
         .gap_1()
         .text_size(ui::TEXT_XS)
         .text_color(faint)
@@ -1655,7 +1587,7 @@ fn forward_card(original: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyEl
         }
         None => source,
     };
-    div()
+    ui::col()
         .mt_1()
         .max_w(px(FORWARD_WIDTH))
         .pt_2()
@@ -1663,8 +1595,6 @@ fn forward_card(original: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyEl
         .pb_2p5()
         .squircle(RADIUS_MD)
         .bg(palette::strong(cx).opacity(0.05))
-        .flex()
-        .flex_col()
         .gap_1()
         .child(label)
         .children(content(original, ctx, cx))
@@ -1759,11 +1689,8 @@ pub(crate) fn poll_results(message: &Message, ctx: &RowContext, cx: &App) -> Vec
 
 // A thread starter's parent message, whole but inert: no toolbar, reactions or thread chip, as Discord draws it.
 pub(crate) fn starter_message(parent: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Div {
-    let body = div()
+    let body = ui::col()
         .flex_1()
-        .min_w_0()
-        .flex()
-        .flex_col()
         .text_size(ui::TEXT_MD)
         .text_color(palette::text(cx))
         .child(message_head(parent, ctx, cx))
@@ -1774,14 +1701,11 @@ pub(crate) fn starter_message(parent: &Message, ctx: &Rc<RowContext>, cx: &mut A
         .children(parent.poll.as_ref().map(|p| poll_card(parent, p, ctx, cx)))
         .children(shown_embeds(parent, ctx).iter().enumerate().map(|(i, e)| embed_card(e, None, parent.reply_to.as_deref(), format!("starter-embed-{}-{i}", parent.id), ctx, cx)))
         .children(files(parent, ctx, cx));
-    div()
-        .flex()
-        .flex_col()
+    ui::col()
         .line_height(gpui_kit::relative(1.45))
         .children(parent.reply.as_ref().map(|reply| reply_preview(reply, parent.reply_to.clone(), ctx, cx)))
         .child(
-            div()
-                .flex()
+            ui::row().items_stretch()
                 .gap_4()
                 .child(profile_trigger(format!("starter-avatar-{}", parent.id), &parent.author, ctx).flex_none().mt_0p5().child(ui::avatar(parent.author.avatar.clone(), AVATAR)))
                 .child(body),
@@ -1799,7 +1723,7 @@ pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Opti
     // A message of only custom emoji renders them big, as Discord's "jumbo" emoji.
     let emoji = custom_emoji(&message.content);
     if !emoji.is_empty() && strip_emoji(&message.content).trim().is_empty() && emoji.len() <= 27 {
-        return Some(div().flex().flex_wrap().gap_1().children(emoji.iter().filter_map(|e| shown_emoji(e, ctx.media.emoji).url()).enumerate().map(|(i, url)| img(url).id(("jumbo", i)).size_12())).into_any_element());
+        return Some(ui::row().items_stretch().flex_wrap().gap_1().children(emoji.iter().filter_map(|e| shown_emoji(e, ctx.media.emoji).url()).enumerate().map(|(i, url)| img(url).id(("jumbo", i)).size_12())).into_any_element());
     }
     // Spoilers stay covered until the message is clicked, unless the setting shows them; "-# " lines are
     // Discord's small grey subtext.
@@ -1815,12 +1739,9 @@ pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Opti
     let refresh = ctx.this.clone();
     let faint = palette::faint(cx);
     Some(
-        div()
+        ui::col()
             .id(SharedString::from(format!("content-{}", message.id)))
             .w_full()
-            .min_w_0()
-            .flex()
-            .flex_col()
             .when(has_spoiler && !revealed, |c| {
                 c.cursor_pointer().on_click(move |_, _, cx| { cx.stop_propagation();
                     reveal.borrow_mut().insert(id.clone());
@@ -1829,7 +1750,7 @@ pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Opti
             })
             .children(blocks)
             .when(message.edited, |c| {
-                c.child(div().flex().flex_wrap().items_baseline().children(last).child(div().ml_1().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(faint).child("(edited)")))
+                c.child(ui::row().flex_wrap().items_baseline().children(last).child(div().ml_1().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(faint).child("(edited)")))
             })
             .into_any_element(),
     )
@@ -1838,7 +1759,7 @@ pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Opti
 // Discord markdown outside a message's own content (a Components V2 text block), with its mentions, its
 // body at `size`.
 pub(crate) fn rich_text(id: &str, text: &str, size: f32, ctx: &RowContext, cx: &App) -> AnyElement {
-    div().w_full().min_w_0().flex().flex_col().children(text_blocks(id, &readable(text, ctx), size, ctx, cx)).into_any_element()
+    ui::col().w_full().children(text_blocks(id, &readable(text, ctx), size, ctx, cx)).into_any_element()
 }
 
 // A message body's markdown in order, its "-# " subtext lines small and muted between the rest.
@@ -1932,8 +1853,8 @@ fn composer_chip(cx: &App) -> impl Fn(&gpui_kit::component::input::InlineTokenCo
 // An option name in a typed slash command: the muted left segment of the option's box, which
 // `Waffle::option_boxes` strokes around it and the value typed after it.
 fn option_key(label: SharedString, height: Pixels, fill: Hsla, ink: Hsla) -> Div {
-    let key = div().h_full().px(px(7.)).flex().items_center().rounded_l(px(5.)).bg(fill).text_color(ink).text_size(ui::TEXT_DETAIL).font_weight(FontWeight::SEMIBOLD).whitespace_nowrap().child(label);
-    div().h(height).pl(px(crate::command_picker::OPTION_GAP)).pr(px(5.)).flex().child(key)
+    let key = ui::row().h_full().px(px(7.)).rounded_l(px(5.)).bg(fill).text_color(ink).text_size(ui::TEXT_DETAIL).font_weight(FontWeight::SEMIBOLD).whitespace_nowrap().child(label);
+    ui::row().items_stretch().h(height).pl(px(crate::command_picker::OPTION_GAP)).pr(px(5.)).child(key)
 }
 
 // Discord markdown with mentions, channel links and code copy buttons; messages and embeds share it.
@@ -2216,11 +2137,9 @@ fn send_failure(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> AnyElement
     let (retry_this, retry) = (ctx.this.clone(), message.clone());
     let (delete_this, delete) = (ctx.this.clone(), message.clone());
     let action = |id: String, label: &'static str| ui::button(SharedString::from(id), ui::Tone::Ghost, cx).small().h_7().child(label);
-    div()
+    ui::row()
         .mt_1()
-        .flex()
         .flex_wrap()
-        .items_center()
         .gap_x_2()
         .gap_y_1()
         .text_size(ui::TEXT_SM)
@@ -2264,12 +2183,10 @@ fn thread_card(thread: &Channel, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
         .hover(move |s| s.border_color(edge))
         .cursor_pointer()
         .text_size(ui::TEXT_SM)
-        .child(div().min_w_0().truncate().font_weight(FontWeight::MEDIUM).text_color(if archived { palette::muted(cx) } else { palette::strong(cx) }).child(thread.name.clone()))
+        .child(ui::line(thread.name.clone()).font_weight(FontWeight::MEDIUM).text_color(if archived { palette::muted(cx) } else { palette::strong(cx) }))
         .child(
-            div()
+            ui::row()
                 .flex_none()
-                .flex()
-                .items_center()
                 .gap_0p5()
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(palette::muted(cx))
@@ -2357,7 +2274,7 @@ fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<A
     if ctx.media.attachments || message.media_files.is_empty() {
         return gallery;
     }
-    Some(div().flex().flex_col().children(gallery).children(message.media_files.iter().map(|f| file_card(message, f, cx))).into_any_element())
+    Some(ui::col().children(gallery).children(message.media_files.iter().map(|f| file_card(message, f, cx))).into_any_element())
 }
 
 // Indexes into `message.media` drawn inline: uploads lead it (see `Message::media_files`), link media follows.
@@ -2381,7 +2298,7 @@ pub(crate) fn media_layout(message: &Message, shown: &[usize], width: f32, pagin
         let (w, h) = (first.width * scale, first.height * scale);
         let caption = shown_alt(message, shown[0], ctx).map(|alt| div().mt_1().max_w(px(w)).text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(alt));
         let frame = media_frame(message, shown[0], (w, h), ui::all(RADIUS_LG), paging, ctx, cx).flex_none().w(px(w)).h(px(h));
-        return Some(div().flex().flex_col().child(frame).children(caption));
+        return Some(ui::col().child(frame).children(caption));
     }
     // Laid out for the feed's column, then scaled to `width`.
     let k = width / COLUMN;
@@ -2494,15 +2411,13 @@ fn alt_button(key: String, ctx: &RowContext) -> Stateful<Div> {
 // "Image Description (Alt Text)" over the gallery; a press anywhere else closes it.
 fn alt_popout(key: &str, text: String, ctx: &RowContext, cx: &App) -> Stateful<Div> {
     let (this, key) = (ctx.this.clone(), key.to_owned());
-    div()
+    ui::col()
         .id(SharedString::from(format!("alt-popout-{key}")))
         .occlude()
         .absolute()
         .w(px(260.))
         .px_3p5()
         .py_3()
-        .flex()
-        .flex_col()
         .gap_1()
         .squircle(RADIUS_MD)
         .bg(palette::surface(Level::Overlay, cx))
@@ -2603,11 +2518,9 @@ fn media_veil(key: String, label: &'static str, corners: Corners<Pixels>, ctx: &
             refresh.update(cx, |_, cx| cx.notify()).ok();
         })
         .child(
-            div()
+            ui::row()
                 .h_8()
                 .px_3()
-                .flex()
-                .items_center()
                 .gap_1p5()
                 .squircle(RADIUS_MD)
                 .bg(on_media(0.72))
@@ -2643,7 +2556,7 @@ fn reveal_veil(message: &Message, i: usize, corners: Corners<Pixels>, ctx: &RowC
 
 // What covers a spoiler picture: a blur and a dim over it.
 fn spoiler_veil() -> Div {
-    div().absolute().inset_0().flex().items_center().justify_center().bg(on_media(0.3)).backdrop_blur(px(24.))
+    ui::row().absolute().inset_0().justify_center().bg(on_media(0.3)).backdrop_blur(px(24.))
 }
 
 // A label over media (GIF, a duration): fixed dark values, since it sits on pictures in both themes.
@@ -2653,13 +2566,13 @@ fn media_tag(text: &'static str) -> Div {
 
 // The same label placed by its parent (a row of tags).
 fn media_label(text: &'static str) -> Div {
-    div().h_5().px_1p5().flex().items_center().gap_1().squircle(RADIUS_XS).bg(on_media(0.72)).text_color(gpui_kit::white()).text_size(ui::TEXT_XXS).font_weight(FontWeight::SEMIBOLD).child(text)
+    ui::row().h_5().px_1p5().gap_1().squircle(RADIUS_XS).bg(on_media(0.72)).text_color(gpui_kit::white()).text_size(ui::TEXT_XXS).font_weight(FontWeight::SEMIBOLD).child(text)
 }
 
 // A small bar of icon buttons floating over a picture's corner: it takes the pointer, so its caller
 // keeps the hover with the bar's own `on_hover`.
 fn floating_bar(id: SharedString, cx: &App) -> Stateful<Div> {
-    div().id(id).occlude().absolute().p_0p5().flex().gap_0p5().squircle(RADIUS_SM).bg(palette::surface(Level::Overlay, cx)).shadow(ui::shadow_pop(cx))
+    ui::row().items_stretch().id(id).occlude().absolute().p_0p5().gap_0p5().squircle(RADIUS_SM).bg(palette::surface(Level::Overlay, cx)).shadow(ui::shadow_pop(cx))
 }
 
 fn track_tile_hover(this: WeakEntity<Waffle>, key: String) -> impl Fn(&bool, &mut Window, &mut App) + 'static {
@@ -2804,17 +2717,14 @@ fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Option<&str>, 
             .child(name)
     });
     let author = embed.author.clone().map(|name| {
-        div()
+        ui::row()
             .id(SharedString::from(format!("{key}-author")))
-            .flex()
-            .items_center()
             .gap_2()
-            .min_w_0()
             .text_size(ui::TEXT_SM)
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(strong)
             .children(embed.author_icon.clone().map(|icon| ui::avatar(icon, 24.)))
-            .child(div().min_w_0().truncate().when(embed.author_url.is_some(), |d| d.cursor_pointer().hover(|s| s.underline())).child(name))
+            .child(ui::line(name).when(embed.author_url.is_some(), |d| d.cursor_pointer().hover(|s| s.underline())))
             .when_some(embed.author_url.clone(), |d, url| d.on_click(open(url)))
     });
     let title = embed.title.clone().map(|title| {
@@ -2832,9 +2742,7 @@ fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Option<&str>, 
         let long = long_description(text);
         let open_full = !long || ctx.revealed.borrow().contains(&more);
         let (reveal, refresh) = (ctx.revealed.clone(), ctx.this.clone());
-        div()
-            .flex()
-            .flex_col()
+        ui::col()
             .items_start()
             .child(
                 div()
@@ -2848,14 +2756,12 @@ fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Option<&str>, 
             )
             .when(long, |d| {
                 d.child(
-                    div()
+                    ui::row()
                         .id(SharedString::from(more.clone()))
                         .mt_0p5()
                         .ml_neg_1p5()
                         .h(px(26.))
                         .px_1p5()
-                        .flex()
-                        .items_center()
                         .squircle(RADIUS_XS)
                         .text_size(ui::TEXT_XS)
                         .font_weight(FontWeight::SEMIBOLD)
@@ -2876,15 +2782,12 @@ fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Option<&str>, 
             })
     });
     let fields = (!embed.fields.is_empty()).then(|| {
-        div().mt_1().flex().flex_col().gap_2p5().children(field_rows(&embed.fields, embed.thumbnail.is_some()).into_iter().map(|row| {
-            div().flex().gap_4().children(row.into_iter().map(|i| {
+        ui::col().mt_1().gap_2p5().children(field_rows(&embed.fields, embed.thumbnail.is_some()).into_iter().map(|row| {
+            ui::row().items_stretch().gap_4().children(row.into_iter().map(|i| {
                 let (name, value, _) = &embed.fields[i];
-                div()
+                ui::col()
                     .flex_1()
                     .flex_basis(Pixels::ZERO)
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
                     .gap_0p5()
                     .child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(name.clone()))
                     .child(div().text_color(strong).child(md(&format!("field-{i}"), value)))
@@ -2895,11 +2798,8 @@ fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Option<&str>, 
         let url = crate::discord::sized_image(&m.url, EMBED_THUMB, EMBED_THUMB, (m.width, m.height));
         img(url).size(px(EMBED_THUMB)).flex_none().squircle(RADIUS_SM).object_fit(gpui_kit::ObjectFit::Cover)
     });
-    let text = div()
+    let text = ui::col()
         .flex_1()
-        .min_w_0()
-        .flex()
-        .flex_col()
         .gap_1p5()
         .children(provider)
         .children(author)
@@ -2907,18 +2807,15 @@ fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Option<&str>, 
         .children(description)
         .children(fields);
     let has_text = embed.provider.is_some() || embed.author.is_some() || embed.title.is_some() || embed.description.is_some() || !embed.fields.is_empty();
-    let top = (has_text || thumbnail.is_some()).then(|| div().flex().items_start().gap_4().child(text).children(thumbnail));
+    let top = (has_text || thumbnail.is_some()).then(|| ui::row().items_start().gap_4().child(text).children(thumbnail));
     // Without inline link media the card keeps its text and thumbnail but not its big pictures.
     let media = ctx.media.links.then(|| embed_media(embed, row, &key, inner, ctx, cx)).flatten();
     let stamp = embed.timestamp.as_deref().map(|t| (format_stamp(t), day(t).map(|d| format!("{}, {}", d.format("%A, %B %-d, %Y"), clock(t))).unwrap_or_default()));
     let footer = (embed.footer.is_some() || stamp.is_some()).then(|| {
         let line = embed.footer.clone().into_iter().chain(stamp.as_ref().map(|(short, _)| short.clone())).collect::<Vec<_>>().join(" · ");
-        div()
+        ui::row()
             .id(SharedString::from(format!("{key}-footer")))
-            .flex()
-            .items_center()
             .gap_2()
-            .min_w_0()
             .text_size(ui::TEXT_XS)
             .text_color(faint)
             .children(embed.footer_icon.clone().map(|icon| ui::avatar(icon, 20.)))
@@ -2937,7 +2834,7 @@ fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Option<&str>, 
         .bottom_0()
         .w(px(EMBED_BAR_STRIP))
         .bg(linear_gradient(90., linear_color_stop(bar, cut), linear_color_stop(bar.opacity(0.), cut + 0.02)));
-    div()
+    ui::col()
         .relative()
         .mt_2()
         .when(full, |d| d.w(px(width)))
@@ -2946,8 +2843,6 @@ fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Option<&str>, 
         .py(px(EMBED_PAD.0))
         .pl(px(EMBED_PAD.1 + EMBED_BAR))
         .pr(px(EMBED_PAD.1))
-        .flex()
-        .flex_col()
         .gap_3()
         .squircle(RADIUS_LG)
         .bg(fill)
@@ -3046,8 +2941,8 @@ fn embed_media(embed: &Embed, row: Option<&Message>, key: &str, inner: f32, ctx:
             .hover(|s| s.opacity(0.92))
             .child(ui::edge(img(crate::discord::sized_image(&m.url, w, h, (m.width, m.height))), corners).size_full().object_fit(gpui_kit::ObjectFit::Cover))
             .when(video, |d| {
-                d.child(div().absolute().inset_0().flex().items_center().justify_center().child(
-                    div().size(px(56.)).rounded_full().flex().items_center().justify_center().bg(on_media(0.62)).text_color(gpui_kit::white()).child(Icon::new(Glyph::Play).size(px(26.))),
+                d.child(ui::row().absolute().inset_0().justify_center().child(
+                    ui::row().size(px(56.)).rounded_full().justify_center().bg(on_media(0.62)).text_color(gpui_kit::white()).child(Icon::new(Glyph::Play).size(px(26.))),
                 ))
                 .children(embed.url.clone().map(|url| open_link_button(url, row, &format!("{key}-open-{i}"), ctx)))
             })
@@ -3082,14 +2977,12 @@ fn embed_media(embed: &Embed, row: Option<&Message>, key: &str, inner: f32, ctx:
 // Discord's Open Link corner on a video still. In a feed row it reports hover, since occluding takes it from the row.
 fn open_link_button(url: String, row: Option<&Message>, id: &str, ctx: &RowContext) -> AnyElement {
     let this = ctx.this.clone();
-    div()
+    ui::row()
         .id(SharedString::from(id.to_owned()))
         .absolute()
         .top_2()
         .right_2()
         .size_8()
-        .flex()
-        .items_center()
         .justify_center()
         .squircle(RADIUS_SM)
         .bg(on_media(0.55))
@@ -3123,15 +3016,13 @@ fn poll_result(poll: &crate::discord::PollResult, poll_message: Option<&str>, ke
         None => div().text_size(ui::TEXT_XL).line_height(ui::LINE_XL).child("📊").into_any_element(),
     };
     let (this, target) = (ctx.this.clone(), poll_message.map(str::to_owned));
-    div()
+    ui::row()
         .mt_2()
         .w_full()
         .max_w(px(EMBED_WIDTH.min(ctx.column)))
         .py_3()
         .pl_3p5()
         .pr_3()
-        .flex()
-        .items_center()
         .gap_3()
         .squircle(RADIUS_LG)
         .bg(palette::surface(Level::Sidebar, cx))
@@ -3139,16 +3030,11 @@ fn poll_result(poll: &crate::discord::PollResult, poll_message: Option<&str>, ke
         .border_color(palette::line(cx))
         .child(mark)
         .child(
-            div()
+            ui::col()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .child(div().truncate().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(headline))
+                .child(ui::line(headline).text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
                 .child(
-                    div()
-                        .flex()
-                        .items_center()
+                    ui::row()
                         .gap_1()
                         .text_size(ui::TEXT_XS)
                         .text_color(palette::muted(cx))
@@ -3189,20 +3075,18 @@ fn poll_card(message: &Message, poll: &Poll, ctx: &RowContext, cx: &App) -> AnyE
         cx.stop_propagation();
         peek_this.update(cx, |this, cx| this.toggle_poll_results(peek_id.clone(), cx)).ok();
     };
-    let actions = div().ml_auto().flex().gap_2().when(!pending && !closed, |d| match (voted, results) {
+    let actions = ui::row().items_stretch().ml_auto().gap_2().when(!pending && !closed, |d| match (voted, results) {
         (true, _) => d.child(ui::button(key("remove"), ui::Tone::Ghost, cx).small().child("Remove vote").on_click(act(Vec::new()))),
         (false, true) => d.child(ui::button(key("back"), ui::Tone::Ghost, cx).small().child("Back to vote").on_click(peek)),
         (false, false) => d
             .child(ui::button(key("peek"), ui::Tone::Ghost, cx).small().child("Show results").on_click(peek))
             .child(ui::button(key("vote"), ui::Tone::Primary, cx).small().disabled(picks.is_empty()).child("Vote").on_click(act(picks.clone()))),
     });
-    div()
+    ui::col()
         .mt_2()
         .w_full()
         .max_w(px(COLUMN.min(ctx.column)))
         .p_3p5()
-        .flex()
-        .flex_col()
         .gap_3()
         .squircle(RADIUS_LG)
         .bg(palette::surface(Level::Sidebar, cx))
@@ -3210,22 +3094,20 @@ fn poll_card(message: &Message, poll: &Poll, ctx: &RowContext, cx: &App) -> AnyE
         .border_color(palette::line(cx))
         .when(pending, |d| d.opacity(0.6))
         .child(
-            div()
-                .flex()
-                .flex_col()
+            ui::col()
                 .gap_1()
                 .child(div().text_size(ui::TEXT_MD).line_height(ui::LINE_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(poll.question.clone()))
                 .child(div().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(poll.prompt(now))),
         )
-        .child(div().flex().flex_col().gap_1p5().children(options))
-        .child(div().flex().flex_wrap().items_center().gap_2().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(poll.foot(now)).child(actions))
+        .child(ui::col().gap_1p5().children(options))
+        .child(ui::row().flex_wrap().gap_2().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(poll.foot(now)).child(actions))
         .into_any_element()
 }
 
 // An answer to pick before voting: its radio (a check where several may be picked), emoji and text.
 fn poll_choice(message: &Message, poll: &Poll, answer: &PollAnswer, on: bool, pending: bool, ctx: &RowContext, cx: &App) -> AnyElement {
     let mark = if poll.multiselect { ui::check(if on { ui::Check::On } else { ui::Check::Off }, cx) } else { ui::radio(on, cx) };
-    let lead = div().flex_none().flex().items_center().gap_2p5().child(mark).children(answer.emoji.as_ref().map(|e| crate::menu::emoji_face(e, 20.)));
+    let lead = ui::row().flex_none().gap_2p5().child(mark).children(answer.emoji.as_ref().map(|e| crate::menu::emoji_face(e, 20.)));
     let (this, message_id, answer_id, multiselect) = (ctx.this.clone(), message.id.clone(), answer.id, poll.multiselect);
     ui::pick_row(SharedString::from(format!("poll-{}-answer-{answer_id}", message.id)), lead, answer.text.clone(), None, cx)
         .toggled(on, cx)
@@ -3241,13 +3123,11 @@ fn poll_choice(message: &Message, poll: &Poll, answer: &PollAnswer, on: bool, pe
 fn poll_share(answer: &PollAnswer, share: u32, cx: &App) -> AnyElement {
     let strong = palette::strong(cx);
     let bar = if answer.me { palette::accent_soft(cx) } else { strong.opacity(0.10) };
-    div()
+    ui::row()
         .relative()
         .min_h_11()
         .px_3()
         .py_2()
-        .flex()
-        .items_center()
         .gap_2p5()
         .squircle(RADIUS_MD)
         .bg(palette::hover(cx))
@@ -3310,13 +3190,11 @@ fn upload_cards(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Vec<AnyEle
                 true => format_size(file.size),
                 false => format!("{} of {}", format_size(sent), format_size(file.size)),
             };
-            div()
+            ui::row()
                 .mt_2()
                 .w_full()
                 .max_w(px(COLUMN))
                 .p_3()
-                .flex()
-                .items_center()
                 .gap_3()
                 .squircle(RADIUS_LG)
                 .bg(palette::surface(Level::Sidebar, cx))
@@ -3324,13 +3202,10 @@ fn upload_cards(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Vec<AnyEle
                 .border_color(palette::line(cx))
                 .child(picture)
                 .child(
-                    div()
+                    ui::col()
                         .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
                         .gap_1p5()
-                        .child(div().flex().items_baseline().gap_2().child(div().flex_1().min_w_0().truncate().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(strong).child(file.name.clone())).child(div().flex_none().text_size(ui::TEXT_XS).text_color(faint).child(status)))
+                        .child(ui::row().items_baseline().gap_2().child(ui::line(file.name.clone()).flex_1().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(strong)).child(div().flex_none().text_size(ui::TEXT_XS).text_color(faint).child(status)))
                         .when(job.error.is_none(), |d| d.child(ui::progress(fraction, cx))),
                 )
                 .when(job.error.is_none(), |d| {
@@ -3355,7 +3230,7 @@ fn file_picture(picture: Option<std::sync::Arc<gpui_kit::RenderImage>>, kind: cr
         None => well.bg(palette::surface(Level::Raised, cx)).text_color(palette::muted(cx)).flex().items_center().justify_center().child(Icon::new(kind.glyph()).size(px(side * 0.5))),
     };
     well.when(spoiler, |w| {
-        w.child(div().absolute().inset_0().bg(palette::surface(Level::Sidebar, cx).opacity(0.85)).backdrop_blur(px(8.)).flex().items_center().justify_center().text_color(palette::strong(cx)).child(Icon::new(Glyph::EyeSlash).size(px(side * 0.4))))
+        w.child(ui::row().absolute().inset_0().bg(palette::surface(Level::Sidebar, cx).opacity(0.85)).backdrop_blur(px(8.)).justify_center().text_color(palette::strong(cx)).child(Icon::new(Glyph::EyeSlash).size(px(side * 0.4))))
     })
     .into_any_element()
 }
@@ -3363,40 +3238,33 @@ fn file_picture(picture: Option<std::sync::Arc<gpui_kit::RenderImage>>, kind: cr
 pub(crate) fn file_card(message: &Message, file: &crate::discord::File, cx: &App) -> AnyElement {
     let (strong, faint, muted) = (palette::strong(cx), palette::faint(cx), palette::muted(cx));
     let (open, download) = (file.url.clone(), file.url.clone());
-    div()
+    ui::row()
         .mt_2()
         .w_full()
         .max_w(px(COLUMN))
         .p_3()
-        .flex()
-        .items_center()
         .gap_3()
         .squircle(RADIUS_LG)
         .bg(palette::surface(Level::Sidebar, cx))
         .border_1()
         .border_color(palette::line(cx))
         .when(message.state != SendState::Sent, |d| d.opacity(0.6))
-        .child(div().w_10().flex_none().flex().justify_center().text_color(muted).child(Icon::new(Glyph::File).size_9()))
+        .child(ui::row().items_stretch().w_10().flex_none().justify_center().text_color(muted).child(Icon::new(Glyph::File).size_9()))
         .child(
-            div()
+            ui::col()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .child(
-                    div()
+                    ui::line(file.name.clone())
                         .id(SharedString::from(format!("file-{}-{}", message.id, file.name)))
-                        .truncate()
                         .cursor_pointer()
                         .text_size(ui::TEXT_SM)
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(strong)
                         .hover(|s| s.underline())
-                        .child(file.name.clone())
                         .on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&open) }),
                 )
                 // A Components V2 file that matches no attachment comes without a size.
-                .child(div().flex().items_center().gap_1p5().text_size(ui::TEXT_XS).text_color(faint).when(file.size > 0, |d| d.child(format_size(file.size))).when(file.spoiler, |d| d.child(ui::tag("Spoiler", cx)))),
+                .child(ui::row().gap_1p5().text_size(ui::TEXT_XS).text_color(faint).when(file.size > 0, |d| d.child(format_size(file.size))).when(file.spoiler, |d| d.child(ui::tag("Spoiler", cx)))),
         )
         .child(ui::icon_button(SharedString::from(format!("download-{}-{}", message.id, file.name)), Glyph::Download, "Download", cx).on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&download) }))
         .into_any_element()
@@ -3407,13 +3275,11 @@ pub(crate) fn file_card(message: &Message, file: &crate::discord::File, cx: &App
 // that layout and only offers this corner slot, so the button stays icon-only.
 fn copy_button(code: String, copied: bool, this: WeakEntity<Waffle>, cx: &App) -> AnyElement {
     let (hover, strong) = (palette::hover(cx), palette::strong(cx));
-    div()
+    ui::row()
         .id(SharedString::from(format!("copy-{}", code.len())))
         .h_7()
         .w_7()
         .justify_center()
-        .flex()
-        .items_center()
         .squircle(RADIUS_XS)
         .cursor_pointer()
         .text_color(if copied { palette::positive_ink(cx) } else { palette::muted(cx) })
@@ -3459,7 +3325,7 @@ fn reactions(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyEle
         .on_click(move |_, window, cx| { cx.stop_propagation();
             this.update(cx, |this, cx| this.open_emoji_picker(EmojiTarget::Reaction(Box::new(msg.clone())), window, cx)).ok();
         });
-    Some(div().mt_1p5().flex().flex_wrap().gap_1p5().children(pills).child(add).into_any_element())
+    Some(ui::row().items_stretch().mt_1p5().flex_wrap().gap_1p5().children(pills).child(add).into_any_element())
 }
 
 // A custom emoji's picture, or a unicode one drawn as text.
@@ -3494,7 +3360,7 @@ fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> Any
     let sep = || div().w(ui::HAIRLINE).h_5().mx_0p5().bg(line);
     let sent = message.state == SendState::Sent;
     let facts = crate::message_menu::Facts { mine, saved: ctx.saved_ids.contains(&message.id), ..ctx.facts };
-    let mut bar = div()
+    let mut bar = ui::row()
         .id(SharedString::from(format!("actions-{}", message.id)))
         // Rides 18px into the row above: block the pointer there and keep this row hovered, or the pointer hands
         // the hover (and the bar) to that row. The wheel still reaches the feed under it.
@@ -3505,8 +3371,6 @@ fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> Any
         // A flush mention row is 8px wider each side; the bar stays where it sits on other rows.
         .right(px(if ctx.mentions_me.contains(&message.id) { 20. } else { 12. }))
         .p_0p5()
-        .flex()
-        .items_center()
         .gap_0p5()
         .squircle(RADIUS_MD)
         .bg(palette::surface(Level::Overlay, cx))
@@ -3771,15 +3635,12 @@ fn typing_parts(names: &[&str]) -> Vec<(String, bool)> {
 
 // A strip at the top of the composer: replying, editing, or a send waiting out slowmode.
 pub(crate) fn bar_row(cx: &App) -> Div {
-    div()
+    ui::row()
         .min_h_10()
         .py_1()
         .pl_3p5()
         .pr_1p5()
-        .flex()
-        .items_center()
         .gap_1p5()
-        .min_w_0()
         .border_b_1()
         .border_color(palette::line(cx))
         .text_size(ui::TEXT_SM)
@@ -3791,9 +3652,9 @@ pub(crate) fn bar_row(cx: &App) -> Div {
 pub(crate) fn suggest_lead(lead: &crate::SuggestLead, cx: &App) -> AnyElement {
     match lead {
         crate::SuggestLead::Avatar(url) => ui::avatar(url.clone(), 28.).into_any_element(),
-        crate::SuggestLead::Channel => div().size_7().flex_none().rounded_full().bg(palette::selected(cx)).text_color(palette::muted(cx)).flex().items_center().justify_center().child(Icon::new(Glyph::Hashtag).size(ui::ICON_MD)).into_any_element(),
-        crate::SuggestLead::Emoji(emoji) => div().size_7().flex_none().flex().items_center().justify_center().child(crate::menu::emoji_face(emoji, 22.)).into_any_element(),
-        crate::SuggestLead::Command(glyph) => div().size_7().flex_none().flex().items_center().justify_center().text_color(palette::muted(cx)).child(Icon::new(*glyph).size(ui::ICON_XL)).into_any_element(),
+        crate::SuggestLead::Channel => ui::row().size_7().flex_none().rounded_full().bg(palette::selected(cx)).text_color(palette::muted(cx)).justify_center().child(Icon::new(Glyph::Hashtag).size(ui::ICON_MD)).into_any_element(),
+        crate::SuggestLead::Emoji(emoji) => ui::row().size_7().flex_none().justify_center().child(crate::menu::emoji_face(emoji, 22.)).into_any_element(),
+        crate::SuggestLead::Command(glyph) => ui::row().size_7().flex_none().justify_center().text_color(palette::muted(cx)).child(Icon::new(*glyph).size(ui::ICON_XL)).into_any_element(),
     }
 }
 
@@ -3801,18 +3662,15 @@ pub(crate) fn suggest_lead(lead: &crate::SuggestLead, cx: &App) -> AnyElement {
 fn skeleton(cx: &App) -> AnyElement {
     let bar = palette::selected(cx);
     let row = |w: f32| {
-        div()
-            .flex()
+        ui::row().items_stretch()
             .gap_4()
             .child(div().size(px(AVATAR)).flex_none().rounded_full().bg(bar))
-            .child(div().flex_1().flex().flex_col().gap_2().pt_1().child(div().w(px(120.)).h_3().rounded_full().bg(bar)).child(div().w(px(w)).h_3().rounded_full().bg(bar)))
+            .child(ui::col().flex_1().gap_2().pt_1().child(div().w(px(120.)).h_3().rounded_full().bg(bar)).child(div().w(px(w)).h_3().rounded_full().bg(bar)))
     };
-    div()
+    ui::col()
         .size_full()
         .px_6()
         .pb_4()
-        .flex()
-        .flex_col()
         .justify_end()
         .gap_6()
         .children([360., 220., 420., 280.].map(row))
@@ -3833,20 +3691,18 @@ fn unread_line() -> AnyElement {
         // The rule runs on under the tag to its body, so it meets the sharp tip at full thickness.
         .child(div().absolute().left_neg_px().w(px(9.)).top(px(7.5)).h(ui::HAIRLINE).bg(alert))
         .child(gpui_kit::svg().path(crate::icons::NEW_TAG).absolute().inset_0().size_full().text_color(alert))
-        .child(div().absolute().top_0().bottom_0().left_2().right_0().flex().items_center().justify_center().text_color(gpui_kit::white()).text_size(ui::TEXT_XXS).font_weight(FontWeight::BOLD).child("NEW"));
-    div().w_full().px_4().my_2().flex().items_center().child(div().flex_1().h(ui::HAIRLINE).bg(alert)).child(tag).into_any_element()
+        .child(ui::row().absolute().top_0().bottom_0().left_2().right_0().justify_center().text_color(gpui_kit::white()).text_size(ui::TEXT_XXS).font_weight(FontWeight::BOLD).child("NEW"));
+    ui::row().w_full().px_4().my_2().child(div().flex_1().h(ui::HAIRLINE).bg(alert)).child(tag).into_any_element()
 }
 
 // Between dates, inside the feed's gutters, never edge to edge.
 fn day_divider(timestamp: &str, cx: &App) -> AnyElement {
     let line = || div().flex_1().h(ui::HAIRLINE).bg(palette::line(cx));
-    div()
+    ui::row()
         .w_full()
         .px_4()
         .mt_4()
         .mb_2()
-        .flex()
-        .items_center()
         .gap_2p5()
         .whitespace_nowrap()
         .text_size(ui::TEXT_XS)
@@ -3859,7 +3715,7 @@ fn day_divider(timestamp: &str, cx: &App) -> AnyElement {
 }
 
 fn empty_state(id: &'static str, art: impl Into<ui::Art>, title: &'static str, detail: impl Into<SharedString>, cx: &App) -> AnyElement {
-    div().size_full().flex().items_center().justify_center().child(ui::empty_state(id, art, title, detail, cx)).into_any_element()
+    ui::row().size_full().justify_center().child(ui::empty_state(id, art, title, detail, cx)).into_any_element()
 }
 
 fn continues(previous: &Message, message: &Message) -> bool {
@@ -3943,14 +3799,11 @@ pub(crate) fn format_size(bytes: u64) -> String {
 // A breadcrumb back up the hierarchy: muted until hovered.
 fn crumb(id: &'static str, cx: &App) -> Stateful<Div> {
     let (hover, strong) = (palette::hover(cx), palette::strong(cx));
-    div()
+    ui::row()
         .id(id)
         .occlude()
         .h_8()
         .px_1p5()
-        .min_w_0()
-        .flex()
-        .items_center()
         .gap_1p5()
         .squircle(RADIUS_SM)
         .cursor_pointer()

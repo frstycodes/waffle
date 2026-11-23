@@ -158,11 +158,8 @@ impl Waffle {
             return super::field_text(label, value, cx).into_any_element();
         };
         let id = if field == ProfileField::Username { "edit-username" } else { "edit-name" };
-        div()
+        ui::col()
             .flex_1()
-            .min_w_0()
-            .flex()
-            .flex_col()
             .gap_1p5()
             .child(super::field_label(label, cx))
             .child(ui::text_field(id, gpui_kit::component::input::Input::new(&edit.input).appearance(false), &edit.input.read(cx).focus_handle(cx)))

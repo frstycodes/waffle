@@ -321,8 +321,7 @@ impl Waffle {
                 }
             }
         }
-        let footer = div()
-            .flex()
+        let footer = ui::row().items_stretch()
             .justify_end()
             .gap_2()
             .child(ui::button("app-modal-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_app_modal(cx))))
@@ -426,9 +425,7 @@ fn editor(field: &TextInput, window: &mut Window, cx: &mut Context<Waffle>) -> E
 
 // The app's tile, the form's title, and the way out.
 fn head(app: &app_commands::App, title: &str, cx: &mut Context<Waffle>) -> impl IntoElement {
-    div()
-        .flex()
-        .items_center()
+    ui::row()
         .gap_3()
         .child(ui::server_tile(app.icon.as_deref(), &app.name, 24., cx))
         .child(div().flex_1().min_w_0().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.to_owned()))
@@ -440,8 +437,7 @@ fn notice(app: &str, cx: &gpui_kit::App) -> impl IntoElement {
     let lead = "This form will be submitted to ";
     let text = format!("{lead}{app}. Do not share passwords or other sensitive information.");
     let bold = HighlightStyle { font_weight: Some(FontWeight::BOLD), ..Default::default() };
-    div()
-        .flex()
+    ui::row()
         .items_start()
         .gap_2()
         .p_3()
@@ -503,7 +499,7 @@ impl Waffle {
         let max = field.max.unwrap_or(1).max(1) as usize;
         let rows: Vec<AnyElement> = files.iter().enumerate().map(|(i, f)| file_row(ix, i, f, cx)).collect();
         if max == 1 && files.len() == 1 {
-            return div().flex().flex_col().children(rows).into_any_element();
+            return ui::col().children(rows).into_any_element();
         }
         let size = crate::chat::format_size(self.app_modal_upload_limit());
         let zone = if files.len() >= max {
@@ -512,10 +508,10 @@ impl Waffle {
             let browse = ui::button(SharedString::from(format!("app-modal-browse-{ix}")), Tone::Link, cx)
                 .child("browse")
                 .on_click(cx.listener(move |this, _, window, cx| this.browse_app_modal_files(ix, max, window, cx)));
-            let lead = div().flex().flex_wrap().items_center().gap_1().child(drop_lead(max)).child(browse);
+            let lead = ui::row().flex_wrap().gap_1().child(drop_lead(max)).child(browse);
             drop_zone(Glyph::Upload, lead, upload_hint(field.min.unwrap_or(1), max as u32, &size), cx)
         };
-        div().flex().flex_col().gap_2().child(zone).children(rows).into_any_element()
+        ui::col().gap_2().child(zone).children(rows).into_any_element()
     }
 }
 
@@ -536,9 +532,7 @@ fn upload_hint(min: u32, max: u32, size: &str) -> String {
 }
 
 fn drop_zone(glyph: Glyph, lead: gpui_kit::Div, hint: String, cx: &gpui_kit::App) -> AnyElement {
-    div()
-        .flex()
-        .flex_col()
+    ui::col()
         .items_center()
         .gap_1()
         .p_4()
@@ -556,13 +550,11 @@ fn drop_zone(glyph: Glyph, lead: gpui_kit::Div, hint: String, cx: &gpui_kit::App
 
 // A picked file: its name and Discord's Remove.
 fn file_row(ix: usize, i: usize, file: &PendingFile, cx: &mut Context<Waffle>) -> AnyElement {
-    div()
-        .flex()
-        .items_center()
+    ui::row()
         .gap_2()
         .py_1()
         .child(div().flex_none().text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::File).size(ui::ICON_LG)))
-        .child(div().flex_1().min_w_0().truncate().text_size(ui::TEXT_SM).text_color(palette::strong(cx)).child(file.name.clone()))
+        .child(ui::line(file.name.clone()).flex_1().text_size(ui::TEXT_SM).text_color(palette::strong(cx)))
         .child(ui::icon_button(SharedString::from(format!("app-modal-file-{ix}-{i}")), Glyph::Trash, "Remove", cx).small().on_click(cx.listener(move |this, _, _, cx| this.remove_app_modal_file(ix, i, cx))))
         .into_any_element()
 }
@@ -577,25 +569,21 @@ fn choices(ix: usize, options: &[SelectOption], several: bool, value: &FieldValu
         let on = picked.contains(&o.value);
         let mark = if several { ui::check(if on { Check::On } else { Check::Off }, cx) } else { ui::radio(on, cx) };
         let pick = o.value.clone();
-        div()
+        ui::row()
             .id(SharedString::from(format!("app-modal-choice-{ix}-{i}")))
-            .flex()
             .items_start()
             .gap_2p5()
             .py_1p5()
             .cursor_pointer()
             .child(mark)
             .child(
-                div()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
+                ui::col()
                     .child(div().text_size(ui::TEXT_SM).text_color(palette::strong(cx)).child(o.label.clone()))
                     .children(o.description.clone().map(|d| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(d))),
             )
             .on_click(cx.listener(move |this, _, _, cx| this.pick_app_modal(ix, Some(pick.clone()), cx)))
     });
-    div().flex().flex_col().children(rows).into_any_element()
+    ui::col().children(rows).into_any_element()
 }
 
 fn checkbox(ix: usize, on: bool, cx: &mut Context<Waffle>) -> AnyElement {

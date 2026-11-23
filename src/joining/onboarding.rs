@@ -427,30 +427,25 @@ impl Waffle {
             true => {
                 let room = f32::from(window.viewport_size().height) - 2. * SPLASH_INSET;
                 let list = div().id("onboarding-body").max_h(px((room - FOOTER_ROOM).min(STEP_MAX_HEIGHT))).child(body);
-                let card = div().relative().bg(page).flex().flex_col().child(ui::scroll_fade(list, &view.body_scroll, page)).child(footer).child(close);
+                let card = ui::col().relative().bg(page).child(ui::scroll_fade(list, &view.body_scroll, page)).child(footer).child(close);
                 let width = SHEET_WIDTH.min(f32::from(window.viewport_size().width) - 2. * SPLASH_INSET);
                 ui::dialog("onboarding-card", width, card, window, cx).into_any_element()
             }
-            false => div()
+            false => ui::col()
                 .relative()
                 .w_full()
                 .flex_1()
-                .min_h_0()
-                .flex()
-                .flex_col()
                 .when(!on_splash_cover, |d| d.bg(page))
                 .child(ui::scroll_area(div().id("onboarding-body").child(body), &view.body_scroll))
                 .child(footer)
                 .child(close)
                 .into_any_element(),
         };
-        let root = div()
+        let root = ui::col()
             .id("onboarding")
             .occlude()
             .absolute()
             .inset_0()
-            .flex()
-            .flex_col()
             .bg(page)
             .when_some(splash, |d, url| {
                 // gpui has no text shadow: a dark wash over the splash keeps the cover's white text legible.
@@ -465,8 +460,7 @@ impl Waffle {
     fn prompt_step(&self, guild: &Guild, prompts: &[Prompt], index: usize, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let view = self.join.onboard.as_ref().expect("overlay checked the open view");
         let prompt = &prompts[index];
-        let caption = div()
-            .flex()
+        let caption = ui::row().items_stretch()
             .gap_1p5()
             .text_size(ui::TEXT_SM)
             .font_weight(FontWeight::SEMIBOLD)
@@ -486,12 +480,10 @@ impl Waffle {
             .child(div().mb_4().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(help))
             .child(options)
             .child(
-                div()
+                ui::row()
                     .mt_4()
                     .min_h_6()
-                    .flex()
                     .flex_wrap()
-                    .items_center()
                     .text_size(ui::TEXT_SM)
                     .text_color(palette::muted(cx))
                     .children(gives(sentence.channels, sentence.roles).into_iter().flat_map(|p| piece(p, cx))),
@@ -526,11 +518,9 @@ impl Waffle {
         // The hint gets its own line over the buttons, ending under the button it's about, instead of a
         // third of the row.
         let hint = hint.map(|hint| div().text_right().text_size(ui::TEXT_SM).text_color(palette::danger_ink(cx)).child(hint));
-        let row = div().flex().items_center().gap_3().child(div().flex_1().flex().children(back)).children(dots).child(div().flex_1().flex().justify_end().child(next));
-        div()
+        let row = ui::row().gap_3().child(ui::row().items_stretch().flex_1().children(back)).children(dots).child(ui::row().items_stretch().flex_1().justify_end().child(next));
+        ui::col()
             .flex_none()
-            .flex()
-            .flex_col()
             .gap_2p5()
             .px_6()
             .py_4()
@@ -543,10 +533,8 @@ impl Waffle {
 // The cover: the server, "Welcome to …", over the splash in white or on the plain page.
 fn cover(guild: &Guild, on_splash: bool, cx: &App) -> AnyElement {
     let (strong, soft) = if on_splash { (palette::stage::strong(), palette::stage::text()) } else { (palette::strong(cx), palette::muted(cx)) };
-    div()
+    ui::col()
         .min_h_full()
-        .flex()
-        .flex_col()
         .items_center()
         .justify_center()
         .px_6()
@@ -588,14 +576,13 @@ fn rules_body(rules: &RulesStep, scroll: &ScrollHandle, note: Option<Div>, cx: &
 fn rules_list(rules: &[String], scroll: &ScrollHandle, cx: &App) -> Div {
     let last = rules.len().saturating_sub(1);
     let rows = rules.iter().enumerate().map(|(i, rule)| {
-        div()
+        ui::row()
             .relative()
-            .flex()
             .items_start()
             .gap_3()
             .p_3()
             .child(
-                div()
+                ui::row()
                     .size_6()
                     .flex_none()
                     .rounded_full()
@@ -603,8 +590,6 @@ fn rules_list(rules: &[String], scroll: &ScrollHandle, cx: &App) -> Div {
                     .text_color(palette::accent_ink(cx))
                     .text_size(ui::TEXT_XS)
                     .font_weight(FontWeight::BOLD)
-                    .flex()
-                    .items_center()
                     .justify_center()
                     .child((i + 1).to_string()),
             )
@@ -612,16 +597,16 @@ fn rules_list(rules: &[String], scroll: &ScrollHandle, cx: &App) -> Div {
             .when(i < last, |d| d.child(ui::inset_rule(12., cx).left_12()))
     });
     let group = palette::surface(palette::Level::Group, cx);
-    let list = div().id("onboarding-rules").max_h(px(RULES_HEIGHT)).flex().flex_col().children(rows);
+    let list = ui::col().id("onboarding-rules").max_h(px(RULES_HEIGHT)).children(rows);
     div().squircle(ui::RADIUS_LG).bg(group).p_1().child(ui::scroll_fade(list, scroll, group))
 }
 
 fn column() -> Div {
-    div().w_full().max_w(px(640.)).flex().flex_col().gap_1p5()
+    ui::col().w_full().max_w(px(640.)).gap_1p5()
 }
 
 fn centered(column: Div) -> AnyElement {
-    div().w_full().flex().justify_center().px_6().pt(px(56.)).pb_6().child(column).into_any_element()
+    ui::row().items_stretch().w_full().justify_center().px_6().pt(px(56.)).pb_6().child(column).into_any_element()
 }
 
 fn heading(text: String, cx: &App) -> Div {
@@ -633,7 +618,7 @@ fn progress_dots(step: Step, total: usize, cx: &App) -> Div {
         Step::Prompt(i) => i,
         _ => total.saturating_sub(1),
     };
-    div().flex_none().flex().gap_1p5().children((0..total).map(|i| {
+    ui::row().items_stretch().flex_none().gap_1p5().children((0..total).map(|i| {
         let fill = match i.cmp(&now) {
             std::cmp::Ordering::Less => palette::accent(),
             std::cmp::Ordering::Equal => palette::strong(cx),
@@ -651,23 +636,19 @@ fn option_grid(guild: &Guild, prompt: &Prompt, picked: &HashSet<String>, cx: &mu
             let on = picked.contains(&option.id);
             let adds = adds_of(guild, iter::once(option));
             let ink = if on { palette::accent_ink(cx) } else { palette::muted(cx) };
-            let gets = adds.channels.iter().map(|c| div().min_w_0().max_w_full().truncate().child(format!("#{c}")).into_any_element()).chain(adds.roles.iter().map(|(name, color)| ui::role_chip(name.clone(), role_color(*color, cx), cx).into_any_element()));
+            let gets = adds.channels.iter().map(|c| ui::line(format!("#{c}")).max_w_full().into_any_element()).chain(adds.roles.iter().map(|(name, color)| ui::role_chip(name.clone(), role_color(*color, cx), cx).into_any_element()));
             let gets: Vec<AnyElement> = gets.enumerate().flat_map(|(i, el)| (i > 0).then(|| div().child("·").into_any_element()).into_iter().chain(iter::once(el))).collect();
-            let text = div()
+            let text = ui::col()
                 .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
                 .gap_0p5()
                 .child(div().text_size(ui::TEXT_LEAD).line_height(px(TITLE_LINE)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(option.title.clone()))
                 .when_some(option.description.clone(), |d, desc| d.child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(desc)))
-                .when(!gets.is_empty(), |d| d.child(div().mt_0p5().flex().flex_wrap().items_center().gap_1().text_size(ui::TEXT_XS).text_color(ink).children(gets)));
+                .when(!gets.is_empty(), |d| d.child(ui::row().mt_0p5().flex_wrap().gap_1().text_size(ui::TEXT_XS).text_color(ink).children(gets)));
             let edge = if on { palette::accent().opacity(0.7) } else { palette::line(cx) };
             let hover_edge = if on { edge } else { palette::line_strong(cx) };
-            let card = div()
+            let card = ui::row()
                 .id(gpui_kit::SharedString::from(format!("onboarding-option-{}", option.id)))
                 .min_h(px(56.))
-                .flex()
                 // The emoji sits on the title's line, not mid-card, so it stays put as descriptions wrap.
                 .items_start()
                 .gap_3()
@@ -710,9 +691,7 @@ fn dropdown(prompt: &Prompt, picked: &HashSet<String>, window: &mut Window, cx: 
             ui::pick_row(gpui_kit::SharedString::from(id), mark, title, option.description.clone().map(Into::into), cx).on_click(listener).into_any_element()
         })
         .collect();
-    div()
-        .flex()
-        .flex_col()
+    ui::col()
         .gap_0p5()
         .p_1p5()
         .squircle(ui::RADIUS_MD)
@@ -726,7 +705,7 @@ fn dropdown(prompt: &Prompt, picked: &HashSet<String>, window: &mut Window, cx: 
 // A unicode emoji as text, a custom one as its image.
 // One title line tall, centred on it.
 fn option_emoji(emoji: &OptionEmoji) -> Option<AnyElement> {
-    let slot = div().w_7().h(px(TITLE_LINE)).flex_none().flex().items_center().justify_center();
+    let slot = ui::row().w_7().h(px(TITLE_LINE)).flex_none().justify_center();
     if let Some(url) = emoji.url() {
         return Some(slot.child(img(url).size(px(22.)).object_fit(ObjectFit::Contain)).into_any_element());
     }
@@ -812,7 +791,7 @@ fn and_list(items: Vec<Piece>) -> Vec<Piece> {
 fn piece(piece: Piece, cx: &App) -> Vec<AnyElement> {
     match piece {
         Piece::Text(text) => text.split_inclusive(' ').map(|word| div().whitespace_nowrap().child(word.to_owned()).into_any_element()).collect(),
-        Piece::Channel(name) => vec![div().min_w_0().max_w_full().truncate().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(format!("#{name}")).into_any_element()],
+        Piece::Channel(name) => vec![ui::line(format!("#{name}")).max_w_full().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).into_any_element()],
         Piece::Role(name, color) => vec![ui::role_chip(name, role_color(color, cx), cx).mx_0p5().into_any_element()],
     }
 }

@@ -528,23 +528,17 @@ impl Waffle {
     fn channel_settings_nav(&self, channel: &Channel, guild_id: &str, cx: &mut Context<Self>) -> impl IntoElement {
         let view = self.channel_settings.as_ref().expect("channel settings are open");
         let category = self.guilds.iter().find(|g| g.id == guild_id).and_then(|g| g.channels.iter().find(|c| Some(&c.id) == channel.parent_id.as_ref())).map(|c| c.name.clone());
-        let head = div()
-            .flex()
-            .items_center()
+        let head = ui::row()
             .gap_2p5()
             .px_1p5()
             .pb_3()
-            .min_w_0()
             .child(ui::icon_tile(channel_glyph(channel), palette::selected(cx), palette::strong(cx)).size_10().flex_none())
             .child(
-                div()
+                ui::col()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
                     .line_height(ui::LINE_DETAIL)
-                    .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(channel.name.clone()))
-                    .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(category.unwrap_or_else(|| "Channel settings".into()))),
+                    .child(ui::line(channel.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
+                    .child(ui::line(category.unwrap_or_else(|| "Channel settings".into())).text_size(ui::TEXT_XS).text_color(palette::muted(cx))),
             );
         let items: Vec<AnyElement> = self
             .channel_setting_pages(guild_id, channel)
@@ -603,13 +597,10 @@ impl Waffle {
                     .h_auto()
                     .py_1p5()
                     .child(
-                        div()
+                        ui::col()
                             .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .child(div().truncate().text_color(palette::strong(cx)).child(setting.title))
-                            .child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(place)),
+                            .child(ui::line(setting.title).text_color(palette::strong(cx)))
+                            .child(ui::line(place).text_size(ui::TEXT_XS).text_color(palette::muted(cx))),
                     )
                     .on_click(cx.listener(move |this, _, window, cx| this.jump_to_channel_setting(setting, window, cx)))
                     .into_any_element()
@@ -642,18 +633,15 @@ impl Waffle {
     fn delete_ask(&self, channel: &Channel, cx: &mut Context<Self>) -> impl IntoElement {
         let id = channel.id.clone();
         let what = if channel.kind == ChannelKind::Category { format!("Delete the {} category? Its channels stay, without a category.", channel.name) } else { format!("Delete #{}? Its messages go with it. This can't be undone.", channel.name) };
-        div()
+        ui::col()
             .my_1()
             .p_2p5()
             .squircle(ui::RADIUS_MD)
             .bg(palette::danger().opacity(0.1))
-            .flex()
-            .flex_col()
             .gap_2()
             .child(div().text_color(palette::strong(cx)).child(what))
             .child(
-                div()
-                    .flex()
+                ui::row().items_stretch()
                     .gap_2()
                     .child(ui::button("cs-delete-keep", Tone::Secondary, cx).small().flex_1().child("Keep").on_click(cx.listener(|this, _, _, cx| {
                         if let Some(view) = &mut this.channel_settings {
@@ -702,7 +690,7 @@ impl Waffle {
                 .flex_col()
                 .items_stretch()
                 .gap_3()
-                .child(div().flex().items_start().gap_4().child(ui::settings_text("Bitrate", Some("Higher sounds better and costs slow connections more"), cx)).child(value_text(format!("{} kbps", bitrate / 1000), cx)))
+                .child(ui::row().items_start().gap_4().child(ui::settings_text("Bitrate", Some("Higher sounds better and costs slow connections more"), cx)).child(value_text(format!("{} kbps", bitrate / 1000), cx)))
                 .child(self.range("cs-bitrate".into(), fraction, crate::settings::Fill::Accent, move |this, f, cx| {
                     let kbps = (8. + f.clamp(0., 1.) * (cap - 8_000) as f32 / 1000.).round() as u32;
                     this.edit_draft(cx, |d| d.props.bitrate = kbps * 1000);
@@ -713,7 +701,7 @@ impl Waffle {
                 .flex_col()
                 .items_stretch()
                 .gap_3()
-                .child(div().flex().items_start().gap_4().child(ui::settings_text("User limit", Some("Members with Move members can still join"), cx)).child(value_text(if limit == 0 { "No limit".into() } else { limit.to_string() }, cx)))
+                .child(ui::row().items_start().gap_4().child(ui::settings_text("User limit", Some("Members with Move members can still join"), cx)).child(value_text(if limit == 0 { "No limit".into() } else { limit.to_string() }, cx)))
                 .child(self.range("cs-limit".into(), limit as f32 / limit_max as f32, crate::settings::Fill::Accent, move |this, f, cx| {
                     let n = (f.clamp(0., 1.) * limit_max as f32).round() as u32;
                     this.edit_draft(cx, |d| d.props.user_limit = n);
@@ -871,7 +859,7 @@ impl Waffle {
                 ui::menu_row(SharedString::from(format!("cs-target-{id}")), cx)
                     .toggled(selected.as_deref() == Some(o.id.as_str()), cx)
                     .child(mark.flex_none())
-                    .child(div().flex_1().min_w_0().truncate().child(name_of(o)))
+                    .child(ui::line(name_of(o)).flex_1())
                     .on_click(cx.listener(move |this, _, _, cx| {
                         if let Some(view) = &mut this.channel_settings {
                             view.target = Some(id.clone());
@@ -887,11 +875,9 @@ impl Waffle {
             roles.into_iter().map(|r| (r.id.clone(), r.name.clone())).collect()
         };
         let add = (!addable.is_empty()).then(|| div().mt_2().child(self.cs_select(Select::AddRole, &addable, "", "Add a role".into(), cx)));
-        let list = div()
+        let list = ui::col()
             .w(px(200.))
             .flex_none()
-            .flex()
-            .flex_col()
             .gap_0p5()
             .child(div().px_1().pb_1().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Roles and members"))
             .children(rows)
@@ -924,9 +910,9 @@ impl Waffle {
                     this.edit_draft(cx, |d| d.overwrites.retain(|o| o.id != id));
                 }))
             });
-            div().flex_1().min_w_0().flex().flex_col().gap_6().children(groups).child(div().flex().justify_end().children(remove))
+            ui::col().flex_1().gap_6().children(groups).child(ui::row().items_stretch().justify_end().children(remove))
         });
-        out.push(div().flex().items_start().gap_6().child(list).children(editor).into_any_element());
+        out.push(ui::row().items_start().gap_6().child(list).children(editor).into_any_element());
         out
     }
 
@@ -1017,7 +1003,7 @@ impl Waffle {
                 }
             }));
         let save = ui::button("cs-save", Tone::Primary, cx).loading(saving.then_some("Saving")).child("Save changes").on_click(cx.listener(move |this, _, _, cx| this.save_channel_settings(closing, cx)));
-        let bar = div()
+        let bar = ui::row()
             .w_full()
             .max_w(px(ui::SETTINGS_WIDTH))
             .py_2p5()
@@ -1026,20 +1012,15 @@ impl Waffle {
             .squircle(ui::RADIUS_LG)
             .bg(palette::surface(Level::Overlay, cx))
             .shadow(ui::shadow_pop(cx))
-            .flex()
-            .items_center()
             .gap_3()
             .child(div().text_color(ink).flex_none().child(Icon::new(glyph).size(ui::ICON_XL)))
             .child(
-                div()
+                ui::col()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
                     .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title))
                     .children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(px(17.)).text_color(palette::muted(cx)).child(d))),
             )
-            .child(div().flex().gap_2().flex_none().child(reset).child(save));
+            .child(ui::row().items_stretch().gap_2().flex_none().child(reset).child(save));
         Some(ui::rise(div().absolute().bottom_4().left_10().right_10().child(bar), "cs-savebar-in", std::time::Duration::ZERO))
     }
 }

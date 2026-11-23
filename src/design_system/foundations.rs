@@ -3,8 +3,7 @@ use super::*;
 
 pub(super) fn type_scale(cx: &App) -> impl IntoElement {
     let spec = |meta: String, first: bool, text: gpui_kit::Div| {
-        div()
-            .flex()
+        ui::row()
             .items_baseline()
             .gap_4()
             .py_3()
@@ -32,9 +31,7 @@ pub(super) fn type_scale(cx: &App) -> impl IntoElement {
 // Drawn from the tokens themselves, so this page can't drift from what the app uses.
 pub(super) fn space(cx: &App) -> impl IntoElement {
     let bar = |(name, n): (&'static str, f32)| {
-        div()
-            .flex()
-            .items_center()
+        ui::row()
             .gap_3()
             .text_size(ui::TEXT_XS)
             .text_color(palette::faint(cx))
@@ -43,9 +40,7 @@ pub(super) fn space(cx: &App) -> impl IntoElement {
             .child(div().w(px(n * 3.)).h_3().squircle(3.).bg(palette::accent().opacity(0.8)))
     };
     let tile = |name: &'static str, radius: f32, use_: &'static str| {
-        div()
-            .flex()
-            .flex_col()
+        ui::col()
             .items_center()
             .gap_1p5()
             .text_size(ui::TEXT_XS)

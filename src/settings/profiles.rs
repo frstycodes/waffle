@@ -456,8 +456,8 @@ impl Waffle {
             (Some(_), None) if editor.tab == ProfileTab::Main => (self.main_profile_groups(editor, cx), MAIN_GROUP),
             (Some(_), None) => (self.server_profile_groups(editor, cx), SERVER_GROUP),
         };
-        let fields = div().flex_1().min_w_0().flex().flex_col().gap_6().child(tabs).children(groups);
-        let body = div().flex().items_start().gap_8().child(fields).children(editor.saved.is_some().then(|| self.profile_preview_column(editor, cx)));
+        let fields = ui::col().flex_1().gap_6().child(tabs).children(groups);
+        let body = ui::row().items_start().gap_8().child(fields).children(editor.saved.is_some().then(|| self.profile_preview_column(editor, cx)));
         vec![Section::keyed(group, body)]
     }
 
@@ -506,7 +506,7 @@ impl Waffle {
             Some(avatar) => self.recent_slot(i, avatar, editor.avatar == AvatarChoice::Recent(avatar.id.clone()), cx).into_any_element(),
             None => div().size(px(SLOT)).flex_none().rounded_full().border(px(1.5)).border_dashed().border_color(palette::line_strong(cx)).into_any_element(),
         }).collect::<Vec<_>>();
-        let field = ui::field("Recent avatars", cx).flex_1().child(div().flex().flex_wrap().gap_3().py_1().children(slots)).child(ui::field_hint("Your last 6 avatars. Pick one to use it again; no new upload.", None, cx));
+        let field = ui::field("Recent avatars", cx).flex_1().child(ui::row().items_stretch().flex_wrap().gap_3().py_1().children(slots)).child(ui::field_hint("Your last 6 avatars. Pick one to use it again; no new upload.", None, cx));
         ui::settings_row("pf-recent", true, cx).child(field)
     }
 
@@ -514,7 +514,7 @@ impl Waffle {
         let group = SharedString::from(format!("pf-recent-{i}"));
         let id = avatar.id.clone();
         let surface = palette::surface(Level::Overlay, cx);
-        let remove = div()
+        let remove = ui::row()
             .id(SharedString::from(format!("pf-recent-{i}-remove")))
             .absolute()
             .top_0()
@@ -523,8 +523,6 @@ impl Waffle {
             .rounded_full()
             .bg(surface)
             .shadow(ui::shadow_pop(cx))
-            .flex()
-            .items_center()
             .justify_center()
             .cursor_pointer()
             .text_color(palette::strong(cx))
@@ -560,7 +558,7 @@ impl Waffle {
         let swatches = colours.into_iter().map(|colour| {
             ui::swatch(SharedString::from(format!("pf-accent-{colour:06x}")), palette::data_color(colour), editor.accent == Some(colour), ring).on_click(cx.listener(move |this, _, _, cx| this.edit_profile(cx, |e| e.accent = Some(colour))))
         });
-        ui::settings_row("pf-accent", false, cx).child(div().flex().flex_wrap().items_center().gap_2().child(none).children(swatches))
+        ui::settings_row("pf-accent", false, cx).child(ui::row().flex_wrap().gap_2().child(none).children(swatches))
     }
 
     fn server_tag_row(&self, editor: &ProfileEditor, cx: &mut Context<Self>) -> Stateful<Div> {
@@ -691,7 +689,7 @@ impl Waffle {
         };
         let reset = ui::button("pf-reset", Tone::Link, cx).disabled(editor.saving).child("Reset").on_click(cx.listener(|this, _, window, cx| this.reset_profile(window, cx)));
         let save = ui::button("pf-save", Tone::Primary, cx).loading(editor.saving.then_some("Saving…")).child("Save changes").on_click(cx.listener(|this, _, window, cx| this.save_profile(window, cx)));
-        let bar = div()
+        let bar = ui::row()
             .id("pf-savebar")
             .occlude()
             .w_full()
@@ -702,12 +700,10 @@ impl Waffle {
             .squircle(ui::RADIUS_LG)
             .bg(palette::surface(Level::Overlay, cx))
             .shadow(ui::shadow_pop(cx))
-            .flex()
-            .items_center()
             .gap_3()
             .child(div().flex_1().min_w_0().text_color(ink).child(message))
-            .child(div().flex().flex_none().items_center().gap_2().child(reset).child(save));
-        let shaken = div().w_full().flex().justify_center().child(bar).with_animation(SharedString::from(format!("pf-shake-{}", editor.shakes)), Animation::new(SHAKE), |el, t| el.translate_x(px(shake_offset(t))));
+            .child(ui::row().flex_none().gap_2().child(reset).child(save));
+        let shaken = ui::row().items_stretch().w_full().justify_center().child(bar).with_animation(SharedString::from(format!("pf-shake-{}", editor.shakes)), Animation::new(SHAKE), |el, t| el.translate_x(px(shake_offset(t))));
         let slid = div().w_full().child(shaken).with_animation("pf-savebar-in", Animation::new(ui::DUR_PANEL).with_easing(|t| motion::ease_out().sample(t)), |el, t| el.opacity(t).translate_y(px(16. * (1. - t))));
         Some(div().absolute().bottom_4().left_10().right_10().child(slid).into_any_element())
     }
@@ -720,7 +716,7 @@ impl Waffle {
         let toast = ui::toast_with(SharedString::from(format!("pf-undo-{}", removal.avatar.id)), Glyph::Trash, palette::muted(cx), "Avatar removed", None, Some(undo.into_any_element()), cx);
         let bar_shows = !editor.changes(cx).is_empty() || editor.saving;
         let surface = div().id("pf-undo-toast").occlude().w(px(380.)).child(toast);
-        Some(div().absolute().bottom(px(if bar_shows { 84. } else { 16. })).left_0().right_0().flex().justify_center().child(surface).into_any_element())
+        Some(ui::row().items_stretch().absolute().bottom(px(if bar_shows { 84. } else { 16. })).left_0().right_0().justify_center().child(surface).into_any_element())
     }
 }
 
@@ -768,7 +764,7 @@ fn text_input(id: &'static str, state: &Entity<InputState>, cx: &App) -> impl In
 // Help under a field with its count, which turns red only at the limit.
 fn count_hint(text: impl Into<SharedString>, count: usize, max: usize, cx: &App) -> Div {
     let ink = if count >= max { palette::danger_ink(cx) } else { palette::faint(cx) };
-    div().flex().justify_between().gap_2().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(text.into()).child(div().flex_none().text_color(ink).child(format!("{count}/{max}")))
+    ui::row().items_stretch().justify_between().gap_2().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(text.into()).child(div().flex_none().text_color(ink).child(format!("{count}/{max}")))
 }
 
 fn nitro_row(id: &'static str, title: &'static str, caption: &'static str, cx: &mut Context<Waffle>) -> Stateful<Div> {

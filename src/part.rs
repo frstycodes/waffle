@@ -14,12 +14,15 @@ type RenderFn = fn(&mut Waffle, &mut Window, &mut Context<Waffle>) -> AnyElement
 pub struct Part {
     waffle: WeakEntity<Waffle>,
     render: RenderFn,
+    // Which column, for the render counters (perf.rs).
+    name: &'static str,
     images: Entity<Images>,
     _observe: Subscription,
 }
 
 impl Render for Part {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe(self.name);
         self.images.update(cx, |images, cx| images.next_frame(cx));
         let render = self.render;
         let content = self.waffle.update(cx, |waffle, cx| render(waffle, window, cx)).unwrap_or_else(|_| div().into_any_element());
@@ -46,16 +49,17 @@ pub enum Column {
 impl Waffle {
     // `column` as a cached view laid out by `style`; its own content can't size it.
     pub fn part(&mut self, column: Column, style: StyleRefinement, cx: &mut Context<Self>) -> AnyElement {
-        let (slot, render): (&mut Option<Entity<Part>>, RenderFn) = match column {
-            Column::Nav => (&mut self.parts.nav, |w, window, cx| w.render_nav(window, cx).into_any_element()),
-            Column::Main => (&mut self.parts.main, Waffle::render_main),
-            Column::Panel => (&mut self.parts.panel, |w, window, cx| w.render_panel(window, cx).unwrap_or_else(|| div().into_any_element())),
+        let (slot, render, name): (&mut Option<Entity<Part>>, RenderFn, &'static str) = match column {
+            Column::Nav => (&mut self.parts.nav, |w, window, cx| w.render_nav(window, cx).into_any_element(), "Nav column"),
+            Column::Main => (&mut self.parts.main, Waffle::render_main, "Main column"),
+            Column::Panel => (&mut self.parts.panel, |w, window, cx| w.render_panel(window, cx).unwrap_or_else(|| div().into_any_element()), "Panel column"),
         };
         let waffle = cx.entity();
         let part = slot.get_or_insert_with(|| {
             cx.new(|cx: &mut Context<Part>| Part {
                 waffle: waffle.downgrade(),
                 render,
+                name,
                 images: crate::images::new_cache(cx),
                 _observe: cx.observe(&waffle, |_, _, cx| cx.notify()), // lint-allow(global-notify): notifies this part, following the app
             })
@@ -94,6 +98,7 @@ pub struct Overlays {
 
 impl Render for Overlays {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("Overlays");
         let overlays = self.waffle.update(cx, |waffle, cx| waffle.render_overlays(window, cx)).unwrap_or_default();
         // After the app's render set the rest of this layout's covering.
         if !overlays.is_empty() {

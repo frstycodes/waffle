@@ -405,7 +405,7 @@ impl Waffle {
                 let ctx = self.row_context_everywhere(&shown, 380., cx);
                 // The demo shows the first card as hovered, its actions up.
                 let demo = cfg!(debug_assertions) && std::env::var("WAFFLE_DEMO").as_deref() == Ok("inbox-mark-read");
-                div().flex().flex_col().gap_2().children(shown.iter().enumerate().map(|(i, m)| self.mention_card(m, &ctx, demo && i == 0, cx))).into_any_element()
+                ui::col().gap_2().children(shown.iter().enumerate().map(|(i, m)| self.mention_card(m, &ctx, demo && i == 0, cx))).into_any_element()
             }
         }
     }
@@ -433,10 +433,10 @@ impl Waffle {
             cx.stop_propagation();
             this.mark_mention_read(message_id.clone(), cx);
         }));
-        let actions = div().flex_none().my(px(-3.)).flex().items_center().gap_0p5().child(jump).child(read);
+        let actions = ui::row().flex_none().my(px(-3.)).gap_0p5().child(jump).child(read);
         let actions = if revealed { actions } else { actions.opacity(0.).group_hover(group.clone(), |s| s.opacity(1.)) };
-        let author = div().flex().items_center().gap_2().child(ui::avatar(m.author.avatar.clone(), 24.)).child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::NORMAL).child(m.author.name.clone())).child(actions);
-        div()
+        let author = ui::row().gap_2().child(ui::avatar(m.author.avatar.clone(), 24.)).child(ui::line(m.author.name.clone()).flex_1().font_weight(FontWeight::NORMAL)).child(actions);
+        ui::col()
             .id(group.clone())
             .group(group)
             .p_3()
@@ -444,8 +444,6 @@ impl Waffle {
             .bg(palette::surface(palette::Level::Raised, cx))
             .cursor_pointer()
             .hover(|s| s.bg(palette::hover(cx)))
-            .flex()
-            .flex_col()
             .gap_1()
             .child(div().text_size(ui::TEXT_XS).text_color(cx.theme().muted_foreground).child(place))
             .child(author)
@@ -534,8 +532,7 @@ impl Waffle {
         let body: AnyElement = match results {
             None => div().p_4().text_color(theme.muted_foreground).child("Loading GIFs…").into_any_element(),
             Some(Err(error)) => div().p_4().text_color(theme.danger).child(error.clone()).into_any_element(),
-            Some(Ok(gifs)) => div()
-                .flex()
+            Some(Ok(gifs)) => ui::row().items_stretch()
                 .flex_wrap()
                 .gap_1()
                 .children(gifs.iter().enumerate().map(|(i, g)| {
@@ -587,7 +584,7 @@ impl Waffle {
             .id("pins")
             .w(px(420.))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(div().px_4().py_3().flex().items_center().gap_2().child(Icon::new(Glyph::Pin).size(ui::ICON_XL)).child(div().font_weight(FontWeight::SEMIBOLD).child("Pinned Messages")))
+            .child(ui::row().px_4().py_3().gap_2().child(Icon::new(Glyph::Pin).size(ui::ICON_XL)).child(div().font_weight(FontWeight::SEMIBOLD).child("Pinned Messages")))
             .child(body);
         // Under the header's pin button: its top-right corner just right of the click, kept in the window.
         let at = point(self.popover_at.x + px(16.), px(crate::layout::HEADER_HEIGHT - 2.));
@@ -614,14 +611,12 @@ impl Waffle {
         let hovered = window.use_keyed_state("emoji-hovered", cx, |_, _| None::<(Emoji, SharedString)>);
         let preview = hovered.read(cx).clone().or_else(|| sections.first().and_then(|s| Some((s.items.first()?.clone(), s.source.clone()))));
         let in_view = scroll.top_item();
-        let rail = div()
+        let rail = ui::col()
             .id("emoji-rail")
             .w_12()
             .flex_none()
             .px_1p5()
             .pb_1p5()
-            .flex()
-            .flex_col()
             .items_center()
             .gap_0p5()
             .overflow_y_scroll()
@@ -633,13 +628,11 @@ impl Waffle {
                 // A line sets the server's own emoji apart from the Unicode groups after them.
                 let after_server = i > 0 && matches!(sections[i - 1].lead, SectionLead::Server { .. }) && !matches!(section.lead, SectionLead::Server { .. });
                 let line = after_server.then(|| div().w_5().h(ui::HAIRLINE).my_1().flex_none().bg(palette::line(cx)).into_any_element());
-                let tab = div()
+                let tab = ui::row()
                     .id(("emoji-cat", i))
                     .size_9()
                     .flex_none()
                     .squircle(RADIUS_SM)
-                    .flex()
-                    .items_center()
                     .justify_center()
                     .cursor_pointer()
                     .text_color(if i == in_view { strong } else { palette::muted(cx) })
@@ -659,13 +652,11 @@ impl Waffle {
             };
             let (picked, shown) = (emoji.clone(), (emoji, source));
             let hovered = hovered.clone();
-            div()
+            ui::row()
                 .id(SharedString::from(key))
                 .w(relative(1. / 9.))
                 .h_10()
                 .squircle(RADIUS_SM)
-                .flex()
-                .items_center()
                 .justify_center()
                 .cursor_pointer()
                 .hover(|s| s.bg(palette::selected(cx)))
@@ -691,14 +682,10 @@ impl Waffle {
             .pb_2()
             .children(sections.into_iter().map(|section| {
                 // GAP: the section label sticks to the top of the grid in the design; gpui has no sticky.
-                div()
-                    .flex()
-                    .flex_col()
+                ui::col()
                     .mb_1()
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
+                        ui::row()
                             .gap_1p5()
                             .py_1p5()
                             .px_1()
@@ -708,15 +695,13 @@ impl Waffle {
                             .child(section.lead.small(cx))
                             .child(section.name.clone()),
                     )
-                    .child(div().flex().flex_wrap().children(section.items.into_iter().enumerate().map(|(i, e)| cell(e, section.source.clone(), format!("emoji-{}-{i}", section.name)))))
+                    .child(ui::row().items_stretch().flex_wrap().children(section.items.into_iter().enumerate().map(|(i, e)| cell(e, section.source.clone(), format!("emoji-{}-{i}", section.name)))))
             }));
-        let foot = div()
+        let foot = ui::row()
             .min_h(px(52.))
             .flex_none()
             .py_1p5()
             .px_3()
-            .flex()
-            .items_center()
             .gap_2p5()
             .border_t_1()
             .border_color(palette::line(cx))
@@ -725,18 +710,12 @@ impl Waffle {
                     Some(url) => img(url).size_7().into_any_element(),
                     None => div().text_size(ui::TEXT_XL).line_height(ui::LINE_XL).child(emoji.name.clone()).into_any_element(),
                 };
-                div()
-                    .flex()
-                    .items_center()
+                ui::row()
                     .gap_2p5()
-                    .min_w_0()
-                    .child(div().w_8().flex_none().flex().justify_center().child(face))
+                    .child(ui::row().items_stretch().w_8().flex_none().justify_center().child(face))
                     .child(
-                        div()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(crate::message_menu::shortcode(&emoji)))
+                        ui::col()
+                            .child(ui::line(crate::message_menu::shortcode(&emoji)).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
                             .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(source)),
                     )
             }));
@@ -744,7 +723,7 @@ impl Waffle {
         let head = div().p_2p5().child(ui::search_field("emoji-search", &self.emoji_search, cx));
         vec![
             head.into_any_element(),
-            div().flex_1().min_h_0().flex().child(rail).child(div().flex_1().min_w_0().h_full().flex().relative().child(grid).child(gpui_kit::component::scroll::Scrollbar::vertical(&scroll))).into_any_element(),
+            ui::row().items_stretch().flex_1().min_h_0().child(rail).child(ui::row().items_stretch().flex_1().h_full().relative().child(grid).child(gpui_kit::component::scroll::Scrollbar::vertical(&scroll))).into_any_element(),
             foot.into_any_element(),
         ]
     }
@@ -797,15 +776,13 @@ impl Waffle {
         }
         let is_empty = list.is_empty();
         let field = div().flex_none().child(ui::search_field("switcher-search", &self.switcher_input, cx));
-        let hint = |keys: Vec<AnyElement>, label: &'static str| div().flex().items_center().gap_1().children(keys).child(label);
+        let hint = |keys: Vec<AnyElement>, label: &'static str| ui::row().gap_1().children(keys).child(label);
         let key = |glyph: Glyph| crate::ui::kbd("", cx).child(Icon::new(glyph).size(ui::ICON_XS)).into_any_element();
-        let foot = div()
+        let foot = ui::row()
             .pt_2p5()
             .px_2p5()
             .pb_1()
-            .flex()
             .flex_wrap()
-            .items_center()
             .gap_x_4()
             .gap_y_2()
             .border_t_1()
@@ -817,12 +794,10 @@ impl Waffle {
         let body: AnyElement = if is_empty {
             crate::ui::empty_state("switcher-empty", crate::mascot::Mood::Waiting, format!("Nothing called “{query}”"), "Check the spelling, or search messages in a channel instead.", cx).into_any_element()
         } else {
-            div().id("switcher-list").flex().flex_col().gap_0p5().max_h(px(380.)).overflow_y_scroll().children(list).into_any_element()
+            ui::col().id("switcher-list").gap_0p5().max_h(px(380.)).overflow_y_scroll().children(list).into_any_element()
         };
-        let body = div()
+        let body = ui::col()
             .p_2p5()
-            .flex()
-            .flex_col()
             .gap_2()
             .capture_key_down(cx.listener(Self::on_switcher_key))
             .child(field)
@@ -831,7 +806,7 @@ impl Waffle {
         Some(
             backdrop("switcher-backdrop", cx)
                 .bg(palette::scrim(cx))
-                .child(div().absolute().top(px(120.)).left_0().right_0().flex().justify_center().child(ui::dialog("switcher", SWITCHER_WIDTH, body, window, cx)))
+                .child(ui::row().items_stretch().absolute().top(px(120.)).left_0().right_0().justify_center().child(ui::dialog("switcher", SWITCHER_WIDTH, body, window, cx)))
                 .into_any_element(),
         )
     }
@@ -863,14 +838,12 @@ impl Waffle {
         let mark = name.to_lowercase().find(&query.to_lowercase()).filter(|_| !query.is_empty()).map(|at| at..at + query.len()).filter(|r| name.is_char_boundary(r.start) && name.is_char_boundary(r.end));
         let label = StyledText::new(name.clone()).with_highlights(mark.map(|r| (r, HighlightStyle { color: Some(strong), font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() })));
         let hover = palette::hover(cx);
-        div()
+        ui::row()
             .id(SharedString::from(format!("switch-{}", channel.id)))
             .h_9()
             .px_2p5()
             .flex_none()
             .squircle(RADIUS_SM)
-            .flex()
-            .items_center()
             .gap_2p5()
             .cursor_pointer()
             .text_color(if active { strong } else { palette::text(cx) })
@@ -923,31 +896,27 @@ impl SectionLead {
 // The mention cards' shape while they load: the place line, avatar and name, two lines of text.
 fn mention_skeletons(cx: &App) -> AnyElement {
     let card = |i: usize, widths: (f32, f32, f32)| {
-        div()
+        ui::col()
             .p_3()
             .squircle(RADIUS_XS)
             .bg(palette::surface(palette::Level::Raised, cx))
-            .flex()
-            .flex_col()
             .gap_2()
             .child(ui::skeleton(("mention-skel-place", i), RADIUS_XS, cx).h_2p5().w(px(widths.0)))
-            .child(div().flex().items_center().gap_2().child(ui::skeleton_circle(("mention-skel-avatar", i), 24., cx)).child(ui::skeleton(("mention-skel-name", i), RADIUS_XS, cx).h_3().w(px(widths.1))))
+            .child(ui::row().gap_2().child(ui::skeleton_circle(("mention-skel-avatar", i), 24., cx)).child(ui::skeleton(("mention-skel-name", i), RADIUS_XS, cx).h_3().w(px(widths.1))))
             .child(ui::skeleton(("mention-skel-text", i), RADIUS_XS, cx).h_3().w(gpui_kit::relative(widths.2)))
     };
-    div().flex().flex_col().gap_2().child(card(0, (140., 90., 0.85))).child(card(1, (110., 70., 0.6))).child(card(2, (160., 100., 0.75))).into_any_element()
+    ui::col().gap_2().child(card(0, (140., 90., 0.85))).child(card(1, (110., 70., 0.6))).child(card(2, (160., 100., 0.75))).into_any_element()
 }
 
 // A picker's floating card: the overlay surface, rounded and shadowed, its content laid out top to bottom.
 fn picker_frame(id: &'static str, height: f32, cx: &App) -> gpui_kit::Stateful<gpui_kit::Div> {
-    div()
+    ui::col()
         .id(id)
         .w(px(PICKER_SIZE.0))
         .h(px(height))
         .squircle(RADIUS_LG)
         .bg(palette::surface(palette::Level::Overlay, cx))
         .shadow(ui::shadow_pop(cx))
-        .flex()
-        .flex_col()
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
 }
 
@@ -996,10 +965,9 @@ fn pin_card(m: &Message, ctx: &std::rc::Rc<crate::chat::RowContext>, cx: &mut Ap
     let unpin = ui::icon_button(SharedString::from(format!("pin-unpin-{}", m.id)), Glyph::X, "Unpin", cx).small().on_click(move |_, window, cx| {
         this.update(cx, |this, cx| this.run_message_action(crate::message_menu::MessageAction::Pin, &pinned, false, window, cx)).ok();
     });
-    div()
+    ui::row()
         .id(group.clone())
         .group(group.clone())
-        .flex()
         .items_start()
         .gap_2()
         .p_3()
@@ -1008,7 +976,7 @@ fn pin_card(m: &Message, ctx: &std::rc::Rc<crate::chat::RowContext>, cx: &mut Ap
         .border_1()
         .border_color(palette::line(cx))
         .child(crate::chat::search_hit(m, ctx, cx).flex_1().min_w_0())
-        .child(div().flex_none().mt_neg_1().mr_neg_1().flex().gap_1().opacity(0.).group_hover(group, |s| s.opacity(1.)).child(jump).child(unpin))
+        .child(ui::row().items_stretch().flex_none().mt_neg_1().mr_neg_1().gap_1().opacity(0.).group_hover(group, |s| s.opacity(1.)).child(jump).child(unpin))
         .into_any_element()
 }
 

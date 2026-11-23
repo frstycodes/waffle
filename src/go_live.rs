@@ -287,9 +287,7 @@ impl Waffle {
     pub(crate) fn share_overlay(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let picker = self.share_picker.as_ref()?;
         let channel = self.call.as_ref().map_or_else(|| "voice".to_owned(), |c| c.channel.name.clone());
-        let head = div()
-            .flex()
-            .flex_col()
+        let head = ui::col()
             .gap_0p5()
             .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(format!("Go live in {channel}")))
             .child(div().text_color(palette::muted(cx)).child("Choose a screen, a window or a capture device."));
@@ -327,7 +325,7 @@ impl Waffle {
     // .srcs: three across, 12px apart; each a live still and its name.
     fn share_sources(&self, picker: &SharePicker, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = palette::muted(cx);
-        let note = |text: SharedString, color: Hsla| div().py_8().flex().justify_center().text_color(color).child(text).into_any_element();
+        let note = |text: SharedString, color: Hsla| ui::row().items_stretch().py_8().justify_center().text_color(color).child(text).into_any_element();
         let body: AnyElement = match picker.tab {
             ShareTab::Windows => match &picker.windows {
                 None => note("Finding windows…".into(), muted),
@@ -357,7 +355,7 @@ impl Waffle {
             Some(image) => ui::media(image, ui::all(ui::RADIUS_MD)).size_full().object_fit(gpui_kit::ObjectFit::Contain).into_any_element(),
             None => Icon::new(glyph(source)).size_8().text_color(muted).into_any_element(),
         };
-        let shot = div()
+        let shot = ui::row()
             .relative()
             .w_full()
             .aspect_ratio(16. / 10.)
@@ -365,8 +363,6 @@ impl Waffle {
             .bg(palette::surface(palette::Level::Rail, cx))
             .border_1()
             .border_color(palette::line(cx))
-            .flex()
-            .items_center()
             .justify_center()
             .child(still)
             .when(selected, |d| d.child(selection_ring(&key, picker.picked, palette::surface(palette::Level::Raised, cx))));
@@ -374,28 +370,22 @@ impl Waffle {
             Some(image) => img(image).size_4().flex_none().into_any_element(),
             None => Icon::new(glyph(source)).size(ui::ICON_MD).flex_none().text_color(muted).into_any_element(),
         };
-        div()
+        ui::col()
             .id(SharedString::from(format!("share-{key}")))
-            .min_w_0()
             .p_1()
             .m_neg_1()
             .squircle(ui::RADIUS_LG)
-            .flex()
-            .flex_col()
             .gap_1p5()
             .cursor_pointer()
             .hover(move |s| s.bg(hover))
             .child(shot)
             .child(
-                div()
-                    .flex()
-                    .items_center()
+                ui::row()
                     .gap_1p5()
-                    .min_w_0()
                     .font_weight(FontWeight::NORMAL)
                     .text_color(if selected { palette::strong(cx) } else { palette::text(cx) })
                     .child(icon)
-                    .child(div().min_w_0().truncate().child(name)),
+                    .child(ui::line(name)),
             )
             .on_click(cx.listener(move |this, _, _, cx| this.pick_share(source, label.clone(), cx)))
             .into_any_element()
@@ -428,8 +418,8 @@ impl Waffle {
             window,
             cx,
         );
-        let field = |label: &'static str, control: Div| div().flex_1().min_w_0().flex().flex_col().gap_1p5().child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(label)).child(control);
-        div().flex().gap_4().child(field("Resolution", resolutions)).child(field("Frame rate", rates))
+        let field = |label: &'static str, control: Div| ui::col().flex_1().gap_1p5().child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(label)).child(control);
+        ui::row().items_stretch().gap_4().child(field("Resolution", resolutions)).child(field("Frame rate", rates))
     }
 
     // The sound switch, saying whose sound viewers get.
@@ -439,14 +429,12 @@ impl Waffle {
             (Some(_), Some(label)) => format!("Viewers hear {label}, not your other apps"),
             (Some(_), None) => "Viewers hear this app, not your other apps".to_owned(),
         };
-        div()
+        ui::row()
             .id("stream-audio")
             .py_2p5()
-            .flex()
-            .items_center()
             .gap_3()
             .cursor_pointer()
-            .child(div().flex_1().min_w_0().child(div().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child("Share audio")).child(div().truncate().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(what)))
+            .child(div().flex_1().min_w_0().child(div().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child("Share audio")).child(ui::line(what).text_size(ui::TEXT_XS).text_color(palette::muted(cx))))
             .child(ui::switch_live("stream-audio-switch", self.prefs.stream_audio, window, cx))
             .on_click(cx.listener(|this, _, _, cx| this.update_prefs(cx, |p| p.stream_audio = !p.stream_audio)))
     }
@@ -463,11 +451,9 @@ impl Waffle {
             this.close_share_picker(cx);
             cx.notify();
         }));
-        div()
-            .flex()
-            .items_center()
+        ui::row()
             .gap_2()
-            .child(div().flex_1().min_w_0().truncate().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(self.share_hint()))
+            .child(ui::line(self.share_hint()).flex_1().text_size(ui::TEXT_XS).text_color(palette::faint(cx)))
             .child(cancel)
             .child(go)
     }

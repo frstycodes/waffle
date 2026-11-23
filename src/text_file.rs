@@ -212,13 +212,11 @@ fn card(card: Card, cx: &App) -> Stateful<Div> {
     let (open, download, copy_url, viewer_file) = (file.url.clone(), file.url.clone(), file.url.clone(), file.clone());
     let (expand_this, copy_this, open_this, close_this) = (this.clone(), this.clone(), this.clone(), this);
     let button = |name: &str, glyph: Glyph, tip: &'static str| ui::icon_button(SharedString::from(format!("{id}-{name}")), glyph, tip, cx).small();
-    div()
+    ui::col()
         .id(id.clone())
         .mt_2()
         .w_full()
         .when(!full, |d| d.max_w(px(640.)))
-        .flex()
-        .flex_col()
         .squircle(RADIUS_LG)
         .overflow_hidden()
         .bg(frame)
@@ -226,9 +224,7 @@ fn card(card: Card, cx: &App) -> Stateful<Div> {
         .border_color(line)
         .child(body)
         .child(
-            div()
-                .flex()
-                .items_center()
+            ui::row()
                 .gap_2()
                 .px_2()
                 .py_1p5()
@@ -248,19 +244,16 @@ fn card(card: Card, cx: &App) -> Stateful<Div> {
                     })
                 }))
                 .child(
-                    div()
+                    ui::line(file.name.clone())
                         .id(SharedString::from(format!("{id}-name")))
-                        .min_w_0()
-                        .truncate()
                         .cursor_pointer()
                         .text_size(ui::TEXT_SM)
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(palette::strong(cx))
                         .hover(|s| s.underline())
-                        .child(file.name.clone())
                         .on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&open) }),
                 )
-                .child(div().flex_1().min_w_0().truncate().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(size))
+                .child(ui::line(size).flex_1().text_size(ui::TEXT_XS).text_color(palette::faint(cx)))
                 .when(text.is_some(), |d| {
                     d.child(
                         button("copy", if copied { Glyph::Checkmark } else { Glyph::Copy }, if copied { "Copied" } else { "Copy contents" })

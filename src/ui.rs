@@ -30,7 +30,7 @@ use gpui_kit::{
     div, img, linear_color_stop, linear_gradient, point, prelude::FluentBuilder, px, relative,
 };
 
-use crate::{discord::Status, icons::Glyph, illustration::Illustration, mascot, motion, palette, settings::Density};
+use crate::{icons::Glyph, illustration::Illustration, mascot, motion, palette, settings::Density};
 
 mod control;
 mod date;
@@ -45,12 +45,14 @@ mod tri;
 mod tunnel;
 mod tokens;
 mod layout;
+mod face;
+mod kit;
 pub mod prelude;
 
-pub use control::{Control, Pressable, button, chip, chip_lead, hover_fade, hover_state, icon_button, menu_row, pressable, round_button, swatch, tip};
+pub use control::{Control, Pressable, button, card, chip, chip_lead, hover_fade, hover_state, icon_button, menu_row, pressable, round_button, swatch, tip};
 pub use date::{date_field, time_field};
 pub use dialog::{dialog, dialog_body, dialog_scroll, modal};
-pub use feedback::{meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
+pub use feedback::{progress_bar, meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
 pub use field::{Align, check_options, code_cell, drop_zone, dropdown, field, field_error, field_marked, field_frame, field_hint, menu_dropdown, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
 pub use group::{settings_caption, settings_card, settings_choice, settings_close, settings_column, settings_group, SettingsHighlight, settings_warning, settings_nav_item, settings_page, SETTINGS_NAV_WIDTH, SETTINGS_WIDTH, settings_row, settings_nav_edge, settings_sidebar, settings_switch, settings_text, settings_title, settings_window};
 pub use overflow::{Entry, overflow_list};
@@ -59,6 +61,8 @@ pub use tabs::{Tab, pill_tabs, segmented_live, tabs};
 pub use tri::{Tri, tri_state};
 pub use tunnel::{TUNNEL_GRACE, Tunnel};
 pub use tokens::*;
+pub use kit::{Heading, RowHeight, dialog_header, list_row, media_label, section_label, toolbar};
+pub use face::{Badge, MarkFill, Shape, Spot, app_tile, avatar, badge_of, badged, dm_face, gap, monogram, name_hue, server_tile, status_mark};
 pub use layout::{col, floating, floating_at, line, row, sized, visible_rows};
 
 /// Rounds an element with the design's soft squircle.
@@ -115,6 +119,8 @@ pub enum Tone {
     Overlay,
     // Just the accent ink, underlined on hover: "View all members".
     Link,
+    // A wash of the stage's ink over the call stage, which keeps its own dark palette in both themes.
+    Stage,
 }
 
 // A main action and its options chevron, joined: inner corners tighten to 4px with a 1px seam.
@@ -530,68 +536,6 @@ fn choice_text(title: impl IntoElement, detail: Option<SharedString>, cx: &App) 
         .when_some(detail, |d, detail| d.child(div().text_size(px(12.)).text_color(palette::muted(cx)).child(detail)))
 }
 
-// A photo avatar.
-pub fn avatar(url: impl Into<SharedString>, size: f32) -> Img {
-    img(url.into()).size(px(size)).flex_none().rounded_full()
-}
-
-// A DM's face at `size` (design: navigation.html's .gav). A pair puts the first member top left and the
-// second bottom right at 0.69 of the size, the front one ringed in `ring`, the surface behind it.
-pub fn dm_face(face: &crate::discord::DmFace, size: f32, ring: Hsla) -> AnyElement {
-    use crate::discord::DmFace;
-    match face {
-        DmFace::Icon(url) | DmFace::One(url) => avatar(url.clone(), size).into_any_element(),
-        DmFace::Letters(name) => monogram(name, size).into_any_element(),
-        DmFace::Pair(back, front) => {
-            let small = (size * 0.69).round();
-            let gap = if size >= 48. { 3. } else { 2. };
-            div()
-                .relative()
-                .flex_none()
-                .size(px(size))
-                .child(div().absolute().top_0().left_0().child(avatar(back.clone(), small)))
-                .child(div().absolute().right_0().bottom_0().size(px(small)).child(self::gap(ring, gap)).child(avatar(front.clone(), small)))
-                .into_any_element()
-        }
-    }
-}
-
-// An avatar without a photo: the name's initial on a gradient picked from the name. Below 24px it
-// drops the initial.
-pub fn monogram(name: &str, size: f32) -> Div {
-    monogram_face(name_hue(name), size).rounded_full().when(size >= 24., |d| d.child(initial(name)))
-}
-
-// The monogram's gradient and type at `size`, on `hue`, with no shape or letter yet.
-fn monogram_face(hue: f32, size: f32) -> Div {
-    div()
-        .size(px(size))
-        .flex_none()
-        .bg(linear_gradient(135., linear_color_stop(palette::picture_oklch(0.53, 0.12, hue), 0.), linear_color_stop(palette::picture_oklch(0.41, 0.13, hue + 35.), 1.)))
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_color(gpui_kit::white())
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_size(px(size * 0.38))
-}
-
-fn initial(name: &str) -> String {
-    name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default()
-}
-
-// The design's avatar hue: a stable hash of the name onto the colour wheel.
-pub fn name_hue(name: &str) -> f32 {
-    name.chars().fold(7_u32, |h, c| (h * 31 + c as u32) % 360) as f32
-}
-
-// An avatar with its presence mark at the corner. `ring` is the surface behind it.
-pub fn with_status(avatar: impl IntoElement, status: Status, size: f32, ring: Hsla, cx: &App) -> Div {
-    let mark = (size * 0.3).clamp(9., 16.);
-    let inset = size * 0.04 - 2.;
-    div().relative().flex_none().size(px(size)).child(avatar).child(div().absolute().right(px(inset)).bottom(px(inset)).child(status_mark(status, mark, ring, cx)))
-}
-
 // Speaking: a gap in the surface's colour, then the accent ring.
 pub fn speaking_ring(ring: Hsla) -> Vec<BoxShadow> {
     vec![shadow(palette::accent(), 0., 0., 0., 4., false), shadow(ring, 0., 0., 0., 2., false)]
@@ -649,93 +593,13 @@ pub fn listed_stack(id: impl Into<ElementId>, title: impl Into<SharedString>, pe
     }
 }
 
-// Paints `el` in the surface colour it stands in for; over the native sidebar, where that colour is
-// clear, it cuts its shape out of whatever was painted under it instead, so the material shows through.
-pub fn cut_out(el: Div, surface: Hsla) -> Div {
-    match surface.a > 0. {
-        true => el.bg(surface),
-        false => el.backdrop_erase(),
-    }
-}
-
-// The gap `spread` wide around a round mark or an overlapping avatar, separating it from what's under
-// it. Goes first among the parent's children, so it paints before the mark.
-pub fn gap(surface: Hsla, spread: f32) -> Div {
-    cut_out(div().absolute().top(px(-spread)).left(px(-spread)).right(px(-spread)).bottom(px(-spread)).rounded_full(), surface)
-}
-
-// The rail's tile proportion (a 44px tile at RADIUS_LG), kept at every size a server tile is drawn.
-const SERVER_TILE_ROUNDING: f32 = RADIUS_LG / 44.;
-
-// A server's icon as a squircle tile at `size`, or its initials on the selected fill when it has none.
-pub fn server_tile(icon: Option<&str>, name: &str, size: f32, cx: &App) -> AnyElement {
-    let radius = size * SERVER_TILE_ROUNDING;
-    if let Some(url) = icon {
-        return img(url.to_owned()).size(px(size)).flex_none().squircle(radius).into_any_element();
-    }
-    div()
-        .size(px(size))
-        .flex_none()
-        .squircle(radius)
-        .bg(palette::selected(cx))
-        .text_color(palette::strong(cx))
-        .text_size(px((size * 0.38).round()))
-        .font_weight(FontWeight::SEMIBOLD)
-        .flex()
-        .items_center()
-        .justify_center()
-        .child(crate::sidebar::initials(name))
-        .into_any_element()
-}
-
-// An app's icon as a server tile, or without one its initial on the monogram gradient, hued by `id` so an
-// app keeps its colour whatever it's called.
-pub fn app_tile(icon: Option<&str>, name: &str, id: &str, size: f32, cx: &App) -> AnyElement {
-    if icon.is_some() {
-        return server_tile(icon, name, size, cx);
-    }
-    monogram_face(name_hue(id), size).squircle(size * SERVER_TILE_ROUNDING).child(initial(name)).into_any_element()
-}
-
-// A server tile with `badge` (a channel's kind) on a round mark at its bottom-right, ringed 2px in
-// `surface`, the colour the tile sits on, so the mark reads cut out of the tile.
-pub fn server_tile_badged(icon: Option<&str>, name: &str, size: f32, badge: Glyph, surface: Hsla, cx: &App) -> Div {
-    let mark = (size * 0.45).round();
-    let ring = 2.;
-    let corner = -(mark / 2. - size * 0.12);
-    let badge = cut_out(div().absolute().right(px(corner - ring)).bottom(px(corner - ring)).size(px(mark + 2. * ring)).rounded_full(), surface)
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_color(palette::muted(cx))
-        .child(Icon::new(badge).size(px((mark * 0.66).round())));
-    div().relative().flex_none().size(px(size)).child(server_tile(icon, name, size, cx)).child(badge)
-}
-
-// A presence mark for an avatar's corner. Never colour alone: online is a dot, idle a moon, do not
-// disturb a bar, offline a ring. `ring` is the surface it sits on: a 2px gap around the mark.
-pub fn status_mark(status: Status, size: f32, ring: Hsla, cx: &App) -> Div {
-    let color = palette::status_in(status, cx);
-    let mark = div().absolute().inset_0().rounded_full();
-    let mark = match status {
-        Status::Online => mark.bg(color),
-        // The moon's bite runs past the disc's edge into the ring, which is the same colour.
-        Status::Idle => mark.bg(color).child(cut_out(div().absolute().top(px(size * (0.28 - 0.346))).left(px(size * (0.28 - 0.346))).size(px(size * 0.692)).rounded_full(), ring)),
-        Status::Dnd => mark.bg(color).flex().items_center().justify_center().child(cut_out(div().w(px(size * 0.55)).h(px(size * 0.22)), ring)),
-        Status::Offline => mark.child(cut_out(div().absolute().inset_0().rounded_full(), ring)).child(div().absolute().inset_0().rounded_full().border(px(2.5)).border_color(color)),
-    };
-    div().size(px(size)).flex_none().relative().child(gap(ring, 2.)).child(mark)
-}
-
 // A floating surface (menu, popover, picker): rounded, ringed and shadowed, with its content inset so
 // nothing reaches the rounded edge. A menu card is `surface(cx).w(px(248.))`.
+// Keywords: popover, card, menu, panel, popup, picker
 pub fn surface(cx: &App) -> Div {
     div().squircle(RADIUS_LG).bg(palette::surface(palette::Level::Overlay, cx)).shadow(shadow_pop(cx)).p(px(SURFACE_INSET)).flex().flex_col().gap(px(1.))
 }
 
-// A floating surface's entrance (menus, popovers, pickers, dialogs): it fades in and grows from 0.95 over
-// the pop timing, after `delay` (a submenu's intent delay). It grows from the top-left corner unless the
-// caller set a `transform_origin` toward its trigger.
 // A bar that floats over a page's foot (unsaved changes, bulk actions): the overlay card at the settings
 // column's width. It occludes, so the rows under it never take its hover or clicks.
 pub fn floating_bar(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
@@ -760,6 +624,9 @@ pub fn foot_dock(bar: impl IntoElement, id: impl Into<ElementId>) -> AnimationEl
     rise(div().absolute().bottom(px(16.)).left(px(40.)).right(px(40.)).flex().justify_center().child(bar), id, Duration::ZERO)
 }
 
+// A floating surface's entrance (menus, popovers, pickers, dialogs): it fades in and grows from 0.95 over
+// the pop timing, after `delay` (a submenu's intent delay). It grows from the top-left corner unless the
+// caller set a `transform_origin` toward its trigger.
 pub fn rise<E:IntoElement + Styled + 'static>(mut el: E, id: impl Into<ElementId>, delay: Duration) -> AnimationElement<E> {
     if el.style().transform_origin.x.is_none() {
         el = el.transform_origin(point(relative(0.), relative(0.)));

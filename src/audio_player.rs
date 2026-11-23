@@ -402,6 +402,7 @@ impl AudioPlayer {
 
 impl Render for AudioPlayer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("AudioPlayer");
         let painted = self.unpainted_since.clone();
         let body = if self.voice { self.voice_pill(window, cx) } else { self.file_card(window, cx) };
         body.child(canvas(|_, _, _| {}, move |_, _, _, _| painted.set(None)).absolute().size_0())
@@ -417,13 +418,11 @@ impl AudioPlayer {
         let rate = self.rate(cx);
         let rate_label = format!("{}X", rate.to_string().trim_start_matches('0'));
         let needs_length = duration.is_none() && matches!(self.stage, Stage::Idle);
-        div()
+        ui::row()
             .id(SharedString::from(format!("voice-{}", self.key)))
             .mt_1p5()
             .self_start()
             .max_w_full()
-            .flex()
-            .items_center()
             .gap_3()
             .py_2()
             .pl_2()
@@ -439,14 +438,12 @@ impl AudioPlayer {
             .child(div().flex_none().min_w_8().text_right().text_size(ui::TEXT_SM).font_features(tabular()).text_color(palette::muted(cx)).child(time))
             .child(
                 ui::pressable(
-                    div()
+                    ui::row()
                         .id(SharedString::from(format!("voice-rate-{}", self.key)))
                         .h_6()
                         .min_w_9()
                         .px_1p5()
                         .flex_none()
-                        .flex()
-                        .items_center()
                         .justify_center()
                         .squircle(RADIUS_XS)
                         .cursor_pointer()
@@ -476,7 +473,7 @@ impl AudioPlayer {
         let label = if playing { "Pause" } else if ended { "Play again" } else { "Play" };
         let fraction = duration.filter(|d| !d.is_zero()).map_or(0., |d| self.position().as_secs_f32() / d.as_secs_f32());
         let open = self.file.url.clone();
-        div()
+        ui::col()
             .id(SharedString::from(format!("audio-{}", self.key)))
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| this.key_down(e, cx)))
@@ -484,36 +481,26 @@ impl AudioPlayer {
             .w_full()
             .max_w(px(440.))
             .p_3()
-            .flex()
-            .flex_col()
             .gap_2p5()
             .squircle(RADIUS_LG)
             .bg(palette::surface(Level::Sidebar, cx))
             .border_1()
             .border_color(palette::line(cx))
             .child(
-                div()
-                    .flex()
-                    .items_center()
+                ui::row()
                     .gap_3()
-                    .min_w_0()
-                    .child(div().size_10().flex_none().squircle(RADIUS_XS).bg(palette::surface(Level::Raised, cx)).text_color(palette::muted(cx)).flex().items_center().justify_center().child(Icon::new(Glyph::File).size(ui::ICON_XL)))
+                    .child(ui::row().size_10().flex_none().squircle(RADIUS_XS).bg(palette::surface(Level::Raised, cx)).text_color(palette::muted(cx)).justify_center().child(Icon::new(Glyph::File).size(ui::ICON_XL)))
                     .child(
-                        div()
+                        ui::col()
                             .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
                             .child(
-                                div()
+                                ui::line(self.file.name.clone())
                                     .id(SharedString::from(format!("audio-name-{}", self.key)))
-                                    .truncate()
                                     .cursor_pointer()
                                     .text_size(ui::TEXT_SM)
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(palette::strong(cx))
                                     .hover(|s| s.underline())
-                                    .child(self.file.name.clone())
                                     .on_click(move |_, _, cx| {
                                         cx.stop_propagation();
                                         cx.open_url(&open)
@@ -523,9 +510,7 @@ impl AudioPlayer {
                     ),
             )
             .child(
-                div()
-                    .flex()
-                    .items_center()
+                ui::row()
                     .gap_2()
                     .child(self.play_button(32., label, cx))
                     .child(div().flex_none().text_size(ui::TEXT_XS).font_features(tabular()).text_color(palette::muted(cx)).child(format!("{now:0>width$} / {total}", width = total.len())))
@@ -544,7 +529,7 @@ impl AudioPlayer {
         let glyph = if self.is_playing() { Glyph::Pause } else if ended && !self.voice { Glyph::ArrowCounterClockwise } else { Glyph::Play };
         let loading = matches!(self.stage, Stage::Loading { play: true });
         ui::pressable(
-            div()
+            ui::row()
                 .id(SharedString::from(format!("audio-play-{}", self.key)))
                 .size(px(side))
                 .flex_none()
@@ -552,8 +537,6 @@ impl AudioPlayer {
                 .bg(palette::accent())
                 .hover(|s| s.bg(palette::accent_hover()))
                 .text_color(palette::on_accent())
-                .flex()
-                .items_center()
                 .justify_center()
                 .cursor_pointer()
                 .when(loading, |d| d.opacity(0.7))
@@ -636,12 +619,10 @@ impl AudioPlayer {
             .flex_none()
             .child(
                 ui::pressable(
-                    div()
+                    ui::row()
                         .id(SharedString::from(format!("audio-mute-{}", self.key)))
                         .size_7()
                         .squircle(RADIUS_XS)
-                        .flex()
-                        .items_center()
                         .justify_center()
                         .cursor_pointer()
                         .text_color(palette::muted(cx))

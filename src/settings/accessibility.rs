@@ -47,7 +47,7 @@ impl Waffle {
             .text_size(ui::TEXT_XS)
             .child("Adjust the visual density of chat messages and UI")
             .on_click(cx.listener(|this, _, window, cx| this.open_page(Page::Accessibility, window, cx)));
-        div().px_1().flex().child(link)
+        ui::row().items_stretch().px_1().child(link)
     }
 
     fn readability_group(&self, window: &mut Window, cx: &mut Context<Self>) -> Div {
@@ -157,15 +157,13 @@ impl Waffle {
                 .on_click(cx.listener(|this, _, _, _| crate::message_menu::speak(TTS_SAMPLE, this.prefs.tts_rate)))
         });
         let value = div().whitespace_nowrap().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(format!("x{:.2}", at as f32 / 4.));
-        let header = div()
-            .flex()
+        let header = ui::row()
             .items_start()
             .justify_between()
             .gap_4()
             .child(ui::settings_text(tts.title, Some(caption), cx))
-            .child(div().flex().items_center().gap_3().flex_none().child(value).children(preview));
-        let marks = div()
-            .flex()
+            .child(ui::row().gap_3().flex_none().child(value).children(preview));
+        let marks = ui::row().items_stretch()
             .gap_2()
             .text_size(ui::TEXT_XS)
             .text_color(palette::muted(cx))
@@ -200,9 +198,7 @@ impl Waffle {
     // GAP: drawn here, not by chat.rs's message_row, which needs a live channel's RowContext.
     fn a11y_preview(&self, cx: &mut Context<Self>) -> Div {
         let look = PreviewLook::new(self);
-        let card = div()
-            .flex()
-            .flex_col()
+        let card = ui::col()
             .py_3()
             .px_2()
             .squircle(ui::RADIUS_LG)
@@ -210,17 +206,15 @@ impl Waffle {
             .text_size(px(look.font))
             .line_height(px(look.font * 1.375))
             .children(SAMPLES.iter().enumerate().map(|(i, sample)| look.message(sample, i, cx)));
-        let heading = div()
+        let heading = ui::row()
             .px_1()
-            .flex()
-            .items_center()
             .gap_1p5()
             .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(palette::muted(cx))
             .child(Icon::new(Glyph::Eye).size(ui::ICON_SM))
             .child("Preview");
-        div().flex().flex_col().gap_2().child(heading).child(card)
+        ui::col().gap_2().child(heading).child(card)
     }
 }
 
@@ -250,7 +244,7 @@ fn value_marks<T: std::fmt::Display>(values: &[T], unit: &str, at: usize, cx: &m
 
 fn marks(labels: impl IntoIterator<Item = (SharedString, bool)>, cx: &mut Context<Waffle>) -> Div {
     let (muted, on) = (palette::muted(cx), palette::accent_ink(cx));
-    div().flex().justify_between().text_size(ui::TEXT_XS).text_color(muted).children(
+    ui::row().items_stretch().justify_between().text_size(ui::TEXT_XS).text_color(muted).children(
         labels.into_iter().map(|(label, chosen)| div().when(chosen, |d| d.text_color(on).font_weight(FontWeight::SEMIBOLD)).child(label)),
     )
 }
@@ -316,15 +310,15 @@ impl PreviewLook {
         if self.compact {
             let time = div().w(px(52.)).flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(sample.time);
             let face = (sample.starts_group && self.compact_avatars).then(|| ui::monogram(sample.author, 18.));
-            let line = div().flex().items_baseline().gap_2().child(time).children(face).when(sample.starts_group, |d| d.child(self.name(sample, cx))).child(self.text(sample, cx));
+            let line = ui::row().items_baseline().gap_2().child(time).children(face).when(sample.starts_group, |d| d.child(self.name(sample, cx))).child(self.text(sample, cx));
             return row.child(line).children(media.map(|m| m.ml(px(60.))));
         }
         let face = if sample.starts_group { ui::monogram(sample.author, 40.) } else { div().w_10().flex_none() };
         let who = sample.starts_group.then(|| {
             let time = div().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(format!("Today at {}", sample.time));
-            div().flex().items_baseline().gap_2().child(self.name(sample, cx)).child(time)
+            ui::row().items_baseline().gap_2().child(self.name(sample, cx)).child(time)
         });
-        let body = div().flex_1().min_w_0().flex().flex_col().children(who).child(self.text(sample, cx)).children(media);
+        let body = ui::col().flex_1().children(who).child(self.text(sample, cx)).children(media);
         row.flex().gap_3p5().child(face).child(body)
     }
 
@@ -333,7 +327,7 @@ impl PreviewLook {
         let role = if self.desaturate_user_colors { self.saturate(role) } else { role };
         let ink = if self.role_style == RoleStyle::InNames { role } else { palette::strong(cx) };
         let dot = (self.role_style == RoleStyle::NextToNames).then(|| div().size_2p5().flex_none().rounded_full().bg(role));
-        div().flex().items_center().gap_1p5().font_weight(FontWeight::SEMIBOLD).text_color(ink).children(dot).child(sample.author)
+        ui::row().gap_1p5().font_weight(FontWeight::SEMIBOLD).text_color(ink).children(dot).child(sample.author)
     }
 
     fn text(&self, sample: &Sample, cx: &Context<Waffle>) -> Div {
@@ -357,7 +351,7 @@ impl PreviewLook {
 
     // Images and stickers are user content: saturation leaves them alone.
     fn media(&self, media: &SampleMedia, cx: &Context<Waffle>) -> Option<Div> {
-        let frame = div().mt_1p5().flex();
+        let frame = ui::row().items_stretch().mt_1p5();
         match media {
             SampleMedia::None => None,
             SampleMedia::Image { description } => {
@@ -365,9 +359,9 @@ impl PreviewLook {
                 let alt = self.descriptions.then(|| {
                     div().px_1p5().py_px().rounded_md().bg(gpui_kit::black().opacity(0.6)).text_size(ui::TEXT_XXS).line_height(px(15.)).text_color(gpui_kit::white()).child(*description)
                 });
-                Some(frame.child(div().w(px(180.)).h(px(112.)).p_1p5().squircle(ui::RADIUS_MD).bg(fill).flex().items_end().children(alt)))
+                Some(frame.child(ui::row().w(px(180.)).h(px(112.)).p_1p5().squircle(ui::RADIUS_MD).bg(fill).items_end().children(alt)))
             }
-            SampleMedia::Sticker => Some(frame.child(div().size(px(72.)).flex().items_center().justify_center().text_color(self.saturate(palette::accent_ink(cx))).child(Icon::new(Glyph::Sticker).size(px(56.))))),
+            SampleMedia::Sticker => Some(frame.child(ui::row().size(px(72.)).justify_center().text_color(self.saturate(palette::accent_ink(cx))).child(Icon::new(Glyph::Sticker).size(px(56.))))),
         }
     }
 

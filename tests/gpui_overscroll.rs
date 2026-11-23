@@ -180,6 +180,59 @@ fn content_that_fits_does_not_stretch() {
     assert_eq!(overscroll.offset(), Point::default());
 }
 
+// A mouse wheel's notch moves nothing when it lands: the list eases to it, a step per frame at prepaint.
+// The list must be prepainted again for those steps, not replayed, inside a cached view as the chat's is.
+mod notched {
+    use gpui_kit::prelude::*;
+    use gpui_kit::{AnyView, Context, Entity, ListAlignment, ListState, Pixels, ScrollDelta, ScrollEvent, StyleRefinement, TestAppContext, TouchPhase, VisualTestContext, Window, div, list, point, px};
+
+    struct Column(ListState);
+
+    impl Render for Column {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            list(self.0.clone(), |ix, _, _| {
+                let row = div().h(px(30.)).w_full();
+                if ix == 39 { row.debug_selector(|| "last".into()).into_any_element() } else { row.into_any_element() }
+            })
+            .size_full()
+        }
+    }
+
+    struct Shell(Entity<Column>);
+
+    impl Render for Shell {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let mut style = StyleRefinement::default();
+            style.size.width = Some(px(200.).into());
+            style.size.height = Some(px(200.).into());
+            div().size_full().child(AnyView::from(self.0.clone()).cached(style))
+        }
+    }
+
+    fn last_row_bottom(cx: &mut VisualTestContext) -> Pixels {
+        cx.debug_bounds("last").expect("last row painted").bottom()
+    }
+
+    #[gpui_kit::test]
+    fn a_notch_scrolls_a_list_in_a_cached_view(cx: &mut TestAppContext) {
+        let (_, cx) = cx.add_window_view(|_, cx| Shell(cx.new(|_| Column(ListState::new(40, ListAlignment::Bottom, px(100.))))));
+        cx.run_until_parked();
+        let rest = last_row_bottom(cx);
+        cx.simulate_event(ScrollEvent {
+            position: point(px(100.), px(100.)),
+            delta: ScrollDelta::Lines(point(0., 3.)),
+            modifiers: Default::default(),
+            touch_phase: TouchPhase::Moved,
+            source: Default::default(),
+        });
+        // Frames come only from what the list asks for: no forced refresh.
+        for _ in 0..40 {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            cx.run_until_parked();
+        }
+        assert!(last_row_bottom(cx) > rest, "the notch never moved the list: last row still at {rest:?}");
+    }
+}
 
 // Rubber-banding only runs on macOS, where scroll phases tell the finger from momentum.
 #[cfg(target_os = "macos")]
