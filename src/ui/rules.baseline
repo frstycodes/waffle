@@ -110,12 +110,6 @@ src/login.rs	custom-surface	2
 src/login.rs	endless-animation	1
 src/login.rs	raw-margin	2
 src/login.rs	raw-px	13
-src/main.rs	detached-task	48
-src/main.rs	file-lines	3424
-src/main.rs	global-notify	71
-src/main.rs	hot-notify	2
-src/main.rs	raw-px	9
-src/main.rs	unbounded-growth	15
 src/mascot.rs	endless-animation	2
 src/menu.rs	custom-component	1
 src/menu.rs	custom-divider	1

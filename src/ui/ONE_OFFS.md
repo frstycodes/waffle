@@ -73,6 +73,10 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/app_modal.rs` — the app modal is drawn by the Overlays view, which re-renders only with the app
 - `src/app_modal.rs` — the app modal is drawn by the Overlays view, which re-renders only with the app
 - `src/app_modal.rs` — the app modal is drawn by the Overlays view, which re-renders only with the app
+- `src/boot.rs` — the Modify Attachment dialog is drawn by the root's overlays, outside the columns
+- `src/boot.rs` — the add-friend dialog is drawn by the root's overlays, outside the columns; the observer ends with the note it watches
+- `src/boot.rs` — the settings view covers the whole window, so a new query redraws every column
+- `src/boot.rs` — window focus restyles carets, focus rings and selections in every column
 - `src/call.rs` — call_view swaps the main column and the nav selection
 - `src/call.rs` — full screen hides the nav and the panel and shows the stage alone
 - `src/call.rs` — the call menus are overlays, which only follow the app
@@ -176,6 +180,12 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/forward.rs` — the forward dialog is drawn by the root's overlays, over every column
 - `src/games.rs` — game icons show in the user panel (nav), the member list and profile cards
 - `src/games.rs` — your game shows in the user panel (nav), the member list and profile cards
+- `src/gateway.rs` — a gateway event can change the servers, channels, feed, members and calls that every column draws
+- `src/gateway.rs` — a sign-in step changes the login screen, which replaces every column
+- `src/gateway.rs` — account settings (developer mode and the rest) change menus and rows in every column
+- `src/gateway.rs` — connecting changes the status every column and the splash draw
+- `src/gateway.rs` — starting a sign-in swaps the whole window to the login screen
+- `src/gateway.rs` — the typing line shows in the main column, the call chat and the sidebar's DM rows
 - `src/go_live.rs` — the share picker is an overlay, which only follows the app
 - `src/go_live.rs` — the share picker is an overlay, which only follows the app
 - `src/go_live.rs` — the share picker is an overlay, which only follows the app
@@ -228,6 +238,12 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/modify_attachment.rs` — the attachment dialog is drawn by the root's overlays, over every column
 - `src/modify_attachment.rs` — the attachment dialog is drawn by the root's overlays, over every column
 - `src/modify_attachment.rs` — the attachment dialog is drawn by the root's overlays, over every column
+- `src/navigation.rs` — an empty server changes the channel list, the feed and the panel together
+- `src/navigation.rs` — opening a channel changes the channel list, the feed, the composer and the panel together
+- `src/navigation.rs` — opening a forum changes the channel list, the feed and the panel together
+- `src/navigation.rs` — the fullscreen call lays out its chat and tiles outside the columns
+- `src/navigation.rs` — the pins popover is drawn by the overlays, which render with the app
+- `src/navigation.rs` — the pins popover is drawn by the overlays, which render with the app
 - `src/notification_settings.rs` — the dialog is built by render_root, not by a column
 - `src/notification_settings.rs` — the dialog is built by render_root, not by a column
 - `src/notification_settings.rs` — the dialog is built by render_root, not by a column
@@ -271,6 +287,7 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/role_popout.rs` — the role card is drawn by Overlays, which only redraws with the app
 - `src/role_popout.rs` — the role card is drawn by Overlays, which only redraws with the app
 - `src/search_menu.rs` — closes the filters card in the side panel and clears the pick in the header's search menu
+- `src/sending.rs` — a new local message shows in the feed and can reorder the sidebar's DM list
 - `src/server_settings/lists.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
 - `src/server_settings/lists.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
 - `src/server_settings/lists.rs` — the server settings window is built by the root render over the columns, so every column's draw reads it
@@ -390,6 +407,26 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/viewer.rs` — the media viewer is drawn by the root, over every column
 - `src/viewer.rs` — the media viewer is drawn by the root, over every column
 - `src/viewer.rs` — the media viewer is drawn by the root, over every column
+- `src/voice_calls.rs` — a failed watch shows on the call tile and in the PiP outside the columns
+- `src/voice_calls.rs` — a missing-picture issue shows on the call tile, the dock and the PiP outside the columns
+- `src/voice_calls.rs` — a reconnecting stream shows on the call tile and in the PiP outside the columns
+- `src/voice_calls.rs` — a rewatched stream shows on the call tile and in the PiP outside the columns
+- `src/voice_calls.rs` — a voice event changes the call tiles, the sidebar's participants and the dock, and the PiP outside the columns
+- `src/voice_calls.rs` — an ended stream leaves the call tiles, the sidebar's participants and the PiP outside the columns
+- `src/voice_calls.rs` — an unwatched stream leaves the call tiles, the sidebar's participants and the PiP outside the columns
+- `src/voice_calls.rs` — dropping every watched stream changes the call tiles, the sidebar's participants and the PiP outside the columns
+- `src/voice_calls.rs` — ending our Go Live changes the call tiles, the dock, the rail and the PiP outside the columns
+- `src/voice_calls.rs` — ending the call changes the dock, the rail and the participant list as well as the main column
+- `src/voice_calls.rs` — focusing a stream changes the call tiles, the sidebar's participants and the PiP outside the columns
+- `src/voice_calls.rs` — joining changes the dock, the rail and the participant list as well as the main column
+- `src/voice_calls.rs` — restarting our Go Live changes the call tiles, the dock and the PiP outside the columns
+- `src/voice_calls.rs` — starting our Go Live changes the call tiles, the dock, the rail and the PiP outside the columns
+- `src/voice_calls.rs` — the Copied label shows on whichever surface holds the button, in any column or the overlays
+- `src/voice_calls.rs` — the Copied label shows on whichever surface holds the button, in any column or the overlays
+- `src/voice_calls.rs` — the self-view frame shows in the call view and in the stream PiP, which is drawn outside the columns
+- `src/voice_calls.rs` — the watch error shows in the dock and on the call tiles, outside the main column
+- `src/voice_calls.rs` — watching a stream changes the call tiles, the sidebar's participants and the PiP outside the columns
+- `src/voice_calls.rs` — watching a stream changes the call tiles, the sidebar's participants and the PiP outside the columns
 - `src/voice_status.rs` — a voice status shows on the channel list (nav) and the call stage (main)
 - `src/voice_status.rs` — a voice status shows on the channel list (nav) and the call stage (main)
 - `src/voice_status.rs` — the status dialog is an overlay, which only follows the app
@@ -637,6 +674,25 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/app_modal.rs` — ends itself once its upload or file prompt resolves, and holds only a weak handle
 - `src/app_modal.rs` — the subscription ends when the editor entity, held in AppModal, drops
 - `src/app_modal.rs` — the subscription ends when the editor entity, held in AppModal, drops
+- `src/boot.rs` — one SPLASH_LIMIT timer, then it ends
+- `src/boot.rs` — the activation observer ends with the window
+- `src/boot.rs` — the add-friend dialog is drawn by the root's overlays, outside the columns; the observer ends with the note it watches
+- `src/boot.rs` — the appearance observer ends with the window
+- `src/boot.rs` — the focus observer ends with the feed's focus handle
+- `src/boot.rs` — the focus observer ends with the window
+- `src/boot.rs` — the observer ends with the composer it watches
+- `src/boot.rs` — the subscription ends with the GIF search it watches
+- `src/boot.rs` — the subscription ends with the add-friend input it watches
+- `src/boot.rs` — the subscription ends with the composer it watches
+- `src/boot.rs` — the subscription ends with the description input it watches
+- `src/boot.rs` — the subscription ends with the dialog input it watches
+- `src/boot.rs` — the subscription ends with the emoji search it watches
+- `src/boot.rs` — the subscription ends with the search input it watches
+- `src/boot.rs` — the subscription ends with the settings search it watches
+- `src/boot.rs` — the subscription ends with the status input it watches
+- `src/boot.rs` — the subscription ends with the sticker search it watches
+- `src/boot.rs` — the subscription ends with the switcher input it watches
+- `src/boot.rs` — two SPLASH_BEAT timers, then it ends
 - `src/call/previews.rs` — a one-shot colour fetch holding a WeakEntity; it ends when the response lands
 - `src/call/previews.rs` — a one-shot fetch holding a WeakEntity; it ends when the response lands or the update fails
 - `src/call/previews.rs` — the preview loop holds a WeakEntity and returns when the generation changes or the share ends
@@ -674,6 +730,8 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/forum/composer.rs` — the subscription ends when the input, held in ForumState, drops; the new post dialog is drawn by the app's own render
 - `src/forum/composer.rs` — the subscription ends when the input, held in ForumState, drops; the new post dialog is drawn by the app's own render
 - `src/forum/tags.rs` — ends itself once its request or timer resolves, and holds only a weak handle
+- `src/gateway.rs` — one REST check of the token, then it ends
+- `src/gateway.rs` — one TYPING_TTL timer, then it ends
 - `src/invite.rs` — ends itself once its request or timer resolves, and holds only a weak handle
 - `src/invite.rs` — ends itself once its request or timer resolves, and holds only a weak handle
 - `src/invite.rs` — ends itself once its request or timer resolves, and holds only a weak handle
@@ -685,11 +743,26 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/mod_view.rs` — a single timer that ends after MEMBER_WAIT, holding only a WeakEntity
 - `src/mod_view.rs` — one request that ends when the reply lands, holding only a WeakEntity
 - `src/mod_view.rs` — the loop breaks once Mod View closes or the member changes, and ends when the app entity drops
+- `src/navigation.rs` — one 32ms wait, then it ends
+- `src/navigation.rs` — one JUMP_FLASH timer, then it ends
+- `src/navigation.rs` — one request for older messages, then it ends
+- `src/navigation.rs` — one request for the latest messages, then it ends
+- `src/navigation.rs` — one request for the messages around the target, then it ends
+- `src/navigation.rs` — one request for the pins, then it ends
 - `src/notification_settings.rs` — the input subscription ends with its entity, and the dialog it redraws is built by render_root
 - `src/report.rs` — one request that ends when the menu lands, holding only a WeakEntity
 - `src/report.rs` — one request that ends when the report is sent, holding only a WeakEntity
 - `src/role_popout.rs` — one request that ends when the counts land, holding only a WeakEntity
 - `src/role_popout.rs` — one request that ends when the member ids land, holding only a WeakEntity
+- `src/sending.rs` — one delete request, then it ends
+- `src/sending.rs` — one edit request, then it ends
+- `src/sending.rs` — one file prompt, then it ends
+- `src/sending.rs` — one reaction request, then it ends
+- `src/sending.rs` — one resend request, then it ends
+- `src/sending.rs` — one send request, then it ends
+- `src/sending.rs` — one thumbnail job, then it ends
+- `src/sending.rs` — settle runs inside that task, so it ends itself
+- `src/sending.rs` — the progress loop stops itself once the upload settles or fails
 - `src/server_settings/lists.rs` — holds a WeakEntity and ends when its work finishes or the update fails
 - `src/server_settings/lists.rs` — the subscription ends when the input entity it watches is dropped with the settings state
 - `src/server_settings/member_bulk.rs` — holds a WeakEntity and ends when its work finishes or the update fails
@@ -719,9 +792,21 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/settings/view.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
 - `src/settings/view.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
 - `src/settings/voice_pages.rs` — a one-shot task that ends when its request answers, and it updates through a WeakEntity so a closed view drops the result
+- `src/startup.rs` — an app-lifetime sweep owned by the process, not a view
+- `src/startup.rs` — an app-lifetime watcher owned by the process; it returns when the presence channel closes
+- `src/startup.rs` — one 100ms wait then a compaction, then the task ends
+- `src/startup.rs` — runs once to install the update, then the app restarts or opens the window
+- `src/startup.rs` — the Dock observer lives as long as the window and ends with it
 - `src/system_message.rs` — ends when the greet request answers, or at once if the app is gone
 - `src/text_file.rs` — ends when the fetch finishes, or at once if the app is gone
 - `src/text_file.rs` — ends when the fetch finishes, or at once if the app is gone
+- `src/voice_calls.rs` — one 1.5 second timer, then it ends
+- `src/voice_calls.rs` — one 60 second timer, then it ends
+- `src/voice_calls.rs` — one LIVE_LAPSE timer, then it ends
+- `src/voice_calls.rs` — one READY_TIMEOUT timer, then it ends
+- `src/voice_calls.rs` — one REJOIN_AFTER timer, then it ends
+- `src/voice_calls.rs` — one watch-timeout timer, then it ends
+- `src/voice_calls.rs` — the clock loop stops itself once the call is gone
 
 ## unbounded-growth
 
@@ -740,6 +825,21 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
 - `src/joining/mod.rs` — one entry per joined server, a few dozen at most
 - `src/joining/onboarding.rs` — the ids of one server's onboarding questions, a dozen at most
+- `src/main.rs` — one colour per person seen in a call, a few dozen at most
+- `src/main.rs` — one entry per channel with someone typing; each typer expires after TYPING_TTL, bounded by the user channel count
+- `src/main.rs` — one entry per live stream we have heard of, replaced on every STREAM_UPDATE
+- `src/main.rs` — one entry per mention or emoji picked in the composer this session, a few hundred at most
+- `src/main.rs` — one entry per person who spoke in a call, a few dozen at most; replaced on each speak
+- `src/main.rs` — one entry per profile effect sku seen, a catalogue of a few hundred at most
+- `src/main.rs` — one entry per server visited, bounded by the servers the user is in
+- `src/main.rs` — one entry per server whose member list was opened, bounded by the user's server count
+- `src/main.rs` — one f32 per streamer the user adjusted, a few dozen at most
+- `src/main.rs` — one forum state per forum channel opened, bounded by the user's forum channels
+- `src/main.rs` — one group-count map per server opened, bounded by the user's server count
+- `src/main.rs` — one member list per server opened, bounded by the user's server count
+- `src/main.rs` — one pair per (server, channel) member range asked for, bounded by the user's channel count
+- `src/main.rs` — one thumbnail url per streamer seen, a handful of live streams at a time
+- `src/main.rs` — one u64 per channel the gateway reported, bounded by the user's channel count
 - `src/report.rs` — one pick per form element of the node on screen, a handful
 - `src/report.rs` — the reasons of one menu node, a few dozen at most
 - `src/role_popout.rs` — one entry per role card opened, a few dozen a session at most
