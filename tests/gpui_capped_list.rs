@@ -5,7 +5,7 @@ use std::{cell::Cell, rc::Rc};
 
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    Context, ListAlignment, ListSizingBehavior, ListState, ScrollDelta, ScrollWheelEvent, TestAppContext, TouchPhase, VisualTestContext,
+    Context, ListAlignment, ListSizingBehavior, ListState, ScrollDelta, ScrollEvent, TestAppContext, TouchPhase, VisualTestContext,
     Window, canvas, div, list, point, px,
 };
 
@@ -54,7 +54,7 @@ fn long_list_caps_and_scrolls(cx: &mut TestAppContext) {
     let (cx, rows, height) = open(10, cx);
     assert_eq!(height.get(), HEADER + CAP, "capped");
     let delta = ScrollDelta::Pixels(point(px(0.), px(-200.)));
-    cx.simulate_event(ScrollWheelEvent { position: point(px(100.), px(HEADER + 100.)), delta, modifiers: Default::default(), touch_phase: TouchPhase::Moved });
+    cx.simulate_event(ScrollEvent { position: point(px(100.), px(HEADER + 100.)), delta, modifiers: Default::default(), touch_phase: TouchPhase::Moved, source: Default::default() });
     settle(cx);
     let top = rows.logical_scroll_top();
     assert_eq!((top.item_ix, top.offset_in_item), (2, px(40.)), "the wheel scrolls 200px");

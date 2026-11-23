@@ -2472,7 +2472,7 @@ impl gpui_kit::http_client::HttpClient for Images {
     fn send(
         &self,
         req: gpui_kit::http_client::Request<gpui_kit::http_client::AsyncBody>,
-    ) -> futures::future::BoxFuture<'static, gpui_kit::http_client::Result<gpui_kit::http_client::Response<gpui_kit::http_client::AsyncBody>>> {
+    ) -> futures::future::BoxFuture<'static, anyhow::Result<gpui_kit::http_client::Response<gpui_kit::http_client::AsyncBody>>> {
         let url = req.uri().to_string();
         if let Some(bytes) = downloads::get(&url).or_else(|| demo_media(&url)) {
             return Box::pin(async move { Ok(gpui_kit::http_client::Response::builder().status(200).body(bytes.to_vec().into())?) });

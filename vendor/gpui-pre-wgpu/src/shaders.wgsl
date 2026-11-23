@@ -1357,10 +1357,10 @@ fn fs_underline(input: UnderlineVarying) -> @location(0) vec4<f32> {
 struct MonochromeSprite {
     order: u32,
     pad: u32,
+    tile: AtlasTile,
     bounds: Bounds,
     content_mask: Bounds,
     color: Hsla,
-    tile: AtlasTile,
     transformation: TransformationMatrix,
 }
 
@@ -1404,12 +1404,12 @@ fn fs_mono_sprite(input: MonoSpriteVarying) -> @location(0) vec4<f32> {
 struct PolychromeSprite {
     order: u32,
     pad: u32,
+    tile: AtlasTile,
     grayscale: u32,
     opacity: f32,
     bounds: Bounds,
     content_mask: Bounds,
     corner_radii: Corners,
-    tile: AtlasTile,
     transformation: TransformationMatrix,
     corner_exponent: f32,
     pad2: u32, // align to 8 bytes

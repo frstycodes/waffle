@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    Context, Entity, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollDelta, ScrollWheelEvent,
+    Context, Entity, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollDelta, ScrollEvent,
     TestAppContext, TouchPhase, VisualTestContext, Window, div, point, px,
 };
 
@@ -131,11 +131,12 @@ fn wheel_by(cx: &mut VisualTestContext, dy: Pixels) {
 }
 
 fn scroll(cx: &mut VisualTestContext, dy: Pixels, touch_phase: TouchPhase) {
-    cx.simulate_event(ScrollWheelEvent {
+    cx.simulate_event(ScrollEvent {
         position: point(px(50.), px(25.)),
         delta: ScrollDelta::Pixels(point(px(0.), dy)),
         modifiers: Default::default(),
         touch_phase,
+        source: Default::default(),
     });
     cx.run_until_parked();
 }

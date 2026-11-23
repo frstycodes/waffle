@@ -15,9 +15,10 @@ dhat-heap = ["dep:dhat"]
 
 [dependencies]
 dhat = { version = "0.3", optional = true }
+anyhow = "1"
 backtrace = "0.3"
 bytes = "1"
-gpui-kit = { version = "=0.7.3", features = ["component", "assets", "tree-sitter-languages"] }
+gpui-kit = { version = "=0.10.0", features = ["component", "assets", "tree-sitter-languages"] }
 gpui-motion-kit = "0.5"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "fs", "net", "io-util"] }
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
@@ -80,7 +81,7 @@ rodio = { version = "0.23.0", default-features = false, features = ["playback", 
 [dev-dependencies]
 # Headless windows for tests/gpui_overscroll.rs. gpui-kit's own test-support pulls in a gpui-fast that
 # conflicts with this tree's cocoa pin.
-gpui = { package = "gpui-pre", version = "0.3.9", features = ["test-support"] }
+gpui = { package = "gpui-pre", version = "=0.3.12", features = ["test-support"] }
 
 [build-dependencies]
 # Same version gpui-pre already builds with; only used for Windows targets.
@@ -168,5 +169,7 @@ gpui-pre-apple = { path = "vendor/gpui-pre-apple" }
 gpui-pre-windows = { path = "vendor/gpui-pre-windows" }
 gpui-pre-wgpu = { path = "vendor/gpui-pre-wgpu" }
 gpui-pre-macos = { path = "vendor/gpui-pre-macos" }
-# Links in rendered markdown carry no underline.
+# Links in rendered markdown carry no underline; scrollbars ignore a pixel of layout rounding.
 gpui-base = { path = "vendor/gpui-base" }
+# gpui-motion-kit 0.5 pins gpui-kit 0.7.3 and has no release for 0.10; this copy only lifts that pin.
+gpui-motion-kit = { path = "vendor/gpui-motion-kit" }

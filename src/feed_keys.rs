@@ -116,11 +116,11 @@ mod tests {
         message_menu::Facts,
     };
 
-    fn key(s: &str) -> Keystroke {
+    fn key(s: &'static str) -> Keystroke {
         Keystroke::parse(s).expect("valid keystroke")
     }
 
-    fn typed_key(s: &str, ch: &str) -> Keystroke {
+    fn typed_key(s: &'static str, ch: &str) -> Keystroke {
         Keystroke { key_char: Some(ch.into()), ..key(s) }
     }
 
@@ -142,8 +142,8 @@ mod tests {
         assert_eq!(action(typed_key("shift-=", "+")), Some(MessageAction::React));
         assert_eq!(action(typed_key("+", "+")), Some(MessageAction::React));
         assert_eq!(action(typed_key("c", "c")), Some(MessageAction::CopyText));
-        assert_eq!(action(key(&format!("{sec}-c"))), Some(MessageAction::CopyText));
-        assert_eq!(action(key(&format!("{sec}-shift-c"))), Some(MessageAction::CopyId));
+        assert_eq!(action(key(format!("{sec}-c").leak())), Some(MessageAction::CopyText));
+        assert_eq!(action(key(format!("{sec}-shift-c").leak())), Some(MessageAction::CopyId));
         assert_eq!(action(key("alt-enter")), Some(MessageAction::MarkUnread));
         for k in ["backspace", "delete", "shift-backspace", "shift-delete", "shift-d"] {
             assert_eq!(action(key(k)), Some(MessageAction::Delete), "{k}");

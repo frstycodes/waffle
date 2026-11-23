@@ -7,7 +7,7 @@
 //! `_NSElasticDeltaForTimeDelta`, which WebKit's `ScrollingEffectsController.mm` and
 //! `ScrollAnimationRubberBand.mm` call; their constants were read back from AppKit itself.
 
-use crate::{App, Pixels, Point, ScrollWheelEvent, Size, TouchPhase, point, px};
+use crate::{App, Pixels, Point, ScrollEvent, Size, TouchPhase, point, px};
 use std::time::Instant;
 
 /// AppKit's `NSScrollingBehaviorHyperbolicCoefficientTrackpad`.
@@ -54,7 +54,7 @@ pub fn rebound_offset(initial: f32, velocity: f32, t: f32) -> f32 {
 /// Whether this scroll event may stretch past an edge. Wheel notches clamp. Trackpads stretch on
 /// macOS and Windows alike: Windows' Direct Manipulation ends the touch when its inertia starts
 /// (direct_manipulation.rs), giving the same phases as macOS.
-pub(crate) fn rubber_bands(event: &ScrollWheelEvent, cx: &App) -> bool {
+pub(crate) fn rubber_bands(event: &ScrollEvent, cx: &App) -> bool {
     event.delta.precise() && !cx.reduce_motion()
 }
 

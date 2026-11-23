@@ -4,7 +4,7 @@
 // Discord (tray.rs).
 use gpui_kit::{App, KeyBinding, actions};
 
-use crate::Waffle;
+use crate::{Waffle, shortcuts::platform_keys};
 
 actions!(waffle, [Quit, Restart, FocusSearch, ZoomIn, ZoomOut, ResetZoom, ToggleInbox, MarkTopUnreadRead, ToggleSoundboard, AddServer]);
 
@@ -14,19 +14,19 @@ pub(crate) const ZOOM_STEPS: [f32; 11] = [0.5, 0.67, 0.75, 0.8, 0.9, 1., 1.1, 1.
 pub fn init(cx: &mut App) {
     // `secondary` is ⌘ on macOS and Ctrl elsewhere.
     cx.bind_keys([
-        KeyBinding::new("secondary-q", Quit, None),
-        KeyBinding::new("secondary-r", Restart, None),
-        KeyBinding::new("secondary-f", FocusSearch, Some("Chat")),
-        KeyBinding::new("secondary-=", ZoomIn, None),
-        KeyBinding::new("secondary-+", ZoomIn, None),
-        KeyBinding::new("secondary--", ZoomOut, None),
-        KeyBinding::new("secondary-0", ResetZoom, None),
-        KeyBinding::new("secondary-i", ToggleInbox, None),
-        KeyBinding::new("secondary-shift-e", MarkTopUnreadRead, None),
+        KeyBinding::new(platform_keys("secondary-q"), Quit, None),
+        KeyBinding::new(platform_keys("secondary-r"), Restart, None),
+        KeyBinding::new(platform_keys("secondary-f"), FocusSearch, Some("Chat")),
+        KeyBinding::new(platform_keys("secondary-="), ZoomIn, None),
+        KeyBinding::new(platform_keys("secondary-+"), ZoomIn, None),
+        KeyBinding::new(platform_keys("secondary--"), ZoomOut, None),
+        KeyBinding::new(platform_keys("secondary-0"), ResetZoom, None),
+        KeyBinding::new(platform_keys("secondary-i"), ToggleInbox, None),
+        KeyBinding::new(platform_keys("secondary-shift-e"), MarkTopUnreadRead, None),
         // Waffle's own: Discord leaves its Toggle Soundboard keybind unset. The window's root handles it (soundboard.rs).
-        KeyBinding::new("secondary-shift-b", ToggleSoundboard, None),
+        KeyBinding::new(platform_keys("secondary-shift-b"), ToggleSoundboard, None),
         // Discord's "Create or join a server".
-        KeyBinding::new("secondary-shift-n", AddServer, None),
+        KeyBinding::new(platform_keys("secondary-shift-n"), AddServer, None),
     ]);
     cx.on_action(|_: &ToggleInbox, cx| update_main(cx, Waffle::toggle_inbox));
     cx.on_action(|_: &MarkTopUnreadRead, cx| update_main(cx, Waffle::mark_top_unread_read));
