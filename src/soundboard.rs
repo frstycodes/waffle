@@ -212,7 +212,7 @@ pub fn slider_fraction(amplitude: f32) -> f32 {
 
 // The gain a sound plays at: its own volume, the soundboard setting, and output volume up to 100%.
 pub fn playback_volume(sound_volume: f32, soundboard_volume: f32, output_volume: f32) -> f32 {
-    (sound_volume * perceptual(soundboard_volume) / 100. * output_volume.min(1.)).min(1.)
+    (sound_volume * perceptual(soundboard_volume) / 100. * crate::voice::volume_gain(output_volume).min(1.)).min(1.)
 }
 
 // Discord's rule for one sound in a channel: its own server's and Discord's sounds always; another server's
@@ -583,7 +583,7 @@ mod tests {
         assert_eq!(playback_volume(1., 100., 1.), 1.);
         assert!((playback_volume(0.5, 100., 1.) - 0.5).abs() < 1e-6);
         assert!((playback_volume(1., amplitude(50.), 1.) - 0.5).abs() < 1e-4, "the setting plays at its perceptual value");
-        assert!((playback_volume(1., 100., 0.4) - 0.4).abs() < 1e-6, "output volume under 100% lowers it");
+        assert!((playback_volume(1., 100., 0.4) - crate::voice::volume_gain(0.4)).abs() < 1e-6, "output volume under 100% lowers it");
         assert_eq!(playback_volume(1., 100., 2.), 1., "output over 100% doesn't raise it");
         assert_eq!(playback_volume(0.8, 400., 1.), 1., "capped at 1");
         assert_eq!(playback_volume(1., 0., 1.), 0., "0 is the soundboard muted");

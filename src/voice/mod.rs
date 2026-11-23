@@ -432,6 +432,11 @@ struct Shared {
     frames: Mutex<HashMap<(String, VideoSource), Arc<VideoFrame>>>,
 }
 
+// A volume slider's value (0..=2) as the gain it plays at, on Discord's loudness curve (see `audio`).
+pub fn volume_gain(volume: f32) -> f32 {
+    audio::volume_gain(volume)
+}
+
 // Spamming mute or deafen sent an update per press, and Discord rate-limits the gateway (about 120
 // messages a minute): updates were dropped, the shown state went stale, and rejoining could fail. Presses
 // now coalesce into one update with the latest flags, at most one per `FLAGS_GAP`.
@@ -484,11 +489,16 @@ impl Shared {
         attenuation.target(self.self_speaking.load(Ordering::Relaxed), self.others_speaking.load(Ordering::Relaxed))
     }
 
-    // The gain to play `user_id` at: their local volume, 0 when locally muted or deafened.
+    // The gain to play `user_id`'s voice at: their local volume, 0 when locally muted or deafened.
     fn listening_gain(&self, user_id: &str) -> f32 {
         if self.deafened.load(Ordering::Relaxed) {
             return 0.0;
         }
+        self.local_gain(user_id)
+    }
+
+    // `user_id`'s local volume, 0 when locally muted; deafen isn't applied here.
+    fn local_gain(&self, user_id: &str) -> f32 {
         let local = self.listening.lock().ok().and_then(|l| l.get(user_id).copied());
         match local {
             Some((_, true)) => 0.0,
@@ -497,9 +507,10 @@ impl Shared {
         }
     }
 
-    // A watched Go Live plays at the streamer's listening gain times its own stream volume.
+    // A watched Go Live plays at the streamer's local volume times its own stream volume. Deafen
+    // silences the call's voices, not a stream the user chose to watch.
     fn stream_gain(&self, user_id: &str) -> f32 {
-        self.listening_gain(user_id) * self.stream_volume.lock().ok().and_then(|v| v.get(user_id).copied()).unwrap_or(1.0)
+        self.local_gain(user_id) * self.stream_volume.lock().ok().and_then(|v| v.get(user_id).copied()).unwrap_or(1.0)
     }
 
     fn server_id(&self) -> &str {
@@ -609,13 +620,13 @@ impl VoiceSession {
     // The volume of `user_id`'s Go Live while watching it (0..=2), apart from their voice.
     pub fn set_stream_volume(&self, user_id: &str, volume: f32) {
         if let Ok(mut volumes) = self.shared.stream_volume.lock() {
-            volumes.insert(user_id.to_owned(), volume.clamp(0.0, audio::MAX_VOLUME));
+            volumes.insert(user_id.to_owned(), volume_gain(volume));
         }
     }
 
     pub fn set_user_volume(&self, user_id: &str, volume: f32) {
         if let Ok(mut listening) = self.shared.listening.lock() {
-            listening.entry(user_id.to_owned()).or_insert((1.0, false)).0 = volume.clamp(0.0, audio::MAX_VOLUME);
+            listening.entry(user_id.to_owned()).or_insert((1.0, false)).0 = volume_gain(volume);
         }
     }
 
@@ -983,6 +994,8 @@ mod tests {
         assert_eq!(shared.listening_gain("u"), 0.0, "locally muted");
         shared.deafened.store(true, Ordering::Relaxed);
         assert_eq!(shared.listening_gain("v"), 0.0, "deafened hears no one");
+        assert_eq!(shared.stream_gain("v"), 1.0, "a watched stream keeps playing while deafened");
+        assert_eq!(shared.stream_gain("u"), 0.0, "a locally muted streamer's stream stays muted");
     }
 
     #[test]
