@@ -844,6 +844,7 @@ impl Harness {
                 atlas: &self.atlas,
                 globals: &self.globals,
                 paths: None,
+                blur: None,
             };
             rasterize(&tiles, &mut self.pipelines, &mut self.frame, scene)?;
         }
@@ -872,6 +873,7 @@ impl Harness {
                 msaa_texture: &msaa_texture,
                 msaa_view: &msaa_view,
             }),
+            blur: None,
         };
         let globals = create_globals(&self.device, width, height)?;
         // What `DirectXRenderer::pre_draw` binds.

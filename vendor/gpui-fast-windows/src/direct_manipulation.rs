@@ -243,6 +243,7 @@ impl IDirectManipulationViewportEventHandler_Impl for DirectManipulationEventHan
                     delta: ScrollDelta::Pixels(point(px(0.0), px(0.0))),
                     modifiers: current_modifiers(),
                     touch_phase: TouchPhase::Ended,
+                    source: Default::default(),
                 }));
         }
 
