@@ -43,6 +43,8 @@ enum Size {
     #[default]
     Medium,
     Large,
+    // An exact square, for icon buttons the three sizes don't cover (a picker's 36px rail, the server rail's 44).
+    Exact(u8),
 }
 
 // A control's colours at rest, hovered and pressed; each change fades over the hover timing.
@@ -108,6 +110,23 @@ pub fn round_button(id: impl Into<ElementId>, glyph: Glyph, tooltip: impl Into<S
     let mut control = Control::new(id, Kind::Round(size as u8), look);
     control.glyph = Some(glyph);
     control.tooltip(move |window: &mut Window, cx: &mut App| super::tip(tooltip.clone(), window, cx))
+}
+
+// A clickable card (a template, a post, a launcher entry, a theme): a quiet fill on the page that deepens on
+// hover, rounded large; `.toggled` marks the chosen one and `.bordered` adds the hairline edge.
+// Keywords: clickable card, choice card, option card, tile button, template, panel, preview card
+pub fn card(id: impl Into<ElementId>, cx: &App) -> Control {
+    let look = Look { rest: palette::surface(palette::Level::Raised, cx), hover: palette::hover(cx), press: palette::press(cx), ink: palette::text(cx), ink_hover: palette::text(cx), edge: None };
+    Control::new(id, Kind::Row, look).base_style(|b| b.p_3().rounded(px(super::RADIUS_LG)).corner_shape(SQUIRCLE))
+}
+
+impl Control {
+    // The hairline edge a card or chip takes on a surface the same tone as its fill.
+    pub fn bordered(mut self, cx: &App) -> Self {
+        let line = palette::line(cx);
+        self.look.edge = Some((line, palette::line_strong(cx)));
+        self
+    }
 }
 
 // A filter or toggle chip; pressed takes the accent tint and a half-accent edge.
@@ -205,6 +224,56 @@ impl Control {
         self
     }
 
+    // The same control in another tone: an icon button over media (`Tone::OnMedia`) or on the call stage
+    // (`Tone::Stage`), a filled icon button (`Tone::Secondary`).
+    pub fn tone(mut self, tone: Tone, cx: &App) -> Self {
+        self.look = tone_look(tone, cx);
+        self
+    }
+
+    // Round instead of square, at the size it has (an icon button over video, a call control).
+    pub fn round(mut self) -> Self {
+        let (height, _, _) = self.dimensions();
+        self.kind = Kind::Round(height as u8);
+        self
+    }
+
+    // An exact square size for an icon button (36 for a picker's category rail, 44 for the server rail).
+    pub fn sized(mut self, size: f32) -> Self {
+        self.size = Size::Exact(size as u8);
+        self
+    }
+
+    // The action just worked (Copied): the positive ink until the caller clears it.
+    pub fn succeeded(mut self, on: bool, cx: &App) -> Self {
+        if on {
+            let ink = palette::positive_ink(cx);
+            self.look.ink = ink;
+            self.look.ink_hover = ink;
+        }
+        self
+    }
+
+    // A chip that can be taken away (a picked member, a search token, an attached file): a small × after its
+    // label calls `remove`, without the click reaching the chip.
+    pub fn removable(self, remove: impl Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) + 'static, cx: &App) -> Self {
+        let (muted, strong) = (palette::muted(cx), palette::strong(cx));
+        let id = part(&self.id, "remove");
+        self.child(
+            div()
+                .id(id)
+                .flex_none()
+                .rounded_full()
+                .text_color(muted)
+                .hover(move |s| s.text_color(strong))
+                .child(Icon::new(Glyph::X).size(px(14.)))
+                .on_click(move |event, window, cx| {
+                    cx.stop_propagation();
+                    remove(event, window, cx);
+                }),
+        )
+    }
+
     // A toggle that's on: the accent tint for buttons, the selected fill for icon buttons.
     pub fn toggled(mut self, on: bool, cx: &App) -> Self {
         if !on {
@@ -293,6 +362,8 @@ impl Control {
             (Kind::Icon, Size::Small) => (24., RADIUS_XS, 16.),
             (Kind::Icon, Size::Medium) => (32., RADIUS_SM, 20.),
             (Kind::Icon, Size::Large) => (40., RADIUS_MD, 22.),
+            (Kind::Icon, Size::Exact(n)) => (n as f32, if n < 28 { RADIUS_XS } else if n < 36 { RADIUS_SM } else { RADIUS_MD }, (n as f32 * 0.55).round()),
+            (Kind::Button, Size::Exact(n)) => (n as f32, RADIUS_MD, 18.),
             (Kind::Round(size), _) => (size as f32, size as f32 / 2., size as f32 / 2.),
             (Kind::Chip, _) => (30., RADIUS_SM, 16.),
             (Kind::Swatch, _) => (32., RADIUS_SM, 16.),
@@ -533,6 +604,10 @@ fn tone_look(tone: Tone, cx: &App) -> Look {
         // Dark ink on white whatever the theme: the art behind it is what sets the tone.
         Tone::Overlay => (white, super::mix(white, palette::stage::bg(), 0.12), super::mix(white, palette::stage::bg(), 0.2), palette::stage::bg()),
         Tone::Link => (clear, clear, clear, palette::accent_ink(cx)),
+        Tone::Stage => {
+            let ink = palette::stage::strong();
+            (ink.opacity(0.1), ink.opacity(0.16), ink.opacity(0.22), ink)
+        }
     };
     Look { rest, hover, press, ink, ink_hover: ink, edge: None }
 }

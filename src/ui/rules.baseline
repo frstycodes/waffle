@@ -164,7 +164,7 @@ src/design_system.rs	custom-divider	1
 src/design_system.rs	custom-mark	1
 src/design_system.rs	detached-task	1
 src/design_system.rs	raw-col	6
-src/design_system.rs	raw-margin	12
+src/design_system.rs	raw-margin	10
 src/design_system.rs	raw-px	16
 src/design_system.rs	raw-row	14
 src/design_system/faces.rs	custom-badge	1

@@ -4,7 +4,9 @@
 // design/primitives.html (section ids as there), so a drift between the two shows up side by side.
 mod faces;
 mod foundations;
+mod kit;
 use faces::{avatars, badged_faces};
+use kit::{badges, kit_variants};
 use foundations::{space, type_scale};
 use std::time::{Duration, Instant};
 
@@ -174,6 +176,7 @@ impl Render for DesignSystem {
         }
         if self.shows("badges") {
             add("badges", badges(cx).into_any_element());
+            add("kit variants", kit_variants(cx).into_any_element());
         }
         if self.shows("avatars") {
             add("avatars", avatars(cx).into_any_element());
@@ -769,40 +772,6 @@ fn icons(cx: &App) -> impl IntoElement {
         .child(board(cx).child(row().gap_4().text_color(palette::text(cx)).children(set.map(|g| Icon::new(g).size(px(22.))))))
 }
 
-fn badges(cx: &App) -> impl IntoElement {
-    let muted = |text: &'static str| div().text_color(palette::muted(cx)).child(text);
-    section("Badges and keys", "A count asks for you, so it takes the accent. Tags label what something is; roles carry their colour as a dot, never as text colour.", cx).child(
-        board(cx)
-            .child(
-                row()
-                    .gap_4()
-                    .child(ui::count_badge(3))
-                    .child(ui::count_badge(42))
-                    .child(ui::count_badge(120))
-                    .child(ui::unread_dot())
-                    .child(ui::tag("App", cx))
-                    .child(ui::tag_with(Glyph::Crown, "Host", cx))
-                    .child(ui::tag("New", cx))
-                    .child(ui::live_badge()),
-            )
-            .child(
-                row()
-                    .child(ui::role_chip("Moderators", palette::oklch(0.65, 0.2, 5.), cx))
-                    .child(ui::role_chip("Raid team", palette::oklch(0.7, 0.14, 155.), cx))
-                    .child(ui::role_chip("Night owls", palette::oklch(0.75, 0.14, 80.), cx))
-                    .child(ui::role_chip("Members", palette::status_in(Status::Offline, cx), cx)),
-            )
-            .child(
-                row()
-                    .child(ui::keys(["⌘", "K"], cx))
-                    .child(muted("Quick switcher"))
-                    .child(ui::keys(["=", "Backspace"], cx).ml_4())
-                    .child(muted("Mute"))
-                    .child(ui::keys(["Esc"], cx).ml_4())
-                    .child(muted("Close")),
-            ),
-    )
-}
 
 
 fn layout(cx: &App) -> impl IntoElement {

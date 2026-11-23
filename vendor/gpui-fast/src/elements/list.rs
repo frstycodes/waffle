@@ -1720,6 +1720,8 @@ impl Element for List {
                 state.scroll_motion.stop();
             }
             if more {
+                // The next frame must prepaint the list again to take its next step, not replay it.
+                crate::fast::dependencies::StateVersion::bump(&state.version);
                 window.request_animation_frame();
             }
         }
@@ -1796,6 +1798,10 @@ impl Element for List {
                 let input = if event.delta.precise() { ScrollInput::Precise } else { ScrollInput::Notched };
                 let fed = list_state.0.borrow_mut().scroll_motion.input(event.delta.pixel_delta(px(20.)), input, event.touch_phase, !cx.reduce_motion(), Instant::now());
                 if list_state.0.borrow().scroll_motion.is_moving() {
+                    // A notch moves nothing now: it is stepped at prepaint. Bump the state so a
+                    // retained subtree holding the list is prepainted again rather than replayed,
+                    // which would leave the notch queued and the list unmoved.
+                    crate::fast::dependencies::StateVersion::bump(&list_state.0.borrow().version);
                     cx.notify(current_view);
                 }
                 let pixel_delta = if rubber_bands(event, cx) {

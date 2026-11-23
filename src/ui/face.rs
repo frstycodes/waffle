@@ -179,6 +179,8 @@ pub enum Spot {
 pub enum Shape {
     Round,
     Tile,
+    // A control (an icon button, an upload tile): the mark hangs just past its corner.
+    Control,
 }
 
 impl Shape {
@@ -187,6 +189,7 @@ impl Shape {
         match self {
             Shape::Round => (size * 0.04 - 2., 2.),
             Shape::Tile => (-4., 3.),
+            Shape::Control => (-3., 2.),
         }
     }
 }
@@ -198,12 +201,14 @@ pub struct Badge {
     el: Content,
     radius: Option<f32>,
     scale: f32,
+    // Drawn without the cut ring: over media or a busy surface where a ring in its colour would show as a halo.
+    bare: bool,
 }
 
 // A corner mark from any element (a count, an icon mark, a status), round unless given a `radius`.
 // Keywords: custom mark, corner element, any badge
 pub fn badge_of(el: impl IntoElement) -> Badge {
-    Badge { el: Content::El(el.into_any_element()), radius: None, scale: 1. }
+    Badge { el: Content::El(el.into_any_element()), radius: None, scale: 1., bare: false }
 }
 
 // What a mark draws: an element, or presence, which needs the theme and the face's surface and so is
@@ -222,7 +227,13 @@ impl Badge {
     pub fn status(status: impl Into<Mark>, dot: f32) -> Self {
         let status = status.into();
         let radius = (status == Mark::Mobile).then_some(dot * PHONE_ROUNDING);
-        Badge { el: Content::Status(status, dot), radius, scale: 1. }
+        Badge { el: Content::Status(status, dot), radius, scale: 1., bare: false }
+    }
+
+    // No cut ring: the mark sits straight on the face.
+    pub fn bare(mut self) -> Self {
+        self.bare = true;
+        self
     }
 
     pub fn scale(mut self, scale: f32) -> Self {
@@ -268,7 +279,7 @@ impl Badged {
 
     // An icon mark at `spot`, sized for the face.
     pub fn icon(self, spot: Spot, icon: Icon, fill: MarkFill) -> Self {
-        self.mark(spot, Badge { el: Content::Icon(Box::new(icon), fill), radius: None, scale: 1. })
+        self.mark(spot, Badge { el: Content::Icon(Box::new(icon), fill), radius: None, scale: 1., bare: false })
     }
 
     // A count at the bottom-right, red as counts are; nothing for zero.
@@ -296,9 +307,11 @@ impl RenderOnce for Badged {
                 Content::Status(status, dot) => status_mark(status, dot, surface, cx).into_any_element(),
                 Content::Icon(icon, fill) => icon_mark(*icon, fill, (size * ICON_MARK_SCALE).round(), cx).into_any_element(),
             };
-            (spot, badge.radius, badge.scale, el)
+            (spot, badge.radius, badge.scale, badge.bare, el)
         }).collect();
-        div().relative().flex_none().size(px(self.size)).child(self.face).children(marks.into_iter().map(move |(spot, radius, scale, el)| {
+        div().relative().flex_none().size(px(self.size)).child(self.face).children(marks.into_iter().map(move |(spot, radius, scale, bare, el)| {
+            let ring = if bare { 0. } else { ring };
+            let at = if bare { inset } else { at };
             let holder = div().absolute().p(px(ring)).flex().items_center().justify_center();
             // The ring follows the mark's own corner, grown by the ring's width.
             let holder = match radius {
@@ -311,7 +324,7 @@ impl RenderOnce for Badged {
                 Spot::BottomLeft => holder.bottom(px(at)).left(px(at)),
                 Spot::BottomRight => holder.bottom(px(at)).right(px(at)),
             };
-            let holder = if scale >= 0.999 { cut_out(holder, surface) } else { holder.scale(scale.max(0.)).opacity(scale.clamp(0., 1.)) };
+            let holder = if bare { holder } else if scale >= 0.999 { cut_out(holder, surface) } else { holder.scale(scale.max(0.)).opacity(scale.clamp(0., 1.)) };
             holder.child(el)
         }))
     }

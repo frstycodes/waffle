@@ -80,6 +80,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::button` — A text button, 36px tall (`.large()` 44, `.small()` 30).
 - `ui::icon_button` — A square icon-only button that fills on hover, with its tooltip: 32px (`.small()` 24, `.large()` 40).
 - `ui::round_button` — A round icon button over video or the call stage (`size` 28 or 40).
+- `ui::card` — A clickable card (a template, a post, a launcher entry, a theme): a quiet fill on the page that deepens on hover, rounded large; `.toggled` 
 - `ui::chip` — A filter or toggle chip; pressed takes the accent tint and a half-accent edge.
 - `ui::chip_lead` — A chip led by something other than a glyph (a forum tag's emoji).
 - `ui::swatch` — A colour choice (role colours): a filled square, ringed and ticked when chosen.
@@ -124,6 +125,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::progress` — Progress: the done part, a 4px gap, then what's left.
 - `ui::progress_live` — Progress whose done part grows to a new value over the panel timing rather than jumping.
 - `ui::progress_indeterminate` — Work that can't be counted: a done-coloured stretch travels the track, gapped from the rest on both sides, on the design's 1.6s move curve.
+- `ui::progress_bar` — Progress with options for its colours and weight; see `ProgressBar`.
 - `ui::slider_track` — The slider's resting look, for screens that run their own drag.
 - `ui::slider_live` — A draggable slider for a 0..1 value: press anywhere on the track to jump there, drag to follow, arrows step 1% (shift 10%) once it has focus
 - `ui::meter` — The mic meter: `bars` equal bars that light up to `level` (0..1), turning amber then red near the top.
@@ -176,6 +178,16 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::SETTINGS_WIDTH`
 - `ui::SETTINGS_NAV_WIDTH` — The settings nav column's starting width; it can be dragged wider or narrower.
 - `ui::settings_column` — The centred content column a settings page's title and every group sit in.
+
+## src/ui/kit.rs
+
+- `ui::dialog_header` — A dialog's title row with its close button; see `DialogHeader`.
+- `ui::Heading` — How much a section label stands out: the usual muted small caps-weight label, a fainter one in dense lists, or a strong one that heads a for
+- `ui::section_label` — A small heading over a group of things (a list section, a form group, a picker's category); the caller can add a lead glyph or a trailing co
+- `ui::media_label` — A label over an image or video (a duration, GIF, a muted mark): white on the media scrim, whatever the theme.
+- `ui::RowHeight` — How tall a list row is: dense (36, a picker), default (48, a member) or tall (60, a friend with a status line).
+- `ui::list_row` — A list row for a person or thing: lead, name, muted line, trailing actions; see `ListRow`.
+- `ui::toolbar` — A small floating bar of icon buttons (a message's hover actions, an image's tools): the overlay surface, tight around its buttons.
 
 ## src/ui/layout.rs
 

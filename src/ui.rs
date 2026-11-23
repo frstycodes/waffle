@@ -46,12 +46,13 @@ mod tunnel;
 mod tokens;
 mod layout;
 mod face;
+mod kit;
 pub mod prelude;
 
-pub use control::{Control, Pressable, button, chip, chip_lead, hover_fade, hover_state, icon_button, menu_row, pressable, round_button, swatch, tip};
+pub use control::{Control, Pressable, button, card, chip, chip_lead, hover_fade, hover_state, icon_button, menu_row, pressable, round_button, swatch, tip};
 pub use date::{date_field, time_field};
 pub use dialog::{dialog, dialog_body, dialog_scroll, modal};
-pub use feedback::{meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
+pub use feedback::{progress_bar, meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
 pub use field::{Align, check_options, code_cell, drop_zone, dropdown, field, field_error, field_marked, field_frame, field_hint, menu_dropdown, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
 pub use group::{settings_caption, settings_card, settings_choice, settings_close, settings_column, settings_group, SettingsHighlight, settings_warning, settings_nav_item, settings_page, SETTINGS_NAV_WIDTH, SETTINGS_WIDTH, settings_row, settings_nav_edge, settings_sidebar, settings_switch, settings_text, settings_title, settings_window};
 pub use overflow::{Entry, overflow_list};
@@ -60,6 +61,7 @@ pub use tabs::{Tab, pill_tabs, segmented_live, tabs};
 pub use tri::{Tri, tri_state};
 pub use tunnel::{TUNNEL_GRACE, Tunnel};
 pub use tokens::*;
+pub use kit::{Heading, RowHeight, dialog_header, list_row, media_label, section_label, toolbar};
 pub use face::{Badge, MarkFill, Shape, Spot, app_tile, avatar, badge_of, badged, dm_face, gap, monogram, name_hue, server_tile, status_mark};
 pub use layout::{col, floating, floating_at, line, row, sized, visible_rows};
 
@@ -117,6 +119,8 @@ pub enum Tone {
     Overlay,
     // Just the accent ink, underlined on hover: "View all members".
     Link,
+    // A wash of the stage's ink over the call stage, which keeps its own dark palette in both themes.
+    Stage,
 }
 
 // A main action and its options chevron, joined: inner corners tighten to 4px with a 1px seam.
