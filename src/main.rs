@@ -3981,6 +3981,28 @@ fn mention_order(users: impl Iterator<Item = User>, me: Option<&str>) -> Vec<Use
     others.into_iter().chain(mine).collect()
 }
 
+// A finished call's video frames, handed back: each is a texture in gpui's atlas until dropped, so a
+// call that ended without this kept every last stream, camera and self-view frame on the GPU.
+fn release_frames(mut call: Call, cx: &mut gpui_kit::App) {
+    let frames = call.watching.drain(..).filter_map(|w| w.frame).chain(call.cameras.drain().map(|(_, frame)| frame)).chain(call.self_view.take().map(|(frame, _)| frame));
+    for frame in frames {
+        cx.drop_image(frame, None);
+    }
+}
+
+fn fail_watch(watching: &mut Watching, cx: &mut Context<Waffle>) {
+    watching.state = WatchState::Failed(STREAM_FAILED_TO_START);
+    if let Some(frame) = watching.frame.take() {
+        cx.drop_image(frame, None);
+    }
+    cx.notify();
+}
+
+// STREAM_DELETE's own reasons, as opposed to a transport error that dropped the connection.
+fn is_delete_reason(reason: &str) -> bool {
+    [voice::STREAM_DELETE_ENDED, voice::STREAM_DELETE_RATE_LIMITED, "user_requested"].contains(&reason)
+}
+
 #[cfg(test)]
 mod tests {
     fn voice(user: &str, channel: Option<&str>, guild: Option<&str>) -> discord::VoiceState {
@@ -4087,26 +4109,4 @@ mod tests {
     fn nonce_looks_like_a_snowflake() {
         assert!(nonce().parse::<u64>().unwrap() > 1 << 40);
     }
-}
-
-// A finished call's video frames, handed back: each is a texture in gpui's atlas until dropped, so a
-// call that ended without this kept every last stream, camera and self-view frame on the GPU.
-fn release_frames(mut call: Call, cx: &mut gpui_kit::App) {
-    let frames = call.watching.drain(..).filter_map(|w| w.frame).chain(call.cameras.drain().map(|(_, frame)| frame)).chain(call.self_view.take().map(|(frame, _)| frame));
-    for frame in frames {
-        cx.drop_image(frame, None);
-    }
-}
-
-fn fail_watch(watching: &mut Watching, cx: &mut Context<Waffle>) {
-    watching.state = WatchState::Failed(STREAM_FAILED_TO_START);
-    if let Some(frame) = watching.frame.take() {
-        cx.drop_image(frame, None);
-    }
-    cx.notify();
-}
-
-// STREAM_DELETE's own reasons, as opposed to a transport error that dropped the connection.
-fn is_delete_reason(reason: &str) -> bool {
-    [voice::STREAM_DELETE_ENDED, voice::STREAM_DELETE_RATE_LIMITED, "user_requested"].contains(&reason)
 }
