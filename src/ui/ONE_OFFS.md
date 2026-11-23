@@ -217,6 +217,9 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/joining/rules.rs` — the rules dialog is drawn by the Overlays view, which re-renders only with the app
 - `src/joining/rules.rs` — the rules dialog is drawn by the Overlays view, which re-renders only with the app
 - `src/joining/rules.rs` — the rules dialog is drawn by the Overlays view, which re-renders only with the app
+- `src/launch.rs` — READY changes every column
+- `src/launch.rs` — disk reads land for profiles, icons, previews and feeds across every column
+- `src/launch.rs` — the whole shell appears at once, every column changes
 - `src/link_preview.rs` — link previews draw in the feed, the thread panel and the pins popover
 - `src/mod_view.rs` — Closing Mod View swaps the right panel, whose width every column lays out around
 - `src/mod_view.rs` — swapping the right panel changes the panel width every column lays out around
@@ -676,6 +679,9 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/invite.rs` — ends itself once its request or timer resolves, and holds only a weak handle
 - `src/joining/browse.rs` — the subscription ends when the search entity, held in BrowseView, drops
 - `src/joining/onboarding.rs` — ends itself once the cover's hold timer fires, and holds only a weak handle
+- `src/launch.rs` — holds a WeakEntity and ends when the app's entity is gone or the store's channel closes
+- `src/launch.rs` — one read, applied once through a WeakEntity, then done
+- `src/launch.rs` — the quit hook lives as long as the app, which is what it's for
 - `src/mod_view.rs` — a single timer that ends after MEMBER_WAIT, holding only a WeakEntity
 - `src/mod_view.rs` — one request that ends when the reply lands, holding only a WeakEntity
 - `src/mod_view.rs` — the loop breaks once Mod View closes or the member changes, and ends when the app entity drops

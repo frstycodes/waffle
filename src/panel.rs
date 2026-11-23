@@ -120,7 +120,8 @@ impl Waffle {
     }
 
     fn group_member_list(&self, cx: &mut Context<Self>) -> AnyElement {
-        let Some(group) = self.open_group() else { return div().into_any_element() };
+        // Before READY nobody's presence is known, and listing them all as offline would say otherwise.
+        let Some(group) = self.open_group().filter(|_| self.live()) else { return div().into_any_element() };
         let people = self.me.iter().chain(&group.recipients);
         let rows: Vec<AnyElement> = people
             .map(|user| Member { user: user.clone(), roles: Vec::new(), presence: self.presences.get(&user.id).cloned().unwrap_or_default(), boosting_since: None })

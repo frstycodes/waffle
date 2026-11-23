@@ -354,7 +354,7 @@ impl Waffle {
         let search = div().flex_none().pb_3().child(ui::search_field("settings-search", &self.settings_search, cx).on_sidebar());
         let me = (!searching).then(|| self.me.clone()).flatten().map(|me| {
             let sidebar = crate::material::sidebar_fill(cx);
-            let avatar = ui::badged(ui::avatar(me.avatar.clone(), ui::AVATAR_LG), ui::AVATAR_LG, ui::Shape::Round, sidebar).status(Some(self.my_status));
+            let avatar = ui::badged(ui::avatar(me.avatar.clone(), ui::AVATAR_LG), ui::AVATAR_LG, ui::Shape::Round, sidebar).status(self.my_mark());
             let text = ui::col()
                 .flex_1()
                 .line_height(ui::LINE_DETAIL)
@@ -453,7 +453,12 @@ impl Waffle {
         // Over a banner Waffle doesn't choose, so its own scrim, not a theme fill.
         let banner_button = ui::button("change-banner", Tone::OnMedia, cx).small().child("Change banner").on_click(cx.listener(|this, _, _, cx| this.pick_profile_image(profile::ProfileImage::Banner, cx)));
         let banner = div().relative().h(px(BANNER_HEIGHT)).child(banner_art).child(div().absolute().top_3().right_3().child(banner_button));
-        let avatar = ui::badged(ui::avatar(me.avatar.clone(), PROFILE_AVATAR).border(px(AVATAR_RING)).border_color(fill), PROFILE_AVATAR, ui::Shape::Round, fill).mark(ui::Spot::BottomRight, ui::Badge::status(self.my_status, PROFILE_STATUS));
+        let avatar = ui::badged(ui::avatar(me.avatar.clone(), PROFILE_AVATAR).border(px(AVATAR_RING)).border_color(fill), PROFILE_AVATAR, ui::Shape::Round, fill);
+        // Your presence only once the live connection has confirmed it (see `my_mark`).
+        let avatar = match self.my_mark() {
+            Some(status) => avatar.mark(ui::Spot::BottomRight, ui::Badge::status(status, PROFILE_STATUS)),
+            None => avatar,
+        };
         let identity = ui::row()
             // lint-allow(raw-margin): the avatar rides up over the banner, which only a negative margin does
             .mt(px(-AVATAR_LIFT))

@@ -43,7 +43,7 @@ impl Waffle {
         let selected = self.channel.as_ref().is_some_and(|c| c.id == channel.id);
         let unread = self.unread(&channel.id);
         let mentions = self.mention_count(&channel.id);
-        let presence = channel.recipient.as_ref().map(|u| self.presences.get(&u.id).cloned().unwrap_or_default());
+        let presence = channel.recipient.as_ref().and_then(|u| self.presence_of(&u.id));
         let status = presence.as_ref().map(|p| p.status);
         let offline = status == Some(Status_::Offline);
         let ring = crate::material::sidebar_fill(cx);

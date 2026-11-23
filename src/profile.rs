@@ -210,7 +210,7 @@ impl Waffle {
     fn profile_header(&self, card: &ProfileCard, profile: &Profile, radius: f32, hovered: bool, ink: Ink, cx: &mut Context<Self>) -> Div {
         let user = &card.user;
         let is_me = self.me.as_ref().is_some_and(|me| me.id == user.id);
-        let status = self.presences.get(&user.id).map(|p| p.mark()).or(is_me.then_some(self.my_status.into()));
+        let status = self.presences.get(&user.id).map(|p| p.mark()).or(self.my_mark().filter(|_| is_me).map(Into::into));
         let (banner, _) = banner(profile, ink, radius, hovered, cx);
         let decoration = user.decoration.clone().or(profile.decoration.clone());
         // Still until the card is hovered, as Discord's.

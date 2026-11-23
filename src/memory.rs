@@ -408,12 +408,13 @@ pub fn report() -> String {
     let images = crate::images::last_stats();
     let (renders, layer) = crate::gif::draws_since_last();
     format!(
-        "{process}rust heap {:.1} MB (peak {:.1}); images {} decoded {:.1} MB, downloads {:.1} MB; gifs playing {}, clip cache {:.1} MB; app renders {renders}, gif layer draws {layer}",
+        "{process}rust heap {:.1} MB (peak {:.1}); images {} decoded {:.1} MB, downloads {:.1} MB; {}; gifs playing {}, clip cache {:.1} MB; app renders {renders}, gif layer draws {layer}",
         heap_bytes() as f64 / MB,
         heap_peak() as f64 / MB,
         images.images,
         images.decoded_bytes as f64 / MB,
-        crate::discord::downloads::bytes() as f64 / MB,
+        crate::downloads::bytes() as f64 / MB,
+        crate::store::report(),
         gifs.playing,
         gifs.clip_cache_bytes as f64 / MB
     )

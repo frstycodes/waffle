@@ -42,7 +42,7 @@ src/demo.rs	file-lines	2906
 src/demo.rs	hot-notify	1
 src/demo.rs	main-thread-io	6
 src/demo.rs	raw-px	32
-src/discord.rs	file-lines	3390
+src/discord.rs	file-lines	3370
 src/discord.rs	unbounded-growth	1
 src/dm_call.rs	custom-badge	1
 src/dm_call.rs	custom-button	2
@@ -111,7 +111,7 @@ src/login.rs	endless-animation	1
 src/login.rs	raw-margin	2
 src/login.rs	raw-px	13
 src/main.rs	detached-task	48
-src/main.rs	file-lines	3427
+src/main.rs	file-lines	3424
 src/main.rs	global-notify	71
 src/main.rs	hot-notify	2
 src/main.rs	raw-px	9

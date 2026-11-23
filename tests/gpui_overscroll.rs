@@ -180,44 +180,27 @@ fn content_that_fits_does_not_stretch() {
     assert_eq!(overscroll.offset(), Point::default());
 }
 
-// A mouse wheel's notch moves nothing when it lands: the list eases to it, a step per frame at prepaint.
-// The list must be prepainted again for those steps, not replayed, inside a cached view as the chat's is.
+// A mouse wheel's notch eases in, a few pixels a frame. From the end of a bottom-aligned list, as the chat
+// rests, those steps were taken from past the last row and clamped back to the end: the wheel never moved it.
 mod notched {
     use gpui_kit::prelude::*;
-    use gpui_kit::{AnyView, Context, Entity, ListAlignment, ListState, Pixels, ScrollDelta, ScrollEvent, StyleRefinement, TestAppContext, TouchPhase, VisualTestContext, Window, div, list, point, px};
+    use gpui_kit::{Context, ListAlignment, ListState, ScrollDelta, ScrollEvent, TestAppContext, TouchPhase, Window, div, list, point, px};
 
-    struct Column(ListState);
+    struct Messages(ListState);
 
-    impl Render for Column {
+    impl Render for Messages {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            list(self.0.clone(), |ix, _, _| {
-                let row = div().h(px(30.)).w_full();
-                if ix == 39 { row.debug_selector(|| "last".into()).into_any_element() } else { row.into_any_element() }
-            })
-            .size_full()
+            div().h(px(200.)).w(px(200.)).child(list(self.0.clone(), |_, _, _| div().h(px(30.)).w_full().into_any_element()).size_full())
         }
-    }
-
-    struct Shell(Entity<Column>);
-
-    impl Render for Shell {
-        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            let mut style = StyleRefinement::default();
-            style.size.width = Some(px(200.).into());
-            style.size.height = Some(px(200.).into());
-            div().size_full().child(AnyView::from(self.0.clone()).cached(style))
-        }
-    }
-
-    fn last_row_bottom(cx: &mut VisualTestContext) -> Pixels {
-        cx.debug_bounds("last").expect("last row painted").bottom()
     }
 
     #[gpui_kit::test]
-    fn a_notch_scrolls_a_list_in_a_cached_view(cx: &mut TestAppContext) {
-        let (_, cx) = cx.add_window_view(|_, cx| Shell(cx.new(|_| Column(ListState::new(40, ListAlignment::Bottom, px(100.))))));
+    fn a_notch_scrolls_a_bottom_aligned_list_up_from_its_end(cx: &mut TestAppContext) {
+        let state = ListState::new(40, ListAlignment::Bottom, px(100.));
+        let kept = state.clone();
+        let (_, cx) = cx.add_window_view(move |_, _| Messages(kept));
         cx.run_until_parked();
-        let rest = last_row_bottom(cx);
+        assert_eq!(state.logical_scroll_top().item_ix, 40, "starts at the end");
         cx.simulate_event(ScrollEvent {
             position: point(px(100.), px(100.)),
             delta: ScrollDelta::Lines(point(0., 3.)),
@@ -225,12 +208,14 @@ mod notched {
             touch_phase: TouchPhase::Moved,
             source: Default::default(),
         });
-        // Frames come only from what the list asks for: no forced refresh.
+        // The test platform has no display link: deliver frames as it would.
         for _ in 0..40 {
             std::thread::sleep(std::time::Duration::from_millis(10));
+            cx.update(|window, cx| window.simulate_next_frame(cx));
             cx.run_until_parked();
         }
-        assert!(last_row_bottom(cx) > rest, "the notch never moved the list: last row still at {rest:?}");
+        let top = state.logical_scroll_top();
+        assert!(top.item_ix < 40, "the notch never left the end: {top:?}");
     }
 }
 

@@ -641,7 +641,7 @@ impl Waffle {
         let mut rows: Vec<AnyElement> = Vec::new();
         match (&self.status, self.guild().cloned()) {
             // Until the gateway's first READY: the list's shape, shimmering.
-            (Status::Connecting, guild) => rows.extend((0..8).map(|i| list_skeleton(i, guild.is_some(), cx))),
+            (Status::Connecting, guild) if guild.as_ref().map_or(self.dms.is_empty(), |g| g.channels.is_empty()) => rows.extend((0..8).map(|i| list_skeleton(i, guild.is_some(), cx))),
             _ if self.in_favorites() => rows.extend(self.favorite_rows(window, cx)),
             (_, Some(guild)) => {
                 // Beside the carried channel: "Move to Archive" while it's aimed into another category.

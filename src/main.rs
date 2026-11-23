@@ -25,6 +25,11 @@ mod restart;
 mod feed_keys;
 mod auth;
 mod cache;
+mod downloads;
+mod launch;
+mod snapshot;
+mod store;
+mod tiered;
 mod captcha;
 mod query;
 mod call;
@@ -496,19 +501,8 @@ struct Autocomplete {
     selected: usize,
 }
 
-// Where Waffle keeps its files: Application Support on macOS, %APPDATA% on Windows,
-// $XDG_DATA_HOME (or ~/.local/share) elsewhere.
-fn data_dir() -> Option<std::path::PathBuf> {
-    let var = |name| std::env::var_os(name).map(std::path::PathBuf::from);
-    let dir = if cfg!(target_os = "macos") {
-        var("HOME")?.join("Library/Application Support/Waffle")
-    } else if cfg!(target_os = "windows") {
-        var("APPDATA")?.join("Waffle")
-    } else {
-        var("XDG_DATA_HOME").or_else(|| var("HOME").map(|h| h.join(".local/share")))?.join("waffle")
-    };
-    Some(dir)
-}
+// Where Waffle keeps its files (store.rs).
+use store::data_dir;
 
 // The quietest mic level the meters show, in dBFS.
 const SELF_VIEW_INTERVAL: Duration = Duration::from_millis(66);
@@ -701,6 +695,7 @@ type ComposerState = TextareaState;
 
 pub struct Waffle {
     status: Status,
+    launch: launch::Launch,
     client: Option<Client>,
     // The connected account's token, filed under its id once READY names the user.
     token: Option<String>,
@@ -1093,6 +1088,7 @@ impl Waffle {
             return waffle;
         }
         waffle.start_hotkeys(cx);
+        waffle.start_store(window, cx);
         match accounts::startup_token(&waffle.prefs) {
             Some(token) => waffle.connect(token, cx),
             None => waffle.sign_in(cx),
@@ -1175,6 +1171,7 @@ impl Waffle {
         .detach();
         let mut waffle = Self {
             status: Status::Connecting,
+            launch: launch::Launch::new(),
             client: None,
             token: None,
             _session: None,
@@ -1618,6 +1615,7 @@ impl Waffle {
                 self.splash_ready(cx);
                 self.rejoin_after_restart(cx);
                 self.load_favorites(cx);
+                self.reconcile_ready(cx);
             }
             Event::Batch(events) => {
                 for event in events {
@@ -2138,13 +2136,9 @@ impl Waffle {
         if let Some(previous) = self.channel.as_ref().filter(|c| c.id != id).and_then(|c| self.feeds.get(&c.id).map(|f| (c.id.clone(), f)))
             && previous.1.loaded
         {
-            cache::save(&previous.0, &previous.1.messages);
+            cache::save(&mut self.launch.messages, &previous.0, &previous.1.messages);
         }
-        if !self.feeds.contains_key(&id)
-            && let Some(messages) = cache::load(&id)
-        {
-            self.feeds.insert(id.clone(), Feed { messages: Arc::new(messages), loaded: true, has_more: true, ..Default::default() });
-        }
+        self.warm_feed(&id);
         self.load_dm_profile(&channel, cx);
         // Before the reset: the draft keeps the command typed into it.
         self.stash_draft(cx);
@@ -2270,7 +2264,7 @@ impl Waffle {
         feed.messages = Arc::new(fetched.into_iter().chain(kept).collect());
         feed.loaded = true;
         feed.error = None;
-        cache::save(channel_id, &feed.messages);
+        cache::save(&mut self.launch.messages, channel_id, &feed.messages);
         let count = feed.messages.len();
         let authors: Vec<String> = feed.messages.iter().map(|m| m.author.id.clone()).collect();
         if is_open && !unchanged {
@@ -2555,7 +2549,9 @@ impl Waffle {
             ..Default::default()
         };
         self.push_local(pending, cx);
+        let live = self.when_live();
         cx.spawn(async move |this, cx| {
+            live.await;
             let result = client.send_message(&channel.id, &content, &nonce, reply.as_ref().map(|r| r.id.as_str()), ping, options).await;
             this.update(cx, |this, cx| this.settle(&channel.id, &nonce, result, cx)).ok();
         })
