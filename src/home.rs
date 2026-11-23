@@ -98,12 +98,17 @@ pub fn load_last_channel(user_id: &str) -> Option<(Option<String>, String)> {
     Some(((guild != "@me").then(|| guild.to_owned()), channel.to_owned()))
 }
 
+// Written on the IO thread, whole or not at all.
 pub fn save_last_channel(user_id: &str, guild_id: Option<&str>, channel_id: &str) {
     let Some(path) = last_channel_file(Some(user_id)) else { return };
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
-    let _ = std::fs::write(path, format!("{} {channel_id}", guild_id.unwrap_or("@me")));
+    let text = format!("{} {channel_id}", guild_id.unwrap_or("@me"));
+    crate::store::io(move || drop(crate::store::write_atomic(&path, text.as_bytes())));
+}
+
+// Logging out forgets where the account was.
+pub fn forget_last_channel(user_id: &str) {
+    let Some(path) = last_channel_file(Some(user_id)) else { return };
+    crate::store::io(move || drop(std::fs::remove_file(path)));
 }
 
 impl Waffle {

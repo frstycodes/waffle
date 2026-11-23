@@ -450,7 +450,7 @@ impl Waffle {
 
     // Who the menu is about: their avatar and presence, their name, and in a call where they are.
     fn user_header(&self, user: &User, guild: Option<&crate::discord::Guild>) -> Entry {
-        let status = self.presences.get(&user.id).map(|p| p.mark()).or(self.me.as_ref().filter(|me| me.id == user.id).map(|_| self.my_status.into()));
+        let status = self.presences.get(&user.id).map(|p| p.mark()).or(self.my_mark().filter(|_| self.my_id() == user.id).map(Into::into));
         let voice = guild.and_then(|g| g.voice_states.iter().find(|v| v.user_id == user.id).and_then(|v| g.channels.iter().find(|c| v.channel_id.as_ref() == Some(&c.id))));
         let speaking = self.call.as_ref().is_some_and(|c| c.speaking.contains(&user.id));
         let subtitle = voice.map(|c| if speaking { format!("In {} · speaking", c.name) } else { format!("In {}", c.name) });

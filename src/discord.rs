@@ -2428,37 +2428,7 @@ pub struct SearchPage {
 #[derive(Default)]
 pub struct Images(reqwest::Client);
 
-// Image files as downloaded (compressed), most recently used last, within `CAP` bytes. The image
-// cache frees decoded images that leave the screen; this lets them come back without the network.
-pub mod downloads {
-    use std::{collections::VecDeque, sync::Mutex};
-
-    const CAP: usize = 32 << 20;
-
-    static FILES: Mutex<VecDeque<(String, bytes::Bytes)>> = Mutex::new(VecDeque::new());
-
-    pub fn get(url: &str) -> Option<bytes::Bytes> {
-        let mut files = FILES.lock().ok()?;
-        let index = files.iter().position(|(u, _)| u == url)?;
-        let entry = files.remove(index)?;
-        let bytes = entry.1.clone();
-        files.push_back(entry);
-        Some(bytes)
-    }
-
-    pub fn put(url: String, bytes: bytes::Bytes) {
-        let Ok(mut files) = FILES.lock() else { return };
-        files.retain(|(u, _)| *u != url);
-        files.push_back((url, bytes));
-        while files.iter().map(|(_, b)| b.len()).sum::<usize>() > CAP && files.len() > 1 {
-            files.pop_front();
-        }
-    }
-
-    pub fn bytes() -> usize {
-        FILES.lock().map(|f| f.iter().map(|(_, b)| b.len()).sum()).unwrap_or(0)
-    }
-}
+use crate::downloads;
 
 impl gpui_kit::http_client::HttpClient for Images {
     fn user_agent(&self) -> Option<&gpui_kit::http_client::http::HeaderValue> {
@@ -2479,6 +2449,10 @@ impl gpui_kit::http_client::HttpClient for Images {
         }
         let get = self.0.get(&url);
         Box::pin(async move {
+            // The disk tier, read on the loader's thread, never the UI's.
+            if let Some(bytes) = downloads::get_or_read(&url) {
+                return Ok(gpui_kit::http_client::Response::builder().status(200).body(bytes.to_vec().into())?);
+            }
             // gpui drops this future when the image cache lets go of a load; the download stops with it.
             let mut fetch = AbortOnDrop(runtime().spawn(async move {
                 let res = get.send().await?;

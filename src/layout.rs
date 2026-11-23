@@ -441,8 +441,8 @@ impl Waffle {
             .on_hover(on_hover)
             .on_click(cx.listener(|this, _, _, cx| this.toggle_status_menu(cx)))
             .child(match animate {
-                true => playing_avatar("me", &me.avatar, me.decoration.as_deref(), 32., Some(self.my_status.into()), ring),
-                false => decorated_avatar(&me.avatar, me.decoration.as_deref(), 32., Some(self.my_status.into()), ring),
+                true => playing_avatar("me", &me.avatar, me.decoration.as_deref(), 32., self.my_mark().map(Into::into), ring),
+                false => decorated_avatar(&me.avatar, me.decoration.as_deref(), 32., self.my_mark().map(Into::into), ring),
             })
             .child(
                 div()
