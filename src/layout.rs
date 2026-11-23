@@ -82,7 +82,7 @@ impl Waffle {
             let back = self.prefs.account.as_ref().and_then(|id| self.prefs.accounts.iter().find(|a| &a.id == id)).cloned();
             return root
                 .bg(theme.background)
-                .child(login::render(&login, back, window, cx))
+                .child(login::render(&login, back, &self.updates.status, window, cx))
                 .children(crate::window_controls::render(window, cx))
                 .into_any_element();
         }

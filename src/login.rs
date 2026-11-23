@@ -16,6 +16,7 @@ use crate::{
     mascot::{Mood, mascot_at},
     motion, palette,
     ui::{self, Squircle, Tone},
+    updater::{Command, Status},
 };
 
 // The code card: 204 square with 14 of white around the modules.
@@ -50,7 +51,8 @@ impl Login {
 }
 
 // `back` is the signed-in account to return to while adding another.
-pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Window, cx: &mut Context<Waffle>) -> AnyElement {
+// `update`: the updater's status, offered here too, so a build that can't sign in can still be replaced.
+pub fn render(login: &Login, back: Option<crate::accounts::Account>, update: &Status, _: &mut Window, cx: &mut Context<Waffle>) -> AnyElement {
     let (phase, title, detail): (&str, SharedString, SharedString) = match login {
         Login::Preparing => ("preparing", "Sign in with your phone".into(), "Getting a fresh code from Discord\u{2026}".into()),
         Login::Qr(_) => ("qr", "Sign in with your phone".into(), "Scan with the Discord app on your phone.".into()),
@@ -125,6 +127,7 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Win
             ui::button("back-to-account", ui::Tone::Link, cx).child(label).on_click(cx.listener(move |this, _, window, cx| this.switch_account(account.id.clone(), window, cx)))
         }))
         .child(div().flex_1())
+        .children(update_notice(update, matches!(login, Login::Failed(_)), cx))
         .child(
             ui::row()
                 .gap_1p5()
@@ -135,6 +138,70 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, _: &mut Win
         )
         .into_any_element()
 }
+
+// A newer Waffle, whatever its stage: looking, found (download it), downloading with its progress, ready
+// (restart into it), or a download that failed (try again). After a failed sign-in (`failed`) the
+// sign-in screen has already started the download, and the copy says the update may fix it.
+fn update_notice(status: &Status, failed: bool, cx: &mut Context<Waffle>) -> Option<AnyElement> {
+    // After a failure, Try again is the screen's one primary action; the update's button stays quiet.
+    let tone = if failed { Tone::Secondary } else { Tone::Primary };
+    let download = move |id: &'static str, label: &'static str, cx: &mut Context<Waffle>| {
+        ui::button(id, tone, cx).small().child(label).on_click(cx.listener(|this, _, _, _| {
+            if let Some(updater) = &this.updates.updater {
+                updater.send(Command::Download);
+            }
+        }))
+    };
+    let might_fix = |version: &str| format!("Waffle {version} might fix this");
+    let mut progress = None;
+    let (title, note, action): (String, Option<String>, Option<AnyElement>) = match status {
+        Status::Checking if failed => ("Looking for a newer Waffle\u{2026}".into(), Some("An update might fix this.".into()), None),
+        Status::Available(version) => {
+            let title = if failed { might_fix(version) } else { format!("Waffle {version} is available") };
+            (title, None, Some(download("login-update-download", "Download", cx).into_any_element()))
+        }
+        Status::Downloading { version, done, total } => {
+            let fraction = total.filter(|t| *t > 0).map(|t| *done as f32 / t as f32);
+            progress = fraction;
+            let percent = fraction.map(|f| format!(" {}%", (f * 100.).round() as u32)).unwrap_or_default();
+            let title = if failed { might_fix(version) } else { format!("Downloading Waffle {version}") };
+            (title, Some(format!("Downloading it now\u{2026}{percent}")), None)
+        }
+        Status::Ready(staged) => {
+            let (title, note) = if failed { (might_fix(&staged.version), Some("It's downloaded. Restart to try it.".to_owned())) } else { (format!("Waffle {} is ready", staged.version), None) };
+            let staged = staged.clone();
+            let restart = ui::button("login-update-restart", tone, cx)
+                .small()
+                .child("Restart to update")
+                .on_click(cx.listener(move |this, _, _, cx| this.request_restart(Some(staged.clone()), cx)));
+            (title, note, Some(restart.into_any_element()))
+        }
+        Status::DownloadFailed(version) => (format!("Couldn't download Waffle {version}"), Some("Check your connection and try again.".into()), Some(download("login-update-retry", "Try again", cx).into_any_element())),
+        Status::Checking | Status::Idle | Status::UpToDate | Status::CheckFailed => return None,
+    };
+    // Straight on the window's surface like the rest of the sign-in column: no box, set apart by space.
+    let heading = ui::row()
+        .max_w_full()
+        .gap_1p5()
+        .child(Icon::new(Glyph::Download).size(ui::ICON_MD).flex_none().text_color(palette::accent_ink(cx)))
+        .child(ui::line(title).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)));
+    let notice = ui::col()
+        // Clear of the footer line under it.
+        .pb_4()
+        // One width through every stage, so the progress bar doesn't jump as the copy changes mid-download.
+        .w(px(UPDATE_WIDTH))
+        .max_w_full()
+        .items_center()
+        .gap_1p5()
+        .child(heading)
+        .children(note.map(|note| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(note)))
+        .children(progress.map(|f| div().w_full().pt_1().child(ui::progress_bar(f, cx).thin())))
+        .children(action.map(|action| div().pt_1p5().child(action)));
+    Some(arrive("login-update", notice))
+}
+
+// The update notice's width, the QR card's give or take, so it reads as part of the column.
+const UPDATE_WIDTH: f32 = 280.;
 
 // GAP: the design reads "Discord said:", but auth.rs's errors also come from the network and the
 // captcha page, so the label doesn't name a source.

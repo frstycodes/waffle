@@ -177,6 +177,19 @@ impl Waffle {
         }
     }
 
+    // Right-clicking a user's mention: their member menu, as on their name.
+    pub(super) fn open_mention_menu(&mut self, url: &str, at: gpui_kit::Point<Pixels>, cx: &mut Context<Self>) {
+        let Some(id) = url.strip_prefix("waffle://user/") else { return };
+        // A mention of someone not loaded yet still gets the menu; its items need only the id.
+        let user = self.known_users().into_iter().find(|u| u.id == id).unwrap_or_else(|| crate::discord::User {
+            id: id.to_owned(),
+            name: self.user_name(id),
+            avatar: crate::discord::avatar_url(id, None),
+            ..Default::default()
+        });
+        self.open_author_menu(user, at, cx);
+    }
+
     pub(super) fn shows_jump_to_present(&self) -> bool {
         self.scrolled_up && self.list.item_count() > 0
     }
