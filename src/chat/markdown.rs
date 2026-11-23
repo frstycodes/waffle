@@ -70,14 +70,22 @@ impl MarkdownPlugin for MentionBadges {
     }
 }
 
+// Inline marks: a mention's side padding, an option key's side padding and rounded edge, a server tag's height and gap.
+const MENTION_PAD: f32 = 3.;
+const OPTION_KEY_PAD: f32 = 7.;
+const OPTION_EDGE: f32 = 5.;
+const TAG_HEIGHT: f32 = 18.;
+const TAG_GAP: f32 = 3.;
+
 // A mention as messages draw it; the composer's mention chips wear the same.
+// lint-allow(custom-component): ui::badge is a 20px block, and a mention must run inside a line of text at its size
 pub(super) fn mention_badge(label: SharedString, fill: Hsla, ink: Hsla) -> Div {
-    div().px(px(3.)).rounded_sm().bg(fill).text_color(ink).font_weight(FontWeight::MEDIUM).whitespace_nowrap().child(label)
+    div().px(px(MENTION_PAD)).rounded_sm().bg(fill).text_color(ink).font_weight(FontWeight::MEDIUM).whitespace_nowrap().child(label)
 }
 
 // The composer's tokens: mentions in the message badge, a slash command's option names as a quieter
 // chip, and the blank end of each option's value. The hover fill marks one inside the selection.
-pub(super) fn composer_chip(cx: &App) -> impl Fn(&gpui_kit::component::input::InlineTokenContext, &mut Window, &mut App) -> Div + 'static {
+pub(super) fn composer_tokens(cx: &App) -> impl Fn(&gpui_kit::component::input::InlineTokenContext, &mut Window, &mut App) -> Div + 'static {
     let (fill, selected, ink) = (palette::accent_soft(cx), palette::accent().opacity(0.26), palette::accent_ink(cx));
     let (key_fill, key_selected, key_ink) = (palette::selected(cx), palette::accent_soft(cx), palette::muted(cx));
     move |token, _, _| {
@@ -97,8 +105,8 @@ pub(super) fn composer_chip(cx: &App) -> impl Fn(&gpui_kit::component::input::In
 // An option name in a typed slash command: the muted left segment of the option's box, which
 // `Waffle::option_boxes` strokes around it and the value typed after it.
 pub(super) fn option_key(label: SharedString, height: Pixels, fill: Hsla, ink: Hsla) -> Div {
-    let key = ui::row().h_full().px(px(7.)).rounded_l(px(5.)).bg(fill).text_color(ink).text_size(ui::TEXT_DETAIL).font_weight(FontWeight::SEMIBOLD).whitespace_nowrap().child(label);
-    ui::row().items_stretch().h(height).pl(px(crate::command_picker::OPTION_GAP)).pr(px(5.)).child(key)
+    let key = ui::row().h_full().px(px(OPTION_KEY_PAD)).rounded_l(px(OPTION_EDGE)).bg(fill).text_color(ink).text_size(ui::TEXT_DETAIL).font_weight(FontWeight::SEMIBOLD).whitespace_nowrap().child(label);
+    ui::row().items_stretch().h(height).pl(px(crate::command_picker::OPTION_GAP)).pr(px(OPTION_EDGE)).child(key)
 }
 
 // Discord markdown with mentions, channel links and code copy buttons; messages and embeds share it.
@@ -111,6 +119,7 @@ pub(super) fn markdown(id: SharedString, text: String, body: f32, ctx: &RowConte
         // Constant: the plugin only changes how mentions draw, never what parses.
         .markdown_extensions(MarkdownExtensions::default().parser_revision(1).plugin(badges))
         // messages.css `.codeblock { margin-top: 6px }`: a block opening a message clears the name row.
+        // lint-allow(raw-margin): the text view's code-block style takes the design's `.codeblock` top margin, it has no parent gap to carry it
         .style(gpui_kit::component::text::TextViewStyle { heading_base_font_size: px(body), ..Default::default() }.code_block(gpui_kit::StyleRefinement::default().mt_1p5()).heading_font_size(heading_size))
         .selectable(true)
         .code_block_actions(move |block, _, cx| copy_button(block.code().to_string(), copied.as_deref() == Some(block.code().as_ref()), copy_target.clone(), cx))
@@ -306,7 +315,7 @@ pub(super) fn hide_spoilers(text: &str, revealed: bool) -> String {
 
 // A user's server tag (Discord's guild tag): its badge and text, as it follows their name.
 pub(crate) fn guild_tag(tag: &crate::discord::GuildTag, cx: &App) -> Div {
-    ui::badge(palette::selected(cx), palette::strong(cx)).h(px(18.)).px_1p5().gap(px(3.)).children(tag.badge.clone().map(|b| img(b).size_3())).child(tag.text.clone())
+    ui::badge(palette::selected(cx), palette::strong(cx)).h(px(TAG_HEIGHT)).px_1p5().gap(px(TAG_GAP)).children(tag.badge.clone().map(|b| img(b).size_3())).child(tag.text.clone())
 }
 
 // A display name in its Discord style's colours, one run per character, each colour stepped in lightness

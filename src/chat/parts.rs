@@ -4,6 +4,7 @@ use super::*;
 // Discord's reply spine: from the preview's middle it runs left to over the avatar's centre, rounds
 // the corner and drops to just above the avatar, so the preview lines up with the name below it.
 pub(super) fn reply_spine(cx: &App) -> Div {
+    // lint-allow(custom-mark): ui::badged marks a face's corner; this is a connector line drawn from the preview to the avatar
     div()
         .absolute()
         .left(px(AVATAR / 2. - 1.))
@@ -27,13 +28,12 @@ pub(super) fn reply_preview(reply: &Message, target: Option<String>, ctx: &Rc<Ro
         None => vec![ui::avatar(reply.author.avatar.clone(), 16.).into_any_element(), div().flex_none().font_weight(FontWeight::MEDIUM).text_color(muted).child(ctx.name_of(&reply.author)).into_any_element(), reply_snippet(reply, ctx, cx)],
     };
     let this = ctx.this.clone();
-    ui::row()
+    let preview = ui::row()
         .id(SharedString::from(format!("reply-{}", reply.id)))
         .relative()
         .h(px(REPLY_HEIGHT))
         // Compact draws it in the text column, with no avatar for the spine to reach.
         .when(!ctx.compact, |r| r.pl(px(CONTENT_INSET)).child(reply_spine(cx)))
-        .mb_0p5()
         .gap_1p5()
         .cursor_pointer()
         .text_size(ui::TEXT_SM)
@@ -43,8 +43,8 @@ pub(super) fn reply_preview(reply: &Message, target: Option<String>, ctx: &Rc<Ro
         .on_click(move |_, _, cx| { cx.stop_propagation();
             let Some(id) = target.clone() else { return };
             this.update(cx, |this, cx| this.jump_to(id, cx)).ok();
-        })
-        .into_any_element()
+        });
+    div().pb_0p5().child(preview).into_any_element()
 }
 
 pub(super) fn reply_snippet(reply: &Message, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
@@ -56,7 +56,7 @@ pub(super) fn reply_snippet(reply: &Message, ctx: &Rc<RowContext>, cx: &App) -> 
 
 // A forwarded copy (design/messages.html `.fwd`): the label, the original's text, media and files, then
 // where it came from, which jumps to the original. A source outside your servers shows its time alone.
-pub(super) fn forward_card(original: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
+pub(super) fn forward_quote(original: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
     let faint = palette::faint(cx);
     let label = ui::row()
         .gap_1p5()
@@ -84,8 +84,7 @@ pub(super) fn forward_card(original: &Message, ctx: &Rc<RowContext>, cx: &mut Ap
         }
         None => source,
     };
-    ui::col()
-        .mt_1()
+    let card = ui::col()
         .max_w(px(FORWARD_WIDTH))
         .pt_2()
         .px_3()
@@ -99,8 +98,8 @@ pub(super) fn forward_card(original: &Message, ctx: &Rc<RowContext>, cx: &mut Ap
         .children(original.stickers.iter().map(|s| crate::stickers::in_chat(s, ctx.media.stickers.plays(false), cx)))
         .children(shown_embeds(original, ctx).iter().enumerate().map(|(i, e)| embed_card(e, None, None, format!("forward-embed-{}-{i}", original.id), ctx, cx)))
         .children(files(original, ctx, cx))
-        .child(source)
-        .into_any_element()
+        .child(source);
+    div().pt_1().child(card).into_any_element()
 }
 
 // What a reply without text quotes instead: the kind of attachment it carries.
@@ -170,7 +169,7 @@ pub(crate) fn pin_line(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) ->
     let this = ctx.this.clone();
     let pins = s.link("pinned messages").on_mouse_down(gpui_kit::MouseButton::Left, move |_, _, cx| { cx.stop_propagation();
         this.update(cx, |this, cx| {
-            this.popover_at = gpui_kit::point(px(this.pins_button_x.get()), px(0.));
+            this.popover_at = gpui_kit::point(px(this.pins_button_x.get()), Pixels::ZERO);
             this.open_pins(cx);
         })
         .ok();
@@ -192,7 +191,7 @@ pub(crate) fn starter_message(parent: &Message, ctx: &Rc<RowContext>, cx: &mut A
         .text_color(palette::text(cx))
         .child(message_head(parent, ctx, cx))
         .children(content(parent, ctx, cx))
-        .children(parent.forward.as_ref().map(|original| forward_card(original, ctx, cx)))
+        .children(parent.forward.as_ref().map(|original| forward_quote(original, ctx, cx)))
         .children(media_grid(parent, ctx, cx))
         .children(parent.stickers.iter().map(|s| crate::stickers::in_chat(s, ctx.media.stickers.plays(false), cx)))
         .children(parent.poll.as_ref().map(|p| poll_card(parent, p, ctx, cx)))
@@ -204,6 +203,7 @@ pub(crate) fn starter_message(parent: &Message, ctx: &Rc<RowContext>, cx: &mut A
         .child(
             ui::row().items_stretch()
                 .gap_4()
+                // lint-allow(raw-margin): optical, lines the avatar's top with the name's cap height
                 .child(profile_trigger(format!("starter-avatar-{}", parent.id), &parent.author, ctx).flex_none().mt_0p5().child(ui::avatar(parent.author.avatar.clone(), AVATAR)))
                 .child(body),
         )
@@ -247,7 +247,7 @@ pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Opti
             })
             .children(blocks)
             .when(message.edited, |c| {
-                c.child(ui::row().flex_wrap().items_baseline().children(last).child(div().ml_1().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(faint).child("(edited)")))
+                c.child(ui::row().flex_wrap().items_baseline().gap_x_1().children(last).child(div().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(faint).child("(edited)")))
             })
             .into_any_element(),
     )
@@ -258,8 +258,7 @@ pub(super) fn send_failure(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
     let (retry_this, retry) = (ctx.this.clone(), message.clone());
     let (delete_this, delete) = (ctx.this.clone(), message.clone());
     let action = |id: String, label: &'static str| ui::button(SharedString::from(id), ui::Tone::Ghost, cx).small().h_7().child(label);
-    ui::row()
-        .mt_1()
+    let line = ui::row()
         .flex_wrap()
         .gap_x_2()
         .gap_y_1()
@@ -276,8 +275,8 @@ pub(super) fn send_failure(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
         }))
         .child(action(format!("discard-{}", message.id), "Delete message").on_click(move |_, _, cx| { cx.stop_propagation();
             delete_this.update(cx, |this, cx| this.delete(delete.clone(), cx)).ok();
-        }))
-        .into_any_element()
+        }));
+    div().pt_1().child(line).into_any_element()
 }
 
 // The card under the message that started a thread: its name and how many messages it holds.
@@ -287,8 +286,7 @@ pub(super) fn thread_card(thread: &Channel, ctx: &Rc<RowContext>, cx: &App) -> A
     let archived = meta.is_some_and(|t| t.archived);
     let (this, open) = (ctx.this.clone(), thread.clone());
     let edge = palette::line_strong(cx);
-    ui::pressable(div().id(SharedString::from(format!("thread-card-{}", thread.id))), 0.99)
-        .mt_2()
+    let card = ui::pressable(div().id(SharedString::from(format!("thread-card-{}", thread.id))), 0.99)
         .w_full()
         .max_w(px(COLUMN))
         .py_2p5()
@@ -317,5 +315,6 @@ pub(super) fn thread_card(thread: &Channel, ctx: &Rc<RowContext>, cx: &App) -> A
         .on_click(move |_, window, cx| { cx.stop_propagation();
             this.update(cx, |this, cx| this.open_channel(open.clone(), window, cx)).ok();
         })
-        .into_any_element()
+        .into_any_element();
+    div().pt_2().child(card).into_any_element()
 }

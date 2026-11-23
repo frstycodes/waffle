@@ -40,8 +40,8 @@ impl Waffle {
     pub(crate) fn focus_search(&mut self, _: &crate::app_keys::FocusSearch, window: &mut Window, cx: &mut Context<Self>) {
         self.focused_message = None;
         self.search_input.update(cx, |state, cx| state.focus(window, cx));
-        // lint-allow(global-notify): focus opens the search popover, which the overlays view draws outside the columns
-        cx.notify();
+        // The header's field and its popover (channel_search) are the main column's.
+        self.redraw(Column::Main, cx);
     }
 
     fn focused(&self) -> Option<(usize, Message)> {

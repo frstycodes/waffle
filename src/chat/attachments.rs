@@ -1,5 +1,13 @@
 use super::*;
 
+// A spoiler's blur, a reaction's side padding (with the add pill's), the code copy button's side, and how far
+// the hover bar rides above its row.
+const SPOILER_BLUR: f32 = 8.;
+const REACTION_PAD: f32 = 9.;
+const REACTION_ADD_PAD: f32 = 7.;
+const COPY_BUTTON: f32 = 28.;
+const ACTIONS_LIFT: f32 = 18.;
+
 // Audio plays in place; text files read in place (the fetch starts here, when the row first renders);
 // any other file, or one that turned out not to be text, is a card with its icon, name, size and one action.
 pub(super) fn files(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Vec<AnyElement> {
@@ -48,8 +56,7 @@ pub(super) fn upload_cards(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
                 true => format_size(file.size),
                 false => format!("{} of {}", format_size(sent), format_size(file.size)),
             };
-            ui::row()
-                .mt_2()
+            let card = ui::row()
                 .w_full()
                 .max_w(px(COLUMN))
                 .p_3()
@@ -72,8 +79,8 @@ pub(super) fn upload_cards(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
                         cx.stop_propagation();
                         this.update(cx, |this, cx| this.delete(cancel.clone(), cx)).ok();
                     }))
-                })
-                .into_any_element()
+                });
+            div().pt_2().child(card).into_any_element()
         })
         .collect()
 }
@@ -88,7 +95,7 @@ pub(super) fn file_picture(picture: Option<std::sync::Arc<gpui_kit::RenderImage>
         None => well.bg(palette::surface(Level::Raised, cx)).text_color(palette::muted(cx)).flex().items_center().justify_center().child(Icon::new(kind.glyph()).size(px(side * 0.5))),
     };
     well.when(spoiler, |w| {
-        w.child(ui::row().absolute().inset_0().bg(palette::surface(Level::Sidebar, cx).opacity(0.85)).backdrop_blur(px(8.)).justify_center().text_color(palette::strong(cx)).child(Icon::new(Glyph::EyeSlash).size(px(side * 0.4))))
+        w.child(ui::row().absolute().inset_0().bg(palette::surface(Level::Sidebar, cx).opacity(0.85)).backdrop_blur(px(SPOILER_BLUR)).justify_center().text_color(palette::strong(cx)).child(Icon::new(Glyph::EyeSlash).size(px(side * 0.4))))
     })
     .into_any_element()
 }
@@ -96,8 +103,7 @@ pub(super) fn file_picture(picture: Option<std::sync::Arc<gpui_kit::RenderImage>
 pub(crate) fn file_card(message: &Message, file: &crate::discord::File, cx: &App) -> AnyElement {
     let (strong, faint, muted) = (palette::strong(cx), palette::faint(cx), palette::muted(cx));
     let (open, download) = (file.url.clone(), file.url.clone());
-    ui::row()
-        .mt_2()
+    let card = ui::row()
         .w_full()
         .max_w(px(COLUMN))
         .p_3()
@@ -124,27 +130,17 @@ pub(crate) fn file_card(message: &Message, file: &crate::discord::File, cx: &App
                 // A Components V2 file that matches no attachment comes without a size.
                 .child(ui::row().gap_1p5().text_size(ui::TEXT_XS).text_color(faint).when(file.size > 0, |d| d.child(format_size(file.size))).when(file.spoiler, |d| d.child(ui::tag("Spoiler", cx)))),
         )
-        .child(ui::icon_button(SharedString::from(format!("download-{}-{}", message.id, file.name)), Glyph::Download, "Download", cx).on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&download) }))
-        .into_any_element()
+        .child(ui::icon_button(SharedString::from(format!("download-{}-{}", message.id, file.name)), Glyph::Download, "Download", cx).on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&download) }));
+    div().pt_2().child(card).into_any_element()
 }
 
 // Sits in the corner of every code block; it turns to a check, in the online ink, for a moment after.
 // GAP: the design gives code blocks a header line (language, then Copy with its label); TextView owns
 // that layout and only offers this corner slot, so the button stays icon-only.
 pub(super) fn copy_button(code: String, copied: bool, this: WeakEntity<Waffle>, cx: &App) -> AnyElement {
-    let (hover, strong) = (palette::hover(cx), palette::strong(cx));
-    ui::row()
-        .id(SharedString::from(format!("copy-{}", code.len())))
-        .h_7()
-        .w_7()
-        .justify_center()
-        .squircle(RADIUS_XS)
-        .cursor_pointer()
-        .text_color(if copied { palette::positive_ink(cx) } else { palette::muted(cx) })
-        .when(copied, |b| b.hover(move |s| s.bg(hover)))
-        .when(!copied, |b| b.hover(move |s| s.bg(hover).text_color(strong)))
-        .child(Icon::new(if copied { Glyph::Checkmark } else { Glyph::Copy }).size(ui::ICON_MD))
-        .tooltip(move |window, cx| ui::tip(if copied { "Copied" } else { "Copy" }, window, cx))
+    ui::icon_button(SharedString::from(format!("copy-{}", code.len())), if copied { Glyph::Checkmark } else { Glyph::Copy }, if copied { "Copied" } else { "Copy" }, cx)
+        .sized(COPY_BUTTON)
+        .succeeded(copied, cx)
         .on_click(move |_, _, cx| { cx.stop_propagation();
             this.update(cx, |this, cx| this.copy_code(code.clone(), code.clone(), cx)).ok();
         })
@@ -161,7 +157,7 @@ pub(super) fn reactions(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Op
         let (hover_this, hover_msg, hover_emoji) = (ctx.this.clone(), message.clone(), r.emoji.clone());
         let card = crate::reactions::ReactorsCard::new(ctx.this.clone(), message, r);
         reaction_pill(SharedString::from(format!("react-{}-{}", message.id, r.emoji.name)), r.me, cx)
-            .px(px(9.))
+            .px(px(REACTION_PAD))
             .child(emoji_face(&shown_emoji(&r.emoji, ctx.media.emoji), 18., 16.))
             .child(r.count.to_string())
             .on_hover(move |hovered, _, cx| {
@@ -177,13 +173,13 @@ pub(super) fn reactions(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Op
     });
     let (this, msg) = (ctx.this.clone(), message.clone());
     let add = reaction_pill(SharedString::from(format!("react-add-{}", message.id)), false, cx)
-        .px(px(7.))
+        .px(px(REACTION_ADD_PAD))
         .child(Icon::new(Glyph::EmojiAdd).size(ui::ICON_LG))
         .tooltip(|window, cx| ui::tip("Add Reaction", window, cx))
         .on_click(move |_, window, cx| { cx.stop_propagation();
             this.update(cx, |this, cx| this.open_emoji_picker(EmojiTarget::Reaction(Box::new(msg.clone())), window, cx)).ok();
         });
-    Some(ui::row().items_stretch().mt_1p5().flex_wrap().gap_1p5().children(pills).child(add).into_any_element())
+    Some(div().pt_1p5().child(ui::row().items_stretch().flex_wrap().gap_1p5().children(pills).child(add)).into_any_element())
 }
 
 // A custom emoji's picture, or a unicode one drawn as text.
@@ -215,9 +211,10 @@ pub(super) fn reaction_pill(id: SharedString, mine: bool, cx: &App) -> ui::Press
 pub(super) fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
     use crate::message_menu::MessageAction as A;
     let (hover, line) = (palette::hover(cx), palette::line(cx));
-    let sep = || div().w(ui::HAIRLINE).h_5().mx_0p5().bg(line);
+    let sep = || div().w(ui::HAIRLINE).h_5().mx_0p5().bg(line); // lint-allow(custom-divider, raw-margin): ui::divider is a horizontal rule, and this vertical seam sits 2px clear of the buttons beside it
     let sent = message.state == SendState::Sent;
     let facts = crate::message_menu::Facts { mine, saved: ctx.saved_ids.contains(&message.id), ..ctx.facts };
+    // lint-allow(custom-mark, custom-surface): ui::toolbar occludes the wheel too, and this bar must let the feed scroll under it; it also rides above its row's edge
     let mut bar = ui::row()
         .id(SharedString::from(format!("actions-{}", message.id)))
         // Rides 18px into the row above: block the pointer there and keep this row hovered, or the pointer hands
@@ -225,7 +222,7 @@ pub(super) fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &
         .block_mouse_except_scroll()
         .on_hover(track_message_hover(message, ctx))
         .absolute()
-        .top(px(-18.))
+        .top(px(-ACTIONS_LIFT))
         // A flush mention row is 8px wider each side; the bar stays where it sits on other rows.
         .right(px(if ctx.mentions_me.contains(&message.id) { 20. } else { 12. }))
         .p_0p5()

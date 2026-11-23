@@ -2,7 +2,7 @@
 // design/navigation.html (channel header).
 //
 // GAP: hover fades (row fill, toolbar, 150ms) are instant: gpui's `.hover` styles don't transition.
-use std::{cell::Cell, collections::HashMap, f32::consts::TAU, rc::Rc, time::Duration};
+use std::{cell::Cell, collections::HashMap, rc::Rc, time::Duration};
 
 use chrono::{DateTime, Local, NaiveDate};
 use gpui_kit::{
@@ -212,8 +212,9 @@ impl Waffle {
             // Drag area: every control inside it occludes it, or Windows' caption takes its clicks.
             .window_control_area(WindowControlArea::Drag)
             .child(crumbs)
-            .children(topic)
-            .child(ui::row().ml_auto().flex_none().gap_0p5().children(self.follow_button(channel, cx)).children(join).children(calls.into_iter().flatten()).children(threads).children(bell).child(pins).children(add_members).children(members).children(search))
+            // The topic stretches; without one, a spacer keeps the tools at the far end.
+            .child(topic.unwrap_or_else(|| div().flex_1().min_w_0()))
+            .child(ui::row().flex_none().gap_0p5().children(self.follow_button(channel, cx)).children(join).children(calls.into_iter().flatten()).children(threads).children(bell).child(pins).children(add_members).children(members).children(search))
             .child(self.caption_clearance(!self.panel_shown()));
         ui::hard_edge(|| false, cx).child(bar)
     }
@@ -225,6 +226,8 @@ impl Waffle {
         // Closed it's the search box's icon alone: 12px padding either side of the 16px glyph; open, room for filter chips.
         const CLOSED: f32 = 40.;
         const OPEN: f32 = 260.;
+        // How far under the field the popover hangs.
+        const SEARCH_POPOVER_TOP: f32 = 46.;
         let handle = self.search_input.read(cx).focus_handle(cx);
         let focused = handle.is_focused(window);
         let open = focused || !self.search_input.read(cx).value().is_empty();
@@ -241,6 +244,7 @@ impl Waffle {
         let el = div()
             .id("search-field")
             .w(px(if open { OPEN } else { CLOSED }))
+            // lint-allow(raw-margin): an optical 4px past the tool buttons, which the row's own gap_0p5 can't give one child
             .ml_1()
             .flex_none()
             .occlude()
@@ -248,9 +252,9 @@ impl Waffle {
             .child(ui::search_frame("channel-search", Input::new(&self.search_input).token(move |token, _, cx| crate::search_menu::render_token(token, &avatars, cx)), &handle).quiet(!open))
             .capture_key_down(cx.listener(Self::on_search_key))
             .when(!open, |d| {
-                d.cursor_pointer().hover(move |s| s.bg(hover)).on_click(cx.listener(move |_, _, window, cx| {
+                d.cursor_pointer().hover(move |s| s.bg(hover)).on_click(cx.listener(move |this, _, window, cx| {
                     window.focus(&handle, cx);
-                    cx.notify();
+                    this.redraw(crate::part::Column::Main, cx);
                 }))
             });
         let el = if changes == 0 {
@@ -266,7 +270,7 @@ impl Waffle {
         let popover_bounds = window.use_keyed_state("search-popover-bounds", cx, |_, _| None::<Bounds<Pixels>>);
         let popover = focused.then(|| self.search_popover(cx)).flatten().map(|card| {
             let bounds = popover_bounds.clone();
-            let card = div().absolute().top(px(46.)).right_0().on_children_prepainted(move |children, _, cx| bounds.update(cx, |b, _| *b = children.first().copied())).child(card);
+            let card = div().absolute().top(px(SEARCH_POPOVER_TOP)).right_0().on_children_prepainted(move |children, _, cx| bounds.update(cx, |b, _| *b = children.first().copied())).child(card);
             // lint-allow(raw-floating): hangs at absolute offsets from the field, not anchored; the card occludes itself.
             gpui_kit::deferred(ui::rise(card.transform_origin(ui::corner(true, false)), "search-popover-in", Duration::ZERO)).with_priority(2)
         });
@@ -304,9 +308,11 @@ impl Waffle {
         let label = unread_label(fresh.len(), estimated, &first.timestamp);
         let tint = ui::mix(palette::surface(Level::Page, cx), palette::accent(), 0.16);
         let press = palette::accent().opacity(0.14);
+        // lint-allow(custom-button): ui::button has no tone that washes the accent over a tinted bar
         let button = move |id: &'static str| ui::row().id(id).h_7().px_2().gap_1p5().squircle(RADIUS_XS).cursor_pointer().hover(move |s| s.bg(press));
         let (first_id, channel_id) = (first.id.clone(), channel_id.to_owned());
         Some(
+            // lint-allow(custom-badge, custom-mark): ui::callout is inline, not floating over a list; ui::floating_bar docks at the foot, this one hangs from the feed's top
             ui::row()
                 .id("unread-bar")
                 // Floats over the feed: the messages under it must not take its hover or clicks.
@@ -328,6 +334,7 @@ impl Waffle {
                     button("unread-jump")
                         .flex_1()
                         .min_w_0()
+                        // lint-allow(raw-margin): optical, pulls the jump button's wash to the bar's edge past its pl_3
                         .ml_neg_2()
                         .child(Icon::new(Glyph::ArrowUp).size(ui::ICON_MD))
                         .child(ui::line(label))
@@ -337,6 +344,7 @@ impl Waffle {
                 // Read now; the NEW line stays until the channel is left or you post, as Discord's does.
                 .child(button("unread-read").child("Mark as read").child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD)).on_click(cx.listener(move |this, _, _, cx| {
                     this.mark_channel_read(&channel_id, cx);
+                    // lint-allow(global-notify): reading a channel clears its unread bar here and its dot in the nav column
                     cx.notify();
                 })))
                 .into_any_element(),
@@ -585,7 +593,7 @@ pub(crate) struct RowContext {
     pub(crate) me: Option<User>,
     // Files going out with pending messages, by nonce, and their tile pictures.
     uploads: HashMap<String, crate::UploadJob>,
-    previews: HashMap<std::path::PathBuf, Option<std::sync::Arc<gpui_kit::RenderImage>>>,
+    previews: HashMap<std::path::PathBuf, Option<std::sync::Arc<gpui_kit::RenderImage>>>, // lint-allow(unbounded-growth): a snapshot cloned per frame, one entry per pending upload
     // Settings › Chat: Discord's render_embeds and render_reactions.
     embeds: bool,
     reactions: bool,
@@ -599,15 +607,15 @@ pub(crate) struct RowContext {
     underline_links: bool,
     name_styles: bool,
     media: MediaPrefs,
-    names: HashMap<String, String>,
+    names: HashMap<String, String>, // lint-allow(unbounded-growth): a per-frame snapshot of the visible messages' authors
     // The chat's surface, for drawing authors' display-name styles on; None in a server.
     style_ground: Option<Hsla>,
     colors: HashMap<String, Hsla>,
     mentions_me: std::collections::HashSet<String>,
     // Replied-to messages by someone blocked or ignored, by id: the reply bar doesn't quote them.
     hidden_replies: HashMap<String, Hidden>,
-    pub(crate) channel_names: HashMap<String, String>,
-    role_names: HashMap<String, String>,
+    pub(crate) channel_names: HashMap<String, String>, // lint-allow(unbounded-growth): a per-frame snapshot of this server's channels
+    role_names: HashMap<String, String>, // lint-allow(unbounded-growth): a per-frame snapshot of this server's roles
     mention_fill: Hsla,
     mention_hover: Hsla,
     mention_ink: Hsla,

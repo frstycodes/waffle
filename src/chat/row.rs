@@ -1,5 +1,8 @@
 use super::*;
 
+// The fold line's left inset: the row's own side padding plus the content column's.
+const FOLD_INSET: f32 = 16. + CONTENT_INSET;
+
 // An avatar column and a content column; a continuation shows its time in the gutter on hover, and the
 // toolbar floats at the row's top right. Compact display puts each message on one line after its time.
 pub(super) fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElement {
@@ -43,7 +46,7 @@ pub(super) fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowCon
         .children(lead)
         .children(components::interaction_status(message, ctx, cx))
         .children(crate::announcements::publish_bump(message, mine, &ctx.announce, ctx.this.clone(), cx))
-        .children(message.forward.as_ref().map(|original| forward_card(original, ctx, cx)))
+        .children(message.forward.as_ref().map(|original| forward_quote(original, ctx, cx)))
         .children(media.map(|m| div().when(pending, |d| d.opacity(0.6)).child(m)))
         .children(message.stickers.iter().map(|s| div().when(pending, |d| d.opacity(0.6)).child(crate::stickers::in_chat(s, ctx.media.stickers.plays(ctx.hovers(message)), cx))))
         .children(message.poll.as_ref().map(|p| poll_card(message, p, ctx, cx)))
@@ -80,6 +83,7 @@ pub(super) fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowCon
     let toolbar = hovered.then(|| actions(message, mine, ctx, cx));
     if ctx.compact {
         let line = ui::row().items_stretch().gap_2().child(compact_time(message, ctx, cx)).child(body);
+        // lint-allow(raw-margin): the gap between groups is the reader's setting, and rows are list items with no parent gap to carry it
         return inset(with_message_menu(row.when(starts_group, |r| r.mt(px(ctx.group_spacing))).child(line).children(toolbar), message, ctx), mention);
     }
     if !starts_group {
@@ -92,12 +96,14 @@ pub(super) fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowCon
             .text_color(palette::faint(cx))
             .whitespace_nowrap()
             .map(|g| match message.state {
+                // lint-allow(raw-margin): optical, drops the clock to the text's baseline
                 SendState::Sending => g.child(Icon::new(Glyph::Clock).size(ui::ICON_SM).mt_1()),
                 _ => g.when(hovered, |g| g.child(gutter_clock(&message.timestamp))),
             });
         return inset(with_message_menu(row.child(ui::row().items_stretch().gap_4().child(gutter).child(body)).children(toolbar), message, ctx), mention);
     }
     let row = row
+        // lint-allow(raw-margin): the gap between groups is the reader's setting, and rows are list items with no parent gap to carry it
         .mt(px(ctx.group_spacing))
         .pt_1()
         .children(message.reply.as_ref().map(|reply| reply_preview(reply, message.reply_to.clone(), ctx, cx)))
@@ -105,6 +111,7 @@ pub(super) fn message_row(message: &Message, starts_group: bool, ctx: &Rc<RowCon
         .child(
             ui::row().items_stretch()
                 .gap_4()
+                // lint-allow(raw-margin): optical, lines the avatar's top with the name's cap height
                 .child(author_trigger(format!("avatar-{}", message.id), message, ctx).flex_none().mt_0p5().child(crate::layout::decorated_avatar(
                     &message.author.avatar,
                     message.author.decoration.as_deref(),
@@ -147,6 +154,7 @@ pub(super) fn fold_line(first_id: &str, run: &Run, ctx: &Rc<RowContext>, cx: &Ap
         .small()
         .h_7()
         .px_2()
+        // lint-allow(raw-margin): optical, keeps Show's wash off the label before it
         .ml_0p5()
         .text_size(ui::TEXT_SM)
         .font_weight(FontWeight::SEMIBOLD)
@@ -157,9 +165,8 @@ pub(super) fn fold_line(first_id: &str, run: &Run, ctx: &Rc<RowContext>, cx: &Ap
             this.update(cx, |this, cx| this.toggle_fold(key.clone(), cx)).ok();
         });
     let line = ui::row()
-        .mt_1p5()
         .min_h_8()
-        .pl(px(16. + CONTENT_INSET))
+        .pl(px(FOLD_INSET))
         .pr_4()
         .gap_2()
         .text_size(ui::TEXT_SM)
@@ -167,7 +174,7 @@ pub(super) fn fold_line(first_id: &str, run: &Run, ctx: &Rc<RowContext>, cx: &Ap
         .child(Icon::new(glyph).size(ui::ICON_MD))
         .child(label)
         .child(toggle);
-    inset(line.into_any_element(), false)
+    inset(div().pt_1p5().child(line).into_any_element(), false)
 }
 
 // A search result: the message as the feed draws it (head, text, media, embeds, files), without the
@@ -181,12 +188,13 @@ pub(crate) fn search_hit(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) 
         .text_color(palette::text(cx))
         .child(message_head(message, ctx, cx))
         .children(content(message, ctx, cx))
-        .children(message.forward.as_ref().map(|original| forward_card(original, ctx, cx)))
+        .children(message.forward.as_ref().map(|original| forward_quote(original, ctx, cx)))
         .children(media.map(|m| div().flex_none().child(m)))
         .children(message.embeds.iter().enumerate().map(|(i, e)| embed_card(e, None, message.reply_to.as_deref(), format!("hit-embed-{}-{i}", message.id), ctx, cx)))
         .children(files(message, ctx, cx));
     ui::row().items_stretch()
         .gap_3()
+        // lint-allow(raw-margin): optical, lines the avatar's top with the name's cap height
         .child(ui::avatar(message.author.avatar.clone(), 36.).flex_none().mt_0p5())
         .child(body)
 }
@@ -210,7 +218,7 @@ pub(super) fn hit_media(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -
             div().flex_none().w(px(w)).h(px(h)).child(media_tile(message, i, (w, h), ui::all(RADIUS_MD), Paging::Feed, ctx, cx)).into_any_element()
         })
         .collect();
-    Some(ui::row().items_stretch().mt_2().flex_wrap().gap_1().children(tiles).into_any_element())
+    Some(ui::row().items_stretch().pt_2().flex_wrap().gap_1().children(tiles).into_any_element())
 }
 
 // The frame for a picture of `size` within `max`: its own shape, never larger than it is, with the shape
@@ -265,7 +273,7 @@ pub(super) fn author(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Div {
         .children(dot.map(role_dot))
         .children(message.author.tag.as_ref().map(|tag| guild_tag(tag, cx)))
         .when(crate::announcements::is_crosspost(message), |h| h.child(crate::announcements::server_tag(message, cx)))
-        .when(message.author.bot && !crate::announcements::is_crosspost(message), |h| h.child(ui::badge(palette::accent_soft(cx), palette::accent_ink(cx)).h(px(18.)).px_1p5().gap(px(3.)).child(Icon::new(Glyph::Checkmark).size(px(11.))).child("APP")))
+        .when(message.author.bot && !crate::announcements::is_crosspost(message), |h| h.child(ui::tag_with(Glyph::Checkmark, "APP", cx)))
 }
 
 // Not verified: Discord's compact time column and avatar; 52px and 18px in design/explore-settings.html,

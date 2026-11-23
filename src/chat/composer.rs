@@ -1,5 +1,22 @@
 use super::*;
 
+// The composer row's vertical padding, and the glass card's blur and hairline edge.
+const ROW_PAD_Y: f32 = 7.;
+const GLASS_BLUR: f32 = 24.;
+const GLASS_EDGE: f32 = 0.5;
+// The typing pill's blur.
+const PILL_BLUR: f32 = 16.;
+// A tray tile's tag gap, picture height and card width.
+const TAG_GAP: f32 = 3.;
+const WELL_HEIGHT: f32 = 140.;
+const TRAY_CARD_WIDTH: f32 = 184.;
+// The popups above the composer: the lift off its top edge, Hold Up!'s side padding, the suggestion detail's
+// widest, and the list's tallest.
+const POPUP_LIFT: f32 = 9.;
+const HOLD_UP_PAD_X: f32 = 18.;
+const SUGGEST_DETAIL_MAX: f32 = 180.;
+const SUGGEST_MAX_H: f32 = 340.;
+
 impl Waffle {
     pub(crate) fn render_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focused = self.composer.read(cx).focus_handle(cx).is_focused(window);
@@ -9,33 +26,33 @@ impl Waffle {
         let locked = self.locked_row(cx);
         let row = ui::row()
             .min_h_12()
-            .py(px(7.))
+            .py(px(ROW_PAD_Y))
             .px_1p5()
             .items_end()
             .gap_1()
             .child(ui::icon_button("attach", Glyph::PlusCircle, "Upload a file or create a poll", cx).on_click(cx.listener(|this, _, window, cx| this.open_menu(window.mouse_position(), this.attach_entries(), cx))))
             // XSmall gives the editor 0/4px padding of its own; with these, the design's 4/6.
-            .child(self.composer_field(strong, cx))
-            .children(self.slowmode_chip(cx))
+            .child(self.composer_editor(strong, cx))
+            .children(self.slowmode_timer(cx))
             .children([(ComposerPicker::Gifs, "composer-gif", Glyph::Gif, "Open GIF picker"), (ComposerPicker::Stickers, "composer-sticker", Glyph::Sticker, "Open sticker picker"), (ComposerPicker::Emoji, "composer-emoji", Glyph::Emoji, "Select Emoji")].map(|(picker, id, glyph, label)| {
                 ui::icon_button(id, glyph, label, cx).toggled(open_picker == Some(picker), cx).on_click(cx.listener(move |this, _, window, cx| this.show_composer_picker(picker, window, cx)))
             }))
             // Not verified: the tooltip; Discord's chat box shows its button only when this setting is on.
             .when(self.prefs.send_button, |r| r.child(ui::icon_button("composer-send", Glyph::PaperPlane, "Send Message", cx).disabled(!self.has_draft).on_click(cx.listener(|this, _, window, cx| this.submit(false, window, cx)))))
             .child(self.composer_activities_button(cx));
+        // lint-allow(custom-surface): ui::surface has no glass fill (translucent, blurred, saturated) over a scrolling feed
         let card = ui::col()
             .relative()
-            .mx_4()
             .squircle(RADIUS_LG)
             // Glass: the feed shows through, blurred, as it scrolls under.
             .bg(palette::surface(Level::Raised, cx).opacity(0.72))
-            .backdrop_blur(px(24.))
+            .backdrop_blur(px(GLASS_BLUR))
             .backdrop_saturate(1.6)
             // The ring-less elevation: the hairline below is the edge, and the pop shadow's own 1px ring
             // on top of it drew a line three times as heavy as the design's.
             .shadow(ui::shadow_pop_on(gpui_kit::transparent_black(), cx))
             // A hairline: one device pixel on Retina; a full point read heavy around the glass.
-            .border(px(0.5))
+            .border(px(GLASS_EDGE))
             .border_color(if focused { palette::line_strong(cx) } else { palette::line(cx) })
             .when(locked.is_none(), |card| {
                 card.children(self.autocomplete_popup(cx))
@@ -53,18 +70,22 @@ impl Waffle {
             0 => card.into_any_element(),
             n => card.with_animation(("composer-shake", n), Animation::new(crate::motion::SHAKE), |card, t| card.left(px(crate::motion::shake(t)))).into_any_element(),
         };
+        // The card's side inset, as padding of the box that holds it (outside the shake, which moves the card itself).
+        let card = ui::col().px_4().child(card);
         let guide_bar = self.channel.clone().and_then(|channel| self.guide_action_bar(&channel, cx));
         let typers = self.typers();
         let names: Vec<&str> = typers.iter().map(|t| t.name.as_str()).collect();
         // A glass pill just above the composer, out of the flow, so the box never moves when someone types.
         // Out of the way while suggestions, Hold Up! or the command picker are open, which rise over the same spot.
         let typing = (!names.is_empty() && self.autocomplete.is_none() && self.hold_up.is_none() && !self.command_picker.is_open() && !self.command_typed(cx)).then(|| {
+            // lint-allow(custom-badge, custom-mark): ui::pill is in the flow and solid; this one floats out of it over the feed with a blurred glass fill
             ui::row().absolute().left_7().top_neg_7().max_w(gpui_kit::relative(0.6)).h_6().px_2p5().gap_2().rounded_full()
                 .bg(palette::surface(Level::Raised, cx).opacity(0.72))
-                .backdrop_blur(px(16.))
+                .backdrop_blur(px(PILL_BLUR))
                 .text_size(ui::TEXT_XS)
                 .text_color(muted)
                 .child(ui::bars("typing", palette::accent_ink(cx), 12.))
+                // lint-allow(raw-truncate): ui::line takes plain text, and this line carries bold runs
                 .child(div().min_w_0().truncate().child(emphasised(&typing_parts(&names), strong)))
         });
         let (height, this) = (self.composer_height.clone(), cx.weak_entity());
@@ -73,14 +94,15 @@ impl Waffle {
                 let h = f32::from(bounds.size.height);
                 if (h - height.get()).abs() > 0.5 {
                     height.set(h);
-                    this.update(cx, |_, cx| cx.notify()).ok();
+                    // The feed's bottom padding and the jump button follow the composer's height: the main column's.
+                    this.update(cx, |this, cx| this.redraw(crate::part::Column::Main, cx)).ok();
                 }
             },
             |_, _, _, _| {},
         )
         .absolute()
         .inset_0();
-        let note = self.send_error.clone().map(|error| div().mx_4().mt_1p5().text_size(ui::TEXT_XS).text_color(palette::danger_ink(cx)).child(error));
+        let note = self.send_error.clone().map(|error| div().px_4().pt_1p5().text_size(ui::TEXT_XS).text_color(palette::danger_ink(cx)).child(error));
         ui::col()
             .absolute()
             .left_0()
@@ -129,8 +151,8 @@ impl Waffle {
             .child(div().h_2())
     }
 
-    pub(super) fn composer_field(&self, ink: Hsla, cx: &mut Context<Self>) -> AnyElement {
-        let field = Textarea::new(&self.composer).appearance(false).with_size(Size::XSmall).text_size(ui::TEXT_LEAD).line_height(ui::LINE_LEAD).text_color(ink).token(composer_chip(cx));
+    pub(super) fn composer_editor(&self, ink: Hsla, cx: &mut Context<Self>) -> AnyElement {
+        let field = Textarea::new(&self.composer).appearance(false).with_size(Size::XSmall).text_size(ui::TEXT_LEAD).line_height(ui::LINE_LEAD).text_color(ink).token(composer_tokens(cx));
         // XSmall gives the editor 0/4px padding of its own; with these, the design's 4/6.
         // The option boxes paint after the field: they read where its text landed this frame.
         div().relative().flex_1().min_w_0().child(field.py_1().px_0p5()).children(self.option_boxes(cx)).into_any_element()
@@ -189,11 +211,12 @@ impl Waffle {
             .on_click(cx.listener(|this, _, _, cx| {
                 this.list.scroll_to_end();
                 this.scrolled_up = false;
-                cx.notify();
+                this.redraw(crate::part::Column::Main, cx);
             }));
         Some(ui::row().items_stretch().absolute().left_0().right_0().top_neg_11().justify_center().child(capsule).with_animation(
             "jump-to-present-in",
             Animation::new(ui::DUR_POP).with_easing(gpui_kit::ease_out_quint()),
+            // lint-allow(raw-margin, raw-px): the entrance slides 8px as it fades, a margin computed from the animation's progress
             |d, t| d.opacity(t).mt(px((1. - t) * 8.)),
         ))
     }
@@ -206,18 +229,19 @@ impl Waffle {
             (_, Some(_)) => emphasised(&[("Editing message".into(), true)], strong),
             _ => return None,
         };
-        let bar = bar_row(cx).child(div().min_w_0().truncate().child(label).flex_1());
+        let bar = bar_row(cx).child(bar_label(label));
         let bar = match self.replying.is_some() {
-            true => bar.child(self.ping_toggle(cx)),
+            true => bar.child(self.ping_mention(cx)),
             false => bar.child(ui::key_hint(ui::kbd("Esc", cx), "Cancel", cx)).child(ui::key_hint(ui::kbd("Enter", cx), "Save", cx)),
         };
         Some(bar.child(ui::icon_button("cancel-compose", Glyph::X, "Cancel", cx).small().on_click(cx.listener(|this, _, window, cx| this.cancel_compose(window, cx)))))
     }
 
     // Whether the reply notifies its author; it remembers your last choice.
-    pub(super) fn ping_toggle(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    pub(super) fn ping_mention(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let on = self.reply_ping;
         let hover = palette::hover(cx);
+        // lint-allow(custom-button): ui::button's Ghost tone is 30px at its smallest, this one sits in a 28px bar and takes the accent ink when on
         ui::row()
             .id("reply-ping")
             .h_7()
@@ -234,7 +258,7 @@ impl Waffle {
             .tooltip(|window, cx| ui::tip("Mention the author of this message", window, cx))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.reply_ping = !this.reply_ping;
-                cx.notify();
+                this.redraw(crate::part::Column::Main, cx);
             }))
     }
 
@@ -260,12 +284,12 @@ impl Waffle {
             .absolute()
             .left_1p5()
             .bottom_1p5()
-            .gap(px(3.))
+            .gap(px(TAG_GAP))
             .when(has_alt, |t| t.child(media_label("Alt")))
             .when(file.spoiler, |t| t.child(media_label("Spoiler")));
         let well = ui::row()
             .relative()
-            .h(px(140.))
+            .h(px(WELL_HEIGHT))
             .flex_none()
             .overflow_hidden()
             .squircle(RADIUS_MD)
@@ -301,7 +325,7 @@ impl Waffle {
         ui::col()
             .id(SharedString::from(format!("tray-card-{i}")))
             .relative()
-            .w(px(184.))
+            .w(px(TRAY_CARD_WIDTH))
             .flex_none()
             .p_1p5()
             .gap_1p5()
@@ -380,10 +404,11 @@ impl Waffle {
         let edit = ui::button("hold-up-edit", ui::Tone::Secondary, cx).gap_2().child("Edit Message").child(ui::kbd("Esc", cx)).on_click(cx.listener(|this, _, window, cx| {
             this.hold_up = None;
             this.composer.update(cx, |state, cx| state.focus(window, cx));
-            cx.notify();
+            this.redraw(crate::part::Column::Main, cx);
         }));
         let send = ui::button("hold-up-send", ui::Tone::Primary, cx).gap_2().child("Send Now").child(ui::kbd("Enter", cx)).on_click(cx.listener(|this, _, window, cx| this.submit(true, window, cx)));
         Some(
+            // lint-allow(custom-badge, custom-mark, custom-surface): ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
             ui::col()
                 .id("hold-up")
                 .occlude()
@@ -391,9 +416,10 @@ impl Waffle {
                 .left_neg_px()
                 .right_neg_px()
                 .bottom(gpui_kit::relative(1.))
-                .mb(px(9.))
+                // lint-allow(raw-margin): `bottom` is a fraction of the card's height, which can't also take a pixel lift
+                .mb(px(POPUP_LIFT))
                 .py_4()
-                .px(px(18.))
+                .px(px(HOLD_UP_PAD_X))
                 .gap_2p5()
                 .squircle(RADIUS_LG)
                 .bg(palette::surface(Level::Overlay, cx))
@@ -424,7 +450,8 @@ impl Waffle {
         };
         let rows = auto.items.iter().enumerate().map(|(i, item)| {
             let lead = suggest_lead(&item.lead, cx);
-            let detail = item.detail.clone().map(|d| ui::line(d).flex_none().max_w(px(180.)).text_size(ui::TEXT_XS).text_color(muted));
+            let detail = item.detail.clone().map(|d| ui::line(d).flex_none().max_w(px(SUGGEST_DETAIL_MAX)).text_size(ui::TEXT_XS).text_color(muted));
+            // lint-allow(custom-button): ui::menu_row fills on hover but has no persistent selected state driven by the arrow keys
             ui::row()
                 .id(SharedString::from(format!("suggest-{i}")))
                 .min_h_10()
@@ -448,15 +475,17 @@ impl Waffle {
         });
         // msg-pop: it grows from 95% at its bottom centre as it fades in.
         Some(
+            // lint-allow(custom-badge, custom-mark, custom-surface): ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
             ui::col()
                 .absolute()
                 .left_neg_px()
                 .right_neg_px()
                 .bottom(gpui_kit::relative(1.))
-                .mb(px(9.))
+                // lint-allow(raw-margin): `bottom` is a fraction of the card's height, which can't also take a pixel lift
+                .mb(px(POPUP_LIFT))
                 .p_1p5()
                 .gap_0p5()
-                .max_h(px(340.))
+                .max_h(px(SUGGEST_MAX_H))
                 .squircle(RADIUS_LG)
                 .bg(palette::surface(Level::Overlay, cx))
                 .shadow(ui::shadow_pop(cx))

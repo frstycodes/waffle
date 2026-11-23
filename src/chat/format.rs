@@ -190,6 +190,12 @@ pub(crate) fn bar_row(cx: &App) -> Div {
         .text_color(palette::muted(cx))
 }
 
+// A reply or queued bar's label: it takes the bar's room and truncates. It carries bold runs, which ui::line's plain text can't.
+pub(crate) fn bar_label(label: StyledText) -> Div {
+    // lint-allow(raw-truncate): ui::line takes plain text, and this label carries bold runs
+    div().min_w_0().truncate().child(label).flex_1()
+}
+
 // A keycap and what it does, for the edit bar.
 // A suggestion's face: an avatar, a channel's #, an emoji.
 pub(crate) fn suggest_lead(lead: &crate::SuggestLead, cx: &App) -> AnyElement {
@@ -201,14 +207,28 @@ pub(crate) fn suggest_lead(lead: &crate::SuggestLead, cx: &App) -> AnyElement {
     }
 }
 
-// Placeholders shaped like the real transcript, sweeping in step.
+// A placeholder name bar's width and the bars' corner.
+const SKELETON_NAME: f32 = 120.;
+const SKELETON_RADIUS: f32 = 6.;
+// The unread rule's stub under the NEW tag: how far it runs and where it sits down the tag.
+const UNREAD_STUB: f32 = 9.;
+const UNREAD_STUB_TOP: f32 = 7.5;
+
+// Placeholders shaped like the real transcript.
 pub(super) fn skeleton(cx: &App) -> AnyElement {
-    let bar = palette::selected(cx);
-    let row = |w: f32| {
-        ui::row().items_stretch()
+    let row = |(i, w): (usize, f32)| {
+        ui::row()
+            .items_stretch()
             .gap_4()
-            .child(div().size(px(AVATAR)).flex_none().rounded_full().bg(bar))
-            .child(ui::col().flex_1().gap_2().pt_1().child(div().w(px(120.)).h_3().rounded_full().bg(bar)).child(div().w(px(w)).h_3().rounded_full().bg(bar)))
+            .child(ui::skeleton_circle(("skeleton-avatar", i), AVATAR, cx))
+            .child(
+                ui::col()
+                    .flex_1()
+                    .gap_2()
+                    .pt_1()
+                    .child(ui::skeleton(("skeleton-name", i), SKELETON_RADIUS, cx).w(px(SKELETON_NAME)).h_3())
+                    .child(ui::skeleton(("skeleton-line", i), SKELETON_RADIUS, cx).w(px(w)).h_3()),
+            )
     };
     ui::col()
         .size_full()
@@ -216,8 +236,7 @@ pub(super) fn skeleton(cx: &App) -> AnyElement {
         .pb_4()
         .justify_end()
         .gap_6()
-        .children([360., 220., 420., 280.].map(row))
-        .with_animation("skeleton", Animation::new(Duration::from_millis(1100)).repeat(), |el, t| el.opacity(0.6 + 0.4 * (t * TAU).cos().abs()))
+        .children([360., 220., 420., 280.].into_iter().enumerate().map(row))
         .into_any_element()
 }
 
@@ -232,20 +251,27 @@ pub(super) fn unread_line() -> AnyElement {
         .w_10()
         .h_4()
         // The rule runs on under the tag to its body, so it meets the sharp tip at full thickness.
-        .child(div().absolute().left_neg_px().w(px(9.)).top(px(7.5)).h(ui::HAIRLINE).bg(alert))
+        // lint-allow(custom-divider): ui::inset_rule runs along an edge in the neutral line colour; this stub carries the alert rule on under the NEW tag
+        .child(div().absolute().left_neg_px().w(px(UNREAD_STUB)).top(px(UNREAD_STUB_TOP)).h(ui::HAIRLINE).bg(alert))
         .child(gpui_kit::svg().path(crate::icons::NEW_TAG).absolute().inset_0().size_full().text_color(alert))
         .child(ui::row().absolute().top_0().bottom_0().left_2().right_0().justify_center().text_color(gpui_kit::white()).text_size(ui::TEXT_XXS).font_weight(FontWeight::BOLD).child("NEW"));
-    ui::row().w_full().px_4().my_2().child(div().flex_1().h(ui::HAIRLINE).bg(alert)).child(tag).into_any_element()
+    let row = ui::row().w_full().px_4().child(rule(alert)).child(tag);
+    div().py_2().child(row).into_any_element()
+}
+
+// One rule running to its neighbour: a day divider's line, or the unread line in alert red.
+fn rule(color: Hsla) -> Div {
+    // lint-allow(custom-divider): ui::divider takes a 'static label in the neutral line colour, and these two take a formatted date or the alert colour
+    div().flex_1().h(ui::HAIRLINE).bg(color)
 }
 
 // Between dates, inside the feed's gutters, never edge to edge.
+// lint-allow(custom-component): ui::divider takes a 'static label, and a day's label is formatted from the message's date
 pub(super) fn day_divider(timestamp: &str, cx: &App) -> AnyElement {
-    let line = || div().flex_1().h(ui::HAIRLINE).bg(palette::line(cx));
-    ui::row()
+    let line = || rule(palette::line(cx));
+    let row = ui::row()
         .w_full()
         .px_4()
-        .mt_4()
-        .mb_2()
         .gap_2p5()
         .whitespace_nowrap()
         .text_size(ui::TEXT_XS)
@@ -253,8 +279,8 @@ pub(super) fn day_divider(timestamp: &str, cx: &App) -> AnyElement {
         .text_color(palette::faint(cx))
         .child(line())
         .child(day(timestamp).map(|d| d.format("%A, %B %-d, %Y").to_string()).unwrap_or_default())
-        .child(line())
-        .into_any_element()
+        .child(line());
+    div().pt_4().pb_2().child(row).into_any_element()
 }
 
 pub(super) fn empty_state(id: &'static str, art: impl Into<ui::Art>, title: &'static str, detail: impl Into<SharedString>, cx: &App) -> AnyElement {
@@ -342,6 +368,7 @@ pub(crate) fn format_size(bytes: u64) -> String {
 // A breadcrumb back up the hierarchy: muted until hovered.
 pub(super) fn crumb(id: &'static str, cx: &App) -> Stateful<Div> {
     let (hover, strong) = (palette::hover(cx), palette::strong(cx));
+    // lint-allow(custom-button): ui::button has no breadcrumb look, muted ink that strengthens on hover and takes the surrounding type
     ui::row()
         .id(id)
         .occlude()

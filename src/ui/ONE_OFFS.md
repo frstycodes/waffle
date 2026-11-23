@@ -4,6 +4,12 @@
 Every place app code was let off a rule, and why. Before writing an exception, look here for the same kind of
 thing: a second copy of a one-off is a missing design-system component or variant, and belongs in src/ui/.
 
+## raw-px
+
+_Spacing: gpui's scale (gap_2, p_1p5, mt_3 … see ui/tokens.rs). Sizes: a ui token (TEXT_*, ICON_*, AVATAR_*, RADIUS_*, HAIRLINE) or a named const._
+
+- `src/chat/composer.rs` — the entrance slides 8px as it fades, a margin computed from the animation's progress
+
 ## raw-floating
 
 _Floating surface: ui::floating / ui::floating_at. They occlude, so nothing under them takes the pointer._
@@ -41,6 +47,7 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/activity_launcher.rs` — the launcher is drawn by the root, over the columns
 - `src/activity_launcher.rs` — the launcher is drawn by the root, over the columns
 - `src/call/fit.rs` — the stage is the main column's, or full screen the root's
+- `src/chat.rs` — reading a channel clears its unread bar here and its dot in the nav column
 - `src/forum.rs` — notifies the measured height's own entity, not Waffle
 - `src/forum.rs` — notifies the measured width's own entity, not Waffle
 - `src/overlays.rs` — notifies the hovered entry's own entity, not Waffle
@@ -53,3 +60,113 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
+
+## custom-button
+
+_Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_row, ui::settings_choice or ui::pressable. Missing a look? Give the component a Tone, size or slot (src/ui/control.rs) and use it._
+
+- `src/chat.rs` — ui::button has no tone that washes the accent over a tinted bar
+- `src/chat/composer.rs` — ui::button's Ghost tone is 30px at its smallest, this one sits in a 28px bar and takes the accent ink when on
+- `src/chat/composer.rs` — ui::menu_row fills on hover but has no persistent selected state driven by the arrow keys
+- `src/chat/embeds.rs` — ui::button's smallest Ghost is 30px with the muted ink; this is a 26px toggle in the accent ink that hangs 6px left under the text
+- `src/chat/format.rs` — ui::button has no breadcrumb look, muted ink that strengthens on hover and takes the surrounding type
+
+## custom-surface
+
+_Floating or raised surface: ui::surface, ui::floating, ui::floating_bar, ui::toast, ui::dialog or ui::settings_card. Missing a level, radius or inset? Add it as an option there._
+
+- `src/chat/attachments.rs` — ui::toolbar occludes the wheel too, and this bar must let the feed scroll under it; it also rides above its row's edge
+- `src/chat/composer.rs` — ui::surface has no glass fill (translucent, blurred, saturated) over a scrolling feed
+- `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
+- `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
+- `src/chat/media.rs` — ui::surface sits in the flow; this popout hangs absolutely over a gallery tile and sizes itself
+
+## custom-divider
+
+_Divider: ui::divider or ui::inset_rule._
+
+- `src/chat/attachments.rs` — ui::divider is a horizontal rule, and this vertical seam sits 2px clear of the buttons beside it
+- `src/chat/format.rs` — ui::divider takes a 'static label in the neutral line colour, and these two take a formatted date or the alert colour
+- `src/chat/format.rs` — ui::inset_rule runs along an edge in the neutral line colour; this stub carries the alert rule on under the NEW tag
+
+## custom-badge
+
+_Label: ui::badge, ui::tag, ui::count_badge, ui::pill or ui::role_chip; add a variant there if none fits._
+
+- `src/chat.rs` — ui::callout is inline, not floating over a list; ui::floating_bar docks at the foot, this one hangs from the feed's top
+- `src/chat/composer.rs` — ui::pill is in the flow and solid; this one floats out of it over the feed with a blurred glass fill
+- `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
+- `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
+- `src/chat/embeds.rs` — ui::badge is a small solid label; this is a result row with its share drawn as a fill behind the text
+- `src/chat/embeds.rs` — ui::card is a clickable Control; an embed is a static quote card with a coloured bar down its edge
+
+## custom-mark
+
+_A mark on a face's or control's corner: ui::badged with a Spot (it places the mark for the face's shape and cuts its ring). Missing a host shape or ring style? Add it to src/ui/face.rs._
+
+- `src/chat.rs` — ui::callout is inline, not floating over a list; ui::floating_bar docks at the foot, this one hangs from the feed's top
+- `src/chat/attachments.rs` — ui::toolbar occludes the wheel too, and this bar must let the feed scroll under it; it also rides above its row's edge
+- `src/chat/composer.rs` — ui::pill is in the flow and solid; this one floats out of it over the feed with a blurred glass fill
+- `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
+- `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
+- `src/chat/embeds.rs` — ui::progress_bar draws a thin track; this fill runs behind the row's text, as wide as the share
+- `src/chat/parts.rs` — ui::badged marks a face's corner; this is a connector line drawn from the preview to the avatar
+- `src/text_file.rs` — ui::more_below follows a scroll handle, and this preview never scrolls while clipped; its fade is always on
+
+## raw-truncate
+
+_One-line text: ui::line(text), or ui::truncating(key, text) when the cut text should show in a tooltip._
+
+- `src/chat/composer.rs` — ui::line takes plain text, and this line carries bold runs
+- `src/chat/format.rs` — ui::line takes plain text, and this label carries bold runs
+
+## raw-margin
+
+_Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::row / ui::col / grid; space inside is the parent's padding; pushing to the end is flex_1 or justify_between. Margins stay near 0: an optical nudge carries lint-allow(raw-margin) with why._
+
+- `src/chat.rs` — an optical 4px past the tool buttons, which the row's own gap_0p5 can't give one child
+- `src/chat.rs` — optical, pulls the jump button's wash to the bar's edge past its pl_3
+- `src/chat/attachments.rs` — ui::divider is a horizontal rule, and this vertical seam sits 2px clear of the buttons beside it
+- `src/chat/composer.rs` — `bottom` is a fraction of the card's height, which can't also take a pixel lift
+- `src/chat/composer.rs` — `bottom` is a fraction of the card's height, which can't also take a pixel lift
+- `src/chat/composer.rs` — the entrance slides 8px as it fades, a margin computed from the animation's progress
+- `src/chat/embeds.rs` — optical, the toggle's wash hangs left so its label lines up with the text above
+- `src/chat/embeds.rs` — optical, the toggle's wash hangs left so its label lines up with the text above
+- `src/chat/embeds.rs` — pushes the buttons to the end of a wrapping footer, where flex_1 would take the footer's text space
+- `src/chat/markdown.rs` — the text view's code-block style takes the design's `.codeblock` top margin, it has no parent gap to carry it
+- `src/chat/parts.rs` — optical, lines the avatar's top with the name's cap height
+- `src/chat/row.rs` — optical, drops the clock to the text's baseline
+- `src/chat/row.rs` — optical, keeps Show's wash off the label before it
+- `src/chat/row.rs` — optical, lines the avatar's top with the name's cap height
+- `src/chat/row.rs` — optical, lines the avatar's top with the name's cap height
+- `src/chat/row.rs` — the gap between groups is the reader's setting, and rows are list items with no parent gap to carry it
+- `src/chat/row.rs` — the gap between groups is the reader's setting, and rows are list items with no parent gap to carry it
+- `src/system_message.rs` — optical, sets the time 2px clear of the sentence beyond the row's word gap
+- `src/system_message.rs` — pulls a glued word back over the row's gap_x, which a gap can't take away from one child
+- `src/system_message/automod.rs` — optical, lines the shield's top with the name's cap height
+
+## custom-component
+
+_A function named like a component builds it from the design system: wrap the ui:: component (a domain wrapper is fine), or add the component to src/ui/ first (src/ui/CATALOG.md lists what exists)._
+
+- `src/chat/format.rs` — ui::divider takes a 'static label, and a day's label is formatted from the message's date
+- `src/chat/markdown.rs` — ui::badge is a 20px block, and a mention must run inside a line of text at its size
+
+## detached-task
+
+_A detached task outlives its view: keep the Task in the view so dropping the view cancels it (CLAUDE.md, Idiomatic Rust). Detach only a task that ends itself, and say how in lint-allow(detached-task); hold a WeakEntity, never an Entity, in it._
+
+- `src/chat_guard.rs` — the loop ends itself when tick_slowmode says the countdowns are done, or when the app is gone
+- `src/system_message.rs` — ends when the greet request answers, or at once if the app is gone
+- `src/text_file.rs` — ends when the fetch finishes, or at once if the app is gone
+- `src/text_file.rs` — ends when the fetch finishes, or at once if the app is gone
+
+## unbounded-growth
+
+_A collection field that the app grows and never shrinks holds memory for the whole session: cap it (evict, truncate, an LRU), or clear it when what it's for goes away. A bound that holds by nature carries lint-allow(unbounded-growth) saying it ("one per joined server")._
+
+- `src/chat.rs` — a per-frame snapshot of the visible messages' authors
+- `src/chat.rs` — a per-frame snapshot of this server's channels
+- `src/chat.rs` — a per-frame snapshot of this server's roles
+- `src/chat.rs` — a snapshot cloned per frame, one entry per pending upload
+- `src/drafts.rs` — one pick per option of one typed command, 25 at most (Discord's cap)

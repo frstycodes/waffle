@@ -1,5 +1,13 @@
 use super::*;
 
+// An embed description's fade height and its Show more toggle's height; the play disc over a video still, its
+// glyph and the Open Link corner button's size.
+const EMBED_FADE: f32 = 72.;
+const SHOW_MORE_HEIGHT: f32 = 26.;
+const PLAY_DISC: f32 = 56.;
+const PLAY_ICON: f32 = 26.;
+const OPEN_LINK_SIZE: f32 = 32.;
+
 // A link preview: it leads with the site, never a coloured bar, one surface step from the feed. Link
 // previews keep a thumbnail at the right; large images run the card's width.
 // Previews of the Discord links the message carries (link_preview.rs).
@@ -98,15 +106,18 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
                     .when(!open_full, |d| d.max_h(px(EMBED_CLIP)).overflow_hidden())
                     .child(md("description", text))
                     // The fade says there is more; it ends in the card's own fill.
-                    .when(!open_full, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(px(72.)).bg(linear_gradient(180., linear_color_stop(fill.opacity(0.), 0.), linear_color_stop(fill, 1.))))),
+                    .when(!open_full, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(px(EMBED_FADE)).bg(linear_gradient(180., linear_color_stop(fill.opacity(0.), 0.), linear_color_stop(fill, 1.))))),
             )
             .when(long, |d| {
                 d.child(
+                    // lint-allow(custom-button): ui::button's smallest Ghost is 30px with the muted ink; this is a 26px toggle in the accent ink that hangs 6px left under the text
                     ui::row()
                         .id(SharedString::from(more.clone()))
+                        // lint-allow(raw-margin): optical, the toggle's wash hangs left so its label lines up with the text above
                         .mt_0p5()
+                        // lint-allow(raw-margin): optical, the toggle's wash hangs left so its label lines up with the text above
                         .ml_neg_1p5()
-                        .h(px(26.))
+                        .h(px(SHOW_MORE_HEIGHT))
                         .px_1p5()
                         .squircle(RADIUS_XS)
                         .text_size(ui::TEXT_XS)
@@ -128,7 +139,7 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
             })
     });
     let fields = (!embed.fields.is_empty()).then(|| {
-        ui::col().mt_1().gap_2p5().children(field_rows(&embed.fields, embed.thumbnail.is_some()).into_iter().map(|row| {
+        ui::col().pt_1().gap_2p5().children(field_rows(&embed.fields, embed.thumbnail.is_some()).into_iter().map(|row| {
             ui::row().items_stretch().gap_4().children(row.into_iter().map(|i| {
                 let (name, value, _) = &embed.fields[i];
                 ui::col()
@@ -173,16 +184,16 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
     // The bar is the card's own left 4px, following its squircle like a CSS inset shadow: a strip as wide as
     // both left corners, cut to the card's corner shape, painted bar-coloured to 4px and clear past it.
     let cut = EMBED_BAR / EMBED_BAR_STRIP;
-    let strip = ui::edge(div(), Corners { top_left: px(RADIUS_LG - 1.), bottom_left: px(RADIUS_LG - 1.), top_right: px(0.), bottom_right: px(0.) })
+    let strip = ui::edge(div(), Corners { top_left: px(RADIUS_LG - 1.), bottom_left: px(RADIUS_LG - 1.), top_right: Pixels::ZERO, bottom_right: Pixels::ZERO })
         .absolute()
         .left_0()
         .top_0()
         .bottom_0()
         .w(px(EMBED_BAR_STRIP))
         .bg(linear_gradient(90., linear_color_stop(bar, cut), linear_color_stop(bar.opacity(0.), cut + 0.02)));
-    ui::col()
+    // lint-allow(custom-badge): ui::card is a clickable Control; an embed is a static quote card with a coloured bar down its edge
+    let card = ui::col()
         .relative()
-        .mt_2()
         .when(full, |d| d.w(px(width)))
         .when(!full, |d| d.self_start().min_w(px(EMBED_MIN.min(width))))
         .max_w(px(width))
@@ -198,8 +209,8 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
         .line_height(gpui_kit::relative(1.45))
         .child(strip)
         .children(sections.into_iter().flatten())
-        .children(row.filter(|m| !embed.inline() && remove_embeds_shown(m, ctx)).map(|m| remove_embeds_button(m, &key, ctx, cx)))
-        .into_any_element()
+        .children(row.filter(|m| !embed.inline() && remove_embeds_shown(m, ctx)).map(|m| remove_embeds_button(m, &key, ctx, cx)));
+    div().pt_2().child(card).into_any_element()
 }
 
 // While the row is hovered or keyboard-focused.
@@ -288,9 +299,9 @@ pub(super) fn embed_media(embed: &Embed, row: Option<&Message>, key: &str, inner
             .child(ui::edge(img(crate::discord::sized_image(&m.url, w, h, (m.width, m.height))), corners).size_full().object_fit(gpui_kit::ObjectFit::Cover))
             .when(video, |d| {
                 d.child(ui::row().absolute().inset_0().justify_center().child(
-                    ui::row().size(px(56.)).rounded_full().justify_center().bg(on_media(0.62)).text_color(gpui_kit::white()).child(Icon::new(Glyph::Play).size(px(26.))),
+                    ui::row().size(px(PLAY_DISC)).rounded_full().justify_center().bg(on_media(0.62)).text_color(gpui_kit::white()).child(Icon::new(Glyph::Play).size(px(PLAY_ICON))),
                 ))
-                .children(embed.url.clone().map(|url| open_link_button(url, row, &format!("{key}-open-{i}"), ctx)))
+                .children(embed.url.clone().map(|url| open_link_button(url, row, &format!("{key}-open-{i}"), ctx, cx)))
             })
             .on_click(move |_, window, cx| {
                 cx.stop_propagation();
@@ -321,24 +332,16 @@ pub(super) fn embed_media(embed: &Embed, row: Option<&Message>, key: &str, inner
 }
 
 // Discord's Open Link corner on a video still. In a feed row it reports hover, since occluding takes it from the row.
-pub(super) fn open_link_button(url: String, row: Option<&Message>, id: &str, ctx: &RowContext) -> AnyElement {
+pub(super) fn open_link_button(url: String, row: Option<&Message>, id: &str, ctx: &RowContext, cx: &App) -> AnyElement {
     let this = ctx.this.clone();
-    ui::row()
-        .id(SharedString::from(id.to_owned()))
+    ui::icon_button(SharedString::from(id.to_owned()), Glyph::Open, "Open Link", cx)
+        .tone(ui::Tone::OnMedia, cx)
+        .sized(OPEN_LINK_SIZE)
         .absolute()
         .top_2()
         .right_2()
-        .size_8()
-        .justify_center()
-        .squircle(RADIUS_SM)
-        .bg(on_media(0.55))
-        .hover(|s| s.bg(on_media(0.75)))
-        .text_color(gpui_kit::white())
-        .cursor_pointer()
         .occlude()
         .when_some(row, |d, m| d.on_hover(track_message_hover(m, ctx)))
-        .tooltip(|window, cx| ui::tip("Open Link", window, cx))
-        .child(Icon::new(Glyph::Open).size(ui::ICON_LG))
         .on_click(move |_, window, cx| {
             cx.stop_propagation();
             this.update(cx, |this, cx| this.open_link(&url, window, cx)).ok();
@@ -362,8 +365,7 @@ pub(super) fn poll_result(poll: &crate::discord::PollResult, poll_message: Optio
         None => div().text_size(ui::TEXT_XL).line_height(ui::LINE_XL).child("📊").into_any_element(),
     };
     let (this, target) = (ctx.this.clone(), poll_message.map(str::to_owned));
-    ui::row()
-        .mt_2()
+    let card = ui::row()
         .w_full()
         .max_w(px(EMBED_WIDTH.min(ctx.column)))
         .py_3()
@@ -393,8 +395,8 @@ pub(super) fn poll_result(poll: &crate::discord::PollResult, poll_message: Optio
                 cx.stop_propagation();
                 this.update(cx, |this, cx| this.jump_to(id.clone(), cx)).ok();
             }))
-        })
-        .into_any_element()
+        });
+    div().pt_2().child(card).into_any_element()
 }
 
 // A live poll (design/messages.html `.poll`): pick and Vote, or its results once you've voted, peeked or it closed.
@@ -421,6 +423,7 @@ pub(super) fn poll_card(message: &Message, poll: &Poll, ctx: &RowContext, cx: &A
         cx.stop_propagation();
         peek_this.update(cx, |this, cx| this.toggle_poll_results(peek_id.clone(), cx)).ok();
     };
+    // lint-allow(raw-margin): pushes the buttons to the end of a wrapping footer, where flex_1 would take the footer's text space
     let actions = ui::row().items_stretch().ml_auto().gap_2().when(!pending && !closed, |d| match (voted, results) {
         (true, _) => d.child(ui::button(key("remove"), ui::Tone::Ghost, cx).small().child("Remove vote").on_click(act(Vec::new()))),
         (false, true) => d.child(ui::button(key("back"), ui::Tone::Ghost, cx).small().child("Back to vote").on_click(peek)),
@@ -428,8 +431,7 @@ pub(super) fn poll_card(message: &Message, poll: &Poll, ctx: &RowContext, cx: &A
             .child(ui::button(key("peek"), ui::Tone::Ghost, cx).small().child("Show results").on_click(peek))
             .child(ui::button(key("vote"), ui::Tone::Primary, cx).small().disabled(picks.is_empty()).child("Vote").on_click(act(picks.clone()))),
     });
-    ui::col()
-        .mt_2()
+    let card = ui::col()
         .w_full()
         .max_w(px(COLUMN.min(ctx.column)))
         .p_3p5()
@@ -446,8 +448,8 @@ pub(super) fn poll_card(message: &Message, poll: &Poll, ctx: &RowContext, cx: &A
                 .child(div().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(poll.prompt(now))),
         )
         .child(ui::col().gap_1p5().children(options))
-        .child(ui::row().flex_wrap().gap_2().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(poll.foot(now)).child(actions))
-        .into_any_element()
+        .child(ui::row().flex_wrap().gap_2().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(poll.foot(now)).child(actions));
+    div().pt_2().child(card).into_any_element()
 }
 
 // An answer to pick before voting: its radio (a check where several may be picked), emoji and text.
@@ -469,6 +471,7 @@ pub(super) fn poll_choice(message: &Message, poll: &Poll, answer: &PollAnswer, o
 pub(super) fn poll_share(answer: &PollAnswer, share: u32, cx: &App) -> AnyElement {
     let strong = palette::strong(cx);
     let bar = if answer.me { palette::accent_soft(cx) } else { strong.opacity(0.10) };
+    // lint-allow(custom-badge): ui::badge is a small solid label; this is a result row with its share drawn as a fill behind the text
     ui::row()
         .relative()
         .min_h_11()
@@ -480,6 +483,7 @@ pub(super) fn poll_share(answer: &PollAnswer, share: u32, cx: &App) -> AnyElemen
         .text_size(ui::TEXT_SM)
         .font_weight(FontWeight::MEDIUM)
         .text_color(if answer.me { strong } else { palette::text(cx) })
+        // lint-allow(custom-mark): ui::progress_bar draws a thin track; this fill runs behind the row's text, as wide as the share
         .when(share > 0, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(gpui_kit::relative(share as f32 / 100.)).squircle(RADIUS_MD).bg(bar)))
         .children(answer.emoji.as_ref().map(|e| div().flex_none().child(crate::menu::emoji_face(e, 20.))))
         .child(div().flex_1().min_w_0().child(answer.text.clone()))

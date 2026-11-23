@@ -1,5 +1,10 @@
 use super::*;
 
+// The blur over a spoiler picture, over a veiled one, and the alt popout's width.
+const SPOILER_BLUR: f32 = 24.;
+const VEIL_BLUR: f32 = 28.;
+const ALT_POPOUT_WIDTH: f32 = 260.;
+
 // gpui only advances an animated image's frames when the img has an id to keep its frame state under,
 // so every img that may hold a GIF (or animated WebP) gets one.
 pub(crate) fn animated_image(source: impl Into<gpui_kit::ImageSource>) -> Stateful<gpui_kit::Img> {
@@ -71,7 +76,7 @@ pub(crate) enum Paging {
 
 // The message's media, then its uploads as file rows where the setting keeps them out of line.
 pub(super) fn media_grid(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Option<AnyElement> {
-    let gallery = media_layout(message, &inline_media(message, &ctx.media), ctx.column.min(COLUMN), Paging::Feed, ctx, cx).map(|g| g.mt_2().into_any_element());
+    let gallery = media_layout(message, &inline_media(message, &ctx.media), ctx.column.min(COLUMN), Paging::Feed, ctx, cx).map(|g| div().pt_2().child(g).into_any_element());
     if ctx.media.attachments || message.media_files.is_empty() {
         return gallery;
     }
@@ -97,9 +102,9 @@ pub(crate) fn media_layout(message: &Message, shown: &[usize], width: f32, pagin
             Paging::Gallery => (width / first.width).min(GALLERY_MAX_H / first.height),
         };
         let (w, h) = (first.width * scale, first.height * scale);
-        let caption = shown_alt(message, shown[0], ctx).map(|alt| div().mt_1().max_w(px(w)).text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(alt));
+        let caption = shown_alt(message, shown[0], ctx).map(|alt| div().max_w(px(w)).text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(alt));
         let frame = media_frame(message, shown[0], (w, h), ui::all(RADIUS_LG), paging, ctx, cx).flex_none().w(px(w)).h(px(h));
-        return Some(ui::col().child(frame).children(caption));
+        return Some(ui::col().gap_1().child(frame).children(caption));
     }
     // Laid out for the feed's column, then scaled to `width`.
     let k = width / COLUMN;
@@ -189,7 +194,8 @@ pub(super) fn spoiler_key(message: &Message, i: usize) -> String {
 pub(super) fn alt_button(key: String, ctx: &RowContext) -> Stateful<Div> {
     let open = ctx.alt_popout.as_deref() == Some(key.as_str());
     let this = ctx.this.clone();
-    media_label("ALT")
+    ui::media_label()
+        .child("ALT")
         .id(SharedString::from(format!("alt-{key}")))
         .occlude()
         .absolute()
@@ -212,11 +218,12 @@ pub(super) fn alt_button(key: String, ctx: &RowContext) -> Stateful<Div> {
 // "Image Description (Alt Text)" over the gallery; a press anywhere else closes it.
 pub(super) fn alt_popout(key: &str, text: String, ctx: &RowContext, cx: &App) -> Stateful<Div> {
     let (this, key) = (ctx.this.clone(), key.to_owned());
+    // lint-allow(custom-surface): ui::surface sits in the flow; this popout hangs absolutely over a gallery tile and sizes itself
     ui::col()
         .id(SharedString::from(format!("alt-popout-{key}")))
         .occlude()
         .absolute()
-        .w(px(260.))
+        .w(px(ALT_POPOUT_WIDTH))
         .px_3p5()
         .py_3()
         .gap_1()
@@ -308,7 +315,7 @@ pub(super) fn media_veil(key: String, label: &'static str, corners: Corners<Pixe
         .absolute()
         .inset_0()
         .bg(on_media(0.35))
-        .backdrop_blur(px(28.))
+        .backdrop_blur(px(VEIL_BLUR))
         .flex()
         .items_center()
         .justify_center()
@@ -318,19 +325,7 @@ pub(super) fn media_veil(key: String, label: &'static str, corners: Corners<Pixe
             reveal.borrow_mut().insert(key.clone());
             refresh.update(cx, |_, cx| cx.notify()).ok();
         })
-        .child(
-            ui::row()
-                .h_8()
-                .px_3()
-                .gap_1p5()
-                .squircle(RADIUS_MD)
-                .bg(on_media(0.72))
-                .text_color(gpui_kit::white())
-                .text_size(ui::TEXT_SM)
-                .font_weight(FontWeight::SEMIBOLD)
-                .child(Icon::new(Glyph::EyeSlash).size(ui::ICON_MD))
-                .child(label),
-        )
+        .child(ui::media_label().h_8().px_3().gap_1p5().squircle(RADIUS_MD).text_size(ui::TEXT_SM).child(Icon::new(Glyph::EyeSlash).size(ui::ICON_MD)).child(label))
 }
 
 // A spoiler's cover: blurred and dimmed, labelled, and a click lifts it (and nothing else).
@@ -357,7 +352,7 @@ pub(super) fn reveal_veil(message: &Message, i: usize, corners: Corners<Pixels>,
 
 // What covers a spoiler picture: a blur and a dim over it.
 pub(super) fn spoiler_veil() -> Div {
-    ui::row().absolute().inset_0().justify_center().bg(on_media(0.3)).backdrop_blur(px(24.))
+    ui::row().absolute().inset_0().justify_center().bg(on_media(0.3)).backdrop_blur(px(SPOILER_BLUR))
 }
 
 // A label over media (GIF, a duration): fixed dark values, since it sits on pictures in both themes.
@@ -367,13 +362,13 @@ pub(super) fn media_tag(text: &'static str) -> Div {
 
 // The same label placed by its parent (a row of tags).
 pub(super) fn media_label(text: &'static str) -> Div {
-    ui::row().h_5().px_1p5().gap_1().squircle(RADIUS_XS).bg(on_media(0.72)).text_color(gpui_kit::white()).text_size(ui::TEXT_XXS).font_weight(FontWeight::SEMIBOLD).child(text)
+    ui::media_label().child(text)
 }
 
 // A small bar of icon buttons floating over a picture's corner: it takes the pointer, so its caller
 // keeps the hover with the bar's own `on_hover`.
 pub(super) fn floating_bar(id: SharedString, cx: &App) -> Stateful<Div> {
-    ui::row().items_stretch().id(id).occlude().absolute().p_0p5().gap_0p5().squircle(RADIUS_SM).bg(palette::surface(Level::Overlay, cx)).shadow(ui::shadow_pop(cx))
+    ui::toolbar(id, cx).items_stretch().absolute()
 }
 
 pub(super) fn track_tile_hover(this: WeakEntity<Waffle>, key: String) -> impl Fn(&bool, &mut Window, &mut App) + 'static {
