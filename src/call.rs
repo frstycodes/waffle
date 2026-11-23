@@ -75,10 +75,10 @@ const PING_BAD: u32 = 120;
 const LOSS_POOR_PCT: f32 = 5.;
 const METER_BARS: usize = 28;
 
-// The chat's width for a window this wide: what was asked for, within Discord's bounds. A window too
-// narrow for both keeps the minimum.
+// The chat's width for a window this wide: what was asked for, within Discord's bounds and no wider than
+// `fit::CHAT_MAX_WIDTH`. A window too narrow for both keeps the minimum.
 pub(crate) fn chat_width(wanted: f32, window: f32) -> f32 {
-    wanted.min(window - CHAT_STAGE_ROOM).max(CHAT_MIN_WIDTH)
+    wanted.min(fit::CHAT_MAX_WIDTH).min(window - CHAT_STAGE_ROOM).max(CHAT_MIN_WIDTH)
 }
 
 fn grid_gap(cols: usize) -> f32 {

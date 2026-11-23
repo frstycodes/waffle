@@ -8,6 +8,8 @@ const FULL_FROM: f32 = 560.;
 const COMPACT_FROM: f32 = 420.;
 // The stage keeps at least this width beside a docked chat; narrower, the chat floats over it instead.
 const CHAT_DOCKS_FROM: f32 = 480.;
+// The chat is never wider than this, so on a big screen it always docks beside the stage rather than float.
+pub(super) const CHAT_MAX_WIDTH: f32 = 640.;
 // The floating chat's inset from the stage's edges, and how far it slides in from the right as it opens.
 const FLOAT_INSET: f32 = 8.;
 const FLOAT_SLIDE: f32 = 16.;
@@ -231,5 +233,14 @@ mod tests {
         assert_eq!(Dock::for_width(COMPACT_FROM), Dock::Compact);
         assert_eq!(Dock::for_width(COMPACT_FROM - 1.), Dock::Tight);
         assert_eq!(Dock::for_width(0.), Dock::Tight);
+    }
+
+    #[test]
+    fn the_chat_stops_widening_and_docks_on_a_big_screen() {
+        assert_eq!(chat_width(2000., 3000.), CHAT_MAX_WIDTH);
+        assert_eq!(chat_width(500., 3000.), 500.);
+        assert_eq!(chat_width(100., 3000.), CHAT_MIN_WIDTH);
+        // A 1600-wide window with the default rail and channel list: the widest chat still leaves the stage room.
+        assert!(1600. - (RAIL_WIDTH + crate::layout::CHANNELS_WIDTH) - chat_width(5000., 1600.) >= CHAT_DOCKS_FROM);
     }
 }
