@@ -61,7 +61,7 @@ pub const MONO_FONT: &str = "Roboto Mono";
 #[serde(default)]
 pub struct Prefs {
     pub theme: ThemePref,
-    // macOS's Liquid Glass behind the sidebar, where the system has it.
+    // The system's material behind the sidebar (Mica, Liquid Glass), where there is one.
     pub native_sidebar: bool,
     // The interface's font family: Figtree (bundled) unless picked in Appearance.
     pub ui_font: String,

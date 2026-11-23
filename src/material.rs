@@ -1,5 +1,5 @@
-// Window material behind the sidebar: AppKit's sidebar glass on macOS 27, where the Appearance setting
-// turns it on. Off, in full screen and everywhere else (Windows included), the sidebar is solid.
+// Window material behind the sidebar: Mica on Windows 11, AppKit's sidebar glass on macOS 27, where the
+// Appearance setting turns it on. Off, in full screen and on systems without either, the sidebar is solid.
 use std::cell::Cell;
 
 use gpui_kit::WindowBackgroundAppearance;
@@ -15,13 +15,14 @@ pub fn setting_name() -> Option<&'static str> {
     if !supported() {
         return None;
     }
-    Some("Liquid Glass sidebar")
+    Some(if cfg!(target_os = "windows") { "Mica" } else { "Liquid Glass sidebar" })
 }
 
 pub fn window_background() -> WindowBackgroundAppearance {
-    match supported() {
-        true => WindowBackgroundAppearance::Transparent,
-        false => WindowBackgroundAppearance::Opaque,
+    match (supported(), cfg!(target_os = "windows")) {
+        (false, _) => WindowBackgroundAppearance::Opaque,
+        (true, true) => WindowBackgroundAppearance::MicaBackdrop,
+        (true, false) => WindowBackgroundAppearance::Transparent,
     }
 }
 
@@ -71,13 +72,41 @@ pub fn card(cx: &gpui_kit::App) -> gpui_kit::Hsla {
     gpui_kit::white().opacity(if cx.theme().is_dark() { 0.08 } else { 0.55 })
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn supported() -> bool {
     false
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn apply(_: &mut gpui_kit::Window, _: bool, _: f32, _: bool) {}
+
+// gpui applies Mica from build 22621 (Windows 11 22H2), so the setting starts there too.
+#[cfg(target_os = "windows")]
+fn supported() -> bool {
+    use std::sync::OnceLock;
+    static SUPPORTED: OnceLock<bool> = OnceLock::new();
+    *SUPPORTED.get_or_init(|| {
+        let mut version = windows::Win32::System::SystemInformation::OSVERSIONINFOW {
+            dwOSVersionInfoSize: std::mem::size_of::<windows::Win32::System::SystemInformation::OSVERSIONINFOW>() as u32,
+            ..Default::default()
+        };
+        // SAFETY: a sized OSVERSIONINFOW for the call to fill.
+        let status = unsafe { windows::Wdk::System::SystemServices::RtlGetVersion(&mut version) };
+        status.is_ok() && version.dwBuildNumber >= 22621
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn apply(window: &mut gpui_kit::Window, on: bool, _: f32, _: bool) {
+    thread_local! {
+        static SHOWN: Cell<Option<bool>> = const { Cell::new(None) };
+    }
+    if SHOWN.get() == Some(on) {
+        return;
+    }
+    SHOWN.set(Some(on));
+    window.set_background_appearance(if on { WindowBackgroundAppearance::MicaBackdrop } else { WindowBackgroundAppearance::Opaque });
+}
 
 // AppKit's sidebar glass arrived in macOS 27; earlier, the sidebar item's background isn't the look.
 #[cfg(target_os = "macos")]
