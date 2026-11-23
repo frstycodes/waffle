@@ -101,7 +101,7 @@ impl Waffle {
 
     // Discord's Mic Test: our processed mic, looped back to the speaker, metered. Deafened while it
     // runs, so a call's voices don't play over it.
-    pub(super) fn toggle_mic_test(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn toggle_mic_test(&mut self, cx: &mut Context<Self>) {
         if self.mic_test.is_some() {
             self.stop_mic_test();
             // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change

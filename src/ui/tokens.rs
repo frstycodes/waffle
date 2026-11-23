@@ -69,3 +69,5 @@ pub const DUR_PRESS: Duration = Duration::from_millis(120);
 pub const DUR_HOVER: Duration = Duration::from_millis(150);
 pub const DUR_POP: Duration = Duration::from_millis(200);
 pub const DUR_PANEL: Duration = Duration::from_millis(260);
+// A hover roll's swap (Discord's HoverRoll).
+pub const DUR_ROLL: Duration = Duration::from_millis(220);

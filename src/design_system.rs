@@ -8,7 +8,7 @@ mod kit;
 mod notices;
 use notices::notices;
 use faces::{avatars, badged_faces};
-use kit::{badges, kit_variants};
+use kit::{badges, hover_rolls, kit_variants};
 use foundations::{space, type_scale};
 use std::time::{Duration, Instant};
 
@@ -177,6 +177,7 @@ impl Render for DesignSystem {
         }
         if self.shows("motion") {
             add("motion", self.motion(window, cx).into_any_element());
+            add("hover roll", hover_rolls(window, cx).into_any_element());
         }
         if self.shows("icons") {
             add("icons", icons(cx).into_any_element());

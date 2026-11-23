@@ -493,10 +493,6 @@ pub mod stage {
         hex(DARK.idle)
     }
 
-    pub fn dnd() -> Hsla {
-        hex(DND)
-    }
-
     // Translucent white: hover .05, press .09, selected .08, line .08, strong line .14.
     pub fn wash(alpha: f32) -> Hsla {
         hex(DARK.ink_wash).opacity(alpha)
@@ -509,6 +505,16 @@ pub mod stage {
 
     pub fn off_ink() -> Hsla {
         hex(0xFF9079)
+    }
+
+    // A muted mic on the call's bar and tiles, as Discord's: the light red ink on a 12% wash of red (16% hovered,
+    // 24% pressed).
+    pub fn muted_fill(alpha: f32) -> Hsla {
+        hex(DND).opacity(alpha)
+    }
+
+    pub fn muted_ink() -> Hsla {
+        hex(DARK.danger_ink)
     }
 
     // On states (camera on) are a light fill with dark ink.

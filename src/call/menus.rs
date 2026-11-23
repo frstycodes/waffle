@@ -6,42 +6,93 @@ const MENU_WIDTH: f32 = 300.;
 const CHOICE_ROW_HEIGHT: f32 = 34.;
 
 impl Waffle {
-    // .controls: mic and camera as split buttons with their device menus, share, activities, more,
-    // then the one red fill that leaves.
-    pub(crate) fn mic_control(&self, cx: &mut Context<Self>) -> Div {
+    // .controls: mic and camera as split buttons with their device menus (a right-click opens them too); muted, the
+    // mic and its caret take the red. `carets` is false in a narrow window.
+    pub(crate) fn mic_control(&self, carets: bool, cx: &mut Context<Self>) -> Div {
         let muted = self.muted || self.deafened;
-        let mic_state = if muted { Control::Off } else { Control::Rest };
+        let state = if muted { Control::Off } else { Control::Rest };
+        let tip = match (self.deafened, muted) {
+            (true, _) => "Undeafen",
+            (false, true) => "Unmute",
+            (false, false) => "Mute",
+        };
+        let open = |this: &mut Self, e: &MouseDownEvent, cx: &mut Context<Self>| this.open_stage_device_menu(DeviceKind::Input, e.position, cx);
         split_control(
-            control("call-mic", if muted { Glyph::MicOffFill } else { Glyph::MicFill }, if muted { "Unmute" } else { "Mute" }, mic_state, true).on_click(cx.listener(|this, _, _, cx| this.toggle_mute(cx))),
-            control("call-mic-devices", Glyph::ChevronUpBold, "Microphone options", if self.stage_menu_open(DeviceKind::Input) { Control::Open } else { Control::Rest }, true)
-                .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_stage_device_menu(DeviceKind::Input, e.position, cx))),
+            control("call-mic", if muted { Glyph::MicOffFill } else { Glyph::MicFill }, tip, state, true)
+                .on_click(cx.listener(|this, _, _, cx| if this.deafened { this.toggle_deafen(cx) } else { this.toggle_mute(cx) }))
+                .on_mouse_down(MouseButton::Right, cx.listener(move |this, e, _, cx| open(this, e, cx))),
+            carets.then(|| {
+                control("call-mic-devices", Glyph::ChevronUpBold, "More Microphone Options", if self.stage_menu_open(DeviceKind::Input) { Control::Open } else { state }, true)
+                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, e, _, cx| open(this, e, cx)))
+            }),
         )
     }
 
-    pub(crate) fn camera_control(&self, cx: &mut Context<Self>) -> Div {
+    pub(crate) fn camera_control(&self, carets: bool, cx: &mut Context<Self>) -> Div {
         let call = self.call.as_ref().expect("in a call");
         let connected = call.stage == Stage::Connected;
         let camera_state = if call.camera_on { Control::On } else { Control::Rest };
+        let open = |this: &mut Self, e: &MouseDownEvent, cx: &mut Context<Self>| this.open_stage_device_menu(DeviceKind::Camera, e.position, cx);
         split_control(
-            control("call-camera", if call.camera_on { Glyph::VideoFill } else { Glyph::VideoOffFill }, if call.camera_on { "Turn off camera" } else { "Turn on camera" }, camera_state, connected)
-                .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_camera(cx)))),
-            control("call-camera-devices", Glyph::ChevronUpBold, "Camera options", if self.stage_menu_open(DeviceKind::Camera) { Control::Open } else { Control::Rest }, true)
-                .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_stage_device_menu(DeviceKind::Camera, e.position, cx))),
+            control("call-camera", if call.camera_on { Glyph::VideoFill } else { Glyph::VideoOffFill }, if call.camera_on { "Turn Off Camera" } else { "Turn On Camera" }, camera_state, connected)
+                .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_camera(cx))))
+                .on_mouse_down(MouseButton::Right, cx.listener(move |this, e, _, cx| open(this, e, cx))),
+            carets.then(|| {
+                control("call-camera-devices", Glyph::ChevronUpBold, "More Options", if self.stage_menu_open(DeviceKind::Camera) { Control::Open } else { Control::Rest }, true)
+                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, e, _, cx| open(this, e, cx)))
+            }),
         )
     }
 
-    // Live, the main half stops the stream and the chevron holds its options, as Discord's.
-    pub(crate) fn share_control(&self, cx: &mut Context<Self>) -> Div {
+    // Share Your Screen, or Stop Streaming while live; right-click holds the stream's options, as Discord's.
+    pub(crate) fn share_control(&self, cx: &mut Context<Self>) -> ui::Pressable {
         let call = self.call.as_ref().expect("in a call");
         let connected = call.stage == Stage::Connected;
         let sharing = call.sharing.is_some();
-        let share_state = if sharing { Control::Active } else { Control::Rest };
-        split_control(
-            control("call-share", Glyph::ShareScreenFill, if sharing { "Stop streaming" } else { "Share your screen" }, share_state, connected)
-                .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_screen_share(cx)))),
-            control("call-share-options", Glyph::ChevronUpBold, "Stream options", if self.menu.is_some() && sharing { Control::Open } else { Control::Rest }, sharing)
-                .when(sharing, |b| b.on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_stream_menu(e.position, cx)))),
-        )
+        control("call-share", Glyph::ShareScreenFill, if sharing { "Stop Streaming" } else { "Share Your Screen" }, if sharing { Control::On } else { Control::Rest }, connected)
+            .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_screen_share(cx))))
+            .when(sharing, |b| b.on_mouse_down(MouseButton::Right, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_stream_menu(e.position, cx))))
+    }
+
+    // A stream tile's Options (and its right-click): watch or stop, its volume, focus, then the streamer.
+    pub(super) fn open_stream_tile_menu(&mut self, streamer_id: String, at: Point<Pixels>, cx: &mut Context<Self>) {
+        cx.stop_propagation();
+        self.open_live_menu(
+            at,
+            move |this| {
+                let Some(call) = &this.call else { return Vec::new() };
+                let me = this.me.as_ref().is_some_and(|m| m.id == streamer_id);
+                let watching = call.watched(&streamer_id).is_some();
+                let mut entries = Vec::new();
+                let id = streamer_id.clone();
+                entries.push(match (me, watching) {
+                    (true, _) => item("Stop Streaming", |this, _, cx| this.toggle_screen_share(cx)).entry(),
+                    (false, true) => item("Stop Watching", move |this, _, cx| this.unwatch_stream(&id, cx)).entry(),
+                    (false, false) => item("Watch Stream", move |this, _, cx| this.watch_stream(id.clone(), cx)).entry(),
+                });
+                if me {
+                    let hidden = this.self_stream_hidden();
+                    entries.push(item(if hidden { "Show Preview" } else { "Hide Preview" }, |this, _, cx| this.toggle_self_stream_hidden(cx)).icon(Glyph::EyeSlash).entry());
+                }
+                entries.push(Entry::Separator);
+                if watching && !me {
+                    let (id, volume) = (streamer_id.clone(), this.stream_volumes.get(&streamer_id).copied().unwrap_or(1.));
+                    entries.push(crate::menu::slider("Stream Volume", format!("stream-volume-{streamer_id}"), volume / 2., move |this, f, cx| this.set_stream_volume(&id, f * 2., cx)));
+                }
+                let key = format!("stream:{streamer_id}");
+                let focused = this.call_focus.as_deref() == Some(key.as_str());
+                entries.push(item(if focused { "Unfocus This Person" } else { "Focus This Person" }, move |this, _, cx| this.toggle_focus(key.clone(), cx)).entry());
+                entries.push(Entry::Separator);
+                let id = streamer_id.clone();
+                entries.push(item("Profile", move |this, _, cx| this.open_voice_profile(&id, at, cx)).icon(Glyph::UserCircle).entry());
+                if !me {
+                    let id = streamer_id.clone();
+                    entries.push(item("Message", move |this, window, cx| this.message_user(id.clone(), window, cx)).icon(Glyph::ChatRound).entry());
+                }
+                entries
+            },
+            cx,
+        );
     }
 
     pub(super) fn stage_menu_open(&self, kind: DeviceKind) -> bool {
@@ -138,6 +189,14 @@ impl Waffle {
                     .child(div().flex_1().min_w_0().child(div().font_weight(FontWeight::NORMAL).text_color(ink.strong).child("Noise suppression")).child(div().text_size(ui::TEXT_XS).text_color(ink.muted).child("Filters fans and keys on this device")))
                     .child(ui::switch_live("device-noise-switch", noise, window, cx))
                     .on_click(cx.listener(|this, _, _, cx| this.toggle_noise_suppression(cx)))
+                    .into_any_element(),
+            );
+            let deafened = self.deafened;
+            body.push(
+                choice_row("device-deafen", &ink, cx)
+                    .child(div().flex_1().min_w_0().font_weight(FontWeight::NORMAL).text_color(ink.strong).child("Deafen"))
+                    .child(ui::switch_live("device-deafen-switch", deafened, window, cx))
+                    .on_click(cx.listener(|this, _, _, cx| this.toggle_deafen(cx)))
                     .into_any_element(),
             );
             body.push(menu_rule(&ink).into_any_element());

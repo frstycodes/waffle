@@ -604,7 +604,7 @@ impl Waffle {
         let covered = !composed && (self.menu.is_some()
             || self.dialog.is_some()
             || self.device_menu.is_some()
-            || self.connection_info
+            || self.voice_popover.is_some()
             || self.settings_open()
             || self.activities.launcher.is_some()
             || self.activities.consent.is_some()

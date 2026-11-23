@@ -302,6 +302,9 @@ pub(super) fn parse_forum_emoji(id: &Value, name: &Value) -> Option<Emoji> {
     }
 }
 
+// Discord's channel type for a stage channel, which `ChannelKind` folds into Voice.
+pub const STAGE_TYPE: u8 = 13;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ChannelKind {
     Text,

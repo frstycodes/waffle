@@ -318,10 +318,10 @@ impl Waffle {
     pub(crate) fn member_row(&self, member: &Member, spot: RowSpot, cx: &mut Context<Self>) -> AnyElement {
         let dark = cx.theme().is_dark();
         let offline = member.presence.status == Status::Offline;
-        let (strong, faint, hover) = (palette::strong(cx), palette::faint(cx), palette::hover(cx));
+        let (strong, hover) = (palette::strong(cx), palette::hover(cx));
         let (role_ink, dot) = crate::chat::role_marks(self.prefs.role_style, self.role_color(self.guild_id.as_ref(), &member.user.id, Some(&member.roles), dark));
-        let name_ink = if offline { faint } else { role_ink.unwrap_or(strong) };
-        let dot = dot.filter(|_| !offline);
+        // Offline keeps its role colour; the whole row fades instead, as Discord's does.
+        let name_ink = role_ink.unwrap_or(strong);
         let name_style = member.user.name_style.as_ref().filter(|_| self.prefs.display_name_styles);
         let surface = spot.surface;
         let owner = match self.guild() {
@@ -329,17 +329,21 @@ impl Waffle {
             None => self.open_group().is_some_and(|g| g.props.owner_id.as_ref() == Some(&member.user.id)),
         };
         let selected = self.profile_card.as_ref().is_some_and(|p| p.user.id == member.user.id);
-        let crown = ui::mix(palette::status_in(Status::Idle, cx), strong, 0.4);
+        let crown = palette::warning_ink(cx);
         let boost = palette::boost_ink(cx);
         let boosting = member.boosting_since.as_deref().and_then(boost_date);
         let name_line = |key: String| {
+            // Discord's order and spacing: the name, then its tag, APP, crown and gem 4px apart.
             ui::row()
-                .gap_1p5()
-                .child(crate::name_fonts::styled(ui::truncating(key, member.user.name.clone()).font_weight(FontWeight::NORMAL).text_color(name_ink), name_style))
+                .gap_1()
+                .child(crate::name_fonts::styled(ui::truncating(key, member.user.name.clone()).text_size(ui::TEXT_MD).line_height(ui::LINE_SM).font_weight(FontWeight::MEDIUM).text_color(name_ink), name_style))
                 .children(dot.map(crate::chat::role_dot))
                 .children(member.user.tag.as_ref().map(|tag| crate::chat::guild_tag(tag, cx)))
                 .when(member.user.bot, |r| r.child(ui::tag("App", cx)))
-                .when(owner, |r| r.child(Icon::new(Glyph::Crown).size(ui::ICON_SM).flex_none().text_color(crown)))
+                .when(owner, |r| {
+                    let id = SharedString::from(format!("member-owner-{}", member.user.id));
+                    r.child(div().id(id).flex_none().child(Icon::new(Glyph::Crown).size(ui::ICON_SM).text_color(crown)).tooltip(|window, cx| ui::tip("Server Owner", window, cx)))
+                })
                 .children(boosting.clone().map(|since| {
                     div()
                         .id(SharedString::from(format!("member-boost-{}", member.user.id)))
@@ -378,14 +382,16 @@ impl Waffle {
             .px_2()
             // Discord's room for the art: names stop 32px short of a nameplated row's end.
             .when(plated, |r| r.pr(px(NAMEPLATE_END)))
-            .gap_2p5()
+            .gap_3()
             .squircle(ui::RADIUS_SM)
+            // Offline members fade to 30% until hovered (in the hover style below), as Discord's do.
+            .when(offline && !selected, |r| r.opacity(0.3))
             .group(MEMBER_ROW_GROUP)
             .cursor_pointer()
             .when(selected, |r| r.bg(palette::selected(cx)))
-            .when(!selected, |r| r.hover(move |s| s.bg(hover)))
+            .when(!selected, |r| r.hover(move |s| if offline { s.bg(hover).opacity(1.) } else { s.bg(hover) }))
             .children(plate)
-            .child(div().when(offline, |a| a.opacity(0.5)).child(member_face(member, animate, surface)))
+            .child(member_face(member, animate, surface))
             .child(names(format!("member-name-{}", member.user.id)).relative().flex_1())
             .on_click({
                 let user = member.user.clone();
@@ -409,45 +415,63 @@ impl Waffle {
     // activity, then being in voice in this server; "+N" when more than one applies; the custom status after
     // it. Hovering it lists every item. Nothing while offline.
     fn member_status(&self, member: &Member) -> Option<MemberStatus> {
-        let presence = &member.presence;
-        if presence.status == Status::Offline {
-            return None;
-        }
         let voice = self.guild().and_then(|g| {
             let state = g.voice_states.iter().find(|v| v.user_id == member.user.id)?;
             let channel = g.channels.iter().find(|c| Some(&c.id) == state.channel_id.as_ref())?;
             Some((state.streaming, channel.clone()))
         });
-        let custom = presence.custom.clone();
-        let activities: Vec<(ActivityKind, String)> = presence.activity.iter().flat_map(|a| std::iter::once((a.kind, a.text.clone())).chain(a.rest.iter().cloned())).collect();
-        // The hover list, in Discord's order: the stream, each activity, then voice (when not streaming).
-        let stream = voice.as_ref().filter(|(streaming, _)| *streaming).map(|(_, channel)| StatusItem { icon: StatusIcon::Screen, text: "Sharing their screen".into(), channel: Some(channel.clone()) });
-        let in_voice = voice.as_ref().filter(|(streaming, _)| !*streaming).map(|(_, channel)| StatusItem { icon: StatusIcon::Channel(Box::new(channel.clone())), text: "In voice".into(), channel: Some(channel.clone()) });
-        let items: Vec<StatusItem> = stream
-            .into_iter()
-            .chain(activities.iter().map(|(kind, text)| StatusItem { icon: StatusIcon::Activity(*kind), text: text.clone(), channel: None }))
-            .chain(in_voice)
-            .filter(|_| !member.user.bot)
-            .collect();
-        let (icon, text, sources) = match (&voice, activities.first()) {
-            // Live: what they're playing names the stream, and isn't counted again.
-            (Some((true, _)), first) => {
-                let game = first.filter(|(kind, _)| *kind == ActivityKind::Playing).map(|(_, text)| text.clone());
-                let sources = 1 + activities.len() - usize::from(game.is_some());
-                (StatusIcon::Screen, game.unwrap_or_else(|| "Sharing their screen".into()), sources)
-            }
-            (_, Some((kind, text))) => (StatusIcon::Activity(*kind), text.clone(), items.len()),
-            (Some((false, channel)), None) => (StatusIcon::Channel(Box::new(channel.clone())), "In voice".to_owned(), 1),
-            (None, None) => return custom.map(|custom| MemberStatus { id: member.user.id.clone(), icon: None, text: None, more: 0, custom: Some(custom), items: Vec::new() }),
-        };
-        // Bots show no activity icon.
-        let icon = (!member.user.bot).then_some(icon);
-        Some(MemberStatus { id: member.user.id.clone(), icon, text: Some(text), more: sources.saturating_sub(1), custom, items })
+        activity_status(&member.user, &member.presence, voice)
+    }
+}
+
+// The same line for anyone: `voice` is the channel they're in and whether they're live in it. The user
+// panel draws yours with it.
+pub(crate) fn activity_status(user: &crate::discord::User, presence: &crate::discord::Presence, voice: Option<(bool, crate::discord::Channel)>) -> Option<MemberStatus> {
+    if presence.status == Status::Offline {
+        return None;
+    }
+    let custom = presence.custom.clone();
+    let activities: Vec<(ActivityKind, String)> = presence.activity.iter().flat_map(|a| std::iter::once((a.kind, a.text.clone())).chain(a.rest.iter().cloned())).collect();
+    // The hover list, in Discord's order: the stream, each activity, then voice (when not streaming).
+    let stream = voice.as_ref().filter(|(streaming, _)| *streaming).map(|(_, channel)| StatusItem { icon: StatusIcon::Screen, text: "Sharing their screen".into(), channel: Some(channel.clone()) });
+    let in_voice = voice.as_ref().filter(|(streaming, _)| !*streaming).map(|(_, channel)| StatusItem { icon: StatusIcon::Channel(Box::new(channel.clone())), text: voice_word(channel).into(), channel: Some(channel.clone()) });
+    let items: Vec<StatusItem> = stream
+        .into_iter()
+        .chain(activities.iter().map(|(kind, text)| StatusItem { icon: StatusIcon::Activity(*kind), text: text.clone(), channel: None }))
+        .chain(in_voice)
+        .filter(|_| !user.bot)
+        .collect();
+    let (icon, text, sources) = match (&voice, activities.first()) {
+        // Live: what they're playing names the stream, and isn't counted again.
+        (Some((true, _)), first) => {
+            let game = first.filter(|(kind, _)| *kind == ActivityKind::Playing).map(|(_, text)| text.clone());
+            let sources = 1 + activities.len() - usize::from(game.is_some());
+            (StatusIcon::Screen, game.unwrap_or_else(|| "Sharing their screen".into()), sources)
+        }
+        (_, Some((kind, text))) => (StatusIcon::Activity(*kind), text.clone(), items.len()),
+        (Some((false, channel)), None) => (StatusIcon::Channel(Box::new(channel.clone())), voice_word(channel).to_owned(), 1),
+        (None, None) => return custom.map(|custom| MemberStatus { id: user.id.clone(), icon: None, text: None, more: 0, custom: Some(custom), items: Vec::new() }),
+    };
+    // Bots show no activity icon.
+    let icon = (!user.bot).then_some(icon);
+    Some(MemberStatus { id: user.id.clone(), icon, text: Some(text), more: sources.saturating_sub(1), custom, items })
+}
+
+// Discord's words for being in voice: a DM's is a call, a stage channel's a stage.
+fn voice_word(channel: &crate::discord::Channel) -> &'static str {
+    voice_word_for(channel.kind, channel.raw_type)
+}
+
+fn voice_word_for(kind: crate::discord::ChannelKind, raw_type: u8) -> &'static str {
+    match kind {
+        crate::discord::ChannelKind::Dm => "In a call",
+        _ if raw_type == crate::discord::STAGE_TYPE => "In a stage",
+        _ => "In voice",
     }
 }
 
 #[derive(Clone)]
-struct MemberStatus {
+pub(crate) struct MemberStatus {
     id: String,
     icon: Option<StatusIcon>,
     text: Option<String>,
@@ -473,21 +497,21 @@ enum StatusIcon {
 }
 
 impl StatusIcon {
-    // As Discord's: only the voice channel is tinted online green; activities and a stream take the
-    // line's own colour. A stream is our share glyph rather than Discord's TV.
+    // As Discord's: every item's icon is 12px in the online green. A stream is our share glyph rather than
+    // Discord's TV.
     fn icon(&self, green: gpui_kit::Hsla) -> Option<Icon> {
         let icon = match self {
             StatusIcon::Activity(kind) => activity_glyph(*kind)?,
             StatusIcon::Screen => Icon::new(Glyph::ShareScreen),
-            StatusIcon::Channel(channel) => return Some(channel_glyph(channel).size_4().flex_none().text_color(green)),
+            StatusIcon::Channel(channel) => channel_glyph(channel),
         };
-        Some(icon.size(ui::ICON_MD).flex_none())
+        Some(icon.size(ui::ICON_XS).flex_none().text_color(green))
     }
 }
 
 impl MemberStatus {
     // Beside a custom status the primary item is its icon alone, as Discord's member list draws it.
-    fn line(self, cx: &App) -> gpui_kit::Stateful<Div> {
+    pub(crate) fn line(self, cx: &App) -> gpui_kit::Stateful<Div> {
         let beside_custom = self.custom.is_some();
         let primary = self.icon.is_some() || (self.text.is_some() && !beside_custom);
         let green = palette::positive_ink(cx);
@@ -499,7 +523,8 @@ impl MemberStatus {
             .text_color(palette::faint(cx))
             .children(self.icon.and_then(|icon| icon.icon(green)))
             .children(self.text.filter(|_| !beside_custom).map(|text| ui::truncating(format!("member-status-{text}"), text)))
-            .when(self.more > 0, |d| d.child(div().flex_none().child(format!("+{}", self.more))))
+            // Beside a custom status the count takes the green, as Discord's does.
+            .when(self.more > 0, |d| d.child(div().flex_none().when(beside_custom, |c| c.text_color(green)).child(format!("+{}", self.more))))
             .when(primary && beside_custom, |d| d.child(div().flex_none().child("•")))
             .children(self.custom.map(|custom| ui::truncating(format!("member-custom-{custom}"), custom)))
             .when(!items.is_empty(), |d| d.tooltip(move |_, cx| cx.new(|_| ActivityTip(items.clone())).into()))
@@ -697,7 +722,9 @@ fn boost_date(iso: &str) -> Option<String> {
 }
 
 fn member_face(member: &Member, animate: bool, surface: gpui_kit::Hsla) -> AnyElement {
-    let (avatar, decoration, mark) = (&member.user.avatar, member.user.decoration.as_deref(), Some(member.presence.mark()));
+    // Offline shows no mark at all, as Discord's member list does.
+    let mark = (member.presence.status != Status::Offline).then(|| member.presence.mark());
+    let (avatar, decoration) = (&member.user.avatar, member.user.decoration.as_deref());
     match animate {
         true => playing_avatar(&format!("member-{}", member.user.id), avatar, decoration, 32., mark, surface),
         false => decorated_avatar(avatar, decoration, 32., mark, surface),
@@ -706,7 +733,15 @@ fn member_face(member: &Member, animate: bool, surface: gpui_kit::Hsla) -> AnyEl
 
 #[cfg(test)]
 mod tests {
-    use super::ago;
+    use super::{ago, voice_word_for};
+    use crate::discord::{ChannelKind, STAGE_TYPE};
+
+    #[test]
+    fn voice_word_names_calls_and_stages() {
+        assert_eq!(voice_word_for(ChannelKind::Dm, 1), "In a call");
+        assert_eq!(voice_word_for(ChannelKind::Voice, STAGE_TYPE), "In a stage");
+        assert_eq!(voice_word_for(ChannelKind::Voice, 2), "In voice");
+    }
 
     #[test]
     fn ago_steps_up_by_unit() {
