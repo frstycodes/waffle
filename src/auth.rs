@@ -192,7 +192,35 @@ async fn qr_session(tx: &mpsc::UnboundedSender<AuthEvent>) -> Result<String, Out
                             let _ = tx.unbounded_send(AuthEvent::Scanned(Box::new(user)));
                         }
                     }
-                    "pending_login" => return exchange_ticket(tx, &key, msg["ticket"].as_str().unwrap_or_default()).await,
+                    "pending_login" => {
+                        // The exchange can wait on a captcha for minutes. The gateway session must stay alive
+                        // meanwhile: one that misses its heartbeats is closed, and its ticket stops working.
+                        let ticket = msg["ticket"].as_str().unwrap_or_default().to_owned();
+                        let exchange = exchange_ticket(tx, &key, &ticket);
+                        tokio::pin!(exchange);
+                        let mut open = true;
+                        loop {
+                            tokio::select! {
+                                result = &mut exchange => return result,
+                                _ = heartbeat.tick(), if open => {
+                                    // A failed beat means the socket is gone; the exchange may still succeed.
+                                    open = sink.send(send(json!({ "op": "heartbeat" }))).await.is_ok();
+                                }
+                                frame = stream.next(), if open => match frame {
+                                    Some(Ok(WsMessage::Close(close))) => {
+                                        eprintln!("auth: QR gateway closed during the ticket exchange: {close:?}");
+                                        open = false;
+                                    }
+                                    Some(Err(e)) => {
+                                        eprintln!("auth: QR gateway error during the ticket exchange: {e}");
+                                        open = false;
+                                    }
+                                    None => open = false,
+                                    Some(Ok(_)) => {}
+                                },
+                            }
+                        }
+                    }
                     // Protocol v1 sends the token directly.
                     "finish" => return String::from_utf8(decrypt(&key, &msg["encrypted_token"])?).map_err(|e| failed(&e)),
                     "cancel" => return Err(Outcome::Expired),
@@ -203,17 +231,32 @@ async fn qr_session(tx: &mpsc::UnboundedSender<AuthEvent>) -> Result<String, Out
     }
 }
 
+// The ticket exchange goes where Discord's web client sends it, as that client: one cookie jar for
+// every attempt (a solved captcha is bound to the session that was asked), and the fingerprint,
+// locale and timezone the web client sends.
+const LOGIN_API: &str = "https://discord.com/api/v9";
+
 async fn exchange_ticket(tx: &mpsc::UnboundedSender<AuthEvent>, key: &RsaPrivateKey, ticket: &str) -> Result<String, Outcome> {
     let failed = |e: String| Outcome::Failed(format!("Ticket exchange: {e}"));
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().cookie_store(true).user_agent(USER_AGENT).build().map_err(|e| failed(e.to_string()))?;
+    let fingerprint = web_fingerprint(&client).await;
+    let locale = sys_locale::get_locale().unwrap_or_else(|| "en-US".into());
+    let timezone = iana_time_zone::get_timezone().ok();
     let mut solved: Option<(captcha::Challenge, String)> = None;
     // Discord may ask for a captcha, and occasionally asks again after one is solved.
-    for _ in 0..3 {
+    for attempt in 1..=3 {
         let mut req = client
-            .post(format!("{}/users/@me/remote-auth/login", discord::API))
-            .header("User-Agent", USER_AGENT)
+            .post(format!("{LOGIN_API}/users/@me/remote-auth/login"))
             .header("Origin", "https://discord.com")
+            .header("Referer", "https://discord.com/login")
+            .header("X-Discord-Locale", &locale)
             .json(&json!({ "ticket": ticket }));
+        if let Some(fingerprint) = &fingerprint {
+            req = req.header("X-Fingerprint", fingerprint);
+        }
+        if let Some(timezone) = &timezone {
+            req = req.header("X-Discord-Timezone", timezone);
+        }
         if let Some((challenge, answer)) = &solved {
             for (name, value) in challenge.headers(answer) {
                 req = req.header(name, value);
@@ -227,15 +270,23 @@ async fn exchange_ticket(tx: &mpsc::UnboundedSender<AuthEvent>, key: &RsaPrivate
             return String::from_utf8(token).map_err(|e| Outcome::Failed(e.to_string()));
         }
         let Some(challenge) = captcha::Challenge::from_response(&body) else {
-            eprintln!("http: {status} remote-auth/login: {body}");
+            eprintln!("http: {status} remote-auth/login (attempt {attempt}, after captcha: {}): {body}", solved.is_some());
             return Err(failed(body["message"].as_str().map(str::to_owned).unwrap_or_else(|| status.to_string())));
         };
+        eprintln!("auth: remote-auth/login asked for a captcha (attempt {attempt})");
         let pending = captcha::serve(&challenge).await.map_err(failed)?;
         let _ = tx.unbounded_send(AuthEvent::Captcha(pending.url.clone()));
         let answer = pending.solved().await.map_err(Outcome::Failed)?;
         solved = Some((challenge, answer));
     }
     Err(failed("Discord kept asking for a captcha".into()))
+}
+
+// The fingerprint Discord hands a signed-out web client (and the cookies set with it, kept by `client`).
+async fn web_fingerprint(client: &reqwest::Client) -> Option<String> {
+    let res = client.get(format!("{LOGIN_API}/experiments")).header("Origin", "https://discord.com").send().await.ok()?;
+    let body: Value = res.json().await.ok()?;
+    body["fingerprint"].as_str().map(str::to_owned)
 }
 
 // A refused upgrade carries the server's reason in the response body; show it instead of just the status.

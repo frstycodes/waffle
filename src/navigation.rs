@@ -251,14 +251,15 @@ impl Waffle {
                 let added = older.len();
                 let authors: Vec<String> = older.iter().map(|m| m.author.id.clone()).collect();
                 Arc::make_mut(&mut feed.messages).splice(0..0, older);
-                if is_open && added == 0 && !feed.has_more {
-                    this.list.remeasure_items(0..1.min(feed.messages.len()));
-                }
-                if is_open && added > 0 {
-                    // Keep the same message under the reader's eye while history grows above it.
-                    let top = this.list.logical_scroll_top();
+                // The old first message loses the placeholders drawn above it, so it's measured again; the
+                // reader stays on the same message, or carries on into the new history from the placeholders.
+                let top = this.list.logical_scroll_top();
+                if is_open {
                     this.list.splice(0..0, added);
-                    this.list.scroll_to(ListOffset { item_ix: top.item_ix + added, offset_in_item: top.offset_in_item });
+                    this.list.remeasure_items(added..(added + 1).min(feed.messages.len()));
+                    if added > 0 || top.item_ix == 0 {
+                        this.list.scroll_to(crate::chat::anchor_after_older(top, added));
+                    }
                 }
                 if added > 0 {
                     this.refresh_viewer(cx);

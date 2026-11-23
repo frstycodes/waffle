@@ -13,7 +13,7 @@ use gpui_kit::{
         input::{Input, Textarea},
         text::{InlineElement, InlineRenderContext, MarkdownExtensions, MarkdownNode, MarkdownParseContext, MarkdownPlugin, TextView, markdown_ast},
     },
-    div, img, linear_color_stop, linear_gradient, list, point, prelude::*, px,
+    ListOffset, div, img, linear_color_stop, linear_gradient, list, point, prelude::*, px,
 };
 use gpui_motion_kit::core::{Motion, Target};
 
@@ -37,6 +37,7 @@ mod attachments;
 mod composer;
 mod embeds;
 mod format;
+mod history;
 mod markdown;
 mod media;
 mod parts;
@@ -45,6 +46,7 @@ mod row;
 pub(crate) use attachments::*;
 pub(crate) use embeds::*;
 pub(crate) use format::*;
+pub(crate) use history::*;
 pub(crate) use markdown::*;
 pub(crate) use media::*;
 pub(crate) use parts::*;
@@ -361,7 +363,8 @@ impl Waffle {
         self.refold(&channel.id, &messages, &folds);
         let arrivals = self.arrivals.clone();
         let messages = list(self.list.clone(), move |ix, window, cx| {
-            if ix == 0 && ctx.has_more {
+            // Near the oldest loaded message, the next page loads; `load_older` keeps it to one at a time.
+            if ix < PREFETCH_ROWS && ctx.has_more {
                 let this = ctx.this.clone();
                 cx.defer(move |cx| {
                     this.update(cx, |this, cx| this.load_older(cx)).ok();
@@ -378,10 +381,13 @@ impl Waffle {
             // One accent line above the first message after your read position.
             let first_unread = ctx.unread_marker.is_some_and(|read| crate::order(&message.id) > read && previous.is_none_or(|p| crate::order(&p.id) <= read));
             let start = ctx.history_start.as_ref().filter(|_| ix == 0).map(|s| crate::dm_start::channel_start::history_start_header(s, ctx.this.clone(), cx));
-            let row = match new_day || first_unread || start.is_some() {
+            // While older history loads, placeholders above the oldest message the reader can scroll into.
+            let loading = (ix == 0 && ctx.has_more).then(|| history_skeleton(cx));
+            let row = match new_day || first_unread || start.is_some() || loading.is_some() {
                 false => row,
                 true => ui::col()
                     .w_full()
+                    .children(loading)
                     .children(start)
                     .when(new_day, |d| d.child(day_divider(&message.timestamp, cx)))
                     .when(first_unread, |d| d.child(unread_line()))

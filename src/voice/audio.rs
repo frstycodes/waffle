@@ -34,6 +34,15 @@ const DEVICE_POLL: Duration = Duration::from_millis(200);
 pub const MAX_VOLUME: f32 = 2.0;
 pub const SILENCE_DB: f32 = -100.0;
 
+// A volume slider's value (0..=MAX_VOLUME, shown as 0..200%) as the gain samples are scaled by. Ears
+// hear loudness logarithmically, so a linear gain stays loud until the slider's last few percent.
+// Discord's curve: below 100% the gain is the value to the power 2.8 (50% ≈ -17 dB); above it, each
+// further 100% adds 6 dB, so 200% is about 2x. Continuous at 100% = 1.
+pub fn volume_gain(volume: f32) -> f32 {
+    let volume = volume.clamp(0.0, MAX_VOLUME);
+    if volume <= 1.0 { volume.powf(2.8) } else { 10f32.powf((volume - 1.0) * 6.0 / 20.0) }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Device {
     pub id: String,
@@ -92,18 +101,19 @@ impl AudioSettings {
         Self {
             input_device: Mutex::new(input_device),
             output_device: Mutex::new(output_device),
-            input_volume: AtomicU32::new(input_volume.clamp(0.0, MAX_VOLUME).to_bits()),
-            output_volume: AtomicU32::new(output_volume.clamp(0.0, MAX_VOLUME).to_bits()),
+            input_volume: AtomicU32::new(volume_gain(input_volume).to_bits()),
+            output_volume: AtomicU32::new(volume_gain(output_volume).to_bits()),
             processor,
         }
     }
 
+    // Slider values (0..=MAX_VOLUME); stored as the gain they play at.
     pub fn set_input_volume(&self, volume: f32) {
-        self.input_volume.store(volume.clamp(0.0, MAX_VOLUME).to_bits(), Ordering::Relaxed);
+        self.input_volume.store(volume_gain(volume).to_bits(), Ordering::Relaxed);
     }
 
     pub fn set_output_volume(&self, volume: f32) {
-        self.output_volume.store(volume.clamp(0.0, MAX_VOLUME).to_bits(), Ordering::Relaxed);
+        self.output_volume.store(volume_gain(volume).to_bits(), Ordering::Relaxed);
     }
 
     fn input_volume(&self) -> f32 {
@@ -484,13 +494,25 @@ mod tests {
 
     #[test]
     fn mic_chain_applies_volume_and_reports_level() {
-        let settings = AudioSettings::new(None, None, 0.5, 1.0, Processor::new(false, crate::voice::NoiseSuppression::Off, false));
+        // A slider at 2^(-1/2.8) ≈ 78% plays at half gain.
+        let settings = AudioSettings::new(None, None, 0.5f32.powf(1.0 / 2.8), 1.0, Processor::new(false, crate::voice::NoiseSuppression::Off, false));
         let mut frame = [0.2; FRAME_LEN];
         let mic = settings.process_mic(&mut frame);
         let db = mic.db;
         assert!((mic.raw_db - level_db(&[0.2; 4])).abs() < 1e-4, "raw level is before the volume");
-        assert!(frame.iter().all(|&s| (s - 0.1).abs() < 1e-6));
+        assert!(frame.iter().all(|&s| (s - 0.1).abs() < 1e-5));
         assert!((db - -20.0).abs() < 0.01, "0.1 RMS is -20 dBFS, got {db}");
         assert_eq!(level_db(&[0.0; 4]), SILENCE_DB);
+    }
+
+    #[test]
+    fn volume_sliders_follow_loudness() {
+        assert_eq!(volume_gain(0.0), 0.0);
+        assert_eq!(volume_gain(1.0), 1.0);
+        let half_db = 20.0 * volume_gain(0.5).log10();
+        assert!((-18.0..-16.0).contains(&half_db), "50% is well quieter, got {half_db} dB");
+        assert!(volume_gain(0.1) < 0.002, "10% is near silent");
+        assert!((volume_gain(MAX_VOLUME) - 2.0).abs() < 0.01, "200% is about double");
+        assert!(volume_gain(1.01) > 1.0 && volume_gain(0.99) < 1.0, "monotonic through 100%");
     }
 }

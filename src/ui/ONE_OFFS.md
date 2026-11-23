@@ -757,6 +757,7 @@ _A function named like a component builds it from the design system: wrap the ui
 _A scrolling list that builds every row: list/uniform_list with a ListState draw only the rows on screen (CLAUDE.md, Rendering). A list that stays small carries lint-allow(unvirtualized-list) saying how big it can get ("a server's roles, a few dozen at most"), so whoever grows it knows to virtualize it._
 
 - `src/call/layouts.rs` — at most 25 rows of tiles; Discord's grid draws every tile too
+- `src/chat/history.rs` — a fixed twelve placeholder rows inside one list item
 - `src/create_channel.rs` — at most 100 members plus the server's roles, a few hundred rows
 - `src/events/views.rs` — one server's scheduled events, at most 100
 - `src/overlays/emoji.rs` — the Unicode groups hold under 2,000 emoji and a server adds a few hundred at most.
