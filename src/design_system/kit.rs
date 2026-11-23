@@ -76,3 +76,14 @@ pub(super) fn kit_variants(cx: &App) -> impl IntoElement {
             ),
     )
 }
+
+// Hover rolls: the user panel's second line and the voice status swap for another line while hovered.
+pub(super) fn hover_rolls(window: &mut Window, cx: &mut App) -> impl IntoElement {
+    let roll = |id: &'static str, rest: &'static str, rolled: &'static str, window: &mut Window, cx: &mut App| {
+        let (hovered, on_hover) = ui::hover_state(id, window, cx);
+        let swap = ui::hover_roll(id, ui::line(rest), ui::line(rolled), hovered, ui::LINE_XS, window, cx);
+        div().id(id).w_40().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).on_hover(on_hover).child(swap)
+    };
+    section("Hover roll", "A line that rolls up and away as another rises in, over 220ms: hover a line.", cx)
+        .child(row().gap_4().child(roll("ds-roll-status", "Online", "frsty", window, cx)).child(roll("ds-roll-voice", "Voice Connected", "Voice Details", window, cx)))
+}

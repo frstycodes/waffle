@@ -48,6 +48,7 @@ mod layout;
 mod face;
 mod kit;
 mod notice;
+mod roll;
 pub mod prelude;
 
 pub use control::{Control, Pressable, button, card, icon_slot, chip, chip_lead, hover_fade, hover_state, icon_button, menu_row, pressable, round_button, swatch, tip};
@@ -62,6 +63,7 @@ pub use tabs::{Tab, pill_tabs, segmented_live, tabs};
 pub use tri::{Tri, tri_state};
 pub use tunnel::{TUNNEL_GRACE, Tunnel};
 pub use tokens::*;
+pub use roll::{hover_roll};
 pub use notice::{StripFill, divider_with, number_mark, panel, rule, strip, surface_in, toast_text};
 pub use kit::{Heading, RowHeight, dialog_header, list_row, media_label, section_label, toolbar};
 pub use face::{Badge, MarkFill, Shape, Spot, app_tile, avatar, badge_of, badged, dm_face, gap, monogram, name_hue, server_tile, status_mark};
@@ -856,10 +858,6 @@ pub fn top(radius: f32) -> Corners<Pixels> {
 
 pub fn left(radius: f32) -> Corners<Pixels> {
     Corners { top_left: px(radius), top_right: px(0.), bottom_left: px(radius), bottom_right: px(0.) }
-}
-
-pub fn bottom(radius: f32) -> Corners<Pixels> {
-    Corners { top_left: px(0.), top_right: px(0.), bottom_left: px(radius), bottom_right: px(radius) }
 }
 
 // A strip (header, footer, scroll area) that runs edge to edge of a rounded container, rounded to

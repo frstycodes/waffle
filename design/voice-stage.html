@@ -1,0 +1,992 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice stage</title>
+<meta name="description" content="The call view that fills the main area in a voice channel or call: every state Discord's has, beside Waffle's as built, plus a playground to configure and poke both.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&family=Noto+Sans:wght@400..700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="site.css">
+<link rel="stylesheet" href="css/primitives.css">
+<script>try{const p=JSON.parse(localStorage.getItem("waffle-ds")||"{}"),r=document.documentElement;if(p.theme)r.dataset.theme=p.theme}catch{}</script>
+<style>
+  main { max-width: 1400px; }
+  .src { font-size: var(--text-xs); color: var(--text-faint); line-height: 1.5; }
+  .src code { font-family: var(--font-mono); font-size: 11px; }
+  .nv { margin: var(--space-2) 0 0; padding-left: 18px; font-size: var(--text-xs); color: var(--text-muted); line-height: 1.5; }
+
+  /* Playground */
+  .play { display: grid; grid-template-columns: 272px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+  .knobs { display: grid; gap: var(--space-4); padding: var(--space-4); background: var(--bg-raised); border-radius: var(--radius-lg); position: sticky; top: var(--space-4); max-height: calc(100vh - 32px); overflow: auto; }
+  .knobs fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+  .knobs legend { font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--text-faint); margin-bottom: var(--space-1); }
+  .knobs label { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text); min-width: 0; }
+  .knobs label > span { flex: none; width: 92px; color: var(--text-muted); }
+  .knobs select { flex: 1; min-width: 0; height: 32px; padding: 0 var(--space-2); border-radius: var(--radius-xs); border: 1px solid var(--line-strong); background: var(--bg-page); color: var(--text-strong); font: inherit; }
+  .knobs input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+  .knobs output { flex: none; width: 40px; text-align: right; font-variant-numeric: tabular-nums; font-size: var(--text-xs); color: var(--text-muted); }
+  .knobs input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+  .knobs .acts { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .knobs .acts button { height: 30px; padding: 0 var(--space-3); border-radius: var(--radius-xs); border: 0; background: var(--hover); color: var(--text-strong); font: inherit; font-size: var(--text-xs); font-weight: var(--weight-medium); cursor: pointer; }
+  .knobs .acts button:hover { background: var(--press); }
+  .stages { display: grid; gap: var(--space-5); min-width: 0; }
+  .stage { display: grid; gap: var(--space-2); min-width: 0; }
+  .stage h3 { margin: 0; font-size: var(--text-sm); color: var(--text-strong); }
+  .log { margin: 0; padding: var(--space-3) var(--space-3) var(--space-3) 28px; min-height: 64px; max-height: 150px; overflow: auto; background: var(--bg-raised); border-radius: var(--radius-md); font-size: var(--text-xs); line-height: 1.5; color: var(--text); }
+  .log li:first-child { color: var(--text-strong); font-weight: var(--weight-medium); }
+  @media (max-width: 960px) { .play { grid-template-columns: minmax(0, 1fr); } .knobs { position: static; max-height: none; } }
+
+  /* A stage is drawn at its real size, then zoomed to fit its column. */
+  .fit { width: 100%; min-width: 0; overflow: hidden; border-radius: var(--radius-md); }
+  .fit > .scene { zoom: var(--z, 1); }
+  .scene { position: relative; display: flex; overflow: hidden; border-radius: 10px; isolation: isolate; }
+
+  /* Case matrix */
+  .cases { display: grid; gap: 0; }
+  .case { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2) var(--space-4); padding: var(--space-4) 0; border-top: 1px solid var(--line); }
+  .case > header { grid-column: 1 / -1; display: grid; gap: 2px; }
+  .case h4 { margin: 0; font-size: var(--text-sm); color: var(--text-strong); }
+  .case p { margin: 0; font-size: var(--text-xs); line-height: 1.45; color: var(--text-muted); text-wrap: pretty; }
+  .case .side { font-size: var(--text-xs); color: var(--text-faint); margin-bottom: 4px; }
+  .ok { color: var(--online-ink); }
+  .gap { color: var(--danger-ink); }
+  @media (max-width: 900px) { .case { grid-template-columns: minmax(0, 1fr); } }
+
+  .gaps { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+  .gaps th, .gaps td { text-align: left; vertical-align: top; padding: var(--space-2) var(--space-3) var(--space-2) 0; border-top: 1px solid var(--line); line-height: 1.45; }
+  .gaps th { font-size: var(--text-xs); color: var(--text-faint); font-weight: var(--weight-semibold); }
+  .gaps td:first-child { color: var(--text-strong); font-weight: var(--weight-medium); white-space: nowrap; }
+  .gaps-wrap { overflow-x: auto; }
+
+  /* ── Discord: the call area always renders in its Onyx theme (theme-midnight) on black; the chat beside it follows the app theme.
+        Values read from discord.com's shipped CSS and theme variables, 2026-11-24. ── */
+  .dc { --d-black: #000; --d-surface-high: hsl(240 9.1% 4.3%); --d-border-muted: hsl(240 4% 60.8% / .2); --d-overlay: hsl(0 0% 0% / .56); --d-overlay-hover: hsl(0 0% 0% / .64);
+        --d-red: hsl(357.7 67.8% 54.9%); --d-crit: hsl(355.6 64.7% 50%); --d-crit-hover: hsl(355.1 65.7% 40%); --d-red12: hsl(355.6 64.7% 50% / .12); --d-red16: hsl(355.6 64.7% 50% / .16); --d-red24: hsl(355.6 64.7% 50% / .24);
+        --d-green: hsl(141.6 44.3% 42.9%); --d-green300: hsl(137.8 40.7% 61%); --d-brand: hsl(234.9 85.6% 64.7%); --d-p700: hsl(225 6.25% 12.5%); --d-p630: hsl(230 6.4% 18.4%); --d-p300: hsl(228 4.9% 79.8%);
+        --d-ink: hsl(240 4.5% 86.9%); --d-ink-dim: hsl(232.5 4% 60.4%); --d-mod-muted: hsl(240 4% 60.8% / .078);
+        --d-bg: hsl(230 6.4% 18.4%); --d-bg-low: hsl(232.5 6.9% 22.7%); --d-text: hsl(240 4.3% 95.5%); --d-muted: hsl(231.4 4.3% 68.4%); --d-line: hsl(240 4% 60.8% / .12); --d-float: hsl(240 5.9% 16.7%); --d-tip: hsl(240 5.3% 7.5%);
+        font: 500 14px/1.25 "gg sans", "Noto Sans", system-ui, sans-serif; color: #fff; }
+  :root[data-theme="light"] .dc { --d-bg: hsl(240 4.3% 95.5%); --d-bg-low: hsl(0 0% 98.4%); --d-text: hsl(240 6.1% 19.2%); --d-muted: hsl(234 4.4% 44.3%); --d-line: hsl(240 4% 60.8% / .28); --d-float: #fff; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme]) .dc { --d-bg: hsl(240 4.3% 95.5%); --d-bg-low: hsl(0 0% 98.4%); --d-text: hsl(240 6.1% 19.2%); --d-muted: hsl(234 4.4% 44.3%); --d-line: hsl(240 4% 60.8% / .28); --d-float: #fff; } }
+  .dc .call { position: relative; flex: 1 1 auto; min-width: 0; background: var(--d-black); overflow: hidden; }
+  .dc.chatopen .call { border-radius: 0 8px 8px 0; }
+  .dc .grad { position: absolute; inset-inline: 0; height: 160px; pointer-events: none; z-index: 2; transition: opacity .2s ease-in-out; background-image: linear-gradient(#000, rgba(0,0,0,.738) 19%, rgba(0,0,0,.541) 34%, rgba(0,0,0,.382) 47%, rgba(0,0,0,.278) 56.5%, rgba(0,0,0,.194) 65%, rgba(0,0,0,.126) 73%, rgba(0,0,0,.075) 80.2%, rgba(0,0,0,.042) 86.1%, rgba(0,0,0,.021) 91%, rgba(0,0,0,.008) 95.2%, transparent); }
+  .dc .grad.t { top: 0; } .dc .grad.b { bottom: 0; transform: scaleY(-1); }
+  .dc .vc { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 0 16px 16px; pointer-events: none; z-index: 3; }
+  .dc .top, .dc .bot { pointer-events: all; transition: transform .2s ease-in-out, opacity .2s ease-in-out; }
+  .dc .idle .top { opacity: 0; transform: translate3d(0,-8px,0); } .dc .idle .bot { opacity: 0; transform: translate3d(0,8px,0); } .dc .idle .grad { opacity: 0; }
+  .dc .idle { cursor: none; }
+  .dc .top { display: flex; align-items: center; gap: 8px; height: 48px; min-width: 0; }
+  .dc .top .ttl { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; font-size: 16px; font-weight: 600; }
+  .dc .top .ttl > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dc .top .ttl i { flex: none; font-size: 22px; color: var(--d-ink-dim); }
+  .dc .top .ttl small { font-size: 12px; font-weight: 500; color: var(--d-ink-dim); }
+  .dc .top .div { flex: none; width: 1px; height: 24px; background: hsl(240 4% 60.8% / .24); }
+  .dc .top .av { width: 24px; height: 24px; font-size: 10px; }
+  .dc .tb { display: flex; gap: 16px; align-items: center; flex: none; }
+  .dc .ib { position: relative; display: grid; place-items: center; width: 24px; height: 24px; color: var(--d-ink-dim); cursor: pointer; }
+  .dc .ib:hover { color: #fff; } .dc .ib i { font-size: 22px; }
+  .dc .cnt { display: flex; align-items: center; gap: 4px; color: var(--d-ink-dim); font-size: 16px; cursor: pointer; } .dc .cnt:hover { color: #fff; }
+  .dc .bot { display: grid; grid-template-columns: minmax(max-content,1fr) auto minmax(max-content,1fr); column-gap: 24px; align-items: center; line-height: 0; }
+  .dc .edge { display: flex; gap: 20px; align-items: center; } .dc .edge.end { justify-content: flex-end; }
+  .dc .ctr { display: flex; gap: 12px; align-items: center; justify-content: center; }
+  .dc .sec { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 12px; background: var(--d-surface-high); border: 1px solid var(--d-border-muted); }
+  .dc .cb { position: relative; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 8px; background: none; color: #fff; cursor: pointer; transition: background .15s ease-in-out, color .15s ease-in-out; font: inherit; }
+  .dc .cb i { font-size: 20px; }
+  .dc .cb:hover, .dc .cb.open { background: rgba(255,255,255,.1); }
+  .dc .cb.white { background: #fff; color: hsl(240 5.9% 16.7%); } .dc .cb.white:hover { background: hsl(228 6.7% 85%); }
+  .dc .cb.red { background: var(--d-red12); color: var(--d-red); } .dc .cb.red:hover, .dc .cb.red.open { background: var(--d-red16); } .dc .cb.red:active { background: var(--d-red24); }
+  .dc .cb.green { background: var(--d-green); color: #fff; }
+  .dc .cb.dis { opacity: .5; cursor: not-allowed; }
+  .dc .grp { display: flex; align-items: center; }
+  .dc .grp .cb:first-child { border-radius: 8px 0 0 8px; }
+  .dc .grp .nub { width: 20px; margin-inline-start: 1px; border-radius: 0 8px 8px 0; }
+  .dc .grp .nub i { font-size: 16px; } .dc .grp .nub.open i { transform: rotateX(180deg); }
+  .dc .grp:hover .cb:not(.red):not(.white) { background: var(--d-mod-muted); } .dc .grp .cb:not(.red):not(.white):hover { background: rgba(255,255,255,.1); }
+  .dc .cb.leave { width: 64px; height: 48px; border-radius: 12px; border: 1px solid var(--d-border-muted); background: var(--d-crit); color: #fff; }
+  .dc .cb.leave:hover { background: var(--d-crit-hover); }
+  .dc .cb.join { width: auto; padding: 0 16px; gap: 8px; display: flex; border-radius: 12px; height: 48px; background: var(--d-green); font-weight: 600; font-size: 14px; }
+  .dc .eb { display: grid; place-items: center; width: 24px; height: 24px; color: var(--d-ink); cursor: pointer; } .dc .eb:hover { color: #fff; } .dc .eb i { font-size: 24px; }
+  .dc .tip { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); padding: 6px 10px; border-radius: 8px; background: var(--d-tip); color: #fff; font: 500 14px/1.2 "gg sans", "Noto Sans", sans-serif; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .1s; z-index: 30; box-shadow: 0 8px 16px rgba(0,0,0,.24); }
+  .dc .tip.below { bottom: auto; top: calc(100% + 10px); }
+  .dc [data-t]:hover > .tip { opacity: 1; }
+
+  .dc .dgrid { position: absolute; inset: 0; overflow: auto; scrollbar-width: none; }
+  .dc .drow { display: flex; justify-content: center; }
+  .dc .tw { display: flex; margin: 0 8px 8px 0; flex: none; }
+  .dc .tile { position: relative; flex: 1; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; cursor: pointer; display: grid; place-items: center; background: var(--d-p700); }
+  .dc .tile .rg { position: absolute; inset: 0; border-radius: 8px; pointer-events: none; transition: box-shadow 50ms ease-out; z-index: 2; }
+  .dc .tile.speak .rg { box-shadow: inset 0 0 0 3px var(--d-green), inset 0 0 0 4px #000; }
+  .dc .tile.sb .rg { box-shadow: inset 0 0 0 3px var(--d-brand), inset 0 0 0 4px #000; }
+  .dc .tile.nob, .dc .tile.nob .rg { border-radius: 0; } .dc .tile.nob .rg { display: none; }
+  .dc .ov { position: absolute; inset: 0; margin: 12px; transition: opacity .2s ease-in-out; z-index: 3; pointer-events: none; }
+  .dc .ov.cp { margin: 4px; }
+  .dc .ovb { position: absolute; inset-inline: 0; bottom: 0; display: flex; gap: 4px; align-items: end; justify-content: space-between; line-height: 0; }
+  .dc .dchip { display: flex; align-items: center; gap: 4px; min-width: 0; min-height: 20px; padding: 6px 8px; border-radius: 8px; background: var(--d-overlay); color: #fff; font-size: 14px; line-height: 20px; }
+  .dc .ov.cp .dchip { font-size: 12px; padding: 4px 6px; min-height: 16px; line-height: 16px; }
+  .dc .dchip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .dc .dchip i { flex: none; font-size: 16px; } .dc .dchip i.r { color: var(--d-red); }
+  .dc .idle .dchip, .dc .idle .obs { opacity: 0; }
+  .dc .obs { display: flex; gap: 8px; pointer-events: all; transition: opacity .2s; }
+  .dc .ob { display: none; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--d-overlay); color: #fff; cursor: pointer; }
+  .dc .ob:hover { background: var(--d-overlay-hover); } .dc .ob i { font-size: 18px; } .dc .ob.on { display: grid; }
+  .dc .tile:hover .ob, .dc .tile.hov .ob { display: grid; }
+  .dc .ind { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; align-items: center; gap: 4px; }
+  .dc .lvb { height: 16px; padding: 0 6px; border-radius: 16px; background: var(--d-red); color: #fff; font: 700 11px/16px "gg sans", "Noto Sans", sans-serif; letter-spacing: .02em; }
+  .dc .lvb.lg { height: 20px; line-height: 20px; padding: 0 8px; font-size: 12px; }
+  .dc .qual { height: 16px; padding: 0 6px; border-radius: 16px 0 0 16px; background: var(--d-overlay); color: #fff; font: 600 11px/16px "gg sans", sans-serif; margin-right: -6px; }
+  .dc .cta { position: relative; z-index: 3; display: flex; gap: 8px; }
+  .dc .dbtn { height: 38px; padding: 0 16px; border: 0; border-radius: 8px; background: hsl(240 4% 60.8% / .24); color: #fff; font: 600 14px/38px "gg sans", "Noto Sans", sans-serif; cursor: pointer; white-space: nowrap; }
+  .dc .dbtn:hover { background: hsl(240 4% 60.8% / .32); } .dc .dbtn.sm { height: 32px; line-height: 32px; padding: 0 12px; }
+  .dc .dbtn.white { background: #fff; color: hsl(240 5.9% 16.7%); } .dc .dbtn.white:hover { background: hsl(228 6.7% 88%); }
+  .dc .dbtn.dis { opacity: .5; cursor: not-allowed; }
+  .dc .shot { position: absolute; inset: 0; background: linear-gradient(160deg, hsl(var(--h) 40% 24%), hsl(calc(var(--h) + 60) 40% 12%)); }
+  .dc .shot.dim { opacity: .15; }
+  .dc .shot::before { content: ""; position: absolute; left: 10%; right: 10%; top: 12%; bottom: 14%; border-radius: 6px; background: linear-gradient(hsl(0 0% 100% / .1) 0 12%, hsl(0 0% 100% / .04) 12%); box-shadow: inset 0 0 0 1px hsl(0 0% 100% / .08); }
+  .dc .cam { position: absolute; inset: 0; background: radial-gradient(circle at 50% 120%, hsl(var(--h) 25% 34%) 0 34%, transparent 35%), radial-gradient(circle at 50% 44%, hsl(var(--h) 20% 44%) 0 13%, transparent 13.5%), linear-gradient(170deg, hsl(calc(var(--h) + 30) 18% 26%), hsl(var(--h) 22% 14%)); }
+  .dc .cam.mirror { transform: scaleX(-1); }
+  .dc .bgav { position: absolute; inset: 0; background: var(--bgc); }
+  .dc .act { position: absolute; inset: 0; background: radial-gradient(circle at 30% 30%, hsl(48 90% 60%), hsl(18 80% 45%) 60%, hsl(330 60% 25%)); display: grid; place-items: center; }
+  .dc .act b { font: 800 22px/1 "Figtree", sans-serif; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.4); }
+  .dc .sel { position: absolute; inset: 0; background: hsl(0 0% 0% / .6); display: grid; place-items: center; z-index: 3; } .dc .sel i { font-size: 32px; color: #fff; }
+  .dc .entry { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px; text-align: center; background: radial-gradient(circle at 50% 0%, hsl(235 60% 30%), hsl(235 40% 10%) 70%); color: #fff; }
+  .dc .entry p { margin: 0; font-size: 14px; color: var(--d-p300); white-space: pre-line; }
+  .dc .entry .x { position: absolute; top: 8px; right: 8px; color: var(--d-p300); }
+  .dc .focus { position: absolute; left: 50%; transform: translateX(-50%); }
+  .dc .focus .tile { width: 100%; height: 100%; aspect-ratio: auto; }
+  .dc .strip { position: absolute; left: 0; right: 0; display: flex; justify-content: center; gap: 8px; padding: 0 8px; }
+  .dc .strip .tile { flex: none; aspect-ratio: 16 / 9; }
+  .dc .mem { position: absolute; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 48px; background: var(--d-p630); color: #fff; cursor: pointer; box-shadow: 0 0 0 1px hsl(0 0% 100% / .06), 0 8px 16px rgba(0,0,0,.24); }
+  .dc .mem:hover { background: var(--d-p700); } .dc .mem i { font-size: 20px; }
+  .dc .camprev { position: absolute; right: 16px; bottom: 50px; width: 160px; aspect-ratio: 16/9; border-radius: 8px; overflow: hidden; z-index: 4; box-shadow: 0 8px 16px rgba(0,0,0,.4); }
+  .dc .join { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; background: radial-gradient(ellipse at 20% -10%, hsl(255 100% 20% / .9), transparent 60%), radial-gradient(ellipse at 90% -10%, hsl(235 86% 65% / .5), transparent 55%), #000; }
+  .dc .join .avs { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .dc .join .avs .tile { width: 48px; flex: none; }
+  .dc .join h2 { margin: 8px 0 0; font: 600 24px/1.25 "gg sans", "Noto Sans", sans-serif; color: #fff; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dc .join p { margin: 0 0 8px; font-size: 14px; color: hsl(240 4.3% 95.5%); }
+  .dc .chat { flex: none; display: flex; flex-direction: column; min-width: 0; background: var(--d-bg-low); color: var(--d-text); border-inline-start: 1px solid var(--d-line); }
+  .dc .chat header { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 16px; border-bottom: 1px solid var(--d-line); font-weight: 600; font-size: 16px; }
+  .dc .chat header i { color: var(--d-muted); font-size: 22px; } .dc .chat header .x { margin-inline-start: auto; cursor: pointer; }
+  .dc .chat .msgs { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; padding: 16px; font-size: 15px; overflow: hidden; }
+  .dc .chat .msgs b { display: block; font-size: 15px; } .dc .chat .msgs span { color: var(--d-text); }
+  .dc .chat .in { margin: 0 16px 16px; height: 44px; border-radius: 8px; background: var(--d-bg); color: var(--d-muted); display: flex; align-items: center; padding: 0 16px; font-size: 15px; }
+  .dc .pop { position: absolute; z-index: 40; width: 260px; padding: 8px; border-radius: 8px; background: var(--d-float); color: var(--d-text); border: 1px solid var(--d-line); box-shadow: 0 12px 24px rgba(0,0,0,.32); font-size: 14px; line-height: 1.3; animation: fade .15s; }
+  .dc .pop h5 { margin: 6px 8px; font-size: 12px; color: var(--d-muted); font-weight: 600; }
+  .dc .pop .mi { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; padding: 0 8px; border-radius: 4px; cursor: default; }
+  .dc .pop .mi:hover { background: var(--d-brand); color: #fff; } .dc .pop .mi.danger { color: var(--d-red); } .dc .pop .mi.danger:hover { background: var(--d-red); color: #fff; }
+  .dc .pop .mi small { color: var(--d-muted); font-size: 12px; } .dc .pop .mi:hover small { color: inherit; }
+  .dc .pop .sep { height: 1px; margin: 4px 8px; background: var(--d-line); }
+  .dc .pop .bar { height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--d-brand) 60%, hsl(240 4% 60.8% / .24) 60%); margin: 8px; }
+  .dc .pip { position: absolute; right: 16px; bottom: 16px; width: 320px; aspect-ratio: 16/9; border-radius: 8px; overflow: hidden; background: hsl(220 7% 8%); z-index: 20; box-shadow: 0 12px 24px rgba(0,0,0,.5); }
+  .dc .pip .pc { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 8px; background: linear-gradient(#000 0, transparent 30%, transparent 60%, #000 100%); font-size: 14px; font-weight: 600; z-index: 2; }
+  .dc .pip .pc div { display: flex; align-items: center; gap: 6px; } .dc .pip .pc i { font-size: 18px; color: var(--d-p300); }
+  .dc .elsewhere { flex: 1; display: flex; flex-direction: column; background: var(--d-bg-low); color: var(--d-text); }
+  .dc .elsewhere header { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--d-line); font-weight: 600; } .dc .elsewhere header i { color: var(--d-muted); font-size: 22px; }
+  .dc .audience { position: absolute; left: 0; right: 0; bottom: 80px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .dc .audience h6 { margin: 0; font-size: 12px; font-weight: 600; color: var(--d-p300); text-transform: uppercase; letter-spacing: .02em; }
+  .dc .audience .ar { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; max-width: 90%; }
+  .dc .audience .am { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 64px; font-size: 12px; color: var(--d-p300); }
+  .dc .audience .am span { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dc .invite { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 8px; background: var(--d-float); color: var(--d-text); box-shadow: 0 12px 24px rgba(0,0,0,.4); white-space: nowrap; }
+  .dc .ringing { opacity: .3; } .dc .ringing::after { content: ""; position: absolute; inset: -3px; border: 3px solid #fff; border-radius: 12px; animation: pulse 2.5s ease-out infinite; }
+  @keyframes pulse { 0% { opacity: 0; transform: scale(1); } 30% { opacity: 1; } 100% { opacity: 0; transform: scale(1.12); } }
+  .dc .dmhead { flex: none; position: relative; background: #000; }
+  .dc .dmrow { position: absolute; inset: 48px 0 72px; display: flex; align-items: center; justify-content: center; gap: 16px; }
+  @keyframes fade { from { opacity: 0; } }
+
+  /* ── Waffle, as built (src/call.rs, src/call/*, src/stage_view.rs, src/pip.rs). The stage is dark in both themes
+        (palette::stage reads Graphite's dark tokens); the chat beside it follows the theme. ── */
+  .wf { --w-bg: #0A0B0D; --w-dock: #17181A; --w-strong: #F3F5F8; --w-text: #D4D8DD; --w-muted: #A0A5AC; --w-faint: #8B8F97; --w-online: #3EC87D; --w-idle: #F2B036; --w-dnd: #DB2B33;
+        --w-coral: #FF9079; --w-wash: 255 255 255; font: 500 14px/1.25 var(--font-ui); color: var(--w-strong); }
+  .wf .call { position: relative; flex: 1 1 auto; min-width: 0; background: var(--w-bg); display: flex; flex-direction: column; gap: 16px; padding: 16px; overflow: hidden; }
+  .wf .head { flex: none; display: flex; align-items: center; gap: 8px; height: 32px; min-width: 0; }
+  .wf .head .ttl { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+  .wf .head .ttl i { font-size: 24px; color: var(--w-muted); flex: none; }
+  .wf .head .ttl div { min-width: 0; }
+  .wf .head .ttl b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wf .head .ttl small { display: block; font-size: 12px; color: var(--w-online); white-space: nowrap; }
+  .wf .head .ttl small.c { color: var(--w-muted); }
+  .wf .chipx { flex: none; display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: 8px; background: rgb(var(--w-wash) / .08); color: var(--w-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .wf .chipx .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--w-online); }
+  .wf .people { flex: none; position: relative; display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px 0 4px; border-radius: 10px; color: var(--w-muted); font-size: 12px; cursor: default; }
+  .wf .people:hover { background: rgb(var(--w-wash) / .05); }
+  .wf .wstack { display: flex; } .wf .wstack .av { width: 22px; height: 22px; font-size: 9px; box-shadow: 0 0 0 2px var(--w-bg); } .wf .wstack .av + .av { margin-left: -6px; }
+  .wf .seam { flex: none; width: 1px; height: 20px; background: rgb(var(--w-wash) / .08); }
+  .wf .sib { flex: none; position: relative; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; color: var(--w-text); cursor: pointer; }
+  .wf .sib:hover { background: rgb(var(--w-wash) / .08); } .wf .sib.on { background: rgb(var(--w-wash) / .12); color: var(--w-strong); } .wf .sib i { font-size: 20px; }
+  .wf .sbtn { flex: none; position: relative; height: 30px; padding: 0 12px; border-radius: 10px; background: rgb(var(--w-wash) / .08); color: var(--w-strong); font-size: 12px; font-weight: 600; display: flex; align-items: center; cursor: pointer; }
+  .wf .body { position: relative; flex: 1; min-height: 0; display: flex; flex-wrap: wrap; justify-content: center; align-content: center; }
+  .wf .tile { position: relative; aspect-ratio: 16 / 9; border-radius: 20px; corner-shape: superellipse(1.4); overflow: hidden; display: grid; place-items: center; cursor: pointer; flex: none; background: var(--fill); }
+  .wf .tile .rg { position: absolute; inset: 0; border-radius: inherit; corner-shape: inherit; border: 1px solid rgb(var(--w-wash) / .06); pointer-events: none; z-index: 2; }
+  .wf .tile:hover .rg, .wf .tile.hov .rg { border-color: rgb(var(--w-wash) / .2); }
+  .wf .tile.speak .rg { border: 2px solid var(--w-online); box-shadow: inset 0 0 0 2px rgb(10 11 13 / .6); }
+  .wf .tile.sb .rg { border: 2px solid var(--accent-fill, #EFA831); box-shadow: inset 0 0 0 2px rgb(10 11 13 / .6); }
+  .wf .tile.lm.speak .rg { border-color: rgb(var(--w-wash) / .42); }
+  .wf .tile.fill { border-radius: 0; } .wf .tile.fill .rg { display: none; }
+  .wf .name { position: absolute; left: 8px; bottom: 8px; z-index: 3; display: flex; align-items: center; gap: 6px; height: 24px; max-width: calc(100% - 16px); padding: 0 8px; border-radius: 8px; background: rgb(0 0 0 / .6); color: #fff; font-size: 12px; font-weight: 500; box-sizing: border-box; }
+  .wf .name span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wf .name i { flex: none; font-size: 14px; color: var(--w-coral); } .wf .name i.srv { color: var(--w-dnd); } .wf .name i.lv { color: #fff; }
+  .wf .tile.small .name, .wf .tile.fill .name { opacity: 0; transition: opacity .15s; } .wf .tile.small:hover .name, .wf .tile.fill:hover .name, .wf .tile.hov .name { opacity: 1; }
+  .wf .wlive { position: absolute; left: 8px; top: 8px; z-index: 3; display: flex; gap: 4px; }
+  .wf .badge { height: 20px; padding: 0 7px; border-radius: 6px; display: flex; align-items: center; font-size: 11px; font-weight: 600; }
+  .wf .badge.lvb { background: #EFA831; color: #2A1C00; } .wf .badge.q { background: rgb(0 0 0 / .6); color: #fff; }
+  .wf .scrim { position: absolute; inset: 0; z-index: 3; background: rgb(0 0 0 / .45); display: flex; align-items: center; justify-content: center; gap: 8px; color: #fff; font-weight: 600; font-size: 13px; }
+  .wf .rb { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: rgb(0 0 0 / .5); color: #fff; cursor: pointer; } .wf .rb i { font-size: 15px; }
+  .wf .hoverbar { position: absolute; right: 8px; bottom: 8px; z-index: 4; display: none; gap: 6px; }
+  .wf .tile:hover .hoverbar, .wf .tile.hov .hoverbar { display: flex; }
+  .wf .hoverbar .sbtn { height: 28px; background: rgb(0 0 0 / .5); }
+  .wf .shot { position: absolute; inset: 0; background: linear-gradient(160deg, hsl(var(--h) 40% 24%), hsl(calc(var(--h) + 60) 40% 12%)); }
+  .wf .shot::before { content: ""; position: absolute; left: 10%; right: 10%; top: 12%; bottom: 14%; border-radius: 6px; background: linear-gradient(hsl(0 0% 100% / .1) 0 12%, hsl(0 0% 100% / .04) 12%); box-shadow: inset 0 0 0 1px hsl(0 0% 100% / .08); }
+  .wf .cam { position: absolute; inset: 0; background: radial-gradient(circle at 50% 120%, hsl(var(--h) 25% 34%) 0 34%, transparent 35%), radial-gradient(circle at 50% 44%, hsl(var(--h) 20% 44%) 0 13%, transparent 13.5%), linear-gradient(170deg, hsl(calc(var(--h) + 30) 18% 26%), hsl(var(--h) 22% 14%)); }
+  .wf .cam.mirror { transform: scaleX(-1); }
+  .wf .act { position: absolute; inset: 0; background: radial-gradient(circle at 30% 30%, hsl(48 90% 60%), hsl(18 80% 45%) 60%, hsl(330 60% 25%)); display: grid; place-items: center; }
+  .wf .act b { font: 800 22px/1 "Figtree", sans-serif; color: #fff; }
+  .wf .ctl { flex: none; position: relative; display: flex; justify-content: center; align-items: center; gap: 8px; height: 48px; transition: transform .26s cubic-bezier(.23,1,.32,1), opacity .26s; z-index: 5; }
+  .wf .rest .ctl { opacity: 0; transform: translateY(6px); pointer-events: none; }
+  .wf .grp { display: flex; gap: 2px; height: 48px; padding: 4px; box-sizing: border-box; border-radius: 14px; corner-shape: superellipse(1.4); background: var(--w-dock); border: 1px solid rgb(var(--w-wash) / .08); }
+  .wf .cb { position: relative; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 10px; corner-shape: superellipse(1.4); background: transparent; color: #fff; cursor: pointer; font: inherit; transition: background-color .15s; }
+  .wf .cb i { font-size: 20px; } .wf .cb:hover { background: rgb(var(--w-wash) / .08); } .wf .cb:active { transform: scale(.92); }
+  .wf .cb.chev { width: 20px; color: var(--w-muted); } .wf .cb.chev i { font-size: 12px; } .wf .cb.chev:hover { color: #fff; }
+  .wf .cb.off { background: rgb(219 43 51 / .2); color: var(--w-coral); } .wf .cb.off:hover { background: rgb(219 43 51 / .3); }
+  .wf .cb.onn { background: var(--w-strong); color: #1d1f24; } .wf .cb.onn:hover { background: var(--w-text); }
+  .wf .cb.act { background: #EFA831; color: #2A1C00; }
+  .wf .cb.open { background: rgb(var(--w-wash) / .12); color: #fff; }
+  .wf .cb.dis { opacity: .4; cursor: not-allowed; } .wf .cb.dis:hover { background: transparent; }
+  .wf .cb.leave { width: 56px; height: 48px; border-radius: 14px; background: #C21F3A; color: #fff; } .wf .cb.leave:hover { background: #A81A32; }
+  .wf .corner { position: absolute; right: 0; top: 0; height: 48px; display: flex; align-items: center; gap: 4px; }
+  .wf .tip { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); padding: 6px 10px; border-radius: 8px; background: var(--w-strong); color: #17181A; font-size: 12px; font-weight: 500; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 30; }
+  .wf .tip.below { bottom: auto; top: calc(100% + 8px); }
+  .wf [data-t]:hover > .tip { opacity: 1; }
+  .wf .focus { position: relative; flex: 1; min-height: 0; margin: -16px -16px 0; background: #000; display: flex; }
+  .wf .focus > .tile { width: 100%; height: 100%; aspect-ratio: auto; }
+  .wf .fband { flex: none; height: 48px; margin: -16px -16px -16px; padding: 0 16px; display: flex; align-items: center; gap: 8px; }
+  .wf .strip { flex: none; display: flex; justify-content: center; gap: 8px; padding: 8px 16px 0; margin: 0 -16px; overflow-x: auto; scrollbar-width: none; }
+  .wf .strip .tile { width: 148px; }
+  .wf .stog { position: absolute; left: 50%; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: 10px; background: var(--w-dock); color: var(--w-text); font-size: 12px; cursor: pointer; border: 1px solid rgb(var(--w-wash) / .08); }
+  .wf .chat { flex: none; display: flex; flex-direction: column; min-width: 0; background: var(--bg-page); color: var(--text); border-inline-start: 1px solid var(--line); }
+  .wf .chat.float { position: absolute; right: 8px; top: 8px; bottom: 8px; z-index: 12; border: 0; border-radius: 20px; corner-shape: superellipse(1.4); overflow: hidden; box-shadow: var(--shadow-pop); }
+  .wf .chat header { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--line); font-weight: 600; color: var(--text-strong); }
+  .wf .chat header i { color: var(--text-muted); font-size: 20px; } .wf .chat header .x { margin-inline-start: auto; cursor: pointer; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; } .wf .chat header .x:hover { background: var(--hover); }
+  .wf .chat .msgs { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; padding: 16px; font-size: 14px; overflow: hidden; }
+  .wf .chat .msgs b { display: block; color: var(--text-strong); }
+  .wf .chat .in { margin: 0 12px 12px; height: 44px; border-radius: 14px; background: var(--bg-raised); color: var(--text-faint); display: flex; align-items: center; padding: 0 14px; }
+  .wf .pop { position: absolute; z-index: 40; width: 300px; padding: 6px; border-radius: 20px; corner-shape: superellipse(1.4); background: #26282A; color: var(--w-text); box-shadow: 0 16px 40px rgb(0 0 0 / .5), 0 0 0 1px rgb(var(--w-wash) / .08); font-size: 13px; animation: fade .15s; }
+  .wf .pop h5 { margin: 6px 10px 4px; font-size: 12px; color: var(--w-faint); font-weight: 600; }
+  .wf .pop .mi { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px; border-radius: 12px; }
+  .wf .pop .mi:hover { background: rgb(var(--w-wash) / .05); color: var(--w-strong); } .wf .pop .mi.danger { color: #FF7A8C; }
+  .wf .pop .mi i { font-size: 16px; color: var(--w-muted); width: 16px; } .wf .pop .mi small { margin-left: auto; color: var(--w-faint); }
+  .wf .pop .sep { height: 1px; margin: 4px 10px; background: rgb(var(--w-wash) / .08); }
+  .wf .pip { position: absolute; right: 16px; bottom: 76px; width: 320px; height: 180px; border-radius: 14px; overflow: hidden; z-index: 20; box-shadow: 0 16px 40px rgb(0 0 0 / .5); }
+  .wf .pip .sbtn { position: absolute; right: 8px; bottom: 8px; z-index: 3; background: rgb(0 0 0 / .5); }
+  .wf .elsewhere { flex: 1; display: flex; flex-direction: column; background: var(--bg-page); color: var(--text); }
+  .wf .elsewhere header { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--line); color: var(--text-strong); font-weight: 600; }
+  .wf .wnote { margin: auto; max-width: 360px; text-align: center; color: var(--w-muted); font-size: 13px; line-height: 1.45; }
+  .wf .wnote b { display: block; color: var(--w-strong); font-size: 16px; margin-bottom: 4px; }
+  .wf .stagehead { font-size: 12px; font-weight: 600; color: var(--w-muted); display: flex; align-items: center; gap: 6px; }
+  .wf .aud { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+  .wf .aud .am { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 60px; font-size: 11px; color: var(--w-muted); } .wf .aud .am span { max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wf .aud .am em { font-style: normal; color: #EFA831; }
+  .wf .invite { position: absolute; left: 50%; top: 56px; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 20px; background: #26282A; color: var(--w-strong); box-shadow: 0 16px 40px rgb(0 0 0 / .5); white-space: nowrap; font-size: 13px; }
+  .wf .wbtn { height: 30px; padding: 0 12px; border-radius: 10px; border: 0; background: rgb(var(--w-wash) / .08); color: var(--w-strong); font: 600 12px/30px var(--font-ui); cursor: pointer; }
+  .wf .wbtn.p { background: #EFA831; color: #2A1C00; } .wf .wbtn.d { background: #C21F3A; color: #fff; }
+  .wf .dmwin { position: absolute; right: 16px; top: 16px; width: 300px; z-index: 10; padding: 16px; border-radius: 20px; background: #26282A; color: var(--w-strong); box-shadow: 0 16px 40px rgb(0 0 0 / .5); display: grid; gap: 10px; justify-items: center; text-align: center; }
+
+  /* Shared avatar */
+  .av { position: relative; flex: none; width: var(--s, 80px); height: var(--s, 80px); border-radius: 50%; display: grid; place-items: center; color: #fff; font: 700 calc(var(--s, 80px) * .4)/1 "Figtree", sans-serif; background: linear-gradient(135deg, hsl(var(--h) 70% 62%), hsl(calc(var(--h) + 40) 65% 45%)); z-index: 1; }
+  .av.spk { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--d-green); }
+  .stagepad { padding-top: 0; }
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div class="layout">
+<nav class="toc" id="toc" aria-label="Design system"></nav>
+<main>
+<section id="voice-stage">
+  <h1>Voice stage</h1>
+  <p class="lede">The call view that fills the main area while you're in, or looking at, a voice channel or call. Discord's behaviour is read from its shipped web client (discord.com bundle, lazy chunks and CSS, 2026-11-24); Waffle's is <code>src/call.rs</code>, <code>src/call/*</code>, <code>src/stage_view.rs</code>, <code>src/pip.rs</code> and <code>src/dm_call.rs</code> on main. Both stages are dark whatever the page theme (Discord forces its Onyx theme on a black call area; Waffle reads Graphite's dark tokens); the chat beside them follows the theme.</p>
+  <p class="src">Discord source: call wrapper <code>wrapper_hbKzX7</code>/<code>callContainer_hbKzX7</code> (idle timeout <code>2e3</code>, layouts NORMAL/MINIMUM/NO_CHAT/FULL_SCREEN), control layer <code>root_rTsZa_</code> (160px gradients, idle fade 8px/200ms), tray <code>buttonSection_9bvEB0</code> and <code>centerButton_K9Xq13</code>, tray compactness <code>bf(w)</code> (≤650 no invite, ≤550 minimal), grid module 511205 (16:9, 8px gaps, ≤25 visible), call tile <code>tile_7NOr2f</code> with its overlay thresholds (≤124, ≤160, ≤220), speaking shadow module 556525, focus view 699707 and strip 163432, join screen 484191, chat sidebar 518530 (min 450). Strings resolved from the en-US table. Icons on both sides are Phosphor stand-ins.</p>
+  <ul class="nv" id="nv">
+    <li>Not verified: the order Discord lays grid tiles in (drawn: activity, streams, then people in join order; the focus strip's order <em>is</em> verified).</li>
+    <li>Not verified: Discord's PiP default width (drawn 320) and whether it shows for voice-only calls (drawn: only with video or a stream).</li>
+    <li>Not verified: what Discord draws while a voice connection is still connecting (drawn as connected, header says "Connecting").</li>
+    <li>Not verified: the tray caret's resting direction (drawn pointing up; <code>.open</code> flips it with <code>rotateX(180deg)</code>, which is read).</li>
+    <li>Not verified: the colour Discord gives Camera and Share while on (drawn white, its <code>active</code> variant); the overlay title's type size (drawn 14px, 12px compact).</li>
+    <li>Not verified: Discord's Stage speaker columns (drawn with the 1/2/3/4 breakpoints Waffle's comment attributes to Discord) and its audience layout beyond the class names <code>audienceRow/audienceMember</code>.</li>
+    <li>Not verified: what the main window shows after Discord pops the call out (drawn as its "popped out" string), the chat sidebar's behaviour when the window is narrower than stage + 450.</li>
+    <li>Not verified: Discord's voice-channel effects and gifting buttons (an enum names them; not drawn).</li>
+  </ul>
+</section>
+
+<section id="playground">
+  <h2>Playground</h2>
+  <p class="lede">Set the scene on the left. Hover, click, double-click and right-click tiles and controls on either stage; leave the pointer still to watch each one go idle. Clicks drive one shared state, so both apps answer the same action, and each log says what that app does.</p>
+  <div class="play">
+    <form class="knobs" id="knobs" onsubmit="return false">
+      <fieldset><legend>Channel</legend>
+        <label><span>Kind</span><select name="kind"><option value="voice">Server voice</option><option value="dm">DM call</option><option value="stage">Stage channel</option></select></label>
+        <label><span>You</span><select name="conn"><option value="connected">In the call</option><option value="connecting">Connecting</option><option value="none">Viewing, not joined</option><option value="ringing">Ringing (DM)</option></select></label>
+        <label><span>People</span><input type="range" name="n" min="0" max="30" value="4"><output id="o-n">4</output></label>
+        <label><span>Speaking</span><select name="speak"><option value="none">No one</option><option value="you">You</option><option value="one" selected>One other</option><option value="many">Three at once</option><option value="sb">Soundboard</option></select></label>
+      </fieldset>
+      <fieldset><legend>Video</legend>
+        <label><span>Cameras on</span><input type="range" name="cams" min="0" max="12" value="1"><output id="o-cams">1</output></label>
+        <label><input type="checkbox" name="selfCam"> Your camera</label>
+        <label><span>Others live</span><input type="range" name="streams" min="0" max="3" value="1"><output id="o-streams">1</output></label>
+        <label><input type="checkbox" name="selfLive"> You're live</label>
+        <label><input type="checkbox" name="activity"> Activity running</label>
+      </fieldset>
+      <fieldset><legend>Voice</legend>
+        <label><input type="checkbox" name="selfMute"> You're muted</label>
+        <label><input type="checkbox" name="selfDeaf"> You're deafened</label>
+        <label><input type="checkbox" name="othersMuted" checked> Someone muted</label>
+        <label><input type="checkbox" name="serverMuted"> Someone server muted</label>
+        <label><input type="checkbox" name="longNames"> Longest names</label>
+      </fieldset>
+      <fieldset><legend>View</legend>
+        <label><span>Width</span><input type="range" name="W" min="320" max="1500" value="980"><output id="o-W">980</output></label>
+        <label><span>Height</span><input type="range" name="H" min="240" max="900" value="560"><output id="o-H">560</output></label>
+        <label><span>Focus</span><select name="focus"><option value="">Grid</option><option value="u0">You</option><option value="u1">Person 2</option><option value="s">First stream</option><option value="a">Activity</option></select></label>
+        <label><input type="checkbox" name="stripHidden"> Hide the strip</label>
+        <label><input type="checkbox" name="chat"> Chat open</label>
+        <label><span>Controls</span><select name="ctl"><option value="auto">Live (idle timers)</option><option value="shown">Pin shown</option><option value="idle">Pin idle</option></select></label>
+        <label><input type="checkbox" name="away"> Navigated away (PiP)</label>
+        <label><input type="checkbox" name="popout"> Popped out</label>
+      </fieldset>
+      <fieldset><legend>Stage channel</legend>
+        <label><span>Your role</span><select name="role"><option value="speaker">Speaker</option><option value="audience">Audience</option><option value="hand">Hand raised</option><option value="invited">Invited to speak</option></select></label>
+        <label><input type="checkbox" name="live" checked> Stage started</label>
+      </fieldset>
+      <fieldset><legend>Presets</legend>
+        <div class="acts">
+          <button type="button" data-act="p-empty">Empty channel</button>
+          <button type="button" data-act="p-alone">Alone</button>
+          <button type="button" data-act="p-crowd">30 people</button>
+          <button type="button" data-act="p-cams">Cameras</button>
+          <button type="button" data-act="p-watch">Watching</button>
+          <button type="button" data-act="p-narrow">Narrow</button>
+          <button type="button" data-act="reset">Reset</button>
+        </div>
+      </fieldset>
+    </form>
+    <div class="stages">
+      <div class="stage"><h3>Discord</h3><div class="fit" id="fd"></div><ol class="log" id="ld" reversed></ol></div>
+      <div class="stage"><h3>Waffle, as built</h3><div class="fit" id="fw"></div><ol class="log" id="lw" reversed></ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="cases">
+  <h2>Every case</h2>
+  <p class="lede">Each state Discord's stage can be in, frozen, with Waffle's beside it. Every stage still answers hover; rows that need a hover, menu or idle state have it pinned.</p>
+  <div class="cases" id="caselist"></div>
+</section>
+
+<section id="gaps">
+  <h2>What to change in Waffle</h2>
+  <div class="gaps-wrap">
+  <table class="gaps">
+    <thead><tr><th>Area</th><th>Discord</th><th>Waffle today</th></tr></thead>
+    <tbody id="gaprows"></tbody>
+  </table>
+  </div>
+</section>
+</main>
+</div>
+<script src="site.js"></script>
+<script>
+// ── Model ──
+const BASE = { kind: "voice", conn: "connected", n: 4, speak: "one", cams: 1, selfCam: false, streams: 1, selfLive: false, activity: false,
+  selfMute: false, selfDeaf: false, othersMuted: true, serverMuted: false, longNames: false, W: 980, H: 560, focus: "", stripHidden: false, chat: false,
+  ctl: "auto", away: false, popout: false, role: "speaker", live: true, watching: [], dIdle: false, wRest: false, menu: null, pop: null, hov: null, entryDismissed: false };
+const NAMES = ["Frsty", "Mira", "Bao", "Yuzu", "Kenji", "Ana", "Ollie", "Sana", "Theo", "Lumi", "Rex", "Ivy", "Juno", "Pax", "Quinn", "Remy", "Sol", "Tove", "Uma", "Vik", "Wren", "Xan", "Yara", "Zed", "Ada", "Bo", "Cy", "Dee", "Eli", "Fae"];
+const LONG = "Maximiliana Wolfeschlegelsteinhausen";
+const CHANNEL = { voice: "General", dm: "mira", stage: "Town Hall" };
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const hue = n => [...n].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+const icon = (n, cls = "") => `<i class="ph-fill ph-${n} ${cls}" aria-hidden="true"></i>`;
+const bold = (n, cls = "") => `<i class="ph-bold ph-${n} ${cls}" aria-hidden="true"></i>`;
+const av = (p, s, extra = "") => `<span class="av${extra}" style="--h:${p.hue};--s:${s}px" aria-hidden="true">${esc(p.name[0])}</span>`;
+
+// Who is in the channel. Not joined: you aren't among them.
+function people(s) {
+  const out = [], joined = s.conn !== "none";
+  const n = joined ? Math.max(1, s.n) : s.n;
+  for (let i = 0; i < n; i++) {
+    const idx = joined ? i : i + 1, self = joined && i === 0;
+    const name = self ? "Frsty" : s.longNames && idx === 1 ? LONG : NAMES[idx % NAMES.length] + (idx >= NAMES.length ? " " + Math.floor(idx / NAMES.length) : "");
+    const others = n - (joined ? 1 : 0), oi = joined ? i : i + 1;
+    out.push({ id: "u" + idx, name, self, hue: hue(name),
+      speaking: s.speak === "you" ? self : s.speak === "one" ? idx === 1 : s.speak === "many" ? idx >= 1 && idx <= 3 : false,
+      sounding: s.speak === "sb" && idx === 1,
+      cam: self ? s.selfCam : oi >= 1 && oi <= Math.min(s.cams, others),
+      live: self ? s.selfLive : oi > 0 && oi > others - Math.min(s.streams, others) && oi <= others,
+      muted: self ? s.selfMute || s.selfDeaf : s.othersMuted && idx === 2, deaf: self ? s.selfDeaf : false, server: s.serverMuted && idx === 3 });
+  }
+  return out;
+}
+// Tiles: a person's tile, plus a separate tile per stream, plus the activity.
+function tiles(s, app) {
+  const ps = people(s), streams = ps.filter(p => p.live).map(p => ({ type: "stream", id: "s" + p.id, p, watched: p.self || s.watching.includes(p.id) }));
+  const users = ps.map(p => ({ type: "user", id: p.id, p }));
+  const act = s.activity ? [{ type: "activity", id: "a", p: { name: "Gartic Phone", hue: 30 } }] : [];
+  if (app === "w") { // Waffle: streams you watch, other streams, cameras, then avatars (call.rs ordered_tiles).
+    return [...streams.filter(t => t.watched), ...streams.filter(t => !t.watched), ...act, ...users.filter(t => t.p.cam), ...users.filter(t => !t.p.cam)];
+  }
+  return [...act, ...streams, ...users];
+}
+function focused(s, list) {
+  if (!s.focus) return null;
+  if (s.focus === "s") return list.find(t => t.type === "stream") ?? null;
+  return list.find(t => t.id === s.focus) ?? null;
+}
+
+// ── Discord layout math, as shipped ──
+// Grid (module 511205): the biggest 16:9 tile that fits every tile (8px gaps), at least width/25; past 25 tiles the grid scrolls.
+function dGrid(count, width, height) {
+  const c = 16 / 9, l = width - 16, a = height - 128;
+  const cols = w => Math.max(1, Math.floor((l - w) / (8 + w)) + 1);
+  const lb = (lo, hi, pred) => { let i = hi - lo; while (i > 0) { let t = lo; const h = Math.floor(i / 2); t += h; if (pred(t)) { lo = t + 1; i -= h + 1; } else i = h; } return lo; };
+  const r = Math.floor(l / 25);
+  const s = count > 25 ? lb(r, l, w => cols(w) * (Math.ceil((a - w / c) / (8 + w / c)) + 1) > 25)
+                       : lb(r, l, w => cols(w) * (Math.floor((a - w / c) / (8 + w / c)) + 1) >= count) - 1;
+  const o = Math.max(1, cols(s)), rows = Math.ceil(count / o), rowH = Math.floor(s / c) + 8;
+  return { w: Math.max(1, s), cols: o, rows, top: 64 + Math.max(0, a - rowH * rows) / 2, scrolls: rowH * rows > a + 8 };
+}
+// Focus strip (module 163432): tiles up to 16/9*112+8 wide, at least 124, at most 12; you sort last.
+function dStrip(width, list) {
+  const order = t => t.type === "activity" ? 0 : t.type === "stream" ? 1 : t.p.speaking ? 2 : t.p.cam ? 4 : 5;
+  const sorted = [...list].sort((a, b) => order(a) - order(b));
+  const selfIdx = sorted.findIndex(t => t.type === "user" && t.p.self && t.p.cam);
+  const selfT = selfIdx >= 0 ? sorted.splice(selfIdx, 1)[0] : null;
+  const max = 16 / 9 * 112 + 8, M = selfT ? width - max - 8 : width;
+  const A = Math.max(0, Math.min(Math.floor((M - 8) / (124 + 8)), 12, list.length));
+  const w = Math.min((M - 8) / Math.max(A, 1) - 8, max);
+  const shown = sorted.slice(0, selfT ? A : A);
+  return { tiles: selfT ? [...shown, selfT] : shown, w, selfW: max };
+}
+const dBar = w => w <= 550 ? 2 : w <= 650 ? 1 : 0;
+
+// ── Waffle layout math, as built (call.rs grid_fit; fit.rs Dock) ──
+function wGrid(n, width, height) {
+  n = Math.max(1, n);
+  const gap = c => c >= 3 ? 8 : 10;
+  const size = c => { const rows = Math.ceil(n / c), g = gap(c); return Math.min((width - g * (c - 1)) / c, (height - g * (rows - 1)) / rows * 16 / 9); };
+  let best = 1; for (let c = 1; c <= n; c++) if (size(c) > size(best)) best = c;
+  return { cols: best, w: Math.max(0, Math.floor(size(best))), gap: gap(best) };
+}
+const wDock = w => w >= 560 ? "full" : w >= 420 ? "compact" : "tight";
+const wChatWidth = W => Math.max(450, Math.min(450, 640, W - 550));
+
+// ── Discord rendering ──
+function dTip(t, below) { return `<span class="tip${below ? " below" : ""}">${esc(t)}</span>`; }
+function dTile(t, w, s, o = {}) {
+  const compact = w <= 220, small = w < 195, hideBottom = w <= 124;
+  let media = "", chipIcons = "", name = "", cls = "", buttons = "", ind = "", cta = "";
+  if (t.type === "user") {
+    const p = t.p;
+    if (p.cam) media = `<div class="cam${p.self ? " mirror" : ""}" style="--h:${p.hue}"></div>`;
+    else media = `<div class="bgav" style="--bgc:hsl(${p.hue} 28% 26%)"></div>${av(p, w < 124 ? 40 : 80)}`;
+    const ic = p.server ? icon("microphone-slash", "r") : p.deaf ? icon("speaker-slash", "r") : p.muted ? icon("microphone-slash", "r") : "";
+    chipIcons = ic; name = p.name;
+    if (p.speaking && !p.muted) cls += " speak"; if (p.sounding) cls += " sb";
+    buttons = `<span class="ob" data-t>${icon("dots-three")}${dTip("Options")}</span>`;
+  } else if (t.type === "stream") {
+    const p = t.p;
+    chipIcons = icon("monitor"); name = p.name;
+    ind = `<div class="ind"><span class="lvb">LIVE</span></div>`;
+    if (t.watched || p.self) media = `<div class="shot" style="--h:${p.hue}"></div>`;
+    else { media = `<div class="shot dim" style="--h:${p.hue}"></div>`; if (!o.selected) cta = `<div class="cta"><button class="dbtn${small ? " sm" : ""}" data-hit="watch" data-id="${t.id}">${w < 175 ? "Watch" : "Watch Stream"}</button></div>`; }
+    buttons = `<span class="ob" data-t>${icon("dots-three")}${dTip("Options")}</span>` + (t.watched && !p.self ? `<span class="ob" data-t>${icon("speaker-high")}${dTip("Mute")}</span>` : "");
+  } else if (t.type === "activity") {
+    media = `<div class="act"><b>${esc(t.p.name)}</b></div>`; name = "";
+  } else if (t.type === "entry") {
+    const alone = t.alone;
+    media = w < 250 ? `<div class="entry"><button class="dbtn white sm">${alone ? "Invite to Voice" : "Start An Activity"}</button></div>`
+      : alone ? `<div class="entry">${icon("rocket-launch")}<p>Looking for something to do?\nStart a game or video playlist instantly.</p><div class="cta"><button class="dbtn white sm">Invite to Voice</button><button class="dbtn sm">Choose Activity</button></div></div>`
+      : `<div class="entry"><span class="x">${bold("x")}</span><b style="font-size:16px">Start An Activity</b><p>Looking for something to do?\nStart a game or video playlist instantly.</p><button class="dbtn white sm">Choose Activity</button><span style="font-size:12px;color:var(--d-p300)">Don't show again</span></div>`;
+    return `<div class="tile" data-tile="${t.id}" style="cursor:default">${media}</div>`;
+  }
+  const overlay = t.type === "activity" ? "" : `<div class="ov${compact ? " cp" : ""}">${hideBottom ? "" : `<div class="ovb"><div class="dchip">${chipIcons}${name ? `<span>${esc(name)}</span>` : ""}</div><div class="obs">${buttons}</div></div>`}</div>`;
+  const sel = o.selected ? `<div class="sel">${icon(t.type === "stream" ? "monitor" : t.p?.cam ? "video-camera" : "phone")}</div>` : "";
+  return `<div class="tile${cls}${o.nob ? " nob" : ""}${s.hov === t.id ? " hov" : ""}" data-tile="${t.id}">${media}<div class="rg"></div>${ind}${cta}${overlay}${sel}</div>`;
+}
+function dControls(s, width) {
+  const lvl = dBar(width), narrowWin = width <= 456, muted = s.selfMute || s.selfDeaf, p = s.pop?.app === "d" ? s.pop.what : null;
+  const nub = (what, red) => narrowWin ? "" : `<button class="cb nub${red ? " red" : ""}${p === what ? " open" : ""}" data-hit="pop-${what}" data-t aria-label="${what === "mic" ? "More Microphone Options" : "More Options"}">${bold("caret-up")}</button>`;
+  const ps = people(s), me = ps.find(x => x.self);
+  if (s.kind === "stage") return dStageControls(s, width);
+  const mic = `<div class="grp"><button class="cb${muted ? " red" : ""}" data-hit="mic" data-t>${icon(muted ? "microphone-slash" : "microphone")}${dTip(s.selfDeaf ? "Undeafen" : muted ? "Unmute" : "Mute")}</button>${nub("mic", muted)}</div>`;
+  const cam = `<div class="grp"><button class="cb${s.selfCam ? " white" : ""}" data-hit="cam" data-t>${icon(s.selfCam ? "video-camera" : "video-camera-slash")}${dTip(s.selfCam ? "Turn Off Camera" : "Turn On Camera")}</button>${nub("cam")}</div>`;
+  const second = lvl < 2 ? `<div class="sec"><button class="cb${s.selfLive ? " white" : ""}" data-hit="share" data-t>${icon("screencast")}${dTip(s.selfLive ? "Stop Streaming" : "Share Your Screen")}</button><button class="cb${s.activity ? " green" : ""}" data-hit="activity" data-t>${icon("rocket-launch")}${dTip("Start An Activity")}</button><button class="cb" data-hit="soundboard" data-t>${icon("waveform")}${dTip(s.selfDeaf ? "Soundboard disabled when deafened" : "Open Soundboard")}</button><button class="cb${p === "more" ? " open" : ""}" data-hit="pop-more" data-t>${icon("dots-three")}${dTip("More Options")}</button></div>` : "";
+  const f = focused(s, tiles(s, "d")), watchingFocused = f?.type === "stream" && !f.p.self;
+  const leaveTip = watchingFocused ? "Stop Watching" : s.activity && f?.type === "activity" ? "Leave Activity" : "Disconnect";
+  const leave = `<button class="cb leave" data-hit="leave" data-t>${icon(watchingFocused ? "monitor" : "phone-x")}${dTip(leaveTip)}</button>`;
+  const invite = lvl < 1 ? `<span class="eb" data-hit="invite" data-t>${icon("user-plus")}${dTip("Invite to Voice")}</span>` : "";
+  const dmChat = s.kind === "dm" ? `<span class="eb" data-hit="chat" data-t>${bold(s.chat ? "caret-up" : "caret-down")}${dTip(s.chat ? "Hide chat" : "Show chat")}</span>` : "";
+  const vol = f && f.type !== "activity" && !f.p.self ? `<span class="eb" data-hit="volume" data-t>${icon("speaker-high")}${dTip(f.type === "stream" ? "Stream Volume" : "User Volume")}</span>` : "";
+  return `<div class="bot"><div class="edge">${invite}${dmChat}</div><div class="ctr"><div class="sec">${mic}${cam}</div>${second}${leave}</div>
+    <div class="edge end">${vol}<span class="eb" data-hit="popout" data-t>${icon("arrow-square-out")}${dTip("Pop Out")}</span><span class="eb" data-hit="fullscreen" data-t>${icon("arrows-out")}${dTip("Full Screen")}</span></div></div>`;
+}
+function dStageControls(s, width) {
+  const speaker = s.role === "speaker", muted = s.selfMute || !speaker;
+  const hand = s.role === "hand";
+  const mic = speaker ? `<div class="grp"><button class="cb${muted ? " red" : ""}" data-hit="mic" data-t>${icon(muted ? "microphone-slash" : "microphone")}${dTip(muted ? "Unmute" : "Mute")}</button></div>` : `<button class="cb red dis" data-t>${icon("microphone-slash")}${dTip("Suppressed")}</button>`;
+  const handBtn = speaker ? `<button class="cb" data-hit="tolisten" data-t>${icon("arrow-down")}${dTip("Move to Audience")}</button>` : `<button class="cb${hand ? " white" : ""}" data-hit="hand" data-t>${icon("hand")}${dTip(hand ? "Cancel Request" : "Request to Speak")}</button>`;
+  const cam = speaker ? `<button class="cb" data-hit="cam" data-t>${icon("video-camera-slash")}${dTip("Turn On Camera")}</button><button class="cb" data-hit="share" data-t>${icon("screencast")}${dTip("Share Your Screen")}</button>` : "";
+  return `<div class="bot"><div class="edge"></div><div class="ctr"><div class="sec">${mic}${cam}${handBtn}<button class="cb" data-hit="pop-more" data-t>${icon("dots-three")}${dTip("More Options")}</button></div><button class="cb leave" data-hit="leave" data-t>${icon("phone-x")}${dTip("Disconnect Quietly")}</button></div><div class="edge end"><span class="eb" data-hit="fullscreen" data-t>${icon("arrows-out")}${dTip("Full Screen")}</span></div></div>`;
+}
+function dHeader(s, f, list) {
+  const ps = people(s), name = esc(CHANNEL[s.kind]);
+  const glyph = s.kind === "stage" ? "broadcast" : s.kind === "dm" ? "at" : "speaker-high";
+  let extra = "";
+  if (f?.type === "stream") extra = `<span class="div"></span>${av(f.p, 24)}<span>${esc(f.p.name)}’s Screen</span>`;
+  else if (f?.type === "activity") extra = `<span class="div"></span><span>${esc(f.p.name)}</span>`;
+  else if (s.kind === "stage") extra = `<span class="div"></span><span style="font-weight:500">Weekly roadmap Q&amp;A</span>`;
+  const status = s.conn === "connecting" ? `<small>Connecting</small>` : "";
+  let tb = "";
+  if (f?.type === "stream") tb += `<span style="display:flex"><span class="qual">1080P 60</span><span class="lvb lg">LIVE</span></span>`;
+  if (s.stripHidden && f) tb += `<span class="cnt" data-t>${icon("users")}${ps.length}${dTip("Participants", true)}</span>`;
+  if (s.kind === "stage") tb += `<span class="ib" data-hit="audience" data-t>${icon("users-three")}${dTip("Audience", true)}</span>`;
+  if (s.kind !== "dm" && !s.chat) tb += `<span class="ib" data-hit="chat" data-t>${icon("chat-circle")}${dTip("Show Chat", true)}</span>`;
+  return `<div class="top"><div class="ttl">${icon(glyph)}<span>${name}</span>${status}${extra}</div><div class="tb">${tb}</div></div>`;
+}
+function dChat(s, w) {
+  return `<aside class="chat" style="width:${w}px"><header>${icon("chat-circle")}<span>${esc(CHANNEL[s.kind])}</span><span class="x" data-hit="chat" title="Close">${bold("x")}</span></header>
+    <div class="msgs"><div><b>Mira</b><span>who's bringing snacks to the raid</span></div><div><b>Bao</b><span>I can stream it if anyone wants to watch</span></div></div><div class="in">Message #${esc(CHANNEL[s.kind])}</div></aside>`;
+}
+function dMenu(s) {
+  const m = s.menu; if (!m || m.app !== "d") return "";
+  const list = tiles(s, "d"), t = list.find(x => x.id === m.id); if (!t) return "";
+  const f = focused(s, list), isF = f?.id === t.id;
+  let items;
+  if (t.type === "stream") items = [t.watched || t.p.self ? (t.p.self ? "Stop Streaming" : "Stop Watching") : "Watch Stream", "sep", "Stream Volume ▸", isF ? "Unfocus This Person" : "Focus This Person", "Pop Out Stream", "sep", "Profile", "Message"];
+  else if (t.p.self) items = ["Profile", "Mention", "sep", isF ? "Unfocus This Person" : "Focus This Person", t.p.cam ? "Pop Out Video" : "Pop Out User", "sep", "Edit Per-server Profile", "Change Nickname", "sep", "Copy User ID"];
+  else items = ["Profile", "Mention", "Message", "Start a Call", "Add Note", "sep", isF ? "Unfocus This Person" : "Focus This Person", t.p.cam ? "Pop Out Video" : "Pop Out User", ...(t.p.cam ? ["Disable Video"] : []), "User Volume", "Mute", "Mute Soundboard", "sep",
+    ...(s.kind === "voice" ? ["Server Mute", "Server Deafen", "Disconnect!", "Move to ▸", "sep", "Change Nickname", "Timeout " + t.p.name + "!", "Kick " + t.p.name + "!", "Ban " + t.p.name + "!", "sep"] : []), "Copy User ID"];
+  return `<div class="pop" style="left:${m.x}px;top:${m.y}px;width:220px">${items.map(i => i === "sep" ? `<div class="sep"></div>` : i === "User Volume" ? `<h5>User Volume</h5><div class="bar"></div>` : `<div class="mi${i.endsWith("!") ? " danger" : ""}" data-menu="${esc(i)}">${esc(i.replace(/!$/, ""))}</div>`).join("")}</div>`;
+}
+function dPop(s, width, height) {
+  if (!s.pop || s.pop.app !== "d") return "";
+  const cx = width / 2;
+  if (s.pop.what === "mic") return `<div class="pop" style="left:${cx - 240}px;bottom:76px"><h5>Input Device</h5><div class="mi">MacBook Pro Microphone <small>Default</small></div><h5>Input Profile</h5><div class="mi">Voice Isolation</div><h5>Input Volume</h5><div class="bar"></div><div class="mi">Deafen <small>${s.selfDeaf ? "On" : "Off"}</small></div><div class="sep"></div><h5>Output Device</h5><div class="mi">MacBook Pro Speakers <small>Default</small></div><h5>Output Volume</h5><div class="bar"></div><div class="mi">Spatial Audio</div><div class="mi">Voice Settings</div></div>`;
+  if (s.pop.what === "cam") return `<div class="pop" style="left:${cx - 140}px;bottom:84px;width:230px"><h5>Camera</h5><div class="mi">FaceTime HD Camera <small>Default</small></div><div class="mi">Video Background</div><div class="mi">Video Settings</div></div>`;
+  return `<div class="pop" style="left:${cx + 40}px;bottom:84px;width:240px"><h5>More Settings</h5><div class="mi">Show Non-Video Participants</div><div class="mi">Show New Message Previews</div><div class="mi">Region <small>Automatic</small></div><div class="mi">Invite to Voice</div><div class="mi">Create Event</div><div class="sep"></div><div class="mi danger">Disconnect</div></div>`;
+}
+function dCallBody(s, cw, ch) {
+  const list = tiles(s, "d"), f = focused(s, list), ps = people(s);
+  if (s.kind === "stage") return dStageBody(s, cw, ch);
+  if (!f) {
+    const users = ps.length, entries = [];
+    if (s.kind === "voice" && !s.activity && !s.entryDismissed && users >= 2) entries.push({ type: "entry", id: "entry" });
+    if (s.kind === "voice" && users === 1) entries.push({ type: "entry", id: "entry", alone: true });
+    const all = [...list, ...entries], g = dGrid(all.length, cw, ch);
+    const rows = [];
+    for (let r = 0; r < g.rows; r++) rows.push(all.slice(r * g.cols, r * g.cols + g.cols));
+    return `<div class="dgrid" style="padding:${g.top}px 0 56px 8px">${rows.map((row, ri) => `<div class="drow">${row.map((t, i) => `<div class="tw" style="width:${g.w}px;${(i === row.length - 1) ? "margin-right:0;" : ""}${ri === g.rows - 1 ? "margin-bottom:0" : ""}">${dTile(t, g.w, s)}</div>`).join("")}</div>`).join("")}</div>`;
+  }
+  // Focus view (module 699707): strip only when taller than 384 and not hidden.
+  const Q = !s.stripHidden && ch > 384, ratio = 16 / 9;
+  let el = 0; if (f.type === "activity" || Q) el += 72; if (Q) el += 68;
+  const es = ch - 2 * el, er = es * ratio, fw = Math.min(cw, er), fh = Math.floor(Math.min(cw, er) / ratio);
+  const top = (ch - fh) / 2 - (Q ? 60 : 0);
+  const nob = er >= cw || es >= ch;
+  let strip = "", mem = "", camprev = "";
+  const others = list.filter(t => t.id !== f.id);
+  if (Q) {
+    const st = dStrip(cw, list);
+    const sh = st.w * 9 / 16, bottom = 76;
+    strip = `<div class="strip" style="bottom:${bottom}px">${st.tiles.map(t => `<div style="width:${t.type === "user" && t.p.self && t.p.cam ? st.selfW : st.w}px">${dTile(t, st.w, s, { selected: t.id === f.id })}</div>`).join("")}</div>`;
+  } else {
+    const me = list.find(t => t.type === "user" && t.p.self && t.p.cam);
+    if (me && me.id !== f.id) camprev = `<div class="camprev">${dTile(me, 160, s)}</div>`;
+  }
+  if (ch > 384) mem = `<span class="mem" data-hit="strip" data-t style="${Q ? `top:${top + fh + 2}px` : `bottom:${40 + Math.max(0, 72 - (ch - fh) / 2)}px`}">${bold(Q ? "caret-down" : "caret-up")}${icon("users")}${dTip(Q ? "Hide Members" : "Show Members")}</span>`;
+  return `<div class="focus" style="top:${top}px;width:${fw}px;height:${fh}px">${dTile(f, fw, s, { nob })}</div>${mem}${strip}${camprev}`;
+}
+function dStageBody(s, cw, ch) {
+  const ps = people(s), speakers = ps.filter((p, i) => i < Math.min(3, ps.length) && !(p.self && s.role !== "speaker")), audience = ps.filter(p => !speakers.includes(p));
+  if (!s.live) return `<div class="join"><h2>${s.role === "speaker" ? "Start the Stage" : "Waiting for the Stage to start"}</h2><p>${s.role === "speaker" ? "Pick a topic to start the conversation." : "What will you be talking about today?"}</p>${s.role === "speaker" ? `<button class="dbtn white" data-hit="startstage">Start the Stage</button>` : ""}</div>`;
+  const cols = cw < 424 ? 1 : cw < 624 ? 2 : cw < 824 ? 3 : 4, tw = Math.min(260, (cw - 32 - 8 * (cols - 1)) / cols);
+  const tl = speakers.map(p => ({ type: "user", id: p.id, p }));
+  const inv = s.role === "invited" ? `<div class="invite">${icon("microphone-stage")}<span>You’ve been invited to speak</span><button class="dbtn sm" data-hit="decline">Not Now</button><button class="dbtn sm white" data-hit="accept">Speak on Stage</button></div>` : "";
+  return `${inv}<div style="position:absolute;left:0;right:0;top:72px;display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:0 16px">${tl.map(t => `<div style="width:${tw}px">${dTile(t, tw, s)}</div>`).join("")}</div>
+    <div class="audience"><h6>Audience — ${audience.length}</h6><div class="ar">${audience.slice(0, 12).map(p => `<div class="am">${av(p, 48)}<span>${p.self && s.role === "hand" ? "✋ " : ""}${esc(p.name)}</span></div>`).join("") || `<span style="color:var(--d-p300)">No listeners yet</span>`}</div></div>`;
+}
+function dJoin(s) {
+  const ps = people(s), N = ps.length === 4 ? 2 : 3;
+  const line = ps.length === 0 ? "No one is currently in voice" : ps.length === 1 ? `${ps[0].name} is currently in voice` : ps.length === 2 ? `${ps[0].name} and ${ps[1].name} are currently in voice` : `${ps[0].name}, ${ps[1].name}, and ${ps.length - 2} other${ps.length - 2 === 1 ? "" : "s"} are currently in voice`;
+  return `<div class="join"><div class="avs" style="max-width:${168 * N}px">${ps.slice(0, 5).map(p => `<div class="tile${p.speaking ? " speak" : ""}" style="width:48px;aspect-ratio:1;border-radius:50%;background:none">${av(p, 40)}</div>`).join("")}</div><h2>${esc(CHANNEL[s.kind])}</h2><p>${esc(line)}</p><button class="dbtn white" data-hit="join">Join Voice</button></div>`;
+}
+function discordScene(s, W, H) {
+  const chatOpen = s.chat && s.kind === "voice" && !s.away;
+  if (s.away) return `<div class="scene dc" data-app="d" style="width:${W}px;height:${H}px"><div class="elsewhere"><header>${icon("hash")}general</header><div style="flex:1"></div></div>${dPip(s)}</div>`;
+  if (s.popout) return `<div class="scene dc" data-app="d" style="width:${W}px;height:${H}px"><div class="call"><div class="join"><p style="font-size:16px">You've popped out the player to another window</p></div></div></div>`;
+  if (s.kind === "dm") return dDm(s, W, H);
+  const chatW = chatOpen ? Math.min(450, Math.floor(W * .6)) : 0, cw = W - chatW;
+  const list = tiles(s, "d"), f = focused(s, list);
+  const idle = s.ctl === "idle" || (s.ctl === "auto" && s.dIdle);
+  const notJoined = s.conn === "none" && s.kind === "voice";
+  const body = notJoined ? dJoin(s) : dCallBody(s, cw, H);
+  const controls = notJoined ? `<div class="vc"><div class="top">${dHeader(s, null, list).replace(/^<div class="top">|<\/div>$/g, "")}</div><div></div></div>`
+    : `<div class="grad t"></div><div class="grad b"></div><div class="vc">${dHeader(s, f, list)}${dControls(s, cw)}</div>`;
+  return `<div class="scene dc${chatOpen ? " chatopen" : ""}" data-app="d" style="width:${W}px;height:${H}px"><div class="call${idle && !notJoined ? " idle" : ""}" data-stage="d">${body}${controls}${dPop(s, cw, H)}${dMenu(s)}</div>${chatOpen ? dChat(s, chatW) : ""}</div>`;
+}
+function dPip(s) {
+  const list = tiles(s, "d"), w = list.find(t => t.type === "stream" && t.watched && !t.p.self) || list.find(t => t.type === "user" && t.p.cam && !t.p.self);
+  if (!w) return "";
+  return `<div class="pip">${dTile(w, 320, s, { nob: true })}<div class="pc"><div>${bold("caret-left")}<span>${esc(CHANNEL[s.kind])}</span></div><div style="justify-content:flex-end">${icon("arrow-square-out")}${icon("phone-x")}</div></div></div>`;
+}
+function dDm(s, W, H) {
+  const ps = people(s), video = ps.some(p => p.cam || p.live), callH = s.chat ? (video ? Math.max(284, H / 2) : 240) : H, ringing = s.conn === "ringing";
+  const idle = s.ctl === "idle" || (s.ctl === "auto" && s.dIdle);
+  let inner;
+  if (!video) inner = `<div class="dmrow">${ps.map(p => `<div class="${ringing && !p.self ? "ringing" : ""}" style="position:relative;border-radius:50%">${av(p, ((80 + 16) * ps.length > W ? 40 : 80), p.speaking && !p.muted ? " spk" : "")}</div>`).join("")}</div>`;
+  else inner = dCallBody({ ...s, kind: "dm" }, W, callH);
+  const tray = ringing ? `<div class="bot"><div class="edge"></div><div class="ctr"><button class="cb join" data-hit="join">${icon("video-camera")}</button><button class="cb join" data-hit="join">${icon("phone")}Join Call</button><button class="cb leave" data-hit="leave">${icon("phone-x")}</button></div><div class="edge end"></div></div>` : dControls(s, W);
+  return `<div class="scene dc" data-app="d" style="width:${W}px;height:${H}px;flex-direction:column"><div class="dmhead call${idle ? " idle" : ""}" data-stage="d" style="height:${callH}px">${inner}<div class="grad t"></div><div class="grad b"></div><div class="vc">${dHeader(s, null, tiles(s, "d"))}${tray}</div>${dPop(s, W, callH)}${dMenu(s)}</div>${s.chat ? `<div class="chat" style="flex:1;border:0"><div class="msgs"><div><b>mira</b><span>calling you now</span></div></div><div class="in">Message @mira</div></div>` : ""}</div>`;
+}
+
+// ── Waffle rendering ──
+function wTip(t, below) { return `<span class="tip${below ? " below" : ""}">${esc(t)}</span>`; }
+function wTile(t, w, s, o = {}) {
+  const small = w < 148, avS = o.fill ? 96 : w < 240 ? 40 : 64;
+  let media = "", name = "", glyphs = "", cls = "", extra = "", hover = "";
+  if (t.type === "user") {
+    const p = t.p;
+    media = p.cam ? `<div class="cam${p.self ? " mirror" : ""}" style="--h:${p.hue}"></div>` : av(p, avS);
+    glyphs = p.server ? icon("microphone-slash", "srv") : p.deaf ? icon("speaker-slash") : p.muted ? icon("microphone-slash") : "";
+    name = p.name; if (p.speaking && !p.muted) cls += " speak"; if (p.sounding) cls += " sb";
+    return `<div class="tile${cls}${o.fill ? " fill" : ""}${small ? " small" : ""}${s.hov === t.id ? " hov" : ""}" data-tile="${t.id}" style="${o.w ? `width:${o.w}px;` : ""}--fill:oklch(0.24 0.02 ${p.hue})">${media}<div class="rg"></div><div class="name">${glyphs}<span>${esc(name)}</span></div></div>`;
+  }
+  if (t.type === "stream") {
+    const p = t.p;
+    media = `<div class="shot" style="--h:${p.hue}"></div>`;
+    if (p.self) { extra = `<div class="wlive"><span class="badge lvb">LIVE</span><span class="badge q">1080p 60</span></div>`; hover = `<div class="hoverbar"><span class="rb" data-t>${icon("eye-slash")}${wTip("Hide preview")}</span></div>`; }
+    else if (!t.watched) extra = `<div class="scrim">Watch stream<span class="rb" data-t>${icon("eye")}${wTip("Watch alongside")}</span></div>`;
+    else hover = `<div class="hoverbar"><span class="rb" data-t>${icon("speaker-high")}${wTip("Stream volume")}</span><span class="sbtn" data-hit="unwatch" data-id="${t.id}">Stop watching</span></div>`;
+    return `<div class="tile${o.fill ? " fill" : ""}${small ? " small" : ""}${s.hov === t.id ? " hov" : ""}" data-tile="${t.id}" style="${o.w ? `width:${o.w}px;` : ""}--fill:#000">${media}<div class="rg"></div>${extra}${hover}<div class="name">${icon("monitor", "lv")}<span>${esc(p.name)}</span></div></div>`;
+  }
+  return `<div class="tile${o.fill ? " fill" : ""}" data-tile="${t.id}" style="${o.w ? `width:${o.w}px;` : ""}--fill:#000"><div class="act"><b>${esc(t.p.name)}</b></div><div class="rg"></div></div>`;
+}
+function wControls(s, width) {
+  const fold = wDock(width), call = s.conn === "connected", muted = s.selfMute || s.selfDeaf, p = s.pop?.app === "w" ? s.pop.what : null;
+  const list = tiles(s, "w"), f = focused(s, list), watchingF = f?.type === "stream" && f.watched && !f.p.self;
+  const c = (hit, ic, tip, cls = "", dis = false) => `<button class="cb ${cls}${dis ? " dis" : ""}" data-hit="${dis ? "" : hit}" data-t>${ic}${wTip(tip)}</button>`;
+  if (s.kind === "stage") {
+    const sp = s.role === "speaker";
+    return `<div class="ctl"><div class="grp">${c("mic", icon(muted || !sp ? "microphone-slash" : "microphone"), muted || !sp ? "Unmute" : "Mute", muted || !sp ? "off" : "", !sp)}${sp ? c("cam", icon("video-camera-slash"), "Turn on camera") + c("share", icon("screencast"), "Share your screen") : ""}</div><div class="grp">${sp ? c("tolisten", icon("arrow-down"), "Move to Audience") : c("hand", icon("hand"), s.role === "hand" ? "Cancel Request" : "Request to Speak", s.role === "hand" ? "onn" : "")}${c("pop-more", icon("dots-three"), "More ways to leave")}</div>${c("leave", icon("phone-x"), "Disconnect Quietly", "leave")}</div>`;
+  }
+  const mic = `${c("mic", icon(muted ? "microphone-slash" : "microphone"), muted ? "Unmute" : "Mute", muted ? "off" : "")}${c("pop-mic", bold("caret-up"), "Microphone options", "chev" + (p === "mic" ? " open" : ""))}`;
+  const cam = `${c("cam", icon(s.selfCam ? "video-camera" : "video-camera-slash"), s.selfCam ? "Turn off camera" : "Turn on camera", s.selfCam ? "onn" : "", !call)}${c("pop-cam", bold("caret-up"), "Camera options", "chev" + (p === "cam" ? " open" : ""))}`;
+  const share = `${c("share", icon("screencast"), s.selfLive ? "Stop streaming" : "Share your screen", s.selfLive ? "act" : "", !call)}${s.selfLive ? c("pop-share", bold("caret-up"), "Stream options", "chev") : `<button class="cb chev dis" data-t>${bold("caret-up")}${wTip("Stream options")}</button>`}`;
+  const second = fold === "full" ? `<div class="grp">${share}${c("soundboard", icon("waveform"), "Soundboard", "", !call)}${c("activity", icon("rocket-launch"), "Activities", s.activity ? "open" : "", !call)}${c("pop-more", icon("dots-three"), "More options", p === "more" ? "open" : "")}</div>`
+    : `<div class="grp">${c("pop-more", icon("dots-three"), "More options", p === "more" ? "open" : "")}</div>`;
+  const leave = c("leave", icon(watchingF ? "monitor" : "phone-x"), watchingF ? "Stop watching" : s.activity && f?.type === "activity" ? "Leave Activity" : "Leave call", "leave");
+  const corner = fold !== "tight" ? `<div class="corner">${watchingF ? `<span class="sib" data-hit="volume" data-t>${icon("speaker-high")}${wTip("Stream volume")}</span>` : ""}<span class="sib" data-hit="fullscreen" data-t>${icon("arrows-out")}${wTip("Full screen")}</span></div>` : "";
+  return `<div class="ctl"><div class="grp">${mic}${cam}</div>${second}${leave}${corner}</div>`;
+}
+function wHeader(s, f, chatBtn) {
+  const ps = people(s), conn = s.conn === "connecting";
+  const title = f?.type === "stream" ? `${CHANNEL[s.kind]} • ${f.p.name}'s screen` : f?.type === "activity" ? `${CHANNEL[s.kind]} • ${f.p.name}` : CHANNEL[s.kind];
+  const watching = f?.type === "stream" && f.watched && !f.p.self;
+  return `<div class="head"><div class="ttl">${icon("speaker-high")}<div><b>${esc(title)}</b><small class="${conn ? "c" : ""}">${conn ? "Connecting…" : "Voice connected"}</small></div></div>
+    ${conn ? "" : `<span class="chipx"><span class="dot"></span>0:42</span>`}${watching ? `<span class="chipx"><span class="dot"></span>1080p · Smooth</span><span class="sbtn" data-hit="unwatch" data-id="${f.id}">Stop watching</span>` : ""}
+    <span class="people" data-t><span class="wstack">${ps.slice(0, 3).map(p => av(p, 22)).join("")}</span>${ps.length}${wTip(`${ps.length} in ${ps.length === 1 ? "the call alone" : "the call"}`, true)}</span>
+    ${chatBtn ? `<span class="seam"></span><span class="sib${s.chat ? " on" : ""}" data-hit="chat" data-t>${icon("chat-circle")}${wTip(s.chat ? "Hide Chat" : "Show Chat", true)}</span>` : ""}</div>`;
+}
+function wChat(s, w, float) {
+  return `<aside class="chat${float ? " float" : ""}" style="width:${w}px"><header>${icon("speaker-high")}<span>${esc(CHANNEL[s.kind])}</span><span class="x" data-hit="chat" title="Close Chat">${bold("x")}</span></header>
+    <div class="msgs"><div><b>Mira</b>who's bringing snacks to the raid</div><div><b>Bao</b>I can stream it if anyone wants to watch</div></div><div class="in">Message #${esc(CHANNEL[s.kind])}</div></aside>`;
+}
+function wMenu(s) {
+  const m = s.menu; if (!m || m.app !== "w") return "";
+  const t = tiles(s, "w").find(x => x.id === m.id); if (!t || t.type === "activity") return "";
+  const it = (l, ic, cls = "") => l === "sep" ? `<div class="sep"></div>` : `<div class="mi ${cls}" data-menu="${esc(l)}">${icon(ic)}${esc(l)}</div>`;
+  const p = t.p, rows = p.self ? [["Profile", "user"], ["Mention", "at"], ["sep"], ["Edit per-server profile", "pencil-simple"], ["Change nickname", "tag"]]
+    : [["Profile", "user"], ["Mention", "at"], ["Message", "chat-circle"], ["Call", "phone"], ["Add note", "note-pencil"], ["sep"], ["User volume", "speaker-high"], ["Mute", "microphone-slash"], ["Deafen", "speaker-slash"], ["Mute soundboard", "waveform"], ...(p.cam ? [["Hide video", "video-camera-slash"]] : []), ["sep"],
+       ...(s.kind === "voice" ? [["Move to", "arrow-bend-up-right"], ["Server mute", "microphone-slash"], ["Disconnect", "phone-x", "danger"], ["sep"], [`Timeout ${p.name}`, "timer", "danger"], [`Kick ${p.name}`, "door-open", "danger"], ["sep"]] : []), ["Ignore", "eye-slash"], ["Block", "prohibit", "danger"]];
+  return `<div class="pop" style="left:${m.x}px;top:${m.y}px;width:240px">${rows.map(r => it(...r)).join("")}</div>`;
+}
+function wPop(s, width) {
+  if (!s.pop || s.pop.app !== "w") return "";
+  const cx = width / 2;
+  if (s.pop.what === "mic") return `<div class="pop" style="left:${cx - 300}px;bottom:72px"><h5>Microphone</h5><div class="mi">${icon("check")}MacBook Pro Microphone</div><div class="mi">${icon("")}AirPods Pro</div><div class="sep"></div><h5>Input volume</h5><div class="mi">${icon("sliders-horizontal")}Noise suppression <small>Standard</small></div></div>`;
+  if (s.pop.what === "cam") return `<div class="pop" style="left:${cx - 200}px;bottom:72px"><h5>Camera</h5><div class="mi">${icon("check")}FaceTime HD Camera</div></div>`;
+  if (s.pop.what === "share") return `<div class="pop" style="left:${cx - 120}px;bottom:72px"><div class="mi">${icon("swap")}Change Stream</div><div class="mi">${icon("sliders-horizontal")}Stream Quality <small>1080p</small></div><div class="mi">${icon("speaker-high")}Share Stream Audio</div><div class="mi danger">${icon("x")}Stop Streaming</div></div>`;
+  const fold = wDock(width);
+  return `<div class="pop" style="left:${cx - 40}px;bottom:72px;width:240px">${fold !== "full" ? `<div class="mi">${icon("screencast")}Share your screen</div><div class="mi">${icon("waveform")}Soundboard</div><div class="mi">${icon("rocket-launch")}Activities</div><div class="sep"></div>` : ""}<div class="mi">${icon("users")}Hide everyone <small>The cards under the focused one</small></div>${fold === "tight" ? `<div class="mi">${icon("arrows-out")}Full screen</div>` : ""}<div class="mi">${icon("gear")}Voice settings</div></div>`;
+}
+function wStageBody(s, cw, ch) {
+  const ps = people(s), speakers = ps.filter((p, i) => i < Math.min(3, ps.length) && !(p.self && s.role !== "speaker")), audience = ps.filter(p => !speakers.includes(p));
+  if (!s.live) return `<div class="wnote">${s.role === "speaker" ? `<b>Start the Stage</b>Pick a topic to start the conversation.<br><br><button class="wbtn p" data-hit="startstage">Start Stage</button>` : `<b>Waiting for the Stage to start</b>What will you be talking about today?`}</div>`;
+  const cols = cw < 424 ? 1 : cw < 624 ? 2 : cw < 824 ? 3 : 4, tw = Math.min(260, (cw - 8 * (cols - 1)) / cols);
+  const inv = s.role === "invited" ? `<div class="invite">You have been invited to speak.<button class="wbtn" data-hit="decline">Not Now</button><button class="wbtn p" data-hit="accept">Accept</button></div>` : "";
+  return `${inv}<div style="display:grid;gap:12px;width:100%;align-content:center"><div class="stagehead">${icon("microphone")}Speakers · ${speakers.length}</div><div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px">${speakers.map(p => wTile({ type: "user", id: p.id, p }, tw, s, { w: tw })).join("")}</div>
+    <div class="stagehead">${icon("users")}Audience · ${audience.length}${s.role === "hand" ? ` · ${icon("hand")}1` : ""}</div><div class="aud">${audience.slice(0, 12).map(p => `<div class="am">${av(p, 40)}<span>${esc(p.name)}</span>${p.self && s.role === "invited" ? "<em>Invited</em>" : ""}</div>`).join("")}</div></div>`;
+}
+function waffleScene(s, W, H) {
+  if (s.away) return `<div class="scene wf" data-app="w" style="width:${W}px;height:${H}px"><div class="elsewhere"><header>${icon("hash")}general</header><div style="flex:1"></div></div>${wPip(s)}</div>`;
+  if (s.kind === "dm" && s.conn === "ringing") return `<div class="scene wf" data-app="w" style="width:${W}px;height:${H}px"><div class="elsewhere"><header>${icon("at")}mira</header><div style="flex:1"></div></div><div class="dmwin">${av(people(s)[1] || { name: "Mira", hue: 200 }, 52)}<b>Incoming call</b><span style="color:var(--w-muted);font-size:12px">Mira</span><div style="display:flex;gap:8px"><button class="wbtn d" data-hit="leave">Decline</button><button class="wbtn p" data-hit="join">Join</button></div></div></div>`;
+  const notJoined = s.conn === "none";
+  const list = tiles(s, "w"), f = focused(s, list);
+  const chatAllowed = s.chat && !notJoined, chatW = wChatWidth(W), floats = W - chatW < 480;
+  const cw = chatAllowed && !floats ? W - chatW : W;
+  const rest = s.ctl === "idle" || (s.ctl === "auto" && s.wRest);
+  let body;
+  if (notJoined) body = `<div class="call"><div class="wnote"><b>No join screen</b>Opening a voice channel in Waffle joins it at once (<code>show_call</code> calls <code>join_voice</code>), so this state is never drawn.</div></div>`;
+  else if (s.kind === "stage") body = `<div class="call${rest ? " rest" : ""}" data-stage="w">${wHeader(s, null, true)}<div class="body">${wStageBody(s, cw - 32, H - 144)}</div>${wControls(s, cw - 32)}${wPop(s, cw - 32)}${wMenu(s)}</div>`;
+  else if (!f) {
+    const g = wGrid(list.length, cw - 32, H - 144);
+    body = `<div class="call${rest ? " rest" : ""}" data-stage="w">${wHeader(s, null, true)}<div class="body" style="gap:${g.gap}px">${list.map(t => wTile(t, g.w, s, { w: g.w })).join("")}</div>${wControls(s, cw - 32)}${wPop(s, cw - 32)}${wMenu(s)}</div>`;
+  } else {
+    const others = list.filter(t => t.id !== f.id), strip = !s.stripHidden && others.length > 0;
+    body = `<div class="call${rest ? " rest" : ""}" data-stage="w" style="gap:16px"><div class="fband" style="margin:-16px -16px 0">${wHeader(s, f, true).replace('class="head"', 'class="head" style="flex:1"')}</div>
+      <div class="focus" style="margin:0 -16px">${wTile(f, cw, s, { fill: true })}<div style="position:absolute;left:16px;right:16px;bottom:${others.length ? 44 : 16}px">${wControls(s, cw - 32)}</div>
+      ${others.length ? `<span class="stog" data-hit="strip" style="bottom:8px" data-t>${bold(strip ? "caret-down" : "caret-up")}${icon("users")}${wTip(strip ? "Hide everyone" : "Show everyone")}</span>` : ""}</div>
+      ${strip ? `<div class="strip">${others.slice(0, 12).map(t => wTile(t, 148, s)).join("")}</div>` : ""}${wPop(s, cw - 32)}${wMenu(s)}</div>`;
+  }
+  return `<div class="scene wf" data-app="w" style="width:${W}px;height:${H}px">${body}${chatAllowed ? wChat(s, floats ? Math.min(chatW, W - 16) : chatW, floats) : ""}</div>`;
+}
+function wPip(s) {
+  const w = tiles(s, "w").find(t => t.type === "stream" && t.watched && !t.p.self);
+  if (w) return `<div class="pip">${wTile(w, 320, s, { fill: true })}<span class="sbtn" data-hit="unwatch" data-id="${w.id}">Stop watching</span></div>`;
+  if (s.activity) return `<div class="pip" style="width:400px;height:265px">${wTile({ type: "activity", id: "a", p: { name: "Gartic Phone" } }, 400, s, { fill: true })}</div>`;
+  return "";
+}
+
+// ── Fit: zoom each scene to its column ──
+function fitAll() { for (const f of document.querySelectorAll(".fit")) { const sc = f.firstElementChild; if (!sc) continue; const w = parseFloat(sc.style.width); f.style.setProperty("--z", Math.min(1, f.clientWidth / w).toFixed(4)); } }
+new ResizeObserver(fitAll).observe(document.body);
+
+// ── Cases ──
+const C = (title, over, note) => ({ title, s: { ...BASE, W: 880, H: 495, ...over }, note });
+const CASES = [
+  C("Voice channel, nobody in it", { conn: "none", n: 0 }, "Discord: join screen on its purple glow, channel name 24px, “No one is currently in voice”, a white “Join Voice”. No tray. <span class='gap'>Waffle has no join screen: opening the channel joins it.</span>"),
+  C("Voice channel, three people in it", { conn: "none", n: 3, speak: "one" }, "Up to five 48px faces (rows of 3, or 2 for four), speaking rings live, “Mira, Bao, and 1 other are currently in voice”. <span class='gap'>Missing in Waffle.</span>"),
+  C("Connecting", { conn: "connecting", n: 3 }, "Waffle: “Connecting…”, camera, share and activities at 40% until connected. <span class='ok'>Waffle is more explicit.</span> Discord's connecting visual: Not verified."),
+  C("Alone in the call", { n: 1, cams: 0, streams: 0, speak: "you" }, "Discord adds a second tile: “Invite to Voice” and “Choose Activity” beside your own. <span class='gap'>Waffle shows your tile alone.</span>"),
+  C("Two people, one speaking", { n: 2, cams: 0, streams: 0 }, "Discord: tiles as large as 16:9 allows with 8px gaps, plus a “Start An Activity” tile (dismissable). Speaking: an inset green ring that swells with volume, 0.5–4px. <span class='gap'>Waffle: fixed 2px ring, 10px gaps, no entry tile.</span>"),
+  C("Four people", { n: 4, cams: 0, streams: 0 }, "2×2 plus the entry tile. Discord's name chip: black 56%, 8px corners. <span class='gap'>Waffle's 20px squircle tiles and 24px chip differ.</span>"),
+  C("Nine people", { n: 9, cams: 2, streams: 0, speak: "many" }, "Three speaking at once. Discord keeps tiles big enough to fit; <span class='ok'>Waffle's fit gives the same columns.</span>"),
+  C("Sixteen people", { n: 16, cams: 3, streams: 0 }, "At 16 tiles the chip compacts (≤220px: 4px margin, 12px type) and the avatar is 80px down to 124px wide. <span class='gap'>Waffle drops its avatar to 40px under 240px.</span>"),
+  C("Thirty people (overflow)", { n: 30, cams: 4, streams: 0 }, "Discord stops shrinking at the size where 25 fit and scrolls the rest; chips vanish at ≤124px. <span class='gap'>Waffle shrinks every card to fit, no scroll, no floor.</span>"),
+  C("Cameras on", { n: 5, cams: 3, streams: 0, selfCam: true }, "Camera tiles cover the 16:9 tile; your own is mirrored. Camera on = white button. <span class='ok'>Same idea</span>; Waffle orders cameras before avatars."),
+  C("Muted, deafened, server muted", { n: 5, cams: 0, streams: 0, selfDeaf: true, serverMuted: true, othersMuted: true }, "Discord's chip leads with the state icon (server deafen > server mute > deafen > local mute > mute > soundboard muted). <span class='gap'>Waffle draws them in coral, server mute in red; no soundboard-muted mark.</span>"),
+  C("Someone live, not watching", { n: 4, cams: 0, streams: 1 }, "A separate stream tile: dimmed preview, “Watch Stream” (“Watch” under 175px), red LIVE pill top right. <span class='gap'>Waffle: 45% scrim with “Watch stream” and a “Watch alongside” button; no LIVE on others' streams.</span>"),
+  C("Watching a stream (focused)", { n: 4, cams: 1, streams: 1, watching: ["u3"], focus: "s" }, "Clicking Watch focuses it: header shows the streamer, quality + LIVE; Disconnect becomes “Stop Watching”; strip below with the stream's own tile marked selected. <span class='ok'>Waffle matches the red button swap</span>; <span class='gap'>its header carries health and a second Stop watching.</span>"),
+  C("You're live", { n: 3, cams: 0, streams: 0, selfLive: true }, "Your stream tile previews your screen with LIVE; Share shows active. <span class='gap'>Waffle's LIVE is honey with the quality beside it, top left.</span>"),
+  C("Two streams", { n: 5, cams: 0, streams: 2, watching: ["u4"] }, "Shift-click a second Watch to watch several. <span class='gap'>Waffle replaces the only other watched stream instead.</span>"),
+  C("Focus on a person", { n: 6, cams: 2, streams: 0, focus: "u1" }, "Focused tile centred, strip of up to 12 tiles (124–207px), sorted speaking › recently spoke › video; your camera pinned at the end; pill “Hide Members”. <span class='gap'>Waffle: 148px cards in join order, “Hide everyone”.</span>"),
+  C("Focus, strip hidden", { n: 6, cams: 2, streams: 0, selfCam: true, focus: "u1", stripHidden: true }, "With the strip hidden your camera floats as a draggable preview (bottom right by default) and the header gets a Participants count. <span class='gap'>Waffle has no floating self view.</span>"),
+  C("Focus in a short window", { n: 6, cams: 2, streams: 0, focus: "u1", H: 360 }, "At 384px tall or less Discord drops the strip and its toggle. <span class='gap'>Waffle keeps its strip.</span>"),
+  C("Tile hover", { n: 4, cams: 1, streams: 1, hov: "u1" }, "Discord: “Options” (…) appears bottom right; on a watched stream also its mute. <span class='gap'>Waffle: brighter edge only (stream tiles get volume / Stop watching).</span>"),
+  C("Tile right-click", { n: 4, cams: 1, streams: 0, menu: { app: "both", id: "u1", x: 300, y: 70 } }, "Discord adds Focus This Person, Pop Out User/Video, Disable Video, Ring. <span class='gap'>Waffle lacks Focus and Pop Out.</span>"),
+  C("Microphone menu open", { n: 3, cams: 0, streams: 0, pop: { app: "both", what: "mic" } }, "Discord's one audio menu holds input and output devices, volumes, the Deafen toggle (there's no deafen button on the stage). <span class='gap'>Waffle's menu lists input devices only.</span>"),
+  C("More menu open", { n: 3, cams: 0, streams: 0, pop: { app: "both", what: "more" } }, "Discord: Show Non-Video Participants, message previews, region, invite, event, Disconnect. <span class='gap'>Waffle: Hide everyone, voice settings, plus whatever folded in.</span>"),
+  C("Controls idle", { n: 4, cams: 2, streams: 0, ctl: "idle" }, "Discord after 2s still (or as soon as the pointer leaves): header, tray, gradients and name chips fade, cursor hides. <span class='gap'>Waffle: 3s only over a focused stream; the header and names stay.</span>"),
+  C("Chat open, wide", { n: 4, cams: 1, streams: 0, chat: true, W: 1300 }, "Discord: chat sidebar, 450 min, resizable, header with Close; the Show Chat button leaves the header while it's open. <span class='ok'>Waffle docks 450–640, resizable.</span>"),
+  C("Chat open, narrow", { n: 4, cams: 1, streams: 0, chat: true, W: 860 }, "Under 480px of stage room Waffle floats the chat as a card over the stage. Discord's behaviour here: Not verified (drawn docked)."),
+  C("Narrow, 620", { n: 4, cams: 1, streams: 0, W: 620 }, "Discord ≤650: Invite leaves the tray's left edge. <span class='ok'>Waffle is full until 560.</span>"),
+  C("Narrow, 520", { n: 4, cams: 1, streams: 0, W: 520 }, "Discord ≤550: the whole second section (share, activities, soundboard, more) goes; nothing folds into a menu. <span class='gap'>Waffle folds share, soundboard and activities into More.</span>"),
+  C("Narrow, 400", { n: 4, cams: 1, streams: 0, W: 400 }, "Discord ≤456 (window width): carets go; right-click a control for its menu. <span class='gap'>Waffle keeps its chevrons and drops full screen.</span>"),
+  C("Activity running", { n: 4, cams: 0, streams: 0, activity: true }, "The activity gets its own tile; focusing it turns Disconnect into Leave Activity. <span class='ok'>Same.</span>"),
+  C("Longest names", { n: 6, cams: 1, streams: 1, longNames: true, focus: "" }, "Both truncate the chip with an ellipsis inside the tile."),
+  C("Navigated away (PiP)", { n: 4, cams: 1, streams: 1, watching: ["u3"], away: true }, "Discord keeps the video in a 16:9 PiP (8px corners, controls fade when idle), draggable to a corner and resizable. <span class='gap'>Waffle: 320×180 for a watched stream only, snaps to corners.</span>"),
+  C("Popped out", { n: 4, popout: true }, "Discord can pop the call into its own window (Pop Out). <span class='gap'>Waffle can't pop a call out.</span>"),
+  C("DM call ringing", { kind: "dm", conn: "ringing", n: 2, cams: 0, streams: 0 }, "Discord: the call sits above the DM; the ringing face dims to 30% with a pulsing ring; Join (video), Join Call, decline. <span class='gap'>Waffle: a floating window with Join / Decline.</span>"),
+  C("DM call, voice only", { kind: "dm", n: 2, cams: 0, streams: 0, chat: true }, "No video: 80px faces in a row (40 when crowded), 240px header over the chat; Show/Hide chat at the left. <span class='gap'>Waffle uses the floating DM window, or the full stage.</span>"),
+  C("Stage: speaker", { kind: "stage", n: 8, cams: 0, streams: 0 }, "Speakers on top, audience below; Disconnect Quietly. <span class='ok'>Waffle has the same split.</span>"),
+  C("Stage: audience, hand raised", { kind: "stage", n: 8, cams: 0, streams: 0, role: "hand" }, "Mic suppressed; Request to Speak becomes Cancel Request. <span class='ok'>Same strings.</span>"),
+  C("Stage: invited to speak", { kind: "stage", n: 8, cams: 0, streams: 0, role: "invited" }, "Discord prompts Speak on Stage / Not Now. <span class='gap'>Waffle's card says Accept.</span>"),
+  C("Stage not started", { kind: "stage", n: 3, live: false }, "“Start the Stage”, “Pick a topic to start the conversation.” (audience: “Waiting for the Stage to start”). <span class='ok'>Same copy.</span>"),
+];
+function caseState(c, app) {
+  const s = { ...c.s };
+  if (s.menu?.app === "both") s.menu = { ...s.menu, app };
+  if (s.pop?.app === "both") s.pop = { ...s.pop, app };
+  return s;
+}
+document.getElementById("caselist").innerHTML = CASES.map((c, i) => `<div class="case" data-case="${i}"><header><h4>${c.title}</h4><p>${c.note}</p></header>
+  <div><div class="side">Discord</div><div class="fit">${discordScene(caseState(c, "d"), c.s.W, c.s.H)}</div></div>
+  <div><div class="side">Waffle</div><div class="fit">${waffleScene(caseState(c, "w"), c.s.W, c.s.H)}</div></div></div>`).join("");
+
+// ── Gaps ──
+const GAPS = [
+  ["Join screen", "Viewing a voice channel you aren't in shows its name, up to five live faces, who's in it, and Join Voice (Channel Locked when you can't connect).", "Opening a voice channel joins it immediately; there's no preview."],
+  ["Stage ground", "Call area forced to the Onyx (midnight) theme on pure black; header and tray float over the tiles with 160px black gradients.", "#0A0B0D with an in-flow 32px header and 48px bar; no gradients."],
+  ["Grid fit", "Largest 16:9 tile that fits all, 8px gaps, 64px kept top and bottom for the overlays; never smaller than the size where 25 fit, the rest scroll; last row centred.", "Largest 16:9 tile, 10px gaps (8 at 3+ columns), shrinks without a floor, never scrolls."],
+  ["Tile shape", "8px corners; avatar tile on the avatar's dominant colour (or profile theme), 80px avatar, 40px under 124px wide.", "20px squircle, oklch(0.24 0.02 hue) fill, 64px avatar, 40px under 240px."],
+  ["Speaking ring", "Inset green (--status-speaking) 0.5–4px that follows voice volume, plus a 1px dark inner line, 50ms; soundboard in brand blurple.", "Fixed 2px green + dark inner line; soundboard in honey."],
+  ["Name chip", "Black 56%, 8px corners, 6×8 padding, state icon first; compact ≤220px, hidden ≤124px, fades when idle.", "24px chip, black 60%, 12px; on hover only under 148px; never fades."],
+  ["Tile hover", "Options (…) button bottom right; on a watched stream also Mute; hidden until hover.", "Brighter edge; volume + Stop watching on watched streams only; no Options."],
+  ["Entry tiles", "With 2+ people a dismissable “Start An Activity” tile; alone, “Invite to Voice” + “Choose Activity”.", "None."],
+  ["Clicks", "Click toggles focus; double-click goes full screen on that tile; shift-click Watch adds a stream.", "Click toggles focus; a new stream replaces the only other watched one; no double-click."],
+  ["Context menu", "Adds Focus This Person, Pop Out User/Video/Stream, Disable Video, Ring to Voice.", "No Focus, no Pop Out; has Hide video."],
+  ["Focus strip", "Up to 12 tiles 124–207px, sorted speaking › spoke in last 10s › video › rest, your camera pinned last; gone at ≤384px tall; “Show/Hide Members” pill.", "148px cards in tile order, up to 12, scrolls; “Show/Hide everyone” kept at any height."],
+  ["Self preview", "Strip hidden: your camera floats as a draggable preview, bottom right by default, position remembered.", "None."],
+  ["Tray", "[Mic+caret | Camera+caret] [Share · Activities · Soundboard · More] [Disconnect]; sections on surface-high, 12px corners, 1px border; Invite at the left; user/stream volume, Pop Out, Full Screen at the right. Deafen lives in the mic menu.", "[Mic+chevron · Camera+chevron] [Share+chevron · Soundboard · Activities · More] [Leave 56px]; stream volume + full screen at the right. No Invite, no Pop Out."],
+  ["Narrow tray", "≤650: no Invite. ≤550: the whole second section disappears. Window ≤456: carets go (right-click opens the menu).", "<560 folds Share/Soundboard/Activities into More; <420 folds full screen too."],
+  ["Muted mic", "Red-400 icon on red 12% (16% hover, 24% pressed), caret tinted too.", "Coral #FF9079 on 20% red; chevron stays neutral."],
+  ["Right-click a control", "Opens that control's menu (same as its caret).", "Nothing."],
+  ["Idle", "2s still, or the pointer leaving the call: header and tray fade and slide 8px (200ms), gradients and name chips fade, cursor hides.", "Bar slides 6px (260ms) after 3s only over a focused stream; otherwise when the pointer leaves. Header stays."],
+  ["Header", "Channel name (+ status), focused streamer with quality + LIVE, speakers/participant count when hidden, Show Chat only while chat is closed.", "Title + “Voice connected”, call clock, stream health, people stack, Show/Hide Chat always."],
+  ["LIVE", "Red pill, 16px radius, on every stream tile.", "Honey LIVE + quality on your own stream only."],
+  ["Chat", "Sidebar, min 450, resizable, Close in its header.", "Docked 450–640, resizable; floats as a card when the stage would drop under 480. <span class='ok'>Close.</span>"],
+  ["PiP", "Any focused video or stream, 16:9, 8px corners, corner-snapping, resizable from corners.", "Watched stream (320×180) or activity (400 wide) only."],
+  ["Pop out", "Pop Out moves the call into its own window, with Stay On Top.", "Not available."],
+  ["DM call", "Sits above the DM chat (half height, or 240px voice-only, 284px with video); faces row when no video; ringing face pulses at 30%.", "Floating DM call window; stage on demand."],
+  ["Stage invite", "Speak on Stage / Not Now.", "Accept / Not Now."],
+];
+document.getElementById("gaprows").innerHTML = GAPS.map(([a, d, w]) => `<tr><td>${a}</td><td>${d}</td><td>${w}</td></tr>`).join("");
+
+// ── Playground ──
+const form = document.getElementById("knobs");
+let S = structuredClone(BASE);
+const logs = { d: [], w: [] };
+function log(d, w) {
+  if (d) logs.d.unshift(d); if (w) logs.w.unshift(w);
+  for (const k of ["d", "w"]) { logs[k].length = Math.min(logs[k].length, 8); document.getElementById("l" + k).innerHTML = logs[k].map(x => `<li>${x}</li>`).join(""); }
+}
+function render() {
+  document.getElementById("fd").innerHTML = discordScene(S, S.W, S.H);
+  document.getElementById("fw").innerHTML = waffleScene(S, S.W, S.H);
+  for (const k of ["n", "cams", "streams", "W", "H"]) document.getElementById("o-" + k).textContent = S[k];
+  fitAll();
+}
+const NUM = ["n", "cams", "streams", "W", "H"], BOOL = ["selfCam", "selfLive", "activity", "selfMute", "selfDeaf", "othersMuted", "serverMuted", "longNames", "stripHidden", "chat", "away", "popout", "live"];
+function readForm() {
+  const f = new FormData(form);
+  for (const k of ["kind", "conn", "speak", "focus", "ctl", "role"]) S[k] = f.get(k);
+  for (const k of NUM) S[k] = +f.get(k);
+  for (const k of BOOL) S[k] = f.has(k);
+  if (S.focus === "s" && !S.watching.length) { const st = tiles(S, "d").find(t => t.type === "stream" && !t.p.self); if (st) S.watching = [st.p.id]; }
+}
+function writeForm() { for (const el of form.elements) if (el.name && el.name in S) el.type === "checkbox" ? el.checked = !!S[el.name] : el.value = S[el.name]; }
+form.addEventListener("input", () => { readForm(); S.menu = S.pop = null; render(); });
+const PRESETS = {
+  "p-empty": { conn: "none", n: 0, kind: "voice" }, "p-alone": { n: 1, cams: 0, streams: 0, speak: "you" }, "p-crowd": { n: 30, cams: 4, streams: 0 },
+  "p-cams": { n: 6, cams: 4, selfCam: true, streams: 0 }, "p-watch": { n: 5, cams: 1, streams: 2, watching: ["u4"], focus: "s" }, "p-narrow": { W: 480, H: 520, n: 4 },
+};
+form.addEventListener("click", e => {
+  const act = e.target.closest("[data-act]")?.dataset.act; if (!act) return;
+  S = act === "reset" ? structuredClone(BASE) : { ...structuredClone(BASE), ...PRESETS[act] };
+  writeForm(); render(); log(act === "reset" ? "Reset." : `Preset: ${e.target.textContent}.`, act === "reset" ? "Reset." : `Preset: ${e.target.textContent}.`);
+});
+
+// Idle: Discord idles after 2s still or at once when the pointer leaves (onMouseLeave → onForceIdle);
+// Waffle rests when the pointer leaves, or after 3s still over a focused stream.
+const timers = {};
+function setIdle(app, v) { const k = app === "d" ? "dIdle" : "wRest"; if (S[k] === v) return; S[k] = v; render(); }
+function stageOf(e) { const sc = e.target.closest(".fit"); return sc?.id === "fd" ? "d" : sc?.id === "fw" ? "w" : null; }
+document.querySelector(".stages").addEventListener("mousemove", e => {
+  const app = stageOf(e); if (!app || S.ctl !== "auto") return;
+  setIdle(app, false); clearTimeout(timers[app]);
+  if (app === "d") timers.d = setTimeout(() => setIdle("d", true), 2000);
+  else { const f = focused(S, tiles(S, "w")); if (f?.type === "stream") timers.w = setTimeout(() => setIdle("w", true), 3000); }
+});
+for (const id of ["fd", "fw"]) document.getElementById(id).addEventListener("mouseleave", () => {
+  if (S.ctl !== "auto") return; const app = id === "fd" ? "d" : "w"; clearTimeout(timers[app]);
+  if (!S.pop && !S.menu) setIdle(app, true);
+});
+
+function zoomOf(el) { return parseFloat(getComputedStyle(el).getPropertyValue("--z")) || 1; }
+function local(e, app) { const fit = document.getElementById(app === "d" ? "fd" : "fw"), call = fit.querySelector("[data-stage]") || fit.firstElementChild, r = call.getBoundingClientRect(), z = zoomOf(fit); return { x: Math.round((e.clientX - r.left * 1) / z), y: Math.round((e.clientY - r.top) / z) }; }
+function nameOf(id, app) { const t = tiles(S, app).find(t => t.id === id); return t ? (t.type === "stream" ? `${t.p.name}'s stream` : t.type === "activity" ? t.p.name : t.p.self ? "your tile" : t.p.name) : id; }
+
+const stages = document.querySelector(".stages");
+stages.addEventListener("click", e => {
+  const app = stageOf(e); if (!app) return;
+  if (e.target.closest("[data-menu]")) { const m = e.target.closest("[data-menu]").dataset.menu.replace(/!$/, ""); if (/Focus This Person/.test(m)) { const id = S.menu.id; S.focus = m.startsWith("Un") ? "" : id.startsWith("s") ? "s" : id; } S.menu = null; render(); return log(app === "d" ? `Menu: ${m}.` : null, app === "w" ? `Menu: ${m}.` : null); }
+  if (e.target.closest(".pop")) return;
+  const hitEl = e.target.closest("[data-hit]"), hitName = hitEl?.dataset.hit;
+  if ((S.menu || S.pop) && !hitName?.startsWith("pop-")) { S.menu = S.pop = null; render(); if (!hitName && !e.target.closest("[data-tile]")) return; }
+  if (hitName) return act(hitName, app, hitEl);
+  const tile = e.target.closest("[data-tile]")?.dataset.tile;
+  if (tile && tile !== "entry") clickTile(tile, app, e);
+});
+function clickTile(id, app, e) {
+  const t = tiles(S, app).find(x => x.id === id); if (!t) return;
+  if (S.kind === "stage") return log("Stage tile click: Not verified.", "Stage card: toggles focus, as in voice.");
+  if (t.type === "stream" && !t.watched && !t.p.self) {
+    S.watching = app === "d" && e.shiftKey ? [...S.watching, t.p.id] : [t.p.id];
+    log(e.shiftKey ? `Shift-click: watches ${t.p.name} too (multiple streams).` : `Starts watching ${t.p.name} and focuses it.`, `Starts watching ${t.p.name}; the one other stream you watched stops.`);
+    S.focus = "s"; writeForm(); return render();
+  }
+  const cur = focused(S, tiles(S, app)), same = cur?.id === id;
+  S.focus = same ? "" : t.type === "stream" ? "s" : t.type === "activity" ? "a" : id;
+  if (!["", "u0", "u1", "s", "a"].includes(S.focus)) form.elements.focus.value = "";
+  else writeForm();
+  render();
+  const msg = same ? `Unfocuses ${nameOf(id, app)}: back to the grid.` : `Focuses ${nameOf(id, app)}.`;
+  log(msg, msg);
+}
+stages.addEventListener("dblclick", e => {
+  const app = stageOf(e), id = e.target.closest("[data-tile]")?.dataset.tile; if (!app || !id) return;
+  log(`Double-click: full screen on ${nameOf(id, "d")}.`, "Double-click: no handler (the two clicks toggle focus on and off).");
+});
+stages.addEventListener("contextmenu", e => {
+  const app = stageOf(e); if (!app) return;
+  const hitEl = e.target.closest("[data-hit]"), id = e.target.closest("[data-tile]")?.dataset.tile;
+  if (hitEl && /^(mic|cam|pop-mic|pop-cam)$/.test(hitEl.dataset.hit)) {
+    e.preventDefault(); const what = hitEl.dataset.hit.replace("pop-", "");
+    if (app === "d") { S.pop = { app: "d", what }; render(); }
+    log(`Right-click ${what === "mic" ? "mic" : "camera"}: opens its menu, as the caret does.`, "Right-click a control: no handler.");
+    return;
+  }
+  if (!id || id === "entry") return;
+  e.preventDefault();
+  const p = local(e, app);
+  S.menu = { app, id, x: Math.min(p.x, S.W - 250), y: Math.max(8, Math.min(p.y, S.H - 420)) }; S.pop = null; render();
+  log(`Context menu for ${nameOf(id, "d")}: Profile … Focus This Person, Pop Out, Disable Video, moderation.`, `Context menu for ${nameOf(id, "w")} (voice_user_menu): no Focus, no Pop Out.`);
+});
+function act(hit, app, el) {
+  const d = app === "d", W = (a, b) => log(a ?? "No equivalent.", b ?? "No equivalent.");
+  switch (hit) {
+    case "mic":
+      if (S.selfDeaf) { S.selfDeaf = false; S.selfMute = false; W("Unmute while deafened: undeafens too.", "Unmute while deafened: undeafens too."); }
+      else { S.selfMute = !S.selfMute; W(S.selfMute ? "Muted: red mic on a red 12% fill, caret tinted." : "Unmuted.", S.selfMute ? "Muted: coral mic on a red 20% fill." : "Unmuted."); }
+      break;
+    case "cam": S.selfCam = !S.selfCam; W(S.selfCam ? "Camera on: button turns white; your tile shows you mirrored." : "Camera off.", S.selfCam ? "Camera on: light fill, dark glyph." : "Camera off."); break;
+    case "share": S.selfLive = !S.selfLive; W(S.selfLive ? "Go Live picker, then your stream tile appears with LIVE." : "Stops streaming.", S.selfLive ? "Go Live picker (Screens / Windows / Devices), then your stream card with a honey LIVE." : "Stops streaming."); break;
+    case "activity": W("Hover opens the activity shelf after 200ms; click opens the launcher.", "Opens the launcher under the button."); break;
+    case "soundboard": W(S.selfDeaf ? "Disabled: “Soundboard disabled when deafened”." : "Opens the soundboard above the tray.", "Opens the soundboard."); break;
+    case "pop-mic": case "pop-cam": case "pop-more": case "pop-share": {
+      const what = hit.slice(4); S.pop = S.pop?.app === app && S.pop.what === what ? null : { app, what }; S.menu = null;
+      W(S.pop ? `${what === "mic" ? "Audio" : what === "cam" ? "Video" : "More"} menu opens above, caret flips.` : "Menu closes.", S.pop ? `${what === "mic" ? "Microphone" : what === "cam" ? "Camera" : what === "share" ? "Stream" : "More"} menu opens at the pointer.` : "Menu closes.");
+      break; }
+    case "leave": {
+      const f = focused(S, tiles(S, app));
+      if (f?.type === "stream" && !f.p.self) { S.watching = S.watching.filter(x => x !== f.p.id); S.focus = ""; W("Stop Watching: leaves the stream, stays in voice.", "Stop watching: leaves the stream, stays in the call."); }
+      else if (S.kind === "dm" && S.conn === "ringing") { S.conn = "none"; S.kind = "voice"; W("Declines the call.", "Declines the call."); }
+      else { S.conn = "none"; S.focus = ""; W("Disconnects; the channel shows its join screen.", "Leaves the call; the main column goes back to the text channel."); }
+      writeForm(); break; }
+    case "join": S.conn = "connected"; writeForm(); W("Joins voice.", "Joins."); break;
+    case "chat": S.chat = !S.chat; writeForm(); W(S.chat ? "Chat sidebar opens; Show Chat leaves the header." : "Chat closes; focus returns to the chat button.", S.chat ? "Chat docks beside the stage (or floats when it would crowd it)." : "Chat closes."); break;
+    case "strip": S.stripHidden = !S.stripHidden; writeForm(); W(S.stripHidden ? "Hide Members: strip slides away; your camera floats as a preview." : "Show Members.", S.stripHidden ? "Hide everyone: strip folds away." : "Show everyone."); break;
+    case "invite": W("Opens the invite modal for this voice channel.", null); break;
+    case "popout": S.popout = !S.popout; writeForm(); W("Pops the call into its own window.", null); break;
+    case "fullscreen": W("Full screen: the call fills the window.", "Full screen: hides servers, channels and the user panel."); break;
+    case "volume": W("Volume slider for the focused person or stream.", "Stream volume popover."); break;
+    case "watch": { const t = tiles(S, "d").find(x => x.id === el.dataset.id); S.watching = [t.p.id]; S.focus = "s"; writeForm(); W(`Watch Stream: joins ${t.p.name}'s stream and focuses it.`, null); break; }
+    case "unwatch": { const t = tiles(S, "w").find(x => x.id === el.dataset.id); S.watching = S.watching.filter(x => x !== t?.p.id); S.focus = ""; writeForm(); W(null, "Stop watching."); break; }
+    case "hand": S.role = S.role === "hand" ? "audience" : "hand"; writeForm(); W(S.role === "hand" ? "Request to Speak: hand up, moderators see it." : "Cancel Request.", S.role === "hand" ? "Request to Speak." : "Cancel Request."); break;
+    case "accept": S.role = "speaker"; writeForm(); W("Speak on Stage: you move to speakers.", "Accept: you move to speakers."); break;
+    case "decline": S.role = "audience"; writeForm(); W("Not Now: stays in the audience.", "Not Now."); break;
+    case "tolisten": S.role = "audience"; writeForm(); W("Move to Audience.", "Move to Audience."); break;
+    case "startstage": S.live = true; writeForm(); W("Opens Start Stage (topic, privacy).", "Start Stage."); break;
+    case "audience": W("Toggles the audience sidebar.", null); break;
+    default: return;
+  }
+  render();
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape" && (S.menu || S.pop)) { S.menu = S.pop = null; render(); } });
+render();
+fitAll();
+</script>
+</body>
+</html>

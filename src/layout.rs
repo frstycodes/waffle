@@ -1,21 +1,19 @@
 // Waffle's frame (design/navigation.html): the rail, channel list, chat and side panel run to the window's
 // top, each column's own header doubling as the title bar; the user area sits at the foot of the channel list.
 use gpui_kit::{
-    AnyElement, App, Context, Div, FontWeight, Hsla, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, NavigationDirection,
+    AnyElement, Context, Div, FontWeight, Hsla, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, NavigationDirection,
     Render, SharedString, Stateful, StyleRefinement, Window,
-    AnimationExt as _,
     component::{ActiveTheme, Icon},
     div, img, linear_color_stop, linear_gradient, prelude::*, px,
 };
 
 use crate::{
     Waffle, Drag, Edge, Status,
-    sidebar::Nav,
     discord,
     icons::Glyph,
     login, palette,
     part::Column,
-    ui::{self, Squircle},
+    ui,
 };
 
 // Room at the window's top for the traffic lights and Windows' caption buttons, which overlays keep clear of.
@@ -29,7 +27,6 @@ pub const PANEL_WIDTH: f32 = 264.;
 // The user area: its 42px row (name 18 + status 16 beside a 32px avatar, in a 4px-padded button), inset 6px
 // all round.
 pub const PANEL_HEIGHT: f32 = 54.;
-const USER_ROW: f32 = 40.;
 const UPDATE_HEIGHT: f32 = 42.;
 const CHANNELS_RANGE: (f32, f32) = (200., 440.);
 const PANEL_RANGE: (f32, f32) = (200., 380.);
@@ -371,98 +368,6 @@ impl Waffle {
         div().flex_none().when(clear, |d| d.w(px(crate::window_controls::WIDTH)))
     }
 
-    // The user area (.me), at the foot of the channel list: who you are, how you look to others, and
-    // mute, deafen and settings. Mute and deafen turn coral when off; right-click either for devices.
-    // In a call, the voice panel sits on top of it inside the same card.
-    pub(crate) fn user_panel(&mut self, me: discord::User, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        // Discord animates your avatar, decoration and nameplate while the panel is hovered.
-        let (hovered, on_hover) = ui::hover_state("me-hover", window, cx);
-        let animate = hovered && crate::presence::may_animate();
-        let rail = palette::surface(palette::Level::Rail, cx);
-        let (card, ring) = (crate::material::card(cx), crate::material::behind_sidebar(rail));
-        let sharing = self.call.as_ref().is_some_and(|c| c.sharing.is_some());
-        let server_muted = self.call.as_ref().and_then(|c| self.guilds.iter().find(|g| Some(&g.id) == c.guild_id.as_ref())).and_then(|g| g.voice_states.iter().find(|v| v.user_id == me.id)).is_some_and(|v| v.server_muted);
-        let (muted, deafened) = (self.muted || self.deafened || server_muted, self.deafened);
-        let has_plate = me.nameplate.is_some();
-        // Over nameplate art, as Discord does, a muted or deafened control sits on a plate of black at 22%
-        // so its red reads; controls that are on stay bare, and there is no box around the row.
-        let plate = |on: bool| (has_plate && on).then(|| gpui_kit::black().opacity(0.22));
-        let (faint, danger) = (palette::faint(cx), palette::danger_ink(cx));
-        let status_line: AnyElement = match (server_muted, sharing) {
-            (true, _) => ui::line("Server muted by a moderator").text_color(danger).into_any_element(),
-            (false, true) => ui::row().gap_1().child(Icon::new(Glyph::ShareScreen).size(ui::ICON_SM).text_color(palette::positive_ink(cx))).child(ui::line("Sharing their screen")).into_any_element(),
-            (false, false) => ui::truncating("me-status", self.status_line()).into_any_element(),
-        };
-        let mic = me_button("mic", if muted { Nav::MicOff } else { Nav::Mic }, muted, if server_muted { "A moderator muted you here. Only they can unmute you." } else if muted { "Unmute" } else { "Mute" }, cx)
-            .when(!server_muted, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_mute(cx))))
-            .on_mouse_down(MouseButton::Right, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_device_menu(crate::call::DeviceKind::Input, e.position, cx)))
-            .when_some(plate(muted), |b, fill| b.bg(fill));
-        let headphones = me_button("deafen", if deafened { Nav::HeadphonesOff } else { Nav::Headphones }, deafened, if deafened { "Undeafen" } else { "Deafen" }, cx)
-            .on_click(cx.listener(|this, _, _, cx| this.toggle_deafen(cx)))
-            .on_mouse_down(MouseButton::Right, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_device_menu(crate::call::DeviceKind::Output, e.position, cx)))
-            .when_some(plate(deafened), |b, fill| b.bg(fill));
-        // A chevron beside each opens that device's popover (devices, volume, and noise suppression for the
-        // mic), as Discord's does; right-clicking the button itself opens the same one.
-        let menu_open = |kind: crate::call::DeviceKind| self.device_menu.as_ref().is_some_and(|m| m.opened_from_user_area(kind));
-        let mic_options = me_chevron("mic-options", "Input options", menu_open(crate::call::DeviceKind::Input), cx)
-            .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_device_menu(crate::call::DeviceKind::Input, e.position, cx)))
-            .when_some(plate(muted), |b, fill| b.bg(fill));
-        let output_options = me_chevron("output-options", "Output options", menu_open(crate::call::DeviceKind::Output), cx)
-            .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_device_menu(crate::call::DeviceKind::Output, e.position, cx)))
-            .when_some(plate(deafened), |b, fill| b.bg(fill));
-        let settings = me_button("settings", Nav::Settings, false, "User settings", cx).on_click(cx.listener(|this, _, window, cx| this.open_settings(crate::settings::Page::Account, window, cx)));
-        // The card's bottom corners, and its top ones too when nothing sits above; outside them, the sidebar.
-        let stacked = self.panel_stack_height() > PANEL_HEIGHT;
-        let top = if stacked { 0. } else { ui::RADIUS_MD };
-        let corners = [top, top, ui::RADIUS_MD, ui::RADIUS_MD];
-        let nameplate = me.nameplate.as_ref().map(|plate| nameplate(plate, palette::surface(palette::Level::Sidebar, cx), corners, cx.theme().is_dark(), animate));
-        let who = ui::list_row("me", me.name.clone(), cx)
-            .height(ui::RowHeight::Exact(USER_ROW))
-            .flex_1()
-            .p_1()
-            .squircle(ui::RADIUS_SM)
-            .gap_2()
-            .control(|c| c.highlighted(self.status_menu))
-            .on_hover(on_hover)
-            .on_click(cx.listener(|this, _, _, cx| this.toggle_status_menu(cx)))
-            .lead(match animate {
-                true => playing_avatar("me", &me.avatar, me.decoration.as_deref(), 32., self.my_mark().map(Into::into), ring),
-                false => decorated_avatar(&me.avatar, me.decoration.as_deref(), 32., self.my_mark().map(Into::into), ring),
-            })
-            .title_element(ui::truncating("me-name", me.name.clone()).line_height(ui::LINE_DETAIL))
-            .subtitle(div().line_height(ui::LINE_XS).text_color(faint).child(status_line));
-        let voice = self.voice_panel(cx);
-        ui::col() // lint-allow(custom-badge, custom-mark): ui::surface adds a ring and shadow this docked card doesn't draw
-            .absolute()
-            .left_2()
-            .right_2()
-            .bottom_2()
-            .squircle(ui::RADIUS_MD)
-            .overflow_hidden()
-            .bg(card)
-            .text_size(ui::TEXT_SM)
-            .children(self.update_row(cx))
-            .children(voice)
-            .child(
-                div()
-                    .relative()
-                    .h(px(PANEL_HEIGHT))
-                    .flex_none()
-                    .children(nameplate)
-                    .child(
-                        ui::row()
-                            .relative()
-                            .size_full()
-                            // 6px on every side, so a hover fill never meets the card's edge.
-                            .p_1p5()
-                            .gap_1()
-                            .child(who)
-                            .child(ui::row().relative().gap_2().child(split_control(mic, mic_options)).child(split_control(headphones, output_options)).child(settings)),
-                    ),
-            )
-            .into_any_element()
-    }
-
     // The rail and the channel list, with the user area floating across the foot of both.
     pub(crate) fn render_nav(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let user_panel = self.me.clone().map(|me| self.user_panel(me, window, cx));
@@ -491,7 +396,7 @@ impl Waffle {
 
     // Tops the user area once an update has downloaded: which version, and the restart that installs it.
     // Left alone, it installs on the next launch. In a call, Restart asks before leaving it.
-    fn update_row(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(crate) fn update_row(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let staged = self.updates.staged()?;
         let restart = ui::button("restart-to-update", ui::Tone::Primary, cx)
             .small()
@@ -623,8 +528,6 @@ fn playing_image(still: &str, key: SharedString, look: fn(gpui_kit::Img) -> gpui
 pub const TRAFFIC_LIGHTS: gpui_kit::Point<gpui_kit::Pixels> = gpui_kit::point(px(TRAFFIC_LIGHTS_X), px(TRAFFIC_LIGHTS_Y));
 const TRAFFIC_LIGHTS_X: f32 = 12.;
 const TRAFFIC_LIGHTS_Y: f32 = 18.;
-// The user area's narrow controls: its chevrons' and buttons' height.
-const ME_CONTROL: f32 = 30.;
 
 /// The traffic lights at `zoom`. They are AppKit's and never scale, so their offset follows the zoomed
 /// header instead: down by half the header's growth so they stay centred on it, across by half the
@@ -674,41 +577,6 @@ fn history_step(keystroke: &gpui_kit::Keystroke) -> Option<bool> {
         k if k == forward => Some(true),
         _ => None,
     }
-}
-
-// A user area control (.me .iconbtn): 30px; `on` (muted, deafened) turns it coral. The glyph pops in on
-// every flip, keyed by state.
-// A control and its chevron as one split pill: round on the outside, square where they meet, 1px apart.
-fn split_control(button: impl Styled + IntoElement, chevron: impl Styled + IntoElement) -> Div {
-    ui::row()
-        .gap_px()
-        .child(button.rounded_tr_none().rounded_br_none())
-        .child(chevron.rounded_tl_none().rounded_bl_none())
-}
-
-// The narrow chevron beside a user-area control that opens its device popover; it reads as part of the
-// control, so it is quieter and half as wide.
-fn me_chevron(id: &'static str, label: &'static str, open: bool, cx: &App) -> Stateful<Div> {
-    let (hover, strong, selected) = (palette::hover(cx), palette::strong(cx), palette::selected(cx));
-    ui::row() // lint-allow(custom-button): ui::icon_button is square, and this chevron is a 16px sliver joined to its control
-        .id(id)
-        .w_4()
-        .h(px(ME_CONTROL))
-        .flex_none()
-        .squircle(ui::RADIUS_XS)
-        .justify_center()
-        .cursor_pointer()
-        .text_color(if open { strong } else { palette::faint(cx) })
-        .when(open, |b| b.bg(selected))
-        .hover(move |s| s.bg(hover).text_color(strong))
-        .child(Icon::new(Glyph::ChevronDown).size(ui::ICON_XS))
-        .tooltip(move |window, cx| ui::tip(label, window, cx))
-}
-
-// A user-panel control: Waffle's own mic, headphones and settings icons, popping in when they switch.
-fn me_button(id: &'static str, icon: Nav, on: bool, label: &'static str, cx: &App) -> ui::Control {
-    let face = icon.icon().size(ui::ICON_XL).with_animation(SharedString::from(format!("{id}-{on}")), gpui_kit::Animation::new(ui::DUR_POP).with_easing(crate::motion::back_out), |icon, t| icon.size(ui::ICON_XL * (0.7 + 0.3 * t)));
-    ui::icon_slot(id, label, cx).sized(ME_CONTROL).text_color(if on { palette::danger_ink(cx) } else { palette::strong(cx) }).child(face)
 }
 
 // What draws over the app (dialogs, settings, the viewer, menus, toasts), as one deferred layer after it: an

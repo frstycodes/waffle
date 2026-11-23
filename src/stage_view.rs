@@ -245,7 +245,7 @@ impl Waffle {
             .pt_3()
             .pb_4()
             .child(div().flex_1().min_w_0().children(say))
-            .child(control_group().child(self.mic_control(cx)).when(speaker, |g| g.child(self.camera_control(cx)).child(self.share_control(cx))))
+            .child(control_group().child(self.mic_control(true, cx)).when(speaker, |g| g.child(self.camera_control(true, cx)).child(self.share_control(cx))))
             .when(live, |d| d.child(control_group().children(self.stage_actions(room, cx))))
             .child(self.disconnect_control(room, cx))
     }

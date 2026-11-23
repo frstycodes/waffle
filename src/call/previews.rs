@@ -175,14 +175,3 @@ pub(crate) fn average_color(rgba: &[u8]) -> Option<(u8, u8, u8)> {
     }
     (weight > 0).then(|| ((sum[0] / weight) as u8, (sum[1] / weight) as u8, (sum[2] / weight) as u8))
 }
-
-pub(super) fn oklch_hue(color: Hsla) -> f32 {
-    let rgba = gpui_kit::Rgba::from(color);
-    let lin = |c: f32| if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
-    let (r, g, b) = (lin(rgba.r), lin(rgba.g), lin(rgba.b));
-    let l = (0.412_221_47 * r + 0.536_332_55 * g + 0.051_445_995 * b).cbrt();
-    let m = (0.211_903_5 * r + 0.680_699_5 * g + 0.107_396_96 * b).cbrt();
-    let s = (0.088_302_46 * r + 0.281_718_85 * g + 0.629_978_7 * b).cbrt();
-    let (a, bb) = (1.977_998_5 * l - 2.428_592_2 * m + 0.450_593_7 * s, 0.025_904_037 * l + 0.782_771_77 * m - 0.808_675_77 * s);
-    bb.atan2(a).to_degrees().rem_euclid(360.)
-}

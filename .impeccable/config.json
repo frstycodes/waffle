@@ -1403,6 +1403,96 @@
         ],
         "createdAt": "2026-11-21T17:15:09.401Z",
         "reason": "Claude: page has no marquee, animation or auto-scroll (grep for marquee/animation/scroll finds nothing); only static tables"
+      },
+      {
+        "rule": "marquee",
+        "value": "*",
+        "files": [
+          "design/user-row.html"
+        ],
+        "createdAt": "2026-11-23T20:31:16.061Z",
+        "reason": "Claude: the looping gradient runs only while hovered, reproducing Discord's nameplate and display-name animation that the page compares"
+      },
+      {
+        "rule": "aphoristic-cadence",
+        "value": "*",
+        "files": [
+          "design/user-row.html"
+        ],
+        "createdAt": "2026-11-23T20:31:16.086Z",
+        "reason": "Claude: the short 'Same.' / 'Missing.' lines are per-case verdicts in a comparison table, not prose cadence"
+      },
+      {
+        "rule": "pulsing-dot",
+        "value": "*",
+        "files": [
+          "design/member-row.html"
+        ],
+        "createdAt": "2026-11-23T20:55:55.475Z",
+        "reason": "Claude: the page reproduces Discord's own typing dots, hover-animated decorations, role gradients and nameplate art (drawn with radial gradients) to compare against Waffle"
+      },
+      {
+        "rule": "marquee",
+        "value": "*",
+        "files": [
+          "design/member-row.html"
+        ],
+        "createdAt": "2026-11-23T20:55:55.496Z",
+        "reason": "Claude: the page reproduces Discord's own typing dots, hover-animated decorations, role gradients and nameplate art (drawn with radial gradients) to compare against Waffle"
+      },
+      {
+        "rule": "radial-halo",
+        "value": "*",
+        "files": [
+          "design/member-row.html"
+        ],
+        "createdAt": "2026-11-23T20:55:55.516Z",
+        "reason": "Claude: the page reproduces Discord's own typing dots, hover-animated decorations, role gradients and nameplate art (drawn with radial gradients) to compare against Waffle"
+      },
+      {
+        "rule": "marquee",
+        "value": "*",
+        "files": [
+          "design/voice-stage.html"
+        ],
+        "createdAt": "2026-11-23T21:05:13.880Z",
+        "reason": "Claude: radial gradients draw placeholder camera and activity art inside call tiles; the looping animation is Discord's ringing-call pulse being reproduced"
+      },
+      {
+        "rule": "radial-halo",
+        "value": "*",
+        "files": [
+          "design/voice-stage.html"
+        ],
+        "createdAt": "2026-11-23T21:05:13.899Z",
+        "reason": "Claude: radial gradients draw placeholder camera and activity art inside call tiles; the looping animation is Discord's ringing-call pulse being reproduced"
+      },
+      {
+        "rule": "pulsing-dot",
+        "value": "*",
+        "files": [
+          "design/messages-compare.html"
+        ],
+        "createdAt": "2026-11-23T21:35:21.534Z",
+        "reason": "Claude: Discord's typing indicator dots, drawn while someone is typing (live state), copied from Discord's typing UI"
+      },
+      {
+        "rule": "marquee",
+        "value": "*",
+        "files": [
+          "design/messages-compare.html"
+        ],
+        "createdAt": "2026-11-23T21:35:21.553Z",
+        "reason": "Claude: no scrolling content on the page; the matches are the typing dots and Waffle's typing/thinking bars, copied from both apps"
+      },
+      {
+        "rule": "radial-halo",
+        "value": "*",
+        "files": [
+          "design/messages-compare.html"
+        ],
+        "createdAt": "2026-11-23T21:35:21.572Z",
+        "reason": "Claude: radial gradients draw stand-in image thumbnails and custom-emoji faces inside message attachments, not a page background glow"
       }
     ]
   }

@@ -1,10 +1,10 @@
 // The Direct Messages list's rows.
 use gpui_kit::{AnyElement, Context, Div, FontWeight, SharedString, component::{ActiveTheme, Icon}, div, prelude::*, px};
 
-use super::{RowState, activity_glyph, channel_row, draft_mark, row_action, row_gap};
+use super::{RowState, channel_row, draft_mark, row_action, row_gap};
 use crate::{
     Waffle,
-    discord::{Channel, Status as Status_},
+    discord::Channel,
     icons::Glyph,
     layout::{decorated_avatar, playing_avatar},
     palette,
@@ -42,10 +42,7 @@ impl Waffle {
     pub(super) fn dm_row(&self, channel: &Channel, cx: &mut Context<Self>) -> AnyElement {
         let selected = self.channel.as_ref().is_some_and(|c| c.id == channel.id);
         let unread = self.unread(&channel.id);
-        let mentions = self.mention_count(&channel.id);
         let presence = channel.recipient.as_ref().and_then(|u| self.presence_of(&u.id));
-        let status = presence.as_ref().map(|p| p.status);
-        let offline = status == Some(Status_::Offline);
         let ring = crate::material::sidebar_fill(cx);
         let hovered = self.hovered_row.as_deref() == Some(channel.id.as_str());
         // Discord plays the avatar, decoration and nameplate while the row is hovered or open.
@@ -60,24 +57,28 @@ impl Waffle {
         let faint = palette::faint(cx);
         let call_line = self.dm_call_line(&channel.id, cx);
         // Built twice on a nameplated row: the second, invisible, sizes the nameplate's mask (`key` keeps ids apart).
-        let line = |key: &str| -> Option<Div> {
-            let line = match (typing, presence.clone()) {
-                (true, _) => Some(div().child(ui::bars(SharedString::from(format!("dm-typing-{}{key}", channel.id)), faint, 10.)).child("Typing…")),
-                (false, Some(p)) => match (p.activity, p.status) {
-                    (Some(a), _) => Some(div().children(activity_glyph(a.kind).map(|i| i.size(ui::ICON_XS).flex_none())).child(ui::line(a.text))),
-                    (None, Status_::Offline) => None,
-                    (None, s) => Some(div().child(s.label())),
-                },
-                // A group always counts us and at least one other, so never "1 member".
-                (false, None) => (!channel.recipients.is_empty()).then(|| div().child(format!("{} members", channel.recipients.len() + 1))),
+        // Discord's second line: only what they're doing (the member list's activity line), never the status
+        // word; a group counts its members.
+        let line = |key: &str, cx: &gpui_kit::App| -> Option<Div> {
+            let line = match (typing, presence.clone(), channel.recipient.as_ref()) {
+                (true, _, _) => Some(div().child(ui::bars(SharedString::from(format!("dm-typing-{}{key}", channel.id)), faint, 10.)).child("Typing…")),
+                (false, Some(p), Some(user)) => crate::panel::activity_status(user, &p, None).map(|status| div().child(status.line(cx))),
+                (false, Some(_), None) => None,
+                // A group always counts us and at least one other, so never "1 Member".
+                (false, None, _) => (!channel.recipients.is_empty()).then(|| div().child(format!("{} Members", channel.recipients.len() + 1))),
             };
             call_line.map(|(glyph, label, ink)| div().child(Icon::new(glyph).size(ui::ICON_SM).flex_none().text_color(ink)).child(div().text_color(ink).child(label))).or(line)
         };
-        let names = |key: &str| {
+        let names = |key: &str, cx: &gpui_kit::App| {
             ui::col().min_h_0()
                 .flex_1()
-                .child(ui::line(channel.name.clone()).font_weight(if unread { FontWeight::MEDIUM } else { FontWeight::NORMAL }))
-                .children(line(key).map(|l| l.flex().items_center().gap_1().min_w_0().text_size(ui::TEXT_XS).text_color(faint)))
+                .child(
+                    ui::row()
+                        .gap_1()
+                        .child(ui::line(channel.name.clone()).text_size(ui::TEXT_MD).line_height(ui::LINE_SM).font_weight(FontWeight::MEDIUM))
+                        .children(channel.recipient.as_ref().and_then(|u| u.tag.as_ref()).map(|tag| crate::chat::guild_tag(tag, cx).flex_none())),
+                )
+                .children(line(key, cx).map(|l| l.flex().items_center().gap_1().min_w_0().text_size(ui::TEXT_XS).text_color(faint)))
         };
         // Only while hovered, so the list stays quiet at rest.
         let plate = channel.recipient.as_ref().and_then(|u| u.nameplate.as_ref()).filter(|_| hovered).map(|plate| {
@@ -86,7 +87,7 @@ impl Waffle {
             let fill = |wash: gpui_kit::Hsla| ui::mix(surface, wash.opacity(1.), wash.a);
             let fills = if selected { (fill(palette::selected(cx)), None) } else { (surface, Some(fill(palette::hover(cx)))) };
             let row = PlateRow { group: format!("dm-{}", channel.id).into(), height: DM_ROW_HEIGHT, width: self.channels_width - 16., fills, selected, animate, dark: cx.theme().is_dark() };
-            row_nameplate(plate, names("-mask").flex_initial(), row)
+            row_nameplate(plate, names("-mask", cx).flex_initial(), row)
         });
         let state = RowState { selected, unread, muted: false, strong: false };
         let (open, close_id) = (channel.clone(), channel.id.clone());
@@ -102,13 +103,12 @@ impl Waffle {
         let row = channel_row(SharedString::from(channel.id.clone()), group.clone(), state, cx);
         self.track_row_hover(row, &channel.id, true, cx)
             .h(px(DM_ROW_HEIGHT))
-            .gap_2p5()
+            .gap_3()
             .font_weight(FontWeight::NORMAL)
             .children(plate)
-            .child(div().relative().when(offline, |a| a.opacity(0.5)).child(face))
-            .child(names("").relative())
-            .when(mentions > 0 && !hovered, |r| r.child(ui::count_badge(mentions)))
-            .when(mentions == 0 && !selected && !hovered && self.drafts.has(&channel.id), |r| r.child(ui::row().items_stretch().flex_none().text_color(faint).child(draft_mark())))
+            .child(div().relative().child(face))
+            .child(names("", cx).relative())
+            .when(!selected && !hovered && self.drafts.has(&channel.id), |r| r.child(ui::row().items_stretch().flex_none().text_color(faint).child(draft_mark())))
             .when(pinned && !hovered, |r| r.child(ui::row().items_stretch().flex_none().text_color(faint).child(Icon::new(Glyph::Pin).size(ui::ICON_SM))))
             .when(hovered, |r| r.child(close))
             .on_click(cx.listener(move |this, _, window, cx| this.open_channel(open.clone(), window, cx)))

@@ -66,6 +66,7 @@
   --dur-hover: 150ms;
   --dur-pop: 200ms;
   --dur-panel: 260ms;
+  --dur-roll: 220ms;
 
   /* Status: hue never alone, always with a shape (dot, moon, bar, minus) */
   --online: oklch(0.74 0.16 155);

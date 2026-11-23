@@ -82,8 +82,7 @@ impl MarkdownPlugin for MentionBadges {
 const MENTION_PAD: f32 = 3.;
 const OPTION_KEY_PAD: f32 = 7.;
 const OPTION_EDGE: f32 = 5.;
-const TAG_HEIGHT: f32 = 18.;
-const TAG_GAP: f32 = 3.;
+const TAG_HEIGHT: f32 = 16.;
 
 // A mention as messages draw it; the composer's mention chips wear the same.
 // lint-allow(custom-component): ui::badge is a 20px block, and a mention must run inside a line of text at its size
@@ -323,7 +322,8 @@ pub(super) fn hide_spoilers(text: &str, revealed: bool) -> String {
 
 // A user's server tag (Discord's guild tag): its badge and text, as it follows their name.
 pub(crate) fn guild_tag(tag: &crate::discord::GuildTag, cx: &App) -> Div {
-    ui::badge(palette::selected(cx), palette::strong(cx)).h(px(TAG_HEIGHT)).px_1p5().gap(px(TAG_GAP)).children(tag.badge.clone().map(|b| img(b).size_3())).child(tag.text.clone())
+    // Discord's chip: 16px tall, 4px in, its 14px badge 2px before 12px semibold text in the default ink.
+    ui::badge(palette::selected(cx), palette::text(cx)).h(px(TAG_HEIGHT)).px_1().gap_0p5().text_size(ui::TEXT_XS).font_weight(gpui_kit::FontWeight::SEMIBOLD).children(tag.badge.clone().map(|b| img(b).size_3p5())).child(tag.text.clone())
 }
 
 // A display name in its Discord style's colours, one run per character, each colour stepped in lightness

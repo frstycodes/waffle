@@ -285,7 +285,7 @@ pub(super) fn call_scenes(waffle: &mut Waffle, scene: &str, window: &mut Window,
                 // Holds the chrome up for the first half minute, as if the pointer had just moved.
                 waffle.call_pointer_at = std::time::Instant::now() + std::time::Duration::from_secs(30);
             }
-            waffle.call_strip_hidden = scene != "call-streams-strip";
+            waffle.stage_ui.strip_hidden = scene != "call-streams-strip";
             if scene == "call-streams-full" {
                 waffle.set_call_fullscreen(true, window, cx);
             }
@@ -299,12 +299,35 @@ pub(super) fn call_scenes(waffle: &mut Waffle, scene: &str, window: &mut Window,
         // Text chat in the voice channel we're in: the sidebar's rows, the stage's message previews (with a
         // mention, or unread only) and the chat open beside the call.
         "sidebar-voice-chat" | "call-previews" | "call-previews-unread" | "call-chat" => demo_voice_chat(waffle, scene, window, cx),
-        "call" | "call-info" | "call-devices" | "call-watch" | "call-focus" | "pip" => {
+        "call" | "call-info" | "call-noise" | "call-devices" | "call-watch" | "call-focus" | "call-person" | "call-alone" | "call-join" | "call-muted" | "call-idle" | "pip" => {
             demo_call(waffle);
-            // As if the pointer rests on the stage, so its chrome shows.
-            waffle.call_pointer_inside = true;
+            // As if the pointer just moved on the stage, so its chrome shows for the first half minute.
+            waffle.call_pointer_inside = scene != "call-idle";
+            if scene != "call-idle" {
+                waffle.call_pointer_at = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            }
             match scene {
-                "call-info" => waffle.connection_info = true,
+                // Wren and Bao on camera, Wren focused over the strip.
+                "call-person" => {
+                    if let Some(call) = waffle.call.as_mut() {
+                        call.cameras.insert("8388608".into(), demo_frame(640, 360, 230));
+                        call.cameras.insert("20971520".into(), demo_frame(640, 480, 120));
+                    }
+                    waffle.call_focus = Some("user:8388608".into());
+                }
+                // Everyone else gone: the entry tile offers Invite to Voice and Choose Activity.
+                "call-alone" => {
+                    if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
+                        guild.voice_states.retain(|v| v.channel_id.as_deref() != Some("lounge") || v.user_id == "4194304");
+                    }
+                }
+                // Left the call while looking at it: the channel's join screen.
+                "call-join" => {
+                    waffle.end_call(cx);
+                }
+                "call-muted" => waffle.muted = true,
+                "call-info" => waffle.voice_popover = Some(crate::call::VoicePopover::Connection),
+                "call-noise" => waffle.voice_popover = Some(crate::call::VoicePopover::Noise),
                 // Watching moss lantern's Go Live: the stream over the filmstrip.
                 "call-watch" | "call-focus" | "pip" => {
                     if let Some(call) = waffle.call.as_mut() {

@@ -1,12 +1,15 @@
-// The floating windows over the whole app (design/voice.html .pip, design/dm-call-panel.html): a Go Live
-// we're watching while away from a server call, and a DM call's own window (dm_call.rs). Each rests in a
+// The floating windows over the whole app (design/voice-stage.html .pip, design/dm-call-panel.html): the call's
+// stream or camera while we look away from it, and a DM call's own window (dm_call.rs). Each rests in a
 // corner of the window; dragged, it follows the pointer and on release springs to the nearest corner.
 use std::{cell::Cell, time::Duration};
 
 use gpui_kit::{Animation, AnimationExt, AnyElement, Context, FontWeight, MouseButton, Pixels, Point, SharedString, Window, div, prelude::*, px};
 
+use gpui_kit::component::Icon;
+
 use crate::{
     Waffle,
+    icons::Glyph,
     ui::{self, RADIUS_MD, Squircle},
 };
 
@@ -93,36 +96,52 @@ fn pin_to<E: Styled>(d: E, corner: Corner, insets: Insets) -> E {
 }
 
 impl Waffle {
+    // The call PiP, while looking away from the call: the focused stream or camera (else the first stream we
+    // watch, else our own Go Live, else someone's camera), 16:9. Our own stream shows its local preview. Hovered, the call's name leads back to it and Disconnect sits in the foot.
     pub(crate) fn stream_pip(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let call = self.call.as_ref()?;
-        let watching = call.focused()?;
+        let me = self.me.as_ref().map(|m| m.id.as_str());
+        let focus = self.call_focus.as_deref().and_then(|k| k.split_once(':'));
+        let camera = |id: &str| (me != Some(id)).then(|| call.cameras.get(id)).flatten().map(|f| (id.to_owned(), Some(f.clone()), false));
+        let stream = |id: &str| (me != Some(id)).then(|| call.watched(id)).flatten().map(|w| (w.streamer_id.clone(), w.frame.clone(), true));
+        let own = || call.sharing.as_ref().and(me).map(|id| (id.to_owned(), call.self_view.as_ref().map(|(frame, _)| frame.clone()), true));
+        let (who, frame, is_stream) = match focus {
+            Some(("stream", id)) if me == Some(id) => own(),
+            Some(("stream", id)) => stream(id),
+            Some(("user", id)) => camera(id),
+            _ => None,
+        }
+        .or_else(|| call.watching.iter().find_map(|w| stream(&w.streamer_id)))
+        .or_else(own)
+        .or_else(|| call.cameras.keys().find_map(|id| camera(id)))?;
+        let mine = me == Some(who.as_str());
         let channel = call.channel.clone();
-        let name = self.user_name(&watching.streamer_id);
+        let name = self.user_name(&who);
         let white = gpui_kit::white();
         // Inset absolutely, so a 4:3 picture letterboxes inside the frame instead of growing past it; square,
         // only the frame is rounded.
-        let picture: AnyElement = match &watching.frame {
-            Some(frame) => ui::media(gpui_kit::ImageSource::Render(frame.clone()), ui::all(0.)).absolute().inset_0().size_full().object_fit(gpui_kit::ObjectFit::Contain).into_any_element(),
-            None => crate::call::stream_fill(0.).absolute().inset_0().flex().items_center().justify_center().text_size(ui::TEXT_XS).text_color(white.opacity(0.7)).child(format!("Joining {name}'s stream…")).into_any_element(),
+        let picture: AnyElement = match frame {
+            Some(frame) => ui::media(gpui_kit::ImageSource::Render(frame), ui::all(0.)).absolute().inset_0().size_full().object_fit(gpui_kit::ObjectFit::Contain).into_any_element(),
+            None => crate::call::stream_fill(0.).absolute().inset_0().flex().items_center().justify_center().text_size(ui::TEXT_XS).text_color(white.opacity(0.7)).child(if mine { "You're live".to_owned() } else { format!("Joining {name}'s stream…") }).into_any_element(),
         };
-        let bar = ui::row()
+        let shade = |angle: f32| gpui_kit::linear_gradient(angle, gpui_kit::linear_color_stop(gpui_kit::black().opacity(0.7), 0.), gpui_kit::linear_color_stop(gpui_kit::transparent_black(), 0.4));
+        let back = channel.clone();
+        let controls = ui::col()
             .absolute()
-            .left_0()
-            .right_0()
-            .bottom_0()
+            .inset_0()
             .p_2()
-            .gap_2()
-            .bg(gpui_kit::linear_gradient(180., gpui_kit::linear_color_stop(gpui_kit::transparent_black(), 0.), gpui_kit::linear_color_stop(gpui_kit::black().opacity(0.6), 1.)))
+            .justify_between()
+            .bg(shade(180.))
             .opacity(0.)
             .group_hover("stream-pip", |s| s.opacity(1.))
-            .child(ui::line(format!("{name}'s screen")).flex_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(white))
-            .child(ui::button("pip-stop", ui::Tone::OnMedia, cx).small().child("Stop watching").on_click(cx.listener(|this, _, _, cx| {
+            .child(
+                ui::row().gap_1p5().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(white).child(Icon::new(Glyph::ChevronLeft).size(ui::ICON_LG)).child(ui::line(back.name.clone())),
+            )
+            .child(ui::row().justify_end().child(ui::round_button("pip-disconnect", Glyph::CallEnd, "Disconnect", ui::AVATAR_LG).on_click(cx.listener(|this, _, _, cx| {
                 cx.stop_propagation();
-                this.stop_watching(cx);
-            })));
-        // Who's watching, as on the stage's stream card: faces, a "+n", the full list on hover.
-        let viewers = self.viewers(&watching.streamer_id);
-        let viewer_chip = (!viewers.is_empty()).then(|| crate::call::viewer_chip(viewers, &watching.streamer_id));
+                this.leave_voice(cx);
+            }))));
+        let foot = div().absolute().left_0().right_0().bottom_0().h_1_2().bg(shade(0.)).opacity(0.).group_hover("stream-pip", |s| s.opacity(1.));
         let player = self.floating_drag(div().id("stream-pip"), cx);
         let player = player
             .group("stream-pip")
@@ -137,8 +156,13 @@ impl Waffle {
             .shadow(ui::shadow_pop(cx))
             .cursor_pointer()
             .child(picture)
-            .child(bar)
-            .children(viewer_chip)
+            .child(foot)
+            .child(controls)
+            .tooltip(move |window, cx| ui::tip(match (is_stream, mine) {
+                (true, true) => "Your screen".to_owned(),
+                (true, false) => format!("{name}'s screen"),
+                (false, _) => name.clone(),
+            }, window, cx))
             .on_click(cx.listener(move |this, _, window, cx| this.show_call(channel.clone(), window, cx)));
         Some(self.place_floating(player, (WIDTH, HEIGHT)))
     }

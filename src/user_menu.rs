@@ -189,6 +189,13 @@ impl Waffle {
             out.push(Entry::Separator);
         }
 
+        // Focus This Person: their tile big on the stage, as Discord's call menu.
+        if media && self.participants().iter().any(|p| p.user_id == target) {
+            let key = format!("user:{target}");
+            let focused = self.call_focus.as_deref() == Some(key.as_str());
+            out.push(item(if focused { "Unfocus This Person" } else { "Focus This Person" }, move |this, _, cx| this.toggle_focus(key.clone(), cx)).icon(Glyph::Fullscreen).entry());
+        }
+
         // G3: volume.
         if media && !is_me {
             let volume = self.prefs.user_volumes.get(&target).copied().unwrap_or(1.);
@@ -209,8 +216,13 @@ impl Waffle {
             out.push(
                 item("Mute soundboard", move |this, _, cx| this.update_prefs(cx, |p| toggle(&mut p.soundboard_mutes, &id))).checked(self.prefs.soundboard_mutes.contains(&target)).icon(Glyph::SoundboardOff).entry(),
             );
-            let id = target.clone();
-            out.push(item("Hide video", move |this, _, cx| this.update_prefs(cx, |p| toggle(&mut p.hidden_video, &id))).checked(self.prefs.hidden_video.contains(&target)).icon(Glyph::VideoOff).entry());
+            // Discord offers it only while their camera is on; kept while disabled so it can be undone.
+            let disabled = self.prefs.hidden_video.contains(&target);
+            let camera = self.participants().iter().any(|p| p.user_id == target && p.camera);
+            if camera || disabled {
+                let id = target.clone();
+                out.push(item("Disable Video", move |this, _, cx| this.update_prefs(cx, |p| toggle(&mut p.hidden_video, &id))).checked(disabled).icon(Glyph::VideoOff).entry());
+            }
         }
         if let Some(guild) = guild {
             let gid = guild.id.clone();
