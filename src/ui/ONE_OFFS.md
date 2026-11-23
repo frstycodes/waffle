@@ -9,6 +9,7 @@ thing: a second copy of a one-off is a missing design-system component or varian
 _Spacing: gpui's scale (gap_2, p_1p5, mt_3 … see ui/tokens.rs). Sizes: a ui token (TEXT_*, ICON_*, AVATAR_*, RADIUS_*, HAIRLINE) or a named const._
 
 - `src/chat/composer.rs` — the entrance slides 8px as it fades, a margin computed from the animation's progress
+- `src/demo.rs` — fixture coordinates for where a demo menu opens, not layout
 - `src/settings/accessibility.rs` — the gap before a group is the user's message-spacing setting, a size computed from data
 - `src/settings/profile_preview.rs` — the avatar overlaps the banner by half its size plus its ring, offsets computed from those consts
 - `src/settings/profiles.rs` — the slide-in distance is computed from the animation progress
@@ -398,6 +399,12 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/voice_status.rs` — the status dialog is an overlay, which only follows the app
 - `src/voice_status.rs` — the status dialog is an overlay, which only follows the app
 
+## file-lines
+
+_Split it: move a self-contained part (a view, a section, a group of helpers) into its own module, and put new code in a new file rather than a long one. Counts lines of code: blank lines, comments and #[cfg(test)] modules don't count. A file that was already longer when the rule came in may only shrink._
+
+- `src/discord/tests.rs` — the gateway and parser unit tests, one function per payload shape.
+
 ## custom-button
 
 _Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_row, ui::settings_choice or ui::pressable. Missing a look? Give the component a Tone, size or slot (src/ui/control.rs) and use it._
@@ -612,10 +619,22 @@ _Work on the render path runs on every redraw: sort, parse, read files or build 
 - `src/server_settings/members.rs` — one member's roles, a few dozen at most, sorted per visible row
 - `src/settings.rs` — one page's groups, a dozen at most
 
+## main-thread-io
+
+_Blocking I/O on the UI thread stalls every frame: move it into cx.background_spawn (or the background executor) and send the result back._
+
+- `src/demo/scenes_files.rs` — fixture file written while the demo scene builds the window, before its first frame
+- `src/demo/scenes_files.rs` — fixture file written while the demo scene builds the window, before its first frame
+- `src/demo/scenes_files.rs` — fixture file written while the demo scene builds the window, before its first frame
+- `src/demo/scenes_files.rs` — fixture file written while the demo scene builds the window, before its first frame
+- `src/demo/scenes_files.rs` — fixture file written while the demo scene builds the window, before its first frame
+- `src/demo/scenes_files.rs` — fixture file written while the demo scene builds the window, before its first frame
+
 ## hot-notify
 
 _A notify in a pointer-move or scroll handler, or a timer loop, runs dozens of times a second: compare the new value with the old and notify only when what's drawn changed; a fast source gets its own entity (CLAUDE.md, Rendering)._
 
+- `src/demo/scenes_calls.rs` — one step per 1.5 s, and each step changes a rail unread badge
 - `src/forum/composer.rs` — ticks once a second only while a post slowmode runs down, redrawing the app-level dialog's clock, and stops when it ends
 
 ## endless-animation
@@ -654,6 +673,18 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/create_server.rs` — ends itself once its request or file prompt resolves, and holds only a weak handle
 - `src/create_server.rs` — ends itself once its request or file prompt resolves, and holds only a weak handle
 - `src/create_server.rs` — ends itself when the captcha channel closes with its request, and holds no entity
+- `src/demo/scenes_apps.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_apps.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_calls.rs` — the loop returns once the view is gone and the update fails
+- `src/demo/scenes_calls.rs` — the loop returns once the view is gone and the update fails
+- `src/demo/scenes_chat.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_chat.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_chat.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_chat.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_files.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_media.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_panels.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_people.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
 - `src/design_system.rs` — ends itself after the 1.4s timer, and holds only a weak handle
 - `src/events/manage.rs` — ends itself once its request resolves, and holds only a weak handle
 - `src/events/manage.rs` — ends itself once the file is written, and holds only a weak handle
@@ -733,6 +764,7 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/chat.rs` — a per-frame snapshot of this server's channels
 - `src/chat.rs` — a per-frame snapshot of this server's roles
 - `src/chat.rs` — a snapshot cloned per frame, one entry per pending upload
+- `src/discord/message.rs` — capped at four pictures per embed, as the comment above says.
 - `src/drafts.rs` — one pick per option of one typed command, 25 at most (Discord's cap)
 - `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
 - `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
