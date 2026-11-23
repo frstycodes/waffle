@@ -127,7 +127,7 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, update: &St
             ui::button("back-to-account", ui::Tone::Link, cx).child(label).on_click(cx.listener(move |this, _, window, cx| this.switch_account(account.id.clone(), window, cx)))
         }))
         .child(div().flex_1())
-        .children(update_strip(update, matches!(login, Login::Failed(_)), cx))
+        .children(update_notice(update, matches!(login, Login::Failed(_)), cx))
         .child(
             ui::row()
                 .gap_1p5()
@@ -142,9 +142,11 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, update: &St
 // A newer Waffle, whatever its stage: looking, found (download it), downloading with its progress, ready
 // (restart into it), or a download that failed (try again). After a failed sign-in (`failed`) the
 // sign-in screen has already started the download, and the copy says the update may fix it.
-fn update_strip(status: &Status, failed: bool, cx: &mut Context<Waffle>) -> Option<AnyElement> {
-    let download = |id: &'static str, label: &'static str, cx: &mut Context<Waffle>| {
-        ui::button(id, Tone::Primary, cx).small().child(label).on_click(cx.listener(|this, _, _, _| {
+fn update_notice(status: &Status, failed: bool, cx: &mut Context<Waffle>) -> Option<AnyElement> {
+    // After a failure, Try again is the screen's one primary action; the update's button stays quiet.
+    let tone = if failed { Tone::Secondary } else { Tone::Primary };
+    let download = move |id: &'static str, label: &'static str, cx: &mut Context<Waffle>| {
+        ui::button(id, tone, cx).small().child(label).on_click(cx.listener(|this, _, _, _| {
             if let Some(updater) = &this.updates.updater {
                 updater.send(Command::Download);
             }
@@ -168,7 +170,7 @@ fn update_strip(status: &Status, failed: bool, cx: &mut Context<Waffle>) -> Opti
         Status::Ready(staged) => {
             let (title, note) = if failed { (might_fix(&staged.version), Some("It's downloaded. Restart to try it.".to_owned())) } else { (format!("Waffle {} is ready", staged.version), None) };
             let staged = staged.clone();
-            let restart = ui::button("login-update-restart", Tone::Primary, cx)
+            let restart = ui::button("login-update-restart", tone, cx)
                 .small()
                 .child("Restart to update")
                 .on_click(cx.listener(move |this, _, _, cx| this.request_restart(Some(staged.clone()), cx)));
@@ -177,26 +179,29 @@ fn update_strip(status: &Status, failed: bool, cx: &mut Context<Waffle>) -> Opti
         Status::DownloadFailed(version) => (format!("Couldn't download Waffle {version}"), Some("Check your connection and try again.".into()), Some(download("login-update-retry", "Try again", cx).into_any_element())),
         Status::Checking | Status::Idle | Status::UpToDate | Status::CheckFailed => return None,
     };
-    let text = ui::col()
-        .flex_1()
-        .gap_1()
-        .child(ui::line(title).font_weight(FontWeight::MEDIUM))
-        .children(note.map(|note| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(note)))
-        .children(progress.map(|f| div().pt_1().child(ui::progress_bar(f, cx).thin())));
-    let strip = ui::strip(ui::StripFill::Accent, cx)
-        // One width through every stage, so the strip doesn't jump as its copy changes mid-download.
+    // Straight on the window's surface like the rest of the sign-in column: no box, set apart by space.
+    let heading = ui::row()
+        .max_w_full()
+        .gap_1p5()
+        .child(Icon::new(Glyph::Download).size(ui::ICON_MD).flex_none().text_color(palette::accent_ink(cx)))
+        .child(ui::line(title).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)));
+    let notice = ui::col()
+        // Clear of the footer line under it.
+        .pb_4()
+        // One width through every stage, so the progress bar doesn't jump as the copy changes mid-download.
         .w(px(UPDATE_WIDTH))
         .max_w_full()
-        .py_2p5()
-        .text_left()
-        .child(Icon::new(Glyph::Download).size(ui::ICON_MD).flex_none().text_color(palette::accent_ink(cx)))
-        .child(text)
-        .children(action.map(|action| div().flex_none().child(action)));
-    Some(arrive("login-update", strip))
+        .items_center()
+        .gap_1p5()
+        .child(heading)
+        .children(note.map(|note| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(note)))
+        .children(progress.map(|f| div().w_full().pt_1().child(ui::progress_bar(f, cx).thin())))
+        .children(action.map(|action| div().pt_1p5().child(action)));
+    Some(arrive("login-update", notice))
 }
 
-// The update strip's width: a little wider than the QR card, so a version and a button fit beside the copy.
-const UPDATE_WIDTH: f32 = 360.;
+// The update notice's width, the QR card's give or take, so it reads as part of the column.
+const UPDATE_WIDTH: f32 = 280.;
 
 // GAP: the design reads "Discord said:", but auth.rs's errors also come from the network and the
 // captcha page, so the label doesn't name a source.
