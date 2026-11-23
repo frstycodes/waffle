@@ -12,18 +12,21 @@ use gpui_kit::{
     div, prelude::*, px, relative,
 };
 
+mod entry;
 mod fit;
+mod grid;
 mod previews;
+mod layouts;
 mod dock;
 mod menus;
 mod tiles;
 mod header;
-use previews::*;
 use dock::*;
-use tiles::*;
+pub(crate) use dock::VoicePopover;
+pub(crate) use layouts::StageUi;
 
 use crate::{
-    call_issues::{failure_line, issue_chip, issue_line},
+    call_issues::{failure_line, issue_chip},
     Waffle,
     discord::{self, User, VoiceState},
     icons::Glyph,
@@ -53,16 +56,10 @@ const PREVIEW_RETRY: std::time::Duration = std::time::Duration::from_secs(20);
 // The stage redraws once a second during a call, so the loader shows within a second of this.
 const STALL_AFTER: Duration = Duration::from_secs(3);
 pub(crate) const STAGE_PAD: f32 = 16.;
-const STAGE_GAP: f32 = 16.;
-const HEAD_HEIGHT: f32 = 32.;
 pub(crate) const CONTROLS_HEIGHT: f32 = 48.;
 // A group's inset around its buttons.
 pub(crate) const DOCK_PAD: f32 = 4.;
-// .tiles: 10px apart, 8px once the grid is three across; avatars shrink in small tiles.
-const TILE_GAP: f32 = 10.;
-const TILE_GAP_DENSE: f32 = 8.;
-const SMALL_TILE: f32 = 240.;
-// .filmstrip under a focused stream.
+// .filmstrip under a focused activity.
 const STRIP_TILE: f32 = 148.;
 const STRIP_GAP: f32 = 8.;
 // The filmstrip's fold button.
@@ -75,7 +72,8 @@ const STAGE_BUTTON_HEIGHT: f32 = 30.;
 const STAGE_GROUP: &str = "call-stage";
 // The stage's header band, the app's one header line.
 pub(crate) const FOCUS_HEAD: f32 = 48.;
-const CONTROLS_IDLE: Duration = Duration::from_secs(3);
+// Discord's idle timeout: the header, the bar and the name chips fade after the pointer rests this long.
+const CONTROLS_IDLE: Duration = Duration::from_secs(2);
 // The voice channel's chat beside the call: at least 450 wide, leaving the stage 550 (Discord's numbers).
 const CHAT_SLIDE: Duration = Duration::from_millis(260);
 pub(crate) const CHAT_MIN_WIDTH: f32 = 450.;
@@ -93,25 +91,6 @@ pub(crate) fn chat_width(wanted: f32, window: f32) -> f32 {
     wanted.min(fit::CHAT_MAX_WIDTH).min(window - CHAT_STAGE_ROOM).max(CHAT_MIN_WIDTH)
 }
 
-fn grid_gap(cols: usize) -> f32 {
-    if cols >= 3 { TILE_GAP_DENSE } else { TILE_GAP }
-}
-
-// The column count and tile width that make the biggest 16:9 tiles fit `width` x `height`. No floor
-// on the width: a crowded stage shrinks its cards rather than spill past its foot.
-fn grid_fit(n: usize, width: f32, height: f32) -> (usize, f32) {
-    let n = n.max(1);
-    let size = |cols: usize| {
-        let rows = n.div_ceil(cols) as f32;
-        let gap = grid_gap(cols);
-        let w = (width - gap * (cols as f32 - 1.)) / cols as f32;
-        w.min((height - gap * (rows - 1.)) / rows * 16. / 9.)
-    };
-    let cols = (1..=n).max_by(|a, b| size(*a).total_cmp(&size(*b))).unwrap_or(1);
-    // Floored so float error can't wrap a full row onto one more line.
-    (cols, size(cols).floor().max(0.))
-}
-
 #[derive(Clone)]
 enum Tile {
     User(VoiceState),
@@ -122,10 +101,12 @@ enum Tile {
     Activity(String),
 }
 
-// How a tile is drawn: a 16:9 card of this width, or filling the stage edge to edge.
+// How a tile is drawn: a 16:9 card of this width, the focused tile at its fitted size (flush when it fills the
+// stage on an axis, so it loses its corners), or a focused activity filling the stage edge to edge.
 #[derive(Clone, Copy)]
 enum TileSize {
     Card(f32),
+    Focus { w: f32, h: f32, flush: bool },
     Fill,
 }
 
@@ -199,24 +180,6 @@ impl Link {
             _ => Link::Connecting,
         }
     }
-
-    fn label(self) -> &'static str {
-        match self {
-            Link::Connecting => "Connecting…",
-            Link::Connected => "Voice connected",
-            Link::Poor => "Poor connection",
-            Link::Lost => "Reconnecting…",
-        }
-    }
-
-    // .voicebar's --tone: muted while it connects, green when up, amber when something needs you.
-    fn tone(self, cx: &App) -> Hsla {
-        match self {
-            Link::Connecting => palette::muted(cx),
-            Link::Connected => palette::positive_ink(cx),
-            Link::Poor | Link::Lost => palette::warning_ink(cx),
-        }
-    }
 }
 
 impl Waffle {
@@ -277,40 +240,22 @@ impl Waffle {
         activities.chain(people).collect()
     }
 
-    // .call: the stage, dark in both themes. The header, the tiles and the control bar; a focused
-    // card instead fills the stage edge to edge under the header, the controls floating over it.
+    // .call: the stage, dark in both themes. The grid or the focused tile fill it; the header and the control bar
+    // float over them (`stage_chrome`).
     pub(crate) fn render_call(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         self.call.as_ref()?;
         if self.call_is_stage() {
             return Some(self.render_stage(window, cx));
         }
         let tiles = self.ordered_tiles();
-        // .call.autohide: 260ms out, drifting 6px toward its edge; any move brings it back.
-        // The chrome steps aside whenever the pointer has left the stage, and with a stream focused,
-        // as Discord's does, also while it rests.
-        let menus_closed = self.device_menu.is_none() && self.menu.is_none();
-        // The webview over a focused activity hides the pointer from the stage, so its chrome stays.
-        let activity_focused = self.call_focus.as_deref().is_some_and(|k| k.starts_with("activity:"));
-        let rest = match self.focused_stream() {
-            _ if activity_focused => false,
-            Some(_) => self.call_idle(),
-            None => !self.call_pointer_inside && !self.call_pointer_on_chrome && menus_closed,
+        let shown = self.chrome_shown(window, cx);
+        let focused = self.call_focus.as_ref().and_then(|key| tiles.iter().find(|t| tile_key(t) == *key)).cloned();
+        let body = match focused {
+            Some(big @ Tile::Activity(_)) => self.activity_stage(&big, &tiles, shown, cx),
+            Some(big) => self.focus_view(big, tiles, shown, cx),
+            None => self.card_stage(tiles, shown, cx),
         };
-        let shown = gpui_kit::base::transition("call-chrome", if rest { 0. } else { 1. }, gpui_kit::base::Transition::new(ui::DUR_PANEL), window, cx);
-        let focused = self.call_focus.as_ref().and_then(|key| tiles.iter().find(|t| tile_key(t) == *key));
-        if let Some(big) = focused {
-            return Some(self.focus_stage(big, &tiles, shown, cx));
-        }
-        let body = self.card_stage(tiles, cx);
-        let stage = ui::col().min_h_0().flex_1().gap(px(STAGE_GAP)).pt(px(STAGE_GAP)).px(px(STAGE_PAD)).pb(px(STAGE_PAD));
-        Some(
-            self.stage_root(cx)
-                .flex()
-                .flex_col()
-                .child(self.above_game(self.stage_head(self.call_header(cx)).opacity(shown)))
-                .child(stage.child(div().flex_1().min_h_0().child(body)).child(self.above_game(div().opacity(shown).child(self.call_controls(cx)))))
-                .into_any_element(),
-        )
+        Some(self.stage_root(cx).child(body).child(self.stage_chrome(shown, cx)).into_any_element())
     }
 
     // The stage's size in the window, beside the rail, the channel list and the call's chat.
@@ -352,71 +297,6 @@ impl Waffle {
         }
     }
 
-    // .call.focused: the header as a 48px band (over the stream in full screen), the focused card
-    // edge to edge, letterboxed only on the axis that doesn't fit, and the controls floating over its
-    // foot. Everyone else waits behind the pill on its bottom edge, or sits in a strip under it.
-    fn focus_stage(&self, big: &Tile, tiles: &[Tile], shown: f32, cx: &mut Context<Self>) -> AnyElement {
-        let key = tile_key(big);
-        let others: Vec<&Tile> = tiles.iter().filter(|t| tile_key(t) != key).take(STRIP_LIMIT).collect();
-        let strip = !self.call_strip_hidden && !others.is_empty();
-        let overlay_head = self.call_fullscreen;
-        let drift = 6. * (1. - shown);
-        let band = CONTROLS_HEIGHT + STAGE_PAD * 2.;
-        let head = self.above_game(self.stage_head(self.call_header(cx)));
-        let (in_flow, floating) = if overlay_head { (None, Some(head)) } else { (Some(head), None) };
-        let toggle_bottom = if strip { STRIP_GAP } else { band + STRIP_GAP };
-        // The game keeps clear of the pill, the floating controls and, in full screen, the header, so none of them
-        // covers it (they draw over its webview, see `above_game`).
-        let clear = matches!(big, Tile::Activity(_)).then(|| {
-            let foot = crate::activities::TIP_ROOM + if others.is_empty() { band } else { toggle_bottom + STRIP_TOGGLE + STRIP_GAP };
-            (if overlay_head { FOCUS_HEAD } else { 0. }, foot)
-        });
-        let media = div()
-            .relative()
-            .flex_1()
-            .min_h_0()
-            .bg(gpui_kit::black())
-            .when_some(clear, |d, (top, foot)| d.pt(px(top)).pb(px(foot)))
-            .child(self.tile(big, TileSize::Fill, cx))
-            .when(!others.is_empty(), |d| d.child(self.above_game(ui::row().items_stretch().absolute().left_0().right_0().bottom(px(toggle_bottom)).justify_center().opacity(shown).child(self.strip_toggle(strip, cx)))));
-        self.stage_root(cx)
-            .flex()
-            .flex_col()
-            .children(in_flow)
-            .child(media)
-            .when(strip, |d| {
-                // Centred while it fits; wider than the stage, it starts at the left edge and scrolls.
-                let cards: Vec<AnyElement> = others.into_iter().map(|t| self.tile(t, TileSize::Card(STRIP_TILE), cx)).collect();
-                d.child(self.above_game(ui::row().items_stretch().id("filmstrip").flex_none().overflow_x_scroll().pt(px(STRIP_GAP)).px(px(STAGE_PAD)).child(ui::row().items_stretch().mx_auto().flex_none().gap(px(STRIP_GAP)).children(cards)))) // lint-allow(raw-margin): auto margins centre the strip while it fits and start it at the left edge when wider, which justify_center can't
-                    .child(div().h(px(band)).flex_none())
-            })
-            .children(floating.map(|head| self.above_game(keeps_chrome(div().id("call-head-float"), cx).occlude().absolute().top(px(-drift)).left_0().right_0().h(px(FOCUS_HEAD + 24.)).opacity(shown).bg(scrim(180.)).child(head))))
-            .child(self.above_game(
-                div()
-                    .absolute()
-                    .left_0()
-                    .right_0()
-                    .bottom(px(-drift))
-                    .pt_10()
-                    .px(px(STAGE_PAD))
-                    .pb(px(STAGE_PAD))
-                    .opacity(shown)
-                    .when(!strip, |d| d.bg(scrim(0.)))
-                    .child(self.call_controls(cx)),
-            ))
-            .into_any_element()
-    }
-
-    // The grid, fitted to the space it has this frame: sizing it from the last frame's measurement drew
-    // one stale frame on every resize and Space change.
-    fn card_stage(&self, tiles: Vec<Tile>, cx: &mut Context<Self>) -> AnyElement {
-        let this = cx.weak_entity();
-        ui::sized(move |size, _, cx| {
-            this.update(cx, |waffle, cx| waffle.tile_grid(&tiles, f32::from(size.width), f32::from(size.height), cx)).unwrap_or_else(|_| div().into_any_element())
-        })
-        .into_any_element()
-    }
-
     // Clicking a card makes it the big one; clicking it again goes back to the grid. A stream you
     // aren't watching starts playing as it comes forward, replacing the one you watch, as Discord's does;
     // once you watch two or more, it joins them instead. Ended streams not in focus go as focus moves.
@@ -455,13 +335,6 @@ impl Waffle {
         cx.notify(); // lint-allow(global-notify): the stage focus swaps the stage layout (main) and the activity frame overlay
     }
 
-    // .tiles: the size that makes the biggest 16:9 tiles fit, 10px apart (8px three across and up).
-    fn tile_grid(&self, tiles: &[Tile], width: f32, height: f32, cx: &mut Context<Self>) -> AnyElement {
-        let (cols, tile_w) = grid_fit(tiles.len(), width, height);
-        let rendered: Vec<AnyElement> = tiles.iter().map(|t| self.tile(t, TileSize::Card(tile_w), cx)).collect();
-        ui::row().size_full().flex_wrap().justify_center().content_center().gap(px(grid_gap(cols))).children(rendered).into_any_element()
-    }
-
     // A stage's speakers as the call's cards, in Discord's columns for the width (1 under 424px, 2 under
     // 624, 3 under 824, else 4).
     pub(crate) fn speaker_grid(&self, width: f32, cx: &mut Context<Self>) -> AnyElement {
@@ -481,11 +354,17 @@ impl Waffle {
             _ => 4,
         }
         .min(tiles.len().max(1));
-        let gap = if cols >= 3 { TILE_GAP_DENSE } else { TILE_GAP };
-        let tile_w = (width - gap * (cols as f32 - 1.)) / cols as f32;
-        let rows = tiles.len().div_ceil(cols).max(1) as f32;
-        let height = rows * tile_w * 9. / 16. + gap * (rows - 1.);
-        div().w(px(width)).h(px(height)).child(self.tile_grid(&tiles, width, height, cx)).into_any_element()
+        let tile_w = ((width - grid::GRID_GAP * (cols as f32 - 1.)) / cols as f32).floor();
+        let cards: Vec<AnyElement> = tiles.iter().map(|t| self.tile(t, TileSize::Card(tile_w), 1., cx)).collect();
+        ui::row().w(px(width)).flex_wrap().justify_center().gap(px(grid::GRID_GAP)).children(cards).into_any_element()
+    }
+
+    // Focus This Person from a menu: the tile with `key` becomes the big one, or goes back to the grid.
+    pub(crate) fn toggle_focus(&mut self, key: String, cx: &mut Context<Self>) {
+        let tile = self.ordered_tiles().into_iter().find(|t| tile_key(t) == key);
+        if let Some(tile) = tile {
+            self.toggle_card(&tile, cx);
+        }
     }
 
     // Full screen shows the call alone: no servers, channels or user panel.
@@ -549,6 +428,7 @@ impl Waffle {
     pub(crate) fn render_call_overlays(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let mut out = Vec::new();
         out.extend(self.connection_overlay(cx));
+        out.extend(self.noise_overlay(window, cx));
         out.extend(self.device_overlay(window, cx));
         out.extend(self.render_launcher(cx));
         out.extend(self.render_activity_consent(window, cx));
@@ -644,8 +524,8 @@ fn watch_button_look() -> Div {
         .font_weight(FontWeight::MEDIUM)
 }
 
-// A call control's state: .cbtn at rest, .off (coral), .on (light), .active (accent), the open
-// chevron ([aria-expanded]). The red .leave is its own button.
+// A call control's state: .cbtn at rest, .off (a muted mic: red ink on a red wash, its caret too), .on (light),
+// .active (accent), the open caret ([aria-expanded]). The red .leave is its own button.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Control {
     Rest,
@@ -660,7 +540,7 @@ pub(crate) enum Control {
 pub(crate) fn control(id: &'static str, glyph: Glyph, tip: &'static str, state: Control, enabled: bool) -> ui::Pressable {
     let (fill, hover, ink) = match state {
         Control::Rest => (gpui_kit::transparent_black(), stage::wash(0.08), gpui_kit::white()),
-        Control::Off => (stage::off(false), stage::off(true), stage::off_ink()),
+        Control::Off => (stage::muted_fill(0.12), stage::muted_fill(0.16), stage::muted_ink()),
         Control::On => (stage::on(false), stage::on(true), stage::on_ink()),
         Control::Active => (palette::accent(), palette::accent_hover(), palette::on_accent()),
         Control::Open => (stage::wash(0.12), stage::wash(0.12), gpui_kit::white()),
@@ -676,7 +556,7 @@ pub(crate) fn control(id: &'static str, glyph: Glyph, tip: &'static str, state: 
         .items_center()
         .justify_center()
         .bg(fill)
-        .text_color(if chevron && state == Control::Rest { stage::muted() } else { ink })
+        .text_color(ink)
         .child(Icon::new(glyph).size(px(if chevron { 12. } else { 20. })))
         .when(enabled, |b| b.cursor_pointer().hover(move |s| s.bg(hover).text_color(ink)))
         .when(!enabled, |b| b.opacity(0.4).cursor(gpui_kit::CursorStyle::OperationNotAllowed))
@@ -688,16 +568,17 @@ fn mirrored<E: Styled>(mut el: E) -> E {
     el
 }
 
-// .csplit: the main button with its chevron tucked flush beside it.
-fn split_control(main: impl IntoElement, chevron: impl IntoElement) -> Div {
-    ui::row().items_stretch().child(main).child(chevron)
+// .csplit: the main button with its caret a hairline beside it; in a narrow window the caret goes (right-click
+// still opens the menu).
+fn split_control(main: impl IntoElement, caret: Option<impl IntoElement>) -> Div {
+    ui::row().items_stretch().gap(ui::HAIRLINE).child(main).children(caret)
 }
 
 // .cgroup: related controls on one opaque plate with a hairline, so they read over any picture.
 pub(crate) fn control_group() -> Div {
     ui::row()
         .h(px(CONTROLS_HEIGHT))
-        .gap_0p5()
+        .gap_2()
         .p(px(DOCK_PAD))
         .squircle(10. + DOCK_PAD)
         .bg(stage::dock())
@@ -719,10 +600,7 @@ pub(crate) fn viewer_chip(viewers: Vec<Viewer>, streamer_id: &str) -> Stateful<D
     // lint-allow(custom-mark): ui::badged marks a face's corner, and this chip pins over a stream tile's corner
     let chip = ui::row()
         .id(SharedString::from(format!("viewers-{streamer_id}")))
-        .absolute()
-        .right_2()
-        .top_2()
-        .h_7()
+        .h_5()
         .pl_2()
         .pr_1()
         .rounded_full()
@@ -730,17 +608,8 @@ pub(crate) fn viewer_chip(viewers: Vec<Viewer>, streamer_id: &str) -> Stateful<D
         .bg(stage::dock())
         .text_color(stage::muted())
         .child(Icon::new(Glyph::EyeBold).size(ui::ICON_SM))
-        .child(ui::capped_stack(&people, VIEWER_FACES, 20., stage::dock(), stage::overlay(), stage::strong()));
+        .child(ui::capped_stack(&people, VIEWER_FACES, ui::AVATAR_SM - 4., stage::dock(), stage::overlay(), stage::strong()));
     ui::overflow_list(chip, "Watching", people)
-}
-
-// The hover list behind the viewer chip: everyone watching, face and name.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum MarkKind {
-    // A moderator's lock: solid red.
-    Server,
-    // Your own choice, so neutral.
-    Local,
 }
 
 // .tile.stream: a stream before its first preview arrives.
@@ -764,26 +633,8 @@ pub(crate) fn tabular() -> FontFeatures {
 }
 
 #[cfg(test)]
-mod grid_tests {
-    use super::*;
-
-    #[test]
-    fn the_grid_always_fits_its_stage() {
-        for n in 1..=25 {
-            for (width, height) in [(1600., 700.), (500., 1300.), (300., 200.), (900., 520.)] {
-                let (cols, w) = grid_fit(n, width, height);
-                let rows = n.div_ceil(cols) as f32;
-                let gap = grid_gap(cols);
-                assert!(w * cols as f32 + gap * (cols as f32 - 1.) <= width, "{n} tiles overflow {width} wide");
-                assert!(w * 9. / 16. * rows + gap * (rows - 1.) <= height + 0.01, "{n} tiles overflow {height} tall");
-            }
-        }
-    }
-}
-
-#[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{previews::*, *};
 
     #[test]
     fn avatar_colour_and_url() {
@@ -822,50 +673,6 @@ mod pip_tests {
         assert_eq!(clock(3729), "1:02:09");
         assert_eq!(quality_label(1080, 60), "1080p 60");
         assert_eq!(quality_label(0, 30), "Source 30");
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Health {
-    Smooth,
-    Choppy,
-    Stalled,
-}
-
-// How a watched stream is doing, from when its last frames arrived: no frame for a second is
-// stalled; under 15 frames a second over the last two is choppy, Discord's low-frame-rate line
-// (error 2002) for a 30 fps stream.
-// GAP: Discord scales the line with the stream's own frame rate (3 / 8 / 15 / 30 for up to
-// 5 / 15 / 30 / 60 fps); the voice engine doesn't report a remote stream's rate yet.
-// ponytail: frame rate only; add decode lag once the engine reports it.
-pub fn stream_health(arrivals: &std::collections::VecDeque<Instant>, now: Instant) -> (Health, f32) {
-    let Some(last) = arrivals.back() else { return (Health::Stalled, 0.) };
-    let window = Duration::from_secs(2);
-    let recent = arrivals.iter().filter(|t| now.duration_since(**t) <= window).count();
-    let fps = recent as f32 / window.as_secs_f32();
-    let health = match () {
-        _ if now.duration_since(*last) > Duration::from_secs(1) => Health::Stalled,
-        _ if fps < 15. => Health::Choppy,
-        _ => Health::Smooth,
-    };
-    (health, fps)
-}
-
-#[cfg(test)]
-mod health_tests {
-    use super::*;
-
-    #[test]
-    fn health_from_arrivals() {
-        let now = Instant::now();
-        let at = |ms: u64| now - Duration::from_millis(ms);
-        let smooth: std::collections::VecDeque<Instant> = (0..60).map(|i| at(i * 33)).rev().collect();
-        assert_eq!(stream_health(&smooth, now).0, Health::Smooth);
-        let choppy: std::collections::VecDeque<Instant> = (0..10).map(|i| at(i * 200)).rev().collect();
-        assert_eq!(stream_health(&choppy, now).0, Health::Choppy);
-        let stalled: std::collections::VecDeque<Instant> = [at(1500)].into();
-        assert_eq!(stream_health(&stalled, now).0, Health::Stalled);
-        assert_eq!(stream_health(&Default::default(), now).0, Health::Stalled);
     }
 }
 

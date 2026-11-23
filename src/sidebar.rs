@@ -57,7 +57,7 @@ pub(crate) fn row_gap() -> f32 {
 // A live stage's row: its name with the topic under it.
 const STAGE_ROW_HEIGHT: f32 = 44.;
 // A person's row under a voice channel, and the slot that waits for one being moved there.
-const VOICE_ROW: f32 = 30.;
+const VOICE_ROW: f32 = 32.;
 // Where a voice person's profile opens, above the click.
 const PROFILE_LIFT: f32 = 40.;
 // The gap before a category or the DM heading, at Default density.
@@ -72,13 +72,15 @@ const HEADER_BUTTON: f32 = 34.;
 const FOLDER_GLYPH: f32 = 22.;
 const LIVE_MARK_HEIGHT: f32 = 18.;
 // An audience row's indent (a person's row with its avatar slot).
-const AUDIENCE_INDENT: f32 = 35.;
+const AUDIENCE_INDENT: f32 = 37.;
 // A thread row's indent, and the 1.5px line of its branch or a drop slot's outline.
 const THREAD_INDENT: f32 = 34.;
 const THICK_LINE: f32 = 1.5;
 // A speaking ring sits this far clear of an avatar, and the avatar's own size in a voice row.
 const RING_CLEARANCE: f32 = 3.;
-const VOICE_AVATAR: f32 = 22.;
+const VOICE_AVATAR: f32 = 24.;
+// The speaking ring around it, `RING_CLEARANCE` out on every side.
+const VOICE_RING: f32 = 30.;
 
 
 // Hover and state changes: --dur-hover on --ease-out.

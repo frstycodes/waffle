@@ -71,7 +71,6 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::all` — Corner sets for `media` and edge strips: all four, or only the top or bottom pair.
 - `ui::top`
 - `ui::left`
-- `ui::bottom`
 - `ui::edge` — A strip (header, footer, scroll area) that runs edge to edge of a rounded container, rounded to match on the corners it touches, in the cont
 - `ui::mix` — CSS `color-mix` in sRGB: `t` of `to` over `from`, for fills that follow a transition.
 
@@ -218,6 +217,10 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 
 - `ui::Entry` — One thing in the list: a person (round) or an item (a badge, a server; square), with its name.
 - `ui::overflow_list` — Shows the full list when `el` is hovered; the card itself stays up while the pointer is on it.
+
+## src/ui/roll.rs
+
+- `ui::hover_roll` — One line swapped for another on hover: `rest` rolls up and fades as `rolled` rises in from below, over 220ms.
 
 ## src/ui/table.rs
 

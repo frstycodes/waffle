@@ -20,7 +20,7 @@ pub(super) fn audience_row(count: usize, cx: &App) -> Div {
 pub(super) fn speaking_avatar(avatar: &str, talking: bool, sounding: bool, cx: &App) -> Div {
     let ring = if sounding { Some(palette::accent()) } else { talking.then(|| palette::status_in(crate::discord::Status::Online, cx)) };
     // lint-allow(custom-mark): ui::speaking_ring cuts its gap in the surface colour; this one leaves the gap clear over the sidebar's material.
-    let mark = ring.map(|color| div().absolute().top(px(-RING_CLEARANCE)).left(px(-RING_CLEARANCE)).size_7().rounded_full().border_2().border_color(color));
+    let mark = ring.map(|color| div().absolute().top(px(-RING_CLEARANCE)).left(px(-RING_CLEARANCE)).size(px(VOICE_RING)).rounded_full().border_2().border_color(color));
     div().relative().flex_none().size(px(VOICE_AVATAR)).child(ui::avatar(avatar.to_owned(), VOICE_AVATAR)).children(mark)
 }
 
@@ -76,7 +76,7 @@ pub(super) fn voice_mark_for(state: &crate::discord::VoiceState, cx: &App) -> Op
         VoiceMark::Muted => mark(Nav::MicOffFill.icon(), faint),
         VoiceMark::Deafened => mark(Nav::DeafenedFill.icon(), faint),
     });
-    Some(ui::row().flex_none().gap_1p5().children(elements).into_any_element())
+    Some(ui::row().flex_none().gap_1().children(elements).into_any_element())
 }
 
 pub(super) const STREAM_CARD_WIDTH: f32 = 260.;
@@ -337,6 +337,24 @@ impl Waffle {
                     .tooltip(move |window, cx| ui::tip(game.label(), window, cx))
             });
             let key = SharedString::from(format!("voice-{}", state.user_id));
+            let row_group = SharedString::from(format!("voice-row-{}", state.user_id));
+            // Discord's options button, there only while the row is hovered.
+            // It lays over the row's end on the hover fill rather than holding room, so names don't truncate at rest.
+            let options = row_action(SharedString::from(format!("voice-options-{}", state.user_id)), Icon::new(Glyph::More), "More Options", cx)
+                .absolute()
+                .right_1()
+                .squircle(ui::RADIUS_XS)
+                .bg(hover)
+                .opacity(0.)
+                .group_hover(row_group.clone(), |s| s.opacity(1.))
+                .on_click({
+                    let user_id = state.user_id.clone();
+                    cx.listener(move |this, e: &gpui_kit::ClickEvent, _, cx| {
+                        cx.stop_propagation();
+                        this.voice_user_menu(&user_id, e.position(), cx);
+                    })
+                });
+            let tag = state.user.as_ref().and_then(|u| u.tag.as_ref()).map(|tag| crate::chat::guild_tag(tag, cx).flex_none());
             let carried = self.drag_motion.row(&key);
             let row = div().id(key.clone()).h(px(VOICE_ROW)).flex_none().squircle(ui::RADIUS_SM).children(self.drag_motion.spot(&key));
             let row = self.voice_drop_zone(row, key.clone(), channel, cx);
@@ -359,14 +377,17 @@ impl Waffle {
                     .flex()
                     .items_center()
                     .gap_2()
+                    .relative()
+                    .group(row_group)
                     .font_weight(FontWeight::NORMAL)
                     .text_color(if talking { palette::strong(cx) } else { palette::muted(cx) })
                     .hover(move |s| s.bg(hover).text_color(text))
                     // You, in this call from another client (not this app): avatar and name faded, as Discord does.
                     .child(speaking_avatar(&avatar, talking, self.soundboard_playing(&state.user_id), cx).when(elsewhere(&state.user_id), |a| a.opacity(0.45)))
-                    .child(ui::line(name.clone()).flex_1().when(elsewhere(&state.user_id), |n| n.opacity(0.45)))
+                    .child(ui::row().flex_1().gap_1().child(ui::line(name.clone())).children(tag).when(elsewhere(&state.user_id), |n| n.opacity(0.45)))
                     .children(game.map(|g| g.when(elsewhere(&state.user_id), |g| g.opacity(0.45))))
                     .children(end)
+                    .child(options)
                     .on_mouse_down(gpui_kit::MouseButton::Right, {
                         let user_id = state.user_id.clone();
                         cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.voice_user_menu(&user_id, e.position, cx))

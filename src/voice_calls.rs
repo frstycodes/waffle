@@ -154,6 +154,10 @@ impl Waffle {
         self.camera_on_connect = false;
         self.stop_ringing_out();
         let Some(call) = self.call.take() else { return false };
+        // Left while looking at it: the channel shows its join screen, as Discord's.
+        if self.call_view && call.guild_id.is_some() && call.channel.raw_type != 13 {
+            self.stage_ui.join = Some(call.channel.clone());
+        }
         self.end_activities(cx);
         self.soundboard.leave_call();
         self.call_focus = None;
@@ -206,6 +210,9 @@ impl Waffle {
                 call.level = (db, gate_open);
                 if self.mic_test.is_none() {
                     self.mic_level = db;
+                }
+                if gate_changed && gate_open {
+                    self.heard_while_muted(cx);
                 }
                 if !gate_changed && !self.settings_open() {
                     return;

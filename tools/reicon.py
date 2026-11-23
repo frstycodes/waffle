@@ -51,6 +51,7 @@ MAP = [
     ("speaker-slash", "Voice", "Speaker off", "volume-slash"),
     ("speaker-simple-high", "Voice", "Soundboard", "music-square"),
     ("speaker-simple-slash", "Voice", "Soundboard off", "music-square-remove"),
+    ("Glyph::Soundwave", "Voice", "Noise suppression", "soundwave"),
     ("speaker-low", "Voice", "Volume low", "volume-low"),
     ("speaker-none", "Voice", "Volume silent", "volume"),
     ("speaker-x", "Voice", "Volume muted", "volume-x"),

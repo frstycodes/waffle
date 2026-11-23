@@ -64,6 +64,7 @@ mod icons;
 mod illustration;
 mod images;
 mod layout;
+mod user_panel;
 mod link_preview;
 mod login;
 mod mascot;
@@ -610,7 +611,9 @@ pub struct Waffle {
     slider_bounds: Rc<RefCell<HashMap<SharedString, gpui_kit::Bounds<gpui_kit::Pixels>>>>,
     // The open voice channel's call view replaces the chat.
     call_view: bool,
-    connection_info: bool,
+    // The voice panel's open popover: the connection's details, or noise suppression.
+    voice_popover: Option<call::VoicePopover>,
+    muted_cue: user_panel::MutedCue,
     device_menu: Option<call::DeviceMenu>,
     menu: Option<menu::OpenMenu>,
     // Go Live thumbnails by streamer: the CDN url and when it was fetched.
@@ -707,7 +710,7 @@ pub struct Waffle {
     call_pointer_inside: bool,
     // On the stage's own chrome (controls, header buttons): it stays up while the pointer rests there.
     call_pointer_on_chrome: bool,
-    call_strip_hidden: bool,
+    stage_ui: crate::call::StageUi,
     // Our stream's self-view: shown, and which corner of the stage it sits in.
     // Our local volume for each streamer's Go Live (0..=2), kept across watches.
     // lint-allow(unbounded-growth): one f32 per streamer the user adjusted, a few dozen at most

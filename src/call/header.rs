@@ -8,7 +8,8 @@ impl Waffle {
     // with it: its width rides one critically damped spring, so a click mid-slide reverses from where
     // it is. The panel keeps its full width inside a clip that grows from the right.
     pub(crate) fn render_call_with_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let call_channel = self.call.as_ref()?.channel.clone();
+        let Some(call) = self.call.as_ref() else { return self.join_screen(cx) };
+        let call_channel = call.channel.clone();
         let reveal = self.call_chat_reveal(window, cx);
         // Leaving shows another channel's messages, so only the call's own chat slides out.
         let on_call_channel = self.channel.as_ref().is_some_and(|c| c.id == call_channel.id);
@@ -101,101 +102,46 @@ impl Waffle {
         self.call_chat && self.call.as_ref().is_some_and(|call| self.channel.as_ref().is_some_and(|c| c.id == call.channel.id))
     }
 
-    // .callhead: the room (or whose screen), how long the call has run, who's in it, then the view
-    // controls. While watching one stream: its quality, how smoothly it plays and a way to stop.
+    // .callhead, as Discord's: the room and its status; a focused stream adds whose screen it is on the left and
+    // its quality and LIVE on the right; the participant count shows while the strip is folded away, and Show Chat
+    // only while the chat is closed.
     pub(super) fn call_header(&self, cx: &mut Context<Self>) -> AnyElement {
         let call = self.call.as_ref().expect("in a call");
-        let people = self.participants();
-        let watching = call.focused();
-        let several = call.watching.len() > 1;
-        // A focused stream names the room, then whose it is and what they're playing, as Discord's header.
-        let title = match self.focused_stream() {
-            Some(id) => match self.activity_name(&id) {
-                Some(app) => format!("{} • {} playing {app}", call.channel.name, self.user_name(&id)),
-                None => format!("{} • {}'s screen", call.channel.name, self.user_name(&id)),
-            },
-            None => self.activity_title(&call.channel.name, cx),
-        };
-        let glyph = Glyph::VolumeHigh;
-        let timer = ui::row() // lint-allow(custom-badge): ui::badge lacks a stage tone for the live timer
-            .h(ui::LINE_LEAD)
-            .px_2()
-            .flex_none()
-            .squircle(RADIUS_XS)
-            .gap_1p5()
-            .bg(stage::wash(0.08))
-            .text_color(stage::muted())
-            .text_size(ui::TEXT_XS)
-            .font_weight(FontWeight::MEDIUM)
-            .font_features(tabular())
-            .child(div().size_1p5().rounded_full().bg(stage::online()))
-            .child(clock(call.joined.elapsed().as_secs()));
-        let faces: Vec<String> = people.iter().take(3).map(|p| p.user.as_ref().map(|u| u.avatar.clone()).unwrap_or_else(|| self.user_avatar(&p.user_id))).collect();
-        let count = people.len();
-        let who = ui::row()
-            .id("call-people")
-            .h_8()
-            .pl_1()
-            .pr_2()
-            .flex_none()
-            .squircle(RADIUS_SM)
-            .gap_1p5()
-            .text_color(stage::muted())
-            .text_size(ui::TEXT_XS)
-            .font_weight(FontWeight::MEDIUM)
-            .child(ui::avatar_stack(faces, 22., stage::bg()))
-            .child(count.to_string())
-            .tooltip(move |window, cx| ui::tip(format!("{count} in {}", if count == 1 { "the call alone" } else { "the call" }), window, cx));
-        let health = watching.filter(|w| !several && !w.arrivals.is_empty()).map(|w| {
-            let (health, fps) = stream_health(&w.arrivals, Instant::now());
-            let lossy = call.issues.contains(&(w.streamer_id.clone(), voice::issues::STREAM_VIEW_HIGH_PACKET_LOSS));
-            let (label, color) = match health {
-                // No frames because the streamer paused isn't a fault.
-                Health::Stalled if self.stream_paused(&w.streamer_id) => ("Paused", stage::muted()),
-                Health::Stalled => ("Stalled", stage::dnd()),
-                _ if lossy => ("Packet loss", stage::idle()),
-                Health::Smooth => ("Smooth", stage::online()),
-                Health::Choppy => ("Choppy", stage::idle()),
-            };
-            // GAP: the frame rate isn't reported by the voice engine, so only the resolution shows.
-            let quality = w.frame.as_ref().map(|f| format!("{}p · ", f.size(0).height.0)).unwrap_or_default();
-            ui::row()
-                .id("stream-health")
-                .flex_none()
-                .gap_1p5()
-                .text_size(ui::TEXT_XS)
-                .text_color(stage::muted())
-                .child(div().size_1p5().rounded_full().bg(color))
-                .child(format!("{quality}{label}"))
-                .tooltip(move |window, cx| {
-                    // Discord's viewer warnings for the same conditions, with their codes.
-                    let mut tip = format!("{fps:.0} frames per second.");
-                    if health == Health::Choppy {
-                        tip.push_str(&format!(" {} Error code: {}", issue_line(crate::STREAM_VIEW_LOW_FPS), crate::STREAM_VIEW_LOW_FPS));
-                    }
-                    if lossy {
-                        tip.push_str(&format!(" {} Error code: {}", issue_line(voice::issues::STREAM_VIEW_HIGH_PACKET_LOSS), voice::issues::STREAM_VIEW_HIGH_PACKET_LOSS));
-                    }
-                    ui::tip(tip, window, cx)
-                })
+        let me = self.me.as_ref().map(|m| m.id.as_str());
+        let streamer = self.focused_stream();
+        let connecting = call.stage != Stage::Connected;
+        let screen = streamer.as_ref().map(|id| {
+            let name = self.user_name(id);
+            ui::row().gap_2().min_w_0().child(ui::seam(cx).bg(stage::wash(0.24))).child(ui::avatar(self.user_avatar(id), ui::AVATAR_MD)).child(ui::line(format!("{name}’s Screen")).font_weight(FontWeight::MEDIUM))
         });
-        let stop = watching.map(|_| keeps_chrome(stage_button("stop-watching", if several { "Stop all" } else { "Stop watching" }, cx), cx).occlude().on_click(cx.listener(|this, _, _, cx| this.stop_watching(cx))));
+        let quality = streamer.as_ref().and_then(|id| match me == Some(id.as_str()) {
+            true => Some(quality_label(self.prefs.stream_resolution, self.prefs.stream_fps)),
+            // GAP: the voice engine doesn't report a remote stream's frame rate, so only its height shows.
+            false => call.watched(id)?.frame.as_ref().map(|f| format!("{}P", f.size(0).height.0)),
+        });
+        let live = streamer.is_some().then(|| ui::row().gap_1().children(quality.map(|q| ui::badge(gpui_kit::black().opacity(0.56), gpui_kit::white()).font_features(tabular()).child(q.to_uppercase()))).child(ui::live_badge()));
+        let count = self.participants().len();
+        let people = (self.call_focus.is_some() && self.stage_ui.strip_hidden).then(|| {
+            ui::row().id("call-people").flex_none().gap_1().text_color(stage::muted()).child(Icon::new(Glyph::Users).size(ui::ICON_XL)).child(count.to_string()).tooltip(|window, cx| ui::tip("Participants", window, cx))
+        });
         // A DM call's stage is opened from its window; this is the way back to the chat (Esc too).
         let back = call.guild_id.is_none().then(|| keeps_chrome(stage_button("back-to-chat", "Back to chat", cx), cx).occlude().on_click(cx.listener(|this, _, window, cx| this.back_to_chat(window, cx))));
+        let chat = (call.guild_id.is_some() && !self.call_chat_shown()).then(|| self.chat_toggle(cx));
         ui::row()
-            .h(px(HEAD_HEIGHT))
+            .h(px(FOCUS_HEAD))
             .gap_2()
             .text_color(stage::strong())
-            .child(Icon::new(glyph).size(ui::ICON_XL).text_color(stage::muted()))
-            .child(ui::col().child(ui::line(title).text_size(ui::TEXT_MD).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM)).children(self.call_status_line(&call.channel, cx)))
-            .child(timer)
-            .children(health)
-            .child(div().flex_1()).children(self.activity_invite_button(cx))
-            .children(back)
-            .children(stop)
-            .child(who)
-            .child(ui::seam(cx).bg(stage::wash(0.14)))
-            .child(self.chat_toggle(cx))
+            .child(
+                ui::row()
+                    .flex_1()
+                    .gap_2()
+                    .child(Icon::new(Glyph::VolumeHigh).size(ui::ICON_XL).text_color(stage::muted()))
+                    .child(ui::line(self.activity_title(&call.channel.name, cx)).text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD))
+                    .when(connecting, |d| d.child(div().flex_none().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(stage::muted()).child("Connecting")))
+                    .children(self.call_status_line(&call.channel, cx))
+                    .children(screen),
+            )
+            .child(ui::row().flex_none().gap_4().children(live).children(people).children(self.activity_invite_button(cx)).children(back).children(chat))
             .into_any_element()
     }
 
@@ -223,7 +169,7 @@ impl Waffle {
 
     // The chevron above the filmstrip that folds it away and back, as Discord's.
     pub(super) fn strip_toggle(&self, shown: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> { // lint-allow(custom-component): ui::icon_button lacks a stage tone with a corner badge; this wraps it for the call header
-        let (glyph, tip) = if shown { (Glyph::ChevronDown, "Hide everyone") } else { (Glyph::ChevronUp, "Show everyone") };
+        let (glyph, tip) = if shown { (Glyph::ChevronDown, "Hide Members") } else { (Glyph::ChevronUp, "Show Members") };
         ui::row() // lint-allow(custom-button): ui::round_button lacks a stage toggle with a corner badge
             .id("strip-toggle")
             .h(px(STRIP_TOGGLE))
@@ -239,7 +185,7 @@ impl Waffle {
             .tooltip(move |window, cx| ui::tip(tip, window, cx))
             .on_click(cx.listener(|this, _, _, cx| {
                 cx.stop_propagation();
-                this.call_strip_hidden = !this.call_strip_hidden;
+                this.stage_ui.strip_hidden = !this.stage_ui.strip_hidden;
                 this.redraw(Column::Main, cx);
             }))
     }
