@@ -5,6 +5,8 @@
 mod faces;
 mod foundations;
 mod kit;
+mod notices;
+use notices::notices;
 use faces::{avatars, badged_faces};
 use kit::{badges, kit_variants};
 use foundations::{space, type_scale};
@@ -194,6 +196,7 @@ impl Render for DesignSystem {
         if self.shows("badges") {
             add("badges", badges(cx).into_any_element());
             add("kit variants", kit_variants(cx).into_any_element());
+            add("notices", notices(cx).into_any_element());
         }
         if self.shows("avatars") {
             add("avatars", avatars(cx).into_any_element());

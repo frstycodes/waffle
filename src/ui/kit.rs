@@ -1,7 +1,7 @@
 // Pieces the app had rebuilt by hand in many places, now one component each: the dialog header, section
 // labels, labels over media, list rows and the floating toolbar.
 use gpui_kit::{
-    AnyElement, App, ClickEvent, Div, ElementId, FontWeight, InteractiveElement, Interactivity, IntoElement, ParentElement, RenderOnce, SharedString, Stateful, StatefulInteractiveElement, StyleRefinement,
+    AnyElement, App, ClickEvent, Div, ElementId, FontWeight, Hsla, InteractiveElement, Interactivity, IntoElement, ParentElement, RenderOnce, SharedString, Stateful, StatefulInteractiveElement, StyleRefinement,
     Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 
@@ -94,32 +94,58 @@ pub fn media_label() -> Div {
     badge(palette::media_scrim().opacity(0.72), gpui_kit::white()).gap_1()
 }
 
-// How tall a list row is: dense (36, a picker), default (48, a member) or tall (60, a friend with a status line).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+// How tall a list row is: dense (36, a picker), default (48, a member), tall (60, a friend with a status line),
+// fitted to its content (a message, a template; pad it yourself) or an exact height (a density-scaled row).
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum RowHeight {
     Dense,
     #[default]
     Default,
     Tall,
+    Fit,
+    Exact(f32),
+}
+
+// What a row's title is: plain text, or an element (a name with its matched letters marked).
+enum Title {
+    Text(SharedString),
+    Element(AnyElement),
 }
 
 // A row for a person or thing in a list: a lead (avatar, tile, icon), its name with a muted line under it,
 // and trailing actions; it fills on hover. Keeps the builder chain (`.on_click`, `.toggled`, layout).
-// Keywords: person row, member row, friend row, user row, list item, avatar name subtitle, result row
+// Keywords: person row, member row, friend row, user row, list item, avatar name subtitle, result row, message row, timestamp, request row, activity row
 #[derive(IntoElement)]
 pub struct ListRow {
     control: Control,
-    title: SharedString,
+    title: Title,
+    title_ink: Option<Hsla>,
+    title_weight: FontWeight,
+    stamp: Option<SharedString>,
     lead: Option<AnyElement>,
     subtitle: Option<AnyElement>,
+    body: Option<AnyElement>,
+    top: bool,
     trailing: Vec<AnyElement>,
     height: RowHeight,
 }
 
 // A list row for a person or thing: lead, name, muted line, trailing actions; see `ListRow`.
-// Keywords: person row, member row, friend row, user row, list item, avatar name subtitle, result row
+// Keywords: person row, member row, friend row, user row, list item, avatar name subtitle, result row, message row, timestamp, request row, activity row
 pub fn list_row(id: impl Into<ElementId>, title: impl Into<SharedString>, cx: &App) -> ListRow {
-    ListRow { control: menu_row(id, cx), title: title.into(), lead: None, subtitle: None, trailing: Vec::new(), height: RowHeight::Default }
+    ListRow {
+        control: menu_row(id, cx).gap_3(),
+        title: Title::Text(title.into()),
+        title_ink: None,
+        title_weight: FontWeight::MEDIUM,
+        stamp: None,
+        lead: None,
+        subtitle: None,
+        body: None,
+        top: false,
+        trailing: Vec::new(),
+        height: RowHeight::Default,
+    }
 }
 
 impl ListRow {
@@ -130,6 +156,37 @@ impl ListRow {
 
     pub fn subtitle(mut self, subtitle: impl IntoElement) -> Self {
         self.subtitle = Some(subtitle.into_any_element());
+        self
+    }
+
+    // Under the title, running over as many lines as it needs (a message's text, a template's channels); the
+    // caller clamps it. Pair it with `.top()` and `RowHeight::Fit`.
+    pub fn body(mut self, body: impl IntoElement) -> Self {
+        self.body = Some(body.into_any_element());
+        self
+    }
+
+    // The title as an element, for text with marks in it (the letters a search matched).
+    pub fn title_element(mut self, title: impl IntoElement) -> Self {
+        self.title = Title::Element(title.into_any_element());
+        self
+    }
+
+    // The title in an ink other than strong (a playing activity's accent).
+    pub fn title_ink(mut self, ink: Hsla) -> Self {
+        self.title_ink = Some(ink);
+        self
+    }
+
+    // A time beside the title, faint, kept on its line.
+    pub fn stamp(mut self, stamp: impl Into<SharedString>) -> Self {
+        self.stamp = Some(stamp.into());
+        self
+    }
+
+    // The lead sits at the row's top instead of its middle, for a row whose text runs to several lines.
+    pub fn top(mut self) -> Self {
+        self.top = true;
         self
     }
 
@@ -167,21 +224,33 @@ impl StatefulInteractiveElement for ListRow {}
 
 impl RenderOnce for ListRow {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let (strong, muted) = (palette::strong(cx), palette::muted(cx));
-        let row_height = match self.height {
-            RowHeight::Dense => 36.,
-            RowHeight::Default => 48.,
-            RowHeight::Tall => 60.,
+        let (strong, muted, faint) = (palette::strong(cx), palette::muted(cx), palette::faint(cx));
+        let control = match self.height {
+            RowHeight::Dense => self.control.h(px(36.)),
+            RowHeight::Default => self.control.h(px(48.)),
+            RowHeight::Tall => self.control.h(px(60.)),
+            RowHeight::Fit => self.control.h_auto(),
+            RowHeight::Exact(height) => self.control.h(px(height)),
         };
-        self.control
-            .h(px(row_height))
-            .gap_3()
+        let (ink, weight) = (self.title_ink.unwrap_or(strong), self.title_weight);
+        let title = match self.title {
+            Title::Text(text) => line(text).font_weight(weight).text_color(ink).into_any_element(),
+            Title::Element(el) => div().min_w_0().font_weight(weight).text_color(ink).child(el).into_any_element(),
+        };
+        let head = match self.stamp {
+            Some(stamp) => row().items_baseline().gap_2().child(title).child(div().flex_none().text_size(TEXT_XS).font_weight(FontWeight::NORMAL).text_color(faint).child(stamp)).into_any_element(),
+            None => title,
+        };
+        control
+            .when(self.top, |c| c.items_start())
             .children(self.lead.map(|lead| div().flex_none().child(lead)))
             .child(
                 col()
+                    .min_h_0()
                     .flex_1()
-                    .child(line(self.title).font_weight(FontWeight::MEDIUM).text_color(strong))
-                    .children(self.subtitle.map(|s| div().min_w_0().truncate().text_size(TEXT_XS).text_color(muted).child(s))),
+                    .child(head)
+                    .children(self.subtitle.map(|s| div().min_w_0().truncate().text_size(TEXT_XS).text_color(muted).child(s)))
+                    .children(self.body),
             )
             .when(!self.trailing.is_empty(), |r| r.child(row().flex_none().gap_1().children(self.trailing)))
     }

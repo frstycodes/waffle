@@ -98,7 +98,7 @@ impl Waffle {
             options.extend(devices.iter().map(|d| (Some(d.id.clone()), d.name.clone())));
             body.extend(options.into_iter().enumerate().map(|(i, (id, name))| {
                 let on = id == chosen;
-                choice_row(SharedString::from(format!("device-{title}-{i}")), &ink)
+                choice_row(SharedString::from(format!("device-{title}-{i}")), &ink, cx)
                     .child(ui::radio_with(on, 18., ink.line_strong))
                     .child(ui::line(name).flex_1().font_weight(FontWeight::NORMAL).text_color(ink.strong))
                     .on_click(cx.listener(move |this, _, _, cx| this.choose_device(which, id.clone(), cx)))
@@ -134,7 +134,7 @@ impl Waffle {
         if kind == DeviceKind::Input {
             let noise = self.prefs.noise_suppression;
             body.push(
-                choice_row("device-noise", &ink)
+                choice_row("device-noise", &ink, cx)
                     .child(div().flex_1().min_w_0().child(div().font_weight(FontWeight::NORMAL).text_color(ink.strong).child("Noise suppression")).child(div().text_size(ui::TEXT_XS).text_color(ink.muted).child("Filters fans and keys on this device")))
                     .child(ui::switch_live("device-noise-switch", noise, window, cx))
                     .on_click(cx.listener(|this, _, _, cx| this.toggle_noise_suppression(cx)))
@@ -144,7 +144,7 @@ impl Waffle {
         }
         let settings_label = if kind == DeviceKind::Camera { "Video settings" } else { "Voice settings" };
         body.push(
-            choice_row("device-settings", &ink)
+            choice_row("device-settings", &ink, cx)
                 .child(Icon::new(Glyph::Settings).size(ui::ICON_LG).text_color(ink.muted))
                 .child(div().flex_1().font_weight(FontWeight::NORMAL).text_color(ink.text).child(settings_label))
                 .child(Icon::new(Glyph::ChevronRight).size(ui::ICON_SM).text_color(ink.faint))
@@ -155,18 +155,13 @@ impl Waffle {
                 .into_any_element(),
         );
         let viewport = window.viewport_size();
-        let card = ui::col() // lint-allow(custom-badge, custom-mark, custom-surface): ui::surface lacks the stage-scoped menu card (stage colours, not palette)
+        let card = ui::surface_in(ink.overlay, ink.line_strong, cx)
             .id("device-menu")
             .occlude()
             .absolute()
             .left(px((f32::from(menu.at.x) - 150.).clamp(8., f32::from(viewport.width) - 308.)))
             .bottom(px((f32::from(viewport.height) - f32::from(menu.at.y) + 12.).max(8.)))
             .w(px(MENU_WIDTH))
-            .p_1p5()
-            .squircle(RADIUS_LG)
-            .bg(ink.overlay)
-            .shadow(ui::shadow_pop_on(ink.line_strong, cx))
-            .gap_px()
             .text_size(ui::TEXT_SM)
             .text_color(ink.text)
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
@@ -371,11 +366,11 @@ pub(super) fn menu_label(text: &'static str, ink: &Inks) -> Div {
 
 // .devmenu hr
 pub(super) fn menu_rule(ink: &Inks) -> Div {
-    div().h(ui::HAIRLINE).mx_1().my_1().flex_none().bg(ink.line) // lint-allow(custom-divider, raw-margin): ui::divider lacks a stage-ink hairline; the margins inset it from the card edge like ui::inset_rule
+    div().px_1().py_1().flex_none().child(ui::rule(ink.line))
 }
 
 // .choice.vrow: a 34px menu row holding a radio or a switch.
-pub(super) fn choice_row(id: impl Into<ElementId>, ink: &Inks) -> Stateful<Div> {
-    let hover = ink.hover;
-    ui::row().id(id).min_h(px(CHOICE_ROW_HEIGHT)).px_2p5().py_1p5().squircle(RADIUS_SM).gap_2p5().cursor_pointer().hover(move |s| s.bg(hover)) // lint-allow(custom-button): ui::menu_row lacks the stage ink and a trailing choice mark
+pub(super) fn choice_row(id: impl Into<ElementId>, ink: &Inks, cx: &App) -> ui::Control {
+    let clear = gpui_kit::transparent_black();
+    ui::menu_row(id, cx).scoped(clear, ink.hover, ink.text, ink.text).min_h(px(CHOICE_ROW_HEIGHT)).px_2p5().py_1p5().squircle(RADIUS_SM).gap_2p5()
 }

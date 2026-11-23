@@ -29,6 +29,7 @@ pub const PANEL_WIDTH: f32 = 264.;
 // The user area: its 42px row (name 18 + status 16 beside a 32px avatar, in a 4px-padded button), inset 6px
 // all round.
 pub const PANEL_HEIGHT: f32 = 54.;
+const USER_ROW: f32 = 40.;
 const UPDATE_HEIGHT: f32 = 42.;
 const CHANNELS_RANGE: (f32, f32) = (200., 440.);
 const PANEL_RANGE: (f32, f32) = (200., 380.);
@@ -415,29 +416,21 @@ impl Waffle {
         let top = if stacked { 0. } else { ui::RADIUS_MD };
         let corners = [top, top, ui::RADIUS_MD, ui::RADIUS_MD];
         let nameplate = me.nameplate.as_ref().map(|plate| nameplate(plate, palette::surface(palette::Level::Sidebar, cx), corners, cx.theme().is_dark(), animate));
-        let hover = palette::hover(cx);
-        // lint-allow(custom-button): ui::list_row has fixed 36/48/60px heights, none the 40px user-panel row's
-        let who = ui::row()
-            .id("me")
+        let who = ui::list_row("me", me.name.clone(), cx)
+            .height(ui::RowHeight::Exact(USER_ROW))
             .flex_1()
             .p_1()
             .squircle(ui::RADIUS_SM)
             .gap_2()
-            .cursor_pointer()
-            .hover(move |s| s.bg(hover))
-            .when(self.status_menu, |w| w.bg(hover))
+            .control(|c| c.highlighted(self.status_menu))
             .on_hover(on_hover)
             .on_click(cx.listener(|this, _, _, cx| this.toggle_status_menu(cx)))
-            .child(match animate {
+            .lead(match animate {
                 true => playing_avatar("me", &me.avatar, me.decoration.as_deref(), 32., self.my_mark().map(Into::into), ring),
                 false => decorated_avatar(&me.avatar, me.decoration.as_deref(), 32., self.my_mark().map(Into::into), ring),
             })
-            .child(
-                ui::col().min_h_0()
-                    .flex_1()
-                    .child(ui::truncating("me-name", me.name.clone()).line_height(ui::LINE_DETAIL).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
-                    .child(div().line_height(ui::LINE_XS).text_size(ui::TEXT_XS).text_color(faint).child(status_line)),
-            );
+            .title_element(ui::truncating("me-name", me.name.clone()).line_height(ui::LINE_DETAIL))
+            .subtitle(div().line_height(ui::LINE_XS).text_color(faint).child(status_line));
         let voice = self.voice_panel(cx);
         ui::col() // lint-allow(custom-badge, custom-mark): ui::surface adds a ring and shadow this docked card doesn't draw
             .absolute()

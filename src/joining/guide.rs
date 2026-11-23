@@ -145,21 +145,14 @@ impl Waffle {
         let todo = todos.iter().find(|t| t.channel_id == channel.id)?;
         let empty = HashSet::new();
         let done = self.join.done_actions.get(&guild.id).unwrap_or(&empty);
-        let (strong, ink) = (palette::strong(cx), palette::accent_ink(cx));
-        // lint-allow(custom-badge): ui::callout puts its actions under the text; this bar keeps its button at the row's end
-        let bar = ui::row()
+        let ink = palette::accent_ink(cx);
+        let bar = ui::strip(ui::StripFill::Accent, cx)
             .id("guide-action-bar")
             // lint-allow(raw-margin): insets the bar from the composer column it is returned into, which has no padding of its own
             .mx_4()
-            .min_h_11()
             .pl_3p5()
             .pr_1p5()
-            .py_1p5()
-            .gap_2p5()
-            .squircle(RADIUS_SM)
-            .bg(ui::mix(palette::surface(Level::Page, cx), palette::accent(), 0.16))
-            .text_size(ui::TEXT_SM)
-            .text_color(strong);
+            .gap_2p5();
         if !done.contains(&todo.channel_id) {
             let send = (todo.kind == ActionKind::Chat).then(|| {
                 ui::button("guide-send", Tone::Primary, cx).small().child("Send a message").on_click(cx.listener(|this, _, window, cx| this.composer.update(cx, |state, cx| state.focus(window, cx))))

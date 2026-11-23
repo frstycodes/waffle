@@ -58,7 +58,7 @@ impl Waffle {
         }
         card.child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(stage::strong()).child(heading))
             .child(div().text_size(ui::TEXT_XS).text_color(stage::muted()).child(line))
-            .child(div().mt_1p5().child(stage_button(SharedString::from(format!("{key}-close")), button).on_click(cx.listener(move |this, _, _, cx| { // lint-allow(raw-margin): optical gap under a tile's message before its action; the column is built by the caller
+            .child(div().mt_1p5().child(stage_button(SharedString::from(format!("{key}-close")), button, cx).on_click(cx.listener(move |this, _, _, cx| { // lint-allow(raw-margin): optical gap under a tile's message before its action; the column is built by the caller
                 cx.stop_propagation();
                 close(this, cx);
             }))))

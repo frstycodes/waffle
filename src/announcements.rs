@@ -22,7 +22,7 @@ use crate::{
     menu::{Entry, item},
     overlays::backdrop,
     palette::{self, Level},
-    ui::{self, RADIUS_LG, RADIUS_MD, Squircle},
+    ui::{self, RADIUS_MD, Squircle},
 };
 
 mod views;
@@ -780,20 +780,13 @@ impl Waffle {
             .flex_1()
             .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Follow to get this channel's updates in your own server."))
             .children(following_line(self.follower_stats(&channel.id)).map(|line| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(line)));
-        // lint-allow(custom-badge): ui::callout_with puts its action under the text; this bar keeps Follow at the row's end
-        let card = ui::row()
+        let card = ui::strip(ui::StripFill::Raised, cx)
             .id("follow-blocker")
             .occlude()
             .min_h(px(BLOCKER_HEIGHT))
             .py_2p5()
             .pl_4()
-            .pr_2p5()
             .gap_3()
-            .squircle(RADIUS_LG)
-            .bg(palette::surface(Level::Raised, cx))
-            .border_1()
-            .border_color(palette::line(cx))
-            .text_size(ui::TEXT_SM)
             .child(Icon::new(Glyph::Megaphone).size(ui::ICON_XL).text_color(palette::muted(cx)))
             .child(text)
             .child(ui::button("follow-blocker-button", ui::Tone::Primary, cx).child("Follow").on_click(cx.listener(move |this, _, _, cx| this.open_follow(source.clone(), cx))));

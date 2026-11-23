@@ -21,13 +21,13 @@ use gpui_motion_kit::{
     core::{Bezier, Easing, Motion, Spring, Target, Transition},
 };
 
-use crate::{icons::Glyph, palette, playback::Playback, ui};
+use crate::{icons::Glyph, playback::Playback, ui};
 
 mod chrome;
 
 
-// The scrub knob's centre line, from the top of its track.
-const KNOB_TOP: f32 = 8.;
+// The volume knob's width.
+const VOLUME_KNOB: f32 = 12.;
 // The gap between loading dots.
 const DOT_GAP: f32 = 3.;
 

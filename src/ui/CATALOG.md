@@ -129,6 +129,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::progress_indeterminate` — Work that can't be counted: a done-coloured stretch travels the track, gapped from the rest on both sides, on the design's 1.6s move curve.
 - `ui::progress_bar` — Progress with options for its colours and weight; see `ProgressBar`.
 - `ui::slider_track` — The slider's resting look, for screens that run their own drag.
+- `ui::media_track` — The track of a scrubber or volume slider over video: a 4px wash of white, the accent filled to `fraction` and a white knob `knob` wide centr
 - `ui::slider_live` — A draggable slider for a 0..1 value: press anywhere on the track to jump there, drag to follow, arrows step 1% (shift 10%) once it has focus
 - `ui::meter` — The mic meter: `bars` equal bars that light up to `level` (0..1), turning amber then red near the top.
 - `ui::meter_with` — The meter in a scope with its own colours (the call stage): `lit` is on, hot and clipping.
@@ -187,7 +188,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::Heading` — How much a section label stands out: the usual muted small caps-weight label, a fainter one in dense lists, or a strong one that heads a for
 - `ui::section_label` — A small heading over a group of things (a list section, a form group, a picker's category); the caller can add a lead glyph or a trailing co
 - `ui::media_label` — A label over an image or video (a duration, GIF, a muted mark): white on the media scrim, whatever the theme.
-- `ui::RowHeight` — How tall a list row is: dense (36, a picker), default (48, a member) or tall (60, a friend with a status line).
+- `ui::RowHeight` — How tall a list row is: dense (36, a picker), default (48, a member), tall (60, a friend with a status line), fitted to its content (a messa
 - `ui::list_row` — A list row for a person or thing: lead, name, muted line, trailing actions; see `ListRow`.
 - `ui::toolbar` — A small floating bar of icon buttons (a message's hover actions, an image's tools): the overlay surface, tight around its buttons.
 
@@ -201,6 +202,17 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::floating_at` — `floating` with its `corner` pinned to the window point `at` (a click, a button's edge).
 - `ui::sized` — Content built for the size its slot has this frame, for layouts that pick their shape from the space (a grid choosing its columns), without 
 - `ui::visible_rows` — The rows of a scrolled column worth building: those a view from `view_top`, `view_height` tall, shows, widened by `margin` either side.
+
+## src/ui/notice.rs
+
+- `ui::StripFill` — What an inline strip is filled with: the raised card with a hairline edge, the selected wash, or a tint of the accent.
+- `ui::strip` — An inline strip: a row on its own fill with its mark, message and action, the action at the row's end (`flex_1` on the message).
+- `ui::toast_text` — A toast of one line of text, with no lead glyph, rising in like `ui::toast`.
+- `ui::number_mark` — A numbered disc, 24px, in the accent tint: a step's or a rule's number.
+- `ui::rule` — A hairline in `color`: give it a length (`flex_1`, `w_5`) or `absolute` placement.
+- `ui::divider_with` — A divider whose label and line colour come from data (a day's date, a state's ink): rules either side of the label, inside the parent's gutt
+- `ui::surface_in` — A floating surface in a scope's own colours (the call stage's dark overlay and ring, a menu in its ink): the kit's surface with its `fill` a
+- `ui::panel` — A card that only holds things (a quoted embed, a preview): the raised fill, a hairline edge, rounded large, content in a column.
 
 ## src/ui/overflow.rs
 

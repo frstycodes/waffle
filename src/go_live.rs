@@ -351,7 +351,7 @@ impl Waffle {
         let selected = self.share_choice == Some(source);
         let key = source_key(source);
         let label = name.clone();
-        let (hover, muted) = (palette::hover(cx), palette::muted(cx));
+        let muted = palette::muted(cx);
         let still: AnyElement = match picker.thumb(source) {
             Some(image) => ui::media(image, ui::all(ui::RADIUS_MD)).size_full().object_fit(gpui_kit::ObjectFit::Contain).into_any_element(),
             None => Icon::new(glyph(source)).size_8().text_color(muted).into_any_element(),
@@ -371,14 +371,12 @@ impl Waffle {
             Some(image) => img(image).size_4().flex_none().into_any_element(),
             None => Icon::new(glyph(source)).size(ui::ICON_MD).flex_none().text_color(muted).into_any_element(),
         };
-        ui::col() // lint-allow(custom-button): ui::card fills at rest and pads 12px, and this tile is clear until hovered
-            .id(SharedString::from(format!("share-{key}")))
+        ui::card(SharedString::from(format!("share-{key}")), cx)
+            .flat()
+            .stacked()
             .p_1()
             .m_neg_1() // lint-allow(raw-margin): an optical bleed, so the hover fill sits past the still's edge as the ring does
-            .squircle(ui::RADIUS_LG)
             .gap_1p5()
-            .cursor_pointer()
-            .hover(move |s| s.bg(hover))
             .child(shot)
             .child(
                 ui::row()

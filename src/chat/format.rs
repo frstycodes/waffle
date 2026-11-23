@@ -251,36 +251,17 @@ pub(super) fn unread_line() -> AnyElement {
         .w_10()
         .h_4()
         // The rule runs on under the tag to its body, so it meets the sharp tip at full thickness.
-        // lint-allow(custom-divider): ui::inset_rule runs along an edge in the neutral line colour; this stub carries the alert rule on under the NEW tag
-        .child(div().absolute().left_neg_px().w(px(UNREAD_STUB)).top(px(UNREAD_STUB_TOP)).h(ui::HAIRLINE).bg(alert))
+        .child(ui::rule(alert).absolute().left_neg_px().w(px(UNREAD_STUB)).top(px(UNREAD_STUB_TOP)))
         .child(gpui_kit::svg().path(crate::icons::NEW_TAG).absolute().inset_0().size_full().text_color(alert))
         .child(ui::row().absolute().top_0().bottom_0().left_2().right_0().justify_center().text_color(gpui_kit::white()).text_size(ui::TEXT_XXS).font_weight(FontWeight::BOLD).child("NEW"));
-    let row = ui::row().w_full().px_4().child(rule(alert)).child(tag);
+    let row = ui::row().w_full().px_4().child(ui::rule(alert).flex_1()).child(tag);
     div().py_2().child(row).into_any_element()
 }
 
-// One rule running to its neighbour: a day divider's line, or the unread line in alert red.
-fn rule(color: Hsla) -> Div {
-    // lint-allow(custom-divider): ui::divider takes a 'static label in the neutral line colour, and these two take a formatted date or the alert colour
-    div().flex_1().h(ui::HAIRLINE).bg(color)
-}
-
 // Between dates, inside the feed's gutters, never edge to edge.
-// lint-allow(custom-component): ui::divider takes a 'static label, and a day's label is formatted from the message's date
 pub(super) fn day_divider(timestamp: &str, cx: &App) -> AnyElement {
-    let line = || rule(palette::line(cx));
-    let row = ui::row()
-        .w_full()
-        .px_4()
-        .gap_2p5()
-        .whitespace_nowrap()
-        .text_size(ui::TEXT_XS)
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(palette::faint(cx))
-        .child(line())
-        .child(day(timestamp).map(|d| d.format("%A, %B %-d, %Y").to_string()).unwrap_or_default())
-        .child(line());
-    div().pt_4().pb_2().child(row).into_any_element()
+    let label = day(timestamp).map(|d| d.format("%A, %B %-d, %Y").to_string()).unwrap_or_default();
+    div().pt_4().pb_2().px_4().child(ui::divider_with(label, palette::faint(cx), palette::line(cx))).into_any_element()
 }
 
 pub(super) fn empty_state(id: &'static str, art: impl Into<ui::Art>, title: &'static str, detail: impl Into<SharedString>, cx: &App) -> AnyElement {

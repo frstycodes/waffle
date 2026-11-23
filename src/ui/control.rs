@@ -73,6 +73,8 @@ pub struct Control {
     // In flight with its size kept: the content hidden under the mini wave (Discord's loading button).
     busy: bool,
     ring: Option<Hsla>,
+    // How far a kind that holds still shrinks while held (a card that presses in).
+    shrink: Option<f32>,
 }
 
 // A text button, 36px tall (`.large()` 44, `.small()` 30). Callers add the label and `.on_click`.
@@ -135,6 +137,65 @@ impl Control {
     pub fn bordered(mut self, cx: &App) -> Self {
         let line = palette::line(cx);
         self.look.edge = Some((line, palette::line_strong(cx)));
+        self
+    }
+
+    // No fill until hovered: a card that sits straight on its surface (a source tile, a template).
+    pub fn flat(mut self) -> Self {
+        self.look.rest = gpui_kit::transparent_black();
+        self
+    }
+
+    // Presses in to `to` (0.98) while held, as buttons do: a card of choices.
+    pub fn shrinks(mut self, to: f32) -> Self {
+        self.shrink = Some(to);
+        self
+    }
+
+    // The control in a scope's own colours (a themed profile card, the call stage): the fill at rest and
+    // under the pointer, the ink at rest and under it.
+    pub fn scoped(mut self, rest: Hsla, hover: Hsla, ink: Hsla, ink_hover: Hsla) -> Self {
+        self.look = Look { rest, hover, press: hover, ink, ink_hover, edge: self.look.edge };
+        self
+    }
+
+    // The control on the call stage: clear until the stage's wash comes up under the pointer.
+    pub fn on_stage(self) -> Self {
+        self.scoped(gpui_kit::transparent_black(), palette::stage::wash(0.05), palette::stage::text(), palette::stage::strong())
+    }
+
+    // Laid out as a column of its children, from the top, each the card's width.
+    pub fn stacked(self) -> Self {
+        self.flex_col().items_stretch().justify_start()
+    }
+
+    // A card on the page fill with a hairline edge (a feed entry), the page being what it sits on.
+    pub fn on_page(mut self, cx: &App) -> Self {
+        self.look.rest = palette::surface(palette::Level::Page, cx);
+        self.bordered(cx)
+    }
+
+    // Another fill, deepening a touch under the pointer (a card on a grouped surface).
+    pub fn fill(mut self, color: Hsla, cx: &App) -> Self {
+        let hover = mix(color, palette::strong(cx), 0.04);
+        self.look.rest = color;
+        self.look.hover = hover;
+        self.look.press = hover;
+        self
+    }
+
+    // An edge in `color`, hovered or not (a state's colour: nudged, wrong).
+    pub fn edged(mut self, color: Hsla) -> Self {
+        self.look.edge = Some((color, color));
+        self
+    }
+
+    // The chosen card of a set (an option, an agreement): the accent tint and a half-accent edge.
+    pub fn selected(mut self, on: bool, cx: &App) -> Self {
+        if on {
+            let (soft, ink, edge) = (palette::accent_soft(cx), palette::accent_ink(cx), palette::accent().opacity(0.55));
+            self.look = Look { rest: soft, hover: soft, press: soft, ink, ink_hover: ink, edge: Some((edge, edge)) };
+        }
         self
     }
 }
@@ -216,7 +277,7 @@ pub(super) fn tab_option(id: impl Into<ElementId>, kind: TabKind, on: bool, glyp
 impl Control {
     fn new(id: impl Into<ElementId>, kind: Kind, look: Look) -> Self {
         let id = id.into();
-        Self { base: div().id(id.clone()), id, children: Vec::new(), kind, size: Size::Medium, look, glyph: None, disabled: false, highlighted: false, loading: None, busy: false, ring: None }
+        Self { base: div().id(id.clone()), id, children: Vec::new(), kind, size: Size::Medium, look, glyph: None, disabled: false, highlighted: false, loading: None, busy: false, ring: None, shrink: None }
     }
 
     fn base_style(mut self, f: impl FnOnce(Stateful<Div>) -> Stateful<Div>) -> Self {
@@ -401,6 +462,9 @@ impl Control {
 
     // How far the design's `:active` scales the control, on which curve; `None` for kinds that hold still.
     fn press(&self) -> Option<(f32, Easing)> {
+        if let Some(to) = self.shrink {
+            return Some((to, motion::ease_out()));
+        }
         match self.kind {
             Kind::Button | Kind::Chip => Some((0.97, motion::ease_out())),
             Kind::Icon | Kind::Round(_) => Some((0.92, motion::ease_out())),

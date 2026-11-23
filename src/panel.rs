@@ -267,7 +267,7 @@ impl Waffle {
     // One card: who (avatar, name in their role's colour), what, and when, with its art on the right.
     fn feed_card(&self, i: usize, entry: &FeedEntry, member: &Member, now: i64, cx: &mut Context<Self>) -> AnyElement {
         let dark = cx.theme().is_dark();
-        let (strong, muted, hover) = (palette::strong(cx), palette::muted(cx), palette::hover(cx));
+        let (strong, muted) = (palette::strong(cx), palette::muted(cx));
         let (role_ink, _) = crate::chat::role_marks(self.prefs.role_style, self.role_color(self.guild_id.as_ref(), &member.user.id, Some(&member.roles), dark));
         let name_ink = role_ink.unwrap_or(strong);
         let when = if entry.live { "Now".to_owned() } else { ago(now - entry.at) };
@@ -292,18 +292,11 @@ impl Waffle {
                 .children(activity_glyph(entry.kind).or_else(|| activity_glyph(ActivityKind::Playing)).map(|icon| icon.size(ui::ICON_XL)))
                 .into_any_element(),
         };
-        // lint-allow(custom-button): ui::card is a raised fill with 12px padding; a feed card sits on the page fill with a hairline edge and art at its end.
-        ui::row()
-            .id(SharedString::from(format!("activity-{i}")))
+        ui::card(SharedString::from(format!("activity-{i}")), cx)
+            .on_page(cx)
             .gap_2p5()
             .px_2p5()
             .py_2()
-            .squircle(ui::RADIUS_LG)
-            .bg(palette::surface(palette::Level::Page, cx))
-            .border_1()
-            .border_color(palette::line(cx))
-            .cursor_pointer()
-            .hover(move |s| s.bg(hover))
             .child(
                 ui::col().min_h_0()
                     .flex_1()
