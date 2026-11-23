@@ -34,6 +34,7 @@ const TOP_PAD: f32 = 56.;
 const COLUMN_WIDTH: f32 = 640.;
 // An option card's minimum height, and its custom emoji's size.
 const OPTION_HEIGHT: f32 = 56.;
+const PRESS_TO: f32 = 0.98;
 const OPTION_EMOJI: f32 = 22.;
 // The rules count as read within this far of their end, and scroll at all past this much overflow.
 const READ_NEAR_END: f32 = 4.;
@@ -594,7 +595,7 @@ fn rules_list(rules: &[String], scroll: &ScrollHandle, cx: &App) -> Div {
             .items_start()
             .gap_3()
             .p_3()
-            .child(super::numbered_mark(i + 1, cx))
+            .child(crate::ui::number_mark(i + 1, cx))
             .child(div().flex_1().min_w_0().text_size(ui::TEXT_LEAD).line_height(relative(1.45)).text_color(palette::strong(cx)).child(rule.clone()))
             .when(i < last, |d| d.child(ui::inset_rule(12., cx).left_12()))
     });
@@ -646,11 +647,10 @@ fn option_grid(guild: &Guild, prompt: &Prompt, picked: &HashSet<String>, cx: &mu
                 .child(div().text_size(ui::TEXT_LEAD).line_height(px(TITLE_LINE)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(option.title.clone()))
                 .when_some(option.description.clone(), |d, desc| d.child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(desc)))
                 .when(!gets.is_empty(), |d| d.child(ui::row().pt_0p5().flex_wrap().gap_1().text_size(ui::TEXT_XS).text_color(ink).children(gets)));
-            let edge = if on { palette::accent().opacity(0.7) } else { palette::line(cx) };
-            let hover_edge = if on { edge } else { palette::line_strong(cx) };
-            // lint-allow(custom-button): ui::card has no toggled look in the accent tint with a half-accent edge
-            let card = ui::row()
-                .id(gpui_kit::SharedString::from(format!("onboarding-option-{}", option.id)))
+            let card = ui::card(gpui_kit::SharedString::from(format!("onboarding-option-{}", option.id)), cx)
+                .bordered(cx)
+                .selected(on, cx)
+                .shrinks(PRESS_TO)
                 .min_h(px(OPTION_HEIGHT))
                 // The emoji sits on the title's line, not mid-card, so it stays put as descriptions wrap.
                 .items_start()
@@ -658,18 +658,13 @@ fn option_grid(guild: &Guild, prompt: &Prompt, picked: &HashSet<String>, cx: &mu
                 .px_3p5()
                 .py_2p5()
                 .squircle(ui::RADIUS_MD)
-                .border_1()
-                .border_color(edge)
-                .bg(if on { palette::accent_soft(cx) } else { palette::surface(palette::Level::Raised, cx) })
-                .hover(move |s| s.border_color(hover_edge))
-                .cursor_pointer()
                 .children(option.emoji.as_ref().and_then(option_emoji))
                 .child(text);
             let listener = cx.listener({
                 let (prompt, id) = (prompt.clone(), option.id.clone());
                 move |this: &mut Waffle, _: &gpui_kit::ClickEvent, _, cx| this.onboarding_pick(&prompt, &id, cx)
             });
-            ui::pressable(card.on_click(listener), 0.98).into_any_element()
+            card.on_click(listener).into_any_element()
         })
         .collect();
     div().grid().grid_cols(2).gap_2().children(cards).into_any_element()

@@ -191,8 +191,7 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
         .bottom_0()
         .w(px(EMBED_BAR_STRIP))
         .bg(linear_gradient(90., linear_color_stop(bar, cut), linear_color_stop(bar.opacity(0.), cut + 0.02)));
-    // lint-allow(custom-badge): ui::card is a clickable Control; an embed is a static quote card with a coloured bar down its edge
-    let card = ui::col()
+    let card = ui::panel(cx)
         .relative()
         .when(full, |d| d.w(px(width)))
         .when(!full, |d| d.self_start().min_w(px(EMBED_MIN.min(width))))
@@ -201,10 +200,7 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
         .pl(px(EMBED_PAD.1 + EMBED_BAR))
         .pr(px(EMBED_PAD.1))
         .gap_3()
-        .squircle(RADIUS_LG)
         .bg(fill)
-        .border_1()
-        .border_color(palette::line(cx))
         .text_size(ui::TEXT_SM)
         .line_height(gpui_kit::relative(1.45))
         .child(strip)

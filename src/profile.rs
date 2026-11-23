@@ -306,17 +306,13 @@ impl Waffle {
         });
         let (user, guild_id) = (card.user.clone(), guild.id.clone());
         let add = can_manage.then(|| {
-            // lint-allow(custom-button): ui::chip is a palette-toned filter; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
-            ui::row()
-                .id("profile-add-role")
+            ui::button("profile-add-role", ui::Tone::Ghost, cx)
+                .scoped(gpui_kit::transparent_black(), ink.tile, ink.muted, ink.strong)
                 .h_6()
                 .px_1p5()
                 .gap_1()
                 .squircle(RADIUS_XS)
-                .cursor_pointer()
-                .text_size(ui::TEXT_SM)
-                .text_color(ink.muted)
-                .hover(move |s| s.bg(ink.tile).text_color(ink.strong))
+                .font_weight(gpui_kit::FontWeight::NORMAL)
                 .child(Icon::new(Glyph::Plus).size(ui::ICON_SM))
                 .child("Add role")
                 .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_user_menu(user.clone(), Some(guild_id.clone()), Surface::ServerChat, event.position(), cx)))

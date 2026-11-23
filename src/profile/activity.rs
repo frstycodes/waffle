@@ -95,18 +95,10 @@ impl Waffle {
     // The first card, then a button under it that unfolds the rest in place.
     pub(super) fn activity_more(&self, first: AnyElement, more: usize, ink: Ink, cx: &mut Context<Self>) -> Div {
         let label = if more == 1 { "Show 1 more activity".to_owned() } else { format!("Show {more} more activities") };
-        // lint-allow(custom-button): ui::button takes a palette tone; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
-        let button = ui::row()
-            .id("profile-activity-view-more")
+        let button = ui::button("profile-activity-view-more", ui::Tone::Ghost, cx)
+            .scoped(ink.tile, ink.tile, ink.muted, ink.strong)
             .h_7()
-            .justify_center()
             .squircle(RADIUS_SM)
-            .bg(ink.tile)
-            .text_size(ui::TEXT_SM)
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(ink.muted)
-            .cursor_pointer()
-            .hover(move |s| s.text_color(ink.strong))
             .child(label)
             .on_click(cx.listener(|this, _, _, cx| this.show_all_activity(true, cx)));
         ui::col().gap_1p5().child(first).child(button)
@@ -221,16 +213,9 @@ impl Waffle {
 
     pub(super) fn activity_card(&self, card: &ProfileCard, rich: &RichPresence, ink: Ink, cx: &mut Context<Self>) -> Div {
         let (user, guild_id) = (card.user.clone(), card.guild_id.clone());
-        // lint-allow(custom-button): ui::icon_button fills from palette tones; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
-        let more = ui::row()
-            .id("profile-activity-more")
-            .size_6()
-            .squircle(RADIUS_XS)
-            .justify_center()
-            .cursor_pointer()
-            .text_color(ink.muted)
-            .hover(move |s| s.bg(ink.tile).text_color(ink.strong))
-            .child(Icon::new(Glyph::More).size(ui::ICON_MD))
+        let more = ui::icon_button("profile-activity-more", Glyph::More, "More", cx)
+            .scoped(gpui_kit::transparent_black(), ink.tile, ink.muted, ink.strong)
+            .small()
             .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_user_menu(user.clone(), guild_id.clone(), menu_surface(guild_id.is_some()), event.position(), cx)));
         let art = match &rich.image {
             Some(url) => ui::media(url.clone(), ui::all(RADIUS_SM)).size(px(ACTIVITY_ART)).flex_none().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),

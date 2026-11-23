@@ -8,7 +8,7 @@ use crate::{
     discord::Message,
     icons::Glyph,
     palette,
-    ui::{self, RADIUS_MD, Squircle},
+    ui,
 };
 
 // The quota's pip gap, and the widest the publish bump grows.
@@ -77,17 +77,10 @@ pub(crate) fn publish_bump(message: &Message, mine: bool, newsroom: &Newsroom, t
     }
     let (publish, dismiss, hide) = (this.clone(), this.clone(), this);
     let (msg, id, channel_id) = (message.clone(), message.id.clone(), message.channel_id.clone());
-    // lint-allow(custom-badge): ui::callout is a block-width notice; this is a compact strip with inline actions under a message
-    let strip = ui::row()
+    let strip = ui::strip(ui::StripFill::Selected, cx)
         .max_w(px(STRIP_WIDTH))
+        .min_h_0()
         .py_2()
-        .pl_3()
-        .pr_2p5()
-        .gap_2()
-        .squircle(RADIUS_MD)
-        .bg(palette::selected(cx))
-        .text_size(ui::TEXT_SM)
-        .text_color(palette::text(cx))
         .child(Icon::new(Glyph::Megaphone).size(ui::ICON_MD).text_color(palette::muted(cx)))
         .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Share with your followers!"))
         .child(ui::button(SharedString::from(format!("bump-publish-{}", message.id)), ui::Tone::Link, cx).child("Publish").on_click(move |_, _, cx| {

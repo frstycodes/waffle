@@ -440,21 +440,15 @@ impl Waffle {
                 let faces: Vec<ui::Entry> = instance.participants.iter().map(|p| self.player(&p.user_id)).map(|u| ui::Entry::person(u.avatar, u.name)).collect();
                 let playing = self.in_activity(&app_id, cx);
                 let target = channel.clone();
-                // lint-allow(custom-button): ui::list_row always inks its title strong, and a playing activity's turns accent
-                ui::row()
-                    .id(SharedString::from(format!("list-{}-{}", activity_key(&app_id), channel.id)))
-                    .h(px(LIST_ROW))
+                ui::list_row(SharedString::from(format!("list-{}-{}", activity_key(&app_id), channel.id)), name.clone(), cx)
+                    .height(ui::RowHeight::Exact(LIST_ROW))
                     .flex_none()
                     .pl(px(LIST_INDENT))
                     .pr_2()
                     .gap_2()
-                    .squircle(RADIUS_SM)
-                    .cursor_pointer()
-                    .text_color(if playing { palette::accent_ink(cx) } else { palette::text(cx) })
-                    .hover(|s| s.bg(palette::hover(cx)))
-                    .child(ui::server_tile(app.and_then(|a| a.icon.as_deref()), &name, AVATAR_SM, cx))
-                    .child(ui::line(name).flex_1().text_size(TEXT_SM).font_weight(gpui_kit::FontWeight::MEDIUM))
-                    .child(ui::capped_stack(&faces, LIST_FACES, AVATAR_XS, sidebar, palette::selected(cx), palette::text(cx)).flex_none())
+                    .title_ink(if playing { palette::accent_ink(cx) } else { palette::text(cx) })
+                    .lead(ui::server_tile(app.and_then(|a| a.icon.as_deref()), &name, AVATAR_SM, cx))
+                    .trailing(ui::capped_stack(&faces, LIST_FACES, AVATAR_XS, sidebar, palette::selected(cx), palette::text(cx)).flex_none())
                     .tooltip(move |window, cx| ui::tip(if playing { "Open activity" } else if in_call { "Join activity" } else { "Join the call and the activity" }, window, cx))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();

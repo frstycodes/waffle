@@ -146,22 +146,16 @@ impl Waffle {
         let strong = palette::strong(cx);
         let mark = name.to_lowercase().find(&query.to_lowercase()).filter(|_| !query.is_empty()).map(|at| at..at + query.len()).filter(|r| name.is_char_boundary(r.start) && name.is_char_boundary(r.end));
         let label = StyledText::new(name.clone()).with_highlights(mark.map(|r| (r, HighlightStyle { color: Some(strong), font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() })));
-        let hover = palette::hover(cx);
-        // lint-allow(custom-button): ui::list_row titles are plain text; the switcher highlights the part of the name that matched.
-        ui::row()
-            .id(SharedString::from(format!("switch-{}", channel.id)))
-            .h_9()
+        ui::list_row(SharedString::from(format!("switch-{}", channel.id)), name.clone(), cx)
+            .height(ui::RowHeight::Dense)
             .px_2p5()
             .flex_none()
-            .squircle(RADIUS_SM)
             .gap_2p5()
-            .cursor_pointer()
-            .text_color(if active { strong } else { palette::text(cx) })
-            .when(active, |r| r.bg(palette::selected(cx)))
-            .when(!active, |r| r.hover(move |s| s.bg(hover)))
-            .child(lead)
-            .child(rich_line(label).flex_1())
-            .child(div().pl_3().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(place))
+            .control(|c| c.toggled(active, cx))
+            .title_ink(if active { strong } else { palette::text(cx) })
+            .title_element(rich_line(label).flex_1())
+            .lead(lead)
+            .trailing(div().pl_3().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(place))
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.switcher = None;
                 this.guild_id = guild_id.clone();

@@ -17,7 +17,7 @@ use crate::{
     menu::item,
     palette::{self, stage},
     stage::{STAGE, hand_queue, ordinal, requests_allowed},
-    ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, Squircle, Tone},
+    ui::{self, RADIUS_SM, Squircle, Tone},
 };
 use crate::part::Column;
 
@@ -138,13 +138,13 @@ impl Waffle {
         let live = room.topic.is_some();
         let manage = live && room.moderator;
         let (guild_id, channel_id) = (room.guild.id.clone(), room.channel.id.clone());
-        let edit = stage_icon_button("stage-edit", Glyph::Pen, "Edit Stage", false).occlude().on_click(cx.listener(move |this, _, window, cx| this.open_stage_topic(guild_id.clone(), channel_id.clone(), window, cx)));
+        let edit = stage_icon_button("stage-edit", Glyph::Pen, "Edit Stage", false, cx).occlude().on_click(cx.listener(move |this, _, window, cx| this.open_stage_topic(guild_id.clone(), channel_id.clone(), window, cx)));
         let open = self.requests_open(&room.channel.id, cx);
         let channel_id = room.channel.id.clone();
         let requests = div()
             .relative()
             .flex_none()
-            .child(stage_icon_button("stage-requests-toggle", Glyph::Hand, if open { "Hide Requests" } else { "Show Requests" }, open).occlude().on_click(cx.listener(move |this, _, _, cx| {
+            .child(stage_icon_button("stage-requests-toggle", Glyph::Hand, if open { "Hide Requests" } else { "Show Requests" }, open, cx).occlude().on_click(cx.listener(move |this, _, _, cx| {
                 cx.set_global(StageRequests((!open).then(|| channel_id.clone())));
                 this.redraw(Column::Main, cx);
             })))
@@ -187,7 +187,7 @@ impl Waffle {
     }
 
     // One listener: their face, a raised hand carrying its place in line, their name and why they're asked for.
-    fn audience_face(&self, state: &VoiceState, place: Option<usize>, cx: &mut Context<Self>) -> Stateful<Div> {
+    fn audience_face(&self, state: &VoiceState, place: Option<usize>, cx: &mut Context<Self>) -> ui::Control {
         let id = state.user_id.clone();
         let (name, avatar) = match &state.user {
             Some(user) => (user.name.clone(), user.avatar.clone()),
@@ -198,16 +198,15 @@ impl Waffle {
             (None, OnStage::Invited) => Some("Invited".to_owned()),
             _ => None,
         };
-        // lint-allow(custom-button): ui::card fills with the app's raised surface; this face is a bare wash in the stage's ink
-        ui::col()
-            .id(SharedString::from(format!("stage-face-{id}")))
+        ui::card(SharedString::from(format!("stage-face-{id}")), cx)
+            .flat()
+            .on_stage()
+            .stacked()
             .w(px(FACE_CELL))
             .px_1()
             .py_2()
-            .squircle(RADIUS_MD)
             .items_center()
             .gap_1()
-            .hover(|s| s.bg(stage::wash(0.05)))
             .child(ui::badged(ui::avatar(avatar, FACE), FACE, ui::Shape::Round, stage::bg()).when_some(place, |face, place| face.mark(ui::Spot::TopRight, ui::badge_of(hand_badge(place)))))
             .child(ui::line(name).max_w(relative(1.)).text_size(ui::TEXT_XS).text_color(stage::text()))
             .children(why.map(|why| div().text_size(ui::TEXT_XXS).font_weight(FontWeight::SEMIBOLD).text_color(palette::accent()).font_features(tabular()).child(why)))
@@ -308,16 +307,15 @@ impl Waffle {
     fn requests_popover(&self, room: &Room, stage_height: f32, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let allowed = requests_allowed(room.guild, &room.channel.overwrites);
         let (guild_id, channel_id) = (room.guild.id.clone(), room.channel.id.clone());
-        // lint-allow(custom-button): ui::toggle_row draws in the app's colours, and this row's wash and ink are the stage's
-        let allow = ui::row()
-            .id("stage-allow-requests")
+        let allow = ui::card("stage-allow-requests", cx)
+            .flat()
+            .on_stage()
             .min_h(px(OPTION_ROW))
             .px_2p5()
             .py_2()
             .squircle(RADIUS_SM)
             .gap_3()
-            .cursor_pointer()
-            .hover(|s| s.bg(stage::wash(0.05)))
+            .justify_start()
             .child(
                 div()
                     .flex_1()
@@ -335,8 +333,7 @@ impl Waffle {
                 ui::col().min_h_0().id("stage-requests-list").flex_1().overflow_y_scroll().gap_0p5().children(rows).into_any_element()
             }
         };
-        // lint-allow(custom-surface, custom-mark): ui::surface is the app's overlay and ring, and this card is the stage's own dark overlay
-        let card = ui::col()
+        let card = ui::surface_in(stage::overlay(), stage::wash(0.14), cx)
             .id("stage-requests")
             .occlude()
             .absolute()
@@ -344,10 +341,6 @@ impl Waffle {
             .right_3()
             .w(px(REQUESTS_WIDTH))
             .max_h(px((stage_height - FOCUS_HEAD - FOOT_HEIGHT - 8.).max(160.)))
-            .p_1p5()
-            .squircle(RADIUS_LG)
-            .bg(stage::overlay())
-            .shadow(ui::shadow_pop_on(stage::wash(0.14), cx))
             .gap_0p5()
             .text_color(stage::text())
             .child(
@@ -363,8 +356,7 @@ impl Waffle {
                     .when(room.hands > 0, |d| d.child(ui::count_badge(room.hands as u32))),
             )
             .child(allow)
-            // lint-allow(custom-divider): ui::divider has no colour option, and this rule takes the stage's own wash
-            .child(div().px_2p5().py_1().child(div().h(ui::HAIRLINE).flex_none().bg(stage::wash(0.08))))
+            .child(div().px_2p5().py_1().child(ui::rule(stage::wash(0.08))))
             .child(list);
         // It hangs from the header's hand button, so it grows from its top right.
         ui::rise(card.transform_origin(gpui_kit::point(relative(1.), relative(0.))), "stage-requests", Duration::ZERO).into_any_element()
@@ -409,7 +401,7 @@ impl Waffle {
             )
             .child(invite)
             .child(
-                stage_icon_button(SharedString::from(format!("stage-dismiss-{id}")), Glyph::X, "Dismiss", false)
+                stage_icon_button(SharedString::from(format!("stage-dismiss-{id}")), Glyph::X, "Dismiss", false, cx)
                     .on_click(cx.listener(move |this, _, _, cx| this.answer_request(&dismiss_guild, &dismiss_channel, &dismiss_user, false, cx))),
             )
     }
@@ -420,8 +412,9 @@ impl Waffle {
         let width = (stage_width - 24.).min(INVITE_WIDTH);
         let (guild_id, channel_id) = (room.guild.id.clone(), room.channel.id.clone());
         let (accept_guild, accept_channel) = (guild_id.clone(), channel_id.clone());
-        // lint-allow(custom-surface, custom-mark): ui::surface is the app's overlay and ring, and this card is the stage's own dark overlay
-        let card = ui::row()
+        let card = ui::surface_in(stage::overlay(), stage::wash(0.14), cx)
+            .flex_row()
+            .items_center()
             .id("stage-invite")
             .occlude()
             .absolute()
@@ -431,9 +424,6 @@ impl Waffle {
             .py_3()
             .pl_3p5()
             .pr_3()
-            .squircle(RADIUS_LG)
-            .bg(stage::overlay())
-            .shadow(ui::shadow_pop_on(stage::wash(0.14), cx))
             .gap_3()
             .child(ui::icon_tile(Glyph::Stage, stage::wash(0.08), stage::strong()))
             .child(
@@ -451,7 +441,7 @@ impl Waffle {
                             .child(ui::line(place)),
                     ),
             )
-            .child(stage_button("stage-invite-later", "Not Now").on_click(cx.listener(move |this, _, _, cx| this.set_my_suppress(&guild_id, &channel_id, true, false, cx))))
+            .child(stage_button("stage-invite-later", "Not Now", cx).on_click(cx.listener(move |this, _, _, cx| this.set_my_suppress(&guild_id, &channel_id, true, false, cx))))
             .child(ui::button("stage-invite-accept", ui::Tone::Primary, cx).small().child("Accept").on_click(cx.listener(move |this, _, _, cx| this.set_my_suppress(&accept_guild, &accept_channel, false, false, cx))));
         ui::rise(card.transform_origin(gpui_kit::point(relative(0.5), relative(1.))), "stage-invite", Duration::ZERO).into_any_element()
     }

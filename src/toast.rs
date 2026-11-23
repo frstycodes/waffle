@@ -1,11 +1,11 @@
 // Toasts: one line rising over the bottom of the window, and the kind that carries one way back (Rejoin).
 use std::{rc::Rc, time::Duration};
 
-use gpui_kit::{Animation, AnimationExt, AnyElement, Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, div, prelude::*, px};
+use gpui_kit::{AnyElement, Context, IntoElement, ParentElement, SharedString, Styled, div, prelude::*};
 
 use crate::{
-    Waffle, motion, palette,
-    ui::{self, RADIUS_LG, Squircle},
+    Waffle, palette,
+    ui,
 };
 
 impl Waffle {
@@ -64,35 +64,12 @@ impl Waffle {
             let toast = ui::toast_with(SharedString::from(format!("toast-{text}")), action.glyph, palette::muted(cx), text, action.detail.clone(), Some(button.into_any_element()), cx);
             return Some(ui::row().items_stretch().absolute().left_0().right_0().bottom_6().justify_center().child(div().occlude().child(toast)).into_any_element());
         }
-        // GAP: the design leads a toast with its tone's icon and can carry one action; `show_toast`
-        // carries only text, so neither shows yet.
-        // lint-allow(custom-surface, custom-badge): ui::toast always leads with a glyph; a plain show_toast is one line of text.
-        let toast = ui::row()
-            .max_w(px(TOAST_MAX))
-            .min_h_10()
-            .py_2p5()
-            .pl_3p5()
-            .pr_2p5()
-            .squircle(RADIUS_LG)
-            .bg(palette::surface(palette::Level::Overlay, cx))
-            .shadow(ui::shadow_pop(cx))
-            .text_size(ui::TEXT_SM)
-            .line_height(ui::LINE_SM)
-            .font_weight(FontWeight::NORMAL)
-            .text_color(palette::strong(cx))
-            .child(text.clone());
-        // Rises 8px into place from scale 0.97 with its fade (CSS `toast-in`, 240ms).
-        // GAP: and from blur(4px); gpui has no filter blur on an element's own painting.
-        let toast = toast.with_animation(SharedString::from(format!("toast-{text}")), Animation::new(Duration::from_millis(240)).with_easing(|t| motion::ease_out().sample(t)), |toast, t| {
-            toast.translate_y(px(TOAST_RISE * (1. - t))).scale(0.97 + 0.03 * t).opacity(t)
-        });
+        // GAP: the design leads a toast with its tone's icon; `show_toast` carries only text.
+        let toast = ui::toast_text(SharedString::from(format!("toast-{text}")), text, cx);
         Some(ui::row().items_stretch().absolute().left_0().right_0().bottom_6().justify_center().child(toast).into_any_element())
     }
 }
 
-// The toast's widest, and how far it rises as it comes in (CSS `toast-in`).
-const TOAST_MAX: f32 = 380.;
-const TOAST_RISE: f32 = 8.;
 const TOAST_ACTION_HOLD: Duration = Duration::from_secs(6);
 
 // The one action a toast can carry, with the glyph that leads it and a line of detail.

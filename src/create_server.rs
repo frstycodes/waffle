@@ -3,7 +3,7 @@ use std::{collections::HashSet, path::PathBuf};
 
 use futures::channel::mpsc;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Div, Entity, FocusHandle, Focusable as _, FontWeight, Hsla, InteractiveElement, IntoElement, KeyDownEvent, MouseButton, ParentElement, SharedString, Stateful, StatefulInteractiveElement, Styled, Subscription, Window,
+    AnyElement, App, AppContext as _, Context, Div, Entity, FocusHandle, Focusable as _, FontWeight, Hsla, InteractiveElement, IntoElement, KeyDownEvent, MouseButton, ParentElement, SharedString, StatefulInteractiveElement, Styled, Subscription, Window,
     component::{
         Icon,
         input::{Input, InputEvent, InputState},
@@ -475,32 +475,27 @@ fn template_fill(hue: f32) -> Hsla {
 }
 
 // A bordered row leading to the next step: the tile, the label (and a line under it), a chevron.
-fn card_row(id: &'static str, tile: impl IntoElement, label: &'static str, detail: Option<&'static str>, off: bool, cx: &App) -> Stateful<Div> {
-    let hover = palette::hover(cx);
+fn card_row(id: &'static str, tile: impl IntoElement, label: &'static str, detail: Option<&'static str>, off: bool, cx: &App) -> ui::Control {
     let text = ui::col().min_h_0()
         .flex_1()
         .gap_0p5()
         .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(label))
         .children(detail.map(|d| div().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::muted(cx)).child(d)));
-    // lint-allow(custom-button): ui::card has a raised fill; this is a clear bordered row ending in a chevron
-    ui::row()
-        .id(id)
+    ui::card(id, cx)
+        .flat()
+        .edged(palette::line_strong(cx))
+        .justify_start()
         .gap_3()
-        .p_3()
-        .squircle(ui::RADIUS_LG)
-        .border_1()
-        .border_color(palette::line_strong(cx))
         .child(tile)
         .child(text)
         .child(div().flex_none().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)))
-        .when(off, |r| r.opacity(0.5).cursor_not_allowed())
-        .when(!off, |r| r.cursor_pointer().hover(move |s| s.bg(hover)))
+        .disabled(off)
 }
 
 // A template: its tile at the top beside the name, the channels it comes with under the name, and for a long
 // list the first lines under a fade with a button that shows the rest in place.
 fn template_row(i: usize, template: &Template, expanded: bool, off: bool, cx: &mut Context<Waffle>) -> impl IntoElement {
-    let (hover, strong, faint) = (palette::hover(cx), palette::strong(cx), palette::faint(cx));
+    let (hover, faint) = (palette::hover(cx), palette::faint(cx));
     let chans = channel_chips(template);
     let long = chans.len() > CHIPS_SHOWN;
     let group: SharedString = format!("create-server-template-{i}").into();
@@ -523,20 +518,18 @@ fn template_row(i: usize, template: &Template, expanded: bool, off: bool, cx: &m
             this.toggle_template_channels(i, cx);
         }))
     });
-    // lint-allow(custom-button): ui::list_row has no top-aligned lead with a body of title, channel chips and a button
-    ui::row()
-        .id(("create-server-template", i))
+    ui::list_row(("create-server-template", i), template.label, cx)
+        .height(ui::RowHeight::Fit)
+        .top()
         .group(group)
-        .items_start()
-        .gap_3()
         .px_3()
         .py_2p5()
         .squircle(ui::RADIUS_LG)
-        .child(ui::icon_tile(template.glyph, template_fill(template.hue), gpui_kit::white()))
-        .child(ui::col().min_h_0().flex_1().pt_0p5().items_start().gap_1().child(div().font_weight(FontWeight::MEDIUM).text_color(strong).child(template.label)).child(chips).children(more))
-        .child(div().flex_none().pt_2p5().text_color(faint).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)))
-        .when(off, |r| r.opacity(0.5).cursor_not_allowed())
-        .when(!off, |r| r.cursor_pointer().hover(move |s| s.bg(hover)).on_click(cx.listener(move |this, _, window, cx| this.pick_create_server_template(Some(i), window, cx))))
+        .lead(ui::icon_tile(template.glyph, template_fill(template.hue), gpui_kit::white()))
+        .body(ui::col().items_start().gap_1().child(chips).children(more))
+        .trailing(div().pt_2p5().text_color(faint).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)))
+        .control(|c| c.disabled(off))
+        .when(!off, |r| r.on_click(cx.listener(move |this, _, window, cx| this.pick_create_server_template(Some(i), window, cx))))
 }
 
 fn channel_chips(template: &Template) -> Vec<(Glyph, &'static str)> {
