@@ -34,13 +34,6 @@ src/components.rs	custom-component	1
 src/components.rs	detached-task	3
 src/components.rs	raw-margin	1
 src/components.rs	unbounded-growth	2
-src/demo.rs	detached-task	12
-src/demo.rs	file-lines	2906
-src/demo.rs	hot-notify	1
-src/demo.rs	main-thread-io	6
-src/demo.rs	raw-px	32
-src/discord.rs	file-lines	3370
-src/discord.rs	unbounded-growth	1
 src/dm_call.rs	custom-badge	1
 src/dm_call.rs	custom-button	2
 src/dm_call.rs	custom-component	2
