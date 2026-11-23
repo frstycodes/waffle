@@ -16,7 +16,7 @@ pub(crate) struct Draft {
     pub(crate) command: Option<String>,
     // And the choices picked for its options, whose labels alone don't say what they send.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub(crate) picks: Vec<CommandPick>,
+    pub(crate) picks: Vec<CommandPick>, // lint-allow(unbounded-growth): one pick per option of one typed command, 25 at most (Discord's cap)
     // GAP: the reply target stays in memory only; a restart drops it.
     #[serde(skip)]
     pub(crate) reply: Option<Message>,
