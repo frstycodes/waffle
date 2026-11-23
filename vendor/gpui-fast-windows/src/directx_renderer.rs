@@ -380,6 +380,9 @@ impl DirectXRenderer {
         })?;
         self.upload_scene_buffers(scene)?;
         if crate::fast::frame::draw_batches(self, scene)? {
+            if let Some(resources) = self.resources.as_mut() {
+                resources.trim_backdrop_blur_textures();
+            }
             return Ok(());
         }
 
@@ -856,112 +859,12 @@ impl DirectXRenderer {
     }
 
     fn draw_backdrop_blurs(&mut self, blurs: &[BackdropBlur]) -> Result<()> {
-        let viewport_size = size(
-            DevicePixels(self.width as i32),
-            DevicePixels(self.height as i32),
-        );
-        for blur in blurs {
-            let Some(plan) = blur.plan(viewport_size) else {
-                continue;
-            };
-            self.draw_backdrop_blur_levels(&plan)?;
-            self.draw_backdrop_blur_composite(blur, &plan, viewport_size)?;
-        }
-        Ok(())
-    }
-
-    fn draw_backdrop_blur_levels(&mut self, plan: &BackdropBlurPlan) -> Result<()> {
+        let viewport = size(DevicePixels(self.width as i32), DevicePixels(self.height as i32));
         let devices = self.devices.as_ref().context("devices missing")?;
         let resources = self.resources.as_mut().context("resources missing")?;
-        resources.ensure_backdrop_blur_textures(&devices.device, plan)?;
-        let render_target = resources
-            .render_target
-            .as_ref()
-            .context("render target missing")?;
-
-        let region = plan.region;
-        unsafe {
-            devices.device_context.CopySubresourceRegion(
-                &resources.backdrop_blur_textures[0].texture,
-                0,
-                0,
-                0,
-                0,
-                render_target,
-                0,
-                Some(&D3D11_BOX {
-                    left: region.origin.x.0 as u32,
-                    top: region.origin.y.0 as u32,
-                    front: 0,
-                    right: (region.origin.x.0 + region.size.width.0) as u32,
-                    bottom: (region.origin.y.0 + region.size.height.0) as u32,
-                    back: 1,
-                }),
-            );
-        }
-
-        for level in 1..=plan.level_count {
-            draw_backdrop_blur_level(
-                devices,
-                resources,
-                &mut self.pipelines.backdrop_blur_down,
-                &self.globals,
-                plan,
-                level - 1,
-                level,
-            )?;
-        }
-        for level in (1..plan.level_count).rev() {
-            draw_backdrop_blur_level(
-                devices,
-                resources,
-                &mut self.pipelines.backdrop_blur_up,
-                &self.globals,
-                plan,
-                level + 1,
-                level,
-            )?;
-        }
-
-        unsafe {
-            unbind_source_texture(&devices.device_context);
-            devices
-                .device_context
-                .OMSetRenderTargets(Some(slice::from_ref(&resources.render_target_view)), None);
-            devices
-                .device_context
-                .RSSetViewports(Some(slice::from_ref(&resources.viewport)));
-        }
-        Ok(())
-    }
-
-    fn draw_backdrop_blur_composite(
-        &mut self,
-        blur: &BackdropBlur,
-        plan: &BackdropBlurPlan,
-        viewport_size: Size<DevicePixels>,
-    ) -> Result<()> {
-        let devices = self.devices.as_ref().context("devices missing")?;
-        let resources = self.resources.as_ref().context("resources missing")?;
-        let source = &resources.backdrop_blur_textures[plan.composite_source_level()];
-        let pass = plan.composite_pass(blur, source.size, viewport_size);
-        let pipeline = &mut self.pipelines.backdrop_blur_composite;
-        pipeline.update_buffer(
-            &devices.device,
-            &devices.device_context,
-            slice::from_ref(&pass),
-        )?;
-        pipeline.draw_range_with_texture(
-            &devices.device_context,
-            slice::from_ref(&source.shader_resource_view),
-            self.globals
-                .batch_params_buffer
-                .as_ref()
-                .context("batch params buffer missing")?,
-            slice::from_ref(&self.globals.sampler),
-            0,
-            1,
-        )
+        resources.prepare_backdrop_blurs(&devices.device, blurs, viewport)?;
+        let blur = BlurTarget { devices, resources, viewport };
+        draw_backdrop_blurs(blur, &mut self.pipelines, &self.globals, blurs)
     }
 
     pub(crate) fn gpu_specs(&self) -> Result<GpuSpecs> {
@@ -1084,8 +987,28 @@ impl DirectXResources {
         Ok(())
     }
 
+    /// Allocates the level textures `blurs` need, before a frame that draws them borrows these resources.
+    pub(crate) fn prepare_backdrop_blurs(&mut self, device: &ID3D11Device, blurs: &[BackdropBlur], viewport: Size<DevicePixels>) -> Result<()> {
+        for blur in blurs {
+            if let Some(plan) = blur.plan(viewport) {
+                self.ensure_backdrop_blur_textures(device, &plan)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether every level texture `plan` draws through is allocated and big enough.
+    fn backdrop_blur_ready(&self, plan: &BackdropBlurPlan) -> bool {
+        (0..=plan.level_count).all(|level| {
+            let wanted = plan.level_size(level);
+            self.backdrop_blur_textures
+                .get(level)
+                .is_some_and(|texture| texture.size.width >= wanted.width && texture.size.height >= wanted.height)
+        })
+    }
+
     /// Frees the blur level textures the budget no longer wants, once a frame is drawn.
-    fn trim_backdrop_blur_textures(&mut self) {
+    pub(crate) fn trim_backdrop_blur_textures(&mut self) {
         let allocated = self
             .backdrop_blur_textures
             .iter()
@@ -1542,6 +1465,107 @@ impl BackdropBlurTexture {
 }
 
 /// Renders `target_level` of a backdrop blur from the level next to it.
+/// What a frame's backdrop blurs draw with: the window's render target, which they copy from, and its
+/// level textures, allocated ahead (`DirectXResources::prepare_backdrop_blurs`).
+#[derive(Clone, Copy)]
+pub(crate) struct BlurTarget<'a> {
+    pub(crate) devices: &'a DirectXRendererDevices,
+    pub(crate) resources: &'a DirectXResources,
+    pub(crate) viewport: Size<DevicePixels>,
+}
+
+/// Draws `blurs` over what the window's target holds so far, leaving it bound again. A blur whose
+/// textures weren't allocated ahead is skipped rather than drawn through missing levels.
+pub(crate) fn draw_backdrop_blurs(
+    blur: BlurTarget<'_>,
+    pipelines: &mut DirectXRenderPipelines,
+    globals: &DirectXGlobalElements,
+    blurs: &[BackdropBlur],
+) -> Result<()> {
+    for backdrop in blurs {
+        let Some(plan) = backdrop.plan(blur.viewport) else {
+            continue;
+        };
+        if !blur.resources.backdrop_blur_ready(&plan) {
+            continue;
+        }
+        draw_backdrop_blur_levels(blur, pipelines, globals, &plan)?;
+        draw_backdrop_blur_composite(blur, pipelines, globals, backdrop, &plan)?;
+    }
+    Ok(())
+}
+
+fn draw_backdrop_blur_levels(
+    blur: BlurTarget<'_>,
+    pipelines: &mut DirectXRenderPipelines,
+    globals: &DirectXGlobalElements,
+    plan: &BackdropBlurPlan,
+) -> Result<()> {
+    let (devices, resources) = (blur.devices, blur.resources);
+    let render_target = resources
+        .render_target
+        .as_ref()
+        .context("render target missing")?;
+    let region = plan.region;
+    unsafe {
+        devices.device_context.CopySubresourceRegion(
+            &resources.backdrop_blur_textures[0].texture,
+            0,
+            0,
+            0,
+            0,
+            render_target,
+            0,
+            Some(&D3D11_BOX {
+                left: region.origin.x.0 as u32,
+                top: region.origin.y.0 as u32,
+                front: 0,
+                right: (region.origin.x.0 + region.size.width.0) as u32,
+                bottom: (region.origin.y.0 + region.size.height.0) as u32,
+                back: 1,
+            }),
+        );
+    }
+    for level in 1..=plan.level_count {
+        draw_backdrop_blur_level(devices, resources, &mut pipelines.backdrop_blur_down, globals, plan, level - 1, level)?;
+    }
+    for level in (1..plan.level_count).rev() {
+        draw_backdrop_blur_level(devices, resources, &mut pipelines.backdrop_blur_up, globals, plan, level + 1, level)?;
+    }
+    unsafe {
+        unbind_source_texture(&devices.device_context);
+        devices
+            .device_context
+            .OMSetRenderTargets(Some(slice::from_ref(&resources.render_target_view)), None);
+        devices
+            .device_context
+            .RSSetViewports(Some(slice::from_ref(&resources.viewport)));
+    }
+    Ok(())
+}
+
+fn draw_backdrop_blur_composite(
+    blur: BlurTarget<'_>,
+    pipelines: &mut DirectXRenderPipelines,
+    globals: &DirectXGlobalElements,
+    backdrop: &BackdropBlur,
+    plan: &BackdropBlurPlan,
+) -> Result<()> {
+    let devices = blur.devices;
+    let source = &blur.resources.backdrop_blur_textures[plan.composite_source_level()];
+    let pass = plan.composite_pass(backdrop, source.size, blur.viewport);
+    let pipeline = &mut pipelines.backdrop_blur_composite;
+    pipeline.update_buffer(&devices.device, &devices.device_context, slice::from_ref(&pass))?;
+    pipeline.draw_range_with_texture(
+        &devices.device_context,
+        slice::from_ref(&source.shader_resource_view),
+        globals.batch_params_buffer.as_ref().context("batch params buffer missing")?,
+        slice::from_ref(&globals.sampler),
+        0,
+        1,
+    )
+}
+
 fn draw_backdrop_blur_level(
     devices: &DirectXRendererDevices,
     resources: &DirectXResources,
