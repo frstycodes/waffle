@@ -5,12 +5,12 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
-    f32::consts::TAU,
+
     rc::Rc,
     time::Duration,
 };
 
-use gpui_kit::{Animation, AnimationExt, AnyElement, App, Context, FontWeight, SharedString, Stateful, WeakEntity, Window, component::Icon, div, img, prelude::*, px};
+use gpui_kit::{AnyElement, App, Context, FontWeight, SharedString, Stateful, WeakEntity, Window, component::Icon, div, img, prelude::*, px};
 
 use crate::{
     Waffle,
@@ -167,7 +167,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one fetch: ends when the request returns, or when Waffle is dropped
     }
 
     // A clicked link: a Discord one opens here, anything else in the browser.
@@ -209,7 +209,7 @@ impl Waffle {
                 cx.update(|cx: &mut App| cx.open_url(&url));
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): ends when the captcha channel closes, which is when the join request finishes
         cx.spawn(async move |this, cx| {
             let joined = client.join_invite(&code, captcha_url).await;
             this.update(cx, |this, cx| match joined {
@@ -222,7 +222,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one join request: ends when it returns, or when Waffle is dropped
     }
 
     // A server we just joined opens once its GUILD_CREATE lands; one we were already in opens now.
@@ -245,6 +245,7 @@ pub struct CardContext<'a> {
     pub this: WeakEntity<Waffle>,
     pub previews: &'a Previews,
     pub joined: &'a HashSet<String>,
+    // lint-allow(unbounded-growth): a borrow of the open server's channel names, which this struct never grows
     pub channel_names: &'a HashMap<String, String>,
     // The quoted message's text as one plain line, mentions and emoji resolved.
     pub quote: &'a dyn Fn(&str) -> String,
@@ -283,6 +284,7 @@ pub fn cards(owner: &str, content: &str, ctx: &CardContext, cx: &mut App) -> Vec
 fn card(id: String, width: f32, cx: &App) -> Stateful<gpui_kit::Div> {
     ui::row().items_stretch()
         .id(SharedString::from(id))
+        // lint-allow(raw-margin): the gap under the message text, whose parent is the feed row in chat.rs outside this module
         .mt_2()
         .w_full()
         .max_w(px(width))
@@ -317,11 +319,12 @@ fn message_card(id: String, guild: &str, channel: &str, message: &Message, ctx: 
                 .child(ui::line(message.author.name.clone()).font_weight(FontWeight::MEDIUM).text_color(strong))
                 .child(div().flex_none().text_size(ui::TEXT_XS).text_color(faint).child((ctx.stamp)(&message.timestamp))),
         )
+        // lint-allow(raw-truncate): ui::line is one line; a quote clamps at three lines
         .when(has_quote, |t| t.child(div().text_color(muted).line_clamp(3).text_ellipsis().child(quote)))
         .when(bare, |t| t.child(div().text_color(faint).child("Attachment")))
         .child(
             ui::row()
-                .mt_1()
+                .pt_1()
                 .justify_between()
                 .gap_3()
                 .text_size(ui::TEXT_XS)
@@ -357,10 +360,7 @@ fn invite_card(id: String, code: &str, invite: &Invite, ctx: &CardContext, cx: &
         .text_color(palette::muted(cx))
         .children(count(invite.online, "Online", palette::status_in(Status::Online, cx)))
         .children(count(invite.members, "Members", palette::faint(cx)));
-    let icon = match &invite.icon {
-        Some(url) => img(url.clone()).size(px(INVITE_ICON)).flex_none().squircle(RADIUS_MD).into_any_element(),
-        None => initials_tile(&invite.name, cx),
-    };
+    let icon = ui::server_tile(invite.icon.as_deref(), &invite.name, INVITE_ICON, cx);
     let (this, guild_id, code) = (ctx.this.clone(), invite.guild_id.clone(), code.to_owned());
     let action = match joined {
         true => ui::button(SharedString::from(format!("{id}-open")), Tone::Secondary, cx).child("Joined").on_click(move |_, window, cx| { cx.stop_propagation();
@@ -399,26 +399,27 @@ fn invite_frame(id: String, row: gpui_kit::Div, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-fn initials_tile(name: &str, cx: &App) -> AnyElement {
-    let initials: String = name.split_whitespace().filter_map(|w| w.chars().next()).take(3).collect();
-    ui::row().size(px(INVITE_ICON)).flex_none().squircle(RADIUS_MD).bg(palette::selected(cx)).justify_center().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(initials).into_any_element()
-}
-
-// The card's real layout in bars, pulsing like the feed's skeleton.
+// The card's real layout in bars, shimmering like the feed's skeleton.
 fn skeleton(id: String, invite: bool, cx: &App) -> AnyElement {
-    let bar = palette::selected(cx);
-    let line = |w: f32, h: f32| div().w(px(w)).max_w_full().h(px(h)).rounded_full().bg(bar);
-    let body = match invite {
-        true => card(id.clone(), INVITE_WIDTH, cx).flex_col().gap_2p5().child(line(140., 10.)).child(
+    let shimmer = |n: usize, radius: f32| ui::skeleton(SharedString::from(format!("{id}-bar-{n}")), radius, cx);
+    let bar = |n: usize, w: f32, h: f32| shimmer(n, h / 2.).w(px(w)).max_w_full().h(px(h));
+    match invite {
+        true => card(id.clone(), INVITE_WIDTH, cx).flex_col().gap_2p5().child(bar(0, 140., 10.)).child(
             ui::row()
                 .gap_3()
-                .child(div().size(px(INVITE_ICON)).flex_none().squircle(RADIUS_MD).bg(bar))
-                .child(ui::col().flex_1().gap_2().child(line(160., 14.)).child(line(180., 10.)))
-                .child(div().w_16().h_9().flex_none().squircle(RADIUS_SM).bg(bar)),
+                .child(shimmer(1, RADIUS_MD).size(px(INVITE_ICON)).flex_none())
+                .child(ui::col().flex_1().gap_2().child(bar(2, 160., 14.)).child(bar(3, 180., 10.)))
+                .child(shimmer(4, RADIUS_SM).w_16().h_9().flex_none()),
         ),
-        false => card(id.clone(), MESSAGE_WIDTH, cx).flex_col().gap_2().child(ui::row().gap_2().child(div().size_5().rounded_full().bg(bar)).child(line(96., 12.)).child(line(72., 10.))).child(line(320., 12.)).child(line(220., 12.)).child(line(80., 10.)),
-    };
-    body.with_animation(SharedString::from(format!("{id}-pulse")), Animation::new(Duration::from_millis(1100)).repeat(), |el, t| el.opacity(0.6 + 0.4 * (t * TAU).cos().abs())).into_any_element()
+        false => card(id.clone(), MESSAGE_WIDTH, cx)
+            .flex_col()
+            .gap_2()
+            .child(ui::row().gap_2().child(ui::skeleton_circle(SharedString::from(format!("{id}-bar-0")), 20., cx)).child(bar(1, 96., 12.)).child(bar(2, 72., 10.)))
+            .child(bar(3, 320., 12.))
+            .child(bar(4, 220., 12.))
+            .child(bar(5, 80., 10.)),
+    }
+    .into_any_element()
 }
 
 // "8,311", as Discord writes member counts.

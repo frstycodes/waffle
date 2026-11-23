@@ -253,7 +253,7 @@ impl Waffle {
 
     fn poll_input(&self, placeholder: &'static str, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
         let input = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
-        cx.subscribe_in(&input, window, Self::on_poll_input).detach();
+        cx.subscribe_in(&input, window, Self::on_poll_input).detach(); // lint-allow(detached-task): the subscription ends when the input or Waffle is dropped
         input
     }
 
@@ -373,7 +373,7 @@ impl Waffle {
             let result = client.send_poll(&channel.id, &draft, &nonce).await;
             this.update(cx, |this, cx| this.settle(&channel.id, &nonce, result, cx)).ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one send: ends when the request returns, or when Waffle is dropped
     }
 
     fn poll_duration_entries(&self) -> Vec<menu::Entry> {

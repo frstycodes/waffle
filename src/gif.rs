@@ -148,12 +148,14 @@ pub fn set_covered(covered: bool) {
 // The GIF for `url` where the app shows it: the still (`poster`), and a slot the layer plays the clip
 // over while `moving`. `key` must be unique to where it's shown. gpui can't clip pictures to a rounded
 // parent, so the still and the layer's frames are both rounded to `corners`.
+// lint-allow(custom-component): ui::media rounds an image, but a GIF's slot is a placeholder the layer paints into; there is nothing to wrap
 pub fn rounded_tile(key: String, url: &str, poster: &str, cell: gpui_kit::Size<Pixels>, corners: Corners<Pixels>, moving: bool, _cx: &mut App) -> AnyElement {
     placeholder(key, url, poster, cell, corners, false, moving)
 }
 
 // A tile drawn above every overlay (the media viewer): it keeps playing while one is open, and is
 // clipped to its own frame rather than the chat.
+// lint-allow(custom-component): ui::media rounds an image, but a GIF's slot is a placeholder the layer paints into; there is nothing to wrap
 pub fn top_tile(key: String, url: &str, poster: &str, cell: gpui_kit::Size<Pixels>, corners: Corners<Pixels>, _cx: &mut App) -> AnyElement {
     placeholder(key, url, poster, cell, corners, true, true)
 }
@@ -195,6 +197,7 @@ fn wake(cx: &mut App) {
 
 pub struct GifLayer {
     // Shared with the paint closure, which runs after the app has placed this frame's slots.
+    // lint-allow(unbounded-growth): one player per GIF slot drawn this session, a few hundred at most, each holding one decoded clip
     players: Rc<RefCell<HashMap<String, Player>>>,
     ticking: bool,
 }
@@ -247,7 +250,7 @@ impl GifLayer {
                 let Ok(true) = this.update(cx, |this, cx| this.tick(cx)) else { break };
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): the tick loop ends when tick says stop or the view is dropped
     }
 
     // Starts players for the slots that should move, stops the rest, and advances the playing ones.
@@ -354,7 +357,7 @@ fn start(key: String, url: String, cx: &mut Context<GifLayer>) -> Player {
         })
         .ok();
     })
-    .detach();
+    .detach(); // lint-allow(detached-task): one fetch: ends when the request returns, or when the view is dropped
     Player { url, state: State::Loading, frame: None }
 }
 

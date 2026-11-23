@@ -10,7 +10,7 @@ use crate::{
     menu, palette,
     search::{self, Key, Sort},
     search_menu::token_chip,
-    ui::{self, RADIUS_MD, Squircle},
+    ui::{self},
 };
 use crate::part::Column;
 
@@ -27,6 +27,7 @@ pub(crate) const HIT_COLUMN: f32 = PANEL_WIDTH - 16. - 24. - 48.;
 pub(crate) struct Results {
     scope: String,
     content: String,
+    // lint-allow(unbounded-growth): the filters of one search query, a handful at most, replaced with each new search
     params: Vec<(String, String)>,
     filters: usize,
     page: usize,
@@ -97,7 +98,7 @@ impl Waffle {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one search: ends when the request returns, or when Waffle is dropped; a stale page is ignored on arrival
     }
 
     fn set_search_page(&mut self, page: usize, cx: &mut Context<Self>) {
@@ -194,21 +195,16 @@ impl Waffle {
     }
 
     fn hit_card(&self, hit: &Message, ctx: &std::rc::Rc<crate::chat::RowContext>, cx: &mut Context<Self>) -> AnyElement {
-        let (hover, page) = (palette::hover(cx), palette::surface(palette::Level::Page, cx));
         let channel = match self.guild() {
             Some(guild) => guild.channels.iter().find(|c| c.id == hit.channel_id).cloned(),
             None => self.channel.clone().filter(|c| c.id == hit.channel_id),
         };
         let message_id = hit.id.clone();
-        ui::col()
-            .id(SharedString::from(format!("hit-{}", hit.id)))
-            .p_3()
-            .squircle(RADIUS_MD)
-            .bg(page)
-            .border_1()
-            .border_color(palette::line(cx))
-            .cursor_pointer()
-            .hover(move |s| s.bg(ui::mix(page, hover, 1.)))
+        ui::card(SharedString::from(format!("hit-{}", hit.id)), cx)
+            .bordered(cx)
+            .flex_col()
+            .items_stretch()
+            .justify_start()
             .child(crate::chat::search_hit(hit, ctx, cx).flex_none())
             .on_click(cx.listener(move |this, _, window, cx| {
                 let Some(channel) = channel.clone() else { return };

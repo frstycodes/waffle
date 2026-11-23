@@ -48,6 +48,7 @@ const RADIUS: f32 = 8.;
 
 // The players in the chat, by message and attachment, and which one is playing or fullscreen.
 struct Videos {
+    // lint-allow(unbounded-growth): one player per video attachment shown this session, a few hundred at most
     players: HashMap<String, Entity<VideoPlayer>>,
     playing: Option<WeakEntity<VideoPlayer>>,
     fullscreen: Option<Entity<VideoPlayer>>,
@@ -76,11 +77,13 @@ impl Level {
 }
 
 // The inline player for one video attachment, kept across renders so it remembers where it was.
+// lint-allow(custom-component): ui::media is an image, not a player; this wraps a cached VideoPlayer entity and builds no design-system piece itself
 pub fn tile(key: String, url: &str, poster: &str, cx: &mut App) -> AnyElement {
     if let Some(player) = cx.try_global::<Videos>().and_then(|v| v.players.get(&key)).cloned() {
         return player.into_any_element();
     }
     let (url, poster) = (url.to_owned(), poster.to_owned());
+    // lint-allow(render-work): built once per attachment, then every later render takes it from the map above
     let player = cx.new(|cx| VideoPlayer::new(url, poster, cx));
     cx.default_global::<Videos>().players.insert(key, player.clone());
     player.into_any_element()
@@ -267,7 +270,7 @@ impl VideoPlayer {
             })
             .ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one open: ends when it returns, or when the player is dropped
         cx.notify();
     }
 
@@ -355,7 +358,7 @@ impl VideoPlayer {
                 let Ok(true) = this.update(cx, |this, cx| this.tick(cx)) else { break };
             }
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): the tick loop ends when tick says stop or the player is dropped
     }
 
     fn tick(&mut self, cx: &mut Context<Self>) -> bool {
@@ -549,6 +552,7 @@ fn loading_dots() -> AnyElement {
         .children((0..3).map(|i| {
             div().size_1p5().rounded_full().bg(gpui_kit::white()).with_animation(
                 SharedString::from(format!("video-loading-{i}")),
+                // lint-allow(endless-animation): drawn only while the clip loads; the view swaps it out when it is ready or has failed
                 Animation::new(Duration::from_millis(1200)).repeat(),
                 move |dot, t| dot.opacity(0.35 + 0.65 * ((t - i as f32 * 0.18) * TAU).sin().max(0.)),
             )

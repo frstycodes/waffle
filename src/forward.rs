@@ -141,7 +141,7 @@ impl Waffle {
             let labels: Vec<String> = places.into_iter().map(|(_, label)| label).collect();
             this.update(cx, |this, cx| this.show_toast(forward_outcome(&labels, &failed), cx)).ok();
         })
-        .detach();
+        .detach(); // lint-allow(detached-task): one batch of sends: ends when the last returns, or when Waffle is dropped
         cx.notify(); // lint-allow(global-notify): the forward dialog is drawn by the root's overlays, over every column
     }
 

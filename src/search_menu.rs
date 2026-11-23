@@ -366,9 +366,9 @@ impl Waffle {
                 let first_recent = rows.iter().position(|r| matches!(r, Row::Recent(_)));
                 for (i, row) in rows.iter().enumerate() {
                     if Some(i) == first_recent {
-                        out.push(div().h(ui::HAIRLINE).mx_2().my_1().bg(palette::line(cx)).into_any_element());
+                        out.push(div().px_2().py_1().child(ui::divider(None, cx)).into_any_element());
                         let clear = ui::icon_button("search-history-clear", Glyph::Trash, "Clear history", cx).small().on_click(cx.listener(|this, _, _, cx| this.clear_search_history(cx)));
-                        out.push(group("History", cx).child(div().ml_auto().child(clear)).into_any_element());
+                        out.push(group("History", cx).child(ui::row().flex_1().justify_end().child(clear)).into_any_element());
                     }
                     out.push(self.search_row(i, row, pick, &avatars, cx));
                 }
@@ -402,7 +402,7 @@ impl Waffle {
                     ui::col()
                         .flex_1()
                         .child(ui::line(key.title()).text_color(strong))
-                        .child(div().min_w_0().truncate().child(ui::row().items_stretch().gap_1().child(div().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("{}:", key.word()))).child(key.takes())).text_size(ui::TEXT_XS).text_color(muted)),
+                        .child(ui::row().gap_1().text_size(ui::TEXT_XS).text_color(muted).child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("{}:", key.word()))).child(ui::line(key.takes()))),
                 )
                 .into_any_element(),
             Row::More => base
@@ -464,11 +464,11 @@ impl Waffle {
         ui::col()
             .child(
                 group(format!("{}:", key.word()), cx)
-                    .child(div().ml_auto().font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child(first.format("%B %Y").to_string()))
+                    .child(ui::row().flex_1().justify_end().font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child(first.format("%B %Y").to_string()))
                     .child(step("search-month-back", Glyph::ChevronLeft, "Previous month", -1))
                     .child(step("search-month-next", Glyph::ChevronRight, "Next month", 1)),
             )
-            .child(ui::row().items_stretch().w(px(CALENDAR_DAY * 7. + 12.)).mx_auto().pb_1().flex_wrap().gap_0p5().children(weekdays).children((0..blanks).map(|_| cell())).children(days))
+            .child(ui::row().justify_center().child(ui::row().items_stretch().w(px(CALENDAR_DAY * 7. + 12.)).pb_1().flex_wrap().gap_0p5().children(weekdays).children((0..blanks).map(|_| cell())).children(days)))
             .into_any_element()
     }
 }
@@ -476,12 +476,11 @@ impl Waffle {
 // A filter as a chip, in the field and in history: its word, then the avatar and name it stands for.
 pub(crate) fn token_chip(key: &str, label: &str, avatar: Option<String>, in_field: bool, cx: &App) -> gpui_kit::Div {
     let (fill, word) = if in_field { (palette::accent_soft(cx), palette::accent_ink(cx)) } else { (palette::selected(cx), palette::muted(cx)) };
-    ui::row()
-        .flex_none()
+    ui::pill(cx)
         .h(px(CHIP_HEIGHT))
         .px_1p5()
         .gap_1()
-        .squircle(RADIUS_XS)
+        .font_weight(FontWeight::NORMAL)
         .bg(fill)
         .text_size(ui::TEXT_SM)
         .text_color(palette::strong(cx))
@@ -510,7 +509,7 @@ fn saved_id(saved: &Saved, label: &str) -> Option<String> {
 }
 
 fn group(label: impl Into<SharedString>, cx: &App) -> gpui_kit::Div {
-    ui::row().gap_1().px_2p5().pt_2().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(label.into())
+    ui::section_label(label, ui::Heading::Muted, cx).px_2p5().pt_2().pb_1()
 }
 
 pub(crate) fn key_glyph(key: Key) -> Glyph {
