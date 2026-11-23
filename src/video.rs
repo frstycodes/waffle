@@ -468,6 +468,7 @@ fn fade() -> Transition {
 
 impl Render for VideoPlayer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("VideoPlayer");
         if self.fullscreen {
             // Leaving the OS full screen (green button, Esc on some platforms) leaves ours too.
             match window.is_fullscreen() {

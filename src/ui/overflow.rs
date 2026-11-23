@@ -44,6 +44,7 @@ struct OverflowList {
 
 impl Render for OverflowList {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("OverflowList");
         let long = self.entries.len() > SHOWN;
         let shown = shown(self.entries.len(), self.expanded);
         let rows = self.entries.iter().take(shown).enumerate().map(|(i, e)| row(i, e, cx));

@@ -14,6 +14,7 @@ use super::{DUR_PANEL, DUR_PRESS, SQUIRCLE, Squircle, control::part, stretch};
 use crate::{motion, palette};
 
 // Progress: the done part, a 4px gap, then what's left.
+// Keywords: progress bar, loading, upload, meter, track
 pub fn progress(fraction: f32, cx: &App) -> Div {
     let f = fraction.clamp(0., 1.);
     split_track(f, 6., 3., 2., cx).gap(px(4.))

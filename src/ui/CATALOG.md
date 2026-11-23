@@ -43,26 +43,15 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::toggle_row` — A setting that applies at once: its title and a line of detail, the switch at the end.
 - `ui::pick_row` — One of a set to pick from: the check or radio first, then its title and detail.
 - `ui::pick_row_icon` — A choice whose kind has an icon (a channel type, a place): the icon leads the title, as in Create Channel.
-- `ui::avatar` — A photo avatar.
-- `ui::dm_face` — A DM's face at `size` (design: navigation.html's .gav).
-- `ui::monogram` — An avatar without a photo: the name's initial on a gradient picked from the name.
-- `ui::name_hue` — The design's avatar hue: a stable hash of the name onto the colour wheel.
-- `ui::with_status` — An avatar with its presence mark at the corner.
 - `ui::speaking_ring` — Speaking: a gap in the surface's colour, then the accent ring.
 - `ui::avatar_stack` — Overlapping avatars, each ringed in `ring` (the surface colour) so they read apart.
 - `ui::stacked` — Avatars of one `size` (photos, monograms, a "+3"), overlapped 6px and ringed in the surface's colour.
 - `ui::capped_stack` — At most `cap` faces; past that the last slot becomes a "+n" chip in `more_fill`, so the stack stays a glance, not a roster.
 - `ui::listed_stack` — A capped stack whose "+n" isn't a dead end: hovering it lists everyone, under `title`.
-- `ui::cut_out` — Paints `el` in the surface colour it stands in for; over the native sidebar, where that colour is clear, it cuts its shape out of whatever w
-- `ui::gap` — The gap `spread` wide around a round mark or an overlapping avatar, separating it from what's under it.
-- `ui::server_tile` — A server's icon as a squircle tile at `size`, or its initials on the selected fill when it has none.
-- `ui::app_tile` — An app's icon as a server tile, or without one its initial on the monogram gradient, hued by `id` so an app keeps its colour whatever it's c
-- `ui::server_tile_badged` — A server tile with `badge` (a channel's kind) on a round mark at its bottom-right, ringed 2px in `surface`, the colour the tile sits on, so 
-- `ui::status_mark` — A presence mark for an avatar's corner.
 - `ui::surface` — A floating surface (menu, popover, picker): rounded, ringed and shadowed, with its content inset so nothing reaches the rounded edge.
-- `ui::floating_bar` — A floating surface's entrance (menus, popovers, pickers, dialogs): it fades in and grows from 0.95 over the pop timing, after `delay` (a sub
+- `ui::floating_bar` — A bar that floats over a page's foot (unsaved changes, bulk actions): the overlay card at the settings column's width.
 - `ui::foot_dock` — Docks a floating bar 16px above the foot of the nearest relative parent, centred, rising in.
-- `ui::rise`
+- `ui::rise` — A floating surface's entrance (menus, popovers, pickers, dialogs): it fades in and grows from 0.95 over the pop timing, after `delay` (a sub
 - `ui::corner` — A transform origin at one of an element's corners: where a floating surface rises from, toward its trigger.
 - `ui::Notice`
 - `ui::callout` — An inline notice inside the view it's about: a tinted surface, a leading icon, a title and a line.
@@ -112,6 +101,23 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::dialog_scroll` — The part of a dialog between its fixed header and footer that scrolls when the window is too short, fading out at whichever edge has more be
 - `ui::dialog_body` — A dialog's usual body: 24px in, sections 16px apart.
 - `ui::modal` — Dims the window behind `dialog` and centres it.
+
+## src/ui/face.rs
+
+- `ui::avatar` — A photo avatar.
+- `ui::dm_face` — A DM's face at `size` (design: navigation.html's .gav).
+- `ui::monogram` — An avatar without a photo: the name's initial on a gradient picked from the name.
+- `ui::name_hue` — The design's avatar hue: a stable hash of the name onto the colour wheel.
+- `ui::gap` — The gap `spread` wide around a round mark or an overlapping avatar, separating it from what's under it.
+- `ui::server_tile` — A server's icon as a squircle tile at `size`, or its initials on the selected fill when it has none.
+- `ui::app_tile` — An app's icon as a server tile, or without one its initial on the monogram gradient, hued by `id` so an app keeps its colour whatever it's c
+- `ui::status_mark` — A presence mark, bare: Discord's shapes, never colour alone (a dot for online, a moon for idle, a bar for do not disturb, a ring for offline
+- `ui::MarkFill` — What an icon mark is filled with.
+- `ui::Spot` — Where on a face a mark sits.
+- `ui::Shape` — A face's outline, which decides where its corner marks land: on a round face a mark sits on the curve, tucked in; on a tile it hangs past th
+- `ui::Badge` — One mark for a face's corner: any element, ringed by the face in its surface colour.
+- `ui::badge_of` — A corner mark from any element (a count, an icon mark, a status), round unless given a `radius`.
+- `ui::badged` — A face (avatar, monogram, server or app tile) ready to take corner marks; see `Badged`.
 
 ## src/ui/feedback.rs
 

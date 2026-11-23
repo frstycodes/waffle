@@ -84,6 +84,7 @@ pub fn button(id: impl Into<ElementId>, tone: Tone, cx: &App) -> Control {
 }
 
 // A square icon-only button that fills on hover, with its tooltip: 32px (`.small()` 24, `.large()` 40).
+// Keywords: glyph button, toolbar, square, close, x
 pub fn icon_button(id: impl Into<ElementId>, glyph: Glyph, tooltip: impl Into<SharedString>, cx: &App) -> Control {
     let look = Look {
         rest: gpui_kit::transparent_black(),
@@ -110,6 +111,7 @@ pub fn round_button(id: impl Into<ElementId>, glyph: Glyph, tooltip: impl Into<S
 }
 
 // A filter or toggle chip; pressed takes the accent tint and a half-accent edge.
+// Keywords: pill, tag, filter, toggle, token
 pub fn chip(id: impl Into<ElementId>, glyph: Option<Glyph>, label: impl Into<SharedString>, on: bool, cx: &App) -> Control {
     chip_look(id, on, cx).when_some(glyph, |c, glyph| c.child(Icon::new(glyph).size(px(16.)))).child(label.into())
 }
@@ -142,6 +144,7 @@ pub fn swatch(id: impl Into<ElementId>, color: Hsla, on: bool, ring: Hsla) -> Co
 // A row inside a floating surface (menu, popover, picker): no fill until hovered, then the hover fill and
 // the strong ink fade in. Callers add the lead glyph, the label (`flex_1`) and any trailing mark;
 // `.danger(cx)` makes it the destructive row.
+// Keywords: list row, item, option, hover row
 pub fn menu_row(id: impl Into<ElementId>, cx: &App) -> Control {
     let hover = palette::hover(cx);
     let look = Look { rest: gpui_kit::transparent_black(), hover, press: hover, ink: palette::text(cx), ink_hover: palette::strong(cx), edge: None };
@@ -568,6 +571,7 @@ pub fn tip(text: impl Into<SharedString>, _: &mut Window, cx: &mut App) -> AnyVi
 
 impl Render for Tip {
     fn render(&mut self, _: &mut Window, cx: &mut gpui_kit::Context<Self>) -> impl IntoElement {
+        crate::perf::probe("Tip");
         div()
             .max_w(px(240.))
             .px(px(10.))

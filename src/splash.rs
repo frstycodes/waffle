@@ -53,6 +53,7 @@ pub fn open(stage: impl Into<SharedString>, cx: &mut App) -> Option<WindowHandle
 
 impl Render for Splash {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("Splash");
         let bg = palette::surface(Level::Raised, cx);
         // Opened without gpui-kit's root view, so the app font is set here.
         // GAP: the design's 0 18 40 drop shadow falls outside this borderless window's bounds.

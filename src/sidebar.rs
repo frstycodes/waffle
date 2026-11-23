@@ -23,6 +23,8 @@ use crate::{
 };
 
 mod dm_row;
+mod preview;
+use preview::ServerPreview;
 
 // Rail geometry: 44px tiles 8px apart (at Default density), centred in the 68px rail, so the state pill
 // sits on its edge.
@@ -452,7 +454,15 @@ impl Waffle {
         let item_id = SharedString::from(format!("rail-{key}"));
         let carried = self.drag_motion.row(&item_id);
         let face = match carried {
-            RowDrag::Rest => render_face(face, TILE, ui::RADIUS_LG, selected, open, cx),
+            RowDrag::Rest => {
+                let behind = crate::material::behind_sidebar(rail);
+                let media = media.filter(|_| badge_scale > 0.99).map(|m| media_mark(m, cx));
+                let tile = ui::badged(render_face(face, TILE, ui::RADIUS_LG, selected, open, cx), TILE, ui::Shape::Tile, behind).count_scaled(mentions, badge_scale);
+                match media {
+                    Some((icon, fill)) => tile.icon(ui::Spot::TopRight, icon, fill).into_any_element(),
+                    None => tile.into_any_element(),
+                }
+            }
             RowDrag::Hole => hole(div().size(px(TILE)).squircle(ui::RADIUS_LG), cx).into_any_element(),
             RowDrag::Hidden => div().size(px(TILE)).into_any_element(),
         };
@@ -486,8 +496,6 @@ impl Waffle {
                     })
                     .tooltip_placement(TooltipPlacement::Side),
             )
-            .when(mentions > 0 && badge_scale > 0.01, |item| item.child(rail_count(mentions, badge_scale, crate::material::behind_sidebar(rail))))
-            .children(media.filter(|_| badge_scale > 0.99).map(|m| media_badge(m, crate::material::behind_sidebar(rail), cx)))
             .when(combine_ring, |item| item.child(combine_ring_mark()))
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| this.set_hovered(&hover_key, *hovered, cx)))
             .when_some(guild_id.clone(), |item, guild_id| item.on_click(cx.listener(move |this, _, window, cx| this.open_guild(Some(guild_id.clone()), window, cx))))
@@ -1651,13 +1659,7 @@ fn flying_tile(mini: &Mini, badge: &Badge, head_pill: f32, i: usize, total: usiz
         Some(url) => img(url.clone()).size(px(size)).squircle(lerp(ui::RADIUS_XS, ui::RADIUS_LG)).into_any_element(),
         None => letters_tile(&mini.letters, size, lerp(ui::RADIUS_XS, ui::RADIUS_LG), cx).into_any_element(),
     };
-    let tile = div()
-        .absolute()
-        .left(px(lerp(from.0, to.0)))
-        .top(px(lerp(from.1, to.1)))
-        .size(px(size))
-        .child(face)
-        .when(badge.mentions > 0, |tile| tile.child(count_chip(badge.mentions, t, rail).absolute().right(px(-5. - COUNT_RING)).bottom(px(-4. - COUNT_RING))));
+    let tile = div().absolute().left(px(lerp(from.0, to.0))).top(px(lerp(from.1, to.1))).child(ui::badged(face, size, ui::Shape::Tile, rail).count_scaled(badge.mentions, t));
     let pill = (badge.pill > 0.).then(|| {
         let height = lerp(head_pill, badge.pill);
         let center = lerp(TILE / 2., slot_y(i) + TILE / 2.);
@@ -1748,44 +1750,6 @@ fn letters_tile(label: &str, size: f32, radius: f32, cx: &App) -> Div {
 
 // The hairline between home, the servers and the actions.
 // Add and Discover: a quiet tile that lifts to the raised tone on hover.
-// A server's hover card, as Discord's: its name, then who's talking in voice and who's live.
-const PREVIEW_FACES: usize = 6;
-
-#[derive(Clone)]
-struct ServerPreview {
-    name: SharedString,
-    voice: Vec<ui::Entry>,
-    live: Vec<ui::Entry>,
-    muted: bool,
-}
-
-impl ServerPreview {
-    fn has_activity(&self) -> bool {
-        !self.voice.is_empty() || !self.live.is_empty()
-    }
-}
-
-impl Render for ServerPreview {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let surface = palette::surface(palette::Level::Overlay, cx);
-        let muted = palette::muted(cx);
-        let (wash, strong) = (palette::selected(cx), palette::strong(cx));
-        // Six slots at most per row, the last a "+n" when they don't all fit; the card stays a glance, not a roster.
-        let row = |key: &'static str, title: &'static str, glyph: Glyph, people: &[ui::Entry]| {
-            div().flex().items_center().gap_2().child(Icon::new(glyph).size(ui::ICON_MD).text_color(muted)).child(ui::listed_stack(key, title, people.to_vec(), PREVIEW_FACES, 24., surface, wash, strong))
-        };
-        // Anchored flush to the tile; plain tooltips get their 12px gap from Tooltip's own margin.
-        div().pl_3().child(ui::surface(cx)
-            .max_w(px(280.))
-            .p_3()
-            .gap_2()
-            .child(div().truncate().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(self.name.clone()))
-            .when(!self.voice.is_empty(), |c| c.child(row("server-preview-voice", "In voice", Glyph::VolumeHigh, &self.voice)))
-            .when(!self.live.is_empty(), |c| c.child(row("server-preview-live", "Live", Glyph::ShareScreen, &self.live)))
-            .when(self.muted, |c| c.child(div().text_size(ui::TEXT_XS).text_color(muted).child("Muted"))))
-    }
-}
-
 fn rail_action(id: &'static str, icon: Icon, tooltip: &'static str, cx: &App) -> Stateful<Div> {
     let (raised, strong) = (crate::material::lifted(palette::surface(palette::Level::Raised, cx), cx), palette::strong(cx));
     div()
@@ -1803,24 +1767,6 @@ fn rail_action(id: &'static str, icon: Icon, tooltip: &'static str, cx: &App) ->
         .child(icon.size(ui::ICON_XL))
         .tooltip(move |window, cx| ui::tip(tooltip, window, cx))
         .tooltip_placement(TooltipPlacement::Side)
-}
-
-// The mention count on a tile's corner, ringed in the rail so it reads apart from the art.
-fn rail_count(count: u32, scale: f32, rail: Hsla) -> Div {
-    count_chip(count, scale, rail).absolute().right(px(RAIL_WIDTH - TILE_X - TILE - 5. - COUNT_RING)).bottom(px(-4. - COUNT_RING))
-}
-
-const COUNT_RING: f32 = 3.;
-
-// The count itself, unplaced; `scale` grows it in with a folder's trip.
-fn count_chip(count: u32, scale: f32, rail: Hsla) -> Div {
-    let chip = div().p(px(COUNT_RING)).rounded_full();
-    // The ring's cutout erases the glass behind it at full size whatever the scale or opacity, so while the
-    // count grows or shrinks it goes without, or an empty hole is left where it was.
-    let chip = if scale >= 0.999 { ui::cut_out(chip, rail) } else { chip };
-    chip.scale(scale.max(0.))
-        .opacity(scale.clamp(0., 1.))
-        .child(ui::count_badge(count).min_w(px(18.)).h(px(18.)).px(px(5.)).text_size(ui::TEXT_XS))
 }
 
 // What a server's icon badge shows, as Discord's GuildMediaStateStore decides it; the highest wins.
@@ -1860,19 +1806,16 @@ fn media_state(states: &[crate::discord::VoiceState], me: &str, connected: Optio
     pick(live.iter().any(|s| s.streaming), live.iter().any(|s| s.camera), !live.is_empty()).map(|kind| Media { kind, connected: false })
 }
 
-// The badge on a tile's top-right corner, ringed in the rail like the count below it.
-fn media_badge(media: Media, rail: Hsla, cx: &App) -> Div {
-    const RING: f32 = 3.;
+// The mark on a tile's top-right corner for its voice: dark with white ink in both themes, as Discord draws
+// it; green while you're connected.
+fn media_mark(media: Media, cx: &App) -> (Icon, ui::MarkFill) {
     let icon = match media.kind {
         MediaKind::Voice => Icon::new(Glyph::VolumeHigh),
         MediaKind::Video => Nav::CameraFill.icon(),
         MediaKind::Screen => Icon::new(Glyph::ShareScreen),
     };
-    // Dark with white ink in both themes, as Discord draws it; green while you're connected.
     let fill = if media.connected { palette::status_in(Status_::Online, cx) } else { palette::media_badge() };
-    ui::cut_out(div().absolute().right(px(RAIL_WIDTH - TILE_X - TILE - 4. - RING)).top(px(-4. - RING)).p(px(RING)).rounded_full(), rail).child(
-        div().size_5().rounded_full().bg(fill).flex().items_center().justify_center().text_color(gpui_kit::white()).child(icon.size(ui::ICON_XS)),
-    )
+    (icon, ui::MarkFill::Solid(fill))
 }
 
 // Going onto a tile (making or joining a folder): a ring around it. Reordering shows as the rail making room.

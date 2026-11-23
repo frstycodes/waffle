@@ -82,6 +82,7 @@ impl ReactorsCard {
 
 impl Render for ReactorsCard {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("ReactorsCard");
         let Some(waffle) = self.this.upgrade() else { return div().into_any_element() };
         let waffle = waffle.read(cx);
         // Its link opened the dialog; a hoverable tooltip stays up while the pointer rests on it, so it steps aside.

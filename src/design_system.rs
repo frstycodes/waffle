@@ -2,7 +2,9 @@
 // both themes. Open it with `WAVE_DESIGN=1 cargo run`; `WAVE_DESIGN=buttons,choices` shows only those
 // sections. Sections, their order and their contents mirror design/foundations.html and
 // design/primitives.html (section ids as there), so a drift between the two shows up side by side.
+mod faces;
 mod foundations;
+use faces::{avatars, badged_faces};
 use foundations::{space, type_scale};
 use std::time::{Duration, Instant};
 
@@ -138,6 +140,7 @@ impl DesignSystem {
 
 impl Render for DesignSystem {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("DesignSystem");
         let dark = cx.theme().is_dark();
         let header = self.header(dark, window, cx).into_any_element();
         let mut sections: Vec<gpui_kit::AnyElement> = Vec::new();
@@ -174,6 +177,7 @@ impl Render for DesignSystem {
         }
         if self.shows("avatars") {
             add("avatars", avatars(cx).into_any_element());
+            add("badged faces", badged_faces(cx).into_any_element());
         }
         if self.shows("feedback") {
             add("feedback", self.feedback(window, cx).into_any_element());
@@ -800,45 +804,6 @@ fn badges(cx: &App) -> impl IntoElement {
     )
 }
 
-fn avatars(cx: &App) -> impl IntoElement {
-    let ring = palette::surface(Level::Sidebar, cx);
-    let page = palette::surface(Level::Page, cx);
-    let sized = |size: f32| {
-        let mark = ui::monogram("Mira", size);
-        if size < 32. {
-            return div().child(mark);
-        }
-        ui::with_status(mark, Status::Online, size, page, cx)
-    };
-    let person = |name: &'static str, label: &'static str, status: Option<Status>| {
-        let avatar = match status {
-            Some(status) => ui::with_status(ui::monogram(name, 40.), status, 40., ring, cx),
-            None => ui::monogram(name, 40.).shadow(ui::speaking_ring(ring)),
-        };
-        row().child(avatar).child(div().text_color(palette::muted(cx)).child(label))
-    };
-    let more = div().size_6().rounded_full().bg(palette::surface(Level::Overlay, cx)).text_color(palette::strong(cx)).text_size(ui::TEXT_XXS).font_weight(FontWeight::SEMIBOLD).flex().items_center().justify_center().child("+3");
-    section("Avatars and status", "Status is never colour alone: online is a dot, idle a moon, do not disturb a bar, offline a ring. Speaking is the accent ring plus the bars.", cx).child(
-        board(cx)
-            .gap_6()
-            .child(row().gap_4().items_end().children([16., 20., 24., 32., 40., 56., 80.].map(sized)).child(note("16 20 24 32 40 56 80 · below 24 no initials, no status", cx)))
-            .child(
-                row()
-                    .gap_6()
-                    .child(person("Mira", "Online", Some(Status::Online)))
-                    .child(person("Ana", "Idle", Some(Status::Idle)))
-                    .child(person("Theo", "Do not disturb", Some(Status::Dnd)))
-                    .child(person("Jun", "Offline", Some(Status::Offline)))
-                    .child(person("Rosa", "Speaking", None)),
-            )
-            .child(
-                row()
-                    .gap_3()
-                    .child(ui::stacked([ui::monogram("Mira", 24.).into_any_element(), ui::monogram("Theo", 24.).into_any_element(), ui::monogram("Ana", 24.).into_any_element(), more.into_any_element()], 24., ring))
-                    .child(div().text_color(palette::muted(cx)).child("6 watching")),
-            ),
-    )
-}
 
 fn layout(cx: &App) -> impl IntoElement {
     section("Dividers and tiles", "Dividers separate groups; a label on a divider names what follows. Icon tiles lead rows that need more presence than a bare icon.", cx).child(

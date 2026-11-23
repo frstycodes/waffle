@@ -234,7 +234,9 @@ impl Waffle {
             _ if place.channel.private || place.locked => Glyph::HashtagLock,
             _ => Glyph::Hashtag,
         };
-        ui::server_tile_badged(guild.icon.as_deref(), &guild.name, LEAD, glyph, surface, cx).into_any_element()
+        ui::badged(ui::server_tile(guild.icon.as_deref(), &guild.name, LEAD, cx), LEAD, ui::Shape::Tile, surface)
+            .icon(ui::Spot::BottomRight, Icon::new(glyph), ui::MarkFill::Surface)
+            .into_any_element()
     }
 
     // What goes out: the text, two lines at most, or what it carries, with the first picture at the right.

@@ -289,6 +289,7 @@ pub struct Ghost {
 
 impl Render for Ghost {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("Ghost");
         let mut held = self.hand.borrow_mut();
         let anchor = window.mouse_position() - held.offset;
         let target = held.lock_x.map_or(anchor, |x| point(x, anchor.y));

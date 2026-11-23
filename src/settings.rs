@@ -1069,7 +1069,7 @@ impl Waffle {
         let search = div().flex_none().pb_3().child(ui::search_field("settings-search", &self.settings_search, cx).on_sidebar());
         let me = (!searching).then(|| self.me.clone()).flatten().map(|me| {
             let sidebar = crate::material::sidebar_fill(cx);
-            let avatar = div().relative().flex_none().child(ui::avatar(me.avatar.clone(), 32.)).child(div().absolute().right_neg_0p5().bottom_neg_0p5().child(ui::status_mark(self.my_status, 12., sidebar, cx)));
+            let avatar = ui::badged(ui::avatar(me.avatar.clone(), ui::AVATAR_LG), ui::AVATAR_LG, ui::Shape::Round, sidebar).status(Some(self.my_status));
             let text = div()
                 .flex_1()
                 .min_w_0()
@@ -1171,11 +1171,7 @@ impl Waffle {
         // Over a banner Waffle doesn't choose, so its own scrim, not a theme fill.
         let banner_button = ui::button("change-banner", Tone::OnMedia, cx).small().child("Change banner").on_click(cx.listener(|this, _, _, cx| this.pick_profile_image(profile::ProfileImage::Banner, cx)));
         let banner = div().relative().h(px(120.)).child(banner_art).child(div().absolute().top_3().right_3().child(banner_button));
-        let avatar = div()
-            .relative()
-            .flex_none()
-            .child(ui::avatar(me.avatar.clone(), 100.).border(px(6.)).border_color(fill))
-            .child(div().absolute().right_1().bottom_1().p_0p5().rounded_full().bg(fill).child(ui::status_mark(self.my_status, 28., fill, cx)));
+        let avatar = ui::badged(ui::avatar(me.avatar.clone(), PROFILE_AVATAR).border(px(6.)).border_color(fill), PROFILE_AVATAR, ui::Shape::Round, fill).mark(ui::Spot::BottomRight, ui::Badge::status(self.my_status, PROFILE_STATUS));
         let identity = div()
             .mt(px(-42.))
             .px_2p5()
@@ -2123,6 +2119,10 @@ impl Hairlines {
         std::mem::replace(&mut self.0, true)
     }
 }
+
+// The profile page's avatar and the presence mark on it, larger than any face elsewhere.
+const PROFILE_AVATAR: f32 = 100.;
+const PROFILE_STATUS: f32 = 28.;
 
 const COPIED_FOR: Duration = Duration::from_secs(2);
 const UNDO_FOR: Duration = Duration::from_secs(8);

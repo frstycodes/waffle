@@ -38,6 +38,7 @@ impl Render for Waffle {
     // The shell (shell.rs) caches this view's drawing, so this runs only when the app changed; GIFs
     // placed while it runs are played by the GIF layer beside it.
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("Waffle");
         crate::gif::begin_layout();
         let images = crate::images::cache(cx);
         images.update(cx, |images, cx| images.next_frame(cx));
@@ -625,25 +626,14 @@ fn avatar_frame(url: &str, decoration: Option<&str>, size: f32, status: Option<d
         Some(key) => playing_image(still, SharedString::from(format!("{key}-{part}")), look).into_any_element(),
         None => look(img(still.to_owned())).into_any_element(),
     };
-    // .status: 30% of the avatar (9..16px), ringed 2px in the surface, its corner just past the avatar's.
-    let dot = (size * 0.3).clamp(9., 16.).round();
-    let inset = size * 0.04 - 2. - STATUS_RING;
     let frame = size * 1.2;
-    div()
+    let face = div()
         .relative()
         .size(px(size))
         .flex_none()
         .child(picture(url, "avatar", |i| i.size_full().rounded_full()))
-        .children(decoration.map(|d| div().absolute().size(px(frame)).left(px((size - frame) / 2.)).top(px((size - frame) / 2.)).child(picture(d, "decoration", |i| i.size_full()))))
-        .children(status.map(|status| {
-            // The phone stands taller than the dot, growing upward from the same corner.
-            let tall = if status == discord::Mark::Mobile { dot * PHONE_ASPECT } else { dot };
-            ui::cut_out(div().absolute().right(px(inset)).bottom(px(inset)).w(px(dot + 2. * STATUS_RING)).h(px(tall + 2. * STATUS_RING)).rounded(px(if tall > dot { dot * 0.28 + STATUS_RING } else { dot })), surface)
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(status_mark(status, dot, surface))
-        }))
+        .children(decoration.map(|d| div().absolute().size(px(frame)).left(px((size - frame) / 2.)).top(px((size - frame) / 2.)).child(picture(d, "decoration", |i| i.size_full()))));
+    ui::badged(face, size, ui::Shape::Round, surface).status(status)
         .into_any_element()
 }
 
@@ -660,34 +650,6 @@ fn playing_image(still: &str, key: SharedString, look: fn(gpui_kit::Img) -> gpui
         .with_loading(move || look(img(loading.clone())).into_any_element())
         .with_fallback(move || look(img(fallback.clone())).into_any_element())
         .id(key)
-}
-
-const STATUS_RING: f32 = 2.;
-
-const PHONE_ASPECT: f32 = 1.5;
-
-pub fn status_mark(status: discord::Mark, dot: f32, surface: Hsla) -> AnyElement {
-    use discord::{Mark, Status};
-    let color = match status {
-        Mark::Status(status) => palette::status(status),
-        Mark::Mobile => palette::status(Status::Online),
-        Mark::Streaming => palette::streaming(),
-    };
-    let mark = div().relative().size(px(dot)).rounded_full().bg(color).overflow_hidden();
-    let cut = |w: f32, h: f32| ui::cut_out(div().absolute().w(px(w)).h(px(h)), surface);
-    match status {
-        Mark::Status(Status::Online) => mark,
-        Mark::Status(Status::Idle) => mark.child(cut(dot * 0.62, dot * 0.62).rounded_full().left(px(-dot * 0.12)).top(px(-dot * 0.12))),
-        Mark::Status(Status::Dnd) => mark.flex().items_center().justify_center().child(cut(dot * 0.62, (dot * 0.24).max(2.)).relative().rounded(px(dot))),
-        Mark::Status(Status::Offline) => mark.flex().items_center().justify_center().child(cut(dot * 0.46, dot * 0.46).relative().rounded_full()),
-        // A handset: a screen cut out of the body, a chin below it for the home bar.
-        Mark::Mobile => {
-            let side = (dot * 0.18).max(1.5);
-            mark.h(px(dot * PHONE_ASPECT)).rounded(px(dot * 0.28)).child(cut(dot - 2. * side, dot * PHONE_ASPECT - side - dot * 0.42).left(px(side)).top(px(side)).rounded(px(dot * 0.08)))
-        }
-        Mark::Streaming => mark.flex().items_center().justify_center().text_color(gpui_kit::white()).child(Icon::new(Glyph::Play).size(px((dot * 0.62).round()))),
-    }
-    .into_any_element()
 }
 
 /// Where the traffic lights sit at 100%: centred in the 36px title strip, leaving the first 72px to them.

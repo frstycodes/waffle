@@ -545,6 +545,7 @@ struct ActivityTip(Vec<StatusItem>);
 
 impl Render for ActivityTip {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::probe("ActivityTip");
         let green = palette::positive_ink_inverted(cx);
         let rows = self.0.iter().map(|item| {
             let channel = item.channel.as_ref().map(|channel| {
