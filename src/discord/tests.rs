@@ -735,6 +735,22 @@ fn presence_mark_follows_device_and_stream() {
 }
 
 #[test]
+fn parses_outbox() {
+    let body = json!({ "entries": [
+        { "id": "1", "content_type": 1, "extra": { "game_name": "Celeste", "application_id": "9" }, "traits": [{ "type": 1, "first_time": true }, { "type": 2, "duration_seconds": 9000 }, { "type": 8, "streak_count_days": 4 }] },
+        { "id": "2", "content_type": 2, "extra": { "media_title": "Frieren", "media_subtitle": "S1E3" }, "traits": [] },
+        { "id": "3", "content_type": 5, "extra": { "entries": [{ "media": { "title": "Aqua Regia", "artists": [{ "name": "Sleep Token" }] } }] } },
+        { "id": "4", "content_type": 7, "extra": {} },
+        { "content_type": 1, "extra": { "game_name": "no id" } },
+    ] });
+    let rows = parse_outbox(&body);
+    assert_eq!(rows.len(), 3);
+    assert_eq!((rows[0].kind, rows[0].title.as_str(), rows[0].first_time, rows[0].marathon_hours, rows[0].streak_days), (RecentKind::Played, "Celeste", true, Some(3), Some(4)));
+    assert_eq!((rows[1].kind, rows[1].subtitle.as_deref()), (RecentKind::Watched, Some("S1E3")));
+    assert_eq!((rows[2].kind, rows[2].title.as_str(), rows[2].subtitle.as_deref()), (RecentKind::Listened, "Aqua Regia", Some("Sleep Token")));
+}
+
+#[test]
 fn parses_profile() {
     let body = json!({
         "user": { "id": "9", "username": "aayurene", "global_name": "Aayurene", "banner": "a_b", "avatar_decoration_data": { "asset": "deco" } },

@@ -401,6 +401,12 @@ impl Client {
         Ok(profile)
     }
 
+    /// What they've been doing lately: their content outbox, for the full profile's Recent activity.
+    pub async fn recent_activity(&self, user_id: &str) -> Result<Vec<RecentEntry>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, &format!("/content-inventory/users/{user_id}/outbox"))).await?;
+        Ok(parse_outbox(&body))
+    }
+
     // A profile effect's layers, from the collectibles product its sku names.
     pub async fn profile_effect(&self, sku: &str) -> Result<Vec<EffectLayer>, String> {
         let body = self.run(self.request(reqwest::Method::GET, &format!("/collectibles-products/{sku}"))).await?;

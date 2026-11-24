@@ -60,7 +60,7 @@ pub(super) fn demo_profile(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
         guild.voice_states.push(VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "8388608".into(), user: Some(user("8388608", "Wren")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false, suppress: false, requested_at: None });
     }
     let mut zoe = user("8388608", "Wren");
-    zoe.tag = Some(GuildTag { text: "wony".into(), badge: Some("brand/icons/sticker.png".into()) });
+    zoe.tag = Some(GuildTag { text: "wony".into(), badge: Some("brand/icons/sticker.png".into()), guild_id: Some("1".into()) });
     zoe.decoration = Some("demo/decoration.png".into());
     waffle.open_profile(zoe, demo_at(520., 120.), cx);
     let badge = |name: &str, description: &str| crate::discord::Badge { description: description.into(), icon: format!("brand/icons/{name}.png"), link: Some("https://discord.com/nitro".into()) };

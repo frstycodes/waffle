@@ -35,6 +35,30 @@ pub struct MutualGuild {
     pub nick: Option<String>,
 }
 
+// One row of a profile's Recent activity, from their content outbox (`/content-inventory/users/{id}/outbox`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RecentEntry {
+    pub id: String,
+    pub kind: RecentKind,
+    // The game, show or track.
+    pub title: String,
+    // The episode, artist, or nothing for a game.
+    pub subtitle: Option<String>,
+    pub app_id: Option<String>,
+    // Discord's traits: first time playing, one long session's hours, days in a row.
+    pub first_time: bool,
+    pub marathon_hours: Option<u64>,
+    pub streak_days: Option<u64>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RecentKind {
+    #[default]
+    Played,
+    Watched,
+    Listened,
+}
+
 // An account linked on their profile (`connected_accounts[]`); `kind` is Discord's platform type ("spotify").
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Connection {

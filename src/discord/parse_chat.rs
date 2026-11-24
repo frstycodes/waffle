@@ -270,6 +270,42 @@ pub(crate) fn parse_profile(user_id: &str, body: &Value) -> Profile {
     }
 }
 
+// A user's content outbox as Recent activity rows. Discord's `content_type`: 1 played and 3 top game, 2 watched,
+// 4 listened and 5 a listening session; its trait types: 1 first time, 2 duration in seconds, 8 days in a row.
+// Not verified against a live response: read from Discord's client, which renders these fields.
+pub(crate) fn parse_outbox(body: &Value) -> Vec<RecentEntry> {
+    let trait_of = |e: &Value, kind: u64| e["traits"].as_array().and_then(|t| t.iter().find(|t| t["type"].as_u64() == Some(kind))).cloned();
+    body["entries"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| {
+            let extra = &e["extra"];
+            let (kind, title, subtitle) = match e["content_type"].as_u64()? {
+                1 | 3 => (RecentKind::Played, extra["game_name"].as_str()?.to_owned(), None),
+                2 => (RecentKind::Watched, extra["media_title"].as_str()?.to_owned(), extra["media_subtitle"].as_str().map(str::to_owned)),
+                4 | 5 => {
+                    let media = &extra["entries"][0]["media"];
+                    let media = if media.is_object() { media } else { &extra["media"] };
+                    (RecentKind::Listened, media["title"].as_str()?.to_owned(), media["artists"][0]["name"].as_str().map(str::to_owned))
+                }
+                _ => return None,
+            };
+            let hours = trait_of(e, 2).and_then(|t| t["duration_seconds"].as_u64()).map(|s| (s + 1800) / 3600).filter(|h| *h > 0);
+            Some(RecentEntry {
+                id: e["id"].as_str()?.to_owned(),
+                kind,
+                title,
+                subtitle,
+                app_id: extra["application_id"].as_str().map(str::to_owned),
+                first_time: trait_of(e, 1).is_some_and(|t| t["first_time"].as_bool() == Some(true)),
+                marathon_hours: hours,
+                streak_days: trait_of(e, 8).and_then(|t| t["streak_count_days"].as_u64()).filter(|d| *d > 1),
+            })
+        })
+        .collect()
+}
+
 // The unexpired profile effect in a `collectibles[]` list, `{sku_id, type, expires_at}`.
 // Not verified: that the profile effect's collectible type is 1 (Discord's enum value wasn't read).
 pub(super) fn effect_sku(collectibles: &Value) -> Option<String> {
