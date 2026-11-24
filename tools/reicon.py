@@ -183,7 +183,7 @@ MAP = [
     ("arrow-line-up", "Chrome", "Move to top", "arrow-up5"),
     ("arrow-line-down", "Chrome", "Move to bottom", "CUSTOM:arrow-down-line"),
     ("arrow-line-right", "Chrome", "Move to end", "arrow-right5"),
-    ("arrow-square-out", "Chrome", "Open externally", "arrow-up-right-square"),
+    ("arrow-square-out", "Chrome", "Open externally", "CUSTOM:arrow-up-right-line"),
     ("arrow-square-in", "Chrome", "Open in app", "arrow-down-left-square"),
     ("arrows-in-line-vertical", "Chrome", "Collapse all", "CUSTOM:collapse-all"),
     ("arrows-down-up", "Chrome", "Sort", "sort"),
@@ -477,6 +477,7 @@ def custom(reicon, name):
         # Reicon has no line arrow pointing down; its up arrow turned over.
         "arrow-down-line": lambda: f'<g transform="rotate(180 12 12)">{glyph(reicon, "arrow-up5")}</g>',
         "arrow-left-line": lambda: f'<g transform="rotate(-90 12 12)">{glyph(reicon, "arrow-up5")}</g>',
+        "arrow-up-right-line": lambda: f'<g transform="rotate(45 12 12)">{glyph(reicon, "arrow-up5")}</g>',
         "collapse-all": lambda: '<path d="M8 3.5 12 7.5 16 3.5M8 20.5 12 16.5 16 20.5M4.5 12h15"/>',
         "win-max": lambda: f'<path d="{sq(5, 5, 14, 14, 3)}"/>',
         "win-restore": lambda: (f'<mask id="front" maskUnits="userSpaceOnUse" x="-2" y="-2" width="28" height="28"><rect x="-2" y="-2" width="28" height="28" fill="#fff"/>'
