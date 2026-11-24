@@ -342,7 +342,7 @@ impl Waffle {
             feed_focus,
             call_focus: None,
             profiles: query::Query::new("profiles", Duration::from_secs(5 * 60)),
-            profile_effects: HashMap::new(),
+            profile_effects: Default::default(),
             link_previews: link_preview::previews(),
             reactors: HashMap::new(),
             reactions_dialog: None,

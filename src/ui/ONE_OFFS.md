@@ -321,6 +321,7 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/poll.rs` — the poll creator is drawn by the root's overlays, over every column
 - `src/poll.rs` — the poll creator is drawn by the root's overlays, over every column
 - `src/profile.rs` — the effect draws on the popout and on the DM panel's card
+- `src/profile.rs` — the frame draws on the popout and on the DM panel's card
 - `src/profile.rs` — the profile draws in the popout and in the DM panel
 - `src/profile/activity.rs` — joining a call changes the rail, the channel list and the call stage
 - `src/profile/dm_panel.rs` — showing or hiding the side panel resizes the main column beside it
@@ -529,6 +530,8 @@ _Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_ro
 - `src/overlays/emoji.rs` — ui::icon_button is a square taking a Glyph; an emoji cell is a ninth of the grid's width.
 - `src/panel.rs` — ui::list_row is a flat 48px row; a member row also carries a nameplate, its fade and a per-row hover plate.
 - `src/profile/connections.rs` — ui::chip is a palette-toned filter that toggles; this one wears the card's themed ink and opens the account.
+- `src/profile/full.rs` — ui::text_area is the editor itself; this is the note at rest, plain text a click from becoming one, as Discord's.
+- `src/profile/parts.rs` — the username is a link, as Discord's; ui::button would give it a fill and padding.
 - `src/settings.rs` — ui::settings_nav_item has no icon-less, indented sub-entry
 - `src/settings/voice_pages.rs` — ui::icon_button has no hover to the danger ink without the danger fill, which this quiet remove must not take
 - `src/sidebar/channels.rs` — ui::button(Tone::Ghost) is 36px with a 14px label; this one is the header's full-width name button, 16px semibold.
@@ -558,7 +561,7 @@ _Floating or raised surface: ui::surface, ui::floating, ui::floating_bar, ui::to
 - `src/joining/rules.rs` — ui::surface has no frosted translucent level matching the composer card
 - `src/login.rs` — ui::badged marks a corner with a count or a status; this is the 32px phone chip, ringed by a hairline.
 - `src/login.rs` — ui::surface is the theme's overlay fill; the code sits on white in both themes so phones can read it.
-- `src/profile.rs` — ui::surface is a flat overlay fill; this card is the user's gradient inside a gradient border.
+- `src/profile/parts.rs` — ui::surface is a flat overlay fill; this card is the user's gradient inside a gradient border.
 - `src/settings/profiles.rs` — ui::badged places marks on a face's corner but can't reveal one on hover, and ui::icon_button has no corner placement
 - `src/soundboard/picker.rs` — ui::surface lacks an in-picker popover card anchored under the speaker
 - `src/splash.rs` — ui::surface is the overlay fill with a drop shadow; the splash is a raised fill with an inset hairline in a borderless window.
@@ -590,8 +593,9 @@ _Label: ui::badge, ui::tag, ui::count_badge, ui::pill or ui::role_chip; add a va
 - `src/forum/helpers.rs` — ui::badge is a 20px solid label; this is a 32px file row with an icon and its size
 - `src/joining/rules.rs` — ui::surface has no frosted translucent level matching the composer card
 - `src/panel.rs` — ui::tip is one line of text; this tip lists each thing someone is doing, with its icon.
-- `src/profile.rs` — ui::badge is a 20px solid label in 11px type; the guild tag is 22px in the card's 14px type and ink.
 - `src/profile/activity.rs` — ui::button(...).disabled(true) takes a palette tone; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
+- `src/profile/parts.rs` — ui::badge is a 20px solid label in 11px type; the guild tag is 22px in the card's 14px type and ink.
+- `src/profile/social.rs` — ui::strip takes a palette fill; this notice wears the profile theme's tint (Ink), as the card's other tiles do.
 - `src/settings/accessibility.rs` — ui::settings_card has no body-font-size option; this card sets the preview's message size
 - `src/sidebar/channels.rs` — ui::callout leads with an icon and a title; this banner is a dot and one line, slid in by its motion frame.
 - `src/sidebar/tiles.rs` — ui::badge is a label; this is a server's letter tile, scaled with the rail tile.
@@ -649,7 +653,8 @@ _One-line text: ui::line(text), or ui::truncating(key, text) when the cut text s
 - `src/command_picker/render.rs` — ui::line takes plain text; this one is a highlighted StyledText (the match marks)
 - `src/forum/helpers.rs` — ui::line clamps to one line; a post's title clamps to two
 - `src/link_preview.rs` — ui::line is one line; a quote clamps at three lines
-- `src/profile.rs` — ui::line takes plain text; this is the user's name set in their chosen name font and styled runs.
+- `src/profile/parts.rs` — ui::line ends one line in an ellipsis; this clamps the status to two lines and ends the second.
+- `src/profile/parts.rs` — ui::line takes plain text; this is the user's name set in their chosen name font and styled runs.
 
 ## raw-margin
 
@@ -700,6 +705,7 @@ _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::r
 - `src/overlays.rs` — the 30px buttons reach past the 24px author row so they don't stretch it, which padding can't do.
 - `src/overlays.rs` — the actions pull into the card's corner past its padding, which padding can't do.
 - `src/profile.rs` — the avatar row pulls up over the banner's foot, which padding can't do.
+- `src/profile/full.rs` — the avatar pulls up over the banner's foot by half its size, which padding can't do.
 - `src/report.rs` — a negative margin lets the row's hover fill reach the dialog's text edge, which ui::pick_row has no option for
 - `src/report.rs` — a negative margin lets the row's hover fill reach the dialog's text edge, which ui::pick_row has no option for
 - `src/report.rs` — a negative margin lets the row's hover fill reach the dialog's text edge, which ui::pick_row has no option for
@@ -745,7 +751,7 @@ _A function named like a component builds it from the design system: wrap the ui
 - `src/gif.rs` — ui::media rounds an image, but a GIF's slot is a placeholder the layer paints into; there is nothing to wrap
 - `src/joining/guide.rs` — ui::icon_tile only holds a glyph, not an emoji's image or text
 - `src/login.rs` — ui::card is a clickable raised card; this is the sign-in QR code painted on white in both themes.
-- `src/profile.rs` — ui::search_button is a search box with a magnifier; this is the card's themed "Message @user" prompt.
+- `src/profile/actions.rs` — ui::text_field is the settings field frame; this one wears the card's themed fill.
 - `src/profile/connections.rs` — ui::chip is a palette-toned filter that toggles; this chip wears the card's themed ink and opens the account.
 - `src/sidebar/tiles.rs` — ui::server_tile sets initials on the selected fill; the rail's letters sit on the lifted raised tone.
 - `src/soundboard/picker.rs` — ui::card lacks a sound tile with a lock and a favourite toggle
@@ -762,6 +768,7 @@ _A scrolling list that builds every row: list/uniform_list with a ListState draw
 - `src/create_channel.rs` — at most 100 members plus the server's roles, a few hundred rows
 - `src/events/views.rs` — one server's scheduled events, at most 100
 - `src/overlays/emoji.rs` — the Unicode groups hold under 2,000 emoji and a server adds a few hundred at most.
+- `src/profile/popovers.rs` — a server's assignable roles, a few dozen at most (Discord caps a server at 250).
 - `src/soundboard/picker.rs` — a guild's soundboard, a few dozen sounds at most (the server's sound slots)
 - `src/stickers.rs` — Discord's packs and yours, a few dozen stickers each, a few hundred cells at most
 
@@ -774,7 +781,7 @@ _Work on the render path runs on every redraw: sort, parse, read files or build 
 - `src/part.rs` — made once, on the column's first draw (get_or_insert_with), then kept.
 - `src/part.rs` — made once, on the first draw (get_or_insert_with), then kept.
 - `src/part.rs` — subscribed once with the part, which notifies itself, following the app.
-- `src/profile.rs` — one member's roles in this server, a few dozen at most.
+- `src/profile/actions.rs` — one member's roles in this server, a few dozen at most.
 - `src/reactions.rs` — sorts at most four runs (three names and a link) of one small card
 - `src/server_settings/members.rs` — one member's roles, a few dozen at most, sorted per visible row
 - `src/settings.rs` — one page's groups, a dozen at most
@@ -983,7 +990,16 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/poll.rs` — the subscription ends when the input or Waffle is dropped
 - `src/profile.rs` — ends itself when the card closes, and holds only a WeakEntity.
 - `src/profile.rs` — ends when the effect request returns, and holds only a WeakEntity.
+- `src/profile.rs` — ends when the product request returns, and holds only a WeakEntity.
 - `src/profile.rs` — ends when the profile request returns, and holds only a WeakEntity.
+- `src/profile.rs` — one timer that ends after a single redraw, holding only a WeakEntity.
+- `src/profile/actions.rs` — ends when the send returns, and holds only a WeakEntity.
+- `src/profile/actions.rs` — the subscription lives as long as the field, dropped with the card.
+- `src/profile/full.rs` — ends when the request returns, and holds only a WeakEntity.
+- `src/profile/full.rs` — the subscription lives as long as the field, dropped with the card.
+- `src/profile/popovers.rs` — ends after one timer, holding only a WeakEntity.
+- `src/profile/popovers.rs` — the observation lives as long as the field, dropped with the popover.
+- `src/profile/popovers.rs` — the subscription lives as long as the field, dropped with the popover.
 - `src/reactions.rs` — one page fetch: ends when the request returns, or when Waffle is dropped
 - `src/report.rs` — one request that ends when the menu lands, holding only a WeakEntity
 - `src/report.rs` — one request that ends when the report is sent, holding only a WeakEntity
@@ -1104,7 +1120,6 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/main.rs` — one entry per live stream we have heard of, replaced on every STREAM_UPDATE
 - `src/main.rs` — one entry per mention or emoji picked in the composer this session, a few hundred at most
 - `src/main.rs` — one entry per person who spoke in a call, a few dozen at most; replaced on each speak
-- `src/main.rs` — one entry per profile effect sku seen, a catalogue of a few hundred at most
 - `src/main.rs` — one entry per server visited, bounded by the servers the user is in
 - `src/main.rs` — one entry per server whose member list was opened, bounded by the user's server count
 - `src/main.rs` — one f32 per streamer the user adjusted, a few dozen at most
@@ -1114,6 +1129,7 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/main.rs` — one pair per (server, channel) member range asked for, bounded by the user's channel count
 - `src/main.rs` — one thumbnail url per streamer seen, a handful of live streams at a time
 - `src/main.rs` — one u64 per channel the gateway reported, bounded by the user's channel count
+- `src/profile.rs` — one entry per profile effect sku seen, a catalogue of a few hundred at most
 - `src/reactions.rs` — the name spans of one card sentence, three at most, rebuilt for each card
 - `src/report.rs` — one pick per form element of the node on screen, a handful
 - `src/report.rs` — the reasons of one menu node, a few dozen at most

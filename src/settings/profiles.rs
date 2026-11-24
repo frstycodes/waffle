@@ -186,7 +186,7 @@ impl Waffle {
     }
 
     // Run as the page draws: makes the editor the first time, and follows a search jump to the other tab.
-    pub(super) fn ensure_profile_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn ensure_profile_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(view) = &mut self.settings else { return };
         if view.profiles.is_none() {
             view.profiles = Some(ProfileEditor::new(window, cx));
@@ -280,7 +280,7 @@ impl Waffle {
         true
     }
 
-    fn switch_profile_tab(&mut self, tab: ProfileTab, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn switch_profile_tab(&mut self, tab: ProfileTab, window: &mut Window, cx: &mut Context<Self>) {
         if self.profile_editor_ref().is_none_or(|e| e.tab == tab) || self.refuse_if_unsaved(cx) {
             return;
         }
@@ -384,7 +384,7 @@ impl Waffle {
             ProfileTab::Main => {
                 editor.saved = editor.main_draft(cx).map(|d| MainProfile { avatar: AvatarChoice::Current, ..d });
                 editor.avatar = AvatarChoice::Current;
-                let worn = editor.tag_guild.as_ref().and_then(|g| editor.tags.iter().find(|t| &t.guild_id == g)).map(|t| GuildTag { text: t.tag.clone(), badge: t.badge.clone() });
+                let worn = editor.tag_guild.as_ref().and_then(|g| editor.tags.iter().find(|t| &t.guild_id == g)).map(|t| GuildTag { text: t.tag.clone(), badge: t.badge.clone(), guild_id: Some(t.guild_id.clone()) });
                 if let Some(me) = &mut self.me {
                     me.tag = worn;
                 }
@@ -681,7 +681,7 @@ impl Waffle {
         let main = editor.main_draft(cx).unwrap_or_default();
         let display = Some(main.display_name.trim().to_owned()).filter(|n| !n.is_empty()).unwrap_or_else(|| self.my_account.username.clone());
         user.name = display.clone();
-        user.tag = main.tag_guild.as_ref().and_then(|g| editor.tags.iter().find(|t| &t.guild_id == g)).map(|t| GuildTag { text: t.tag.clone(), badge: t.badge.clone() }).or(if main.tag_guild.is_some() { user.tag } else { None });
+        user.tag = main.tag_guild.as_ref().and_then(|g| editor.tags.iter().find(|t| &t.guild_id == g)).map(|t| GuildTag { text: t.tag.clone(), badge: t.badge.clone(), guild_id: Some(t.guild_id.clone()) }).or(if main.tag_guild.is_some() { user.tag } else { None });
         profile.username = self.my_account.username.clone();
         profile.bio = Some(main.bio.trim_end().to_owned()).filter(|b| !b.is_empty());
         profile.pronouns = Some(main.pronouns.trim().to_owned()).filter(|p| !p.is_empty());

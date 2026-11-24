@@ -93,6 +93,9 @@ pub(super) fn palette_tint(name: &str) -> (u32, u32) {
 pub struct GuildTag {
     pub text: String,
     pub badge: Option<String>,
+    // The server the tag belongs to (`identity_guild_id`).
+    #[serde(default)]
+    pub guild_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

@@ -16,6 +16,10 @@ pub struct Profile {
     pub mutual_friends: Vec<User>,
     pub mutual_friend_count: usize,
     pub mutual_server_count: usize,
+    // The servers you share, each with their nickname there (`mutual_guilds[]`, `{id, nick}`).
+    pub mutual_guilds: Vec<MutualGuild>,
+    // Your private note on them (`GET /users/@me/notes/{id}`); None until fetched or when there is none.
+    pub note: Option<String>,
     // GAP: the API field behind Discord's Game Collection is unknown, so only the demo fills this (icon URLs).
     pub games: Vec<String>,
     // When they joined the server the profile was fetched for (`guild_member.joined_at`, ISO 8601).
@@ -23,6 +27,40 @@ pub struct Profile {
     pub connections: Vec<Connection>,
     // The profile effect they wear: its collectible's sku, resolved through `/collectibles-products/{sku}`.
     pub effect_sku: Option<String>,
+    // The profile frame they wear (collectible type 3), and its layers once that product is fetched.
+    pub frame_sku: Option<String>,
+    #[serde(skip)]
+    pub frame: Option<ProfileFrame>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MutualGuild {
+    pub id: String,
+    pub nick: Option<String>,
+}
+
+// One row of a profile's Recent activity, from their content outbox (`/content-inventory/users/{id}/outbox`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RecentEntry {
+    pub id: String,
+    pub kind: RecentKind,
+    // The game, show or track.
+    pub title: String,
+    // The episode, artist, or nothing for a game.
+    pub subtitle: Option<String>,
+    pub app_id: Option<String>,
+    // Discord's traits: first time playing, one long session's hours, days in a row.
+    pub first_time: bool,
+    pub marathon_hours: Option<u64>,
+    pub streak_days: Option<u64>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RecentKind {
+    #[default]
+    Played,
+    Watched,
+    Listened,
 }
 
 // An account linked on their profile (`connected_accounts[]`); `kind` is Discord's platform type ("spotify").
@@ -34,6 +72,44 @@ pub struct Connection {
     pub verified: bool,
 }
 
+// A profile frame: art drawn around the card, authored on a card `inner_width` wide (Discord's 1200) and scaled to
+// the real one. Staples hang `overflow_top` above and `overflow_bottom` below it; every layer reaches
+// `overflow_horizontal` past each side.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ProfileFrame {
+    pub inner_width: f32,
+    pub overflow_top: f32,
+    pub overflow_bottom: f32,
+    pub overflow_horizontal: f32,
+    pub layers: Vec<FrameLayer>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FrameLayer {
+    pub src: String,
+    pub kind: FrameKind,
+    // Over the card's content, or behind the card.
+    pub front: bool,
+    pub anchor: FrameAnchor,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameKind {
+    // One picture pinned to the top or bottom edge, overhanging it.
+    Staple,
+    // One picture the card's height, cropped from the top, middle or bottom.
+    Rail,
+    // A picture repeated down the card.
+    Border,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameAnchor {
+    Top,
+    Center,
+    Bottom,
+}
+
 // One image of a profile effect, placed in the effect's own pixels (`effects[]` of its config).
 #[derive(Clone, Debug, PartialEq)]
 pub struct EffectLayer {
@@ -43,12 +119,21 @@ pub struct EffectLayer {
     pub width: f32,
     pub height: f32,
     pub z: i64,
+    // Its timeline in milliseconds from the intro's start: shown from `start` for `duration`, then, when it
+    // loops, again every `duration + loop_delay`.
+    pub start: f32,
+    pub duration: f32,
+    pub looping: bool,
+    pub loop_delay: f32,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Badge {
     pub description: String,
     pub icon: String,
+    // Where a click on it goes (Nitro's page, a quest): Discord's `badges[].link`.
+    #[serde(default)]
+    pub link: Option<String>,
 }
 
 #[derive(Clone, Debug)]

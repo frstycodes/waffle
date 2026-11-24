@@ -57,6 +57,30 @@ pub fn dialog(id: impl Into<ElementId>, width: f32, body: Div, window: &mut Wind
         })
 }
 
+/// A dialog of a fixed size whose content may draw past its edge (a profile's frame over the full profile): the
+/// same card, shadow and pop as `dialog`, without the height spring, which needs the card to clip.
+// Keywords: unclipped dialog, fixed size dialog, overflowing dialog, frame dialog, modal without clipping
+pub fn dialog_fixed(id: impl Into<ElementId>, width: f32, height: f32, body: impl IntoElement, cx: &App) -> AnimationElement<Stateful<Div>> {
+    let id = id.into();
+    div()
+        .w(px(width))
+        .h(px(height))
+        .flex()
+        .flex_col()
+        .squircle(RADIUS_XL)
+        .bg(palette::surface(palette::Level::Raised, cx))
+        .shadow(shadow_pop(cx))
+        .text_size(px(14.))
+        .text_color(palette::text(cx))
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .child(body)
+        .id(id.clone())
+        .with_animation(part(&id, "pop"), gpui_kit::Animation::new(DUR_PANEL), |card, t| {
+            let t = motion::ease_out().sample(t);
+            card.opacity(t).scale(0.95 + 0.05 * t)
+        })
+}
+
 // How far a scrolling dialog's edge fades into the card, and how far its fields reach past the body's
 // inset so their focus rings aren't cut.
 const FADE: f32 = 32.;

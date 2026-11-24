@@ -1,17 +1,21 @@
 // The profile card's linked accounts: their chips, brand colours and where each opens.
-use super::*;
+use gpui_kit::{FontWeight, Hsla, Stateful, svg};
 
-pub(super) fn connections(list: &[Connection], ink: Ink, cx: &App) -> Option<Div> {
+use super::*;
+use crate::{discord::Connection, ui::RADIUS_SM};
+
+// The full profile's accounts as wrapping chips.
+pub(super) fn connection_list(list: &[Connection], ink: Ink, cx: &App) -> Option<Div> {
     if list.is_empty() {
         return None;
     }
     let chips = list.iter().enumerate().map(|(i, c)| connection_chip(i, c, ink, cx));
-    Some(section("Connections", ui::row().items_stretch().flex_wrap().gap_1p5().children(chips), ink))
+    Some(ui::row().items_stretch().flex_wrap().gap_1p5().children(chips))
 }
 
-// The service's mark on its colour, the account name, Discord's verified seal, and a click to the account.
+// The service's mark on its colour, the account name, Discord's verified seal, and ↗ with a click to the account.
 // lint-allow(custom-component): ui::chip is a palette-toned filter that toggles; this chip wears the card's themed ink and opens the account.
-pub(super) fn connection_chip(i: usize, c: &Connection, ink: Ink, cx: &App) -> Stateful<Div> {
+fn connection_chip(i: usize, c: &Connection, ink: Ink, cx: &App) -> Stateful<Div> {
     let (platform, color) = platform(&c.kind);
     let url = connection_url(c);
     let tip: SharedString = match url {
@@ -39,7 +43,7 @@ pub(super) fn connection_chip(i: usize, c: &Connection, ink: Ink, cx: &App) -> S
         .child(ui::line(name))
         .when(c.verified, |d| d.child(Icon::new(Glyph::CheckCircle).size(ui::ICON_SM).flex_none().text_color(seal)))
         .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
-        .when_some(url, |d, url| d.cursor_pointer().hover(move |s| s.bg(hover)).on_click(move |_, _, cx| cx.open_url(&url)))
+        .when_some(url, |d, url| d.cursor_pointer().hover(move |s| s.bg(hover)).child(Icon::new(Glyph::Open).size(ui::ICON_SM).flex_none().text_color(ink.muted)).on_click(move |_, _, cx| cx.open_url(&url)))
 }
 
 // The mark tinted dark or light by its colour; a service without a mark gets its initial.
