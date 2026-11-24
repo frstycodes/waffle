@@ -1,8 +1,8 @@
 // A 1:1 DM's side panel: the person's profile, as Discord shows it beside the conversation.
-use gpui_kit::{AnyElement, Context, SharedString, Window, linear_color_stop, linear_gradient, prelude::*};
+use gpui_kit::{AnyElement, Context, SharedString, Window, div, prelude::*};
 
-use super::{Ink, profile_key};
-use crate::{Edge, ProfileCard, RightPanel, Waffle, discord::{Channel, User}, icons::Glyph, palette, ui::{self, Squircle}};
+use super::{FullTab, Header, Ink, ProfileCard, profile_key};
+use crate::{Edge, RightPanel, Waffle, discord::{Channel, User}, icons::Glyph, palette, ui::{self, Squircle}};
 
 impl Waffle {
     // The person in the open 1:1 DM; a group DM has its member list instead.
@@ -19,18 +19,33 @@ impl Waffle {
         self.fetch_profile(user.clone(), None, cx);
         let profile = self.profiles.peek(&profile_key(&user.id, None));
         let (hovered, on_hover) = ui::hover_state(SharedString::from(format!("dm-profile-hover-{}", user.id)), window, cx);
-        let card = ProfileCard { user, guild_id: None, at: Default::default(), profile, all_activity: false, avatar_full: false };
+        let card = ProfileCard::new(user, None, Default::default(), profile, None);
         let profile = card.profile.clone().unwrap_or_default();
         let ink = Ink::new(profile.theme, cx);
-        let content = ui::col().id("dm-profile").child(self.profile_header(&card, &profile, ui::RADIUS_LG, hovered, ink, cx)).child(self.profile_sections(&card, &profile, ink, cx));
-        let panel = ui::col().min_h_0().id("dm-profile-panel").flex_1().squircle(ui::RADIUS_LG).on_hover(on_hover);
+        let content = ui::col().id("dm-profile").child(self.profile_header(&card, &profile, Header::Panel, hovered, ink, cx)).child(self.panel_sections(&card, &profile, ink, cx));
+        let target = card.user.clone();
+        let view_full = ui::button("dm-profile-view-full", ui::Tone::Secondary, cx).w_full().justify_center().child("View Full Profile").on_click(cx.listener(move |this, _, _, cx| this.open_full_profile(target.clone(), FullTab::Activity, cx)));
+        let panel = ui::col().min_h_0().id("dm-profile-panel").group(super::CARD_GROUP).flex_1().squircle(ui::RADIUS_LG).on_hover(on_hover);
         let panel = match ink.border {
-            Some(_) => panel.bg(linear_gradient(180., linear_color_stop(ink.top, 0.), linear_color_stop(ink.bottom, 1.))),
+            Some(_) => panel.bg(ink.wash()),
             None => panel.bg(palette::surface(palette::Level::Sidebar, cx)),
         };
-        let panel = panel.child(ui::scroll_area(content, &self.panel_scroll));
+        let panel = panel.child(ui::scroll_area(content, &self.panel_scroll)).child(div().flex_none().p_4().child(view_full));
         let column = ui::col().relative().size_full().pt_2().pr_2().pb_2().bg(palette::surface(palette::Level::Page, cx));
         Some(column.child(panel).child(self.resize_handle(Edge::Panel, cx)).into_any_element())
+    }
+
+    // Discord's side panel body: name, mutuals, bio, Member Since, then what they're doing.
+    fn panel_sections(&self, card: &ProfileCard, profile: &crate::discord::Profile, ink: Ink, cx: &mut Context<Self>) -> gpui_kit::Div {
+        ui::col()
+            .px_4()
+            .pb_3()
+            .gap_3()
+            .child(self.clickable_name(card, profile, ink, cx))
+            .children(self.mutuals_row(&card.user, profile, ink, cx))
+            .children(profile.bio.as_ref().map(|bio| super::bio_view(&card.user.id, bio, ink)))
+            .children(self.member_since(card, profile, ink, cx))
+            .children(self.profile_activity_cards(card, ink, cx))
     }
 
     // The header's side panel toggle: in a 1:1 DM it shows the person's profile, in a server or group the

@@ -7,7 +7,7 @@ use gpui_kit::{App, Div, IntoElement, ParentElement, Styled, div, img, prelude::
 use crate::{
     discord::{Mark, Profile, User},
     layout::decorated_avatar,
-    profile::{AVATAR, AVATAR_RING, Ink, WIDTH, badges, banner, bio_view, inner_radius, name_block, themed_card},
+    profile::{AVATAR, AVATAR_RING, Ink, WIDTH, banner, bio_view, inner_radius, name_block, themed_card},
 };
 
 // A picked file shows before it's uploaded; everything else is an address.
@@ -19,7 +19,7 @@ pub(super) enum PreviewAvatar {
 pub(super) fn profile_preview(user: &User, profile: &Profile, avatar: PreviewAvatar, status: Option<Mark>, cx: &App) -> Div {
     let ink = Ink::new(profile.theme, cx);
     let radius = inner_radius(ink);
-    let (banner, _) = banner(profile, ink, radius, false, cx);
+    let (banner, _) = banner(profile, ink, radius, false, crate::profile::BANNER, cx);
     let face = match avatar {
         PreviewAvatar::Url(url) => decorated_avatar(&url, user.decoration.as_deref(), AVATAR, status, ink.top),
         PreviewAvatar::File(path) => img(path).size(px(AVATAR)).flex_none().rounded_full().into_any_element(),
@@ -33,8 +33,7 @@ pub(super) fn profile_preview(user: &User, profile: &Profile, avatar: PreviewAva
         .px_4()
         .pb_4()
         .gap_3()
-        .child(name_block(user, profile, ink))
-        .children(badges(&profile.badges, ink))
+        .child(name_block(user, profile, ink, None, None))
         .when_some(profile.bio.as_ref(), |b, bio| b.child(bio_view("preview", bio, ink)));
     let (outer, inner) = themed_card(ink, f32::MAX, cx);
     outer.w(px(WIDTH)).child(inner.child(header).child(body))

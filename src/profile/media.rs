@@ -7,26 +7,25 @@ use crate::{
     palette, ui,
 };
 
-// Discord banners are 5:2; at that height a cover fit crops nothing.
-const BANNER: f32 = WIDTH * 0.4;
-const BANNER_PLAIN: f32 = 64.;
+// Discord's banner heights (`--custom-user-profile-banner-height`): the popout's and side panel's, and the full
+// profile's. With or without a picture the header keeps its height.
+pub(crate) const BANNER: f32 = 105.;
+pub(crate) const BANNER_FULL: f32 = 140.;
 
-/// The banner with its height: the picture at 5:2, else a strip of the theme or accent colour. An
+/// The banner `height` tall: the picture, cover-fit, else a strip of the theme or accent colour. An
 /// animated banner holds its first frame unless `playing` (gpui animates only an image with an id).
-pub(crate) fn banner(profile: &Profile, ink: Ink, radius: f32, playing: bool, cx: &App) -> (AnyElement, f32) {
-    match (&profile.banner, ink.border, profile.accent) {
+pub(crate) fn banner(profile: &Profile, ink: Ink, radius: f32, playing: bool, height: f32, cx: &App) -> (AnyElement, f32) {
+    let fill = |color: Hsla| ui::edge(div().w_full().h(px(height)).bg(color), ui::top(radius)).into_any_element();
+    let el = match (&profile.banner, ink.border, profile.accent) {
         (Some(url), _, _) => {
-            let picture = ui::media(url.clone(), ui::top(radius)).w_full().h(px(BANNER)).object_fit(gpui_kit::ObjectFit::Cover);
-            (if playing { picture.id("profile-banner").into_any_element() } else { picture.into_any_element() }, BANNER)
+            let picture = ui::media(url.clone(), ui::top(radius)).w_full().h(px(height)).object_fit(gpui_kit::ObjectFit::Cover);
+            if playing { picture.id("profile-banner").into_any_element() } else { picture.into_any_element() }
         }
-        (None, Some((color, _)), _) => (banner_fill(color, radius).into_any_element(), BANNER_PLAIN),
-        (None, None, Some(accent)) => (banner_fill(palette::data_color(accent), radius).into_any_element(), BANNER_PLAIN),
-        (None, None, None) => (banner_fill(palette::selected(cx), radius).into_any_element(), BANNER_PLAIN),
-    }
-}
-
-fn banner_fill(color: Hsla, radius: f32) -> Div {
-    ui::edge(div().w_full().h(px(BANNER_PLAIN)).bg(color), ui::top(radius))
+        (None, Some((color, _)), _) => fill(color),
+        (None, None, Some(accent)) => fill(palette::data_color(accent)),
+        (None, None, None) => fill(palette::selected(cx)),
+    };
+    (el, height)
 }
 
 pub(crate) fn full_avatar(url: &str) -> String {

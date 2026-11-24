@@ -155,7 +155,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use discord::{Channel, ChannelKind, Client, Emoji, Event, Folder, Gif, Guild, ListItem, ListOp, Message, Presence, Profile, ReadState, Relationship, SendState, User};
+use discord::{Channel, ChannelKind, Client, Emoji, Event, Folder, Gif, Guild, ListItem, ListOp, Message, Presence, ReadState, Relationship, SendState, User};
 use futures::StreamExt;
 use gpui_kit::{
     AppContext, Bounds, Context, Entity, FocusHandle, Hsla, RenderImage, ListAlignment, ListOffset, ListState, SharedString, Task, TitlebarOptions, Window, WindowBounds,
@@ -444,18 +444,6 @@ impl Watching {
     fn ended(&self) -> bool {
         self.watch.as_ref().is_some_and(voice::StreamWatch::ended)
     }
-}
-
-// A profile popout opened from an avatar or name, at the click point.
-struct ProfileCard {
-    user: User,
-    guild_id: Option<String>,
-    at: gpui_kit::Point<gpui_kit::Pixels>,
-    profile: Option<Profile>,
-    // Every activity card, after the peeking card under the first was clicked.
-    all_activity: bool,
-    // Their avatar full size over the window.
-    avatar_full: bool,
 }
 
 // Where a picked emoji goes.
@@ -806,7 +794,7 @@ pub struct Waffle {
     // it ended that one without a disconnect, and connecting sounds as a move.
     call_switched: bool,
     viewer: Option<viewer::Viewer>,
-    profile_card: Option<ProfileCard>,
+    profile_card: Option<profile::ProfileCard>,
     role_popout: role_popout::RolePopouts,
     status_menu: bool,
     // The channel or DM row under the pointer, which shows its hover-only controls.

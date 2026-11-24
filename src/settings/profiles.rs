@@ -186,7 +186,7 @@ impl Waffle {
     }
 
     // Run as the page draws: makes the editor the first time, and follows a search jump to the other tab.
-    pub(super) fn ensure_profile_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn ensure_profile_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(view) = &mut self.settings else { return };
         if view.profiles.is_none() {
             view.profiles = Some(ProfileEditor::new(window, cx));
@@ -280,7 +280,7 @@ impl Waffle {
         true
     }
 
-    fn switch_profile_tab(&mut self, tab: ProfileTab, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn switch_profile_tab(&mut self, tab: ProfileTab, window: &mut Window, cx: &mut Context<Self>) {
         if self.profile_editor_ref().is_none_or(|e| e.tab == tab) || self.refuse_if_unsaved(cx) {
             return;
         }

@@ -1,5 +1,8 @@
 // The profile card's linked accounts: their chips, brand colours and where each opens.
+use gpui_kit::{FontWeight, Hsla, Stateful, svg};
+
 use super::*;
+use crate::{discord::Connection, ui::RADIUS_SM};
 
 pub(super) fn connections(list: &[Connection], ink: Ink, cx: &App) -> Option<Div> {
     if list.is_empty() {
