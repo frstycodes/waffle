@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Installers</title>
+<meta name="description" content="The macOS disk image window and Waffle's own one-click Windows installer, as each OS shows them in light and dark.">
+<link rel="icon" href="/assets/brand/icons/paper.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="site.css">
+<link rel="stylesheet" href="css/primitives.css">
+<script>try{const p=JSON.parse(localStorage.getItem("waffle-ds")||"{}"),r=document.documentElement;if(p.theme)r.dataset.theme=p.theme}catch{}</script>
+<style>
+  main { max-width: 1440px; }
+  .note { font-size: var(--text-xs); color: var(--text-muted); max-width: 90ch; line-height: 1.5; }
+  .shots { display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; margin-top: 20px; }
+  .shot { display: grid; gap: 10px; }
+  .shot > span { font-size: var(--text-xs); color: var(--text-muted); }
+  .scaler { overflow-x: auto; max-width: calc(100vw - 32px); padding: 4px 4px 40px; }
+
+  /* The disk image background: one still 660x400 image. Finder colours its icon labels black in light
+     mode and white in dark, so the band they sit in is #A66800, ≥4.5:1 against both. */
+  .dmg { position: relative; width: 660px; height: 400px; overflow: hidden; isolation: isolate;
+    background:
+      radial-gradient(120% 90% at 8% -10%, #f7c561 0%, #e9a632 28%, transparent 58%),
+      radial-gradient(90% 70% at 50% 118%, #7a4c00 0%, transparent 60%),
+      #a66800; }
+  .dmg::before { content: ""; position: absolute; inset: -60%; z-index: -1; transform: rotate(-10deg); opacity: .22;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 86px, rgb(255 236 196 / .07) 86px 100px),
+      repeating-linear-gradient(90deg, transparent 0 86px, rgb(255 236 196 / .07) 86px 100px); }
+  .dmg .dipper { position: absolute; width: 300px; right: -78px; top: -92px; transform: rotate(8deg); filter: drop-shadow(0 18px 24px rgb(74 40 0 / .45)); pointer-events: none; }
+  .dmg .crumb { position: absolute; width: 146px; left: -28px; bottom: -36px; transform: rotate(-16deg); filter: drop-shadow(0 14px 18px rgb(74 40 0 / .45)); }
+  .dmg .arrow { position: absolute; left: 300px; top: 170px; overflow: visible; }
+  .dmg .hint { position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; font: 600 14px/1.3 "Figtree", sans-serif; letter-spacing: .005em; color: rgb(255 244 222 / .82); text-wrap: balance; }
+
+  .finder { --f-bar: #f6f6f6; --f-line: rgb(0 0 0 / .1); --f-title: #3d3d3d; --f-label: #000; width: 660px; border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 .5px rgb(0 0 0 / .25), 0 24px 60px rgb(0 0 0 / .32); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+  .finder.dark { --f-bar: #2c2c2e; --f-line: rgb(0 0 0 / .5); --f-title: #e6e6e6; --f-label: #fff; }
+  .finder .bar { height: 28px; background: var(--f-bar); border-bottom: 1px solid var(--f-line); display: flex; align-items: center; padding: 0 10px; position: relative; }
+  .finder .lights { display: flex; gap: 8px; }
+  .finder .lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+  .finder .lights i:nth-child(2) { background: #febc2e; } .finder .lights i:nth-child(3) { background: #28c840; }
+  .finder .bar b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; font-weight: 600; color: var(--f-title); }
+  .finder .icon { position: absolute; width: 128px; top: 136px; display: grid; justify-items: center; gap: 5px; }
+  .finder .icon img, .finder .icon svg { width: 128px; height: 128px; display: block; filter: drop-shadow(0 10px 14px rgb(60 32 0 / .4)); }
+  .finder .icon span { font-size: 13px; color: var(--f-label); }
+
+  /* Waffle's own Windows installer: one small window, no wizard. Built in gpui with the app's tokens. */
+  .setup { --s-bg: #f8f5ee; --s-ink: #1d1f24; --s-muted: #5f6066; --s-track: rgb(29 31 36 / .09); --s-glow: rgb(239 168 49 / .28); --s-line: rgb(0 0 0 / .1); --s-caption: rgb(29 31 36 / .7);
+    position: relative; width: 380px; height: 440px; border-radius: 8px; overflow: hidden; color: var(--s-ink); font-family: "Figtree", sans-serif;
+    background: radial-gradient(70% 46% at 50% 34%, var(--s-glow), transparent 70%), var(--s-bg);
+    box-shadow: 0 0 0 1px var(--s-line), 0 32px 64px rgb(0 0 0 / .28), 0 2px 8px rgb(0 0 0 / .12); }
+  .setup.dark { --s-bg: #1f2024; --s-ink: #f3efe6; --s-muted: #a9a7a2; --s-track: rgb(255 255 255 / .1); --s-glow: rgb(239 168 49 / .2); --s-line: rgb(255 255 255 / .1); --s-caption: rgb(243 239 230 / .7); }
+  .setup .close { position: absolute; top: 0; right: 0; width: 46px; height: 32px; display: grid; place-items: center; color: var(--s-caption); border-radius: 0 8px 0 0; }
+  .setup .close svg { width: 10px; height: 10px; stroke: currentColor; stroke-width: 1; fill: none; }
+  .setup .close:hover { background: #c42b1c; color: #fff; }
+  .setup .hero { position: absolute; left: 50%; top: 60px; width: 200px; height: 200px; translate: -50% 0; }
+  .setup .hero img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 18px 22px rgb(120 70 0 / .28)); }
+  .setup[data-state="installing"] .hero img { animation: bob 3.2s cubic-bezier(.37, 0, .63, 1) infinite alternate; }
+  .setup[data-state="failed"] .hero img { filter: grayscale(.85) drop-shadow(0 18px 22px rgb(0 0 0 / .2)); opacity: .75; }
+  @keyframes bob { to { translate: 0 -6px; } }
+  @media (prefers-reduced-motion: reduce) { .setup .hero img { animation: none !important; } }
+  .setup .copy { position: absolute; left: 32px; right: 32px; top: 286px; display: grid; justify-items: center; gap: 6px; text-align: center; }
+  .setup h3 { margin: 0; font-size: 20px; line-height: 1.2; font-weight: 650; letter-spacing: -.01em; color: var(--s-ink); }
+  .setup p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--s-muted); font-variant-numeric: tabular-nums; text-wrap: pretty; }
+  .setup .track { width: 220px; height: 6px; margin-top: 12px; border-radius: 999px; background: var(--s-track); overflow: hidden; }
+  .setup .fill { height: 100%; width: var(--p, 40%); border-radius: inherit; background: linear-gradient(90deg, #f6b84d, #efa831 60%, #d68d0a); box-shadow: inset 0 1px 0 rgb(255 255 255 / .45); transition: width .3s cubic-bezier(.23, 1, .32, 1); }
+  .setup .actions { gap: 8px; margin-top: 14px; }
+  .setup .act { height: 32px; padding: 0 16px; display: grid; place-items: center; border-radius: 10px; font-size: 14px; font-weight: 600; }
+  .setup .act.primary { background: #efa831; color: #2a1c00; }
+  .setup .act.quiet { box-shadow: inset 0 0 0 1px var(--s-line); color: var(--s-ink); }
+  .setup [data-only] { display: none; }
+  .setup[data-state="installing"] [data-only~="installing"], .setup[data-state="opening"] [data-only~="opening"] { display: block; }
+  .setup[data-state="failed"] [data-only~="failed"] { display: block; }
+  .setup[data-state="failed"] .actions { display: flex; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 16px; font-size: 14px; }
+  .pick { display: inline-flex; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .pick button { font: inherit; padding: 7px 16px; border: 0; background: transparent; color: var(--text); cursor: pointer; }
+  .pick button + button { border-left: 1px solid var(--border); }
+  .pick button[aria-pressed="true"] { background: var(--accent-soft); font-weight: 600; }
+  .controls label { display: flex; gap: 8px; align-items: center; color: var(--text-muted); }
+  .controls input[type=range] { accent-color: var(--accent); width: 180px; }
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div class="layout">
+<nav class="toc" id="toc" aria-label="Design system"></nav>
+<main>
+<section id="first">
+  <h1>Installers</h1>
+  <p class="lede">The first thing anyone sees of Waffle. On macOS it's a disk image window: a still picture Finder lays its icons over. On Windows it's Waffle's own one-click installer, built with the app's design system, so there's no wizard to click through.</p>
+</section>
+
+<section id="mac">
+  <h2>macOS disk image</h2>
+  <p class="note">One still image, 660×400 plus @2x; Finder can't animate it or swap it for dark mode. Finder draws the labels, black in light mode and white in dark, so the band under the icons is honey amber #A66800: 4.6:1 against black, 4.6:1 against white. The dipper and the waffle stay clear of the icons and their labels.</p>
+  <div class="shots">
+    <div class="shot"><div class="scaler"><div class="finder" data-finder></div></div><span>Finder, light</span></div>
+    <div class="shot"><div class="scaler"><div class="finder dark" data-finder></div></div><span>Finder, dark</span></div>
+  </div>
+</section>
+
+<section id="windows">
+  <h2>Windows installer</h2>
+  <p class="note">Waffle installs per user, so there's nothing to choose: the installer opens, installs into AppData, adds the Start menu entry and opens Waffle. It follows the system theme. Waffle.exe ships inside the installer, so nothing downloads; the count is what's been written to disk. A failure (a full drive, a folder it can't write to) stays open, says what went wrong and offers Try again.</p>
+  <div class="controls">
+    <div class="pick" role="group" aria-label="State">
+      <button data-state="installing" aria-pressed="true">Installing</button>
+      <button data-state="opening" aria-pressed="false">Opening</button>
+      <button data-state="failed" aria-pressed="false">Failed</button>
+    </div>
+    <label>Progress <input type="range" min="0" max="100" value="43" id="progress"></label>
+  </div>
+  <div class="shots">
+    <div class="shot"><div class="scaler"><div class="setup" data-setup></div></div><span>Light</span></div>
+    <div class="shot"><div class="scaler"><div class="setup dark" data-setup></div></div><span>Dark</span></div>
+  </div>
+</section>
+</main>
+</div>
+<script src="site.js"></script>
+<script>
+const WAFFLE = "/assets/illustrations/installer-waffle.png";
+const DIPPER = "/assets/illustrations/installer-dipper.png";
+const FOLDER = `<svg viewBox="0 0 128 128" aria-hidden="true"><path d="M10 28a8 8 0 0 1 8-8h30l10 10h52a8 8 0 0 1 8 8v8H10Z" fill="#5fb3f2"/><rect x="10" y="38" width="108" height="76" rx="9" fill="#83c8fb"/><path d="M44 92h40M50 76l14-22 14 22" stroke="#4a9be0" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
+const ARROW = `<svg class="arrow" width="62" height="44" viewBox="0 0 62 44" aria-hidden="true"><path d="M6 30C20 12 40 10 54 20M43 19.9 54 20l-3.7-10.4" stroke="rgb(255 244 222 / .9)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
+
+document.querySelectorAll("[data-finder]").forEach(el => el.innerHTML = `
+  <div class="bar"><span class="lights"><i></i><i></i><i></i></span><b>Waffle</b></div>
+  <div class="dmg">
+    <img class="dipper" src="${DIPPER}" alt="">
+    <img class="crumb" src="${WAFFLE}" alt="">
+    <div class="icon" style="left:156px"><img src="/assets/brand/icons/paper.png" alt=""><span>Waffle</span></div>
+    ${ARROW}
+    <div class="icon" style="left:376px">${FOLDER}<span>Applications</span></div>
+    <div class="hint">Drag Waffle into Applications</div>
+  </div>`);
+
+const CLOSE = `<span class="close" aria-label="Close"><svg viewBox="0 0 10 10"><path d="M0 0l10 10M10 0 0 10"/></svg></span>`;
+document.querySelectorAll("[data-setup]").forEach(el => el.innerHTML = `${CLOSE}
+  <div class="hero"><img src="${WAFFLE}" alt=""></div>
+  <div class="copy">
+    <h3 data-only="installing">Installing Waffle</h3>
+    <h3 data-only="opening">Opening Waffle</h3>
+    <h3 data-only="failed">Couldn't install Waffle</h3>
+    <p data-only="installing" class="size"></p>
+    <p data-only="opening">Pour yourself something warm.</p>
+    <p data-only="failed">There isn't enough space on this drive. Free up 43 MB, then try again.</p>
+    <div class="track" data-only="installing opening"><div class="fill"></div></div>
+    <div class="actions" data-only="failed"><span class="act quiet">Close</span><span class="act primary">Try again</span></div>
+  </div>`);
+
+const TOTAL = 42.6, setups = document.querySelectorAll("[data-setup]"), range = document.querySelector("#progress");
+function render(state) {
+  const p = state === "opening" ? 100 : +range.value;
+  setups.forEach(el => {
+    el.dataset.state = state;
+    el.style.setProperty("--p", `${p}%`);
+    el.querySelector(".size").textContent = `${(TOTAL * p / 100).toFixed(1)} of ${TOTAL} MB`;
+  });
+}
+let state = "installing";
+document.querySelectorAll(".pick button").forEach(b => b.addEventListener("click", () => {
+  state = b.dataset.state;
+  document.querySelectorAll(".pick button").forEach(o => o.setAttribute("aria-pressed", o === b));
+  render(state);
+}));
+range.addEventListener("input", () => render(state));
+render(state);
+</script>
+</body>
+</html>
