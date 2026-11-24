@@ -465,6 +465,7 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/stickers.rs` — the sticker picker is drawn by the root's overlays, over every column
 - `src/stickers.rs` — the sticker picker is drawn by the root's overlays, over every column
 - `src/stickers.rs` — the sticker picker is drawn by the root's overlays, over every column
+- `src/text_file.rs` — the full-size viewer is drawn by the root, over the columns
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
@@ -969,6 +970,8 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/menu.rs` — ends itself after the one grace timer, and holds only a WeakEntity.
 - `src/menu.rs` — ends when the request returns, and holds only a WeakEntity.
 - `src/menu.rs` — ends when the request returns, and holds only a WeakEntity.
+- `src/message_menu/target.rs` — ends after one fetch, the save dialog's answer and one write, holding only a WeakEntity
+- `src/message_menu/target.rs` — ends when the one fetch returns, holding only a WeakEntity
 - `src/mod_view.rs` — a single timer that ends after MEMBER_WAIT, holding only a WeakEntity
 - `src/mod_view.rs` — one request that ends when the reply lands, holding only a WeakEntity
 - `src/mod_view.rs` — the loop breaks once Mod View closes or the member changes, and ends when the app entity drops

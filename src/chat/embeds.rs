@@ -60,6 +60,16 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
             this.update(cx, |this, cx| this.open_link(&url, window, cx)).ok();
         }
     };
+    // Right-click on a link: the row's message menu with Discord's link items.
+    let link_menu = |url: String| {
+        let (this, message) = (ctx.this.clone(), row.cloned());
+        move |event: &gpui_kit::MouseDownEvent, _: &mut Window, cx: &mut App| {
+            let Some(message) = message.clone() else { return };
+            cx.stop_propagation();
+            let target = Some(crate::message_menu::MenuTarget::Link(url.clone()));
+            this.update(cx, |this, cx| this.open_message_menu_on(message, target, event.position, cx)).ok();
+        }
+    };
 
     let provider = embed.provider.clone().map(|name| {
         div()
@@ -88,7 +98,7 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
             .line_height(gpui_kit::relative(1.2))
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(if embed.url.is_some() { palette::accent_ink(cx) } else { strong })
-            .when_some(embed.url.clone(), |t, url| t.cursor_pointer().hover(|s| s.underline()).on_click(open(url)))
+            .when_some(embed.url.clone(), |t, url| t.cursor_pointer().hover(|s| s.underline()).on_mouse_down(gpui_kit::MouseButton::Right, link_menu(url.clone())).on_click(open(url)))
             .child(title)
     });
     let description = embed.description.as_deref().map(|text| {

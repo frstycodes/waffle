@@ -223,11 +223,13 @@ impl Waffle {
     }
 
     pub(super) fn activity_card(&self, card: &ProfileCard, rich: &RichPresence, ink: Ink, cx: &mut Context<Self>) -> Div {
-        let (user, guild_id) = (card.user.clone(), card.guild_id.clone());
-        let more = ui::icon_button("profile-activity-more", Glyph::More, "More", cx)
-            .scoped(gpui_kit::transparent_black(), ink.tile, ink.muted, ink.strong)
-            .small()
-            .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_user_menu(user.clone(), guild_id.clone(), menu_surface(guild_id.is_some()), event.position(), cx)));
+        let (user, menu_rich) = (card.user.clone(), rich.clone());
+        let more = (!self.activity_menu(&card.user, rich).is_empty()).then(|| {
+            ui::icon_button("profile-activity-more", Glyph::More, "More", cx)
+                .scoped(gpui_kit::transparent_black(), ink.tile, ink.muted, ink.strong)
+                .small()
+                .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_activity_menu(user.clone(), menu_rich.clone(), event.position(), cx)))
+        });
         let art = match &rich.image {
             Some(url) => ui::media(url.clone(), ui::all(RADIUS_SM)).size(px(ACTIVITY_ART)).flex_none().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
             None => ui::row().size(px(ACTIVITY_ART)).flex_none().squircle(RADIUS_SM).bg(ink.tile).justify_center().text_color(ink.muted).child(Icon::new(Glyph::Game).size_8()).into_any_element(),
@@ -260,7 +262,7 @@ impl Waffle {
                 ui::row()
                     .justify_between()
                     .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(activity_heading(rich.kind)))
-                    .child(ui::row().gap_1().children(self.interaction_toolbar(card, Source::Activity(rich.name.clone()), ACTIVITY_GROUP, ink, cx)).child(more)),
+                    .child(ui::row().gap_1().children(self.interaction_toolbar(card, Source::Activity(rich.name.clone()), ACTIVITY_GROUP, ink, cx)).children(more)),
             )
             .child(ui::row().gap_3().child(art).child(facts))
             .when(rich.joinable, |c| c.child(ask_to_join(ink))).children(self.activity_join_button(&card.user.id, rich, cx))

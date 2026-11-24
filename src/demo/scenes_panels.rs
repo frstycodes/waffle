@@ -2,6 +2,23 @@ use super::*;
 
 pub(super) fn panel_scenes(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
     match scene {
+        // Menus from the context-menu audit: the server icon's Notification settings submenu, an activity
+        // card's ⋯, a Friends row's ⋯, a picture's message menu and the message box's.
+        "server-menu-notify" => {
+            waffle.open_server_menu("1".into(), demo_at(60., 130.), false, cx);
+            waffle.open_submenu_named("Notification settings");
+        }
+        "activity-menu" => {
+            let rich = crate::discord::RichPresence { kind: crate::discord::ActivityKind::Playing, name: "Minecraft".into(), ..Default::default() };
+            waffle.open_activity_menu(user("8388608", "Wren"), rich, demo_at(640., 260.), cx);
+        }
+        "friend-row-menu" => waffle.open_friend_row_menu(user("8388608", "Wren"), demo_at(900., 200.), cx),
+        "image-menu" => {
+            let Some(message) = waffle.feeds.get("general").and_then(|f| f.messages.iter().find(|m| m.id == "102").cloned()) else { return };
+            let target = Some(crate::message_menu::MenuTarget::Image(avatar_url("3", None)));
+            waffle.open_message_menu_on(message, target, demo_at(700., 120.), cx);
+        }
+        "text-box-menu" => waffle.open_text_box_menu(demo_at(600., 700.), cx),
         // The channel header's bell with its menu open.
         "notify-bell" => {
             if let Some(channel) = waffle.channel.clone() {

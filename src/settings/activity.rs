@@ -49,7 +49,7 @@ impl Waffle {
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_guild_activity(&guild_id, cx)))
     }
 
-    fn toggle_guild_activity(&mut self, guild_id: &str, cx: &mut Context<Self>) {
+    pub(crate) fn toggle_guild_activity(&mut self, guild_id: &str, cx: &mut Context<Self>) {
         let before = self.account_settings.clone();
         let share = before.activity_restricted_guilds.iter().any(|g| g == guild_id);
         let patch = share_in_guild(&mut self.account_settings, guild_id, share);

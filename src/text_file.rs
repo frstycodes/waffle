@@ -45,6 +45,29 @@ pub struct TextFiles {
     pub expanded: HashSet<String>,
     // The file open full size over the window.
     pub viewer: Option<File>,
+    // Files whose ⋯ turned Wrap Text off, or Render Markdown on.
+    pub unwrapped: HashSet<String>,
+    pub rendered: HashSet<String>,
+}
+
+// How one file's text is drawn: expanded inline, and its ⋯ menu's choices.
+#[derive(Clone, Copy, Default)]
+pub struct FileView {
+    pub expanded: bool,
+    pub nowrap: bool,
+    pub markdown: bool,
+}
+
+impl TextFiles {
+    pub fn view(&self, url: &str) -> FileView {
+        FileView { expanded: self.expanded.contains(url), nowrap: self.unwrapped.contains(url), markdown: self.rendered.contains(url) }
+    }
+}
+
+// Discord offers Render Markdown for markdown files only.
+fn is_markdown(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.ends_with(".md") || lower.ends_with(".markdown")
 }
 
 pub fn is_text_name(name: &str) -> bool {
@@ -154,7 +177,8 @@ impl Waffle {
         let width = (f32::from(viewport.width) - 160.).clamp(320., 960.);
         let max_h = f32::from(viewport.height) - 208.;
         let copied = self.copied.as_deref() == Some(file.url.as_str());
-        let card = card(Card { id: "text-viewer".into(), file: &file, text: Some((&text, truncated)), max_h: Some(max_h), expanded: None, copied, full: true, this: cx.weak_entity() }, cx)
+        let view = self.text_files.borrow().view(&file.url);
+        let card = card(Card { id: "text-viewer".into(), file: &file, text: Some((&text, truncated)), max_h: Some(max_h), expanded: None, copied, full: true, view, this: cx.weak_entity() }, cx)
             .w(px(width))
             .shadow(ui::shadow_pop(cx))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation());
@@ -163,14 +187,14 @@ impl Waffle {
     }
 }
 
-pub fn inline(id: String, file: &File, state: Option<&TextFile>, expanded: bool, copied: bool, this: WeakEntity<Waffle>, cx: &App) -> AnyElement {
+pub fn inline(id: String, file: &File, state: Option<&TextFile>, view: FileView, copied: bool, this: WeakEntity<Waffle>, cx: &App) -> AnyElement {
     let text = match state {
         Some(TextFile::Ready { text, truncated }) => Some((text, *truncated)),
         _ => None,
     };
     // Roughly what fits in the collapsed height; anything shorter has nothing to expand.
     let long = text.is_some_and(|(t, _)| t.lines().count() > 7 || t.len() > 600);
-    let card = card(Card { id: id.into(), file, text, max_h: long.then_some(if expanded { EXPANDED } else { COLLAPSED }), expanded: long.then_some(expanded), copied, full: false, this }, cx);
+    let card = card(Card { id: id.into(), file, text, max_h: long.then_some(if view.expanded { EXPANDED } else { COLLAPSED }), expanded: long.then_some(view.expanded), copied, full: false, view, this }, cx);
     div().pt_2().child(card).into_any_element()
 }
 
@@ -185,12 +209,13 @@ struct Card<'a> {
     expanded: Option<bool>,
     copied: bool,
     full: bool,
+    view: FileView,
     this: WeakEntity<Waffle>,
 }
 
 // The file's text over one hairline and a footer: expand, name, size, then Copy contents, Open full size, Download.
 fn card(card: Card, cx: &App) -> Stateful<Div> {
-    let Card { id, file, text, max_h, expanded, copied, full, this } = card;
+    let Card { id, file, text, max_h, expanded, copied, full, view, this } = card;
     let line = palette::line(cx);
     // Two tones: the frame and footer in the file card's tone, the text in an inset well of its own.
     let (frame, well) = (palette::surface(Level::Sidebar, cx), palette::surface(Level::Raised, cx));
@@ -203,10 +228,15 @@ fn card(card: Card, cx: &App) -> Stateful<Div> {
                 // TextView scrolls the block inside its own height only when asked this way, and keeps the wheel from the chat.
                 block.overflow.y = Some(if clipped { Overflow::Hidden } else { Overflow::Scroll });
             }
+            if view.nowrap {
+                block = block.whitespace_nowrap();
+                block.overflow.x = Some(Overflow::Scroll);
+            }
+            let source = if view.markdown { text.to_string() } else { fenced(text) };
             div()
                 .relative()
                 .size_full()
-                .child(TextView::markdown(SharedString::from(format!("{id}-text")), fenced(text)).selectable(true).style(TextViewStyle::default().code_block(block)))
+                .child(TextView::markdown(SharedString::from(format!("{id}-text")), source).selectable(true).style(TextViewStyle::default().code_block(block)))
                 // lint-allow(custom-mark): ui::more_below follows a scroll handle, and this preview never scrolls while clipped; its fade is always on
                 .when(clipped, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(px(FADE)).squircle(RADIUS_MD).bg(linear_gradient(180., linear_color_stop(well.opacity(0.), 0.), linear_color_stop(well, 1.)))))
                 .into_any_element()
@@ -219,8 +249,8 @@ fn card(card: Card, cx: &App) -> Stateful<Div> {
         true => format!("{} · showing the first 100 KB", crate::chat::format_size(file.size)),
         false => crate::chat::format_size(file.size),
     };
-    let (open, download, copy_url, viewer_file) = (file.url.clone(), file.url.clone(), file.url.clone(), file.clone());
-    let (expand_this, copy_this, open_this, close_this) = (this.clone(), this.clone(), this.clone(), this);
+    let (open, menu_file, copy_url, viewer_file) = (file.url.clone(), file.clone(), file.url.clone(), file.clone());
+    let (expand_this, copy_this, open_this, menu_this, close_this) = (this.clone(), this.clone(), this.clone(), this.clone(), this);
     let button = |name: &str, glyph: Glyph, tip: &'static str| ui::icon_button(SharedString::from(format!("{id}-{name}")), glyph, tip, cx).small();
     ui::col()
         .id(id.clone())
@@ -282,7 +312,10 @@ fn card(card: Card, cx: &App) -> Stateful<Div> {
                             .ok();
                     }))
                 })
-                .child(button("download", Glyph::Download, "Download").on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&download) }))
+                .child(button("more", Glyph::More, "More").on_click(move |event, _, cx| { cx.stop_propagation();
+                    let at = event.position();
+                    menu_this.update(cx, |this, cx| this.open_menu(at, text_file_menu(&menu_file, view), cx)).ok();
+                }))
                 .when(full, |d| {
                     d.child(button("close", Glyph::X, "Close").on_click(move |_, _, cx| { cx.stop_propagation();
                         close_this
@@ -294,6 +327,37 @@ fn card(card: Card, cx: &App) -> Stateful<Div> {
                     }))
                 }),
         )
+}
+
+// Discord's text preview ⋯: Download, Wrap Text, and Render Markdown for a markdown file.
+fn text_file_menu(file: &File, view: FileView) -> Vec<crate::menu::Entry> {
+    use crate::menu::item;
+    let (url, name) = (file.url.clone(), file.name.clone());
+    let mut out = vec![item("Download", move |this, _, cx| {
+        let name = name.clone();
+        this.save_download(url.clone(), move |_| name.clone(), cx);
+    })
+    .icon(Glyph::Download)
+    .entry()];
+    let url = file.url.clone();
+    out.push(item("Wrap Text", move |this, _, cx| toggle_view(this, &url, |f| &mut f.unwrapped, cx)).checked(!view.nowrap).entry());
+    if is_markdown(&file.name) {
+        let url = file.url.clone();
+        out.push(item("Render Markdown", move |this, _, cx| toggle_view(this, &url, |f| &mut f.rendered, cx)).checked(view.markdown).entry());
+    }
+    out
+}
+
+fn toggle_view(this: &mut Waffle, url: &str, set: impl Fn(&mut TextFiles) -> &mut HashSet<String>, cx: &mut Context<Waffle>) {
+    let mut files = this.text_files.borrow_mut();
+    let set = set(&mut files);
+    if !set.remove(url) {
+        set.insert(url.to_owned());
+    }
+    drop(files);
+    // The card is drawn in the feed and in the overlay over the window.
+    this.redraw(Column::Main, cx);
+    cx.notify(); // lint-allow(global-notify): the full-size viewer is drawn by the root, over the columns
 }
 
 #[cfg(test)]

@@ -352,6 +352,16 @@ impl Waffle {
         }
     }
 
+    // Demo scenes open a top-level submenu by its label.
+    #[cfg(debug_assertions)]
+    pub(crate) fn open_submenu_named(&mut self, label: &str) {
+        let Some(build) = self.menu.as_ref().map(|m| m.build.clone()) else { return };
+        let index = build(self).iter().position(|e| matches!(e, Entry::Item(item) if item.label == label));
+        if let (Some(menu), Some(index)) = (&mut self.menu, index) {
+            menu.sub = vec![index];
+        }
+    }
+
     // Hovering a row opens its submenu and closes any deeper one from a sibling, unless the pointer is
     // tunnelling across the sibling toward the open submenu: then the switch waits for the grace.
     fn hover_menu_row(&mut self, row: &[usize], next: Vec<usize>, at: Point<Pixels>, cx: &mut Context<Self>) {
