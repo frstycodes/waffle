@@ -1,12 +1,14 @@
 // Faces (avatars, monograms, server and app tiles) and the marks that sit on their corners. A face takes
 // marks through `badged`: one component with four corner slots that places each mark for the face's shape
 // and cuts its ring out of the face, so callers never position or ring a mark by hand.
-use gpui_kit::{AnyElement, component::Icon, App, Div, FontWeight, Hsla, Img, IntoElement, ParentElement, RenderOnce, Styled, Window, div, img, linear_color_stop, linear_gradient, prelude::FluentBuilder as _, px};
+use gpui_kit::{AnyElement, ElementId, component::Icon, App, Div, FontWeight, Hsla, Img, IntoElement, ParentElement, RenderOnce, Styled, Window, div, img, linear_color_stop, linear_gradient, prelude::FluentBuilder as _, px};
 
-use super::{RADIUS_LG, Squircle, count_badge};
+use super::{
+    RADIUS_LG, Squircle, count_badge,
+    status_mark::{ringed_status, status_mark, status_metrics},
+};
 use crate::{
-    discord::{Mark, Status},
-    icons::Glyph,
+    discord::Mark,
     palette,
 };
 
@@ -115,37 +117,6 @@ pub fn app_tile(icon: Option<&str>, name: &str, id: &str, size: f32, cx: &App) -
     monogram_face(name_hue(id), size).squircle(size * SERVER_TILE_ROUNDING).child(initial(name)).into_any_element()
 }
 
-// A presence mark, bare: Discord's shapes, never colour alone (a dot for online, a moon for idle, a bar for
-// do not disturb, a ring for offline, a phone for online on mobile only, a play disc while streaming).
-// Its inner cut-outs are painted in `surface`, the colour around it. On a face it goes through
-// `Badged::status`, which sizes it and rings it.
-// Keywords: presence, online, idle, dnd, offline, mobile, streaming, dot
-pub fn status_mark(status: impl Into<Mark>, dot: f32, surface: Hsla, cx: &App) -> Div {
-    let status = status.into();
-    let color = match status {
-        Mark::Status(status) => palette::status_in(status, cx),
-        Mark::Mobile => palette::status_in(Status::Online, cx),
-        Mark::Streaming => palette::streaming(),
-    };
-    let mark = div().relative().flex_none().size(px(dot)).rounded_full().bg(color).overflow_hidden();
-    let cut = |w: f32, h: f32| cut_out(div().absolute().w(px(w)).h(px(h)), surface);
-    match status {
-        Mark::Status(Status::Online) => mark,
-        Mark::Status(Status::Idle) => mark.child(cut(dot * 0.62, dot * 0.62).rounded_full().left(px(-dot * 0.12)).top(px(-dot * 0.12))),
-        Mark::Status(Status::Dnd) => mark.flex().items_center().justify_center().child(cut(dot * 0.62, (dot * 0.24).max(2.)).relative().rounded(px(dot))),
-        Mark::Status(Status::Offline) => mark.flex().items_center().justify_center().child(cut(dot * 0.46, dot * 0.46).relative().rounded_full()),
-        // A handset: a screen cut out of the body, a chin below it for the home bar.
-        Mark::Mobile => {
-            let side = (dot * 0.18).max(1.5);
-            mark.h(px(dot * PHONE_ASPECT)).rounded(px(dot * PHONE_ROUNDING)).child(cut(dot - 2. * side, dot * PHONE_ASPECT - side - dot * 0.42).left(px(side)).top(px(side)).rounded(px(dot * 0.08)))
-        }
-        Mark::Streaming => mark.flex().items_center().justify_center().text_color(gpui_kit::white()).child(Icon::new(Glyph::Play).size(px((dot * 0.62).round()))),
-    }
-}
-
-const PHONE_ASPECT: f32 = 1.5;
-const PHONE_ROUNDING: f32 = 0.28;
-
 // A round mark holding a glyph: white on a `Solid` fill (a server's voice or stream badge), or muted on the
 // face's own surface (a channel's kind on a server tile).
 // Keywords: voice badge, stream badge, glyph dot, channel kind, round icon
@@ -212,12 +183,16 @@ pub fn badge_of(el: impl IntoElement) -> Badge {
 }
 
 // What a mark draws: an element, or presence, which needs the theme and the face's surface and so is
-// drawn when the face renders.
+// drawn when the face renders. Presence on a round face places and rings itself, from Discord's table.
 enum Content {
     El(AnyElement),
     Status(Mark, f32),
+    RoundStatus(Mark),
     Icon(Box<Icon>, MarkFill),
 }
+
+// The phone's corners, as a share of its width.
+const PHONE_ROUNDING: f32 = 0.1875;
 
 // An icon mark's share of its face (20px on the rail's 44px tile).
 const ICON_MARK_SCALE: f32 = 0.45;
@@ -254,12 +229,14 @@ pub struct Badged {
     shape: Shape,
     surface: Hsla,
     marks: Vec<(Spot, Badge)>,
+    // Keys the presence mark's morph from one status to the next; without it a change of status is a swap.
+    morph: Option<ElementId>,
 }
 
 // A face (avatar, monogram, server or app tile) ready to take corner marks; see `Badged`.
 // Keywords: avatar, tile, server icon, corner, badge, dot, count, notification, status, presence, voice, overlay
 pub fn badged(face: impl IntoElement, size: f32, shape: Shape, surface: Hsla) -> Badged {
-    Badged { face: face.into_any_element(), size, shape, surface, marks: Vec::new() }
+    Badged { face: face.into_any_element(), size, shape, surface, marks: Vec::new(), morph: None }
 }
 
 impl Badged {
@@ -270,11 +247,21 @@ impl Badged {
         self
     }
 
-    // Presence at the bottom-right, sized for the face (30% of it, 9 to 16px).
+    // Presence at the bottom-right, sized for the face: Discord's avatar table on a round face, 30% of a
+    // tile (9 to 16px).
     pub fn status(self, status: Option<impl Into<Mark>>) -> Self {
         let Some(status) = status.map(Into::into) else { return self };
-        let dot = (self.size * 0.3).clamp(9., 16.).round();
-        self.mark(Spot::BottomRight, Badge::status(status, dot))
+        let badge = match self.shape {
+            Shape::Round => Badge { el: Content::RoundStatus(status), radius: None, scale: 1., bare: false },
+            Shape::Tile | Shape::Control => Badge::status(status, (self.size * 0.3).clamp(9., 16.).round()),
+        };
+        self.mark(Spot::BottomRight, badge)
+    }
+
+    // Morphs the presence mark between statuses as Discord does, keyed by `id` (the person's or the row's).
+    pub fn morph(mut self, id: impl Into<ElementId>) -> Self {
+        self.morph = Some(id.into());
+        self
     }
 
     // An icon mark at `spot`, sized for the face.
@@ -297,24 +284,22 @@ impl Badged {
 }
 
 impl RenderOnce for Badged {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let (inset, ring) = self.shape.placement(self.size);
         let at = inset - ring;
-        let (surface, size) = (self.surface, self.size);
-        let marks: Vec<_> = self.marks.into_iter().map(|(spot, badge)| {
+        let (surface, size, morph) = (self.surface, self.size, self.morph);
+        let marks: Vec<AnyElement> = self.marks.into_iter().map(|(spot, badge)| {
             let el = match badge.el {
                 Content::El(el) => el,
-                Content::Status(status, dot) => status_mark(status, dot, surface, cx).into_any_element(),
+                Content::Status(status, dot) => status_mark(status, dot).into_any_element(),
+                Content::RoundStatus(status) => return ringed_status(status, status_metrics(size), surface, morph.clone(), window, cx).into_any_element(),
                 Content::Icon(icon, fill) => icon_mark(*icon, fill, (size * ICON_MARK_SCALE).round(), cx).into_any_element(),
             };
-            (spot, badge.radius, badge.scale, badge.bare, el)
-        }).collect();
-        div().relative().flex_none().size(px(self.size)).child(self.face).children(marks.into_iter().map(move |(spot, radius, scale, bare, el)| {
-            let ring = if bare { 0. } else { ring };
-            let at = if bare { inset } else { at };
+            let ring = if badge.bare { 0. } else { ring };
+            let at = if badge.bare { inset } else { at };
             let holder = div().absolute().p(px(ring)).flex().items_center().justify_center();
             // The ring follows the mark's own corner, grown by the ring's width.
-            let holder = match radius {
+            let holder = match badge.radius {
                 Some(radius) => holder.rounded(px(radius + ring)),
                 None => holder.rounded_full(),
             };
@@ -324,8 +309,9 @@ impl RenderOnce for Badged {
                 Spot::BottomLeft => holder.bottom(px(at)).left(px(at)),
                 Spot::BottomRight => holder.bottom(px(at)).right(px(at)),
             };
-            let holder = if bare { holder } else if scale >= 0.999 { cut_out(holder, surface) } else { holder.scale(scale.max(0.)).opacity(scale.clamp(0., 1.)) };
-            holder.child(el)
-        }))
+            let holder = if badge.bare { holder } else if badge.scale >= 0.999 { cut_out(holder, surface) } else { holder.scale(badge.scale.max(0.)).opacity(badge.scale.clamp(0., 1.)) };
+            holder.child(el).into_any_element()
+        }).collect();
+        div().relative().flex_none().size(px(self.size)).child(self.face).children(marks)
     }
 }

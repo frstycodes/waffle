@@ -4,7 +4,7 @@ use gpui_kit::{AnyElement, Context, Div, FontWeight, SharedString, component::{A
 use super::{RowState, channel_row, draft_mark, row_action, row_gap};
 use crate::{
     Waffle,
-    discord::Channel,
+    discord::{Channel, Mark},
     icons::Glyph,
     layout::{decorated_avatar, playing_avatar},
     palette,
@@ -47,20 +47,22 @@ impl Waffle {
         let hovered = self.hovered_row.as_deref() == Some(channel.id.as_str());
         // Discord plays the avatar, decoration and nameplate while the row is hovered or open.
         let animate = (selected || hovered) && crate::presence::may_animate();
-        let mark = presence.as_ref().map(|p| p.mark());
+        let typing = self.typing.get(&channel.id).is_some_and(|t| t.iter().any(|t| t.until > std::time::Instant::now()));
+        // In a 1:1 DM Discord shows typing on the avatar, as its presence mark turned into the typing pill.
+        let dm_typing = typing && channel.recipient.is_some();
+        let mark = if dm_typing { Some(Mark::Typing) } else { presence.as_ref().map(|p| p.mark()) };
         let face = match &channel.recipient {
-            Some(user) if animate => playing_avatar(&format!("dm-{}", channel.id), &user.avatar, user.decoration.as_deref(), 32., mark, ring),
-            Some(user) => decorated_avatar(&user.avatar, user.decoration.as_deref(), 32., mark, ring),
+            Some(user) if animate => playing_avatar(&format!("dm-{}", channel.id), &user.avatar, user.decoration.as_deref(), 32., mark, ring).morph(format!("dm-presence-{}", channel.id)).into_any_element(),
+            Some(user) => decorated_avatar(&user.avatar, user.decoration.as_deref(), 32., mark, ring).morph(format!("dm-presence-{}", channel.id)).into_any_element(),
             None => ui::dm_face(&channel.face(), 32., ring),
         };
-        let typing = self.typing.get(&channel.id).is_some_and(|t| t.iter().any(|t| t.until > std::time::Instant::now()));
         let faint = palette::faint(cx);
         let call_line = self.dm_call_line(&channel.id, cx);
         // Built twice on a nameplated row: the second, invisible, sizes the nameplate's mask (`key` keeps ids apart).
         // Discord's second line: only what they're doing (the member list's activity line), never the status
         // word; a group counts its members.
         let line = |key: &str, cx: &gpui_kit::App| -> Option<Div> {
-            let line = match (typing, presence.clone(), channel.recipient.as_ref()) {
+            let line = match (typing && !dm_typing, presence.clone(), channel.recipient.as_ref()) {
                 (true, _, _) => Some(div().child(ui::bars(SharedString::from(format!("dm-typing-{}{key}", channel.id)), faint, 10.)).child("Typing…")),
                 (false, Some(p), Some(user)) => crate::panel::activity_status(user, &p, None).map(|status| div().child(status.line(cx))),
                 (false, Some(_), None) => None,

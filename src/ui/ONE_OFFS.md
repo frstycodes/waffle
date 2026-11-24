@@ -811,11 +811,13 @@ _A notify in a pointer-move or scroll handler, or a timer loop, runs dozens of t
 
 _A repeating animation redraws every frame while it's on screen: run it only while its state holds (speaking, loading) and say when it stops in lint-allow(endless-animation)._
 
+- `src/design_system/faces.rs` — drawn only on the design-system page, which exists to show it moving.
 - `src/dm_call.rs` — pulses only on a face still being rung (pending); it stops when they answer
 - `src/dm_call.rs` — pulses only while the ringing card is up; answering or declining removes it
 - `src/mascot.rs` — plays only while a loader is drawn, and reduce-motion gets the still mark above.
 - `src/mascot.rs` — plays only while the mascot is drawn, and reduce-motion gets the still mark above.
 - `src/settings/meter.rs` — shown only while a keybind is recording; the ring is dropped when recording ends
+- `src/ui/status_mark.rs` — the typing mark shows only while someone is typing, which Discord ends after 10 seconds.
 - `src/video.rs` — drawn only while the clip loads; the view swaps it out when it is ready or has failed
 
 ## detached-task
@@ -897,6 +899,7 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/create_server.rs` — ends itself when the captcha channel closes with its request, and holds no entity
 - `src/demo/scenes_apps.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
 - `src/demo/scenes_apps.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_calls.rs` — the loop returns once the view is gone and the update fails
 - `src/demo/scenes_calls.rs` — the loop returns once the view is gone and the update fails
 - `src/demo/scenes_calls.rs` — the loop returns once the view is gone and the update fails
 - `src/demo/scenes_chat.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone

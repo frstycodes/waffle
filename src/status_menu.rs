@@ -553,7 +553,7 @@ fn presence_choice(status: Status, label: &'static str, detail: &'static str, on
         .squircle(ui::RADIUS_MD)
         .gap_3()
         .when(on, |r| r.bg(palette::selected(cx)))
-        .child(ui::status_mark(status, 14., palette::surface(palette::Level::Raised, cx), cx).border_0())
+        .child(ui::status_mark(status, 14.))
         .child(
             ui::col().min_h_0()
                 .flex_1()

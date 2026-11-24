@@ -200,7 +200,7 @@ impl Render for DesignSystem {
             add("notices", notices(cx).into_any_element());
         }
         if self.shows("avatars") {
-            add("avatars", avatars(cx).into_any_element());
+            add("avatars", avatars(window, cx).into_any_element());
             add("badged faces", badged_faces(cx).into_any_element());
         }
         if self.shows("feedback") {

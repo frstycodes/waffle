@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status badges</title>
+<meta name="description" content="Discord's presence marks on avatars at every size and status, beside Waffle's as built and as it draws on the sidebar today, plus a playground with Discord's morph between statuses.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="site.css">
+<link rel="stylesheet" href="css/primitives.css">
+<script>try{const p=JSON.parse(localStorage.getItem("waffle-ds")||"{}"),r=document.documentElement;if(p.theme)r.dataset.theme=p.theme}catch{}</script>
+<style>
+  main { max-width: 1320px; }
+  .src { font-size: var(--text-xs); color: var(--text-faint); max-width: 100ch; }
+  .src code { font-family: var(--font-mono); font-size: 11px; }
+  .nv { color: var(--warning-ink); }
+
+  /* A face: a monogram disc; the SVG on top of it draws the mask and the mark. */
+  .face { position: relative; flex: none; display: block; overflow: visible; }
+  .face, .face * { corner-shape: round; }
+  .face svg { display: block; overflow: visible; }
+  .mono { color: #fff; font: 700 1px/1 "Figtree", sans-serif; }
+
+  /* Surfaces the faces sit on. --sf is what Waffle paints its cut-outs in. */
+  .sf { --sf: var(--bg-page); background: var(--sf); }
+  .sf.side { --sf: var(--bg-sunken, var(--bg-raised)); }
+  .sf.raised { --sf: var(--bg-raised); }
+  .sf.photo { --sf: transparent; background: linear-gradient(135deg, #e9a23b, #b24a8f 50%, #2f6fd6); }
+  .sf.check { --sf: transparent; background: repeating-conic-gradient(var(--line-strong) 0 25%, transparent 0 50%) 0 0 / 12px 12px; }
+
+  /* Size matrix */
+  .matrix { display: grid; gap: 0; overflow-x: auto; }
+  .mrow { display: grid; grid-template-columns: 112px repeat(7, minmax(72px, 1fr)); align-items: center; border-top: 1px solid var(--line); min-width: 720px; }
+  .mrow.head { font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--text-faint); border-top: 0; }
+  .mrow > div { padding: var(--space-3) var(--space-2); display: flex; align-items: center; justify-content: center; min-width: 0; }
+  .mrow > .lab { justify-content: flex-start; flex-direction: column; align-items: flex-start; gap: 2px; font-size: var(--text-sm); color: var(--text-strong); }
+  .mrow > .lab small { font-size: var(--text-xs); color: var(--text-faint); font-weight: 400; }
+  .pair { display: flex; gap: var(--space-3); align-items: center; }
+  .pair .who { font-size: 10px; color: var(--text-faint); writing-mode: vertical-rl; transform: rotate(180deg); }
+  .msw { display: flex; gap: var(--space-2); margin: var(--space-3) 0; flex-wrap: wrap; }
+  .msw button, .pg button { height: 30px; padding: 0 var(--space-3); border-radius: var(--radius-xs); background: var(--hover); color: var(--text-strong); font-size: var(--text-xs); font-weight: var(--weight-medium); }
+  .msw button[aria-pressed="true"], .pg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent, #2A1C00); }
+
+  /* Playground */
+  .play { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+  .knobs { display: grid; gap: var(--space-4); padding: var(--space-4); background: var(--bg-raised); border-radius: var(--radius-lg); position: sticky; top: var(--space-4); }
+  .knobs fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+  .knobs legend { font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--text-faint); margin-bottom: var(--space-1); }
+  .knobs label { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text); }
+  .knobs label > span { flex: none; width: 70px; color: var(--text-muted); }
+  .knobs select { flex: 1; min-width: 0; height: 32px; padding: 0 var(--space-2); border-radius: var(--radius-xs); border: 1px solid var(--line-strong); background: var(--bg-page); color: var(--text-strong); font: inherit; }
+  .knobs input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+  .pg { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); min-width: 0; }
+  .stage { display: grid; gap: var(--space-2); align-content: start; min-width: 0; }
+  .stage h3 { margin: 0; font-size: var(--text-sm); }
+  .stage .frame { display: grid; place-items: center; min-height: 220px; border-radius: var(--radius-lg); overflow: hidden; }
+  .stage .frame .zoom { transform-origin: center; }
+  .stage p { margin: 0; font-size: var(--text-xs); color: var(--text-muted); line-height: 1.45; }
+  @media (max-width: 1100px) { .stages { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 900px) { .play { grid-template-columns: minmax(0, 1fr); } .knobs { position: static; } }
+
+  /* Discord's morph: react-spring with its default config (tension 170, friction 26). */
+  .morph rect, .morph circle, .morph polygon { transition: x .32s cubic-bezier(.25,1.1,.4,1), y .32s cubic-bezier(.25,1.1,.4,1), width .32s cubic-bezier(.25,1.1,.4,1), height .32s cubic-bezier(.25,1.1,.4,1), rx .32s cubic-bezier(.25,1.1,.4,1), ry .32s cubic-bezier(.25,1.1,.4,1), r .32s cubic-bezier(.25,1.1,.4,1), cx .32s, cy .32s, transform .32s cubic-bezier(.25,1.1,.4,1), fill .2s; }
+  .typing-dot { animation: tdot 1.2s infinite; }
+  @keyframes tdot { 0%, 60%, 100% { opacity: .35; } 30% { opacity: 1; } }
+
+  .gaps { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+  .gaps th, .gaps td { text-align: left; vertical-align: top; padding: var(--space-2) var(--space-3) var(--space-2) 0; border-top: 1px solid var(--line); line-height: 1.45; }
+  .gaps th { font-size: var(--text-xs); color: var(--text-faint); font-weight: var(--weight-semibold); }
+  .gaps td:first-child { color: var(--text-strong); font-weight: var(--weight-medium); white-space: nowrap; }
+  .gaps-wrap { overflow-x: auto; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; margin-right: 4px; }
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div class="layout">
+<nav class="toc" id="toc" aria-label="Design system"></nav>
+<main>
+<section id="status-badges">
+  <h1>Status badges</h1>
+  <p class="lede">The presence mark on an avatar: online, idle, do not disturb, offline, online on mobile, streaming, and typing. Discord cuts the mark's ring out of the avatar with an SVG mask, so whatever sits behind shows through. Discord's geometry and colours below are its own numbers, read from Discord's client (2026-11-24). The Waffle columns show <code>status_mark</code> and <code>Badged::status</code> as they were before the port; Waffle now draws Discord's marks and their morph (<code>src/ui/status_mark.rs</code>).</p>
+  <p class="src">Discord source: size table <code>Kj</code> (<code>size / status / stroke / offset</code> per avatar size); avatar cut-outs <code>G</code> (round), <code>B</code> (mobile), <code>k</code> (typing); mark shapes <code>svg-mask-status-*</code>; the animated mark <code>v()</code> and its colours <code>S3</code> in module <code>935154</code>.</p>
+  <p class="src nv">Not verified: the morph's exact spring (Discord animates with react-spring; drawn here as a 320ms ease with a slight overshoot), and the typing dots' size and timing (their mask was read, not the dots inside it).</p>
+</section>
+
+<section id="today">
+  <h2>What broke (fixed)</h2>
+  <p class="lede">In the DM list every mark draws as a plain filled disc: idle has no moon, do not disturb no bar, offline no hole. The shapes in <code>status_mark</code> haven't changed. They were moved unchanged from <code>layout.rs</code> into <code>ui/face.rs</code> in <code>a4d59e8</code>. Over the native sidebar the surface is clear, so <code>cut_out</code> uses <code>backdrop_erase</code> instead of painting the surface colour. The ring around the mark erases correctly. The cut-outs inside the mark don't show, so the mark's own fill seems to cover them.</p>
+  <p class="src nv">Not verified: why the inner erase loses to its parent's fill (paint order of the erase primitive against the mark's background, or the mark's <code>overflow_hidden</code> mask). Check in the app before fixing. Discord's approach sidesteps it: the mark is its own shape (a masked fill), not a fill with holes punched in it.</p>
+  <div class="stages" id="today-stages"></div>
+</section>
+
+<section id="sizes">
+  <h2>Every size</h2>
+  <p class="lede">Each avatar size Discord defines, each status, Discord beside Waffle. Switch the surface to see what the cut shows: Discord's ring is transparent, so over a photo it shows the photo.</p>
+  <div class="msw" id="sfsw" role="group" aria-label="Surface"></div>
+  <div class="matrix" id="matrix"></div>
+</section>
+
+<section id="playground">
+  <h2>Playground</h2>
+  <p class="lede">Switch status to see Discord morph from one shape to the next. Waffle before the port swapped the shape without animating.</p>
+  <div class="play">
+    <form class="knobs" id="knobs" onsubmit="return false">
+      <fieldset><legend>Status</legend><div class="pg" id="pst"></div></fieldset>
+      <fieldset><legend>Face</legend>
+        <label><span>Size</span><select name="size"></select></label>
+        <label><span>Surface</span><select name="sf"><option value="">Page</option><option value="side">Sidebar</option><option value="raised">Raised</option><option value="photo">Photo</option><option value="check">Transparent</option></select></label>
+        <label><span>Zoom</span><select name="zoom"><option>1</option><option selected>3</option><option>6</option></select></label>
+        <label><input type="checkbox" name="cycle"> Cycle every 1.2s</label>
+      </fieldset>
+    </form>
+    <div class="stages" id="pstages"></div>
+  </div>
+</section>
+
+<section id="gaps">
+  <h2>What to change in Waffle</h2>
+  <div class="gaps-wrap">
+  <table class="gaps">
+    <thead><tr><th>Area</th><th>Discord</th><th>Waffle before the port</th></tr></thead>
+    <tbody id="gaptable"></tbody>
+  </table>
+  </div>
+</section>
+</main>
+</div>
+<script src="site.js"></script>
+<script>
+// Discord's size table, verbatim.
+const DSIZE = { 16: [6, 2, 0], 20: [6, 2, 0], 24: [8, 3, 0], 32: [10, 3, 0], 40: [12, 4, 0], 44: [12, 4, 0], 48: [12, 4, 0], 56: [14, 4, 2], 72: [16, 6, 4], 80: [16, 6, 4], 96: [20, 8, 6], 120: [24, 8, 8], 152: [30, 10, 10] };
+// Discord's mark colours (S3), the same in both themes.
+const DCOL = { online: "#45a366", idle: "#ffc04e", dnd: "#da3e44", offline: "#84858d", mobile: "#45a366", streaming: "#9147ff", typing: "#45a366" };
+const STATUSES = ["online", "idle", "dnd", "offline", "mobile", "streaming", "typing"];
+const LABEL = { online: "Online", idle: "Idle", dnd: "Do Not Disturb", offline: "Offline", mobile: "Mobile", streaming: "Streaming", typing: "Typing" };
+const NS = "http://www.w3.org/2000/svg";
+let uid = 0;
+const theme = () => (document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+// Waffle's palette (src/palette.rs): online and idle follow the theme; dnd, offline and streaming don't.
+const WCOL = () => theme() === "light"
+  ? { online: "#00A159", idle: "#DA950B", dnd: "#DB2B33", offline: "#83868C", mobile: "#00A159", streaming: "#8C55E0" }
+  : { online: "#3EC87D", idle: "#F2B036", dnd: "#DB2B33", offline: "#83868C", mobile: "#3EC87D", streaming: "#8C55E0" };
+
+function el(tag, attrs = {}, kids = []) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); kids.forEach(k => e.appendChild(k)); return e; }
+function hue(n) { return (n * 47) % 360; }
+
+// The mark's shape in its own box, Discord's v(): a background rect, a cut-out rect, the play triangle, the phone's home dot.
+function dShape(t, st) {
+  const P = { bgR: .5*t, bgY: .25*t, bgX: 0, bgH: t, bgW: t, cX: .5*t, cY: .75*t, cW: 0, cH: 0, cR: 0, play: 0, dX: .5*t, dY: .75*t, dR: 0 };
+  switch (st) {
+    case "typing": return { ...P, bgW: 2.5*t };
+    case "mobile": return { ...P, bgR: 1.5*t*.125, bgY: 0, bgH: 1.5*t, cX: .125*t, cY: .25*t, cW: .75*t, cH: .75*t, dY: 1.25*t, dR: .125*t };
+    case "idle": return { ...P, cX: -.125*t, cY: .125*t, cW: .75*t, cH: .75*t, cR: .375*t };
+    case "dnd": return { ...P, cX: .125*t, cY: .625*t, cW: .75*t, cH: .25*t, cR: .125*t };
+    case "streaming": return { ...P, cR: .25*t, play: 1 };
+    case "offline": return { ...P, cX: .25*t, cY: .5*t, cW: .5*t, cH: .5*t, cR: .25*t };
+    default: return P;
+  }
+}
+// The avatar's cut-out, in the avatar's own pixels: G (round), B (mobile), k (typing).
+function dCut(S, st) {
+  const [t, k, o] = DSIZE[S];
+  if (st === "mobile") { const h = 1.5*t + 2*k; return { x: S - t - k - o, y: S - 1.5*t - k - o, w: t + 2*k, h, r: h*.2 }; }
+  if (st === "typing") { const i = (1.5*t + 2*k)/2, h = t + 2*k; return { x: S - t - i - o, y: S - t - k - o, w: 2.5*t + 2*k, h, r: h/2 }; }
+  const c = S - t/2 - o, r = t/2 + k; return { x: c - r, y: c - r, w: 2*r, h: 2*r, r };
+}
+
+// Discord's face: avatar masked by the cut, the mark in a box t wide (2.5t typing), 1.5t tall, bottom-right at the offset.
+function discordFace(S, st, n = 1) {
+  const [t, , o] = DSIZE[S], id = "d" + (++uid);
+  const svg = el("svg", { width: S, height: S, viewBox: `0 0 ${S} ${S}`, class: "morph" });
+  const cut = el("rect", { fill: "black" });
+  svg.appendChild(el("defs", {}, [el("mask", { id: id + "a", maskUnits: "userSpaceOnUse", x: -S, y: -S, width: 3*S, height: 3*S }, [el("circle", { cx: S/2, cy: S/2, r: S/2, fill: "white" }), cut])]));
+  const av = el("g", { mask: `url(#${id}a)` }, [el("circle", { cx: S/2, cy: S/2, r: S/2, fill: `hsl(${hue(n)} 55% 52%)` })]);
+  const txt = el("text", { x: S/2, y: S/2, "text-anchor": "middle", "dominant-baseline": "central", fill: "#fff", "font-family": "Figtree", "font-weight": 700, "font-size": S*.42 }); txt.textContent = "GF".slice(0, S < 24 ? 1 : 2); av.appendChild(txt);
+  svg.appendChild(av);
+  // The mark: a bg rect masked by its own cut-outs, filled with the status colour.
+  const mk = { bg: el("rect", { fill: "white" }), c: el("rect", { fill: "black" }), dot: el("circle", { fill: "black" }), play: el("polygon", { fill: "black", points: `${-.216506*t},${-.25*t} ${.216506*t},0 ${-.216506*t},${.25*t}` }) };
+  const g = el("g");
+  svg.appendChild(el("defs", {}, [el("mask", { id: id + "m", maskUnits: "userSpaceOnUse", x: -S, y: -S, width: 3*S, height: 3*S }, [mk.bg, mk.c, mk.play, mk.dot])]));
+  const fill = el("rect", { x: -S, y: -S, width: 3*S, height: 3*S, mask: `url(#${id}m)` });
+  g.appendChild(fill); svg.appendChild(g);
+  const dots = el("g"); svg.appendChild(dots);
+  const set = (st) => {
+    const c = dCut(S, st);
+    Object.assign(cut.style, { x: c.x + "px", y: c.y + "px", width: c.w + "px", height: c.h + "px", rx: c.r + "px", ry: c.r + "px" });
+    const p = dShape(t, st), x0 = S - o - t, y0 = S - o - 1.5*t, tx = st === "typing" ? S - o - 1.75*t : x0;
+    Object.assign(mk.bg.style, { x: tx + p.bgX + "px", y: y0 + p.bgY + "px", width: p.bgW + "px", height: p.bgH + "px", rx: p.bgR + "px", ry: p.bgR + "px" });
+    Object.assign(mk.c.style, { x: x0 + p.cX + "px", y: y0 + p.cY + "px", width: p.cW + "px", height: p.cH + "px", rx: p.cR + "px", ry: p.cR + "px" });
+    Object.assign(mk.dot.style, { cx: x0 + p.dX + "px", cy: y0 + p.dY + "px", r: p.dR + "px" });
+    mk.play.style.transformOrigin = "0 0";
+    mk.play.style.transform = `translate(${x0 + .5625*t}px, ${y0 + .75*t}px) scale(${p.play})`;
+    fill.style.fill = DCOL[st];
+    dots.replaceChildren(...(st === "typing" ? [0, 1, 2].map(i => { const d = el("circle", { cx: tx + (.75 + i*.5)*t, cy: y0 + .75*t, r: .125*t, fill: "white", class: "typing-dot" }); d.style.animationDelay = i*.15 + "s"; return d; }) : []));
+  };
+  set(st);
+  const wrap = document.createElement("span"); wrap.className = "face"; wrap.style.width = wrap.style.height = S + "px"; wrap.appendChild(svg); wrap.set = set;
+  return wrap;
+}
+
+// Waffle's face as built: Badged::status on a round face (dot = 30% of the face, 9 to 16px, 2px ring painted in the surface).
+function waffleFace(S, st, n = 1, broken = false) {
+  const w = document.createElement("span"); w.className = "face"; w.style.width = w.style.height = S + "px";
+  w.innerHTML = `<span style="position:absolute;inset:0;border-radius:50%;background:hsl(${hue(n)} 55% 52%);display:grid;place-items:center;color:#fff;font:700 ${S*.42}px/1 Figtree">${"GF".slice(0, S < 24 ? 1 : 2)}</span>`;
+  if (st === "typing") return w;
+  const C = WCOL(), dot = Math.round(Math.min(16, Math.max(9, S*.3))), ring = 2, at = S*.04 - 2 - ring;
+  const tall = st === "mobile" ? dot*1.5 : dot, rad = st === "mobile" ? dot*.28 : dot/2;
+  const holder = document.createElement("span");
+  // Over a clear surface, backdrop_erase shows what's under the face; drawn here as the frame's own background.
+  const sf = "var(--sf)";
+  Object.assign(holder.style, { position: "absolute", right: at + "px", bottom: at + "px", padding: ring + "px", borderRadius: (rad + ring) + "px", background: sf, display: "grid", placeItems: "center" });
+  const mark = document.createElement("span");
+  Object.assign(mark.style, { position: "relative", width: dot + "px", height: tall + "px", borderRadius: rad + "px", background: C[st], overflow: "hidden", display: "grid", placeItems: "center" });
+  const cut = (css) => { if (broken) return; const c = document.createElement("span"); Object.assign(c.style, { position: "absolute", background: sf, ...css }); mark.appendChild(c); };
+  if (st === "idle") cut({ width: dot*.62 + "px", height: dot*.62 + "px", borderRadius: "50%", left: -dot*.12 + "px", top: -dot*.12 + "px" });
+  if (st === "dnd") cut({ width: dot*.62 + "px", height: Math.max(dot*.24, 2) + "px", borderRadius: dot + "px", left: dot*.19 + "px", top: (dot - Math.max(dot*.24, 2))/2 + "px" });
+  if (st === "offline") cut({ width: dot*.46 + "px", height: dot*.46 + "px", borderRadius: "50%", left: dot*.27 + "px", top: dot*.27 + "px" });
+  if (st === "mobile") { const s = Math.max(dot*.18, 1.5); cut({ width: dot - 2*s + "px", height: dot*1.5 - s - dot*.42 + "px", left: s + "px", top: s + "px", borderRadius: dot*.08 + "px" }); }
+  if (st === "streaming") mark.innerHTML = `<svg width="${Math.round(dot*.62)}" height="${Math.round(dot*.62)}" viewBox="0 0 16 16"><path d="M4.5 2.8v10.4a.8.8 0 0 0 1.2.7l8.3-5.2a.8.8 0 0 0 0-1.4L5.7 2.1a.8.8 0 0 0-1.2.7Z" fill="#fff"/></svg>`;
+  holder.appendChild(mark); w.appendChild(holder);
+  return w;
+}
+
+// What broke: one row each for Discord, Waffle as built, Waffle on the sidebar now, at the DM list's 32px.
+function renderToday() {
+  const box = document.getElementById("today-stages"); box.replaceChildren();
+  [["Discord", "Mask cut, mark is its own shape.", S => STATUSES.map(s => discordFace(32, s))],
+   ["Waffle before, as designed", "On a painted surface the cut-outs land.", S => STATUSES.filter(s => s !== "typing").map(s => waffleFace(32, s))],
+   ["Waffle before, on the sidebar", "Ring erased, inner cut-outs missing: every mark a disc.", S => STATUSES.filter(s => s !== "typing").map(s => waffleFace(32, s, 1, true))]].forEach(([h, p, f]) => {
+    const st = document.createElement("div"); st.className = "stage";
+    st.innerHTML = `<h3>${h}</h3><div class="frame sf side" style="min-height:96px"><div class="zoom" style="display:flex;gap:16px;transform:scale(2);padding:8px"></div></div><p>${p}</p>`;
+    st.querySelector(".zoom").append(...f()); box.appendChild(st);
+  });
+}
+
+let SF = "side";
+function renderMatrix() {
+  const sw = document.getElementById("sfsw");
+  sw.replaceChildren(...[["", "Page"], ["side", "Sidebar"], ["raised", "Raised"], ["photo", "Photo"]].map(([v, l]) => { const b = document.createElement("button"); b.textContent = l; b.setAttribute("aria-pressed", SF === v); b.onclick = () => { SF = v; renderMatrix(); }; return b; }));
+  const m = document.getElementById("matrix"); m.replaceChildren();
+  const head = document.createElement("div"); head.className = "mrow head"; head.innerHTML = `<div class="lab">Avatar</div>` + STATUSES.map(s => `<div>${LABEL[s]}</div>`).join(""); m.appendChild(head);
+  Object.keys(DSIZE).map(Number).forEach(S => {
+    const [t, k, o] = DSIZE[S], wdot = Math.round(Math.min(16, Math.max(9, S*.3)));
+    const r = document.createElement("div"); r.className = "mrow sf " + SF;
+    r.innerHTML = `<div class="lab">${S}px<small>D ${t} + ${k} ring, inset ${o}</small><small>W ${wdot} + 2 ring</small></div>`;
+    STATUSES.forEach((s, i) => { const c = document.createElement("div"); const p = document.createElement("div"); p.className = "pair"; p.append(discordFace(S, s, i + 1), waffleFace(S, s, i + 1)); c.appendChild(p); r.appendChild(c); });
+    m.appendChild(r);
+  });
+}
+
+const PS = { st: "online", size: 32, sf: "side", zoom: 3, cycle: false };
+let pd, timer;
+function renderPlay() {
+  const pst = document.getElementById("pst");
+  pst.replaceChildren(...STATUSES.map(s => { const b = document.createElement("button"); b.type = "button"; b.textContent = LABEL[s]; b.setAttribute("aria-pressed", PS.st === s); b.onclick = () => go(s); return b; }));
+  const box = document.getElementById("pstages"); box.replaceChildren();
+  pd = discordFace(PS.size, PS.st);
+  [["Discord", pd, "Mask cut and mark morph together."], ["Waffle before, as designed", waffleFace(PS.size, PS.st), PS.st === "typing" ? "No typing mark: the DM row's second line says Typing… instead." : "Dot " + Math.round(Math.min(16, Math.max(9, PS.size*.3))) + "px, 2px ring, no animation."], ["Waffle before, on the sidebar", waffleFace(PS.size, PS.st, 1, true), "Inner cut-outs missing."]].forEach(([h, f, p]) => {
+    const st = document.createElement("div"); st.className = "stage";
+    st.innerHTML = `<h3>${h}</h3><div class="frame sf ${PS.sf}"><div class="zoom" style="transform:scale(${PS.zoom})"></div></div><p>${p}</p>`;
+    st.querySelector(".zoom").appendChild(f); box.appendChild(st);
+  });
+}
+// Status buttons morph Discord's face in place rather than rebuilding it.
+function go(s) { if (pd) goMorph(s); else { PS.st = s; renderPlay(); } }
+function goMorph(s) { PS.st = s; pd.set(s); [...document.querySelectorAll("#pst button")].forEach(b => b.setAttribute("aria-pressed", b.textContent === LABEL[s])); const st = document.querySelectorAll("#pstages .stage"); [1, 2].forEach(i => { const z = st[i].querySelector(".zoom"); z.replaceChildren(waffleFace(PS.size, s, 1, i === 2)); }); }
+function wireKnobs() {
+  const f = document.getElementById("knobs"), sel = f.elements.size;
+  sel.innerHTML = Object.keys(DSIZE).map(s => `<option ${+s === PS.size ? "selected" : ""}>${s}</option>`).join("");
+  f.elements.sf.value = PS.sf;
+  f.oninput = () => { PS.size = +sel.value; PS.sf = f.elements.sf.value; PS.zoom = +f.elements.zoom.value; PS.cycle = f.elements.cycle.checked; clearInterval(timer); if (PS.cycle) timer = setInterval(() => goMorph(STATUSES[(STATUSES.indexOf(PS.st) + 1) % STATUSES.length]), 1200); renderPlay(); };
+}
+function renderGaps() {
+  const sw = c => `<span class="swatch" style="background:${c}"></span>${c}`;
+  const W = WCOL();
+  const rows = [
+    ["Mark size", "From the size table: 6px at 16 and 20, 8 at 24, 10 at 32, 12 at 40 to 48, 14 at 56, 16 at 72 and 80, 20 at 96, 24 at 120, 30 at 152.", "30% of the face, clamped 9 to 16px: 10 at 32, 12 at 40, 16 from 56 up. Too big below 32 (9px on a 16px face), too small from 96 up."],
+    ["Ring", "2px at 16 and 20, 3 at 24 and 32, 4 at 40 to 56, 6 at 72 and 80, 8 at 96 and 120, 10 at 152.", "2px at every size."],
+    ["Placement", "Mark flush with the avatar's bottom-right box corner up to 48px; inset 2, 4, 6, 8, 10px from 56 up.", "Ring's outer edge 4% of the face minus 4px from the corner: it hangs past the box below 100px."],
+    ["Cut", "An SVG mask: the ring is transparent, so a photo, a banner or the glass sidebar shows through.", "The ring and the inner shapes are painted in the surface colour, or erased with backdrop_erase over the clear sidebar, where the inner shapes don't render (see What broke)."],
+    ["Idle", "Moon: a 0.75t circle cut at (−0.125t, −0.125t) from the mark's corner.", "A 0.62 circle at −0.12: a thinner crescent."],
+    ["Do not disturb", "Bar 0.75t wide, 0.25t tall, fully rounded, centred.", "Bar 0.62 wide, 0.24 tall."],
+    ["Offline", "Ring: hole 0.5t across.", "Hole 0.46 across."],
+    ["Mobile", "Phone t × 1.5t, corners 0.1875t; screen 0.75t × 0.75t at 0.125t in, 0.25t down; home button a 0.125t dot. The avatar's cut is a rounded rect, not a circle.", "Phone dot × 1.5 dot, screen cut down to a chin, no home dot; the ring around it is a rounded rect too."],
+    ["Streaming", "Purple " + sw(DCOL.streaming) + " disc with the play triangle cut out of it.", "Purple " + sw(W.streaming) + " disc with a white play glyph drawn on it."],
+    ["Typing", "The mark grows into a 2.5t pill with three pulsing dots; the avatar's cut grows with it.", "No typing mark: the DM row's second line reads Typing…"],
+    ["Morph", "Every change between statuses morphs the mark and the avatar's cut (react-spring).", "Shape swaps instantly."],
+    ["Colours", `Same in both themes: online ${sw(DCOL.online)}, idle ${sw(DCOL.idle)}, dnd ${sw(DCOL.dnd)}, offline ${sw(DCOL.offline)}.`, `This theme: online ${sw(W.online)}, idle ${sw(W.idle)}, dnd ${sw(W.dnd)}, offline ${sw(W.offline)}.`],
+  ];
+  document.getElementById("gaptable").innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join("");
+}
+
+function all() { renderToday(); renderMatrix(); renderPlay(); renderGaps(); }
+wireKnobs(); all();
+new MutationObserver(all).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+</script>
+</body>
+</html>

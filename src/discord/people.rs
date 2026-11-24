@@ -160,6 +160,8 @@ pub enum Mark {
     Status(Status),
     Mobile,
     Streaming,
+    // Typing in a DM: the avatar's mark becomes the typing pill.
+    Typing,
 }
 
 impl From<Status> for Mark {
