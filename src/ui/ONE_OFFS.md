@@ -1161,3 +1161,4 @@ _A title-line header (a WindowControlArea::Drag) shares the window's top with Wi
 
 - `src/layout.rs` — a bare drag band under the caption buttons, which occlude it; nothing in it to cover
 - `src/login.rs` — the whole screen drags; its content is centred, clear of both window corners
+- `src/setup.rs` — the setup window opens with titlebar: None, so no caption buttons or traffic lights share its top; its own close button ends this row.

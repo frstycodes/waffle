@@ -158,11 +158,8 @@ jobs:
       - name: Build setup
         if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
-          & $iscc "/DVersion=$env:VERSION" "/DExe=$PWD\Waffle.exe" "/O$PWD" packaging\windows\waffle.iss
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        # The installer is Waffle.exe itself: run under a name with "setup" in it, it installs itself (src/setup.rs).
+        run: Copy-Item Waffle.exe waffle-windows-x86_64-setup.exe
 
       - name: Upload
         if: startsWith(github.ref, 'refs/tags/v')
