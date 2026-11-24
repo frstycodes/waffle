@@ -735,6 +735,36 @@ fn presence_mark_follows_device_and_stream() {
 }
 
 #[test]
+fn parses_profile_frame() {
+    let body = json!({ "items": [{ "type": 3, "inner_width": 1200, "overflow_top": 120, "overflow_bottom": 80, "overflow_horizontal": 24, "layers": [
+        { "id": "top", "type": "staple", "order": "front", "anchor": "top" },
+        { "id": "side", "type": "rail", "order": "back", "anchor": "center" },
+        { "id": "odd", "type": "sparkle" },
+    ] }] });
+    let frame = parse_profile_frame("sku1", &body).expect("a frame");
+    assert_eq!((frame.inner_width, frame.overflow_top, frame.overflow_horizontal), (1200., 120., 24.));
+    assert_eq!(frame.layers.len(), 2);
+    assert_eq!((frame.layers[0].kind, frame.layers[0].front, frame.layers[0].anchor), (FrameKind::Staple, true, FrameAnchor::Top));
+    assert_eq!(frame.layers[1].src, "https://cdn.discordapp.com/media/v1/collectibles-shop/sku1/side/static");
+    assert!(parse_profile_frame("x", &json!({ "items": [] })).is_none());
+    let worn = parse_profile("9", &json!({ "user_profile": { "collectibles": [{ "sku_id": "fr", "type": 3 }] } }));
+    assert_eq!(worn.frame_sku.as_deref(), Some("fr"));
+    // A server profile overrides the main one where it sets a field.
+    let server = parse_profile("9", &json!({
+        "user": { "id": "9", "banner": "main" },
+        "user_profile": { "bio": "main bio", "pronouns": "she/her", "theme_colors": [1, 2] },
+        "guild_member_profile": { "guild_id": "g", "banner": "a_srv", "bio": "server bio", "pronouns": "", "theme_colors": [3, 4] },
+        "badges": [{ "description": "Nitro", "icon": "n" }],
+        "guild_badges": [{ "description": "Booster", "icon": "b" }],
+    }));
+    assert_eq!(server.bio.as_deref(), Some("server bio"));
+    assert_eq!(server.pronouns.as_deref(), Some("she/her"));
+    assert_eq!(server.theme, Some((3, 4)));
+    assert_eq!(server.banner.as_deref(), Some("https://cdn.discordapp.com/guilds/g/users/9/banners/a_srv.gif?size=600"));
+    assert_eq!(server.badges.len(), 2);
+}
+
+#[test]
 fn parses_outbox() {
     let body = json!({ "entries": [
         { "id": "1", "content_type": 1, "extra": { "game_name": "Celeste", "application_id": "9" }, "traits": [{ "type": 1, "first_time": true }, { "type": 2, "duration_seconds": 9000 }, { "type": 8, "streak_count_days": 4 }] },

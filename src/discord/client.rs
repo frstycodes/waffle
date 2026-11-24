@@ -401,6 +401,12 @@ impl Client {
         Ok(profile)
     }
 
+    /// A profile frame's layers, from the collectibles product its sku names.
+    pub async fn profile_frame(&self, sku: &str) -> Result<Option<ProfileFrame>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, &format!("/collectibles-products/{sku}"))).await?;
+        Ok(parse_profile_frame(sku, &body))
+    }
+
     /// What they've been doing lately: their content outbox, for the full profile's Recent activity.
     pub async fn recent_activity(&self, user_id: &str) -> Result<Vec<RecentEntry>, String> {
         let body = self.run(self.request(reqwest::Method::GET, &format!("/content-inventory/users/{user_id}/outbox"))).await?;

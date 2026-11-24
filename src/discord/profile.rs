@@ -27,6 +27,10 @@ pub struct Profile {
     pub connections: Vec<Connection>,
     // The profile effect they wear: its collectible's sku, resolved through `/collectibles-products/{sku}`.
     pub effect_sku: Option<String>,
+    // The profile frame they wear (collectible type 3), and its layers once that product is fetched.
+    pub frame_sku: Option<String>,
+    #[serde(skip)]
+    pub frame: Option<ProfileFrame>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -66,6 +70,44 @@ pub struct Connection {
     pub id: String,
     pub name: String,
     pub verified: bool,
+}
+
+// A profile frame: art drawn around the card, authored on a card `inner_width` wide (Discord's 1200) and scaled to
+// the real one. Staples hang `overflow_top` above and `overflow_bottom` below it; every layer reaches
+// `overflow_horizontal` past each side.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ProfileFrame {
+    pub inner_width: f32,
+    pub overflow_top: f32,
+    pub overflow_bottom: f32,
+    pub overflow_horizontal: f32,
+    pub layers: Vec<FrameLayer>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FrameLayer {
+    pub src: String,
+    pub kind: FrameKind,
+    // Over the card's content, or behind the card.
+    pub front: bool,
+    pub anchor: FrameAnchor,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameKind {
+    // One picture pinned to the top or bottom edge, overhanging it.
+    Staple,
+    // One picture the card's height, cropped from the top, middle or bottom.
+    Rail,
+    // A picture repeated down the card.
+    Border,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameAnchor {
+    Top,
+    Center,
+    Bottom,
 }
 
 // One image of a profile effect, placed in the effect's own pixels (`effects[]` of its config).
