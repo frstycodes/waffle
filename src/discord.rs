@@ -38,7 +38,7 @@ mod tests;
 pub use client::*;
 pub use guild::*;
 pub use http::*;
-pub use identity::{identity, set_full_identity};
+pub use identity::{identity, load_build_number};
 pub use message::*;
 pub use parse::*;
 pub use parse_chat::*;

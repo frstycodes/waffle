@@ -22,16 +22,16 @@ pub fn connect(token: String) -> (Client, mpsc::UnboundedReceiver<Event>) {
     let (commands, command_rx) = mpsc::unbounded();
     let (voice, voice_out) = crate::voice::GatewayHandle::new();
     let subscriptions = pacing::SharedSubscriptions::default();
-    let client = Client { http: reqwest::Client::new(), token: token.clone(), commands, voice: voice.clone(), acks: Default::default(), subscriptions: subscriptions.clone() };
+    let client = Client { http: reqwest::Client::builder().cookie_store(true).build().unwrap_or_default(), token: token.clone(), commands, voice: voice.clone(), acks: Default::default(), subscriptions: subscriptions.clone() };
     let (tx, rx) = mpsc::unbounded();
     runtime().spawn(run_gateway(token, tx, Outbound { commands: command_rx, voice, voice_out, subscriptions }));
     (client, rx)
 }
 
 impl Client {
-    // Every API request carries the token and Waffle's identity headers (identity.rs).
+    // Every API request carries the token and the web client's headers (identity.rs).
     fn authorized(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        identity().headers(req.header("Authorization", &self.token))
+        identity().headers(req.header("Authorization", &self.token).header(reqwest::header::REFERER, "https://discord.com/channels/@me"))
     }
 
     pub(super) fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {

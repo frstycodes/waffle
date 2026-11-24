@@ -139,6 +139,7 @@ enum Outcome {
 
 async fn qr_session(tx: &mpsc::UnboundedSender<AuthEvent>) -> Result<String, Outcome> {
     let failed = |e: &dyn std::fmt::Display| Outcome::Failed(e.to_string());
+    crate::discord::load_build_number().await;
     let key = tokio::task::spawn_blocking(|| RsaPrivateKey::new(&mut rand::thread_rng(), 2048))
         .await
         .map_err(|e| failed(&e))?
@@ -146,7 +147,7 @@ async fn qr_session(tx: &mpsc::UnboundedSender<AuthEvent>) -> Result<String, Out
     let public_key = key.to_public_key().to_public_key_der().map_err(|e| failed(&e))?;
 
     let mut request = REMOTE_AUTH.into_client_request().map_err(|e| failed(&e))?;
-    // The gateway refuses (403) a connection without Discord's own origin; it takes Waffle's user agent.
+    // The gateway refuses (403) a connection without Discord's own origin.
     request.headers_mut().insert("Origin", HeaderValue::from_static("https://discord.com"));
     if let Ok(agent) = HeaderValue::from_str(&crate::discord::identity().user_agent) {
         request.headers_mut().insert("User-Agent", agent);
@@ -244,7 +245,7 @@ async fn exchange_ticket(tx: &mpsc::UnboundedSender<AuthEvent>, key: &RsaPrivate
     let mut solved: Option<(captcha::Challenge, String)> = None;
     // Discord may ask for a captcha, and occasionally asks again after one is solved.
     for attempt in 1..=3 {
-        let mut req = crate::discord::identity().headers(client.post(format!("{LOGIN_API}/users/@me/remote-auth/login")).header("Origin", "https://discord.com").header("Referer", "https://discord.com/login").json(&json!({ "ticket": ticket })));
+        let mut req = crate::discord::identity().headers(client.post(format!("{LOGIN_API}/users/@me/remote-auth/login")).header("Referer", "https://discord.com/login").json(&json!({ "ticket": ticket })));
         if let Some(fingerprint) = &fingerprint {
             req = req.header("X-Fingerprint", fingerprint);
         }

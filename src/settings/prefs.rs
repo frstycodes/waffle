@@ -183,8 +183,6 @@ pub struct Prefs {
     pub tts_command: bool,
     // Off: the updater still checks and says so, but downloads only when asked.
     pub auto_download_updates: bool,
-    // Developer setting: the full client details Waffle tells Discord, or the minimal set (discord/identity.rs).
-    pub full_identity: bool,
     // Recent message searches per account id, newest first.
     pub search_history: HashMap<String, Vec<crate::search::Saved>>,
     // Window zoom, 1 = 100% (⌘= / ⌘- / ⌘0).
@@ -282,7 +280,6 @@ impl Default for Prefs {
             show_image_descriptions: false,
             tts_command: true,
             auto_download_updates: true,
-            full_identity: true,
             search_history: HashMap::new(),
             zoom: 1.,
             rejoin_voice: None,
@@ -310,8 +307,6 @@ impl Prefs {
         if prefs.stream_resolution == 480 {
             prefs.stream_resolution = 720;
         }
-        // Before the first connect, so IDENTIFY already carries the chosen details.
-        crate::discord::set_full_identity(prefs.full_identity);
         prefs
     }
 

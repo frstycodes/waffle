@@ -12,6 +12,7 @@ pub(super) struct Outbound {
 // ends the old session, and the voice server closes with 4014. Only an invalid session, or one that
 // fails to come back in a few tries, identifies anew.
 pub(super) async fn run_gateway(token: String, tx: mpsc::UnboundedSender<Event>, mut outbound: Outbound) {
+    load_build_number().await;
     let mut resume: Option<Resume> = None;
     let mut fails = 0u32;
     loop {
