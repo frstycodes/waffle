@@ -18,7 +18,7 @@ use windows::{
 
 // The main window, once `attach` has run.
 static WINDOW: AtomicIsize = AtomicIsize::new(0);
-// Written beside Waffle.exe; the installer's [UninstallDelete] removes it.
+// Written beside Waffle.exe; uninstalling deletes the whole folder with it (src/setup/windows.rs).
 const ICO_NAME: &str = "Waffle-icon.ico";
 // PNG-in-ICO resources need this version (Vista and later).
 const ICON_RESOURCE_VERSION: u32 = 0x0003_0000;

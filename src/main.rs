@@ -135,6 +135,7 @@ mod system_message;
 mod tray;
 mod text_file;
 mod ui;
+mod setup;
 mod splash;
 mod stage;
 mod stage_dialogs;
@@ -142,6 +143,7 @@ mod stage_view;
 mod updater;
 mod design_system;
 mod app_icon;
+mod fonts;
 mod voice;
 mod voice_status;
 mod window_controls;
@@ -181,6 +183,10 @@ static ALLOCATOR: memory::Counting = memory::Counting;
 static ALLOCATOR: dhat::Alloc = dhat::Alloc;
 
 fn main() {
+    // Run as the setup .exe, or with --uninstall, Waffle installs or removes itself instead.
+    if setup::run_instead() {
+        return;
+    }
     #[cfg(target_os = "windows")]
     if !tray::claim_single_instance() {
         return;
@@ -193,25 +199,7 @@ fn main() {
         gpui_kit::init(cx);
         app_keys::init(cx);
         shortcuts::init(cx);
-        cx.text_system()
-            .add_fonts(
-                [
-                    include_bytes!("../assets/fonts/Gabarito-Regular.ttf").as_slice(),
-                    include_bytes!("../assets/fonts/Gabarito-Medium.ttf"),
-                    include_bytes!("../assets/fonts/Gabarito-SemiBold.ttf"),
-                    include_bytes!("../assets/fonts/Gabarito-Bold.ttf"),
-                    include_bytes!("../assets/fonts/Gabarito-ExtraBold.ttf"),
-                    include_bytes!("../assets/fonts/Figtree-Regular.ttf"),
-                    include_bytes!("../assets/fonts/Figtree-Medium.ttf"),
-                    include_bytes!("../assets/fonts/Figtree-SemiBold.ttf"),
-                    include_bytes!("../assets/fonts/Figtree-Bold.ttf"),
-                    include_bytes!("../assets/fonts/RobotoMono-Regular.ttf"),
-                    include_bytes!("../assets/fonts/RobotoMono-Bold.ttf"),
-                ]
-                .map(std::borrow::Cow::Borrowed)
-                .to_vec(),
-            )
-            .expect("bundled fonts");
+        cx.text_system().add_fonts(fonts::bundled()).expect("bundled fonts");
         name_fonts::start(cx);
         // The design is drawn with `-webkit-font-smoothing: antialiased`; macOS smoothing would thicken every stroke.
         cx.text_system().set_font_smoothing(false);

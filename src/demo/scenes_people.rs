@@ -33,7 +33,7 @@ pub(super) fn demo_active_now(waffle: &mut Waffle, empty: bool, cx: &mut Context
     };
     for (id, name, rich) in [("25165824", "rosa", celeste), ("29360128", "mikey", track)] {
         let activity = Activity { kind: rich.kind, text: rich.name.clone(), rest: Vec::new() };
-        waffle.presences.insert(id.into(), Presence { status: Presence_::Online, activity: Some(activity), rich: Some(rich), ..Default::default() });
+        waffle.presences.insert(id.into(), Presence { status: Presence_::Online, activity: Some(activity), activities: vec![rich], ..Default::default() });
         waffle.relationships.push(Relationship { user: user(id, name), kind: Relation::Friend, since: None });
     }
 }
@@ -55,7 +55,7 @@ pub(super) fn demo_profile(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
         ..Default::default()
     };
     let playing = Activity { kind: ActivityKind::Playing, text: rich.name.clone(), rest: Vec::new() };
-    waffle.presences.insert("8388608".into(), Presence { status: Presence_::Dnd, custom: None, activity: Some(playing), rich: Some(rich), ..Default::default() });
+    waffle.presences.insert("8388608".into(), Presence { status: Presence_::Dnd, custom: None, activity: Some(playing), activities: vec![rich], ..Default::default() });
     if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
         guild.voice_states.push(VoiceState { guild_id: Some("1".into()), channel_id: Some("lounge".into()), user_id: "8388608".into(), user: Some(user("8388608", "Wren")), muted: false, deafened: false, server_muted: false, server_deafened: false, streaming: false, camera: false, suppress: false, requested_at: None });
     }
@@ -227,7 +227,7 @@ pub(super) fn demo_games(waffle: &mut Waffle) {
         let started = Some(chrono::Utc::now().timestamp_millis() - 47 * 60_000);
         let rich = crate::discord::RichPresence { kind: ActivityKind::Playing, name: name.into(), app_id: Some(app_id.into()), started, ..Default::default() };
         let activity = Activity { kind: ActivityKind::Playing, text: name.into(), rest: Vec::new() };
-        waffle.presences.insert(id.into(), Presence { status: Presence_::Online, custom: None, activity: Some(activity), rich: Some(rich), ..Default::default() });
+        waffle.presences.insert(id.into(), Presence { status: Presence_::Online, custom: None, activity: Some(activity), activities: vec![rich], ..Default::default() });
     }
 }
 

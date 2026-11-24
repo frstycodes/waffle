@@ -208,11 +208,11 @@ pub(super) fn parse_presence(p: &Value) -> Presence {
     };
     let mut lines = others.iter().filter_map(|a| line(a));
     let first = lines.next().map(|(kind, text)| Activity { kind, text, rest: lines.collect() });
-    let rich = others.first().and_then(|a| parse_rich(a));
+    let activities = others.iter().filter_map(|a| parse_rich(a)).collect();
     let clients = &p["client_status"];
     let mobile_only = !clients["mobile"].is_null() && clients["desktop"].is_null() && clients["web"].is_null();
     let streaming = others.iter().any(|a| a["type"] == 1);
-    Presence { status: Status::parse(p["status"].as_str().unwrap_or("offline")), custom, activity: first, rich, mobile_only, streaming }
+    Presence { status: Status::parse(p["status"].as_str().unwrap_or("offline")), custom, activity: first, activities, mobile_only, streaming }
 }
 
 // Field names from the diself crate's model (src/model/user.rs), not from Discord's docs (the endpoint is undocumented).
@@ -396,8 +396,8 @@ pub fn app_icon_url(app_id: &str, icon: &str) -> String {
 }
 
 // Large asset keys: "mp:…" is a media proxy path, "spotify:…" an album cover, anything else an app asset id.
-pub(super) fn activity_image(a: &Value) -> Option<String> {
-    let key = a["assets"]["large_image"].as_str()?;
+pub(super) fn activity_image(a: &Value, slot: &str) -> Option<String> {
+    let key = a["assets"][slot].as_str()?;
     if let Some(path) = key.strip_prefix("mp:") {
         return Some(format!("https://media.discordapp.net/{path}"));
     }
@@ -424,7 +424,14 @@ pub(super) fn parse_rich(a: &Value) -> Option<RichPresence> {
         app_id: text("application_id"),
         details: text("details"),
         state: text("state"),
-        image: activity_image(a),
+        image: activity_image(a, "large_image"),
+        small_image: activity_image(a, "small_image"),
+        large_text: a["assets"]["large_text"].as_str().filter(|t| !t.is_empty()).map(str::to_owned),
+        small_text: a["assets"]["small_text"].as_str().filter(|t| !t.is_empty()).map(str::to_owned),
+        buttons: a["buttons"].as_array().into_iter().flatten().filter_map(|b| b.as_str().or_else(|| b["label"].as_str())).take(2).map(str::to_owned).collect(),
+        button_urls: a["metadata"]["button_urls"].as_array().into_iter().flatten().filter_map(Value::as_str).take(2).map(str::to_owned).collect(),
+        url: text("url"),
+        sync_id: text("sync_id"),
         party: match size.as_deref() {
             Some([current, max]) => Some((*current, *max)),
             _ => None,

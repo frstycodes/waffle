@@ -263,7 +263,7 @@ impl Waffle {
     // "Current activity" with every card, or Discord's empty line and a way to say hi.
     // "Current activity", then "Recent activity" from their outbox, or Discord's empty line when there's neither.
     fn activity_tab(&self, card: &ProfileCard, ink: Ink, cx: &mut Context<Self>) -> Div {
-        let cards = self.profile_activity_cards(card, ink, cx);
+        let cards = self.profile_activity_cards(card, super::activity::Fit::Wide, ink, cx);
         let recent = card.recent.as_deref().unwrap_or_default();
         if cards.is_empty() && recent.is_empty() {
             return self.no_activity(card, cx);

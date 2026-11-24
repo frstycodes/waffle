@@ -32,7 +32,6 @@ use page::NAV;
 pub use page::Page;
 pub use prefs::*;
 
-#[cfg(debug_assertions)]
 pub(crate) use profiles::ProfileTab;
 
 use crate::{

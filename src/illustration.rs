@@ -12,10 +12,12 @@ pub enum Illustration {
     ForumEmpty,
     LoadFailed,
     ReportSent,
+    // The waffle the Windows installer shows while it works.
+    InstallerWaffle,
 }
 
 impl Illustration {
-    pub const ALL: [Self; 10] = [Self::FriendsOnline, Self::FriendsAll, Self::FriendsPending, Self::FriendsBlocked, Self::PinsEmpty, Self::SearchEmpty, Self::InboxEmpty, Self::ForumEmpty, Self::LoadFailed, Self::ReportSent];
+    pub const ALL: [Self; 11] = [Self::FriendsOnline, Self::FriendsAll, Self::FriendsPending, Self::FriendsBlocked, Self::PinsEmpty, Self::SearchEmpty, Self::InboxEmpty, Self::ForumEmpty, Self::LoadFailed, Self::ReportSent, Self::InstallerWaffle];
 
     pub fn path(self) -> &'static str {
         ASSETS[self as usize].0
@@ -23,7 +25,7 @@ impl Illustration {
 }
 
 // In `Illustration`'s order.
-pub const ASSETS: [(&str, &[u8]); 10] = [
+pub const ASSETS: [(&str, &[u8]); 11] = [
     ("illustrations/friends-online.png", include_bytes!("../assets/illustrations/friends-online.png")),
     ("illustrations/friends-all.png", include_bytes!("../assets/illustrations/friends-all.png")),
     ("illustrations/friends-pending.png", include_bytes!("../assets/illustrations/friends-pending.png")),
@@ -34,6 +36,7 @@ pub const ASSETS: [(&str, &[u8]); 10] = [
     ("illustrations/forum-empty.png", include_bytes!("../assets/illustrations/forum-empty.png")),
     ("illustrations/load-failed.png", include_bytes!("../assets/illustrations/load-failed.png")),
     ("illustrations/report-sent.png", include_bytes!("../assets/illustrations/report-sent.png")),
+    ("illustrations/installer-waffle.png", include_bytes!("../assets/illustrations/installer-waffle.png")),
 ];
 
 #[cfg(test)]

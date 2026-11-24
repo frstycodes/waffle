@@ -323,7 +323,7 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/profile.rs` — the effect draws on the popout and on the DM panel's card
 - `src/profile.rs` — the frame draws on the popout and on the DM panel's card
 - `src/profile.rs` — the profile draws in the popout and in the DM panel
-- `src/profile/activity.rs` — joining a call changes the rail, the channel list and the call stage
+- `src/profile/activity_voice.rs` — joining or opening a call changes the rail, the channel list and the call stage
 - `src/profile/dm_panel.rs` — showing or hiding the side panel resizes the main column beside it
 - `src/rail_drag.rs` — folders show in the rail and in the server menus, and the root draws the landing ghost
 - `src/rail_drag.rs` — the landing ghost is drawn by the root over the rail, whose tile was held as a hole under it
@@ -592,7 +592,8 @@ _Label: ui::badge, ui::tag, ui::count_badge, ui::pill or ui::role_chip; add a va
 - `src/forum/helpers.rs` — ui::badge is a 20px solid label; this is a 32px file row with an icon and its size
 - `src/joining/rules.rs` — ui::surface has no frosted translucent level matching the composer card
 - `src/panel.rs` — ui::tip is one line of text; this tip lists each thing someone is doing, with its icon.
-- `src/profile/activity.rs` — ui::button(...).disabled(true) takes a palette tone; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
+- `src/profile/activity.rs` — ui::badge is a small label; this is the art slot itself, Discord's unknown-app square.
+- `src/profile/activity_voice.rs` — ui::capped_stack puts its "+n" at a row's end; Discord's tile puts it at one of the seats.
 - `src/profile/parts.rs` — ui::badge is a 20px solid label in 11px type; the guild tag is 22px in the card's 14px type and ink.
 - `src/profile/social.rs` — ui::strip takes a palette fill; this notice wears the profile theme's tint (Ink), as the card's other tiles do.
 - `src/settings/accessibility.rs` — ui::settings_card has no body-font-size option; this card sets the preview's message size
@@ -1161,3 +1162,4 @@ _A title-line header (a WindowControlArea::Drag) shares the window's top with Wi
 
 - `src/layout.rs` — a bare drag band under the caption buttons, which occlude it; nothing in it to cover
 - `src/login.rs` — the whole screen drags; its content is centred, clear of both window corners
+- `src/setup.rs` — the setup window opens with titlebar: None, so no caption buttons or traffic lights share its top; its own close button ends this row.

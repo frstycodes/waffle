@@ -119,7 +119,7 @@ pub(super) fn ready(me: User) -> Ready {
             ("media".into(), ReadState { last_read: 100, mentions: 0 }),
             ("staff".into(), ReadState { last_read: 100, mentions: 2 }),
         ],
-        presences: vec![("8388608".into(), Presence { status: Presence_::Online, custom: None, activity: None, rich: None, ..Default::default() })],
+        presences: vec![("8388608".into(), Presence { status: Presence_::Online, custom: None, activity: None, ..Default::default() })],
         relationships: vec![
             Relationship { user: user("8388608", "Wren"), kind: Relation::Friend, since: Some("2023-08-09T18:20:00+00:00".into()) },
             Relationship { user: user("12582912", "moss lantern"), kind: Relation::Friend, since: Some("2024-02-14T09:00:00+00:00".into()) },
@@ -193,7 +193,7 @@ pub(super) fn load_members() -> (Vec<(String, u32)>, Vec<ListItem>) {
         for n in 0..count {
             let id = format!("{}", 30_000_000 + items.len());
             let activity = (n % 3 == 0).then(|| Activity { kind: ActivityKind::Playing, text: format!("Game number {n}"), rest: Vec::new() });
-            items.push(ListItem::Member(Member { user: user(&id, &format!("{group} member {n}")), roles: vec!["r2".into()], presence: Presence { status, custom: None, activity, rich: None, ..Default::default() }, boosting_since: (n % 7 == 0).then(|| "2025-03-14T10:00:00+00:00".into()) }));
+            items.push(ListItem::Member(Member { user: user(&id, &format!("{group} member {n}")), roles: vec!["r2".into()], presence: Presence { status, custom: None, activity, ..Default::default() }, boosting_since: (n % 7 == 0).then(|| "2025-03-14T10:00:00+00:00".into()) }));
         }
     }
     (groups.iter().map(|(g, _, c)| ((*g).into(), *c)).collect(), items)
@@ -226,7 +226,7 @@ pub(super) fn members() -> Vec<ListItem> {
             status,
             custom: activity.filter(|(kind, _)| *kind == ActivityKind::Custom).map(|(_, text)| text.into()),
             activity: activity.filter(|(kind, _)| *kind != ActivityKind::Custom).map(|(kind, text)| Activity { kind, text: text.into(), rest: Vec::new() }),
-            rich: None,
+            activities: Vec::new(),
             // Wren is only on their phone, so the panel shows the mobile mark.
             mobile_only: id == "8388608",
             streaming: activity.is_some_and(|(kind, _)| kind == ActivityKind::Streaming),

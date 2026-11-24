@@ -30,8 +30,9 @@ jobs:
             echo "::error::tag $TAG does not match Cargo.toml version $version"
             exit 1
           fi
-      # Re-running a tag keeps its release and replaces its assets.
-      - run: gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Waffle $TAG" --generate-notes
+      # A draft until `publish`: releases/latest (the site's download buttons, the updater) must never point
+      # at a release whose installers aren't uploaded yet. Re-running a tag keeps its release and replaces its assets.
+      - run: gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Waffle $TAG" --generate-notes --draft
 
   build:
     needs: create
@@ -103,6 +104,14 @@ jobs:
           RUSTC_WRAPPER: sccache
       - run: command -v sccache && sccache --version && sccache --show-stats
 
+      - name: Install dmgbuild
+        if: runner.os == 'macOS'
+        run: |
+          python3 -m venv build-venv && build-venv/bin/pip install --quiet dmgbuild==2.0.0
+          echo "$PWD/build-venv/bin" >> "$GITHUB_PATH"
+          # One TIFF carrying both resolutions, so Retina screens get the @2x art.
+          tiffutil -cathidpicheck packaging/macos/dmg-background.png packaging/macos/dmg-background@2x.png -out build-dmg-background.tiff
+
       - name: Package Waffle.app
         if: runner.os == 'macOS'
         run: |
@@ -134,22 +143,9 @@ jobs:
             # to macOS and lost Input Monitoring. Requiring only the bundle id keeps the grant across updates.
             codesign --force --deep --sign - -r='designated => identifier "com.frstycodes.waffle"' $app
             ditto -c -k --keepParent $app waffle-macos-$arch.zip
-            dmg=build-$arch/dmg
-            mkdir $dmg && cp -R $app $dmg/ && ln -s /Applications $dmg/Applications
-            # The mounted volume shows the app icon too: a .VolumeIcon.icns plus the custom-icon flag, which
-            # only sticks when set on the mounted volume, so build read-write, flag it, then compress.
-            cp assets/macos/AppIcon.icns $dmg/.VolumeIcon.icns
-            hdiutil create -volname Waffle -srcfolder $dmg -format UDRW -ov build-$arch/rw.dmg
-            hdiutil attach -nobrowse -mountpoint build-$arch/mnt build-$arch/rw.dmg
-            SetFile -a C build-$arch/mnt
-            # Spotlight can still hold the fresh volume ("couldn't eject … Resource busy"): retry, then force.
-            for try in 1 2 3 4 5; do
-              hdiutil detach build-$arch/mnt && break
-              [ "$try" = 5 ] && hdiutil detach -force build-$arch/mnt
-              sleep 3
-            done
-            hdiutil convert build-$arch/rw.dmg -format UDZO -ov -o waffle-macos-$arch.dmg
-            # Only the zip and dmg are kept; the read-write image is the size of the app.
+            # The disk image window: Waffle and an Applications link over the honey background
+            # (packaging/macos), laid out by dmgbuild, which also gives the volume the app icon.
+            dmgbuild -s packaging/macos/dmg-settings.py -D app=$app -D background=build-dmg-background.tiff Waffle waffle-macos-$arch.dmg
             rm -rf build-$arch
           done
 
@@ -163,11 +159,8 @@ jobs:
       - name: Build setup
         if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
-          & $iscc "/DVersion=$env:VERSION" "/DExe=$PWD\Waffle.exe" "/O$PWD" packaging\windows\waffle.iss
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        # The installer is Waffle.exe itself: run under a name with "setup" in it, it installs itself (src/setup.rs).
+        run: Copy-Item Waffle.exe waffle-windows-x86_64-setup.exe
 
       - name: Upload
         if: startsWith(github.ref, 'refs/tags/v')
@@ -178,3 +171,11 @@ jobs:
             $sum "$file" > "$file.sha256"
             gh release upload "$TAG" "$file" "$file.sha256" --clobber
           done
+
+  # Only once every target uploaded; a failed build leaves the release a draft and `latest` where it was.
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
