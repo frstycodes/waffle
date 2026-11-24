@@ -38,3 +38,5 @@ Filename: "{app}\Waffle.exe"; Description: "Launch Waffle"; Flags: nowait postin
 [UninstallDelete]
 ; What an update set aside while Waffle was running.
 Type: files; Name: "{app}\Waffle.exe.old"
+; The picked app icon, written for the shortcuts (src/app_icon/windows.rs).
+Type: files; Name: "{app}\Waffle-icon.ico"
