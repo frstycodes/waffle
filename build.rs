@@ -1,4 +1,5 @@
 fn main() {
+    install_git_hooks();
     match std::env::var("CARGO_CFG_TARGET_OS").as_deref() {
         // ScreenCaptureKit (the `screencapturekit` crate, for Go Live) links Swift's runtime libraries, which
         // macOS ships in /usr/lib/swift; without this rpath the binary fails to launch with "Library not loaded".
@@ -24,4 +25,15 @@ fn main() {
         }
         _ => {}
     }
+}
+
+// Points git at .githooks (the UI rules before each commit) the first time a clone builds, so nobody has to
+// remember `make hooks`. Leaves a hooksPath someone set themselves alone, and does nothing outside a git checkout.
+fn install_git_hooks() {
+    let git = |args: &[&str]| std::process::Command::new("git").args(args).output().ok();
+    let Some(current) = git(&["config", "--get", "core.hooksPath"]) else { return };
+    if !current.stdout.is_empty() || git(&["rev-parse", "--git-dir"]).is_none_or(|o| !o.status.success()) {
+        return;
+    }
+    git(&["config", "core.hooksPath", ".githooks"]);
 }
