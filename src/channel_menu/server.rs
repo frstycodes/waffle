@@ -44,8 +44,7 @@ impl Waffle {
 
         let gid = guild_id.to_owned();
         out.push(self.mute_entry("Mute server", "Unmute server", settings.is_muted(), settings.mute_end.as_deref(), move |this, body, cx| this.patch_guild_settings(gid.clone(), body, cx)));
-        let gid = guild_id.to_owned();
-        out.push(item("Notification settings", move |this, window, cx| this.open_notification_settings(gid.clone(), window, cx)).hint(notification_label(settings.notifications)).icon(Glyph::Bell).entry());
+        out.push(self.server_notify_entry(guild_id, &settings, dropdown));
         let gid = guild_id.to_owned();
         let hide = settings.hide_muted;
         out.push(item("Hide muted channels", move |this, _, cx| this.patch_guild_settings(gid.clone(), json!({ "hide_muted_channels": !hide }), cx)).checked(hide).icon(Glyph::EyeSlash).entry());
@@ -53,7 +52,9 @@ impl Waffle {
             let gid = guild_id.to_owned();
             out.push(item("Show all channels", move |this, _, cx| this.toggle_show_all_channels(&gid, cx)).checked(!settings.opt_in()).icon(Glyph::Eye).entry());
         }
+        out.extend(dropdown.then(|| self.privacy_entry(guild_id)));
         out.push(Entry::Separator);
+        out.extend((!dropdown).then(|| self.privacy_entry(guild_id)));
 
         let gid = guild_id.to_owned();
         let current = self.members.get(guild_id).and_then(|m| m.get(&me.id)).map(|u| u.name.clone()).unwrap_or_else(|| me.name.clone());
@@ -72,6 +73,7 @@ impl Waffle {
             out.push(self.move_server(guild_id));
             out.push(Entry::Separator);
         }
+        out.extend(self.safety_entries(guild, dropdown));
         if !owner {
             let (gid, name) = (guild_id.to_owned(), guild.name.clone());
             out.push(
@@ -90,6 +92,94 @@ impl Waffle {
         if self.developer_mode {
             let id = guild_id.to_owned();
             out.push(item("Copy server ID", move |this, _, cx| this.copy_text(id.clone(), cx)).icon(Glyph::Id).entry());
+        }
+        out
+    }
+
+    // The server icon's Notification Settings is Discord's submenu: the level, the suppress switches, then
+    // mobile push. The name dropdown's opens the dialog.
+    fn server_notify_entry(&self, guild_id: &str, settings: &GuildSettings, dropdown: bool) -> Entry {
+        let gid = guild_id.to_owned();
+        if dropdown {
+            return item("Notification settings", move |this, window, cx| this.open_notification_settings(gid.clone(), window, cx)).hint(notification_label(settings.notifications)).icon(Glyph::Bell).entry();
+        }
+        let mut rows = self.notification_radios(settings.notifications, None, move |this, level, cx| this.patch_guild_settings(gid.clone(), json!({ "message_notifications": level }), cx));
+        rows.push(Entry::Separator);
+        let highlights_off = settings.notify_highlights == crate::notification_settings::HIGHLIGHTS_DISABLED;
+        let highlights = if highlights_off { crate::notification_settings::HIGHLIGHTS_ENABLED } else { crate::notification_settings::HIGHLIGHTS_DISABLED };
+        let switches = [
+            ("Suppress @everyone and @here", settings.suppress_everyone, json!({ "suppress_everyone": !settings.suppress_everyone })),
+            ("Suppress All Role @mentions", settings.suppress_roles, json!({ "suppress_roles": !settings.suppress_roles })),
+            ("Suppress Highlights", highlights_off, json!({ "notify_highlights": highlights })),
+            ("Mute New Events", settings.mute_scheduled_events, json!({ "mute_scheduled_events": !settings.mute_scheduled_events })),
+        ];
+        for (label, on, body) in switches {
+            let gid = guild_id.to_owned();
+            rows.push(item(label, move |this, _, cx| this.patch_guild_settings(gid.clone(), body.clone(), cx)).checked(on).entry());
+        }
+        rows.push(Entry::Separator);
+        let (gid, push) = (guild_id.to_owned(), settings.mobile_push);
+        rows.push(item("Mobile Push Notifications", move |this, _, cx| this.patch_guild_settings(gid.clone(), json!({ "mobile_push": !push }), cx)).checked(push).entry());
+        submenu("Notification settings", rows).hint(notification_label(settings.notifications)).icon(Glyph::Bell).entry()
+    }
+
+    // Discord's Privacy Settings for one server. GAP: Discord opens a dialog that also has Message Requests
+    // and Activity Joining; Waffle shows the two settings it keeps as a submenu.
+    fn privacy_entry(&self, guild_id: &str) -> Entry {
+        let account = &self.account_settings;
+        let dms = !account.restricted_guilds.iter().any(|g| g == guild_id);
+        let activity = !account.activity_restricted_guilds.iter().any(|g| g == guild_id);
+        let gid = guild_id.to_owned();
+        let direct = item("Direct Messages", move |this, _, cx| {
+            let before = this.account_settings.clone();
+            let list = &mut this.account_settings.restricted_guilds;
+            if !list.iter().any(|g| g == &gid) {
+                list.push(gid.clone());
+            } else {
+                list.retain(|g| g != &gid);
+            }
+            let patch = json!({ "restricted_guilds": this.account_settings.restricted_guilds });
+            this.save_account_settings(before, patch, cx);
+        })
+        .hint("Allow DMs from other members in this server")
+        .checked(dms)
+        .entry();
+        let gid = guild_id.to_owned();
+        let status = item("Activity Status", move |this, _, cx| this.toggle_guild_activity(&gid, cx)).checked(activity).entry();
+        submenu("Privacy settings", vec![direct, status]).icon(Glyph::Shield).entry()
+    }
+
+    // A Community server's Security Actions, and in the name dropdown Report Raid, for its moderators.
+    // Not verified: Discord's exact permission for Security Actions; this takes the same set as Report Raid.
+    // GAP: Security Actions opens the Invites page, where Pause invites lives, not Discord's dialog; Report Raid
+    // shows whether or not a raid is already reported, since Waffle doesn't track incidents, and its confirm
+    // copy is Waffle's own (Discord's dialog was not read).
+    fn safety_entries(&self, guild: &crate::discord::Guild, dropdown: bool) -> Vec<Entry> {
+        use crate::server_settings::{access::Page, perms::MANAGE_GUILD};
+        let me = self.my_id();
+        let moderator = [perm::BAN_MEMBERS, perm::KICK_MEMBERS, perm::MODERATE_MEMBERS, MANAGE_GUILD].iter().any(|&bit| guild.can(me, bit));
+        if !guild.has_feature(crate::joining::features::COMMUNITY) || !moderator {
+            return Vec::new();
+        }
+        let gid = guild.id.clone();
+        let mut out = vec![item("Security Actions", move |this, window, cx| {
+            this.open_server_settings(gid.clone(), window, cx);
+            this.open_server_page(Page::Invites, cx);
+        })
+        .danger()
+        .icon(Glyph::Shield)
+        .entry()];
+        if dropdown {
+            let gid = guild.id.clone();
+            out.push(item("Report Raid", move |this, _, cx| {
+                let gid = gid.clone();
+                this.confirm("Report Raid", "Let Discord know this server is being raided.", "Report Raid", move |this, _, cx| {
+                    this.rest(Method::POST, format!("/guilds/{gid}/auto-moderation/report-raid"), Some(json!({})), |this, cx| this.show_toast("Raid reported", cx), cx);
+                }, cx);
+            })
+            .danger()
+            .icon(Glyph::Shield)
+            .entry());
         }
         out
     }
