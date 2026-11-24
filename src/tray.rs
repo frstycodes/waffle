@@ -32,6 +32,7 @@ thread_local! {
 
 pub fn install(window: &mut Window, cx: &mut App) {
     let Some(hwnd) = hwnd(window) else { return };
+    crate::app_icon::attach_window(hwnd);
     crate::presence::watch(hwnd);
     watch_activation(hwnd, cx);
     // Registered before the tray is built: with no close handler gpui lets Windows destroy the window,
