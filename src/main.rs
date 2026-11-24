@@ -456,6 +456,8 @@ enum EmojiTarget {
     PollAnswer(usize),
     ForwardNote,
     VoiceStatus,
+    // A reaction to someone's status, avatar or activity from their profile.
+    ProfileReaction,
 }
 
 #[derive(Clone, Copy, PartialEq)]

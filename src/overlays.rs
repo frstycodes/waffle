@@ -116,6 +116,10 @@ impl Waffle {
             self.redraw_overlays(cx);
             return true;
         }
+        // A profile's popover (role picker, note, reply) closes alone, back to its card.
+        if self.close_card_pop(cx) {
+            return true;
+        }
         // The full-size avatar closes alone, back to the popout it opened from.
         if let Some(card) = self.profile_card.as_mut().filter(|c| c.avatar_full) {
             card.avatar_full = false;

@@ -13,6 +13,11 @@ pub(super) const PROFILE_SCENES: &[&str] = &[
     "profile-full-note",
     "profile-full-worst",
     "profile-dm",
+    "profile-roles",
+    "profile-reply",
+    "profile-tag",
+    "profile-note",
+    "profile-status-long",
 ];
 
 pub(super) fn demo_profile_scene(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
@@ -46,12 +51,36 @@ pub(super) fn demo_profile_scene(waffle: &mut Waffle, scene: &str, window: &mut 
             card.user.name = "Wren Alexandria Lark-Featherstonehaugh the Third of Honeymoor".into();
         }
     }
+    if let Some(card) = waffle.profile_card.as_mut() {
+        card.recent = Some(recent_fixture());
+    }
+    let at = demo_at(700., 180.);
+    match scene {
+        "profile-roles" => waffle.open_role_picker(demo_at(560., 600.), window, cx),
+        "profile-reply" => waffle.open_reply(&user("8388608", "Wren"), crate::profile::Source::Status("🍯 drizzling honey on everything".into()), at, window, cx),
+        "profile-tag" => waffle.open_tag_card(demo_at(640., 330.), cx),
+        "profile-note" => waffle.open_note_popover(String::new(), demo_at(600., 290.), window, cx),
+        "profile-status-long" => waffle.presences.entry("8388608".into()).or_default().custom = Some("currently translating the entire gpui codebase into a sea shanty, verse 47 of 312".into()),
+        _ => {}
+    }
     if worst {
         waffle.presences.entry("8388608".into()).or_default().custom = Some("currently translating the entire gpui codebase into a sea shanty, verse 47 of 312, send snacks".into());
         if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
             guild.roles.extend((0..14).map(|r| crate::discord::Role { id: format!("wr{r}"), name: format!("very long role name number {r}"), color: 0x3BA55C + r * 0x0B0B0B, position: 10 + r as i64, permissions: 0, managed: false, icon: None }));
         }
     }
+}
+
+// A game played for the first time and long, a show, and a listening session, as Recent activity shows them.
+fn recent_fixture() -> Vec<crate::discord::RecentEntry> {
+    use crate::discord::{RecentEntry, RecentKind};
+    // Snowflakes minted a few hours and days ago, for "3h ago" and "2d ago".
+    let minted = |ago_ms: i64| (((chrono::Utc::now().timestamp_millis() - ago_ms - 1_420_070_400_000) as u64) << 22).to_string();
+    vec![
+        RecentEntry { id: minted(3 * 3_600_000), kind: RecentKind::Played, title: "Celeste".into(), app_id: None, first_time: true, marathon_hours: Some(3), ..Default::default() },
+        RecentEntry { id: minted(2 * 86_400_000), kind: RecentKind::Watched, title: "Frieren: Beyond Journey's End".into(), subtitle: Some("Season 1, Episode 3".into()), ..Default::default() },
+        RecentEntry { id: minted(5 * 86_400_000), kind: RecentKind::Listened, title: "Aqua Regia".into(), subtitle: Some("Sleep Token".into()), streak_days: Some(4), ..Default::default() },
+    ]
 }
 
 // Many badges, roles and mutuals, no bio.

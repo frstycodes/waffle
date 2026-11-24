@@ -33,7 +33,7 @@ pub(super) fn profile_preview(user: &User, profile: &Profile, avatar: PreviewAva
         .px_4()
         .pb_4()
         .gap_3()
-        .child(name_block(user, profile, ink, None, None))
+        .child(name_block(user, profile, ink, None, None, None))
         .when_some(profile.bio.as_ref(), |b, bio| b.child(bio_view("preview", bio, ink)));
     let (outer, inner) = themed_card(ink, f32::MAX, cx);
     outer.w(px(WIDTH)).child(inner.child(header).child(body))

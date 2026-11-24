@@ -764,6 +764,7 @@ _A scrolling list that builds every row: list/uniform_list with a ListState draw
 - `src/create_channel.rs` — at most 100 members plus the server's roles, a few hundred rows
 - `src/events/views.rs` — one server's scheduled events, at most 100
 - `src/overlays/emoji.rs` — the Unicode groups hold under 2,000 emoji and a server adds a few hundred at most.
+- `src/profile/popovers.rs` — a server's assignable roles, a few dozen at most (Discord caps a server at 250).
 - `src/soundboard/picker.rs` — a guild's soundboard, a few dozen sounds at most (the server's sound slots)
 - `src/stickers.rs` — Discord's packs and yours, a few dozen stickers each, a few hundred cells at most
 
@@ -986,7 +987,11 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/profile.rs` — ends when the profile request returns, and holds only a WeakEntity.
 - `src/profile/actions.rs` — ends when the send returns, and holds only a WeakEntity.
 - `src/profile/actions.rs` — the subscription lives as long as the field, dropped with the card.
+- `src/profile/full.rs` — ends when the request returns, and holds only a WeakEntity.
 - `src/profile/full.rs` — the subscription lives as long as the field, dropped with the card.
+- `src/profile/popovers.rs` — ends after one timer, holding only a WeakEntity.
+- `src/profile/popovers.rs` — the observation lives as long as the field, dropped with the popover.
+- `src/profile/popovers.rs` — the subscription lives as long as the field, dropped with the popover.
 - `src/reactions.rs` — one page fetch: ends when the request returns, or when Waffle is dropped
 - `src/report.rs` — one request that ends when the menu lands, holding only a WeakEntity
 - `src/report.rs` — one request that ends when the report is sent, holding only a WeakEntity

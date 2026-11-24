@@ -28,6 +28,7 @@ mod dm_panel;
 mod full;
 mod media;
 mod parts;
+mod popovers;
 use activity::game_collection;
 use connections::*;
 pub(crate) use media::{BANNER, banner};
@@ -35,6 +36,7 @@ use media::BANNER_FULL;
 use media::effect_overlay;
 pub(crate) use parts::{Ink, bio_view, inner_radius, name_block, profile_key, themed_card};
 use parts::*;
+pub(crate) use popovers::{CardPop, Source};
 
 pub(crate) const WIDTH: f32 = 300.;
 const BORDER: f32 = 2.;
@@ -68,6 +70,14 @@ pub(crate) struct ProfileCard {
     pub(crate) message: Option<Entity<InputState>>,
     // Every role, after the popout's "+N" was clicked.
     pub(crate) all_roles: bool,
+    // The popover open over the card, what an open emoji picker reacts to, and a passing toast.
+    pub(crate) pop: Option<CardPop>,
+    pub(crate) reacting: Option<Source>,
+    pub(crate) toast: Option<&'static str>,
+    // The full profile's Recent activity once fetched.
+    pub(crate) recent: Option<Vec<crate::discord::RecentEntry>>,
+    // A long status shown whole, after its chevron.
+    pub(crate) status_expanded: bool,
     // The full profile's card body and tab list.
     pub(crate) card_scroll: ScrollHandle,
     pub(crate) tab_scroll: ScrollHandle,
@@ -83,7 +93,7 @@ pub(crate) enum FullTab {
 
 impl ProfileCard {
     fn new(user: User, guild_id: Option<String>, at: Point<Pixels>, profile: Option<Profile>, full: Option<FullTab>) -> Self {
-        Self { user, guild_id, at, profile, all_activity: false, avatar_full: false, full, note: None, message: None, all_roles: false, card_scroll: ScrollHandle::new(), tab_scroll: ScrollHandle::new() }
+        Self { user, guild_id, at, profile, all_activity: false, avatar_full: false, full, note: None, message: None, all_roles: false, pop: None, reacting: None, toast: None, recent: None, status_expanded: false, card_scroll: ScrollHandle::new(), tab_scroll: ScrollHandle::new() }
     }
 }
 
@@ -109,6 +119,9 @@ impl Waffle {
         if self.presences.get(&user.id).and_then(|p| p.rich.as_ref()).is_some_and(|r| r.started.is_some()) {
             self.tick_profile_timer(user.id.clone(), cx);
         }
+        if full.is_some() {
+            self.fetch_recent_activity(&user.id, cx);
+        }
         self.fetch_profile(user, guild_id, cx);
     }
 
@@ -117,6 +130,8 @@ impl Waffle {
         let Some(card) = self.profile_card.as_mut().filter(|c| c.user.id == user.id) else { return self.open_full_profile(user.clone(), tab, cx) };
         card.full = Some(tab);
         card.avatar_full = false;
+        let user_id = card.user.id.clone();
+        self.fetch_recent_activity(&user_id, cx);
         self.redraw_overlays(cx);
     }
 
@@ -232,7 +247,8 @@ impl Waffle {
         // Measured, not estimated: a short card opened low sits just above the window's foot, not 560px up.
         // lint-allow(raw-floating): placed inside the overlay backdrop, with a measured top margin floating_at can't take.
         let placed = gpui_kit::anchored().position(card.at).snap_to_window_with_margin(ui::FLOAT_EDGES).child(rise);
-        Some(crate::overlays::backdrop("profile-backdrop", cx).child(placed).into_any_element())
+        let pop = self.card_popover(card, window, cx);
+        Some(crate::overlays::backdrop("profile-backdrop", cx).child(placed).children(pop).into_any_element())
     }
 
     // Discord's popout body: name, mutuals, bio, activity, then roles in a server.
@@ -273,7 +289,8 @@ impl Waffle {
         let open = card.full.is_none().then(|| std::rc::Rc::new(cx.listener(move |this, _: &gpui_kit::ClickEvent, _, cx| this.view_full_profile(&user, FullTab::Activity, cx))) as OnClick);
         let is_me = self.me.as_ref().is_some_and(|me| me.id == card.user.id);
         let note = (card.full.is_none() && !is_me).then(|| self.note_button(card, profile, ink, cx).into_any_element());
-        name_block(&card.user, profile, ink, open, note)
+        let tag = Some(std::rc::Rc::new(cx.listener(|this, event: &gpui_kit::ClickEvent, _, cx| this.open_tag_card(event.position(), cx))) as OnClick);
+        name_block(&card.user, profile, ink, open, note, tag)
     }
 
     // Beside the name while the card is hovered: Add Note, or Edit Note when there is one. It opens the full
@@ -287,9 +304,9 @@ impl Waffle {
             .small()
             .opacity(0.)
             .group_hover(CARD_GROUP, |s| s.opacity(1.))
-            .on_click(cx.listener(move |this, _, window, cx| {
-                this.view_full_profile(&user, FullTab::Activity, cx);
-                this.edit_profile_note(current.clone(), window, cx);
+            .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, window, cx| {
+                let _ = &user;
+                this.open_note_popover(current.clone(), event.position(), window, cx);
             }))
     }
 
@@ -360,7 +377,7 @@ impl Waffle {
             .when(!is_me, |h| h.child(self.banner_actions(card, cx)))
             // lint-allow(raw-margin): the avatar row pulls up over the banner's foot, which padding can't do.
             .child(ui::row().px(px(CARD_INSET - AVATAR_RING)).mt(px(-(AVATAR / 2. + AVATAR_RING))).mb_2().child(self.profile_face(card, AVATAR, hovered, ink, cx)))
-            .children(self.status_bubble_for(user, ink, cx).map(|bubble| bubble.absolute().top(px(banner_height + BUBBLE_DROP)).left(px(kind.bubble_left())).right_3()))
+            .children(self.status_bubble_for(card, ink, cx).map(|bubble| bubble.absolute().top(px(banner_height + BUBBLE_DROP)).left(px(kind.bubble_left())).right_3()))
     }
 
     // Their avatar ringed in the card's colour; a click opens the full profile, or, in it, the picture itself.
@@ -375,21 +392,44 @@ impl Waffle {
             false => decorated_avatar(&user.avatar, decoration.as_deref(), size, status, ink.top),
         };
         let target = user.clone();
-        div().id("profile-avatar").p(px(AVATAR_RING)).rounded_full().bg(ink.top).cursor_pointer().child(face).on_click(cx.listener(move |this, _, _, cx| {
+        let face = div().id("profile-avatar").p(px(AVATAR_RING)).rounded_full().bg(ink.top).cursor_pointer().child(face).on_click(cx.listener(move |this, _, _, cx| {
             match this.profile_card.as_mut().filter(|c| c.user.id == target.id && c.full.is_some()) {
                 Some(card) => card.avatar_full = true,
                 None => return this.view_full_profile(&target, FullTab::Activity, cx),
             }
             this.redraw_overlays(cx);
-        }))
+        }));
+        let toolbar = self.interaction_toolbar(card, Source::Avatar, FACE_GROUP, ink, cx).map(|t| t.absolute().bottom_0().right_neg_6());
+        div().id("profile-face").relative().group(FACE_GROUP).child(face).children(toolbar)
     }
 
     // The bubble beside the avatar: theirs when they've set a status, yours always (Add Status when unset).
-    pub(super) fn status_bubble_for(&self, user: &User, ink: Ink, cx: &mut Context<Self>) -> Option<Div> {
-        match self.me.as_ref().is_some_and(|me| me.id == user.id) {
-            true => Some(self.own_status_bubble(ink, cx)),
-            false => self.custom_status(&user.id).map(|text| status_bubble(text, ink, cx)),
+    // Theirs carries React and Reply on hover, and a chevron that shows a long status whole.
+    pub(super) fn status_bubble_for(&self, card: &ProfileCard, ink: Ink, cx: &mut Context<Self>) -> Option<Div> {
+        if self.me.as_ref().is_some_and(|me| me.id == card.user.id) {
+            return Some(self.own_status_bubble(ink, cx));
         }
+        let text = self.custom_status(&card.user.id)?;
+        let long = status_runs_long(&text);
+        let toolbar = self.interaction_toolbar(card, Source::Status(text.clone()), BUBBLE_GROUP, ink, cx).map(|t| t.absolute().top_neg_4().right_neg_2());
+        let chevron = long.then(|| {
+            let (glyph, tip) = if card.status_expanded { (Glyph::ChevronUp, "Collapse custom status") } else { (Glyph::ChevronDown, "Expand custom status") };
+            ui::icon_button("profile-status-expand", glyph, tip, cx)
+                .scoped(ui::mix(ink.top, ink.strong, 0.08), ink.tile, ink.muted, ink.strong)
+                .size_6()
+                .rounded_full()
+                .absolute()
+                .bottom_neg_3()
+                .right_2()
+                .on_click(cx.listener(|this, _, _, cx| {
+                    if let Some(card) = this.profile_card.as_mut() {
+                        card.status_expanded = !card.status_expanded;
+                    }
+                    this.redraw_overlays(cx);
+                }))
+        });
+        let bubble = div().relative().group(BUBBLE_GROUP).child(status_bubble(text, card.status_expanded, ink, cx)).children(toolbar).children(chevron);
+        Some(ui::row().items_start().child(bubble))
     }
 
     // Their custom status, as the bubble beside the avatar shows it.
@@ -503,8 +543,19 @@ impl Header {
 const BUBBLE_LEFT: f32 = 105.;
 const BUBBLE_LEFT_PANEL: f32 = 109.;
 const BUBBLE_DROP: f32 = -7.;
-// What the note button's hover reveal listens to: the whole card.
+// What the hover reveals listen to: the whole card (the note button), the status bubble and the avatar (React
+// and Reply).
 const CARD_GROUP: &str = "profile-card";
+const BUBBLE_GROUP: &str = "profile-bubble";
+const FACE_GROUP: &str = "profile-face";
+const ACTIVITY_GROUP: &str = "profile-activity";
+
+// Whether a status runs past the bubble's two lines: about 22 characters to a 155px line of 14px text.
+fn status_runs_long(text: &str) -> bool {
+    text.chars().count() > 2 * STATUS_LINE_CHARS
+}
+
+const STATUS_LINE_CHARS: usize = 22;
 // A face in the mutuals row.
 const MUTUAL_FACE: f32 = 16.;
 

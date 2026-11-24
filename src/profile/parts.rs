@@ -87,8 +87,8 @@ pub(crate) type OnClick = std::rc::Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)
 
 // Display name, then "username • pronouns" with the guild tag chip and their badges trailing that line.
 // `open` makes the display name and username links (the popout's open the full profile); `note` trails the
-// display name (the popout's note button).
-pub(crate) fn name_block(user: &User, profile: &Profile, ink: Ink, open: Option<OnClick>, note: Option<AnyElement>) -> Div {
+// display name (the popout's note button); `tag` makes the guild tag open its server card.
+pub(crate) fn name_block(user: &User, profile: &Profile, ink: Ink, open: Option<OnClick>, note: Option<AnyElement>, tag_click: Option<OnClick>) -> Div {
     let runs = user.name_style.as_ref().map(|style| crate::chat::name_runs(&user.name, style, ui::mix(ink.top, ink.bottom, 0.5))).unwrap_or_default();
     let handle = [Some(profile.username.clone()).filter(|u| !u.is_empty()), profile.pronouns.clone()].into_iter().flatten().collect::<Vec<_>>().join(" • ");
     let tag = user.tag.as_ref().map(|tag| {
@@ -105,6 +105,11 @@ pub(crate) fn name_block(user: &User, profile: &Profile, ink: Ink, open: Option<
             .font_weight(FontWeight::MEDIUM)
             .children(tag.badge.clone().map(|badge| img(badge).size_3p5()))
             .child(tag.text.clone())
+            .id("profile-guild-tag")
+            .when_some(tag_click.clone(), |t, click| {
+                let hover = ink.strong.opacity(0.16);
+                t.cursor_pointer().hover(move |s| s.bg(hover)).on_click(move |e, w, cx| click(e, w, cx))
+            })
     });
     // lint-allow(raw-truncate): ui::line takes plain text; this is the user's name set in their chosen name font and styled runs.
     let name = crate::name_fonts::styled(div().id("profile-name").min_w_0().truncate().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD), user.name_style.as_ref())
@@ -182,9 +187,12 @@ const BIO_CLAMP: f32 = 58.;
 const BIO_LINE_CHARS: usize = 40;
 
 // The custom status in a thought bubble beside the avatar, two lines at most.
-pub(super) fn status_bubble(text: String, ink: Ink, cx: &App) -> Div {
+pub(super) fn status_bubble(text: String, expanded: bool, ink: Ink, cx: &App) -> Div {
     let fill = if ink.border.is_some() { ui::mix(ink.top, ink.strong, 0.08) } else { palette::surface(palette::Level::Raised, cx) };
-    let content = div().min_w_0().max_w(px(BUBBLE_TEXT)).line_clamp(2).text_color(ink.text).child(text);
+    // A status past two lines takes the text's whole width: wrapped any narrower, gpui lays the clamped lines out
+    // wider than the bubble and cuts their ends.
+    let long = super::status_runs_long(&text);
+    let content = div().min_w_0().max_w(px(BUBBLE_TEXT)).when(long, |c| c.w(px(BUBBLE_TEXT))).when(!expanded, |c| c.line_clamp(2).text_ellipsis()).text_color(ink.text).child(text);
     ui::row().items_start().child(ui::thought_bubble("profile-status-bubble", content, fill, palette::line(cx)).max_w(px(BUBBLE_MAX)))
 }
 

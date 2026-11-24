@@ -507,7 +507,7 @@ impl Waffle {
             .child(ui::row().items_stretch().px(px(inset - AVATAR_RING)).mt(px(-(AVATAR / 2. + AVATAR_RING))).mb_2().child(avatar))
             .child(ui::row().items_stretch().absolute().top(px(banner_height - 20.)).left(px(inset + AVATAR + AVATAR_RING + 6.)).right_3().child(ui::thought_bubble("status-bubble", face, ink.top, palette::line(cx))));
         let (outer, inner) = profile::themed_card(ink, f32::MAX, cx);
-        outer.child(inner.child(header).child(div().px(px(inset)).pb(px(inset)).child(name_block(me, &profile, ink, None, None)))).into_any_element()
+        outer.child(inner.child(header).child(div().px(px(inset)).pb(px(inset)).child(name_block(me, &profile, ink, None, None, None)))).into_any_element()
     }
 
     fn my_profile(&self) -> Profile {

@@ -65,11 +65,10 @@ impl Waffle {
                 .on_click(cx.listener(|this, _, _, cx| this.show_all_roles(true, cx)))
         });
         let add = can_manage.then(|| {
-            let (user, guild_id) = (card.user.clone(), guild.id.clone());
-            ui::icon_button("profile-add-role", Glyph::Plus, "Add Role", cx)
+            ui::icon_button("profile-add-role", Glyph::Plus, "Add role", cx)
                 .scoped(gpui_kit::transparent_black(), ink.tile, ink.muted, ink.strong)
                 .small()
-                .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| this.open_role_picker(user.clone(), guild_id.clone(), event.position(), cx)))
+                .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| this.open_role_picker(event.position(), window, cx)))
         });
         Some(ui::row().flex_wrap().gap_1().children(chips).children(more).children(add))
     }
@@ -114,7 +113,7 @@ impl Waffle {
 
     // Before a change from the card, the member's role list starts from what the card shows, so toggling one
     // role never drops the others.
-    fn seed_member_roles(&mut self, guild_id: &str, user_id: &str) {
+    pub(super) fn seed_member_roles(&mut self, guild_id: &str, user_id: &str) {
         let Some(roles) = self.profile_card.as_ref().and_then(|c| c.profile.as_ref()).map(|p| p.roles.clone()) else { return };
         self.member_roles.entry(guild_id.to_owned()).or_default().entry(user_id.to_owned()).or_insert(roles);
     }
@@ -125,13 +124,6 @@ impl Waffle {
         let (g1, u1, r1, g2, u2, r2) = (guild_id.to_owned(), user_id.to_owned(), role_id.to_owned(), guild_id.to_owned(), user_id.to_owned(), role_id.to_owned());
         self.rest_optimistic(Method::DELETE, format!("/guilds/{guild_id}/members/{user_id}/roles/{role_id}"), None, move |this| this.set_role(&g1, &u1, &r1, false), move |this| this.set_role(&g2, &u2, &r2, true), cx);
         self.redraw_overlays(cx);
-    }
-
-    // Add Role: the server's roles as toggles, the ones they hold ticked.
-    // GAP: Discord's picker lists only the roles they don't have, with a search field; this is the user menu's toggle list.
-    fn open_role_picker(&mut self, user: User, guild_id: String, at: gpui_kit::Point<gpui_kit::Pixels>, cx: &mut Context<Self>) {
-        self.seed_member_roles(&guild_id, &user.id);
-        self.open_live_menu(at, move |this| this.guilds.iter().find(|g| g.id == guild_id).map(|guild| this.role_entries(guild, &user.id)).unwrap_or_default(), cx);
     }
 
     fn show_all_roles(&mut self, all: bool, cx: &mut Context<Self>) {
@@ -216,6 +208,8 @@ impl Waffle {
             }
             input.update(cx, |state, cx| state.set_value("", window, cx));
             this.send_profile_message(user_id.clone(), text, cx);
+            // Discord's popout opens the conversation and closes once it has sent.
+            this.message_user(user_id.clone(), window, cx);
         })
         // lint-allow(detached-task): the subscription lives as long as the field, dropped with the card.
         .detach();
@@ -227,7 +221,7 @@ impl Waffle {
     }
 
     // Sends to the DM with them, opening it first if there's none; the message lands there over the gateway.
-    fn send_profile_message(&mut self, user_id: String, text: String, cx: &mut Context<Self>) {
+    pub(super) fn send_profile_message(&mut self, user_id: String, text: String, cx: &mut Context<Self>) {
         let Some(client) = self.client.clone() else { return };
         let known = self.dms.iter().find(|d| d.recipient.as_ref().is_some_and(|r| r.id == user_id)).map(|d| d.id.clone());
         cx.spawn(async move |this, cx| {

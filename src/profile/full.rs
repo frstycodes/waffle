@@ -80,16 +80,17 @@ impl Waffle {
             .child(ui::row().absolute().top_2().right_2().gap_2().child(close));
         let body = div().h(px(height)).child(inner);
         let avatar = card.avatar_full.then(|| avatar_viewer(&card.user, window, cx));
+        let pop = self.card_popover(card, window, cx);
         let backdrop = crate::overlays::backdrop("full-profile-backdrop", cx);
         let dialog = ui::dialog("full-profile-dialog", width, body, window, cx);
-        Some(div().absolute().inset_0().child(ui::modal(backdrop, dialog, cx)).children(avatar).into_any_element())
+        Some(div().absolute().inset_0().child(ui::modal(backdrop, dialog, cx)).children(pop).children(avatar).into_any_element())
     }
 
     // The left card: header, then a scrolling body in Discord's order.
     fn full_card(&self, card: &ProfileCard, profile: &Profile, hovered: bool, ink: Ink, cx: &mut Context<Self>) -> Div {
         let radius = inner_radius(ink);
         let (banner, _) = banner(profile, ink, radius, hovered, BANNER_FULL, cx);
-        let bubble = self.status_bubble_for(&card.user, ink, cx).map(|bubble| {
+        let bubble = self.status_bubble_for(card, ink, cx).map(|bubble| {
             bubble.absolute().top(px(BANNER_FULL - BUBBLE_RISE)).left(px(PADDING + AVATAR_FULL + BUBBLE_FROM_AVATAR)).right_4()
         });
         let header = ui::col()
@@ -199,6 +200,9 @@ impl Waffle {
     fn save_profile_note(&mut self, note: String, cx: &mut Context<Self>) {
         let Some(card) = self.profile_card.as_mut() else { return };
         card.note = None;
+        if matches!(card.pop, Some(super::CardPop::Note { .. })) {
+            card.pop = None;
+        }
         let saved = (!note.is_empty()).then(|| note.clone());
         let user_id = card.user.id.clone();
         let changed = card.profile.as_ref().is_none_or(|p| p.note != saved);
@@ -255,13 +259,70 @@ impl Waffle {
     }
 
     // "Current activity" with every card, or Discord's empty line and a way to say hi.
+    // "Current activity", then "Recent activity" from their outbox, or Discord's empty line when there's neither.
     fn activity_tab(&self, card: &ProfileCard, ink: Ink, cx: &mut Context<Self>) -> Div {
         let cards = self.profile_activity_cards(card, ink, cx);
-        if cards.is_empty() {
+        let recent = card.recent.as_deref().unwrap_or_default();
+        if cards.is_empty() && recent.is_empty() {
             return self.no_activity(card, cx);
         }
-        let list = section("Current activity", ui::col().gap_2().children(cards), ink);
+        let is_me = self.me.as_ref().is_some_and(|me| me.id == card.user.id);
+        let current = (!cards.is_empty()).then(|| section("Current activity", ui::col().gap_2().children(cards), ink));
+        let rows: Vec<Div> = recent.iter().map(|entry| self.recent_row(entry, ink, cx)).collect();
+        let intro = is_me.then(|| div().text_size(ui::TEXT_XS).text_color(ink.muted).child("You'll see your activity from the last 30 days here."));
+        let past = (!rows.is_empty()).then(|| section("Recent activity", ui::col().gap_2().children(intro).children(rows), ink));
+        let list = ui::col().gap_6().children(current).children(past);
         ui::col().child(ui::scroll_area(div().id("full-profile-activity").child(list), &card.tab_scroll))
+    }
+
+    // One game, show or track they had going lately: its art, its name, Discord's traits and how long ago.
+    fn recent_row(&self, entry: &crate::discord::RecentEntry, ink: Ink, cx: &mut Context<Self>) -> Div {
+        use crate::discord::RecentKind;
+        let icon = entry.app_id.as_deref().and_then(|id| self.app_icon(id, cx));
+        let glyph = match entry.kind {
+            RecentKind::Played => Glyph::Game,
+            RecentKind::Watched => Glyph::Video,
+            RecentKind::Listened => Glyph::Headphones,
+        };
+        let art = match icon {
+            Some(url) => ui::media(url, ui::all(ui::RADIUS_SM)).size(px(RECENT_ART)).flex_none().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
+            None => ui::row().size(px(RECENT_ART)).flex_none().justify_center().squircle(ui::RADIUS_SM).bg(ink.tile).text_color(ink.muted).child(Icon::new(glyph).size(ui::ICON_XL)).into_any_element(),
+        };
+        let traits = [
+            entry.first_time.then(|| (Glyph::GroupPlus, "New Player".to_owned())),
+            entry.marathon_hours.map(|h| (Glyph::Clock, format!("{h}h Marathon"))),
+            entry.streak_days.map(|d| (Glyph::Star, format!("{d}x Streak"))),
+            super::snowflake_time(&entry.id).map(|at| (Glyph::Clock, time_ago(at, chrono::Utc::now()))),
+        ];
+        let chips = traits.into_iter().flatten().map(|(glyph, text)| ui::row().gap_1().text_size(ui::TEXT_XS).text_color(ink.muted).child(Icon::new(glyph).size(ui::ICON_XS)).child(text));
+        let facts = ui::col()
+            .min_w_0()
+            .flex_1()
+            .gap_0p5()
+            .child(ui::line(entry.title.clone()).text_size(ui::TEXT_SM).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(ink.strong))
+            .children(entry.subtitle.clone().map(|s| ui::line(s).text_size(ui::TEXT_XS).text_color(ink.text)))
+            .child(ui::row().flex_wrap().gap_x_2().gap_y_0p5().children(chips));
+        ui::row().p_3().gap_3().squircle(ui::RADIUS_MD).bg(ink.tile).child(art).child(facts)
+    }
+
+    pub(super) fn fetch_recent_activity(&mut self, user_id: &str, cx: &mut Context<Self>) {
+        let Some(client) = self.client.clone() else { return };
+        if self.profile_card.as_ref().is_some_and(|c| c.recent.is_some()) {
+            return;
+        }
+        let user_id = user_id.to_owned();
+        cx.spawn(async move |this, cx| {
+            let recent = client.recent_activity(&user_id).await.unwrap_or_default();
+            this.update(cx, |this, cx| {
+                if let Some(card) = this.profile_card.as_mut().filter(|c| c.user.id == user_id) {
+                    card.recent = Some(recent);
+                    this.redraw_overlays(cx);
+                }
+            })
+            .ok();
+        })
+        // lint-allow(detached-task): ends when the request returns, and holds only a WeakEntity.
+        .detach();
     }
 
     fn no_activity(&self, card: &ProfileCard, cx: &mut Context<Self>) -> Div {
@@ -333,6 +394,22 @@ impl Waffle {
     }
 }
 
+// Discord's short "ago": seconds, minutes, hours, days, weeks, then months.
+fn time_ago(at: chrono::DateTime<chrono::Utc>, now: chrono::DateTime<chrono::Utc>) -> String {
+    let secs = (now - at).num_seconds().max(0);
+    match secs {
+        s if s < 60 => format!("{s}s ago"),
+        s if s < 3600 => format!("{}m ago", s / 60),
+        s if s < 86_400 => format!("{}h ago", s / 3600),
+        s if s < 7 * 86_400 => format!("{}d ago", s / 86_400),
+        s if s < 30 * 86_400 => format!("{}w ago", s / (7 * 86_400)),
+        s => format!("{}mo ago", s / (30 * 86_400)),
+    }
+}
+
+// A Recent activity row's art.
+const RECENT_ART: f32 = 60.;
+
 // The tab's label: "No Mutual Friends" with none, else the count.
 fn mutual_tab(n: usize, noun: &str) -> String {
     if n == 0 { format!("No {noun}s") } else { mutual_count(n, noun) }
@@ -375,5 +452,10 @@ mod tests {
         assert_eq!(mutual_tab(1, "Mutual Server"), "1 Mutual Server");
         assert_eq!(pick(NO_SERVERS, "8388608"), pick(NO_SERVERS, "8388608"));
         assert!(NO_FRIENDS.contains(&pick(NO_FRIENDS, "")));
+        let now = chrono::Utc::now();
+        assert_eq!(time_ago(now - chrono::Duration::minutes(5), now), "5m ago");
+        assert_eq!(time_ago(now - chrono::Duration::hours(3), now), "3h ago");
+        assert_eq!(time_ago(now - chrono::Duration::days(9), now), "1w ago");
+        assert_eq!(time_ago(now - chrono::Duration::days(70), now), "2mo ago");
     }
 }

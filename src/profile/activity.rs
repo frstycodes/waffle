@@ -255,7 +255,13 @@ impl Waffle {
             .gap_2p5()
             .squircle(RADIUS_MD)
             .bg(ink.tile)
-            .child(ui::row().justify_between().child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(activity_heading(rich.kind))).child(more))
+            .group(ACTIVITY_GROUP)
+            .child(
+                ui::row()
+                    .justify_between()
+                    .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(activity_heading(rich.kind)))
+                    .child(ui::row().gap_1().children(self.interaction_toolbar(card, Source::Activity(rich.name.clone()), ACTIVITY_GROUP, ink, cx)).child(more)),
+            )
             .child(ui::row().gap_3().child(art).child(facts))
             .when(rich.joinable, |c| c.child(ask_to_join(ink))).children(self.activity_join_button(&card.user.id, rich, cx))
     }
