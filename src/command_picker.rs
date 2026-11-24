@@ -50,11 +50,11 @@ const RAIL_WIDTH: f32 = 52.;
 // The tallest a choice or option-name list grows before it scrolls.
 const CHOICE_LIST_MAX: f32 = 240.;
 // The active option box's focus ring width.
-const FOCUS_RING: f32 = 3.;
+const FOCUS_RING: f32 = 2.;
 // A value placeholder's gap after its key chip.
 const PLACEHOLDER_NUDGE: f32 = 2.;
-// A popup sits 8px above the composer, plus its hairline.
-const POPUP_RAISE: f32 = 9.;
+// A popup sits 8px above the composer, its hairline included.
+const POPUP_RAISE: f32 = 8.;
 
 // Discord's autocomplete debounce: `debounce(…, 500, {leading: true, trailing: true})`.
 const AUTOCOMPLETE_DEBOUNCE: Duration = Duration::from_millis(500);
