@@ -34,7 +34,7 @@ const GLYPHS: [(&str, &[u8]); 168] = [
     ("icons/folder.svg", include_bytes!("../assets/icons/reicon/folder.svg")),
     ("icons/copy.svg", include_bytes!("../assets/icons/reicon/copy.svg")),
     ("icons/play.svg", include_bytes!("../assets/icons/reicon/play.svg")),
-    ("icons/open.svg", include_bytes!("../assets/icons/reicon/arrow-up-right-square.svg")),
+    ("icons/open.svg", include_bytes!("../assets/icons/reicon/arrow-up-right-line.svg")),
     ("icons/chevron-left.svg", include_bytes!("../assets/icons/reicon/chevron-left.svg")),
     ("icons/chevron-right.svg", include_bytes!("../assets/icons/reicon/chevron-right.svg")),
     ("icons/checkmark.svg", include_bytes!("../assets/icons/reicon/check.svg")),
@@ -190,12 +190,16 @@ const GLYPHS: [(&str, &[u8]); 168] = [
     ("icons/soundwave.svg", include_bytes!("../assets/icons/reicon/soundwave.svg")),
 ];
 
-const BRAND: [(&str, &[u8]); 5] = [
+const BRAND: [(&str, &[u8]); 9] = [
     (MARK, include_bytes!("../assets/brand/waffle-mark.svg")),
     (NEW_TAG, include_bytes!("../assets/icons/new-tag.svg")),
     // Stand-in art for the demo's profile scene, which stays offline.
     ("demo/decoration.png", include_bytes!("../assets/demo/decoration.png")),
     ("demo/banner.png", include_bytes!("../assets/demo/banner.png")),
+    ("demo/banner.gif", include_bytes!("../assets/demo/banner.gif")),
+    ("demo/frame-top.png", include_bytes!("../assets/demo/frame-top.png")),
+    ("demo/frame-rail.png", include_bytes!("../assets/demo/frame-rail.png")),
+    ("demo/effect.png", include_bytes!("../assets/demo/effect.png")),
     (crate::voice_status::ART, include_bytes!("../assets/illustrations/voice-status.png")),
 ];
 

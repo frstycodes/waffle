@@ -84,7 +84,7 @@ impl Waffle {
                 entries.push(item(if focused { "Unfocus This Person" } else { "Focus This Person" }, move |this, _, cx| this.toggle_focus(key.clone(), cx)).entry());
                 entries.push(Entry::Separator);
                 let id = streamer_id.clone();
-                entries.push(item("Profile", move |this, _, cx| this.open_voice_profile(&id, at, cx)).icon(Glyph::UserCircle).entry());
+                entries.push(item("Profile", move |this, _, cx| this.open_voice_full_profile(&id, cx)).icon(Glyph::UserCircle).entry());
                 if !me {
                     let id = streamer_id.clone();
                     entries.push(item("Message", move |this, window, cx| this.message_user(id.clone(), window, cx)).icon(Glyph::ChatRound).entry());
@@ -275,6 +275,11 @@ impl Waffle {
     pub(crate) fn open_voice_profile(&mut self, user_id: &str, at: Point<Pixels>, cx: &mut Context<Self>) {
         let (_, user) = self.voice_user(user_id);
         self.open_profile(user, at, cx);
+    }
+
+    pub(crate) fn open_voice_full_profile(&mut self, user_id: &str, cx: &mut Context<Self>) {
+        let (_, user) = self.voice_user(user_id);
+        self.open_full_profile(user, crate::profile::FullTab::Activity, cx);
     }
 
     // Who someone in voice is, and the server they're in voice in (else the call's).

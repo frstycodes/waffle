@@ -216,38 +216,46 @@ pub(super) fn parse_presence(p: &Value) -> Presence {
 }
 
 // Field names from the diself crate's model (src/model/user.rs), not from Discord's docs (the endpoint is undocumented).
+// A server profile (`guild_member_profile`) overrides the main one field by field, as Discord's display profile
+// does: its banner, accent, theme colours, bio and pronouns where set, and `guild_badges` join the badges.
 pub(crate) fn parse_profile(user_id: &str, body: &Value) -> Profile {
     let user = &body["user"];
     let profile = &body["user_profile"];
-    let banner = user["banner"].as_str().map(|hash| {
-        let ext = if hash.starts_with("a_") { "gif" } else { "png" };
-        format!("{CDN}/banners/{user_id}/{hash}.{ext}?size=600")
-    });
-    let theme = match profile["theme_colors"].as_array().map(|c| c.iter().filter_map(Value::as_u64).collect::<Vec<_>>()).as_deref() {
+    let server = &body["guild_member_profile"];
+    let ext = |hash: &str| if hash.starts_with("a_") { "gif" } else { "png" };
+    let server_banner = server["banner"].as_str().zip(server["guild_id"].as_str()).map(|(hash, guild)| format!("{CDN}/guilds/{guild}/users/{user_id}/banners/{hash}.{}?size=600", ext(hash)));
+    let banner = server_banner.or_else(|| user["banner"].as_str().map(|hash| format!("{CDN}/banners/{user_id}/{hash}.{}?size=600", ext(hash))));
+    let colors = |v: &Value| match v.as_array().map(|c| c.iter().filter_map(Value::as_u64).collect::<Vec<_>>()).as_deref() {
         Some([top, bottom]) => Some((*top as u32, *bottom as u32)),
         _ => None,
     };
-    let badges = body["badges"]
+    let theme = colors(&server["theme_colors"]).or_else(|| colors(&profile["theme_colors"]));
+    let text = |v: &Value| v.as_str().filter(|s| !s.is_empty()).map(str::to_owned);
+    let badge = |b: &Value| Some(Badge { description: b["description"].as_str().unwrap_or_default().to_owned(), icon: format!("{CDN}/badge-icons/{}.png", b["icon"].as_str()?), link: b["link"].as_str().map(str::to_owned) });
+    let badges = body["badges"].as_array().into_iter().flatten().chain(body["guild_badges"].as_array().into_iter().flatten()).filter_map(badge).collect();
+    let mutual_friends: Vec<User> = body["mutual_friends"].as_array().into_iter().flatten().map(parse_user).collect();
+    let mutual_guilds: Vec<MutualGuild> = body["mutual_guilds"]
         .as_array()
         .into_iter()
         .flatten()
-        .filter_map(|b| Some(Badge { description: b["description"].as_str().unwrap_or_default().to_owned(), icon: format!("{CDN}/badge-icons/{}.png", b["icon"].as_str()?) }))
+        .filter_map(|g| Some(MutualGuild { id: g["id"].as_str()?.to_owned(), nick: g["nick"].as_str().map(str::to_owned) }))
         .collect();
-    let mutual_friends: Vec<User> = body["mutual_friends"].as_array().into_iter().flatten().map(parse_user).collect();
     let mutual_friend_count = body["mutual_friend_count"].as_u64().or(body["mutual_friends_count"].as_u64()).map_or(mutual_friends.len(), |n| n as usize);
     Profile {
         username: user["username"].as_str().unwrap_or_default().to_owned(),
-        bio: profile["bio"].as_str().or(user["bio"].as_str()).filter(|b| !b.is_empty()).map(str::to_owned),
-        pronouns: profile["pronouns"].as_str().filter(|p| !p.is_empty()).map(str::to_owned),
+        bio: text(&server["bio"]).or_else(|| text(&profile["bio"])).or_else(|| text(&user["bio"])),
+        pronouns: text(&server["pronouns"]).or_else(|| text(&profile["pronouns"])),
         banner,
-        accent: user["accent_color"].as_u64().or(user["banner_color"].as_str().and_then(|c| u32::from_str_radix(c.trim_start_matches('#'), 16).ok().map(u64::from))).map(|c| c as u32),
+        accent: server["accent_color"].as_u64().or(user["accent_color"].as_u64()).or(user["banner_color"].as_str().and_then(|c| u32::from_str_radix(c.trim_start_matches('#'), 16).ok().map(u64::from))).map(|c| c as u32),
         roles: strings(&body["guild_member"]["roles"]),
         decoration: user.is_object().then(|| parse_user(user).decoration).flatten(),
         theme,
         badges,
         mutual_friends,
         mutual_friend_count,
-        mutual_server_count: body["mutual_guilds"].as_array().map_or(0, Vec::len),
+        mutual_server_count: mutual_guilds.len(),
+        mutual_guilds,
+        note: None,
         games: Vec::new(),
         joined: body["guild_member"]["joined_at"].as_str().map(str::to_owned),
         connections: body["connected_accounts"]
@@ -259,18 +267,63 @@ pub(crate) fn parse_profile(user_id: &str, body: &Value) -> Profile {
             })
             .collect(),
         effect_sku: effect_sku(&body["guild_member_profile"]["collectibles"]).or_else(|| effect_sku(&profile["collectibles"])),
+        frame_sku: collectible_sku(&body["guild_member_profile"]["collectibles"], PROFILE_FRAME).or_else(|| collectible_sku(&profile["collectibles"], PROFILE_FRAME)),
+        frame: None,
     }
 }
 
+// A user's content outbox as Recent activity rows. Discord's `content_type`: 1 played and 3 top game, 2 watched,
+// 4 listened and 5 a listening session; its trait types: 1 first time, 2 duration in seconds, 8 days in a row.
+// Not verified against a live response: read from Discord's client, which renders these fields.
+pub(crate) fn parse_outbox(body: &Value) -> Vec<RecentEntry> {
+    let trait_of = |e: &Value, kind: u64| e["traits"].as_array().and_then(|t| t.iter().find(|t| t["type"].as_u64() == Some(kind))).cloned();
+    body["entries"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| {
+            let extra = &e["extra"];
+            let (kind, title, subtitle) = match e["content_type"].as_u64()? {
+                1 | 3 => (RecentKind::Played, extra["game_name"].as_str()?.to_owned(), None),
+                2 => (RecentKind::Watched, extra["media_title"].as_str()?.to_owned(), extra["media_subtitle"].as_str().map(str::to_owned)),
+                4 | 5 => {
+                    let media = &extra["entries"][0]["media"];
+                    let media = if media.is_object() { media } else { &extra["media"] };
+                    (RecentKind::Listened, media["title"].as_str()?.to_owned(), media["artists"][0]["name"].as_str().map(str::to_owned))
+                }
+                _ => return None,
+            };
+            let hours = trait_of(e, 2).and_then(|t| t["duration_seconds"].as_u64()).map(|s| (s + 1800) / 3600).filter(|h| *h > 0);
+            Some(RecentEntry {
+                id: e["id"].as_str()?.to_owned(),
+                kind,
+                title,
+                subtitle,
+                app_id: extra["application_id"].as_str().map(str::to_owned),
+                first_time: trait_of(e, 1).is_some_and(|t| t["first_time"].as_bool() == Some(true)),
+                marathon_hours: hours,
+                streak_days: trait_of(e, 8).and_then(|t| t["streak_count_days"].as_u64()).filter(|d| *d > 1),
+            })
+        })
+        .collect()
+}
+
+// Discord's collectible types: 0 avatar decoration, 1 profile effect, 2 nameplate, 3 profile frame.
+const PROFILE_EFFECT: u64 = 1;
+const PROFILE_FRAME: u64 = 3;
+
 // The unexpired profile effect in a `collectibles[]` list, `{sku_id, type, expires_at}`.
-// Not verified: that the profile effect's collectible type is 1 (Discord's enum value wasn't read).
 pub(super) fn effect_sku(collectibles: &Value) -> Option<String> {
-    const PROFILE_EFFECT: u64 = 1;
+    collectible_sku(collectibles, PROFILE_EFFECT)
+}
+
+// The unexpired collectible of `kind` in a `collectibles[]` list.
+pub(super) fn collectible_sku(collectibles: &Value, kind: u64) -> Option<String> {
     let now = chrono::Utc::now();
     collectibles
         .as_array()?
         .iter()
-        .filter(|c| c["type"].as_u64() == Some(PROFILE_EFFECT))
+        .filter(|c| c["type"].as_u64() == Some(kind))
         .filter(|c| c["expires_at"].as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).is_none_or(|t| t > now))
         .find_map(|c| c["sku_id"].as_str().map(str::to_owned))
 }
@@ -286,12 +339,56 @@ pub(super) fn parse_profile_effect(body: &Value) -> Vec<EffectLayer> {
         .filter_map(|e| {
             let src = e["randomizedSources"][0]["src"].as_str().or(e["src"].as_str())?.to_owned();
             let num = |v: &Value| v.as_f64().unwrap_or(0.) as f32;
-            Some(EffectLayer { src, x: num(&e["position"]["x"]), y: num(&e["position"]["y"]), width: num(&e["width"]), height: num(&e["height"]), z: e["zIndex"].as_i64().unwrap_or(0) })
+            Some(EffectLayer {
+                src,
+                x: num(&e["position"]["x"]),
+                y: num(&e["position"]["y"]),
+                width: num(&e["width"]),
+                height: num(&e["height"]),
+                z: e["zIndex"].as_i64().unwrap_or(0),
+                start: num(&e["start"]),
+                duration: num(&e["duration"]),
+                looping: e["loop"].as_bool().unwrap_or(false),
+                loop_delay: num(&e["loopDelay"]),
+            })
         })
         .filter(|l| l.width > 0. && l.height > 0.)
         .collect();
     layers.sort_by_key(|l| l.z);
     layers
+}
+
+// A frame product's layers (`items[]` of type 3), each drawn from `media/v1/collectibles-shop/{sku}/{layer}/static`.
+// Read from Discord's client; not checked against a live product.
+pub(super) fn parse_profile_frame(sku: &str, body: &Value) -> Option<ProfileFrame> {
+    let item = body["items"].as_array()?.iter().find(|i| i["type"].as_u64() == Some(PROFILE_FRAME) || i["layers"].is_array())?;
+    let num = |v: &Value, or: f32| v.as_f64().map_or(or, |n| n as f32);
+    let layers = item["layers"]
+        .as_array()?
+        .iter()
+        .filter_map(|l| {
+            let kind = match l["type"].as_str()? {
+                "staple" => FrameKind::Staple,
+                "rail" => FrameKind::Rail,
+                "border" => FrameKind::Border,
+                _ => return None,
+            };
+            let anchor = match l["anchor"].as_str() {
+                Some("top") => FrameAnchor::Top,
+                Some("bottom") => FrameAnchor::Bottom,
+                _ => FrameAnchor::Center,
+            };
+            let id = l["id"].as_str()?;
+            Some(FrameLayer { src: format!("{CDN}/media/v1/collectibles-shop/{sku}/{id}/static"), kind, front: l["order"].as_str() == Some("front"), anchor })
+        })
+        .collect::<Vec<_>>();
+    (!layers.is_empty()).then(|| ProfileFrame {
+        inner_width: num(&item["inner_width"], 1200.),
+        overflow_top: num(&item["overflow_top"], 0.),
+        overflow_bottom: num(&item["overflow_bottom"], 0.),
+        overflow_horizontal: num(&item["overflow_horizontal"], 0.),
+        layers,
+    })
 }
 
 pub fn app_icon_url(app_id: &str, icon: &str) -> String {

@@ -124,6 +124,7 @@ pub(super) fn chat_scenes(waffle: &mut Waffle, scene: &str, window: &mut Window,
             })
             .detach(), // lint-allow(detached-task): one-shot fixture step; ends after one timer and update, or when the view is gone
         "profile" => demo_profile(waffle, cx),
+        s if PROFILE_SCENES.contains(&s) => demo_profile_scene(waffle, s, window, cx),
         "role-popout" => demo_role_popout(waffle, cx),
         // Someone you share nothing with, opened from a DM: the Discord date alone, no Friends Since, no connections.
         "profile-stranger" => {

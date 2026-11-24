@@ -155,7 +155,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use discord::{Channel, ChannelKind, Client, Emoji, Event, Folder, Gif, Guild, ListItem, ListOp, Message, Presence, Profile, ReadState, Relationship, SendState, User};
+use discord::{Channel, ChannelKind, Client, Emoji, Event, Folder, Gif, Guild, ListItem, ListOp, Message, Presence, ReadState, Relationship, SendState, User};
 use futures::StreamExt;
 use gpui_kit::{
     AppContext, Bounds, Context, Entity, FocusHandle, Hsla, RenderImage, ListAlignment, ListOffset, ListState, SharedString, Task, TitlebarOptions, Window, WindowBounds,
@@ -446,18 +446,6 @@ impl Watching {
     }
 }
 
-// A profile popout opened from an avatar or name, at the click point.
-struct ProfileCard {
-    user: User,
-    guild_id: Option<String>,
-    at: gpui_kit::Point<gpui_kit::Pixels>,
-    profile: Option<Profile>,
-    // Every activity card, after the peeking card under the first was clicked.
-    all_activity: bool,
-    // Their avatar full size over the window.
-    avatar_full: bool,
-}
-
 // Where a picked emoji goes.
 #[derive(Clone)]
 enum EmojiTarget {
@@ -468,6 +456,8 @@ enum EmojiTarget {
     PollAnswer(usize),
     ForwardNote,
     VoiceStatus,
+    // A reaction to someone's status, avatar or activity from their profile.
+    ProfileReaction,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -806,7 +796,7 @@ pub struct Waffle {
     // it ended that one without a disconnect, and connecting sounds as a move.
     call_switched: bool,
     viewer: Option<viewer::Viewer>,
-    profile_card: Option<ProfileCard>,
+    profile_card: Option<profile::ProfileCard>,
     role_popout: role_popout::RolePopouts,
     status_menu: bool,
     // The channel or DM row under the pointer, which shows its hover-only controls.
@@ -826,8 +816,7 @@ pub struct Waffle {
     // Profiles by user and server, shown at once from the last fetch while a fresh one loads.
     profiles: query::Query<discord::Profile>,
     // Profile effect layers by sku; None while fetching or after it failed, which draws no effect.
-    // lint-allow(unbounded-growth): one entry per profile effect sku seen, a catalogue of a few hundred at most
-    profile_effects: HashMap<String, Option<Vec<discord::EffectLayer>>>,
+    profile_effects: profile::ProfileEffects,
     // Previews of Discord's own links (messages, invites), shared with the rows that draw them.
     link_previews: link_preview::Previews,
     // Who reacted, by message and emoji (`Emoji::path`), fetched on a pill's first hover; dropped when it changes.

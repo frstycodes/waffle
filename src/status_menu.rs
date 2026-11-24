@@ -4,7 +4,7 @@ use std::{cell::Cell, rc::Rc, time::Duration};
 
 use chrono::{DateTime, Datelike, Local, NaiveDateTime, TimeDelta, Utc};
 use gpui_kit::{
-    AnyElement, App, Bounds, Context, Div, Entity, Focusable, FontWeight, MouseButton, MouseMoveEvent, Pixels, SharedString, Stateful, Window,
+    AnyElement, App, Bounds, Context, Div, Entity, Focusable, FontWeight, MouseButton, MouseMoveEvent, Pixels, SharedString, Window,
     component::{
         Icon,
         input::{Input, InputEvent, InputState as SearchState},
@@ -34,8 +34,6 @@ const TEXT_WARN: usize = 110;
 const MENU_WIDTH: f32 = 288.;
 const DIALOG_WIDTH: f32 = 480.;
 const FLYOUT_WIDTH: f32 = 200.;
-// The corner radius of the editor's thought bubble.
-const BUBBLE_RADIUS: f32 = 18.;
 const PRESENCES: [(Status, &str, &str); 4] = [
     (Status::Online, "Online", ""),
     (Status::Idle, "Idle", ""),
@@ -498,7 +496,7 @@ impl Waffle {
             face.children(editor.emoji.as_ref().map(|e| div().flex_none().child(emoji_face(e, 18.)))).when(!text.is_empty(), |f| f.child(div().min_w_0().line_clamp(2).child(text)))
         };
         let radius = profile::inner_radius(ink);
-        let (banner, banner_height) = profile::banner(&profile, ink, radius, false, cx);
+        let (banner, banner_height) = profile::banner(&profile, ink, radius, false, profile::BANNER, cx);
         let decoration = me.decoration.clone().or(profile.decoration.clone());
         let avatar = div().p(px(AVATAR_RING)).rounded_full().bg(ink.top).child(crate::layout::decorated_avatar(&me.avatar, decoration.as_deref(), AVATAR, Some(editor.status.into()), ink.top));
         let inset = 16.;
@@ -507,9 +505,9 @@ impl Waffle {
             .child(banner)
             // lint-allow(raw-margin): the avatar row pulls up over the banner's foot, which padding can't do.
             .child(ui::row().items_stretch().px(px(inset - AVATAR_RING)).mt(px(-(AVATAR / 2. + AVATAR_RING))).mb_2().child(avatar))
-            .child(ui::row().items_stretch().absolute().top(px(banner_height - 20.)).left(px(inset + AVATAR + AVATAR_RING + 6.)).right_3().child(bubble(face, ink, cx)));
+            .child(ui::row().items_stretch().absolute().top(px(banner_height - 20.)).left(px(inset + AVATAR + AVATAR_RING + 6.)).right_3().child(ui::thought_bubble("status-bubble", face, ink.top, palette::line(cx))));
         let (outer, inner) = profile::themed_card(ink, f32::MAX, cx);
-        outer.child(inner.child(header).child(div().px(px(inset)).pb(px(inset)).child(name_block(me, &profile, ink)))).into_any_element()
+        outer.child(inner.child(header).child(div().px(px(inset)).pb(px(inset)).child(name_block(me, &profile, ink, None, None, None)))).into_any_element()
     }
 
     fn my_profile(&self) -> Profile {
@@ -570,20 +568,6 @@ fn presence_choice(status: Status, label: &'static str, detail: &'static str, on
             cx.notify();
         }));
     ui::settings_choice(row, cx)
-}
-
-// A thought bubble: two dots trailing up from the avatar into a pill. The pill paints over the larger dot,
-// so only its top shows, like the bubble's tail.
-fn bubble(content: Div, ink: Ink, cx: &App) -> Stateful<Div> {
-    let (fill, edge) = (ink.top, palette::line(cx));
-    let dot = |size: f32| div().absolute().size(px(size)).rounded_full().bg(fill).border_1().border_color(edge);
-    div()
-        .id("status-bubble")
-        .relative()
-        .min_w_0()
-        .child(dot(8.).left_neg_2().top_neg_3p5())
-        .child(dot(16.).left_1().top_neg_2())
-        .child(ui::row().relative().min_h_9().px_3().py_2().rounded(px(BUBBLE_RADIUS)).bg(fill).border_1().border_color(edge).text_size(ui::TEXT_SM).line_height(ui::LINE_DETAIL).child(content))
 }
 
 #[cfg(test)]

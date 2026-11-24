@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profile parity</title>
+<meta name="description" content="Discord's profile popout, DM side panel and full profile beside Waffle's, every case, a playground, and what Waffle changes to match.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&family=Noto+Sans:wght@400..700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="site.css">
+<link rel="stylesheet" href="css/primitives.css">
+<script>try{const p=JSON.parse(localStorage.getItem("waffle-ds")||"{}"),r=document.documentElement;if(p.theme)r.dataset.theme=p.theme}catch{}</script>
+<style>
+  main { max-width: 1440px; }
+  .src { font-size: var(--text-xs); color: var(--text-faint); max-width: 110ch; }
+  .src code { font-family: var(--font-mono); font-size: 11px; }
+  .nv { color: var(--warning-ink); }
+  .ok { color: var(--online-ink); } .gap { color: var(--danger-ink); }
+
+  /* Playground and case layout, as the other compare pages. */
+  .play { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+  .knobs { display: grid; gap: var(--space-4); padding: var(--space-4); background: var(--bg-raised); border-radius: var(--radius-lg); position: sticky; top: var(--space-4); max-height: calc(100vh - 32px); overflow: auto; }
+  .knobs fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+  .knobs legend { font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--text-faint); margin-bottom: var(--space-1); }
+  .knobs label { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text); min-width: 0; }
+  .knobs label > span { flex: none; width: 80px; color: var(--text-muted); }
+  .knobs select, .knobs input[type="text"] { flex: 1; min-width: 0; height: 32px; padding: 0 var(--space-2); border-radius: var(--radius-xs); border: 1px solid var(--line-strong); background: var(--bg-page); color: var(--text-strong); font: inherit; }
+  .knobs input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+  .knobs .acts { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .knobs .acts button { height: 30px; padding: 0 var(--space-3); border-radius: var(--radius-xs); background: var(--hover); color: var(--text-strong); font-size: var(--text-xs); font-weight: var(--weight-medium); }
+  .knobs .acts button:hover { background: var(--press); }
+  .stages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); min-width: 0; }
+  .stage { display: grid; gap: var(--space-2); min-width: 0; align-content: start; }
+  .stage h3 { margin: 0; }
+  .stage .frame { overflow: auto; padding: var(--space-3); border-radius: var(--radius-md); background: var(--bg-sidebar); }
+  .log { margin: 0; padding: var(--space-3) var(--space-3) var(--space-3) 28px; min-height: 96px; background: var(--bg-raised); border-radius: var(--radius-md); font-size: var(--text-xs); line-height: 1.5; color: var(--text); }
+  .log li:first-child { color: var(--text-strong); font-weight: var(--weight-medium); }
+  .full .stages { grid-template-columns: minmax(0, 1fr); }
+  @media (max-width: 1100px) { .play { grid-template-columns: minmax(0, 1fr); } .knobs { position: static; max-height: none; } .stages { grid-template-columns: minmax(0, 1fr); } }
+
+  .cases { display: grid; gap: var(--space-2); }
+  .case { display: grid; grid-template-columns: 200px minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; padding: var(--space-3) 0; border-top: 1px solid var(--line); }
+  .case.wide { grid-template-columns: 200px minmax(0, 1fr); }
+  .case.wide > .frame + .frame { grid-column: 2; }
+  .case h4 { margin: 0 0 var(--space-1); font-size: var(--text-sm); color: var(--text-strong); }
+  .case p { margin: 0; font-size: var(--text-xs); line-height: 1.45; color: var(--text-muted); text-wrap: pretty; }
+  .case .frame { overflow: auto; min-width: 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--bg-sidebar); }
+  .case .frame::before { content: attr(data-side); display: block; font-size: var(--text-xs); color: var(--text-faint); margin-bottom: 6px; }
+  .group-h { margin: var(--space-6) 0 0; font-size: var(--text-md); color: var(--text-strong); }
+  @media (max-width: 900px) { .case, .case.wide { grid-template-columns: minmax(0, 1fr); } .case.wide > .frame + .frame { grid-column: auto; } }
+
+  .gaps { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+  .gaps th, .gaps td { text-align: left; vertical-align: top; padding: var(--space-2) var(--space-3) var(--space-2) 0; border-top: 1px solid var(--line); line-height: 1.45; }
+  .gaps th { font-size: var(--text-xs); color: var(--text-faint); font-weight: var(--weight-semibold); }
+  .gaps td:first-child { color: var(--text-strong); font-weight: var(--weight-medium); white-space: nowrap; }
+  .gaps-wrap { overflow-x: auto; }
+
+  /* Shared faces: a monogram with its hue, a presence mark cut from --ring-bg. */
+  .av { position: relative; flex: none; width: var(--s, 32px); height: var(--s, 32px); border-radius: 50%; display: grid; place-items: center; color: #fff; font: 700 calc(var(--s, 32px) * .4)/1 "Figtree", sans-serif; background: linear-gradient(135deg, hsl(var(--h) 70% 62%), hsl(calc(var(--h) + 40) 65% 45%)); }
+  .mark { position: absolute; right: calc(var(--m) * -.15); bottom: calc(var(--m) * -.15); width: var(--m); height: var(--m); border-radius: 50%; border: calc(var(--m) * .3) solid var(--ring-bg); background: var(--c); box-sizing: content-box; }
+  .mark.dnd::after { content: ""; position: absolute; left: 18%; right: 18%; top: 38%; height: 24%; border-radius: 2px; background: var(--ring-bg); }
+  .gtile { flex: none; width: var(--s, 16px); height: var(--s, 16px); border-radius: 30%; display: grid; place-items: center; font: 700 calc(var(--s, 16px) * .42)/1 "Figtree", sans-serif; color: #fff; background: hsl(var(--h) 45% 45%); }
+  .fstack { display: inline-flex; flex-direction: row; } .fstack > * + * { margin-left: calc(var(--s) * -.3); box-shadow: 0 0 0 2px var(--ring-bg); }
+  .d-banner.bnr-art, .w-banner.bnr-art, .bg.bnr-art { background: radial-gradient(circle at 20% 30%, #f4c6d8 0 9%, transparent 10%), radial-gradient(circle at 70% 20%, #f7e2c4 0 7%, transparent 8%), radial-gradient(circle at 45% 70%, #e9b4cf 0 11%, transparent 12%), radial-gradient(circle at 85% 70%, #fff3 0 8%, transparent 9%), linear-gradient(160deg, #6f7fae, #9aa6c9); }
+  .bubble-dots { position: absolute; inset: 0; pointer-events: none; }
+
+  /* ── Discord: values from discord.com's shipped CSS and theme variables (2026-11-24). ── */
+  .dc { --d-surface: #383b40; --d-surface-hi: #404047; --d-lower: #333338; --d-border-muted: hsla(240,4%,61%,.04); --d-border-subtle: hsla(240,4%,61%,.12); --d-border: hsla(240,4%,61%,.2);
+        --d-strong: #fff; --d-default: #f2f2f5; --d-subtle: #c4c7c9; --d-muted: #ababb3; --d-brand: #94a8ff; --d-mod-subtle: hsla(240,4%,61%,.12); --d-mod-strong: hsla(240,4%,61%,.2);
+        --d-overlay: #404047; --d-input: rgba(0,0,0,.08); --d-primary: #5865f2; --d-secondary: hsla(240,4%,61%,.2); --d-online: #23a55a; --d-dnd: #f23f43; --d-idle: #f0b232;
+        font: 400 14px/1.2857 "gg sans", "Noto Sans", system-ui, sans-serif; color: var(--d-default); }
+  :root[data-theme="light"] .dc { --d-surface: #fff; --d-surface-hi: #fff; --d-lower: #fafafa; --d-border-muted: hsla(240,4%,61%,.2); --d-border-subtle: hsla(240,4%,61%,.28); --d-border: hsla(240,4%,61%,.4);
+        --d-strong: #29292e; --d-default: #2e2e33; --d-subtle: #595963; --d-muted: #6b6e75; --d-brand: #525ee0; --d-mod-subtle: hsla(240,4%,61%,.12); --d-mod-strong: hsla(240,4%,61%,.24); --d-overlay: #fff; --d-input: rgba(0,0,0,.02); --d-secondary: hsla(240,4%,61%,.24); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme]) .dc { --d-surface: #fff; --d-surface-hi: #fff; --d-lower: #fafafa; --d-border-muted: hsla(240,4%,61%,.2); --d-border-subtle: hsla(240,4%,61%,.28); --d-border: hsla(240,4%,61%,.4);
+        --d-strong: #29292e; --d-default: #2e2e33; --d-subtle: #595963; --d-muted: #6b6e75; --d-brand: #525ee0; --d-overlay: #fff; --d-input: rgba(0,0,0,.02); --d-secondary: hsla(240,4%,61%,.24); } }
+  .d-pop.themed, .d-side.themed, .d-modal.themed { --d-strong: var(--ts); --d-default: var(--ti); --d-subtle: var(--tm); --d-mod-subtle: var(--tile); --d-secondary: var(--tile); }
+  /* popout: 300 wide, radius 8, shadow-border + shadow-high; themed: 2px gradient padding */
+  .d-pop { position: relative; width: 300px; border-radius: 8px; background: var(--d-surface); box-shadow: 0 0 0 1px var(--d-border-subtle), 0 12px 24px hsl(0 0% 0% / .24); display: flex; flex-direction: column; overflow: hidden; --ring-bg: var(--d-surface); }
+  .d-pop.themed { padding: 2px; background: linear-gradient(var(--p1), var(--p2)); }
+  .d-pop.themed > .d-in { border-radius: 6px; background: linear-gradient(var(--o1), var(--o1) 105px, var(--o2)); --ring-bg: var(--o1); }
+  .d-in { display: flex; flex-direction: column; gap: 8px; padding-bottom: 4px; min-height: 0; border-radius: 8px; }
+  .d-head { position: relative; flex: none; min-height: calc(var(--bh) + 35px); }
+  .d-banner { height: var(--bh); border-radius: 8px 8px 0 0; background: var(--bcol); position: relative; }
+  .d-banner::before { content: ""; position: absolute; left: 0; right: 0; bottom: 0; border-bottom: 1px solid var(--d-border-muted); }
+  .d-hbtns { position: absolute; top: 8px; right: 12px; display: flex; gap: 8px; z-index: 3; }
+  .d-hbtn { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: rgba(0,0,0,.5); color: #fff; font-size: 18px; }
+  .d-ava { position: absolute; left: 10px; top: calc(var(--bh) - var(--as) / 2 - 6px + 4px); padding: 6px; border-radius: 50%; background: var(--ring-bg); }
+  .d-ava .av { --s: var(--as); font-size: calc(var(--as) * .38); }
+  .d-ava .mark { --m: calc(var(--as) * .2); }
+  .d-ava.deco::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 4px dotted #ffb13b; pointer-events: none; }
+  .d-bub { position: absolute; left: var(--bl); top: calc(var(--bh) - 7px); max-width: 181px; z-index: 2; }
+  .d-bub .o { position: relative; min-width: 42px; border-radius: 16px; border: 1px solid var(--d-border-muted); box-shadow: 0 1px 4px hsl(0 0% 0% / .14); background: var(--d-surface-hi); }
+  .d-bub .o::before, .d-bub .o::after { content: ""; position: absolute; border-radius: 50%; background: inherit; border: inherit; box-shadow: inherit; }
+  .d-bub .o::before { width: 20px; height: 20px; left: 10px; top: -8px; } .d-bub .o::after { width: 10px; height: 10px; left: -3px; top: -15px; }
+  .d-bub .i { position: relative; padding: 8px 12px; border-radius: 16px; background: inherit; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--d-default); }
+  .d-body { display: flex; flex-direction: column; gap: 12px; padding: 4px 16px 8px; overflow: auto; }
+  .d-name { font-size: 20px; line-height: 24px; font-weight: 600; color: var(--d-strong); word-break: break-word; max-height: 72px; overflow: hidden; }
+  .d-name.click { cursor: pointer; } .d-name.click:hover { text-decoration: underline; }
+  .d-urow { display: flex; flex-wrap: wrap; align-items: center; column-gap: 6px; row-gap: 2px; color: var(--d-strong); }
+  .d-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--d-default); margin-inline: 1px; }
+  .d-tag { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding-inline: 8px; border-radius: 8px; border: 1px solid var(--d-border-muted); background: var(--d-mod-subtle); font-size: 12px; font-weight: 600; color: var(--d-default); }
+  .d-badges { display: inline-flex; gap: 2px; } .d-badge { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font-size: 13px; }
+  .d-mut { display: flex; align-items: center; gap: 8px; color: var(--d-subtle); }
+  .d-mut .h { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; } .d-mut .h:hover span { text-decoration: underline; color: var(--d-strong); }
+  .d-mut .sep { width: 4px; height: 4px; border-radius: 50%; background: var(--d-subtle); }
+  .d-bio { color: var(--d-strong); white-space: pre-wrap; }
+  .d-bio.clamp { max-height: 57.75px; overflow: hidden; }
+  .d-sm { height: 24px; padding: 0 8px; border-radius: 8px; background: var(--d-secondary); color: var(--d-default); font-size: 12px; justify-self: start; display: inline-flex; align-items: center; width: max-content; }
+  .d-sec { display: flex; flex-direction: column; gap: 4px; } .d-sec > .t { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--d-default); }
+  .d-roles { display: flex; flex-wrap: wrap; gap: 4px; }
+  .d-role { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border-radius: 4px; background: var(--d-mod-subtle); font-size: 12px; font-weight: 500; color: var(--d-default); }
+  .d-role i { width: 12px; height: 12px; border-radius: 50%; background: var(--rc); }
+  .d-role .x, .w-role .x { font-size: 10px; cursor: pointer; } .d-role .x { opacity: 0; } .d-role:hover .x { opacity: 1; } .w-role .x { color: var(--tm, var(--text-muted)); } .d-role.add, .w-role.add { background: none; cursor: pointer; }
+  .d-card { border-radius: 8px; background: var(--d-overlay); border: 1px solid var(--d-border-muted); padding: 12px; display: grid; gap: 8px; }
+  .d-card .hd { font-size: 12px; font-weight: 600; color: var(--d-default); }
+  .d-card .row { display: grid; grid-template-columns: 60px 1fr; gap: 12px; align-items: center; }
+  .d-card .art { width: 60px; height: 60px; border-radius: 8px; background: linear-gradient(135deg, #2c5aa0, #79a7e0); }
+  .d-card .t1 { font-weight: 600; color: var(--d-strong); } .d-card .t2 { font-size: 12px; color: var(--d-subtle); } .d-card .tm { font-size: 12px; color: var(--d-online); font-weight: 600; }
+  .d-foot { padding: 0 16px 12px; }
+  .d-msg { height: 40px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-radius: 8px; background: var(--d-input); border: 1px solid var(--d-border-subtle); color: var(--d-muted); }
+  .d-btn { height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; border-radius: 8px; font-weight: 500; color: #fff; background: var(--d-primary); }
+  .d-btn.sec { background: var(--d-secondary); color: var(--d-default); } .d-btn.ic { width: 32px; padding: 0; } .d-btn.full { width: 100%; }
+  .d-side { width: 300px; border-radius: 8px; background: var(--d-surface); box-shadow: 0 0 0 1px var(--d-border-subtle); display: flex; flex-direction: column; --ring-bg: var(--d-surface); overflow: hidden; }
+  .d-side .d-in { gap: 8px; }
+  /* full profile: 962 × min(800, 100vh − 96), card 300–400, tabs */
+  .d-modal { position: relative; width: 100%; max-width: 962px; height: 620px; border-radius: 16px; border: 1px solid var(--d-border); background: var(--d-lower); display: flex; overflow: hidden; padding: 32px 0 0 32px; --ring-bg: var(--d-surface); }
+  .d-modal.themed { background: linear-gradient(var(--o1), var(--o2) 300px); }
+  .d-modal .bg { position: absolute; inset: 0 0 auto 0; height: 280px; filter: saturate(.5) blur(15px); opacity: .3; -webkit-mask: linear-gradient(#000, transparent); mask: linear-gradient(#000, transparent); }
+  .d-mbtn { position: absolute; top: 8px; right: 8px; display: flex; gap: 8px; z-index: 4; }
+  .d-mcard { position: relative; flex: none; width: var(--cw); background: var(--d-surface); border-radius: 16px 16px 0 0; box-shadow: 0 4px 8px hsl(0 0% 0% / .16); outline: 1px solid var(--d-border-muted); display: flex; flex-direction: column; overflow: hidden; }
+  .d-mcard.themed { background: linear-gradient(var(--o1), var(--o1) 140px, var(--o2)); --ring-bg: var(--o1); }
+  .d-mcard .d-banner { border-radius: 16px 16px 0 0; }
+  .d-mcard .d-head { min-height: calc(var(--bh) + 80px); }
+  .d-mcard .d-ava { left: 24px; top: calc(var(--bh) - 66px); }
+  .d-mbody { display: flex; flex-direction: column; gap: 24px; padding: 4px 32px 32px; overflow: auto; }
+  .d-tabs { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0 32px 0 32px; }
+  .d-tabbar { display: flex; gap: 32px; border-bottom: 1px solid var(--d-border-subtle); padding-top: 20px; }
+  .d-tab { height: 25px; color: var(--d-subtle); cursor: pointer; font-weight: 500; border-bottom: 2px solid transparent; }
+  .d-tab:hover { color: var(--d-strong); } .d-tab.on { color: var(--d-brand); border-color: var(--d-brand); }
+  .themed .d-tab.on { color: var(--d-strong); border-color: var(--d-strong); }
+  .d-panel { padding-top: 20px; display: grid; gap: 8px; align-content: start; overflow: auto; }
+  .d-mrow { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 8px; cursor: pointer; } .d-mrow:hover { background: var(--d-mod-subtle); }
+  .d-mrow .n { font-weight: 500; color: var(--d-strong); } .d-mrow .s { font-size: 12px; color: var(--d-subtle); }
+  .d-empty { text-align: center; display: grid; gap: 8px; justify-items: center; padding: 48px 16px; color: var(--d-subtle); }
+  .d-empty b { color: var(--d-strong); font-size: 16px; }
+  .d-note { min-height: 36px; padding: 8px 10px; border-radius: 8px; background: var(--d-input); border: 1px solid var(--d-border-subtle); color: var(--d-muted); }
+
+  /* ── Waffle: tokens from tokens.css; squircles, honey, Reicon stand-ins; mirrors src/profile*.rs. ── */
+  .wf { font: 400 var(--text-sm)/1.43 var(--font-ui); color: var(--text); }
+  .w-pop { position: relative; width: 300px; border-radius: var(--radius-lg); background: var(--bg-overlay); box-shadow: var(--shadow-pop); display: flex; flex-direction: column; overflow: hidden; --ring-bg: var(--bg-overlay); }
+  .w-pop.themed { padding: 2px; background: linear-gradient(var(--p1), var(--p2)); }
+  .w-pop.themed > .w-in { border-radius: calc(var(--radius-lg) - 2px); background: linear-gradient(var(--o1), var(--o2)); --ring-bg: var(--o1); color: var(--ti); }
+  .w-in { display: flex; flex-direction: column; min-height: 0; border-radius: var(--radius-lg); }
+  .w-head { position: relative; flex: none; }
+  .w-banner { height: var(--bh); background: var(--bcol); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  .w-hbtns { position: absolute; top: 8px; right: 12px; display: flex; gap: 8px; }
+  .w-hbtn { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: rgba(0,0,0,.5); color: #fff; font-size: 18px; }
+  .w-avrow { padding: 0 10px; margin-top: calc(var(--as) / -2 - 6px); margin-bottom: 8px; }
+  .w-ava { display: inline-block; padding: 6px; border-radius: 50%; background: var(--ring-bg); position: relative; cursor: pointer; }
+  .w-ava .av { --s: var(--as); font-size: calc(var(--as) * .38); } .w-ava .mark { --m: calc(var(--as) * .2); }
+  .w-ava.deco::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 4px dotted #ffb13b; pointer-events: none; }
+  .w-bub { position: absolute; left: var(--bl); top: calc(var(--bh) - 7px); right: 12px; display: flex; }
+  .w-bub .p { position: relative; max-width: 181px; min-height: 36px; padding: 8px 12px; border-radius: 18px; background: var(--bubble, var(--bg-raised)); border: 1px solid var(--line); line-height: 18px; }
+  .w-bub .p span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .w-bub .d1, .w-bub .d2 { position: absolute; border-radius: 50%; background: var(--bubble, var(--bg-raised)); border: 1px solid var(--line); }
+  .w-bub .d1 { width: 8px; height: 8px; left: -8px; top: -14px; } .w-bub .d2 { width: 16px; height: 16px; left: 4px; top: -8px; }
+  .w-body { display: flex; flex-direction: column; gap: 12px; padding: 4px 16px 8px; overflow: auto; }
+  .w-name { font-size: var(--text-lg); line-height: var(--line-lg); font-weight: 600; color: var(--ts, var(--text-strong)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .w-name.click { cursor: pointer; } .w-name.click:hover { text-decoration: underline; }
+  .w-urow { display: flex; flex-wrap: wrap; align-items: center; column-gap: 6px; row-gap: 2px; color: var(--ti, var(--text)); }
+  .w-urow .u { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .w-tag { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border-radius: var(--radius-xs); background: var(--tile, var(--selected)); color: var(--ts, var(--text-strong)); font-weight: 500; }
+  .w-badges { display: inline-flex; gap: 2px; } .w-badge { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font-size: 13px; }
+  .w-mut { display: flex; align-items: center; gap: 8px; color: var(--ti, var(--text)); }
+  .w-mut .h { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; } .w-mut .h:hover span { text-decoration: underline; color: var(--ts, var(--text-strong)); }
+  .w-mut .sep { width: 4px; height: 4px; border-radius: 50%; background: var(--tm, var(--text-muted)); }
+  .w-bio { color: var(--ts, var(--text)); white-space: pre-wrap; } .w-bio.clamp { max-height: 60px; overflow: hidden; }
+  .w-sm { height: 24px; padding: 0 8px; border-radius: var(--radius-xs); background: var(--tile, var(--selected)); color: var(--ts, var(--text-strong)); font-size: var(--text-xs); width: max-content; display: inline-flex; align-items: center; }
+  .w-sec { display: flex; flex-direction: column; gap: 6px; } .w-sec > .t { font-size: var(--text-xs); font-weight: 600; color: var(--ti, var(--text)); }
+  .w-roles { display: flex; flex-wrap: wrap; gap: 4px; }
+  .w-role { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: var(--radius-full); background: var(--tile, var(--selected)); font-size: var(--text-xs); color: var(--ti, var(--text)); }
+  .w-role i { width: 8px; height: 8px; border-radius: 50%; background: var(--rc); }
+  .w-card { border-radius: var(--radius-md); background: var(--tile, var(--selected)); padding: 12px; display: grid; gap: 10px; }
+  .w-card .hd { font-weight: 500; color: var(--ts, var(--text-strong)); }
+  .w-card .row { display: grid; grid-template-columns: 72px 1fr; gap: 12px; align-items: center; }
+  .w-card .art { width: 72px; height: 72px; border-radius: var(--radius-sm); background: linear-gradient(135deg, #2c5aa0, #79a7e0); }
+  .w-card .t1 { font-weight: 600; color: var(--ts, var(--text-strong)); } .w-card .tm { color: var(--online-ink); font-family: var(--font-mono); }
+  .w-foot { padding: 4px 16px 12px; }
+  .w-msg { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-radius: var(--radius-md); background: var(--tile, var(--selected)); color: var(--tm, var(--text-muted)); }
+  .w-btn { height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 14px; border-radius: var(--radius-sm); font-weight: 500; background: var(--accent); color: var(--on-accent); }
+  .w-btn.sec { background: var(--selected); color: var(--text-strong); } .w-btn.ic { width: 36px; padding: 0; } .w-btn.full { width: 100%; }
+  .w-side { width: 300px; border-radius: var(--radius-lg); background: var(--bg-sidebar); display: flex; flex-direction: column; overflow: hidden; --ring-bg: var(--bg-sidebar); }
+  .w-side.themed { background: linear-gradient(var(--o1), var(--o2)); --ring-bg: var(--o1); color: var(--ti); }
+  .w-modal { position: relative; width: 100%; max-width: 962px; height: 620px; border-radius: var(--radius-xl); background: var(--bg-page); box-shadow: var(--shadow-pop); display: flex; overflow: hidden; padding: 32px 0 0 32px; --ring-bg: var(--bg-raised); }
+  .w-modal.themed { background: linear-gradient(var(--o1), var(--o2)); color: var(--ti); }
+  .w-modal .bg { position: absolute; inset: 0 0 auto 0; height: 280px; opacity: .3; -webkit-mask: linear-gradient(#000, transparent); mask: linear-gradient(#000, transparent); }
+  .w-mcard { position: relative; flex: none; width: var(--cw); background: var(--bg-raised); border-radius: var(--radius-lg) var(--radius-lg) 0 0; box-shadow: var(--shadow-pop); display: flex; flex-direction: column; overflow: hidden; }
+  .w-mcard.themed { background: linear-gradient(var(--o1), var(--o2)); --ring-bg: var(--o1); }
+  .w-mcard .w-avrow { padding: 0 26px; }
+  .w-mbody { display: flex; flex-direction: column; gap: 24px; padding: 4px 32px 32px; overflow: auto; }
+  .w-close { position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--text-muted); font-size: 20px; }
+  .w-tabs { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0 32px; gap: 20px; }
+  .w-tabbar { display: flex; gap: 24px; border-bottom: 1px solid var(--line); padding-right: 32px; }
+  .w-tab { padding: 8px 0; color: var(--tm, var(--text-muted)); cursor: pointer; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .w-tab:hover { color: var(--ts, var(--text-strong)); } .w-tab.on { color: var(--ts, var(--text-strong)); border-color: var(--accent); }
+  .w-panel { display: grid; gap: 8px; align-content: start; overflow: auto; }
+  .w-mrow { display: flex; align-items: center; gap: 12px; height: 60px; padding: 0 10px; border-radius: var(--radius-sm); cursor: pointer; } .w-mrow:hover { background: var(--hover); }
+  .w-mrow .n { font-weight: 500; color: var(--ts, var(--text-strong)); } .w-mrow .s { font-size: var(--text-xs); color: var(--tm, var(--text-muted)); }
+  .w-empty { text-align: center; display: grid; gap: 8px; justify-items: center; padding: 32px 16px; color: var(--tm, var(--text-muted)); }
+  .w-empty b { color: var(--ts, var(--text-strong)); font-size: var(--text-lg); }
+  .w-note { min-height: 36px; padding: 8px 10px; border-radius: var(--radius-xs); background: var(--tile, var(--selected)); color: var(--tm, var(--text-muted)); cursor: text; }
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div class="layout">
+<nav class="toc" id="toc" aria-label="Design system"></nav>
+<main>
+<section id="profile-parity">
+  <h1>Profile parity</h1>
+  <p class="lede">Every place Discord shows a person's profile: the popout from a name or avatar, the DM's side panel, and the full profile dialog. Discord's side is drawn from its shipped client (CSS, layout specs and English strings, read 2026-11-24); Waffle's mirrors <code>src/profile.rs</code>, <code>src/profile/{parts,full,dm_panel}.rs</code>. Waffle keeps its identity: squircle corners, honey, its own icons and springs. Layout, order, copy and behaviour follow Discord.</p>
+  <p class="src">Discord measures: popout 300 wide, banner 105, avatar 80 at 10/4, status bubble at 105px from the left and 7px above the banner's foot; DM side panel 300 wide, banner 105; full profile 962 × min(800, window − 96), its card min(max(300, 45.5vw − 43.68), 400), banner 140, avatar 120, padding and gutter 32. Section headings 12px semibold in default ink. Display name 20px semibold; username row 14px with pronouns, the guild tag pill and the badges trailing it.</p>
+  <p class="src nv">Not verified: the badge icon size inside the username row (drawn at 20); the exact status-bubble fill on a themed card; whether the popout banner without a picture keeps all 105px for users without Nitro (the popout spec sets 105 regardless); colours of themed cards beyond the gradient math, which needs a live render.</p>
+</section>
+
+<section id="playground">
+  <h2>Playground</h2>
+  <p class="lede">Choose the surface and who it is. Click names, avatars, mutuals and tabs on either side; each log says what that app does.</p>
+  <div class="play" id="play">
+    <form class="knobs" id="knobs" onsubmit="return false">
+      <fieldset><legend>Where</legend>
+        <label><span>Surface</span><select name="surface"><option value="popout">Popout</option><option value="side">DM side panel</option><option value="full">Full profile</option></select></label>
+        <label><span>Tab</span><select name="tab"><option value="activity">Activity</option><option value="friends">Mutual Friends</option><option value="servers">Mutual Servers</option></select></label>
+        <label><input type="checkbox" name="guild" checked> Opened in a server</label>
+      </fieldset>
+      <fieldset><legend>Who</legend>
+        <label><span>Name</span><input type="text" name="name" value="Wren"></label>
+        <label><span>Relation</span><select name="rel"><option value="none">Stranger</option><option value="friend" selected>Friend</option><option value="outgoing">Request sent</option><option value="incoming">Request received</option><option value="self">You</option><option value="bot">Bot</option></select></label>
+        <label><input type="checkbox" name="banner" checked> Banner picture</label>
+        <label><span>Theme</span><select name="theme"><option value="">None</option><option value="berry" selected>Berry (dark gradient)</option><option value="mint">Mint (light gradient)</option></select></label>
+        <label><input type="checkbox" name="deco" checked> Avatar decoration</label>
+        <label><input type="checkbox" name="pron" checked> Pronouns</label>
+        <label><input type="checkbox" name="tag" checked> Guild tag</label>
+        <label><span>Badges</span><select name="badges"><option value="0">None</option><option value="5" selected>5</option><option value="9">9 (overflow)</option></select></label>
+        <label><span>Status</span><input type="text" name="status" value="🍯 drizzling honey on everything"></label>
+        <label><span>Bio</span><select name="bio"><option value="">None</option><option value="short" selected>Two lines</option><option value="long">Long</option></select></label>
+        <label><span>Roles</span><select name="roles"><option value="0">None</option><option value="1" selected>One</option><option value="14">Fourteen</option></select></label>
+        <label><span>Activity</span><select name="act"><option value="none">None</option><option value="playing" selected>Playing (party)</option><option value="listening">Listening</option><option value="voice">In voice</option><option value="stream">Streaming</option></select></label>
+        <label><span>Mutual friends</span><select name="mf"><option value="0">0</option><option value="5" selected>5</option><option value="128">128</option></select></label>
+        <label><span>Mutual servers</span><select name="ms"><option value="0">0</option><option value="1" selected>1</option><option value="3">3</option></select></label>
+        <label><input type="checkbox" name="note"> Has a note</label>
+      </fieldset>
+      <fieldset><legend>Presets</legend>
+        <div class="acts">
+          <button type="button" data-act="reference">Reference</button>
+          <button type="button" data-act="plain">Plain</button>
+          <button type="button" data-act="worst">Worst case</button>
+          <button type="button" data-act="stranger">Stranger</button>
+        </div>
+      </fieldset>
+    </form>
+    <div class="stages">
+      <div class="stage"><h3>Discord</h3><div class="frame" id="pd"></div><ol class="log" id="ld" reversed></ol></div>
+      <div class="stage"><h3>Waffle</h3><div class="frame" id="pw"></div><ol class="log" id="lw" reversed></ol></div>
+    </div>
+  </div>
+</section>
+
+<section id="cases">
+  <h2>Every case</h2>
+  <p class="lede">Each state frozen, Discord above or beside Waffle. Notes say what matches and what Waffle on <code>main</code> did instead.</p>
+  <div id="caselist"></div>
+</section>
+
+<section id="interactions">
+  <h2>What each part does</h2>
+  <p class="lede">The first pass compared layout, order and copy and missed what the parts do. This pass goes element by element through every hover, click, right-click and edit Discord's profile offers.</p>
+  <div class="gaps-wrap">
+  <table class="gaps">
+    <thead><tr><th>Element</th><th>Discord</th><th>Waffle on main</th><th>This change</th></tr></thead>
+    <tbody>
+      <tr><td>Role chip</td><td>A ✕ appears on hover for every role you can take away (Manage Roles, below your highest role, not managed); tooltip "Remove Role". Takes it away at once.</td><td>Static chip; removing meant finding the role in the user menu.</td><td>A 12px ✕ on every role you can remove, shown at rest rather than on hover (Waffle's call: nothing removable hides); removed at once and restored if Discord refuses.</td></tr>
+      <tr><td>Role right-click</td><td>"Copy Role ID" with Developer Mode on.</td><td>Nothing.</td><td>Right-click a role for Copy Role ID when Developer Mode is on.</td></tr>
+      <tr><td>Add role</td><td>A "+" button (tooltip "Add role") opening a role picker with a search field, listing roles they don't have.</td><td>An "Add role" text button opening the whole user menu.</td><td>The "+" opens a picker: a search field over the roles you can give them that they don't hold; a pick adds it at once.</td></tr>
+      <tr><td>Many roles</td><td>The popout folds them to two rows; "+N" (tooltip "View All Roles") unfolds the rest in place.</td><td>Every role, the card growing.</td><td>Two rows by estimate from the names, "+N" unfolds.</td></tr>
+      <tr><td>Message field</td><td>A real input: type and press Enter to send to your DM with them without leaving the card.</td><td>A prompt that opened the DM.</td><td>A real field once clicked; Enter sends, then opens the DM and closes the card, as Discord's.</td></tr>
+      <tr><td>Display name and username</td><td>Both links to the full profile, underlined on hover.</td><td>Plain text.</td><td>Both links.</td></tr>
+      <tr><td>Note button</td><td>A note icon after the name while the card is hovered: "Add Note (only visible to you)" / "Edit Note (only visible to you)".</td><td>Only the context menu's prompt.</td><td>The icon on hover opens the note in a popover over the card; leaving it saves.</td></tr>
+      <tr><td>Friend button</td><td>Add Friend sends a request; for a friend or a pending request it opens "Friend Actions": Remove Friend, Cancel, Accept, Ignore.</td><td>Add Friend and Accept worked; Friends and Pending did nothing.</td><td>The menu for each state; Remove Friend asks first.</td></tr>
+      <tr><td>Badges</td><td>Tooltip, and a click follows the badge's link (Nitro's page for Nitro badges).</td><td>Tooltip only.</td><td>Click opens <code>badges[].link</code>.</td></tr>
+      <tr><td>Your status bubble</td><td>Your own card always shows the bubble: "Add Status" when unset; a click edits or clears it.</td><td>No bubble.</td><td>"Add Status" or your status; a click opens the status editor.</td></tr>
+      <tr><td>Their status, avatar, activity</td><td>On hover a small toolbar: Send Reaction and Reply ("React to status", "Reply to avatar", …), sending a DM that quotes it.</td><td>None.</td><td>Both, on hover. Reply opens a field ("Reply to Wren's status"); Send Reaction opens the emoji picker. Each sends Discord's text to your DM, <code>&gt; -# *Replied to Wren's status*</code> then <code>&gt; {status}</code> then the message, and shows "Reply sent" / "Reaction sent". <span class="nv">Format read from Discord's client; not checked against a live send.</span></td></tr>
+      <tr><td>Long status</td><td>Clamped to two lines with a chevron to expand it in place.</td><td>n/a</td><td>Clamped with an ellipsis; a chevron expands and collapses it.</td></tr>
+      <tr><td>Guild tag pill</td><td>Hover deepens it; a click opens the tag's server card.</td><td>Static.</td><td>A click opens the tag's card: badge and tag, the server, and Go to Server when you're in it. <span class="nv">No member counts or Join for servers you're not in.</span></td></tr>
+      <tr><td>Avatar</td><td>Popout and side panel: opens the full profile. Full profile: opens the picture.</td><td>Opened the picture.</td><td>Opens the full profile from the popout and the panel; the picture viewer moved to the full profile's avatar.</td></tr>
+      <tr><td>Mutual rows</td><td>A friend opens their full profile; a server goes to it.</td><td>n/a</td><td>A friend's row opens their full profile, a server's row goes to the server.</td></tr>
+      <tr><td>Bio</td><td>"View Full Bio" when clamped.</td><td>Cut off.</td><td>Clamped near three lines, with View Full Bio under it.</td></tr>
+      <tr><td>Note field</td><td>Click to edit, saves on blur, 256 characters.</td><td>n/a</td><td>Plain text until clicked, then a field that saves when you leave it, capped at 256 characters.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="gaps">
+  <h2>What to change in Waffle</h2>
+  <p class="lede">Measured against Waffle on <code>main</code> before this work. Every row is done in this change unless it says otherwise.</p>
+  <div class="gaps-wrap">
+  <table class="gaps">
+    <thead><tr><th>Area</th><th>Discord</th><th>Waffle on main</th><th>This change</th></tr></thead>
+    <tbody>
+      <tr><td>Popout width</td><td>300px.</td><td>320px.</td><td>300px.</td></tr>
+      <tr><td>Banner</td><td>105px tall on the popout and side panel, picture or not; 140 on the full profile.</td><td>128px with a picture, 64px strip without.</td><td>105 / 140, both kinds.</td></tr>
+      <tr><td>Avatar click</td><td>Opens the full profile (popout and side panel). On the full profile it opens the picture.</td><td>Opens the picture full size.</td><td>Discord's, picture view moved to the full profile.</td></tr>
+      <tr><td>Display name</td><td>A link: underline on hover, click opens the full profile.</td><td>Plain text.</td><td>A link.</td></tr>
+      <tr><td>Custom status</td><td>A thought bubble beside the avatar, 2 lines max, 181px wide max, two trailing dots.</td><td>Not shown on any profile.</td><td>Shown; the status editor's bubble moved into the design system as <code>ui::thought_bubble</code>.</td></tr>
+      <tr><td>Badges</td><td>Bare icons trailing the username row, after the guild tag.</td><td>A 30px pill of 22px icons on its own row under the name.</td><td>Trailing the username row, 20px, "+N" past six.</td></tr>
+      <tr><td>Mutuals</td><td>"5 Mutual Friends • 1 Mutual Server": 16px faces (server icons only when there are no friends), each half a link to that tab of the full profile; 12px when both, 14px when one.</td><td>Muted text with a 20px stack, not clickable.</td><td>Discord's row, linked.</td></tr>
+      <tr><td>Popout order</td><td>Name, mutuals, bio, activity, Roles. Nothing else.</td><td>Name, badges, mutuals, bio, Member Since, Friends Since, connections, Game Collection, activity, roles.</td><td>Discord's order; the dates, connections and games move to the full profile.</td></tr>
+      <tr><td>Bio</td><td>Clamped near three lines (57.75px); past that a small "View Full Bio" button opens the full profile.</td><td>Cut at 160px, no way to the rest.</td><td>Clamped, with View Full Bio.</td></tr>
+      <tr><td>Section headings</td><td>12px semibold, default ink: "Roles", "Member Since", "Note (only visible to you)".</td><td>14px semibold, strong ink; roles had none.</td><td>Discord's, "Roles" added.</td></tr>
+      <tr><td>Your own popout</td><td>Footer: full-width primary "Edit Profile"; in a server it asks Edit Per-server Profile or Edit Main Profile.</td><td>A small secondary "Edit profile" in the header.</td><td>Footer button; per-server choice opens the Profiles page on its tab.</td></tr>
+      <tr><td>More menu</td><td>The popout's More menu leads with "View Full Profile".</td><td>The user menu; its "Profile" reopened the popout.</td><td>"View Full Profile" leads the menu from a popout; "Profile" elsewhere opens the full profile.</td></tr>
+      <tr><td>Friend button</td><td>Add Friend, or the state's icon with "Pending" / "Friends".</td><td>"Friend Request Sent".</td><td>"Pending".</td></tr>
+      <tr><td>Add Role</td><td>"Add Role".</td><td>"Add role".</td><td>"Add Role".</td></tr>
+      <tr><td>DM side panel</td><td>Buttons over the banner; name, mutuals, bio, Member Since, activity; footer "View Full Profile".</td><td>The popout's full section list, no banner buttons, no footer.</td><td>Banner buttons, the shorter section list, Member Since, and a View Full Profile footer.</td></tr>
+      <tr><td>Full profile</td><td>962 × 800 dialog: the card (banner 140, avatar 120, status bubble, name, Message / friend / More, bio, Member Since, Friends Since, Roles, Connections, Note) and tabs Activity, "N Mutual Friends", "N Mutual Servers". Blurred banner behind it.</td><td>Did not exist.</td><td>Built. The blurred banner is the picture at 30% faded out over 280px (gpui has no backdrop blur here).</td></tr>
+      <tr><td>Opening it</td><td>Popout avatar, name, mutuals, View Full Bio, More › View Full Profile, the DM header, the side panel's button, the context menu's Profile (friends list included).</td><td>None.</td><td>All of these.</td></tr>
+      <tr><td>Activity tab</td><td>"Current activity" with stream, each activity, voice; empty: "{name} doesn't have any activity to share here", a playful line, Message.</td><td>n/a</td><td>Same copy; the playful line is fixed per person instead of random per open.</td></tr>
+      <tr><td>Mutual tabs</td><td>Rows of friends (open their full profile) and servers with your nickname there (go to the server); empty: "You don't have any friends in common" / "You don't have any servers in common" with a playful line.</td><td>n/a; only the server count was parsed.</td><td>Parsed <code>mutual_guilds</code> with nicknames; virtualized rows.</td></tr>
+      <tr><td>Note</td><td>"Note (only visible to you)" on the full profile, click to edit, saves on blur, 256 max.</td><td>Only the context menu's prompt, and the note was never read back.</td><td>Fetched with the profile and edited in place.</td></tr>
+      <tr><td>Profile frame</td><td>A worn frame (collectible type 3) is art around the card: staples overhang its top or bottom, rails and borders run down its sides, some behind the card and some over it. Authored on a 1200px card and scaled. On the full profile it reaches past the dialog's edge; the DM panel shrinks so the frame fits its column. Hidden in a short window.</td><td>Not read or drawn.</td><td>Read from the profile and its product (<code>/collectibles-products/{sku}</code>) and drawn on the popout, the DM panel and the full profile, with Discord's sizing. <span class="nv">Layer fields read from Discord's client; not checked against a live product.</span></td></tr>
+      <tr><td>Animated banner</td><td>With GIF autoplay on, it plays whenever the popout or full profile is open, and on the DM panel while the card is hovered. With autoplay off, it plays on hover and shows a GIF tag.</td><td>Played only while hovered.</td><td>Discord's rule, including the GIF tag.</td></tr>
+      <tr><td>DM side panel</td><td>Everything the popout has: frame, effect, banner buttons, status bubble with Reply/React, note button, popovers, toast.</td><td>No frame or effect; popovers opened from it went nowhere.</td><td>Same as the popout; the panel keeps its own card for its popovers.</td></tr>
+      <tr><td>Server profile</td><td>In a server, its profile overrides banner, accent, theme colours, bio and pronouns, and adds server badges.</td><td>Main profile only.</td><td>Overrides read from <code>guild_member_profile</code>; <code>guild_badges</code> joined to the badges.</td></tr>
+      <tr><td>Their request, a block</td><td>Under the name: "<b>name</b> sent you a friend request." with Accept and Ignore; "You blocked them"; "You ignored them • Unignore".</td><td>None.</td><td>The request card with Accept and Ignore, and both notices with Unignore.</td></tr>
+      <tr><td>Mutual rows</td><td>Friends: presence, decoration, guild tag, what they're doing, right-click menu. Servers: in your own server order, right-click menu.</td><td>Name only; servers in the API's order.</td><td>Friend rows with presence, decoration, guild tag, activity line and menu; servers in your order with their menu.</td></tr>
+      <tr><td>Full profile details</td><td>Badges in a tinted pill with "+N"; muted section headings over 16px values; Connections a list (mark, name, ↗); the note plain italic text; Member Since a bare date outside a server.</td><td>Popout styling.</td><td>Badge pill, muted headings over 16px values, a Connections list, italic note text, and a bare date outside servers.</td></tr>
+      <tr><td>Recent activity</td><td>The Activity tab lists the last 30 days from <code>/content-inventory/users/{id}/outbox</code>: games, shows and music, with "New Player", "{h}h Marathon", "{n}x Streak" and "3h ago".</td><td>n/a</td><td>Fetched when the full profile opens and listed under Current activity. <span class="nv">Fields read from Discord's client; not checked against a live response.</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+</main>
+</div>
+<script src="site.js"></script>
+<script>
+const BASE = { surface: "popout", tab: "activity", guild: true, name: "Wren", rel: "friend", banner: true, theme: "berry", deco: true, pron: true, tag: true, badges: "5", status: "🍯 drizzling honey on everything", bio: "short", roles: "1", act: "playing", mf: "5", ms: "1", note: false };
+const THEMES = { berry: { p1: "#9b1fa8", p2: "#e9a6c9", o1: "#46104b", o2: "#5f4a59", ti: "#fff", ts: "#fff", tm: "rgba(255,255,255,.72)", tile: "rgba(255,255,255,.1)" },
+                 mint: { p1: "#7fe0c3", p2: "#f5e6a8", o1: "#c6efe3", o2: "#f3ecd0", ti: "#1d1f24", ts: "#1d1f24", tm: "rgba(29,31,36,.72)", tile: "rgba(29,31,36,.1)" } };
+const BIO = { short: "LUCKY VICKY ✨\n**gpui** fan, probably in voice", long: "Rust, gpui and too much honey. I build little desktop apps on weekends, mostly for my friends, sometimes for strangers on the internet who ask nicely.\nAsk me about waffles, keyboards, or the time I accidentally rewrote a renderer.\nTimezone: whenever." };
+const BADGE_GLYPHS = ["ph-fill ph-diamond", "ph-fill ph-lightning", "ph-fill ph-code", "ph-fill ph-heart", "ph-fill ph-star", "ph-fill ph-crown", "ph-fill ph-flag", "ph-fill ph-leaf", "ph-fill ph-moon"];
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const hue = n => [...n].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+const plural = (n, noun) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+const tabLabel = (n, noun) => n === 0 ? `No ${noun}s` : plural(n, noun);
+const me = s => s.rel === "self";
+const bioText = s => s.bio ? BIO[s.bio] : "";
+const md = t => esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+const themeVars = s => { const t = THEMES[s.theme]; return t ? Object.entries(t).map(([k, v]) => `--${k}:${v}`).join(";") : ""; };
+const bannerCol = s => s.banner ? "" : (THEMES[s.theme]?.p1 ?? "#6d4bd8");
+const face = (n, size, mark) => `<span class="av" style="--s:${size}px;--h:${hue(n)}">${esc(n[0].toUpperCase())}${mark ? `<span class="mark ${mark === "dnd" ? "dnd" : ""}" style="--c:${mark === "dnd" ? "#f23f43" : "#23a55a"}"></span>` : ""}</span>`;
+const gtile = (n, size) => `<span class="gtile" style="--s:${size}px;--h:${hue(n)}">${esc(n[0])}</span>`;
+const friendsList = n => Array.from({ length: Math.min(n, 40) }, (_, i) => i < 3 ? ["moss lantern", "toma reed", "ferris"][i] : `friend with a rather long display name ${i}`);
+const serverList = n => ["Night Owls", "gpui", "Honeycomb Café"].slice(0, n);
+const roleList = s => s.roles === "0" ? [] : s.roles === "1" ? [["Rustacean", "#e67e22"]] : Array.from({ length: 14 }, (_, i) => [`very long role name number ${i}`, `hsl(${i * 25} 60% 55%)`]);
+const ACT = { playing: ["Playing", "PUBG: BATTLEGROUNDS", "Normal, Erangel, 58/99", "4 Squad (4 of 4)", "7:05"], listening: ["Listening to Spotify", "Sleep Token", "by Sleep Token", "on Even In Arcadia", "1:42"], voice: ["In voice", "hangout", "Night Owls", "", ""], stream: ["Streaming", "PUBG: BATTLEGROUNDS", "Night Owls › hangout", "", ""] };
+
+// ── Discord ──
+function dHead(s, { bh, as, bl, full = false }) {
+  const btns = full ? "" : me(s) ? "" : `<div class="d-hbtns">${s.rel === "bot" ? "" : `<span class="d-hbtn" data-hit="friend" title="${s.rel === "none" ? "Add Friend" : s.rel === "friend" ? "Friends" : s.rel === "incoming" ? "Accept" : "Pending"}"><i class="ph-fill ph-user-${s.rel === "none" || s.rel === "incoming" ? "plus" : "check"}"></i></span>`}<span class="d-hbtn" data-hit="more"><i class="ph-bold ph-dots-three"></i></span></div>`;
+  const bub = s.status ? `<div class="d-bub" style="--bl:${bl}px"><div class="o"><div class="i">${esc(s.status)}</div></div></div>` : "";
+  return `<div class="d-head" style="--bh:${bh}px;--as:${as}px"><div class="d-banner ${s.banner ? "bnr-art" : ""}" style="--bcol:${bannerCol(s)}"></div>${btns}<span class="d-ava ${s.deco ? "deco" : ""}" data-hit="avatar">${face(s.name, as, "dnd")}</span>${bub}</div>`;
+}
+function dName(s, clickable) {
+  const badges = +s.badges ? `<span class="d-badges">${BADGE_GLYPHS.slice(0, +s.badges).map(g => `<span class="d-badge"><i class="${g}" style="color:hsl(${hue(g)} 70% 65%)"></i></span>`).join("")}</span>` : "";
+  const bot = s.rel === "bot" ? ` <span class="d-sm" style="background:#5865f2;color:#fff;height:16px;font-size:11px">APP</span>` : "";
+  return `<div><div class="d-name ${clickable ? "click" : ""}" data-hit="${clickable ? "name" : ""}">${esc(s.name)}${bot}</div><div class="d-urow"><span>${esc(s.name.toLowerCase().replace(/\s+/g, "."))}</span>${s.pron ? `<span class="d-dot"></span><span>she/her</span>` : ""}${s.tag ? `<span class="d-tag"><i class="ph-fill ph-shield-star"></i>WONY</span>` : ""}${badges}</div></div>`;
+}
+function dMutuals(s) {
+  const f = +s.mf, g = +s.ms; if (me(s) || (!f && !g)) return "";
+  const small = f && g ? "font-size:12px" : "";
+  const fr = f ? `<span class="h" data-hit="mf"><span class="fstack" style="--s:16px">${friendsList(3).map(n => face(n, 16)).join("")}</span><span>${plural(f, "Mutual Friend")}</span></span>` : "";
+  const sv = g ? `<span class="h" data-hit="ms">${f ? "" : `<span class="fstack" style="--s:16px">${serverList(Math.min(g, 3)).map(n => gtile(n, 16)).join("")}</span>`}<span>${plural(g, "Mutual Server")}</span></span>` : "";
+  return `<div class="d-mut" style="${small}">${fr}${f && g ? `<span class="sep"></span>` : ""}${sv}</div>`;
+}
+function dBio(s) { if (!s.bio) return ""; const long = s.bio === "long"; return `<div class="d-bio ${long ? "clamp" : ""}">${md(bioText(s))}</div>${long ? `<span class="d-sm" data-hit="fullbio">View Full Bio</span>` : ""}`; }
+function dActivity(s) {
+  if (s.act === "none") return "";
+  const [h, t1, t2, t3, tm] = ACT[s.act];
+  return `<div class="d-card"><div class="hd">${h}</div><div class="row"><span class="art"></span><div><div class="t1">${t1}</div><div class="t2">${t2}</div>${t3 ? `<div class="t2">${t3}</div>` : ""}${tm ? `<div class="tm">${tm}</div>` : ""}</div></div>${s.act === "voice" || s.act === "stream" ? `<span class="d-btn sec full">Join Voice</span>` : ""}</div>`;
+}
+const dRoles = s => s.guild ? `<div class="d-sec"><span class="t">Roles</span><div class="d-roles">${roleList(s).map(([n, c]) => `<span class="d-role" style="--rc:${c}" data-hit="role"><i></i>${esc(n)}<b class="x ph ph-x"></b></span>`).join("")}<span class="d-role add" data-hit="addrole" title="Add role"><b class="ph ph-plus"></b></span></div></div>` : "";
+const dSince = (s, friends) => `<div class="d-sec"><span class="t">${s.rel === "bot" ? "Created On" : "Member Since"}</span><div style="display:flex;gap:10px;align-items:center"><span>Mar 4, 2021</span>${s.guild ? `<span class="d-dot"></span>${gtile("Night Owls", 16)}<span>Jun 19, 2022</span>` : ""}</div></div>${friends && s.rel === "friend" ? `<div class="d-sec"><span class="t">Friends Since</span><span>Aug 10, 2023</span></div>` : ""}`;
+function dFooter(s) {
+  if (me(s)) return `<div class="d-foot"><span class="d-btn full" data-hit="edit"><i class="ph-fill ph-pencil-simple"></i>Edit Profile</span></div>`;
+  return `<div class="d-foot"><div class="d-msg" data-hit="message"><span>Message @${esc(s.name)}</span><i class="ph ph-smiley"></i></div></div>`;
+}
+function dPopout(s) {
+  const th = THEMES[s.theme];
+  const inner = `<div class="d-in">${dHead(s, { bh: 105, as: 80, bl: 105 })}<div class="d-body">${dName(s, true)}${dMutuals(s)}${dBio(s)}${dActivity(s)}${dRoles(s)}</div>${dFooter(s)}</div>`;
+  return `<div class="dc"><div class="d-pop ${th ? "themed" : ""}" style="${themeVars(s)}">${inner}</div></div>`;
+}
+function dSide(s) {
+  const th = THEMES[s.theme];
+  return `<div class="dc"><div class="d-side ${th ? "themed" : ""}" style="${themeVars(s)};${th ? "background:linear-gradient(var(--o1),var(--o2));--ring-bg:var(--o1)" : ""}"><div class="d-in">${dHead(s, { bh: 105, as: 80, bl: 109 })}<div class="d-body">${dName(s, true)}${dMutuals(s)}${dBio(s)}${dSince({ ...s, guild: false })}${dActivity(s)}</div><div class="d-foot"><span class="d-btn sec full" data-hit="viewfull">View Full Profile</span></div></div></div></div>`;
+}
+function dButtons(s) {
+  if (me(s)) return `<div style="display:flex;gap:8px"><span class="d-btn" data-hit="edit"><i class="ph-fill ph-pencil-simple"></i>Edit Profile</span></div>`;
+  const friend = s.rel === "bot" ? "" : s.rel === "none" ? `<span class="d-btn sec" data-hit="friend"><i class="ph-fill ph-user-plus"></i>Add Friend</span>` : s.rel === "incoming" ? `<span class="d-btn sec" data-hit="friend">Accept</span>` : `<span class="d-btn sec ic" data-hit="friend" title="${s.rel === "friend" ? "Friends" : "Pending"}"><i class="ph-fill ph-user-check"></i></span>`;
+  return `<div style="display:flex;gap:8px"><span class="d-btn" data-hit="message"><i class="ph-fill ph-chat-circle"></i>Message</span>${friend}<span class="d-btn sec ic" data-hit="more"><i class="ph-bold ph-dots-three"></i></span></div>`;
+}
+function dTabPanel(s) {
+  if (s.tab === "friends" && !me(s)) { const f = friendsList(+s.mf); return f.length ? f.map(n => `<div class="d-mrow" data-hit="friendrow">${face(n, 40, "online")}<div><div class="n">${esc(n)}</div></div></div>`).join("") : `<div class="d-empty"><b>You don't have any friends in common</b>No mutual friends yet - perfect time to make a new connection</div>`; }
+  if (s.tab === "servers" && !me(s)) { const g = serverList(+s.ms); return g.length ? g.map((n, i) => `<div class="d-mrow" data-hit="serverrow">${gtile(n, 40)}<div><div class="n">${esc(n)}</div>${i === 0 ? `<div class="s">wrenny</div>` : ""}</div></div>`).join("") : `<div class="d-empty"><b>You don't have any servers in common</b>Shared server inventory: empty but full of potential ✨</div>`; }
+  if (s.act === "none") return me(s) ? `<div class="d-empty"><b>You don't have any activity here</b>Connect your accounts to share your in-game status and activity. You're in control of what you share.</div>` : `<div class="d-empty"><b>${esc(s.name)} doesn't have any activity to share here</b>So mysterious! ask them to tell you a secret<span class="d-btn sec"><i class="ph-fill ph-chat-circle"></i>Message</span></div>`;
+  return `<div class="d-sec"><span class="t">Current activity</span>${dActivity(s)}</div>`;
+}
+function dFull(s) {
+  const th = THEMES[s.theme];
+  const tabs = [["activity", "Activity"], ...(me(s) ? [] : [["friends", tabLabel(+s.mf, "Mutual Friend")], ["servers", tabLabel(+s.ms, "Mutual Server")]])];
+  const note = me(s) ? "" : `<div class="d-sec"><span class="t">Note (only visible to you)</span><div class="d-note" data-hit="note">${s.note ? "Met in the gpui server. Owes me a waffle recipe." : "Click to add a note"}</div></div>`;
+  const conns = `<div class="d-sec"><span class="t">Connections</span><div class="d-roles"><span class="d-role"><i style="--rc:#1db954"></i>wren.lark</span><span class="d-role"><i style="--rc:#9146ff"></i>wrenplays_after_dark</span></div></div>`;
+  const card = `<div class="d-mcard ${th ? "themed" : ""}" style="--cw:340px">${dHead(s, { bh: 140, as: 120, bl: 172, full: true })}<div class="d-mbody">${dName(s, false)}${dButtons(s)}${s.bio ? `<div class="d-bio">${md(bioText(s))}</div>` : ""}${dSince(s, true)}${s.guild ? dRoles(s).replace(">Roles<", ' style="color:var(--d-subtle);font-weight:500">Roles<') : ""}${conns}${note}</div></div>`;
+  return `<div class="dc"><div class="d-modal ${th ? "themed" : ""}" style="${themeVars(s)}">${s.banner && !th ? `<div class="bg bnr-art"></div>` : ""}<div class="d-mbtn"><span class="d-btn sec ic"><i class="ph-bold ph-x"></i></span></div>${card}<div class="d-tabs"><div class="d-tabbar">${tabs.map(([k, l]) => `<span class="d-tab ${k === s.tab ? "on" : ""}" data-hit="tab:${k}">${l}</span>`).join("")}</div><div class="d-panel">${dTabPanel(s)}</div></div></div></div>`;
+}
+
+// ── Waffle ──
+function wHead(s, { bh, as, bl, buttons }) {
+  const btns = !buttons || me(s) ? "" : `<div class="w-hbtns">${s.rel === "bot" ? "" : `<span class="w-hbtn" data-hit="friend"><i class="ph-fill ph-user-${s.rel === "none" || s.rel === "incoming" ? "plus" : "check"}"></i></span>`}<span class="w-hbtn" data-hit="more"><i class="ph-fill ph-dots-three"></i></span></div>`;
+  const th = THEMES[s.theme];
+  const bub = s.status ? `<div class="w-bub" style="--bl:${bl}px;${th ? `--bubble:color-mix(in oklab, var(--o1) 92%, var(--ts))` : ""}"><div class="p"><span class="d1"></span><span class="d2"></span><span>${esc(s.status)}</span></div></div>` : "";
+  return `<div class="w-head" style="--bh:${bh}px;--as:${as}px"><div class="w-banner ${s.banner ? "bnr-art" : ""}" style="--bcol:${bannerCol(s)}"></div>${btns}<div class="w-avrow"><span class="w-ava ${s.deco ? "deco" : ""}" data-hit="avatar">${face(s.name, as, "dnd")}</span></div>${bub}</div>`;
+}
+function wName(s, clickable) {
+  const n = +s.badges, shown = Math.min(n, 6);
+  const badges = n ? `<span class="w-badges">${BADGE_GLYPHS.slice(0, shown).map(g => `<span class="w-badge"><i class="${g}" style="color:hsl(${hue(g)} 70% 65%)"></i></span>`).join("")}${n > 6 ? `<span style="font-size:12px;padding-left:2px">+${n - 6}</span>` : ""}</span>` : "";
+  const bot = s.rel === "bot" ? ` <span class="w-sm" style="background:var(--accent-soft);color:var(--accent-ink)">App</span>` : "";
+  return `<div><div class="w-name ${clickable ? "click" : ""}" data-hit="${clickable ? "name" : ""}">${esc(s.name)}${bot}</div><div class="w-urow"><span class="u">${esc(s.name.toLowerCase().replace(/\s+/g, "."))}${s.pron ? " • she/her" : ""}</span>${s.tag ? `<span class="w-tag"><i class="ph-fill ph-shield-star"></i>wony</span>` : ""}${badges}</div></div>`;
+}
+function wMutuals(s) {
+  const f = +s.mf, g = +s.ms; if (me(s) || (!f && !g)) return "";
+  const small = f && g ? "font-size:12px" : "";
+  const fr = f ? `<span class="h" data-hit="mf"><span class="fstack" style="--s:16px">${friendsList(3).map(n => face(n, 16)).join("")}</span><span>${plural(f, "Mutual Friend")}</span></span>` : "";
+  const sv = g ? `<span class="h" data-hit="ms">${f ? "" : `<span class="fstack" style="--s:16px">${serverList(Math.min(g, 3)).map(n => gtile(n, 16)).join("")}</span>`}<span>${plural(g, "Mutual Server")}</span></span>` : "";
+  return `<div class="w-mut" style="${small}">${fr}${f && g ? `<span class="sep"></span>` : ""}${sv}</div>`;
+}
+function wBio(s) { if (!s.bio) return ""; const long = s.bio === "long"; return `<div class="w-bio ${long ? "clamp" : ""}">${md(bioText(s))}</div>${long ? `<span class="w-sm" data-hit="fullbio">View Full Bio</span>` : ""}`; }
+function wActivity(s) {
+  if (s.act === "none") return "";
+  const [h, t1, t2, t3, tm] = ACT[s.act];
+  return `<div class="w-card"><div class="hd">${h}</div><div class="row"><span class="art"></span><div><div class="t1">${t1}</div><div>${t2}</div>${t3 ? `<div>${t3}</div>` : ""}${tm ? `<div class="tm">${tm}</div>` : ""}</div></div>${s.act === "voice" || s.act === "stream" ? `<span class="w-btn sec full">Join Voice</span>` : ""}</div>`;
+}
+const wRoles = s => s.guild ? `<div class="w-sec"><span class="t">Roles</span><div class="w-roles">${roleList(s).map(([n, c]) => `<span class="w-role" style="--rc:${c}" data-hit="role"><i></i>${esc(n)}<b class="x ph ph-x"></b></span>`).join("")}<span class="w-role add" data-hit="addrole" title="Add Role"><b class="ph ph-plus"></b></span></div></div>` : "";
+const wSince = (s, friends) => `<div class="w-sec"><span class="t">${s.rel === "bot" ? "Created On" : "Member Since"}</span><div style="display:flex;gap:10px;align-items:center"><span>Mar 4, 2021</span>${s.guild ? `<span class="w-mut"><span class="sep"></span></span>${gtile("Night Owls", 20)}<span>Jun 19, 2022</span>` : ""}</div></div>${friends && s.rel === "friend" ? `<div class="w-sec"><span class="t">Friends Since</span><span>Aug 10, 2023</span></div>` : ""}`;
+function wFooter(s) {
+  if (me(s)) return `<div class="w-foot"><span class="w-btn full" data-hit="edit"><i class="ph-fill ph-pencil-simple"></i>Edit Profile</span></div>`;
+  return `<div class="w-foot"><div class="w-msg" data-hit="message"><span>Message @${esc(s.name)}</span><i class="ph ph-smiley"></i></div></div>`;
+}
+function wPopout(s) {
+  const th = THEMES[s.theme];
+  return `<div class="wf"><div class="w-pop ${th ? "themed" : ""}" style="${themeVars(s)}"><div class="w-in">${wHead(s, { bh: 105, as: 80, bl: 105, buttons: true })}<div class="w-body">${wName(s, true)}${wMutuals(s)}${wBio(s)}${wActivity(s)}${wRoles(s)}</div>${wFooter(s)}</div></div></div>`;
+}
+function wSide(s) {
+  const th = THEMES[s.theme];
+  return `<div class="wf"><div class="w-side ${th ? "themed" : ""}" style="${themeVars(s)}">${wHead(s, { bh: 105, as: 80, bl: 109, buttons: true })}<div class="w-body">${wName(s, true)}${wMutuals(s)}${wBio(s)}${wSince({ ...s, guild: false })}${wActivity(s)}</div><div class="w-foot" style="padding:16px"><span class="w-btn sec full" data-hit="viewfull">View Full Profile</span></div></div></div>`;
+}
+function wButtons(s) {
+  if (me(s)) return `<div style="display:flex;gap:8px"><span class="w-btn" data-hit="edit"><i class="ph-fill ph-pencil-simple"></i>Edit Profile</span></div>`;
+  const friend = s.rel === "bot" ? "" : s.rel === "none" ? `<span class="w-btn sec" data-hit="friend"><i class="ph-fill ph-user-plus"></i>Add Friend</span>` : s.rel === "incoming" ? `<span class="w-btn sec" data-hit="friend"><i class="ph-fill ph-user-plus"></i>Accept Friend Request</span>` : `<span class="w-btn sec ic" data-hit="friend"><i class="ph-fill ph-user-check"></i></span>`;
+  return `<div style="display:flex;gap:8px"><span class="w-btn" data-hit="message"><i class="ph-fill ph-chat-circle"></i>Message</span>${friend}<span class="w-btn sec ic" data-hit="more"><i class="ph-fill ph-dots-three"></i></span></div>`;
+}
+function wTabPanel(s) {
+  if (s.tab === "friends" && !me(s)) { const f = friendsList(+s.mf); return f.length ? f.map(n => `<div class="w-mrow" data-hit="friendrow">${face(n, 40, "online")}<div class="n">${esc(n)}</div></div>`).join("") : `<div class="w-empty"><i class="ph-fill ph-waffle" style="font-size:48px;color:var(--logo)"></i><b>You don't have any friends in common</b>No mutual friends yet - perfect time to make a new connection</div>`; }
+  if (s.tab === "servers" && !me(s)) { const g = serverList(+s.ms); return g.length ? g.map((n, i) => `<div class="w-mrow" data-hit="serverrow">${gtile(n, 40)}<div><div class="n">${esc(n)}</div>${i === 0 ? `<div class="s">wrenny</div>` : ""}</div></div>`).join("") : `<div class="w-empty"><b>You don't have any servers in common</b>Shared server inventory: empty but full of potential ✨</div>`; }
+  if (s.act === "none") return me(s) ? `<div class="w-empty"><b>You don't have any activity here</b>Connect your accounts to share your in-game status and activity. You're in control of what you share.</div>` : `<div class="w-empty"><b>${esc(s.name)} doesn't have any activity to share here</b>So mysterious! ask them to tell you a secret<span class="w-btn sec"><i class="ph-fill ph-chat-circle"></i>Message</span></div>`;
+  return `<div class="w-sec"><span class="t">Current activity</span>${wActivity(s)}</div>`;
+}
+function wFull(s) {
+  const th = THEMES[s.theme];
+  const tabs = [["activity", "Activity"], ...(me(s) ? [] : [["friends", tabLabel(+s.mf, "Mutual Friend")], ["servers", tabLabel(+s.ms, "Mutual Server")]])];
+  const note = me(s) ? "" : `<div class="w-sec"><span class="t">Note (only visible to you)</span><div class="w-note" data-hit="note" style="${s.note ? "color:var(--ti,var(--text))" : ""}">${s.note ? "Met in the gpui server. Owes me a waffle recipe." : "Click to add a note"}</div></div>`;
+  const conns = `<div class="w-sec"><span class="t">Connections</span><div class="w-roles"><span class="w-role"><i style="--rc:#1db954"></i>wren.lark</span><span class="w-role"><i style="--rc:#9146ff"></i>wrenplays_after_dark</span></div></div>`;
+  const card = `<div class="w-mcard ${th ? "themed" : ""}" style="--cw:340px">${wHead(s, { bh: 140, as: 120, bl: 172, buttons: false })}<div class="w-mbody">${wName(s, false)}${wButtons(s)}${s.bio ? `<div class="w-bio">${md(bioText(s))}</div>` : ""}${wSince(s, true)}${wRoles(s)}${conns}${note}</div></div>`;
+  return `<div class="wf"><div class="w-modal ${th ? "themed" : ""}" style="${themeVars(s)}">${s.banner && !th ? `<div class="bg bnr-art"></div>` : ""}<span class="w-close"><i class="ph ph-x"></i></span>${card}<div class="w-tabs"><div class="w-tabbar">${tabs.map(([k, l]) => `<span class="w-tab ${k === s.tab ? "on" : ""}" data-hit="tab:${k}">${l}</span>`).join("")}</div><div class="w-panel">${wTabPanel(s)}</div></div></div></div>`;
+}
+
+const RENDER = { popout: [dPopout, wPopout], side: [dSide, wSide], full: [dFull, wFull] };
+
+// ── Cases ──
+const C = (title, s, note) => ({ title, s: { ...BASE, ...s }, note });
+const GROUPS = [
+  ["Popout", [
+    C("Reference", {}, "Banner, decoration, status bubble, name with tag and badges, mutuals, bio, activity, roles, message field. <span class='gap'>Main: no bubble, badges on a row of their own, mutuals not links, dates and connections in the body.</span>"),
+    C("Plain", { theme: "", banner: false, deco: false, badges: "0", tag: false, status: "" }, "105px accent strip, the plain surface. <span class='gap'>Main drew a 64px strip.</span>"),
+    C("Light theme colours", { theme: "mint" }, "A light gradient flips the card's ink dark."),
+    C("Worst case", { name: "Wren Alexandria Lark-Featherstonehaugh the Third of Honeymoor", badges: "9", bio: "long", roles: "14", mf: "128", ms: "3", status: "currently translating the entire gpui codebase into a sea shanty, verse 47 of 312, send snacks" }, "Name wraps to three lines in Discord; Waffle keeps one line and truncates (its rule). Bio clamps with View Full Bio. Status clamps to two lines."),
+    C("Stranger, no bio", { rel: "none", bio: "", act: "none", mf: "0", ms: "0", status: "", guild: false }, "No mutuals row, no bio, no roles outside a server."),
+    C("Your own", { rel: "self" }, "No banner buttons; footer Edit Profile. <span class='gap'>Main: a small header button.</span>"),
+    C("Bot", { rel: "bot", badges: "0", mf: "0", ms: "2" }, "APP tag, server icons stand in for faces, no friend button."),
+  ]],
+  ["DM side panel", [
+    C("Reference", { surface: "side", guild: false }, "Name, mutuals, bio, Member Since, activity, View Full Profile. <span class='gap'>Main: the popout's whole list, no footer.</span>"),
+    C("Plain", { surface: "side", guild: false, theme: "", banner: false, status: "", act: "none" }, "The sidebar's own fill when there's no theme."),
+  ]],
+  ["Full profile", [
+    C("Activity", { surface: "full" }, "The card and Current activity. <span class='gap'>Main: no full profile.</span>"),
+    C("Mutual Friends", { surface: "full", tab: "friends", mf: "128" }, "Virtualized rows; a row opens that friend's full profile."),
+    C("Mutual Servers", { surface: "full", tab: "servers", ms: "3" }, "Your nickname there under the name; a row goes to the server."),
+    C("Nothing in common", { surface: "full", rel: "none", theme: "", banner: false, mf: "0", ms: "0", act: "none", bio: "", status: "", guild: false }, "\"No Mutual Friends\" tab labels, each tab's empty line, Message to say hi."),
+    C("With a note", { surface: "full", note: true }, "Your note at rest; a click makes it a field that saves when you leave it."),
+    C("Your own", { surface: "full", rel: "self" }, "Edit Profile, Activity only, no note."),
+  ]],
+];
+document.getElementById("caselist").innerHTML = GROUPS.map(([g, cases]) => `<h3 class="group-h">${g}</h3><div class="cases">${cases.map(c => { const [d, w] = RENDER[c.s.surface]; const wide = c.s.surface === "full"; return `<div class="case ${wide ? "wide" : ""}"><div><h4>${c.title}</h4><p>${c.note}</p></div><div class="frame" data-side="Discord">${d(c.s)}</div><div class="frame" data-side="Waffle">${w(c.s)}</div></div>`; }).join("")}</div>`).join("");
+
+// ── Playground ──
+const form = document.getElementById("knobs");
+let S = { ...BASE };
+const logs = { d: [], w: [] };
+function log(d, w) {
+  if (d) logs.d.unshift(d); if (w) logs.w.unshift(w);
+  for (const k of ["d", "w"]) { logs[k].length = Math.min(logs[k].length, 7); document.getElementById("l" + k).innerHTML = logs[k].map(x => `<li>${x}</li>`).join(""); }
+}
+function render() {
+  const [d, w] = RENDER[S.surface];
+  document.getElementById("pd").innerHTML = d(S);
+  document.getElementById("pw").innerHTML = w(S);
+  document.getElementById("play").classList.toggle("full", S.surface === "full");
+}
+const TEXT = ["surface", "tab", "name", "rel", "theme", "badges", "status", "bio", "roles", "act", "mf", "ms"];
+const BOOL = ["guild", "banner", "deco", "pron", "tag", "note"];
+function readForm() { const f = new FormData(form); for (const k of TEXT) S[k] = f.get(k); for (const k of BOOL) S[k] = f.has(k); }
+function writeForm() { for (const el of form.elements) if (el.name && el.name in S) el.type === "checkbox" ? el.checked = !!S[el.name] : el.value = S[el.name]; }
+form.addEventListener("input", () => { readForm(); render(); });
+form.addEventListener("click", e => {
+  const act = e.target.closest("[data-act]")?.dataset.act; if (!act) return;
+  const keep = { surface: S.surface, tab: S.tab };
+  if (act === "reference") S = { ...BASE, ...keep };
+  if (act === "plain") S = { ...BASE, ...keep, theme: "", banner: false, deco: false, badges: "0", tag: false };
+  if (act === "worst") S = { ...BASE, ...keep, name: "Wren Alexandria Lark-Featherstonehaugh the Third of Honeymoor", badges: "9", bio: "long", roles: "14", mf: "128", ms: "3", status: "currently translating the entire gpui codebase into a sea shanty, verse 47 of 312, send snacks" };
+  if (act === "stranger") S = { ...BASE, ...keep, rel: "none", theme: "", banner: false, bio: "", act: "none", mf: "0", ms: "0", status: "", guild: false };
+  writeForm(); render(); log(`Preset: ${act}.`, `Preset: ${act}.`);
+});
+const HITS = {
+  avatar: () => S.surface === "full" ? ["Opens the avatar full size.", "Opens the avatar full size over the window."] : ["Opens the full profile (Activity).", "Opens the full profile (Activity); the popout grows into it."],
+  name: () => ["Opens the full profile.", "Opens the full profile."],
+  mf: () => (S.surface = "full", S.tab = "friends", ["Full profile on Mutual Friends.", "Full profile on Mutual Friends."]),
+  ms: () => (S.surface = "full", S.tab = "servers", ["Full profile on Mutual Servers.", "Full profile on Mutual Servers."]),
+  fullbio: () => (S.surface = "full", ["View Full Bio: the full profile.", "View Full Bio: the full profile."]),
+  viewfull: () => (S.surface = "full", ["View Full Profile.", "View Full Profile (open_full_profile)."]),
+  more: () => ["Overflow menu, led by View Full Profile.", "The user menu at the click, led by View Full Profile from a popout."],
+  friend: () => [S.rel === "none" ? "Sends a friend request." : "Friend Actions: Remove Friend / Cancel / Accept / Ignore.", S.rel === "none" ? "Sends a friend request (optimistic)." : "Friend Actions menu at the click."],
+  message: () => ["The field takes text; Enter sends to the DM.", "The field takes text; Enter sends to the DM (opened if needed)."],
+  edit: () => ["Edit Profile (in a server: Per-server or Main).", "Opens Settings › Profiles."],
+  note: () => ["The note becomes a field; leaving it saves (PUT /users/@me/notes).", "The note becomes a field; leaving it saves (PUT /users/@me/notes)."],
+  role: () => ["✕ removes the role at once (Manage Roles, below your top role).", "✕ removes the role at once; restored if Discord refuses."],
+  addrole: () => ["Role picker: search, roles they don't have.", "The role toggles at the click (no search yet)."],
+  friendrow: () => ["Opens that friend's full profile.", "Opens that friend's full profile."],
+  serverrow: () => ["Closes and goes to the server.", "Closes and opens the server."],
+};
+document.querySelector(".stages").addEventListener("click", e => {
+  const hit = e.target.closest("[data-hit]")?.dataset.hit; if (!hit) return;
+  if (hit.startsWith("tab:")) { S.tab = hit.slice(4); writeForm(); render(); log(`Tab: ${S.tab}.`, `Tab: ${S.tab}.`); return; }
+  const f = HITS[hit]; if (!f) return;
+  const [d, w] = f(); writeForm(); render(); log(d, w);
+});
+render();
+</script>
+</body>
+</html>

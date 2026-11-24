@@ -138,7 +138,10 @@ impl Waffle {
             _ if channel.raw_type == 5 => Icon::new(Glyph::Megaphone).size(ui::ICON_XL).text_color(faint).into_any_element(),
             _ => Icon::new(Glyph::Hashtag).size(ui::ICON_XL).text_color(faint).into_any_element(),
         };
+        let profile = channel.recipient.clone().filter(|_| channel.raw_type == 1);
         let here = ui::row()
+            .id("header-here")
+            .when_some(profile, |r, user| r.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| this.open_full_profile(user.clone(), crate::profile::FullTab::Activity, cx))))
             .h_8()
             .px_1p5()
             .gap_1p5()

@@ -33,15 +33,15 @@ pub(crate) const TIMEOUTS: [(&str, i64); 6] = [("60 seconds", 60), ("5 minutes",
 
 impl Waffle {
     pub(crate) fn open_user_menu(&mut self, user: User, guild_id: Option<String>, surface: Surface, at: Point<Pixels>, cx: &mut Context<Self>) {
-        self.open_live_menu(at, move |this| this.user_menu(&user, guild_id.as_deref(), surface, at), cx);
+        self.open_live_menu(at, move |this| this.user_menu(&user, guild_id.as_deref(), surface), cx);
     }
 
     // Discord's DM row menu: read state, the DM user's items, then Close DM and the channel's ID.
     pub(crate) fn open_dm_menu(&mut self, channel: crate::discord::Channel, at: Point<Pixels>, cx: &mut Context<Self>) {
-        self.open_live_menu(at, move |this| this.dm_menu(&channel, at), cx);
+        self.open_live_menu(at, move |this| this.dm_menu(&channel), cx);
     }
 
-    fn dm_menu(&self, channel: &crate::discord::Channel, at: Point<Pixels>) -> Vec<Entry> {
+    fn dm_menu(&self, channel: &crate::discord::Channel) -> Vec<Entry> {
         let mut entries = Vec::new();
         let unread = self.unread(&channel.id);
         let id = channel.id.clone();
@@ -52,7 +52,7 @@ impl Waffle {
         entries.extend(self.favorite_add_entry(channel));
         entries.push(Entry::Separator);
         if let Some(user) = channel.recipient.clone() {
-            entries.extend(self.user_menu(&user, None, Surface::Dm, at).into_iter().filter(|e| !e.is_copy_id()));
+            entries.extend(self.user_menu(&user, None, Surface::Dm).into_iter().filter(|e| !e.is_copy_id()));
         }
         let id = channel.id.clone();
         if channel.raw_type == 3 {
@@ -140,7 +140,7 @@ impl Waffle {
         Some(row.entry())
     }
 
-    fn user_menu(&self, user: &User, guild_id: Option<&str>, surface: Surface, at: Point<Pixels>) -> Vec<Entry> {
+    pub(crate) fn user_menu(&self, user: &User, guild_id: Option<&str>, surface: Surface) -> Vec<Entry> {
         let Some(me) = self.me.clone() else { return Vec::new() };
         let target = user.id.clone();
         let is_me = target == me.id;
@@ -155,7 +155,7 @@ impl Waffle {
 
         // G2: profile and social.
         let profile_user = user.clone();
-        out.push(item("Profile", move |this, _, cx| this.open_profile(profile_user.clone(), at, cx)).icon(Glyph::UserCircle).entry());
+        out.push(item("Profile", move |this, _, cx| this.open_full_profile(profile_user.clone(), crate::profile::FullTab::Activity, cx)).icon(Glyph::UserCircle).entry());
         if surface == Surface::ServerChat && self.channel.is_some() {
             let mention = user.clone();
             out.push(item("Mention", move |this, window, cx| this.mention_user(&mention, window, cx)).icon(Glyph::At).entry());

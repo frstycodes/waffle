@@ -394,7 +394,23 @@ impl Client {
             path.push_str(&format!("&guild_id={guild}"));
         }
         let body = self.run(self.request(reqwest::Method::GET, &path)).await?;
-        Ok(parse_profile(user_id, &body))
+        let mut profile = parse_profile(user_id, &body);
+        // No note answers 404, which reads as none.
+        let note = self.run(self.request(reqwest::Method::GET, &format!("/users/@me/notes/{user_id}"))).await.ok();
+        profile.note = note.and_then(|n| n["note"].as_str().map(str::to_owned)).filter(|n| !n.is_empty());
+        Ok(profile)
+    }
+
+    /// A profile frame's layers, from the collectibles product its sku names.
+    pub async fn profile_frame(&self, sku: &str) -> Result<Option<ProfileFrame>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, &format!("/collectibles-products/{sku}"))).await?;
+        Ok(parse_profile_frame(sku, &body))
+    }
+
+    /// What they've been doing lately: their content outbox, for the full profile's Recent activity.
+    pub async fn recent_activity(&self, user_id: &str) -> Result<Vec<RecentEntry>, String> {
+        let body = self.run(self.request(reqwest::Method::GET, &format!("/content-inventory/users/{user_id}/outbox"))).await?;
+        Ok(parse_outbox(&body))
     }
 
     // A profile effect's layers, from the collectibles product its sku names.

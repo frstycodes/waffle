@@ -1,5 +1,11 @@
 // The profile card's activity: a stream, rich presence, or the voice channel they're in.
+use gpui_kit::{FontWeight, Stateful, component::ActiveTheme};
+
 use super::*;
+use crate::{
+    discord::{ActivityKind, RichPresence},
+    ui::{RADIUS_MD, RADIUS_SM},
+};
 
 pub(super) fn game_collection(games: &[String], ink: Ink) -> Option<Div> {
     if games.is_empty() {
@@ -53,15 +59,13 @@ pub(super) fn ask_to_join(ink: Ink) -> Stateful<Div> {
 }
 
 impl Waffle {
-    // Discord's popout shows one activity card: their stream, else their first activity, else the voice
-    // channel they're in. More than one peeks from under it; clicking the peek lists them all in place.
-    pub(super) fn profile_activity(&self, card: &ProfileCard, ink: Ink, cx: &mut Context<Self>) -> Option<AnyElement> {
+    // Everything they're doing, in Discord's order: the stream, each activity, then voice when not streaming.
+    pub(super) fn profile_activity_cards(&self, card: &ProfileCard, ink: Ink, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let place = self.guilds.iter().find_map(|g| {
             let state = g.voice_states.iter().find(|v| v.user_id == card.user.id)?;
             let channel = g.channels.iter().find(|c| Some(&c.id) == state.channel_id.as_ref())?;
             Some((g, channel, state.streaming))
         });
-        // Discord's order: the stream, each activity, then voice when not streaming.
         let mut cards: Vec<AnyElement> = Vec::new();
         if let Some((guild, channel, true)) = place {
             cards.push(self.stream_activity(card, guild, channel, ink, cx));
@@ -72,6 +76,13 @@ impl Waffle {
         if let Some((guild, channel, false)) = place {
             cards.push(self.voice_activity(card, guild, channel, ink, cx));
         }
+        cards
+    }
+
+    // Discord's popout shows one activity card; more than one peeks from under it, and clicking the peek
+    // lists them all in place.
+    pub(super) fn profile_activity(&self, card: &ProfileCard, ink: Ink, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let mut cards = self.profile_activity_cards(card, ink, cx);
         if cards.len() <= 1 {
             return cards.pop();
         }
@@ -244,7 +255,13 @@ impl Waffle {
             .gap_2p5()
             .squircle(RADIUS_MD)
             .bg(ink.tile)
-            .child(ui::row().justify_between().child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(activity_heading(rich.kind))).child(more))
+            .group(ACTIVITY_GROUP)
+            .child(
+                ui::row()
+                    .justify_between()
+                    .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(activity_heading(rich.kind)))
+                    .child(ui::row().gap_1().children(self.interaction_toolbar(card, Source::Activity(rich.name.clone()), ACTIVITY_GROUP, ink, cx)).child(more)),
+            )
             .child(ui::row().gap_3().child(art).child(facts))
             .when(rich.joinable, |c| c.child(ask_to_join(ink))).children(self.activity_join_button(&card.user.id, rich, cx))
     }

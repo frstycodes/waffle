@@ -116,6 +116,10 @@ impl Waffle {
             self.redraw_overlays(cx);
             return true;
         }
+        // A profile's popover (role picker, note, reply) closes alone, back to its card.
+        if self.close_card_pop(cx) {
+            return true;
+        }
         // The full-size avatar closes alone, back to the popout it opened from.
         if let Some(card) = self.profile_card.as_mut().filter(|c| c.avatar_full) {
             card.avatar_full = false;
@@ -125,7 +129,7 @@ impl Waffle {
         let text_viewer = self.text_files.borrow_mut().viewer.take().is_some();
         let open = text_viewer
             | self.role_popout.close()
-            | self.profile_card.take().is_some()
+            | self.close_profile_card()
             | std::mem::take(&mut self.status_menu)
             | self.status_editor.take().is_some()
             | self.poll_creator.take().is_some()

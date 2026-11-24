@@ -328,7 +328,7 @@ impl Waffle {
             Some(guild) => guild.owner_id.as_ref() == Some(&member.user.id),
             None => self.open_group().is_some_and(|g| g.props.owner_id.as_ref() == Some(&member.user.id)),
         };
-        let selected = self.profile_card.as_ref().is_some_and(|p| p.user.id == member.user.id);
+        let selected = self.profile_card.as_ref().is_some_and(|p| !p.panel && p.user.id == member.user.id);
         let crown = palette::warning_ink(cx);
         let boost = palette::boost_ink(cx);
         let boosting = member.boosting_since.as_deref().and_then(boost_date);
