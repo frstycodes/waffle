@@ -116,7 +116,7 @@ fn mutual_servers(count: usize) -> String {
 pub(crate) fn dm_start_header(start: &DmStart, this: WeakEntity<Waffle>, cx: &App) -> AnyElement {
     let page = palette::surface(Level::Page, cx);
     let face = match (&start.face, start.person.is_some()) {
-        (DmFace::One(url), true) => decorated_avatar(url, None, FACE, start.status, page),
+        (DmFace::One(url), true) => decorated_avatar(url, None, FACE, start.status, page).into_any_element(),
         (face, _) => ui::dm_face(face, FACE, page),
     };
     ui::col()

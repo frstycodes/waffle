@@ -21,7 +21,7 @@ pub(super) fn profile_preview(user: &User, profile: &Profile, avatar: PreviewAva
     let radius = inner_radius(ink);
     let (banner, _) = banner(profile, ink, radius, false, cx);
     let face = match avatar {
-        PreviewAvatar::Url(url) => decorated_avatar(&url, user.decoration.as_deref(), AVATAR, status, ink.top),
+        PreviewAvatar::Url(url) => decorated_avatar(&url, user.decoration.as_deref(), AVATAR, status, ink.top).into_any_element(),
         PreviewAvatar::File(path) => img(path).size(px(AVATAR)).flex_none().rounded_full().into_any_element(),
     };
     let header = ui::col()

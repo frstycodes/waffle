@@ -233,7 +233,8 @@ impl Waffle {
         let face = match hovered {
             true => playing_avatar(&format!("profile-{}", user.id), &user.avatar, decoration.as_deref(), AVATAR, status, ink.top),
             false => decorated_avatar(&user.avatar, decoration.as_deref(), AVATAR, status, ink.top),
-        };
+        }
+        .morph(format!("profile-presence-{}", user.id));
         let avatar = div()
             .id("profile-avatar")
             .p(px(AVATAR_RING))

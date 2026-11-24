@@ -725,10 +725,11 @@ fn member_face(member: &Member, animate: bool, surface: gpui_kit::Hsla) -> AnyEl
     // Offline shows no mark at all, as Discord's member list does.
     let mark = (member.presence.status != Status::Offline).then(|| member.presence.mark());
     let (avatar, decoration) = (&member.user.avatar, member.user.decoration.as_deref());
-    match animate {
+    let face = match animate {
         true => playing_avatar(&format!("member-{}", member.user.id), avatar, decoration, 32., mark, surface),
         false => decorated_avatar(avatar, decoration, 32., mark, surface),
-    }
+    };
+    face.morph(format!("member-presence-{}", member.user.id)).into_any_element()
 }
 
 #[cfg(test)]

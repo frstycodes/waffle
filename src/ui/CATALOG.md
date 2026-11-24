@@ -113,12 +113,12 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::gap` — The gap `spread` wide around a round mark or an overlapping avatar, separating it from what's under it.
 - `ui::server_tile` — A server's icon as a squircle tile at `size`, or its initials on the selected fill when it has none.
 - `ui::app_tile` — An app's icon as a server tile, or without one its initial on the monogram gradient, hued by `id` so an app keeps its colour whatever it's c
-- `ui::status_mark` — A presence mark, bare: Discord's shapes, never colour alone (a dot for online, a moon for idle, a bar for do not disturb, a ring for offline
 - `ui::MarkFill` — What an icon mark is filled with.
 - `ui::Spot` — Where on a face a mark sits.
 - `ui::Shape` — A face's outline, which decides where its corner marks land: on a round face a mark sits on the curve, tucked in; on a tile it hangs past th
 - `ui::Badge` — One mark for a face's corner: any element, ringed by the face in its surface colour.
 - `ui::badge_of` — A corner mark from any element (a count, an icon mark, a status), round unless given a `radius`.
+- `ui::Badged` — A face with marks on its corners (presence, a count, a voice or stream badge, a channel's kind): each placed for the face's `Shape` and ring
 - `ui::badged` — A face (avatar, monogram, server or app tile) ready to take corner marks; see `Badged`.
 
 ## src/ui/feedback.rs
@@ -224,6 +224,10 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 
 - `ui::hover_roll` — One line swapped for another on hover: `rest` rolls up and fades as `rolled` rises in from below, over 220ms.
 
+## src/ui/status_mark.rs
+
+- `ui::status_mark` — A presence mark, bare: a dot for online, a moon for idle, a bar for do not disturb, a ring for offline, a phone for online on mobile only, a
+
 ## src/ui/table.rs
 
 - `ui::Col`
@@ -310,7 +314,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `palette::info_ink`
 - `palette::warning_ink`
 - `palette::status_in` — Presence colours.
-- `palette::streaming` — Discord's streaming purple, the same in both themes like do-not-disturb.
+- `palette::presence` — A presence mark's colour, Discord's own and the same in both themes.
 - `palette::status` — Presence colours for callers without a theme at hand (the dark values).
 - `palette::role_ink` — A role's colour as a name colour: the role's own hex, as Discord shows it.
 

@@ -272,7 +272,7 @@ enum RightPanel {
 }
 
 #[derive(Clone)]
-struct Typer {
+pub(crate) struct Typer {
     user_id: String,
     name: String,
     until: Instant,

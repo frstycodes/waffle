@@ -476,20 +476,20 @@ pub fn nameplate_art(plate: &discord::Nameplate, height: f32, top_right: gpui_ki
 /// idle, a bar for do-not-disturb, a ring for offline, a phone for online on mobile only, a play disc
 /// while streaming. Cut-outs are painted in the surface colour.
 pub fn avatar_with_status(url: &str, size: f32, status: Option<discord::Mark>, surface: Hsla) -> AnyElement {
-    decorated_avatar(url, None, size, status, surface)
+    decorated_avatar(url, None, size, status, surface).into_any_element()
 }
 
 /// The same, with the user's avatar decoration framing it (drawn at 1.2× the avatar, as Discord does).
 /// An animated avatar or decoration holds its first frame; `playing_avatar` moves them.
-pub fn decorated_avatar(url: &str, decoration: Option<&str>, size: f32, status: Option<discord::Mark>, surface: Hsla) -> AnyElement {
-    ui::badged(avatar_frame(url, decoration, size, None), size, ui::Shape::Round, surface).status(status).into_any_element()
+pub fn decorated_avatar(url: &str, decoration: Option<&str>, size: f32, status: Option<discord::Mark>, surface: Hsla) -> ui::Badged {
+    ui::badged(avatar_frame(url, decoration, size, None), size, ui::Shape::Round, surface).status(status)
 }
 
 /// `decorated_avatar` with its avatar and decoration swapped for their animated versions, playing, keyed
 /// by `key` (gpui animates only an image with an id). `url` and `decoration` are the stills, which stay
 /// up until the animated ones have loaded, so starting to play never flashes.
-pub fn playing_avatar(key: &str, url: &str, decoration: Option<&str>, size: f32, status: Option<discord::Mark>, surface: Hsla) -> AnyElement {
-    ui::badged(avatar_frame(url, decoration, size, Some(key)), size, ui::Shape::Round, surface).status(status).into_any_element()
+pub fn playing_avatar(key: &str, url: &str, decoration: Option<&str>, size: f32, status: Option<discord::Mark>, surface: Hsla) -> ui::Badged {
+    ui::badged(avatar_frame(url, decoration, size, Some(key)), size, ui::Shape::Round, surface).status(status)
 }
 
 fn avatar_frame(url: &str, decoration: Option<&str>, size: f32, key: Option<&str>) -> Div {
