@@ -64,7 +64,7 @@ pub use tri::{Tri, tri_state};
 pub use tunnel::{TUNNEL_GRACE, Tunnel};
 pub use tokens::*;
 pub use roll::{hover_roll};
-pub use notice::{StripFill, divider_with, number_mark, panel, rule, strip, surface_in, toast_text};
+pub use notice::{StripFill, divider_with, number_mark, panel, rule, strip, surface_in, thought_bubble, toast_text};
 pub use kit::{Heading, RowHeight, dialog_header, list_row, media_label, section_label, toolbar};
 pub use face::{Badge, MarkFill, Shape, Spot, app_tile, avatar, badge_of, badged, dm_face, gap, monogram, name_hue, server_tile, status_mark};
 pub use layout::{rich_line, col, floating, floating_at, line, row, sized, visible_rows};

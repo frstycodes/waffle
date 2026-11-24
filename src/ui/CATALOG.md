@@ -212,6 +212,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::divider_with` — A divider whose label and line colour come from data (a day's date, a state's ink): rules either side of the label, inside the parent's gutt
 - `ui::surface_in` — A floating surface in a scope's own colours (the call stage's dark overlay and ring, a menu in its ink): the kit's surface with its `fill` a
 - `ui::panel` — A card that only holds things (a quoted embed, a preview): the raised fill, a hairline edge, rounded large, content in a column.
+- `ui::thought_bubble` — A thought bubble: a pill of `content` in `fill` with a hairline `edge`, and two dots trailing up-left from it towards whoever's thinking it 
 
 ## src/ui/overflow.rs
 

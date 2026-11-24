@@ -1,5 +1,5 @@
 // Inline notices and the scope variants: strips with an action at the row's end, a text-only toast, labelled and
-// bare rules, a numbered mark, a static panel, scoped controls (a themed card, the call stage), the stage's own
+// bare rules, a numbered mark, a thought bubble, a static panel, scoped controls (a themed card, the call stage), the stage's own
 // surface, list rows with a stamp and a body, and the media track.
 use super::*;
 
@@ -21,6 +21,7 @@ pub(super) fn notices(cx: &App) -> impl IntoElement {
                     .child(ui::toast_text("ds-toast-text", "Copied link", cx))
                     .child(ui::number_mark(1, cx))
                     .child(ui::number_mark(12, cx))
+                    .child(div().pt_4().pl_3().w_48().child(ui::thought_bubble("ds-thought", "🍯 drizzling honey on everything", palette::surface(palette::Level::Raised, cx), palette::line(cx))))
                     .child(ui::panel(cx).w_64().p_3().child("A static panel, no pointer")),
             )
             .child(ui::divider_with("Monday, March 3, 2025", palette::faint(cx), palette::line(cx)))
