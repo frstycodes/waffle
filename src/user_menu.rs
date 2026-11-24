@@ -13,6 +13,8 @@ use crate::{
     menu::{Entry, HeadLead, header, item, slider, submenu},
 };
 
+mod overflow;
+
 // Where the menu was opened, which decides Discord's variant and its flags.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Surface {
@@ -64,6 +66,8 @@ impl Waffle {
             entries.push(item("Close DM", move |this, _, cx| this.close_dm(&id, cx)).icon(Glyph::X).entry());
         }
         entries.push(Entry::Separator);
+        entries.push(self.dm_mute_entry(channel));
+        entries.push(Entry::Separator);
         entries.extend(self.favorite_remove_entry(channel));
         entries.push(Entry::Separator);
         if self.developer_mode {
@@ -75,6 +79,21 @@ impl Waffle {
             entries.push(item("Copy channel ID", move |this, _, cx| this.copy_text(cid.clone(), cx)).icon(Glyph::Id).entry());
         }
         entries
+    }
+
+    // Discord's MuteChannel for a DM ("Mute @name") or group ("Mute conversation"), kept under "@me".
+    fn dm_mute_entry(&self, channel: &crate::discord::Channel) -> Entry {
+        let settings = self.settings_for("@me");
+        let end = settings.channels.get(&channel.id).and_then(|o| o.mute_end.clone());
+        let (mute, unmute) = match &channel.recipient {
+            Some(user) if channel.raw_type != 3 => (format!("Mute @{}", user.name), format!("Unmute @{}", user.name)),
+            _ => ("Mute conversation".to_owned(), "Unmute conversation".to_owned()),
+        };
+        let cid = channel.id.clone();
+        self.mute_entry(&mute, &unmute, settings.channel_muted(&channel.id), end.as_deref(), move |this, mut body, cx| {
+            body["channel_id"] = json!(cid);
+            this.patch_channel_override("@me".into(), &cid, body, cx);
+        })
     }
 
     // Discord's pin-dm, for DMs and group DMs: the DM override's FAVORITED bit under "@me".
@@ -167,7 +186,7 @@ impl Waffle {
         let in_dm_call = self.call.as_ref().is_some_and(|c| c.channel.kind == ChannelKind::Dm && c.channel.recipient.as_ref().is_some_and(|r| r.id == target));
         if !is_me && !user.bot && !in_dm_call {
             let id = target.clone();
-            let start = item("Call", move |this, window, cx| this.start_call(id.clone(), window, cx)).icon(Glyph::Phone);
+            let start = item("Call", move |this, window, cx| this.start_call(id.clone(), false, window, cx)).icon(Glyph::Phone);
             out.push(if blocked { start.disabled() } else { start }.entry());
         }
         if !is_me {
@@ -249,17 +268,11 @@ impl Waffle {
             }
         }
         if !is_me && !user.bot {
-            let id = target.clone();
-            let who = name.clone();
             out.push(match relation {
-                Some(Relation::Friend) => item("Remove friend", move |this, _, cx| {
-                    let id = id.clone();
-                    this.confirm(format!("Remove '{who}'"), format!("Are you sure you want to remove {who} from your friends?"), "Remove friend", move |this, _, cx| {
-                        this.drop_relation(&id, cx);
-                    }, cx);
-                })
-                .icon(Glyph::UserMinus)
-                .entry(),
+                Some(Relation::Friend) => {
+                    let friend = user.clone();
+                    item("Remove friend", move |this, _, cx| this.ask_remove_friend(&friend, cx)).icon(Glyph::UserMinus).entry()
+                }
                 Some(Relation::Incoming) => {
                     let friend = user.clone();
                     item("Accept friend request", move |this, _, cx| this.befriend(friend.clone(), cx)).icon(Glyph::GroupPlus).entry()
@@ -607,8 +620,13 @@ impl Waffle {
         self.rest_optimistic(method, format!("/users/@me/relationships/{user_id}/ignore"), None, move |this| flip(this, a, ignore), move |this| flip(this, b, !ignore), cx);
     }
 
-    // Opens (or creates) our DM with `user_id` and joins its call; it rings once connected.
-    pub(crate) fn start_call(&mut self, user_id: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn ask_remove_friend(&mut self, user: &User, cx: &mut Context<Self>) {
+        let (id, who) = (user.id.clone(), user.name.clone());
+        self.confirm(format!("Remove '{who}'"), format!("Are you sure you want to remove {who} from your friends?"), "Remove friend", move |this, _, cx| this.drop_relation(&id, cx), cx);
+    }
+
+    // Opens (or creates) our DM with `user_id` and joins its call, camera on with `video`; it rings once connected.
+    pub(crate) fn start_call(&mut self, user_id: String, video: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(client) = self.client.clone() else { return };
         cx.spawn_in(window, async move |this, cx| {
             let Ok(dm) = client.open_dm(&user_id).await else { return };
@@ -618,8 +636,7 @@ impl Waffle {
                 }
                 this.guild_id = None;
                 this.open_channel(dm.clone(), window, cx);
-                this.ring_on_connect = Some(dm.id.clone());
-                this.join_voice(dm, cx);
+                this.start_dm_call(dm, video, cx);
             })
             .ok();
         })
