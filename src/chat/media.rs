@@ -273,6 +273,7 @@ pub(super) fn media_tile(message: &Message, i: usize, (w, h): (f32, f32), corner
     };
     let (this, url) = (ctx.this.clone(), item.url.clone());
     let own = matches!(paging, Paging::Gallery).then(|| message.media.clone());
+    let (menu_this, menu_message, menu_url) = (ctx.this.clone(), message.clone(), item.url.clone());
     ui::edge(div(), corners)
         .id(SharedString::from(format!("media-{}-{i}", message.id)))
         .relative()
@@ -284,6 +285,12 @@ pub(super) fn media_tile(message: &Message, i: usize, (w, h): (f32, f32), corner
         .hover(|s| s.opacity(0.92))
         .child(picture)
         .children(cover)
+        // The message's menu with Discord's image items; the row's own handler would open it without them.
+        .on_mouse_down(gpui_kit::MouseButton::Right, move |event, _, cx| {
+            cx.stop_propagation();
+            let target = Some(crate::message_menu::MenuTarget::Image(menu_url.clone()));
+            menu_this.update(cx, |this, cx| this.open_message_menu_on(menu_message.clone(), target, event.position, cx)).ok();
+        })
         .on_click(move |_, window, cx| {
             cx.stop_propagation();
             this.update(cx, |this, cx| match own.clone() {
