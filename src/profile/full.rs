@@ -49,7 +49,7 @@ impl Waffle {
         let width = (vw - 2. * MODAL_CLEARANCE).min(MODAL_WIDTH);
         let height = (vh - 2. * MODAL_CLEARANCE).min(MODAL_HEIGHT).max(MODAL_MIN_HEIGHT.min(vh - 2. * ui::SURFACE_INSET));
         let card_width = (CARD_SHARE * vw - CARD_OFFSET).clamp(CARD_MIN, CARD_MAX);
-        let dressing = self.dressing(&profile, card_width, super::FRAME_MIN_FULL, window);
+        let dressing = self.dressing(card, super::Surface::Full, card_width, hovered, window, cx);
         let left = self.full_card(card, &profile, hovered, ink, cx).w(px(card_width)).flex_none().relative().children(dressing.effect);
         let left = ui::col().relative().flex_none().w(px(card_width)).children(dressing.back).child(left.flex_1()).children(dressing.front);
         let right = self.full_tabs(card, &profile, tab, ink, window, cx);
@@ -84,7 +84,7 @@ impl Waffle {
         let body = inner;
         let avatar = card.avatar_full.then(|| avatar_viewer(&card.user, window, cx));
         let pop = self.card_popover(card, window, cx);
-        let backdrop = crate::overlays::backdrop("full-profile-backdrop", cx);
+        let backdrop = crate::overlays::backdrop("full-profile-backdrop", cx).child(crate::layout::title_drag_band());
         // Unclipped, so a frame's top reaches past the dialog's edge, as Discord's does.
         let dialog = ui::dialog_fixed("full-profile-dialog", width, height, body, cx);
         Some(div().absolute().inset_0().child(ui::modal(backdrop, dialog, cx)).children(pop).children(avatar).into_any_element())

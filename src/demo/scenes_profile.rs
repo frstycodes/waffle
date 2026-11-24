@@ -23,17 +23,25 @@ pub(super) const PROFILE_SCENES: &[&str] = &[
     "profile-frame",
     "profile-frame-full",
     "profile-frame-dm",
+    "profile-effect",
+    "profile-effect-full",
+    "profile-effect-dm",
 ];
 
 pub(super) fn demo_profile_scene(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
-    if scene == "profile-dm" || scene == "profile-frame-dm" {
+    if scene.starts_with("profile-effect") {
+        waffle.seed_profile_effect(EFFECT_SKU, effect_fixture());
+    }
+    if scene == "profile-dm" || scene == "profile-frame-dm" || scene == "profile-effect-dm" {
         demo_profile_dm(waffle, window, cx);
-        if scene == "profile-frame-dm" {
-            let key = crate::profile::profile_key("8388608", None);
-            if let Some(mut profile) = waffle.profiles.peek(&key) {
-                profile.frame = Some(frame_fixture());
-                waffle.profiles.seed(&key, profile);
+        let key = crate::profile::profile_key("8388608", None);
+        if let Some(mut profile) = waffle.profiles.peek(&key) {
+            match scene {
+                "profile-frame-dm" => profile.frame = Some(frame_fixture()),
+                "profile-effect-dm" => profile.effect_sku = Some(EFFECT_SKU.into()),
+                _ => {}
             }
+            waffle.profiles.seed(&key, profile);
         }
         return;
     }
@@ -45,7 +53,7 @@ pub(super) fn demo_profile_scene(waffle: &mut Waffle, scene: &str, window: &mut 
     let worst = scene.ends_with("-worst");
     if let Some(card) = waffle.profile_card.as_mut() {
         card.full = match scene {
-            "profile-full" | "profile-full-plain" | "profile-full-note" | "profile-full-worst" | "profile-frame-full" => Some(FullTab::Activity),
+            "profile-full" | "profile-full-plain" | "profile-full-note" | "profile-full-worst" | "profile-frame-full" | "profile-effect-full" => Some(FullTab::Activity),
             "profile-full-friends" => Some(FullTab::MutualFriends),
             "profile-full-servers" => Some(FullTab::MutualServers),
             _ => None,
@@ -55,6 +63,9 @@ pub(super) fn demo_profile_scene(waffle: &mut Waffle, scene: &str, window: &mut 
             profile.note = (scene == "profile-full-note").then(|| "Met in the gpui server. Owes me a waffle recipe.".into());
             if scene.starts_with("profile-frame") {
                 profile.frame = Some(frame_fixture());
+            }
+            if scene.starts_with("profile-effect") {
+                profile.effect_sku = Some(EFFECT_SKU.into());
             }
             if scene.starts_with("profile-gif") {
                 profile.banner = Some("demo/banner.gif".into());
@@ -106,6 +117,13 @@ fn frame_fixture() -> crate::discord::ProfileFrame {
             FrameLayer { src: "demo/frame-top.png".into(), kind: FrameKind::Staple, front: true, anchor: FrameAnchor::Top },
         ],
     }
+}
+
+const EFFECT_SKU: &str = "demo-effect";
+
+// Honey sparkles over the whole card with a glow and a dot in each corner, to show the card's rounding clips them.
+fn effect_fixture() -> Vec<crate::discord::EffectLayer> {
+    vec![crate::discord::EffectLayer { src: "demo/effect.png".into(), x: 0., y: 0., width: 450., height: 880., z: 0, start: 0., duration: 0., looping: false, loop_delay: 0. }]
 }
 
 // A game played for the first time and long, a show, and a listening session, as Recent activity shows them.

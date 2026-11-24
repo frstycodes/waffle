@@ -1,9 +1,9 @@
 // The profile popout, opened from a name or avatar: Discord's layout in the user's profile theme. The same
 // card state opens the full profile dialog (`full.rs`) when its avatar, name or mutuals are clicked.
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gpui_kit::{
-    AnyElement, App, Context, Div, Entity, MouseButton, Pixels, Point, ScrollHandle, SharedString, Window,
+    AnyElement, App, Context, Corners, Div, Entity, MouseButton, Pixels, Point, ScrollHandle, SharedString, Window,
     component::{
         Icon,
         input::{InputState, TextareaState},
@@ -13,7 +13,7 @@ use gpui_kit::{
 
 use crate::{
     Waffle,
-    discord::{Profile, Relation, User},
+    discord::{FrameAnchor, FrameKind, FrameLayer, Profile, Relation, User},
     icons::Glyph,
     layout::{TITLE_HEIGHT, decorated_avatar, playing_avatar},
     palette,
@@ -84,6 +84,8 @@ pub(crate) struct ProfileCard {
     // The full profile's card body and tab list.
     pub(crate) card_scroll: ScrollHandle,
     pub(crate) tab_scroll: ScrollHandle,
+    // When this card (or its full profile) opened: the profile effect's intro runs from here.
+    pub(crate) opened: Instant,
 }
 
 // The full profile's tabs, in Discord's order.
@@ -96,7 +98,7 @@ pub(crate) enum FullTab {
 
 impl ProfileCard {
     fn new(user: User, guild_id: Option<String>, at: Point<Pixels>, profile: Option<Profile>, full: Option<FullTab>) -> Self {
-        Self { user, guild_id, at, profile, all_activity: false, avatar_full: false, full, note: None, message: None, all_roles: false, pop: None, reacting: None, toast: None, recent: None, status_expanded: false, panel: false, card_scroll: ScrollHandle::new(), tab_scroll: ScrollHandle::new() }
+        Self { user, guild_id, at, profile, all_activity: false, avatar_full: false, full, note: None, message: None, all_roles: false, pop: None, reacting: None, toast: None, recent: None, status_expanded: false, panel: false, card_scroll: ScrollHandle::new(), tab_scroll: ScrollHandle::new(), opened: Instant::now() }
     }
 }
 
@@ -141,6 +143,9 @@ impl Waffle {
         let Some(card) = self.profile_card.as_mut().filter(|c| c.user.id == user.id) else { return self.open_full_profile(user.clone(), tab, cx) };
         card.full = Some(tab);
         card.avatar_full = false;
+        // The side panel's card grows into a dialog that Esc and Close can shut; the panel makes itself a new one.
+        card.panel = false;
+        card.opened = Instant::now();
         let user_id = card.user.id.clone();
         self.fetch_recent_activity(&user_id, cx);
         self.redraw_overlays(cx);
@@ -194,18 +199,23 @@ impl Waffle {
         .detach();
     }
 
+    // An effect known up front, as the demo scenes give theirs.
+    pub(crate) fn seed_profile_effect(&mut self, sku: &str, layers: Vec<crate::discord::EffectLayer>) {
+        self.profile_effects.by_sku.insert(sku.into(), Some(layers));
+    }
+
     // Once per sku: an effect that fails to resolve stays None and the card draws none.
     fn fetch_profile_effect(&mut self, sku: Option<String>, cx: &mut Context<Self>) {
         let Some(sku) = sku else { return };
         let Some(client) = self.client.clone() else { return };
-        if self.profile_effects.contains_key(&sku) {
+        if self.profile_effects.by_sku.contains_key(&sku) {
             return;
         }
-        self.profile_effects.insert(sku.clone(), None);
+        self.profile_effects.by_sku.insert(sku.clone(), None);
         cx.spawn(async move |this, cx| {
             let Ok(layers) = client.profile_effect(&sku).await else { return };
             this.update(cx, |this, cx| {
-                this.profile_effects.insert(sku, Some(layers));
+                this.profile_effects.by_sku.insert(sku, Some(layers));
                 cx.notify(); // lint-allow(global-notify): the effect draws on the popout and on the DM panel's card
             })
             .ok();
@@ -250,7 +260,7 @@ impl Waffle {
         }
         if card.panel {
             let pop = self.card_popover(card, window, cx)?;
-            return Some(crate::overlays::backdrop("profile-backdrop", cx).child(pop).into_any_element());
+            return Some(crate::overlays::backdrop("profile-backdrop", cx).child(crate::layout::title_drag_band()).child(pop).into_any_element());
         }
         // Animated pictures move only under the pointer, as Discord's.
         let (hovered, on_hover) = ui::hover_state(SharedString::from(format!("profile-hover-{}", card.user.id)), window, cx);
@@ -269,7 +279,7 @@ impl Waffle {
             false => self.message_field(card, ink, cx).into_any_element(),
         };
         let inner = inner.child(self.profile_header(card, &profile, Header::Popout, hovered, ink, cx)).child(body).child(footer);
-        let dressing = self.dressing(&profile, WIDTH, FRAME_MIN_POPOUT, window);
+        let dressing = self.dressing(card, Surface::Popout, WIDTH, hovered, window, cx);
         let card_el = outer
             .id("profile-card")
             .group(CARD_GROUP)
@@ -288,15 +298,41 @@ impl Waffle {
         // lint-allow(raw-floating): placed inside the overlay backdrop, with a measured top margin floating_at can't take.
         let placed = gpui_kit::anchored().position(card.at).snap_to_window_with_margin(ui::FLOAT_EDGES).child(rise);
         let pop = self.card_popover(card, window, cx);
-        Some(crate::overlays::backdrop("profile-backdrop", cx).child(placed).children(pop).into_any_element())
+        Some(crate::overlays::backdrop("profile-backdrop", cx).child(crate::layout::title_drag_band()).child(placed).children(pop).into_any_element())
     }
 
-    // What a card wears around it, `width` wide: its profile effect over it, and its frame behind and in front.
-    // Discord drops the frame from a window shorter than `frame_min`.
-    pub(super) fn dressing(&self, profile: &Profile, width: f32, frame_min: f32, window: &Window) -> Dressing {
-        let effect = profile.effect_sku.as_ref().and_then(|sku| self.profile_effects.get(sku)).and_then(|layers| layers.as_deref()).and_then(|layers| effect_overlay(layers, width));
-        let frame = profile.frame.as_ref().filter(|_| f32::from(window.viewport_size().height) >= frame_min);
-        Dressing { effect, back: frame.and_then(|f| frame_layers(f, width, false)), front: frame.and_then(|f| frame_layers(f, width, true)) }
+    // What a card wears around it on `surface`, `width` wide: its profile effect over it, and its frame behind and
+    // in front. Discord drops the frame from a window too short for it, and the full profile's bottom staples.
+    pub(super) fn dressing(&self, card: &ProfileCard, surface: Surface, width: f32, hovered: bool, window: &Window, cx: &mut Context<Self>) -> Dressing {
+        let Some(profile) = card.profile.as_ref() else { return Dressing::default() };
+        let layers = profile.effect_sku.as_ref().and_then(|sku| self.profile_effects.by_sku.get(sku)).and_then(|layers| layers.as_deref());
+        let (effect, wake) = layers.and_then(|layers| effect_overlay(layers, width, surface.corners(), card.opened.elapsed(), hovered)).map_or((None, None), |(el, wake)| (Some(el), wake));
+        if let Some(after) = wake {
+            self.wake_profile_effect(after, cx);
+        }
+        let frame = profile.frame.as_ref().filter(|_| f32::from(window.viewport_size().height) >= surface.frame_min());
+        let keep = |layer: &FrameLayer| !(surface == Surface::Full && layer.kind == FrameKind::Staple && layer.anchor == FrameAnchor::Bottom);
+        Dressing { effect, back: frame.and_then(|f| frame_layers(f, width, false, keep)), front: frame.and_then(|f| frame_layers(f, width, true, keep)) }
+    }
+
+    // Redraws the profile surfaces when an effect layer next shows or hides; one wake at a time, the soonest.
+    fn wake_profile_effect(&self, after: Duration, cx: &mut Context<Self>) {
+        let at = Instant::now() + after;
+        if self.profile_effects.wake.get().is_some_and(|pending| pending > Instant::now() && pending <= at) {
+            return;
+        }
+        self.profile_effects.wake.set(Some(at));
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(after).await;
+            this.update(cx, |this, cx| {
+                this.profile_effects.wake.set(None);
+                this.redraw_overlays(cx);
+                this.redraw(crate::part::Column::Panel, cx);
+            })
+            .ok();
+        })
+        // lint-allow(detached-task): one timer that ends after a single redraw, holding only a WeakEntity.
+        .detach();
     }
 
     // Discord's popout body: name, mutuals, bio, activity, then roles in a server.
@@ -583,16 +619,48 @@ pub(super) fn card_toast(card: &ProfileCard, banner_height: f32, cx: &App) -> Op
 // Half a one-line toast's height, to centre it on the banner.
 const TOAST_HALF: f32 = 20.;
 
+// Profile effects by sku once fetched (None while asked for, or when one fails), and when their next layer change
+// redraws the cards.
+#[derive(Default)]
+pub(crate) struct ProfileEffects {
+    // lint-allow(unbounded-growth): one entry per profile effect sku seen, a catalogue of a few hundred at most
+    by_sku: std::collections::HashMap<String, Option<Vec<crate::discord::EffectLayer>>>,
+    wake: std::cell::Cell<Option<Instant>>,
+}
+
+#[derive(Default)]
 pub(super) struct Dressing {
     pub(super) effect: Option<Div>,
     pub(super) back: Option<Div>,
     pub(super) front: Option<Div>,
 }
 
-// The window heights below which Discord hides a frame: the popout's, the side panel's and the full profile's.
-const FRAME_MIN_POPOUT: f32 = 480.;
-pub(super) const FRAME_MIN_PANEL: f32 = 510.;
-pub(super) const FRAME_MIN_FULL: f32 = 785.;
+// The cards that wear a profile's effect and frame.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Surface {
+    Popout,
+    Panel,
+    Full,
+}
+
+impl Surface {
+    // The window heights below which Discord hides a frame.
+    pub(super) fn frame_min(self) -> f32 {
+        match self {
+            Surface::Popout => 480.,
+            Surface::Panel => 510.,
+            Surface::Full => 785.,
+        }
+    }
+
+    // The card's corners, which the effect's pictures round to match; the full profile's card is square at its foot.
+    fn corners(self) -> Corners<Pixels> {
+        match self {
+            Surface::Popout | Surface::Panel => ui::all(ui::RADIUS_LG),
+            Surface::Full => ui::top(ui::RADIUS_LG),
+        }
+    }
+}
 
 // Which card a header sits on: where its banner's corners round and where the status bubble starts.
 #[derive(Clone, Copy, PartialEq, Eq)]

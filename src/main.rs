@@ -816,8 +816,7 @@ pub struct Waffle {
     // Profiles by user and server, shown at once from the last fetch while a fresh one loads.
     profiles: query::Query<discord::Profile>,
     // Profile effect layers by sku; None while fetching or after it failed, which draws no effect.
-    // lint-allow(unbounded-growth): one entry per profile effect sku seen, a catalogue of a few hundred at most
-    profile_effects: HashMap<String, Option<Vec<discord::EffectLayer>>>,
+    profile_effects: profile::ProfileEffects,
     // Previews of Discord's own links (messages, invites), shared with the rows that draw them.
     link_previews: link_preview::Previews,
     // Who reacted, by message and emoji (`Emoji::path`), fetched on a pill's first hover; dropped when it changes.

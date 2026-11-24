@@ -339,7 +339,18 @@ pub(super) fn parse_profile_effect(body: &Value) -> Vec<EffectLayer> {
         .filter_map(|e| {
             let src = e["randomizedSources"][0]["src"].as_str().or(e["src"].as_str())?.to_owned();
             let num = |v: &Value| v.as_f64().unwrap_or(0.) as f32;
-            Some(EffectLayer { src, x: num(&e["position"]["x"]), y: num(&e["position"]["y"]), width: num(&e["width"]), height: num(&e["height"]), z: e["zIndex"].as_i64().unwrap_or(0) })
+            Some(EffectLayer {
+                src,
+                x: num(&e["position"]["x"]),
+                y: num(&e["position"]["y"]),
+                width: num(&e["width"]),
+                height: num(&e["height"]),
+                z: e["zIndex"].as_i64().unwrap_or(0),
+                start: num(&e["start"]),
+                duration: num(&e["duration"]),
+                looping: e["loop"].as_bool().unwrap_or(false),
+                loop_delay: num(&e["loopDelay"]),
+            })
         })
         .filter(|l| l.width > 0. && l.height > 0.)
         .collect();

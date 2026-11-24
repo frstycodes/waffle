@@ -119,6 +119,12 @@ pub struct EffectLayer {
     pub width: f32,
     pub height: f32,
     pub z: i64,
+    // Its timeline in milliseconds from the intro's start: shown from `start` for `duration`, then, when it
+    // loops, again every `duration + loop_delay`.
+    pub start: f32,
+    pub duration: f32,
+    pub looping: bool,
+    pub loop_delay: f32,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]

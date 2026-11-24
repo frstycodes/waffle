@@ -18,6 +18,8 @@ impl Waffle {
         // GAP: a failed fetch is retried on the panel's next redraw; fine while redraws are occasional.
         self.fetch_profile(user.clone(), None, cx);
         let profile = self.profiles.peek(&profile_key(&user.id, None));
+        // A cached profile skips the fetch that would ask for its effect.
+        self.fetch_profile_effect(profile.as_ref().and_then(|p| p.effect_sku.clone()), cx);
         let (hovered, on_hover) = ui::hover_state(SharedString::from(format!("dm-profile-hover-{}", user.id)), window, cx);
         // The panel keeps its card in the profile slot while nothing else is open there, so its popovers, toast,
         // folded roles and expanded status have somewhere to live.
@@ -42,8 +44,8 @@ impl Waffle {
         // The panel's width: its column less the 8px gap to the window's edge, and less the frame's reach past each
         // side when it wears one: Discord shrinks the whole panel so the frame fits its column.
         let column_width = self.panel_column_width().unwrap_or(super::WIDTH) - PANEL_INSET;
-        let fit = FrameFit::of(profile.frame.as_ref().filter(|_| f32::from(window.viewport_size().height) >= super::FRAME_MIN_PANEL), column_width);
-        let dressing = self.dressing(&profile, fit.width, super::FRAME_MIN_PANEL, window);
+        let fit = FrameFit::of(profile.frame.as_ref().filter(|_| f32::from(window.viewport_size().height) >= super::Surface::Panel.frame_min()), column_width);
+        let dressing = self.dressing(&card, super::Surface::Panel, fit.width, hovered, window, cx);
         let panel = ui::col().relative().min_h_0().id("dm-profile-panel").group(super::CARD_GROUP).flex_1().squircle(ui::RADIUS_LG).on_hover(on_hover);
         let panel = match ink.border {
             Some(_) => panel.bg(ink.wash()),

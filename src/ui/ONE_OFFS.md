@@ -528,7 +528,7 @@ _Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_ro
 - `src/joining/browse.rs` — ui::list_row has no held state (dimmed check, no hover or click) or end-of-row note
 - `src/overlays/emoji.rs` — ui::icon_button is a square taking a Glyph; an emoji cell is a ninth of the grid's width.
 - `src/panel.rs` — ui::list_row is a flat 48px row; a member row also carries a nameplate, its fade and a per-row hover plate.
-- `src/profile/connections.rs` — a link row, as Discord's: the account's name underlines on hover; ui::button would give it a fill.
+- `src/profile/connections.rs` — ui::chip is a palette-toned filter that toggles; this one wears the card's themed ink and opens the account.
 - `src/profile/full.rs` — ui::text_area is the editor itself; this is the note at rest, plain text a click from becoming one, as Discord's.
 - `src/profile/parts.rs` — the username is a link, as Discord's; ui::button would give it a fill and padding.
 - `src/settings.rs` — ui::settings_nav_item has no icon-less, indented sub-entry
@@ -751,6 +751,7 @@ _A function named like a component builds it from the design system: wrap the ui
 - `src/joining/guide.rs` — ui::icon_tile only holds a glyph, not an emoji's image or text
 - `src/login.rs` — ui::card is a clickable raised card; this is the sign-in QR code painted on white in both themes.
 - `src/profile/actions.rs` — ui::text_field is the settings field frame; this one wears the card's themed fill.
+- `src/profile/connections.rs` — ui::chip is a palette-toned filter that toggles; this chip wears the card's themed ink and opens the account.
 - `src/sidebar/tiles.rs` — ui::server_tile sets initials on the selected fill; the rail's letters sit on the lifted raised tone.
 - `src/soundboard/picker.rs` — ui::card lacks a sound tile with a lock and a favourite toggle
 - `src/video.rs` — ui::media is an image, not a player; this wraps a cached VideoPlayer entity and builds no design-system piece itself
@@ -988,6 +989,7 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/profile.rs` — ends when the effect request returns, and holds only a WeakEntity.
 - `src/profile.rs` — ends when the product request returns, and holds only a WeakEntity.
 - `src/profile.rs` — ends when the profile request returns, and holds only a WeakEntity.
+- `src/profile.rs` — one timer that ends after a single redraw, holding only a WeakEntity.
 - `src/profile/actions.rs` — ends when the send returns, and holds only a WeakEntity.
 - `src/profile/actions.rs` — the subscription lives as long as the field, dropped with the card.
 - `src/profile/full.rs` — ends when the request returns, and holds only a WeakEntity.
@@ -1115,7 +1117,6 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/main.rs` — one entry per live stream we have heard of, replaced on every STREAM_UPDATE
 - `src/main.rs` — one entry per mention or emoji picked in the composer this session, a few hundred at most
 - `src/main.rs` — one entry per person who spoke in a call, a few dozen at most; replaced on each speak
-- `src/main.rs` — one entry per profile effect sku seen, a catalogue of a few hundred at most
 - `src/main.rs` — one entry per server visited, bounded by the servers the user is in
 - `src/main.rs` — one entry per server whose member list was opened, bounded by the user's server count
 - `src/main.rs` — one f32 per streamer the user adjusted, a few dozen at most
@@ -1125,6 +1126,7 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/main.rs` — one pair per (server, channel) member range asked for, bounded by the user's channel count
 - `src/main.rs` — one thumbnail url per streamer seen, a handful of live streams at a time
 - `src/main.rs` — one u64 per channel the gateway reported, bounded by the user's channel count
+- `src/profile.rs` — one entry per profile effect sku seen, a catalogue of a few hundred at most
 - `src/reactions.rs` — the name spans of one card sentence, three at most, rebuilt for each card
 - `src/report.rs` — one pick per form element of the node on screen, a handful
 - `src/report.rs` — the reasons of one menu node, a few dozen at most

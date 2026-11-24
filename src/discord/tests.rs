@@ -735,6 +735,18 @@ fn presence_mark_follows_device_and_stream() {
 }
 
 #[test]
+fn parses_a_live_profile_effect() {
+    // The shape of a real `/collectibles-products/{sku}` answer for an effect (2026-11-24).
+    let body = json!({ "sku_id": "1", "items": [{ "type": 1, "sku_id": "1", "animationType": 2, "effects": [
+        { "src": "https://cdn/a", "loop": false, "height": 880, "width": 450, "duration": 7833, "start": 0, "loopDelay": 0, "position": { "x": 0, "y": 0 }, "zIndex": 100, "randomizedSources": [] },
+        { "src": "https://cdn/b", "loop": true, "height": 880, "width": 450, "duration": 4250, "start": 9000, "loopDelay": 3000, "position": { "x": 0, "y": 0 }, "zIndex": 101, "randomizedSources": [] },
+    ] }] });
+    let layers = parse_profile_effect(&body);
+    assert_eq!(layers.len(), 2, "{layers:?}");
+    assert_eq!((layers[1].start, layers[1].duration, layers[1].looping, layers[1].loop_delay), (9000., 4250., true, 3000.));
+}
+
+#[test]
 fn parses_profile_frame() {
     let body = json!({ "items": [{ "type": 3, "inner_width": 1200, "overflow_top": 120, "overflow_bottom": 80, "overflow_horizontal": 24, "layers": [
         { "id": "top", "type": "staple", "order": "front", "anchor": "top" },

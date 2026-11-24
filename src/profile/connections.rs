@@ -1,30 +1,49 @@
 // The profile card's linked accounts: their chips, brand colours and where each opens.
-use gpui_kit::{FontWeight, Hsla, svg};
+use gpui_kit::{FontWeight, Hsla, Stateful, svg};
 
 use super::*;
-use crate::discord::Connection;
+use crate::{discord::Connection, ui::RADIUS_SM};
 
-// The full profile's list: each account's mark, its name, the verified seal, and ↗ where it opens a page.
+// The full profile's accounts as wrapping chips.
 pub(super) fn connection_list(list: &[Connection], ink: Ink, cx: &App) -> Option<Div> {
     if list.is_empty() {
         return None;
     }
-    let rows = list.iter().enumerate().map(|(i, c)| {
-        let (platform, color) = platform(&c.kind);
-        let url = connection_url(c);
-        let name = if c.name.is_empty() { platform.to_owned() } else { c.name.clone() };
-        let seal = if ink.border.is_some() { ink.strong } else { palette::info_ink(cx) };
-        // lint-allow(custom-button): a link row, as Discord's: the account's name underlines on hover; ui::button would give it a fill.
-        ui::row()
-            .id(("profile-connection", i))
-            .gap_3()
-            .text_color(ink.strong)
-            .child(brand_tile(&c.kind, platform, color).size_8())
-            .child(ui::line(name))
-            .when(c.verified, |d| d.child(Icon::new(Glyph::CheckCircle).size(ui::ICON_SM).flex_none().text_color(seal)))
-            .when_some(url, |d, url| d.cursor_pointer().hover(|s| s.underline()).child(Icon::new(Glyph::Open).size(ui::ICON_SM).flex_none().text_color(ink.muted)).on_click(move |_, _, cx| cx.open_url(&url)))
-    });
-    Some(ui::col().gap_3().children(rows))
+    let chips = list.iter().enumerate().map(|(i, c)| connection_chip(i, c, ink, cx));
+    Some(ui::row().items_stretch().flex_wrap().gap_1p5().children(chips))
+}
+
+// The service's mark on its colour, the account name, Discord's verified seal, and ↗ with a click to the account.
+// lint-allow(custom-component): ui::chip is a palette-toned filter that toggles; this chip wears the card's themed ink and opens the account.
+fn connection_chip(i: usize, c: &Connection, ink: Ink, cx: &App) -> Stateful<Div> {
+    let (platform, color) = platform(&c.kind);
+    let url = connection_url(c);
+    let tip: SharedString = match url {
+        Some(_) => format!("Open on {platform}").into(),
+        None => platform.into(),
+    };
+    let name = if c.name.is_empty() { platform.to_owned() } else { c.name.clone() };
+    // The seal takes the info ink on the plain card; on a themed one, the card's own ink reads better.
+    let seal = if ink.border.is_some() { ink.strong } else { palette::info_ink(cx) };
+    let hover = ink.strong.opacity(0.16);
+    // lint-allow(custom-button): ui::chip is a palette-toned filter that toggles; this one wears the card's themed ink and opens the account.
+    ui::row()
+        .id(("profile-connection", i))
+        .h_7()
+        .max_w_full()
+        .pl_1()
+        .pr_2()
+        .gap_1p5()
+        .squircle(RADIUS_SM)
+        .bg(ink.tile)
+        .text_size(ui::TEXT_SM)
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(ink.strong)
+        .child(brand_tile(&c.kind, platform, color))
+        .child(ui::line(name))
+        .when(c.verified, |d| d.child(Icon::new(Glyph::CheckCircle).size(ui::ICON_SM).flex_none().text_color(seal)))
+        .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
+        .when_some(url, |d, url| d.cursor_pointer().hover(move |s| s.bg(hover)).child(Icon::new(Glyph::Open).size(ui::ICON_SM).flex_none().text_color(ink.muted)).on_click(move |_, _, cx| cx.open_url(&url)))
 }
 
 // The mark tinted dark or light by its colour; a service without a mark gets its initial.

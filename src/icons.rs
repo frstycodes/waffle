@@ -190,7 +190,7 @@ const GLYPHS: [(&str, &[u8]); 168] = [
     ("icons/soundwave.svg", include_bytes!("../assets/icons/reicon/soundwave.svg")),
 ];
 
-const BRAND: [(&str, &[u8]); 8] = [
+const BRAND: [(&str, &[u8]); 9] = [
     (MARK, include_bytes!("../assets/brand/waffle-mark.svg")),
     (NEW_TAG, include_bytes!("../assets/icons/new-tag.svg")),
     // Stand-in art for the demo's profile scene, which stays offline.
@@ -199,6 +199,7 @@ const BRAND: [(&str, &[u8]); 8] = [
     ("demo/banner.gif", include_bytes!("../assets/demo/banner.gif")),
     ("demo/frame-top.png", include_bytes!("../assets/demo/frame-top.png")),
     ("demo/frame-rail.png", include_bytes!("../assets/demo/frame-rail.png")),
+    ("demo/effect.png", include_bytes!("../assets/demo/effect.png")),
     (crate::voice_status::ART, include_bytes!("../assets/illustrations/voice-status.png")),
 ];
 
