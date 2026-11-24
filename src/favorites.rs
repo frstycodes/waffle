@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use base64::Engine;
 use gpui_kit::{AnyElement, Context, FontWeight, MouseButton, MouseDownEvent, Pixels, Point, Radians, SharedString, Window, component::Icon, div, point, prelude::*, px};
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::json;
 
 use crate::{

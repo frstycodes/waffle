@@ -277,7 +277,7 @@ impl Waffle {
         let friend = friend.map(|(glyph, label, next)| {
             let target = user.clone();
             banner_button("profile-friend", glyph, label, cx).when_some(next, |b, next| {
-                b.on_click(cx.listener(move |this, _, _, cx| this.relation_optimistic(&target.id, Some((target.clone(), next)), reqwest::Method::PUT, Some(serde_json::json!({})), cx)))
+                b.on_click(cx.listener(move |this, _, _, cx| this.relation_optimistic(&target.id, Some((target.clone(), next)), crate::discord::Method::PUT, Some(serde_json::json!({})), cx)))
             })
         });
         let mod_view = card.guild_id.clone().filter(|g| self.can_mod_view(g)).map(|g| {

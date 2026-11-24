@@ -13,7 +13,7 @@ mod rules;
 use std::collections::{HashMap, HashSet};
 
 use gpui_kit::{AnyElement, Context, IntoElement, Window};
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::{Map, Value, json};
 
 pub use browse::BrowseView;

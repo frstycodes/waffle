@@ -3,7 +3,7 @@
 // apps and the full server-settings screens aren't built, so their items are left out. Favorites-mode
 // menus live in favorites.rs.
 use gpui_kit::{Context, Pixels, Point, SharedString, Window};
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::{Value, json};
 
 mod server;

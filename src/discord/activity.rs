@@ -120,13 +120,13 @@ pub fn app_asset_url(app_id: &str, asset_id: &str) -> String {
 impl Client {
     /// An app's named art (embedded_background, embedded_cover …) by asset id, for apps not on the shelf.
     pub async fn app_assets(&self, app_id: &str) -> Result<Vec<(String, String)>, String> {
-        let body = self.run(self.request(reqwest::Method::GET, &format!("/oauth2/applications/{app_id}/assets"))).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, &format!("/oauth2/applications/{app_id}/assets"))).await?;
         Ok(body.as_array().into_iter().flatten().filter_map(|a| Some((a["name"].as_str()?.to_owned(), a["id"].as_str()?.to_owned()))).collect())
     }
 
     /// The apps the activity launcher offers, for a server (None: a DM call).
     pub async fn activity_shelf(&self, guild_id: Option<&str>) -> Result<Vec<ShelfApp>, String> {
-        let req = self.request(reqwest::Method::GET, "/activities/shelf");
+        let req = self.request(crate::discord::Method::GET, "/activities/shelf");
         let req = match guild_id {
             Some(id) => req.query(&[("guild_id", id)]),
             None => req,
@@ -137,7 +137,7 @@ impl Client {
     /// Starts an activity as Discord's client does: it runs the app's launch command (its primary entry
     /// point) as an interaction in the channel. EMBEDDED_ACTIVITY_UPDATE_V2 then reports the instance.
     pub async fn start_activity(&self, app_id: &str, channel_id: &str, guild_id: Option<&str>, session_id: &str, nonce: &str) -> Result<(), String> {
-        let index = self.run(self.request(reqwest::Method::GET, &format!("/applications/{app_id}/application-command-index"))).await?;
+        let index = self.run(self.request(crate::discord::Method::GET, &format!("/applications/{app_id}/application-command-index"))).await?;
         let command = index["application_commands"].as_array().into_iter().flatten().find(|c| c["type"].as_u64() == Some(4)).ok_or("This app has no way to start it")?;
         let body = json!({
             "type": 2,
@@ -148,34 +148,34 @@ impl Client {
             "nonce": nonce,
             "data": { "version": command["version"], "id": command["id"], "name": command["name"], "type": 4, "options": [], "application_command": command },
         });
-        self.run(self.request(reqwest::Method::POST, "/interactions").json(&body)).await.map(drop)
+        self.run(self.request(crate::discord::Method::POST, "/interactions").json(&body)).await.map(drop)
     }
 
     /// Joins an activity already running in the channel.
     pub async fn join_activity(&self, app_id: &str, channel_id: &str, guild_id: Option<&str>, session_id: &str) -> Result<(), String> {
         let body = json!({ "session_id": session_id, "guild_id": guild_id });
-        self.run(self.request(reqwest::Method::POST, &format!("/activities/{channel_id}/{app_id}")).json(&body)).await.map(drop)
+        self.run(self.request(crate::discord::Method::POST, &format!("/activities/{channel_id}/{app_id}")).json(&body)).await.map(drop)
     }
 
     pub async fn leave_activity(&self, instance: &ActivityInstance, session_id: &str) -> Result<(), String> {
         let path = format!("/applications/{}/activities/{}/instances/{}/leave", instance.application_id, instance.location_id, instance.launch_id);
-        self.run(self.request(reqwest::Method::POST, &path).json(&json!({ "session_id": session_id }))).await.map(drop)
+        self.run(self.request(crate::discord::Method::POST, &path).json(&json!({ "session_id": session_id }))).await.map(drop)
     }
 
     /// The ticket the activity's frame carries so its proxy (`/.proxy/…`) lets it through.
     pub async fn activity_proxy_ticket(&self, app_id: &str, channel_id: &str) -> Result<String, String> {
         let body = json!({ "use_stateless_ticket": true, "channel_id": channel_id });
-        let res = self.run(self.request(reqwest::Method::POST, &format!("/applications/{app_id}/proxy-tickets")).json(&body)).await?;
+        let res = self.run(self.request(crate::discord::Method::POST, &format!("/applications/{app_id}/proxy-tickets")).json(&body)).await?;
         res["ticket"].as_str().map(str::to_owned).ok_or_else(|| "No proxy ticket".into())
     }
 
     /// What an activity's AUTHORIZE would grant, before asking: Discord's RPC asks the same GET first. A user
     /// install when the app supports one, else a server install, as Discord's client picks.
     pub async fn oauth_request(&self, client_id: &str, scopes: Vec<String>, state: String) -> Result<OAuthRequest, String> {
-        let app = self.run(self.request(reqwest::Method::GET, &format!("/applications/{client_id}/rpc"))).await.unwrap_or_default();
+        let app = self.run(self.request(crate::discord::Method::GET, &format!("/applications/{client_id}/rpc"))).await.unwrap_or_default();
         let integration_type = if app["integration_types_config"]["1"].is_object() { 1 } else { 0 };
         let query = oauth_query(client_id, &scopes, &state, integration_type);
-        let info = self.run(self.request(reqwest::Method::GET, "/oauth2/authorize").query(&query)).await?;
+        let info = self.run(self.request(crate::discord::Method::GET, "/oauth2/authorize").query(&query)).await?;
         Ok(OAuthRequest {
             app_name: info["application"]["name"].as_str().unwrap_or("This app").to_owned(),
             authorized: info["authorized"].as_bool().unwrap_or(false),
@@ -190,14 +190,14 @@ impl Client {
     pub async fn oauth_authorize(&self, req: &OAuthRequest) -> Result<String, String> {
         let query = oauth_query(&req.client_id, &req.scopes, &req.state, req.integration_type);
         let body = json!({ "authorize": true, "permissions": "0", "integration_type": req.integration_type });
-        let res = self.run(self.request(reqwest::Method::POST, "/oauth2/authorize").query(&query).json(&body)).await?;
+        let res = self.run(self.request(crate::discord::Method::POST, "/oauth2/authorize").query(&query).json(&body)).await?;
         let location = res["location"].as_str().ok_or("No authorization came back")?;
         oauth_code(location).ok_or_else(|| "No authorization code came back".into())
     }
 
     /// The user behind an activity's access token (AUTHENTICATE), with its scopes and expiry.
     pub async fn oauth_me(&self, access_token: &str) -> Result<Value, String> {
-        self.run(self.http.get(format!("{API}/oauth2/@me")).bearer_auth(access_token)).await
+        self.run(super::transport::request(crate::discord::Method::GET, format!("{API}/oauth2/@me")).bearer_auth(access_token)).await
     }
 }
 

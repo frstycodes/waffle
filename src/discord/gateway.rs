@@ -112,7 +112,7 @@ pub(super) enum GatewayError {
 pub(super) async fn session(token: &str, tx: &mpsc::UnboundedSender<Event>, outbound: &mut Outbound, resume: &mut Option<Resume>, up: &mut bool) -> Result<(), GatewayError> {
     let dropped = |e: &dyn std::fmt::Display| GatewayError::Dropped(e.to_string());
     let url = resume.as_ref().map(|r| format!("{}/?v=10&encoding=json", r.url.trim_end_matches('/'))).unwrap_or_else(|| GATEWAY.to_owned());
-    let (ws, _) = tokio_tungstenite::connect_async(url.as_str()).await.map_err(|e| {
+    let ws = transport::websocket(&url).await.map_err(|e| {
         eprintln!("gateway: connect failed: {e}");
         dropped(&e)
     })?;

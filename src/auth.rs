@@ -8,11 +8,12 @@ use futures::{SinkExt, StreamExt, channel::mpsc};
 use rsa::{Oaep, RsaPrivateKey, pkcs8::EncodePublicKey};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use tokio_tungstenite::tungstenite::{Message as WsMessage, client::IntoClientRequest, http::HeaderValue};
+use crate::discord::Method;
+use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 use crate::{
     captcha,
-    discord::{self, User},
+    discord::{self, User, transport},
 };
 
 // Discord's QR sign-in ("remote auth"). Undocumented; the op names below are what the official
@@ -146,13 +147,8 @@ async fn qr_session(tx: &mpsc::UnboundedSender<AuthEvent>) -> Result<String, Out
         .map_err(|e| failed(&e))?;
     let public_key = key.to_public_key().to_public_key_der().map_err(|e| failed(&e))?;
 
-    let mut request = REMOTE_AUTH.into_client_request().map_err(|e| failed(&e))?;
-    // The gateway refuses (403) a connection without Discord's own origin.
-    request.headers_mut().insert("Origin", HeaderValue::from_static("https://discord.com"));
-    if let Ok(agent) = HeaderValue::from_str(&crate::discord::identity().user_agent) {
-        request.headers_mut().insert("User-Agent", agent);
-    }
-    let (ws, _) = tokio_tungstenite::connect_async(request).await.map_err(|e| Outcome::Failed(format!("QR gateway: {}", describe_ws_error(&e))))?;
+    // The gateway refuses (403) a connection without Discord's own origin, which transport sends.
+    let ws = crate::discord::transport::websocket(REMOTE_AUTH).await.map_err(|e| Outcome::Failed(format!("QR gateway: {e}")))?;
     let (mut sink, mut stream) = ws.split();
     let mut heartbeat = tokio::time::interval(Duration::from_secs(3600));
     heartbeat.tick().await;
@@ -240,12 +236,11 @@ const LOGIN_API: &str = "https://discord.com/api/v9";
 
 async fn exchange_ticket(tx: &mpsc::UnboundedSender<AuthEvent>, key: &RsaPrivateKey, ticket: &str) -> Result<String, Outcome> {
     let failed = |e: String| Outcome::Failed(format!("Ticket exchange: {e}"));
-    let client = reqwest::Client::builder().cookie_store(true).user_agent(&crate::discord::identity().user_agent).build().map_err(|e| failed(e.to_string()))?;
-    let fingerprint = web_fingerprint(&client).await;
+    let fingerprint = web_fingerprint().await;
     let mut solved: Option<(captcha::Challenge, String)> = None;
     // Discord may ask for a captcha, and occasionally asks again after one is solved.
     for attempt in 1..=3 {
-        let mut req = crate::discord::identity().headers(client.post(format!("{LOGIN_API}/users/@me/remote-auth/login")).header("Referer", "https://discord.com/login").json(&json!({ "ticket": ticket })));
+        let mut req = transport::request(Method::POST, format!("{LOGIN_API}/users/@me/remote-auth/login")).header("Referer", "https://discord.com/login").json(&json!({ "ticket": ticket }));
         if let Some(fingerprint) = &fingerprint {
             req = req.header("X-Fingerprint", fingerprint);
         }
@@ -274,24 +269,11 @@ async fn exchange_ticket(tx: &mpsc::UnboundedSender<AuthEvent>, key: &RsaPrivate
     Err(failed("Discord kept asking for a captcha".into()))
 }
 
-// The fingerprint Discord hands a signed-out web client (and the cookies set with it, kept by `client`).
-async fn web_fingerprint(client: &reqwest::Client) -> Option<String> {
-    let res = client.get(format!("{LOGIN_API}/experiments")).header("Origin", "https://discord.com").send().await.ok()?;
+// The fingerprint Discord hands a signed-out web client (and the cookies set with it, kept by transport's client).
+async fn web_fingerprint() -> Option<String> {
+    let res = transport::request(Method::GET, format!("{LOGIN_API}/experiments")).send().await.ok()?;
     let body: Value = res.json().await.ok()?;
     body["fingerprint"].as_str().map(str::to_owned)
-}
-
-// A refused upgrade carries the server's reason in the response body; show it instead of just the status.
-fn describe_ws_error(e: &tokio_tungstenite::tungstenite::Error) -> String {
-    use tokio_tungstenite::tungstenite::Error;
-    match e {
-        Error::Http(res) => {
-            let body = res.body().as_deref().map(String::from_utf8_lossy).unwrap_or_default();
-            let body: String = body.trim().chars().take(200).collect();
-            if body.is_empty() { res.status().to_string() } else { format!("{} ({body})", res.status()) }
-        }
-        e => e.to_string(),
-    }
 }
 
 fn decrypt(key: &RsaPrivateKey, encoded: &Value) -> Result<Vec<u8>, Outcome> {

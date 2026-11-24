@@ -3,7 +3,7 @@
 // bookmarks, reminders, apps, report to mods) are left out. Report is hidden on your own messages and call records;
 // GAP: Discord also hides it on system-user messages and type 67 (friend request accepted), which `Message` doesn't carry.
 use gpui_kit::{Context, Pixels, Point};
-use reqwest::Method;
+use crate::discord::Method;
 
 use crate::{
     EmojiTarget, Waffle,

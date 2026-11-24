@@ -22,7 +22,7 @@ impl Waffle {
             self.stream_previews.insert(user_id.clone(), (old.clone(), std::time::Instant::now() + PREVIEW_AGE, fails));
             let client = client.clone();
             cx.spawn(async move |this, cx| {
-                let result = client.call(reqwest::Method::GET, format!("/streams/{key}/preview"), None).await;
+                let result = client.call(crate::discord::Method::GET, format!("/streams/{key}/preview"), None).await;
                 if cfg!(debug_assertions) && std::env::var_os("WAFFLE_STREAM_DEBUG").is_some() {
                     eprintln!("stream preview {key}: {:?}", result.as_ref().map(|b| b.to_string()));
                 }
@@ -100,7 +100,7 @@ impl Waffle {
                 let thumbnail = cx.background_spawn(async move { voice::thumbnail(source, 512).ok().and_then(|frame| jpeg_data_url(&frame)) }).await;
                 let sent = match thumbnail {
                     Some(url) => {
-                        let result = client.call(reqwest::Method::POST, format!("/streams/{key}/preview"), Some(serde_json::json!({ "thumbnail": url }))).await;
+                        let result = client.call(crate::discord::Method::POST, format!("/streams/{key}/preview"), Some(serde_json::json!({ "thumbnail": url }))).await;
                         if let Err(e) = &result {
                             eprintln!("stream preview upload {key} failed: {e}");
                         } else {

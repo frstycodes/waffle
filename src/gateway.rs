@@ -31,7 +31,7 @@ impl Waffle {
         }
         self.status = Status::Reconnecting("Checking your sign-in…".into());
         cx.spawn(async move |this, cx| {
-            let refused = client.call(reqwest::Method::GET, "/users/@me".into(), None).await.err().is_some_and(|e| crate::discord::is_unauthorized(&e));
+            let refused = client.call(crate::discord::Method::GET, "/users/@me".into(), None).await.err().is_some_and(|e| crate::discord::is_unauthorized(&e));
             this.update(cx, |this, cx| match refused {
                 true => {
                     eprintln!("gateway: token refused (4004 and REST 401), signing out");

@@ -519,7 +519,7 @@ impl Waffle {
         self.component_state.skus.borrow_mut().insert(sku_id.clone(), Sku::Loading);
         cx.spawn(async move |this, cx| {
             let path = format!("/applications/storefront/interactions/premium-button/{sku_id}");
-            let body = client.call(reqwest::Method::GET, path, None).await;
+            let body = client.call(crate::discord::Method::GET, path, None).await;
             this.update(cx, |this, cx| {
                 if let Some(sku) = body.ok().and_then(|b| premium_sku(&b, &sku_id)) {
                     this.component_state.skus.borrow_mut().insert(sku_id, sku);

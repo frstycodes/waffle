@@ -80,6 +80,10 @@ async-trait = "0.1"
 # The activity frame: WKWebView on macOS, WebView2 on Windows, placed as a child of the gpui window.
 wry = { version = "0.57", default-features = false }
 rodio = { version = "0.23.0", default-features = false, features = ["playback", "mp3", "symphonia-aac", "wav", "flac", "vorbis", "mp4"] }
+# Discord's API, gateway and voice connect through wreq so their TLS and HTTP/2 handshakes are Chrome's
+# (BoringSSL), matching the Chrome the client claims to be (discord/identity.rs). Builds BoringSSL from source.
+wreq = { version = "0.16.4", features = ["json", "multipart", "stream", "cookies", "ws", "query", "gzip", "brotli", "zstd", "deflate"] }
+wreq-util = "0.2.1"
 
 [dev-dependencies]
 # Headless windows for the tests/gpui_*.rs checks of the vendored gpui patches.

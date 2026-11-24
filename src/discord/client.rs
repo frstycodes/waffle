@@ -2,7 +2,6 @@ use super::*;
 
 #[derive(Clone)]
 pub struct Client {
-    pub(super) http: reqwest::Client,
     pub(super) token: String,
     pub(super) commands: mpsc::UnboundedSender<Value>,
     // The voice engine's view of this gateway: it sends its own ops and sees VOICE_* / STREAM_* dispatches.
@@ -22,7 +21,7 @@ pub fn connect(token: String) -> (Client, mpsc::UnboundedReceiver<Event>) {
     let (commands, command_rx) = mpsc::unbounded();
     let (voice, voice_out) = crate::voice::GatewayHandle::new();
     let subscriptions = pacing::SharedSubscriptions::default();
-    let client = Client { http: reqwest::Client::builder().cookie_store(true).build().unwrap_or_default(), token: token.clone(), commands, voice: voice.clone(), acks: Default::default(), subscriptions: subscriptions.clone() };
+    let client = Client { token: token.clone(), commands, voice: voice.clone(), acks: Default::default(), subscriptions: subscriptions.clone() };
     let (tx, rx) = mpsc::unbounded();
     runtime().spawn(run_gateway(token, tx, Outbound { commands: command_rx, voice, voice_out, subscriptions }));
     (client, rx)
@@ -30,15 +29,15 @@ pub fn connect(token: String) -> (Client, mpsc::UnboundedReceiver<Event>) {
 
 impl Client {
     // Every API request carries the token and the web client's headers (identity.rs).
-    fn authorized(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        identity().headers(req.header("Authorization", &self.token).header(reqwest::header::REFERER, "https://discord.com/channels/@me"))
+    fn authorized(&self, req: transport::Request) -> transport::Request {
+        req.header("Authorization", &self.token).header(transport::header::REFERER, "https://discord.com/channels/@me")
     }
 
-    pub(super) fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
-        self.authorized(self.http.request(method, format!("{API}{path}")))
+    pub(super) fn request(&self, method: crate::discord::Method, path: &str) -> transport::Request {
+        self.authorized(transport::request(method, format!("{API}{path}")))
     }
 
-    pub(super) async fn run(&self, req: reqwest::RequestBuilder) -> Result<Value, String> {
+    pub(super) async fn run(&self, req: transport::Request) -> Result<Value, String> {
         runtime().spawn(send(req)).await.map_err(|e| e.to_string())?
     }
 
@@ -58,21 +57,21 @@ impl Client {
     }
 
     pub async fn default_soundboard_sounds(&self) -> Result<Vec<SoundboardSound>, String> {
-        let body = self.run(self.request(reqwest::Method::GET, "/soundboard-default-sounds")).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, "/soundboard-default-sounds")).await?;
         Ok(body.as_array().into_iter().flatten().filter_map(SoundboardSound::parse).collect())
     }
 
     // Plays `sound` to everyone in the voice channel. Dropping the future cancels the request, as
     // Discord's client does when you leave the channel before it went out.
     pub async fn send_soundboard_sound(&self, channel_id: &str, sound: &SoundboardSound) -> Result<(), String> {
-        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/send-soundboard-sound")).json(&soundboard_play_body(sound));
+        let req = self.request(crate::discord::Method::POST, &format!("/channels/{channel_id}/send-soundboard-sound")).json(&soundboard_play_body(sound));
         let mut send = AbortOnDrop(runtime().spawn(send(req)));
         (&mut send.0).await.map_err(|e| e.to_string())?.map(|_| ())
     }
 
     // The sound file from the CDN: an mp3 or ogg, which its URL doesn't say.
     pub async fn soundboard_file(&self, sound_id: &str) -> Result<bytes::Bytes, String> {
-        let get = self.http.get(soundboard_url(sound_id));
+        let get = transport::plain(crate::discord::Method::GET, soundboard_url(sound_id));
         let mut fetch = AbortOnDrop(runtime().spawn(async move {
             let res = get.send().await?.error_for_status()?;
             res.bytes().await
@@ -82,14 +81,14 @@ impl Client {
 
     /// Members per role across the server, by role id.
     pub async fn role_member_counts(&self, guild_id: &str) -> Result<HashMap<String, u32>, String> {
-        let body = self.run(self.request(reqwest::Method::GET, &format!("/guilds/{guild_id}/roles/member-counts"))).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, &format!("/guilds/{guild_id}/roles/member-counts"))).await?;
         Ok(body.as_object().into_iter().flatten().filter_map(|(role, count)| Some((role.clone(), count.as_u64()? as u32))).collect())
     }
 
     /// The ids of a role's members, as many as the server sends.
     // Not verified: the cap on how many ids one response carries (the client sets none).
     pub async fn role_member_ids(&self, guild_id: &str, role_id: &str) -> Result<Vec<String>, String> {
-        let body = self.run(self.request(reqwest::Method::GET, &format!("/guilds/{guild_id}/roles/{role_id}/member-ids"))).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, &format!("/guilds/{guild_id}/roles/{role_id}/member-ids"))).await?;
         Ok(strings(&body))
     }
 
@@ -118,7 +117,7 @@ impl Client {
         if let Some(id) = around {
             path.push_str(&format!("&around={id}"));
         }
-        let body = self.run(self.request(reqwest::Method::GET, &path)).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, &path)).await?;
         let mut messages: Vec<Message> = body.as_array().into_iter().flatten().filter_map(parse_message).collect();
         messages.reverse();
         Ok(messages)
@@ -128,7 +127,7 @@ impl Client {
     pub async fn send_message(&self, channel_id: &str, content: &str, nonce: &str, reply_to: Option<&str>, ping_author: bool, options: SendOptions) -> Result<Message, String> {
         let mut body = message_body(content, nonce, reply_to, ping_author, &[]);
         options.apply(&mut body);
-        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
+        let req = self.request(crate::discord::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
     }
 
@@ -136,7 +135,7 @@ impl Client {
     /// the original's server, which history loaded over REST doesn't carry on the message.
     pub async fn forward_message(&self, channel_id: &str, original: &Message, guild_id: Option<&str>, nonce: &str) -> Result<Message, String> {
         let body = forward_body(original, guild_id, nonce);
-        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
+        let req = self.request(crate::discord::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
     }
 
@@ -144,14 +143,14 @@ impl Client {
     pub async fn send_sticker(&self, channel_id: &str, sticker_id: &str, nonce: &str, reply_to: Option<&str>, ping_author: bool) -> Result<Message, String> {
         let mut body = message_body("", nonce, reply_to, ping_author, &[]);
         body["sticker_ids"] = json!([sticker_id]);
-        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
+        let req = self.request(crate::discord::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
     }
 
     /// Discord's "Wave to say hi!": a sticker sent as a reply to a join notice, pinging the joiner.
     pub async fn greet(&self, channel_id: &str, guild_id: &str, message_id: &str, sticker_id: &str) -> Result<Message, String> {
         let body = json!({ "sticker_ids": [sticker_id], "message_reference": { "guild_id": guild_id, "channel_id": channel_id, "message_id": message_id } });
-        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/greet")).json(&body);
+        let req = self.request(crate::discord::Method::POST, &format!("/channels/{channel_id}/greet")).json(&body);
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
     }
 
@@ -169,7 +168,7 @@ impl Client {
             })
             .collect();
         body["poll"] = json!({ "question": { "text": poll.question }, "answers": answers, "duration": poll.hours, "allow_multiselect": poll.multiselect, "layout_type": 1 });
-        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
+        let req = self.request(crate::discord::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
     }
 
@@ -181,8 +180,8 @@ impl Client {
             Some(g) => format!("/guilds/{g}/application-command-index"),
             None => format!("/channels/{channel_id}/application-command-index"),
         };
-        let context = runtime().spawn(fetch_index(self.request(reqwest::Method::GET, &path)));
-        let user = runtime().spawn(fetch_index(self.request(reqwest::Method::GET, "/users/@me/application-command-index")));
+        let context = runtime().spawn(fetch_index(self.request(crate::discord::Method::GET, &path)));
+        let user = runtime().spawn(fetch_index(self.request(crate::discord::Method::GET, "/users/@me/application-command-index")));
         let (context, user) = futures::join!(context, user);
         let (context, user) = (context.map_err(|e| e.to_string())?.map(|v| parse_index(&v)), user.map_err(|e| e.to_string())?.map(|v| parse_index(&v)));
         match (context, user) {
@@ -196,7 +195,7 @@ impl Client {
     /// No retries: a refusal is the interaction's failure. Component presses and autocomplete give up
     /// after 3 s, as Discord's client does; commands and modal submits wait.
     pub async fn interact(&self, body: Value) -> Result<(), InteractError> {
-        let mut req = self.request(reqwest::Method::POST, "/interactions").json(&body);
+        let mut req = self.request(crate::discord::Method::POST, "/interactions").json(&body);
         if matches!(body["type"].as_u64(), Some(3 | 4)) {
             req = req.timeout(Duration::from_secs(3));
         }
@@ -215,12 +214,12 @@ impl Client {
 
     // A slot per file, an abortable PUT of each, and each file as Create Message names it.
     pub(super) async fn put_uploads(&self, channel_id: &str, files: &[Upload]) -> Result<Vec<SentAttachment>, String> {
-        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/attachments")).json(&attachments_request(files));
+        let req = self.request(crate::discord::Method::POST, &format!("/channels/{channel_id}/attachments")).json(&attachments_request(files));
         let slots = self.run(req).await?;
         let slots = parse_upload_slots(&slots, files.len())?;
         for (file, (url, _)) in files.iter().zip(&slots) {
             // Cancel drops this future; the guard stops the PUT with it.
-            let mut put = AbortOnDrop(runtime().spawn(put_file(self.http.clone(), url.clone(), file.path.clone(), file.sent.clone())));
+            let mut put = AbortOnDrop(runtime().spawn(put_file(url.clone(), file.path.clone(), file.sent.clone())));
             (&mut put.0).await.map_err(|e| e.to_string())??;
         }
         Ok(files
@@ -234,14 +233,14 @@ impl Client {
     /// answers `{settings: base64}`, as Discord's client reads it (`web#594061`).
     pub async fn frecency_settings(&self) -> Result<Vec<u8>, String> {
         use base64::Engine;
-        let body = self.run(self.request(reqwest::Method::GET, "/users/@me/settings-proto/2")).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, "/users/@me/settings-proto/2")).await?;
         let settings = body["settings"].as_str().ok_or("No settings in the answer")?;
         base64::engine::general_purpose::STANDARD.decode(settings).map_err(|e| e.to_string())
     }
 
     /// Discord's own packs, for everyone.
     pub async fn sticker_packs(&self) -> Result<Vec<StickerPack>, String> {
-        let body = self.run(self.request(reqwest::Method::GET, "/sticker-packs")).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, "/sticker-packs")).await?;
         Ok(body["sticker_packs"]
             .as_array()
             .into_iter()
@@ -259,7 +258,7 @@ impl Client {
         let uploaded = self.put_uploads(channel_id, files).await?;
         let mut body = message_body(content, nonce, reply.map(|(id, _)| id), reply.is_some_and(|(_, ping)| ping), &uploaded);
         options.apply(&mut body);
-        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
+        let req = self.request(crate::discord::Method::POST, &format!("/channels/{channel_id}/messages")).json(&body);
         self.run(req).await.and_then(|v| parse_message(&v).ok_or_else(|| "Unexpected response".into()))
     }
 
@@ -271,31 +270,31 @@ impl Client {
         if let Some(guild) = guild_id {
             path.push_str(&format!("&guild_id={guild}"));
         }
-        let body = self.run(self.request(reqwest::Method::GET, &path)).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, &path)).await?;
         Ok(body.as_array().into_iter().flatten().filter_map(parse_message).collect())
     }
 
     /// One of your settings-proto blobs (base64), by Discord's settings type.
     pub async fn settings_proto(&self, kind: u8) -> Result<String, String> {
-        let body = self.run(self.request(reqwest::Method::GET, &format!("/users/@me/settings-proto/{kind}"))).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, &format!("/users/@me/settings-proto/{kind}"))).await?;
         body["settings"].as_str().map(str::to_owned).ok_or_else(|| "Unexpected response".into())
     }
 
     /// Merges `settings` (base64, only the fields to change) into a settings-proto blob.
     pub async fn patch_settings_proto(&self, kind: u8, settings: String) -> Result<(), String> {
-        let req = self.request(reqwest::Method::PATCH, &format!("/users/@me/settings-proto/{kind}")).json(&serde_json::json!({ "settings": settings }));
+        let req = self.request(crate::discord::Method::PATCH, &format!("/users/@me/settings-proto/{kind}")).json(&serde_json::json!({ "settings": settings }));
         self.run(req).await.map(drop)
     }
 
     /// Your saved-for-later messages, newest saved first (Discord's bookmarks, 25 a page).
     pub async fn saved_messages(&self) -> Result<Vec<Message>, String> {
-        let body = self.run(self.request(reqwest::Method::GET, "/users/@me/saved-messages/bookmarks?limit=25")).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, "/users/@me/saved-messages/bookmarks?limit=25")).await?;
         Ok(body["results"].as_array().into_iter().flatten().filter_map(|r| parse_message(&r["message"])).collect())
     }
 
     /// The ids of the messages you saved, as the client loads them on connect.
     pub async fn saved_message_ids(&self) -> Result<Vec<String>, String> {
-        let body = self.run(self.request(reqwest::Method::GET, "/users/@me/saved-messages?bookmark_ids=true")).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, "/users/@me/saved-messages?bookmark_ids=true")).await?;
         Ok(bookmark_ids(&body["bookmark_ids"]))
     }
 
@@ -306,7 +305,7 @@ impl Client {
         if !query.is_empty() {
             url.query_pairs_mut().append_pair("q", query);
         }
-        let body = self.run(self.authorized(self.http.get(url))).await?;
+        let body = self.run(self.authorized(transport::request(crate::discord::Method::GET, url))).await?;
         Ok(body
             .as_array()
             .into_iter()
@@ -325,7 +324,7 @@ impl Client {
     /// The member list's Activity feed: everyone this account knows, not one server's; the panel keeps
     /// the entries whose author is in the open server.
     pub async fn activity_feed(&self) -> Result<Vec<FeedEntry>, String> {
-        let body = self.run(self.request(reqwest::Method::GET, "/content-inventory/users/@me")).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, "/content-inventory/users/@me")).await?;
         Ok(parse_activity_feed(&body))
     }
 
@@ -333,61 +332,61 @@ impl Client {
     /// the old `/pins` route is deprecated.
     // ponytail: first page only (50); page with `before` = the last `pinned_at` if a channel needs more.
     pub async fn pins(&self, channel_id: &str) -> Result<Vec<Message>, String> {
-        let body = self.run(self.request(reqwest::Method::GET, &format!("/channels/{channel_id}/messages/pins?limit=50"))).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, &format!("/channels/{channel_id}/messages/pins?limit=50"))).await?;
         Ok(parse_pins(&body))
     }
 
     pub async fn edit_message(&self, channel_id: &str, id: &str, content: &str) -> Result<(), String> {
-        let req = self.request(reqwest::Method::PATCH, &format!("/channels/{channel_id}/messages/{id}")).json(&json!({ "content": content }));
+        let req = self.request(crate::discord::Method::PATCH, &format!("/channels/{channel_id}/messages/{id}")).json(&json!({ "content": content }));
         self.run(req).await.map(|_| ())
     }
 
     // `PUT /channels/{id}/voice-status`, 204 on success; "" clears it. Discord's refusal comes back as its message.
     pub async fn set_voice_channel_status(&self, channel_id: &str, status: &str) -> Result<(), String> {
-        let req = self.request(reqwest::Method::PUT, &format!("/channels/{channel_id}/voice-status")).json(&json!({ "status": status }));
+        let req = self.request(crate::discord::Method::PUT, &format!("/channels/{channel_id}/voice-status")).json(&json!({ "status": status }));
         self.run(req).await.map(|_| ())
     }
 
     pub async fn delete_message(&self, channel_id: &str, id: &str) -> Result<(), String> {
-        self.run(self.request(reqwest::Method::DELETE, &format!("/channels/{channel_id}/messages/{id}"))).await.map(|_| ())
+        self.run(self.request(crate::discord::Method::DELETE, &format!("/channels/{channel_id}/messages/{id}"))).await.map(|_| ())
     }
 
     pub async fn react(&self, channel_id: &str, message_id: &str, emoji: &Emoji, add: bool) -> Result<(), String> {
         let mut url = reqwest::Url::parse(&format!("{API}/channels/{channel_id}/messages/{message_id}/reactions")).map_err(|e| e.to_string())?;
         // path_segments_mut percent-encodes the emoji, which unicode reactions need.
         url.path_segments_mut().map_err(|_| "Bad URL")?.push(&emoji.key()).push("@me");
-        let method = if add { reqwest::Method::PUT } else { reqwest::Method::DELETE };
-        self.run(self.authorized(self.http.request(method, url))).await.map(|_| ())
+        let method = if add { crate::discord::Method::PUT } else { crate::discord::Method::DELETE };
+        self.run(self.authorized(transport::request(method, url))).await.map(|_| ())
     }
 
     /// One page of who reacted with `emoji`, in reaction order, starting after the user id `after`.
     pub async fn reactors(&self, channel_id: &str, message_id: &str, emoji: &Emoji, after: Option<&str>, limit: usize) -> Result<Vec<Reactor>, String> {
         let after = after.map(|id| format!("&after={id}")).unwrap_or_default();
         let path = format!("/channels/{channel_id}/messages/{message_id}/reactions/{}?limit={limit}{after}", emoji.path());
-        let body = self.run(self.request(reqwest::Method::GET, &path)).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, &path)).await?;
         let reactor = |v: &Value| Reactor { user: parse_user(v), username: v["username"].as_str().unwrap_or_default().to_owned() };
         Ok(body.as_array().map(|users| users.iter().map(reactor).collect()).unwrap_or_default())
     }
 
     pub async fn typing(&self, channel_id: &str) {
-        let _ = self.run(self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/typing"))).await;
+        let _ = self.run(self.request(crate::discord::Method::POST, &format!("/channels/{channel_id}/typing"))).await;
     }
 
     pub async fn ack(&self, channel_id: &str, message_id: &str) {
-        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages/{message_id}/ack")).json(&json!({ "token": null }));
+        let req = self.request(crate::discord::Method::POST, &format!("/channels/{channel_id}/messages/{message_id}/ack")).json(&json!({ "token": null }));
         let _ = self.run(req).await;
     }
 
     /// Discord's Mark Unread: acks `ack_id`, just before the message marked, with the mentions after it.
     /// The gateway echoes it to every device as a manual MESSAGE_ACK.
     pub async fn ack_manual(&self, channel_id: &str, ack_id: u64, mention_count: u32) {
-        let req = self.request(reqwest::Method::POST, &format!("/channels/{channel_id}/messages/{ack_id}/ack")).json(&json!({ "manual": true, "mention_count": mention_count }));
+        let req = self.request(crate::discord::Method::POST, &format!("/channels/{channel_id}/messages/{ack_id}/ack")).json(&json!({ "manual": true, "mention_count": mention_count }));
         let _ = self.run(req).await;
     }
 
     /// Clears one mention from Recent Mentions on every device; the channel's read state stays.
     pub async fn delete_mention(&self, message_id: &str) -> Result<(), String> {
-        self.run(self.request(reqwest::Method::DELETE, &format!("/users/@me/mentions/{message_id}"))).await.map(|_| ())
+        self.run(self.request(crate::discord::Method::DELETE, &format!("/users/@me/mentions/{message_id}"))).await.map(|_| ())
     }
 
     pub async fn profile(&self, user_id: &str, guild_id: Option<&str>) -> Result<Profile, String> {
@@ -395,13 +394,13 @@ impl Client {
         if let Some(guild) = guild_id {
             path.push_str(&format!("&guild_id={guild}"));
         }
-        let body = self.run(self.request(reqwest::Method::GET, &path)).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, &path)).await?;
         Ok(parse_profile(user_id, &body))
     }
 
     // A profile effect's layers, from the collectibles product its sku names.
     pub async fn profile_effect(&self, sku: &str) -> Result<Vec<EffectLayer>, String> {
-        let body = self.run(self.request(reqwest::Method::GET, &format!("/collectibles-products/{sku}"))).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, &format!("/collectibles-products/{sku}"))).await?;
         Ok(parse_profile_effect(&body))
     }
 
@@ -412,7 +411,7 @@ impl Client {
 
     /// The DM with one recipient, or a new group DM with several (type 3 in the answer).
     pub async fn open_private(&self, recipients: &[String]) -> Result<Channel, String> {
-        let req = self.request(reqwest::Method::POST, "/users/@me/channels").json(&json!({ "recipients": recipients }));
+        let req = self.request(crate::discord::Method::POST, "/users/@me/channels").json(&json!({ "recipients": recipients }));
         let body = self.run(req).await?;
         parse_dm(&body, &Value::Null).ok_or_else(|| "Unexpected response".into())
     }
@@ -421,7 +420,7 @@ impl Client {
     /// `custom` rides along so the presence update doesn't wipe your custom status.
     pub async fn set_status(&self, status: Status, custom: Option<&CustomStatus>, game: Option<&crate::games::Game>, activity: Option<Value>) {
         self.send_presence(status, custom, game, activity);
-        let req = self.request(reqwest::Method::PATCH, "/users/@me/settings").json(&json!({ "status": status_wire(status) }));
+        let req = self.request(crate::discord::Method::PATCH, "/users/@me/settings").json(&json!({ "status": status_wire(status) }));
         let _ = self.run(req).await;
     }
 
@@ -434,64 +433,64 @@ impl Client {
 
     /// An application's icon hash; `/rpc` is the public subset of the application, readable by anyone.
     pub async fn app_icon(&self, app_id: &str) -> Result<Option<String>, String> {
-        let body = self.run(self.request(reqwest::Method::GET, &format!("/applications/{app_id}/rpc"))).await?;
+        let body = self.run(self.request(crate::discord::Method::GET, &format!("/applications/{app_id}/rpc"))).await?;
         Ok(body["icon"].as_str().map(str::to_owned))
     }
 
     /// Saves account settings: `patch` holds only the fields that changed.
     // Not verified: the legacy endpoint still accepting each field Settings sends (it accepts `status`).
     pub async fn set_account_settings(&self, patch: Value) -> Result<(), String> {
-        let req = self.request(reqwest::Method::PATCH, "/users/@me/settings").json(&patch);
+        let req = self.request(crate::discord::Method::PATCH, "/users/@me/settings").json(&patch);
         self.run(req).await.map(|_| ())
     }
 
     /// Changes your account (PATCH /users/@me): display name, username (with `password`), avatar, banner.
     /// Images go as data URIs. Returns the updated user.
     pub async fn modify_me(&self, patch: Value) -> Result<Value, String> {
-        let req = self.request(reqwest::Method::PATCH, "/users/@me").json(&patch);
+        let req = self.request(crate::discord::Method::PATCH, "/users/@me").json(&patch);
         self.run(req).await
     }
 
     /// Your profile as its editor loads it, raw: `GET /users/{id}/profile`, with the server profile when `guild_id` is set.
     pub async fn my_profile(&self, user_id: &str, guild_id: Option<&str>) -> Result<Value, String> {
         let guild = guild_id.map(|g| format!("&guild_id={g}")).unwrap_or_default();
-        self.run(self.request(reqwest::Method::GET, &format!("/users/{user_id}/profile?with_mutual_guilds=false{guild}"))).await
+        self.run(self.request(crate::discord::Method::GET, &format!("/users/{user_id}/profile?with_mutual_guilds=false{guild}"))).await
     }
 
     /// Saves your main profile (PATCH /users/@me/profile): `bio`, `pronouns`, `accent_color`. Returns the profile.
     pub async fn modify_my_profile(&self, patch: Value) -> Result<Value, String> {
-        self.run(self.request(reqwest::Method::PATCH, "/users/@me/profile").json(&patch)).await
+        self.run(self.request(crate::discord::Method::PATCH, "/users/@me/profile").json(&patch)).await
     }
 
     /// Saves your profile on one server (PATCH /guilds/{id}/profile/@me): `pronouns`, and for Nitro `bio` and `banner`.
     pub async fn modify_guild_profile(&self, guild_id: &str, patch: Value) -> Result<Value, String> {
-        self.run(self.request(reqwest::Method::PATCH, &format!("/guilds/{guild_id}/profile/@me")).json(&patch)).await
+        self.run(self.request(crate::discord::Method::PATCH, &format!("/guilds/{guild_id}/profile/@me")).json(&patch)).await
     }
 
     /// Saves your member entry on one server (PATCH /guilds/{id}/members/@me): `nick`, and for Nitro the server avatar.
     pub async fn modify_my_member(&self, guild_id: &str, patch: Value) -> Result<Value, String> {
-        self.run(self.request(reqwest::Method::PATCH, &format!("/guilds/{guild_id}/members/@me")).json(&patch)).await
+        self.run(self.request(crate::discord::Method::PATCH, &format!("/guilds/{guild_id}/members/@me")).json(&patch)).await
     }
 
     /// Wears a server's tag next to your name, or none.
     pub async fn set_server_tag(&self, guild_id: Option<&str>) -> Result<Value, String> {
         let body = json!({ "identity_guild_id": guild_id, "identity_enabled": guild_id.is_some() });
-        self.run(self.request(reqwest::Method::PUT, "/users/@me/clan").json(&body)).await
+        self.run(self.request(crate::discord::Method::PUT, "/users/@me/clan").json(&body)).await
     }
 
     /// A server's public profile, which carries its tag and badge.
     // Not verified: `GET /guilds/{id}/profile` and its `tag` / `badge` fields.
     pub async fn guild_profile(&self, guild_id: &str) -> Result<Value, String> {
-        self.run(self.request(reqwest::Method::GET, &format!("/guilds/{guild_id}/profile"))).await
+        self.run(self.request(crate::discord::Method::GET, &format!("/guilds/{guild_id}/profile"))).await
     }
 
     /// Your last avatars: `{avatars: [{id, storage_hash, description}]}`.
     pub async fn recent_avatars(&self) -> Result<Value, String> {
-        self.run(self.request(reqwest::Method::GET, "/users/@me/avatars")).await
+        self.run(self.request(crate::discord::Method::GET, "/users/@me/avatars")).await
     }
 
     pub async fn delete_recent_avatar(&self, avatar_id: &str) -> Result<(), String> {
-        self.run(self.request(reqwest::Method::DELETE, &format!("/users/@me/avatars/{avatar_id}"))).await.map(|_| ())
+        self.run(self.request(crate::discord::Method::DELETE, &format!("/users/@me/avatars/{avatar_id}"))).await.map(|_| ())
     }
 
     /// Saves the rail's order and folders. Loose servers are folders without an id.
@@ -502,12 +501,12 @@ impl Client {
             .map(|f| json!({ "id": f.id.parse::<u64>().ok(), "name": f.name, "color": f.color, "guild_ids": f.guild_ids }))
             .collect();
         let positions: Vec<&String> = folders.iter().flat_map(|f| &f.guild_ids).collect();
-        let req = self.request(reqwest::Method::PATCH, "/users/@me/settings").json(&json!({ "guild_folders": wire, "guild_positions": positions }));
+        let req = self.request(crate::discord::Method::PATCH, "/users/@me/settings").json(&json!({ "guild_folders": wire, "guild_positions": positions }));
         let _ = self.run(req).await;
     }
 
     /// Any REST call the menus make: moderation, relationships, notes. `body` None sends no JSON.
-    pub async fn call(&self, method: reqwest::Method, path: String, body: Option<Value>) -> Result<Value, String> {
+    pub async fn call(&self, method: crate::discord::Method, path: String, body: Option<Value>) -> Result<Value, String> {
         let req = self.request(method, &path);
         let req = match body {
             Some(body) => req.json(&body),
@@ -518,7 +517,7 @@ impl Client {
 
     /// A call whose failure the caller reads itself: Discord's status and body as sent, with none of `call`'s
     /// retries (a publish's 429 carries the minutes to wait in `retry_after`).
-    pub async fn call_raw(&self, method: reqwest::Method, path: String, body: Option<Value>) -> Result<(u16, Value), String> {
+    pub async fn call_raw(&self, method: crate::discord::Method, path: String, body: Option<Value>) -> Result<(u16, Value), String> {
         let req = self.request(method, &path);
         let req = match body {
             Some(body) => req.json(&body),
@@ -536,14 +535,14 @@ impl Client {
     /// client does. None: it's gone, or the channel isn't one you can read (403, or no history access, which
     /// returns an empty list).
     pub async fn linked_message(&self, channel_id: &str, message_id: &str) -> Result<Option<Message>, String> {
-        let req = self.request(reqwest::Method::GET, &format!("/channels/{channel_id}/messages?around={message_id}&limit=1"));
+        let req = self.request(crate::discord::Method::GET, &format!("/channels/{channel_id}/messages?around={message_id}&limit=1"));
         let body = runtime().spawn(send_or_gone(req)).await.map_err(|e| e.to_string())??;
         Ok(body.and_then(|b| b.as_array()?.iter().filter_map(parse_message).find(|m| m.id == message_id)))
     }
 
     /// An invite's server card. None: the code is unknown or expired (404).
     pub async fn invite(&self, code: &str) -> Result<Option<Invite>, String> {
-        let req = self.request(reqwest::Method::GET, &format!("/invites/{code}?with_counts=true"));
+        let req = self.request(crate::discord::Method::GET, &format!("/invites/{code}?with_counts=true"));
         let body = runtime().spawn(send_or_gone(req)).await.map_err(|e| e.to_string())??;
         Ok(body.as_ref().and_then(parse_invite))
     }
@@ -551,19 +550,19 @@ impl Client {
     /// Joins the invite's server (`POST /invites/{code}`) and returns its id; already a member succeeds too.
     /// Discord usually wants a captcha first (see `call_with_captcha`).
     pub async fn join_invite(&self, code: &str, captcha_url: mpsc::UnboundedSender<String>) -> Result<String, String> {
-        let body = self.call_with_captcha(reqwest::Method::POST, format!("/invites/{code}"), Some(json!({})), captcha_url).await?;
+        let body = self.call_with_captcha(crate::discord::Method::POST, format!("/invites/{code}"), Some(json!({})), captcha_url).await?;
         joined_guild(&body).ok_or_else(|| "That invite isn't to a server".into())
     }
 
     /// A call Discord may answer with a captcha (joining a server, sending a friend request): its page goes
     /// out on `captcha_url` for the browser, and the call is retried with the solved key, as the sign-in
     /// does (`auth::exchange_ticket`). Other failures read as `send` words them.
-    pub async fn call_with_captcha(&self, method: reqwest::Method, path: String, body: Option<Value>, captcha_url: mpsc::UnboundedSender<String>) -> Result<Value, ApiError> {
+    pub async fn call_with_captcha(&self, method: crate::discord::Method, path: String, body: Option<Value>, captcha_url: mpsc::UnboundedSender<String>) -> Result<Value, ApiError> {
         let client = self.clone();
         runtime().spawn(async move { client.captcha_loop(method, &path, body, captcha_url).await }).await.map_err(|e| ApiError::from(e.to_string()))?
     }
 
-    pub(super) async fn captcha_loop(&self, method: reqwest::Method, path: &str, body: Option<Value>, captcha_url: mpsc::UnboundedSender<String>) -> Result<Value, ApiError> {
+    pub(super) async fn captcha_loop(&self, method: crate::discord::Method, path: &str, body: Option<Value>, captcha_url: mpsc::UnboundedSender<String>) -> Result<Value, ApiError> {
         let mut solved: Option<(crate::captcha::Challenge, String)> = None;
         for _ in 0..3 {
             let mut req = self.request(method.clone(), path);
@@ -595,19 +594,19 @@ impl Client {
     /// Marks several channels read at once (a server's "Mark As Read").
     // A form upload with one file, as sticker creation takes it.
     pub async fn call_form(&self, path: String, fields: Vec<(&'static str, String)>, file_name: String, bytes: Vec<u8>) -> Result<Value, String> {
-        let form = fields.into_iter().fold(reqwest::multipart::Form::new(), |form, (key, value)| form.text(key, value));
-        let form = form.part("file", reqwest::multipart::Part::bytes(bytes).file_name(file_name));
-        self.run(self.request(reqwest::Method::POST, &path).multipart(form)).await
+        let form = fields.into_iter().fold(transport::multipart::Form::new(), |form, (key, value)| form.text(key, value));
+        let form = form.part("file", transport::multipart::Part::bytes(bytes).file_name(file_name));
+        self.run(self.request(crate::discord::Method::POST, &path).multipart(form)).await
     }
 
     // A JSON body with files, as `payload_json` and `files[n]` parts; the body names each by its index.
     pub async fn call_files(&self, path: String, payload: Value, files: Vec<Upload>) -> Result<Value, String> {
-        let req = self.request(reqwest::Method::POST, &path);
+        let req = self.request(crate::discord::Method::POST, &path);
         let sent = async move {
-            let mut form = reqwest::multipart::Form::new().text("payload_json", payload.to_string());
+            let mut form = transport::multipart::Form::new().text("payload_json", payload.to_string());
             for (i, file) in files.into_iter().enumerate() {
                 let bytes = std::fs::read(&file.path).map_err(|e| format!("{}: {e}", file.name))?;
-                form = form.part(format!("files[{i}]"), reqwest::multipart::Part::bytes(bytes).file_name(file.name));
+                form = form.part(format!("files[{i}]"), transport::multipart::Part::bytes(bytes).file_name(file.name));
             }
             send(req.multipart(form)).await
         };
@@ -616,7 +615,7 @@ impl Client {
 
     pub async fn ack_bulk(&self, reads: Vec<(String, u64)>) {
         let read_states: Vec<Value> = reads.into_iter().map(|(channel, message)| json!({ "channel_id": channel, "message_id": message.to_string(), "read_state_type": 0 })).collect();
-        let req = self.request(reqwest::Method::POST, "/read-states/ack-bulk").json(&json!({ "read_states": read_states }));
+        let req = self.request(crate::discord::Method::POST, "/read-states/ack-bulk").json(&json!({ "read_states": read_states }));
         let _ = self.run(req).await;
     }
 
@@ -633,7 +632,7 @@ impl Client {
                 pairs.append_pair(name, value);
             }
         }
-        let body = self.run(self.authorized(self.http.get(url))).await?;
+        let body = self.run(self.authorized(transport::request(crate::discord::Method::GET, url))).await?;
         // Each hit is a small array of messages around the match; the match is the one marked `hit`.
         let messages = body["messages"]
             .as_array()

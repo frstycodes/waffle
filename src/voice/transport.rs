@@ -367,7 +367,7 @@ pub(super) async fn serve(
     };
     let host = target.server.endpoint.trim_start_matches("wss://").trim_end_matches('/').to_owned();
     let url = format!("wss://{host}/?v=8");
-    let (ws, _) = tokio_tungstenite::connect_async(&url).await.map_err(|e| e.to_string())?;
+    let ws = crate::discord::transport::websocket(&url).await?;
     let (mut sink, mut stream) = ws.split();
     let (out, mut out_rx) = mpsc::unbounded::<WsMessage>();
 
@@ -450,7 +450,7 @@ pub(super) async fn serve(
                     }
                     resumes += 1;
                     tokio::time::sleep(RESUME_BACKOFF * resumes).await;
-                    let Ok((mut ws, _)) = tokio_tungstenite::connect_async(&url).await else { continue };
+                    let Ok(mut ws) = crate::discord::transport::websocket(&url).await else { continue };
                     if ws.send(resume.clone()).await.is_ok() {
                         break ws.split();
                     }

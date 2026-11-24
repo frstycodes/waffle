@@ -34,6 +34,8 @@ mod people;
 mod profile;
 #[cfg(test)]
 mod tests;
+pub mod transport;
+pub use transport::Method;
 
 pub use client::*;
 pub use guild::*;

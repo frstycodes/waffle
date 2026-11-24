@@ -3,7 +3,6 @@
 // checks and puts the account at risk. IDENTIFY, X-Super-Properties, every REST request and sign-in carry
 // the same details, so they never contradict each other.
 //
-// Gap: the TLS and HTTP/2 handshakes are still rustls's, not Chrome's. Dissent impersonates Chrome's there too.
 use std::sync::{
     OnceLock,
     atomic::{AtomicU64, Ordering},
@@ -16,8 +15,8 @@ use super::*;
 // The language Waffle's interface is in, which is what Discord's X-Discord-Locale names.
 const UI_LOCALE: &str = "en-US";
 // Chrome's reduced user agent freezes the OS and the minor version digits, so only the major moves.
-// Bump with Chrome stable; Sec-Ch-Ua follows it.
-const CHROME_MAJOR: u32 = 152;
+// Bump with transport.rs's PROFILE, the newest Chrome it can imitate; Sec-Ch-Ua follows it.
+const CHROME_MAJOR: u32 = 149;
 // Used until the live build number is read at the first sign-in or connect, and when that read fails.
 const FALLBACK_BUILD_NUMBER: u64 = 679_544;
 
@@ -51,8 +50,8 @@ pub async fn load_build_number() {
 }
 
 async fn fetch_build_number() -> Option<u64> {
-    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(5)).build().ok()?;
-    let page = client.get("https://discord.com/login").header(reqwest::header::USER_AGENT, &identity().user_agent).send().await.ok()?.text().await.ok()?;
+    let req = transport::plain(transport::Method::GET, "https://discord.com/login").header(transport::header::USER_AGENT, &identity().user_agent);
+    let page = req.timeout(std::time::Duration::from_secs(5)).send().await.ok()?.text().await.ok()?;
     parse_build_number(&page)
 }
 
@@ -112,13 +111,13 @@ impl Identity {
     }
 
     // The headers Chrome and Discord's web client put on every API request. The page's Referer is the caller's.
-    pub fn headers(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+    pub fn headers(&self, req: transport::Request) -> transport::Request {
         let super_properties = base64::engine::general_purpose::STANDARD.encode(self.super_properties().to_string());
         let req = req
-            .header(reqwest::header::USER_AGENT, &self.user_agent)
-            .header(reqwest::header::ACCEPT, "*/*")
-            .header(reqwest::header::ACCEPT_LANGUAGE, "en-US,en;q=0.9")
-            .header(reqwest::header::ORIGIN, "https://discord.com")
+            .header(transport::header::USER_AGENT, &self.user_agent)
+            .header(transport::header::ACCEPT, "*/*")
+            .header(transport::header::ACCEPT_LANGUAGE, "en-US,en;q=0.9")
+            .header(transport::header::ORIGIN, "https://discord.com")
             .header("Priority", "u=1, i")
             .header("Sec-Fetch-Dest", "empty")
             .header("Sec-Fetch-Mode", "cors")

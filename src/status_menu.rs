@@ -214,7 +214,7 @@ impl Waffle {
         let before = self.custom_status.clone();
         let setting = custom.as_ref().map(CustomStatus::setting);
         self.rest_optimistic(
-            reqwest::Method::PATCH,
+            crate::discord::Method::PATCH,
             "/users/@me/settings".into(),
             Some(serde_json::json!({ "custom_status": setting })),
             move |this| {
