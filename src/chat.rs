@@ -219,8 +219,10 @@ impl Waffle {
             // The topic stretches; without one, a spacer keeps the tools at the far end.
             .child(topic.unwrap_or_else(|| div().flex_1().min_w_0()))
             .child(ui::row().flex_none().gap_0p5().children(self.follow_button(channel, cx)).children(join).children(calls.into_iter().flatten()).children(threads).children(bell).child(pins).children(add_members).children(members).children(search))
-            .child(self.caption_clearance(!self.panel_shown()));
-        ui::hard_edge(|| false, cx).child(bar)
+            // Clear of Windows' caption buttons wherever the header reaches the window's right edge: no side column,
+            // or a DM's profile card, which sits under the header rather than beside it.
+            .child(self.caption_clearance(!self.panel_shown() || self.header_over_profile()));
+        ui::col().flex_none().child(ui::hard_edge(|| false, cx).child(bar)).children(self.voice_notice_bar(cx))
     }
 
     // The header's search: one element that is a search button when closed and opens into the field, open

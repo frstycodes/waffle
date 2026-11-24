@@ -147,6 +147,7 @@ impl Waffle {
             .text_color(palette::text(cx))
             .text_size(ui::TEXT_SM)
             .child(ui::hard_edge(|| false, cx).child(header))
+            .children(self.voice_notice_bar(cx))
             .child(div().id("requests-list").flex_1().min_h_0().overflow_y_scrollbar().pt_4().px_4().pb_6().child(body))
             .into_any_element()
     }

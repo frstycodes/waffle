@@ -231,7 +231,7 @@ impl Waffle {
         let rise = ui::rise(card_el.transform_origin(origin), SharedString::from(format!("profile-{}", card.user.id)), Duration::ZERO);
         // Measured, not estimated: a short card opened low sits just above the window's foot, not 560px up.
         // lint-allow(raw-floating): placed inside the overlay backdrop, with a measured top margin floating_at can't take.
-        let placed = gpui_kit::anchored().position(card.at).snap_to_window_with_margin(gpui_kit::Edges { top: px(top), right: ui::WINDOW_MARGIN, bottom: ui::WINDOW_MARGIN, left: ui::WINDOW_MARGIN }).child(rise);
+        let placed = gpui_kit::anchored().position(card.at).snap_to_window_with_margin(ui::FLOAT_EDGES).child(rise);
         Some(crate::overlays::backdrop("profile-backdrop", cx).child(placed).into_any_element())
     }
 

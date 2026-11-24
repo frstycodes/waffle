@@ -50,10 +50,10 @@ impl Waffle {
     }
 
     // The header and the bar over the stage, each on its fade, sliding 8px toward its edge as it goes.
-    pub(super) fn stage_chrome(&self, shown: f32, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn stage_chrome(&self, shown: f32, reaches_edge: bool, cx: &mut Context<Self>) -> AnyElement {
         let drift = CHROME_DRIFT * (1. - shown);
         let fade = |angle: f32| gpui_kit::linear_gradient(angle, gpui_kit::linear_color_stop(gpui_kit::black().opacity(0.8), 0.), gpui_kit::linear_color_stop(gpui_kit::transparent_black(), 1.));
-        let head = keeps_chrome(div().id("call-head"), cx).occlude().absolute().top(px(-drift)).left_0().right_0().opacity(shown).child(self.stage_head(self.call_header(cx)));
+        let head = keeps_chrome(div().id("call-head"), cx).occlude().absolute().top(px(-drift)).left_0().right_0().opacity(shown).child(self.stage_head(self.call_header(cx), reaches_edge));
         let bar = div().absolute().left_0().right_0().bottom(px(STAGE_PAD - drift)).px(px(STAGE_PAD)).opacity(shown).child(self.call_controls(cx));
         div()
             .absolute()

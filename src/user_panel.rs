@@ -279,7 +279,7 @@ fn muted_cue() -> AnyElement {
         .child("You are currently muted!");
     let callout = div().id("muted-cue").occlude().pb_2().child(bubble);
     // lint-allow(raw-floating): ui::floating hangs its content below the parent's top-left; this callout sits above the mic
-    gpui_kit::deferred(gpui_kit::anchored().anchor(gpui_kit::Anchor::BottomLeft).snap_to_window_with_margin(ui::WINDOW_MARGIN).child(callout)).into_any_element()
+    gpui_kit::deferred(gpui_kit::anchored().anchor(gpui_kit::Anchor::BottomLeft).snap_to_window_with_margin(ui::FLOAT_EDGES).child(callout)).into_any_element()
 }
 
 // Push to talk's mark at the mic's corner: a 2px ring, red until your key opens the mic, then green.

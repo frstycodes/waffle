@@ -202,7 +202,7 @@ impl Waffle {
                         .left(px(crate::layout::RAIL_WIDTH + 4.))
                         .bottom(px(f32::from(self.user_panel_clearance()) + 4.))
                         .w(px(LIST_POPOVER_WIDTH))
-                        .max_h(px(INBOX_MAX_HEIGHT))
+                        .max_h(px(INBOX_MAX_HEIGHT.min(crate::ui::room_above(window, f32::from(self.user_panel_clearance()) + 4.))))
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                         .child(div().px_3().pt_2().pb_2().child(self.inbox_head(true, window, cx)))
                         .child(div().id("inbox-list").flex_shrink(1.).min_h_0().overflow_y_scroll().px_3().pb_3().child(self.inbox_body(Some(PREVIEW), cx)))
@@ -290,7 +290,7 @@ impl Waffle {
             ComposerPicker::Stickers => self.sticker_tab(window, cx),
             ComposerPicker::Emoji => self.emoji_content(window, cx),
         };
-        let picker = picker_frame("composer-picker", COMPOSER_PICKER_HEIGHT, cx)
+        let picker = picker_frame("composer-picker", COMPOSER_PICKER_HEIGHT.min(ui::room_above(window, self.composer_popover_bottom())), cx)
             .absolute()
             .right(px(self.composer_popover_right()))
             .bottom(px(self.composer_popover_bottom()))

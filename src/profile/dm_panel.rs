@@ -72,9 +72,13 @@ impl Waffle {
     // Where the channel header goes: across the top, over the feed and the profile, while a DM's profile
     // shows (as Discord's); otherwise inside the chat column, beside the member list's own header.
     pub(crate) fn place_header<E>(&self, header: E) -> (Option<E>, Option<E>) {
-        match self.panel_column_width().is_some() && self.dm_recipient().is_some() {
+        match self.header_over_profile() {
             true => (None, Some(header)),
             false => (Some(header), None),
         }
+    }
+
+    pub(crate) fn header_over_profile(&self) -> bool {
+        self.panel_column_width().is_some() && self.dm_recipient().is_some()
     }
 }

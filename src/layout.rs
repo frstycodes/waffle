@@ -148,11 +148,7 @@ impl Waffle {
     // The column beside the sidebar: the call, the inbox, home, a forum or the chat (a part, see part.rs).
     pub(crate) fn render_main(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         crate::gif::begin_inline_layout();
-        let content = self.render_main_content(window, cx);
-        match self.voice_notice_bar(cx) {
-            Some(bar) => ui::col().size_full().child(bar).child(ui::row().items_stretch().flex_1().min_h_0().child(content)).into_any_element(),
-            None => content,
-        }
+        self.render_main_content(window, cx)
     }
 
     fn render_main_content(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -173,9 +169,10 @@ impl Waffle {
         }
     }
 
-    // Discord's notice bar over the main column: a call we lost (in Discord's words when another client of
-    // ours took it, or to Waffle's own restart), with a way to take it back here.
-    fn voice_notice_bar(&self, cx: &mut Context<Self>) -> Option<Div> {
+    // Discord's notice bar, under each page's header so the window's title line stays the header's: a call we
+    // lost (in Discord's words when another client of ours took it, or to Waffle's own restart), with a way to
+    // take it back here.
+    pub(crate) fn voice_notice_bar(&self, cx: &mut Context<Self>) -> Option<Div> {
         let notice = self.voice_notice.as_ref()?;
         // Losing the call to another client is a fault; a restart's offer is just an offer.
         let (fill, ink, text) = match notice.why {
@@ -213,8 +210,7 @@ impl Waffle {
                 .text_color(ink)
                 .text_size(ui::TEXT_SM)
                 .child(ui::row().flex_1().justify_center().gap_3().child(ui::line(text)).child(reconnect))
-                .child(close)
-                .child(self.caption_clearance(cfg!(target_os = "windows"))),
+                .child(close),
         )
     }
 
@@ -298,6 +294,7 @@ impl Waffle {
         let nav = ui::col().relative().flex_none().h_full().w(px(self.settings_width)).child(ui::settings_nav_edge(cx)).child(nav).child(self.resize_handle(Edge::Settings, cx));
         // The page's top band drags the window too, as every other column's header does; it stops above
         // the close button, which sits below the caption buttons.
+        // lint-allow(titlebar-clearance): a bare drag band under the caption buttons, which occlude it; nothing in it to cover
         let drag = div().absolute().top_0().left_0().right_0().h(px(TITLE_HEIGHT)).window_control_area(gpui_kit::WindowControlArea::Drag);
         let main = ui::row().items_stretch().relative().flex_1().h_full().child(main).child(drag);
         ui::settings_window(id, nav, main, cx)

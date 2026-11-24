@@ -197,7 +197,9 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::col` — A vertical flex column, able to shrink below its content's width (so its text truncates) but keeping its content's height: a column that may
 - `ui::rich_line` — One line of styled text (a match highlight, bold runs) that ends in an ellipsis: `ui::line` for anything that isn't plain text.
 - `ui::line` — One line of text that ends in an ellipsis when it doesn't fit.
-- `ui::floating` — A surface floating over everything after it, placed by its parent's position and kept inside the window.
+- `ui::FLOAT_EDGES` — What keeps a floating surface inside the window and under its title line, clear of the traffic lights and Windows' caption buttons.
+- `ui::room_above` — How tall a surface standing `bottom` above the window's foot may grow and stay under the title line.
+- `ui::floating` — A surface floating over everything after it, placed by its parent's position and kept inside the window, under its title line.
 - `ui::floating_at` — `floating` with its `corner` pinned to the window point `at` (a click, a button's edge).
 - `ui::sized` — Content built for the size its slot has this frame, for layouts that pick their shape from the space (a grid choosing its columns), without 
 - `ui::visible_rows` — The rows of a scrolled column worth building: those a view from `view_top`, `view_height` tall, shows, widened by `margin` either side.

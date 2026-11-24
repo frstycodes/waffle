@@ -85,8 +85,8 @@ impl Waffle {
     }
 
     // The header line over the stage: it drags the window, and clears Windows' caption buttons while the
-    // stage runs to the window's right edge.
-    pub(crate) fn stage_head(&self, header: impl IntoElement) -> Div {
+    // stage runs to the window's right edge (`stage_reaches_edge`).
+    pub(crate) fn stage_head(&self, header: impl IntoElement, reaches_edge: bool) -> Div {
         ui::row()
             .h(px(FOCUS_HEAD))
             .flex_none()
@@ -95,7 +95,13 @@ impl Waffle {
             // Drag area: every control inside it occludes it, or Windows' caption takes its clicks.
             .window_control_area(gpui_kit::WindowControlArea::Drag)
             .child(div().flex_1().min_w_0().child(header))
-            .child(self.caption_clearance(!self.call_chat_shown()))
+            .child(self.caption_clearance(reaches_edge))
+    }
+
+    // Whether the stage reaches the window's right edge: no chat docked beside it, or one still sliding in (its
+    // header's room for the caption buttons isn't there yet), or one floating over it.
+    pub(crate) fn stage_reaches_edge(&self, window: &mut Window, cx: &mut App) -> bool {
+        !self.call_chat_shown() || self.call_chat_floats(window) || self.call_chat_reveal(window, cx) < 1.
     }
 
     pub(crate) fn call_chat_shown(&self) -> bool {
