@@ -21,7 +21,7 @@ import ui_perf
 from ui_style import S, wrap
 
 # Scopes whose rules ui_lint's line loop leaves to a later pass over the whole file.
-WHOLE_FILE = ("file", "chain", "fn", "render", "ui-thread", "hot-notify", "growth", "probe")
+WHOLE_FILE = ("file", "chain", "fn", "render", "ui-thread", "hot-notify", "growth", "probe", "titlebar")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RULES = "src/ui/rules.tsv"
@@ -68,7 +68,7 @@ def load_rules():
                 pattern = int(pattern)
             case "chain":
                 pattern = ui_chains.compile_pattern(pattern)
-            case "hot-notify" | "growth" | "probe":
+            case "hot-notify" | "growth" | "probe" | "titlebar":
                 pattern = None
             case _:
                 pattern = re.compile(pattern)
@@ -371,6 +371,8 @@ def scan_performance(hits, lines, parsed, skips, rules, test_lines):
             found += [(n, rule["name"]) for n in ui_perf.hot_notifies(code, test_lines)]
         if rule["scope"] == "probe":
             found += [(n, rule["name"]) for n in ui_perf.unprobed(code, test_lines)]
+        if rule["scope"] == "titlebar":
+            found += [(n, rule["name"]) for n in ui_perf.uncleared(code, test_lines)]
         if rule["scope"] == "growth":
             found += [(n, rule["name"]) for n in ui_perf.unbounded(code, corpus(), test_lines)]
     for n, name in found:
