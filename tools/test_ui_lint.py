@@ -145,7 +145,16 @@ def file_lines():
     assert {r for r in ui_lint.scan("src/ui/x.rs", body + "fn h() { px(3.) }\n", RULES)} == {"file-lines"}
 
 
+def titlebar():
+    head = "fn head(&self) -> Div {{ ui::row().window_control_area(WindowControlArea::Drag).child(x){} }}"
+    # A title-line header that leaves no room for the window's corners is reported; one that does isn't.
+    assert counts(head.format("")) == {"titlebar-clearance": 1}
+    assert counts(head.format(".child(self.caption_clearance(true))")) == {}
+    assert counts(head.format(".pl(px(HEADER_PAD + layout::traffic_lights_overhang(window)))")) == {}
+
+
 test()
+titlebar()
 elements()
 performance()
 duplicate_one_offs()

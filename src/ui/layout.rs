@@ -7,7 +7,7 @@
 // The pointer: gpui hit-tests front to back until something occludes, so a surface drawn over others
 // passes hover and clicks to what's behind it unless it blocks them (CLAUDE.md, "nothing floats without
 // occluding"). `floating` and `floating_at` occlude for you.
-use gpui_kit::{Anchor, AnyElement, App, AvailableSpace, Canvas, Deferred, Div, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, Point, SharedString, Size, Styled, Window, anchored, canvas, deferred, div};
+use gpui_kit::{Anchor, AnyElement, App, AvailableSpace, Canvas, Deferred, Div, ElementId, Edges, InteractiveElement, IntoElement, ParentElement, Pixels, Point, SharedString, Size, Styled, Window, anchored, canvas, deferred, div};
 
 use std::ops::Range;
 
@@ -38,15 +38,25 @@ pub fn line(text: impl Into<SharedString>) -> Div {
     div().min_w_0().truncate().child(text.into())
 }
 
+/// What keeps a floating surface inside the window and under its title line, clear of the traffic lights and
+/// Windows' caption buttons.
+pub const FLOAT_EDGES: Edges<Pixels> = Edges { top: gpui_kit::px(crate::layout::TITLE_HEIGHT + 8.), right: WINDOW_MARGIN, bottom: WINDOW_MARGIN, left: WINDOW_MARGIN };
+
+/// How tall a surface standing `bottom` above the window's foot may grow and stay under the title line.
+// Keywords: max height, popover height, title bar, caption buttons, traffic lights, short window
+pub fn room_above(window: &Window, bottom: f32) -> f32 {
+    f32::from(window.viewport_size().height) - bottom - f32::from(FLOAT_EDGES.top)
+}
+
 /// A surface floating over everything after it, placed by its parent's position and kept inside the
-/// window. It occludes, so nothing under it lights up or takes its clicks.
+/// window, under its title line. It occludes, so nothing under it lights up or takes its clicks.
 pub fn floating(id: impl Into<ElementId>, content: impl IntoElement) -> Deferred {
-    deferred(anchored().snap_to_window_with_margin(WINDOW_MARGIN).child(div().id(id).occlude().child(content)))
+    deferred(anchored().snap_to_window_with_margin(FLOAT_EDGES).child(div().id(id).occlude().child(content)))
 }
 
 /// `floating` with its `corner` pinned to the window point `at` (a click, a button's edge).
 pub fn floating_at(id: impl Into<ElementId>, at: Point<Pixels>, corner: Anchor, content: impl IntoElement) -> Deferred {
-    deferred(anchored().position(at).anchor(corner).snap_to_window_with_margin(WINDOW_MARGIN).child(div().id(id).occlude().child(content)))
+    deferred(anchored().position(at).anchor(corner).snap_to_window_with_margin(FLOAT_EDGES).child(div().id(id).occlude().child(content)))
 }
 
 /// Content built for the size its slot has this frame, for layouts that pick their shape from the space

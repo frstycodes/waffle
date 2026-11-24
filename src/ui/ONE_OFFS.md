@@ -1132,3 +1132,10 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/soundboard.rs` — the files of sounds played this session, a few dozen at most, each a few seconds long
 - `src/video.rs` — one player per video attachment shown this session, a few hundred at most
 - `src/voice/taps.rs` — a developer capture, only built when WAFFLE_VOICE_TAPS names a directory, written out and dropped when the call ends
+
+## titlebar-clearance
+
+_A title-line header (a WindowControlArea::Drag) shares the window's top with Windows' caption buttons (top right, window_controls::WIDTH x HEADER_HEIGHT) and macOS's traffic lights (top left): end it with self.caption_clearance(reaches_right_edge), start it past layout::traffic_lights_overhang, or build it on panel_frame. Derive reaches_right_edge from the same fact that places the header, never a nearby flag. A strip that only drags, under nothing interactive, carries lint-allow(titlebar-clearance) saying so. Cases: design/titlebar-overlaps.html._
+
+- `src/layout.rs` — a bare drag band under the caption buttons, which occlude it; nothing in it to cover
+- `src/login.rs` — the whole screen drags; its content is centred, clear of both window corners

@@ -95,7 +95,9 @@ impl Waffle {
                 .bg(stage::bg())
                 .text_color(stage::text())
                 .child(div().absolute().inset_0().bg(glow))
-                .child(self.stage_head(head))
+                // Not in the call: its chat can't be open beside this screen.
+                .child(self.stage_head(head, true))
+                .children(self.voice_notice_bar(cx))
                 .child(
                     ui::col()
                         .flex_1()

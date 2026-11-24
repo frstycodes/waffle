@@ -114,6 +114,7 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, update: &St
         .pb_4()
         .text_center()
         .text_size(ui::TEXT_SM)
+        // lint-allow(titlebar-clearance): the whole screen drags; its content is centred, clear of both window corners
         .window_control_area(gpui_kit::WindowControlArea::Drag)
         .child(div().flex_1())
         .children(lead)

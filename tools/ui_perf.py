@@ -173,3 +173,19 @@ def unprobed(code, test_lines):
         if not any(PROBE.search(l) for l in first) and line_of(code, m.start()) not in test_lines:
             hits.append(line_of(code, m.start()))
     return hits
+
+
+DRAG = re.compile(r"WindowControlArea::Drag\b")
+# What keeps a title-line element out of the window's corners: Windows' caption buttons, macOS's traffic lights.
+CLEARS = re.compile(r"caption_clearance\s*\(|window_controls::WIDTH|traffic_lights_(overhang|shown)\s*\(|panel_frame\s*\(")
+
+
+def uncleared(code, test_lines):
+    """Title-line drag areas in functions that never leave room for the caption buttons or the traffic lights."""
+    hits = []
+    for _, start, end in functions(code):
+        body = code[start:end]
+        if CLEARS.search(body):
+            continue
+        hits += [n for m in DRAG.finditer(body) if (n := line_of(code, start + m.start())) not in test_lines]
+    return hits
