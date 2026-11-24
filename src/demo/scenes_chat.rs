@@ -22,7 +22,7 @@ pub(super) fn chat_scenes(waffle: &mut Waffle, scene: &str, window: &mut Window,
             let mut items = members();
             items.extend((0..80).map(|n| {
                 let user = user(&(30_000_000 + n).to_string(), &format!("member {n}"));
-                ListItem::Member(Member { user, roles: Vec::new(), presence: Presence { status: Presence_::Offline, custom: None, activity: None, rich: None, ..Default::default() }, boosting_since: None })
+                ListItem::Member(Member { user, roles: Vec::new(), presence: Presence { status: Presence_::Offline, custom: None, activity: None, ..Default::default() }, boosting_since: None })
             }));
             waffle.on_event(Event::MemberList { guild_id: "1".into(), groups: vec![("r1".into(), 2), ("online".into(), 3), ("offline".into(), 81)], ops: vec![ListOp::Sync { start: 0, items }] }, cx);
         }
@@ -125,6 +125,7 @@ pub(super) fn chat_scenes(waffle: &mut Waffle, scene: &str, window: &mut Window,
             .detach(), // lint-allow(detached-task): one-shot fixture step; ends after one timer and update, or when the view is gone
         "profile" => demo_profile(waffle, cx),
         s if PROFILE_SCENES.contains(&s) => demo_profile_scene(waffle, s, window, cx),
+        s if ACTIVITY_SCENES.contains(&s) => demo_activity_scene(waffle, s, window, cx),
         "role-popout" => demo_role_popout(waffle, cx),
         // Someone you share nothing with, opened from a DM: the Discord date alone, no Friends Since, no connections.
         "profile-stranger" => {

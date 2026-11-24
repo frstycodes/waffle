@@ -217,7 +217,7 @@ impl Waffle {
         {
             return Some(Playing { icon: game.icon_url()?, name: game.name.clone(), started: Some(game.started) });
         }
-        let rich = self.presences.get(user_id)?.rich.as_ref().filter(|r| matches!(r.kind, ActivityKind::Playing | ActivityKind::Competing))?;
+        let rich = self.presences.get(user_id)?.rich().filter(|r| matches!(r.kind, ActivityKind::Playing | ActivityKind::Competing))?;
         Some(Playing { icon: self.app_icon(rich.app_id.as_deref()?, cx)?, name: rich.name.clone(), started: rich.started })
     }
 

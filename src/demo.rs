@@ -27,6 +27,7 @@ mod scenes_files;
 mod scenes_media;
 mod scenes_panels;
 mod scenes_people;
+mod scenes_activity;
 mod scenes_profile;
 
 use chat_feed::*;
@@ -38,6 +39,7 @@ use scenes_files::*;
 use scenes_media::*;
 use scenes_panels::*;
 use scenes_people::*;
+use scenes_activity::*;
 use scenes_profile::*;
 
 // The launch splash mid-download, without the main window.

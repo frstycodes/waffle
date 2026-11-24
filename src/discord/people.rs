@@ -134,8 +134,8 @@ pub struct Presence {
     pub custom: Option<String>,
     // The first activity other than the custom status, with "+N" for the rest.
     pub activity: Option<Activity>,
-    // The first non-custom activity in full, for the profile's rich presence card.
-    pub rich: Option<RichPresence>,
+    // Every activity but the custom status, in Discord's order, for the activity cards.
+    pub activities: Vec<RichPresence>,
     // Signed in on a phone and nowhere else.
     pub mobile_only: bool,
     // Any activity of the Streaming kind (a Twitch or YouTube link), not a Go Live screen share.
@@ -143,6 +143,11 @@ pub struct Presence {
 }
 
 impl Presence {
+    // The first activity: the one a row or a single card shows.
+    pub fn rich(&self) -> Option<&RichPresence> {
+        self.activities.first()
+    }
+
     // What the avatar corner shows: Discord swaps online for a phone when they are only on mobile,
     // and any shown status for the streaming mark while they stream.
     pub fn mark(&self) -> Mark {
@@ -176,6 +181,17 @@ pub struct RichPresence {
     pub details: Option<String>,
     pub state: Option<String>,
     pub image: Option<String>,
+    // The badge on the large image's corner, and each image's hover text (an album, a rank).
+    pub small_image: Option<String>,
+    pub large_text: Option<String>,
+    pub small_text: Option<String>,
+    // Up to two link buttons' labels, and their links where Discord sent them (`metadata.button_urls`).
+    pub buttons: Vec<String>,
+    pub button_urls: Vec<String>,
+    // A stream's Twitch or YouTube link.
+    pub url: Option<String>,
+    // A Spotify track's id, for Play on Spotify.
+    pub sync_id: Option<String>,
     // (current, max) party size.
     pub party: Option<(u64, u64)>,
     // Unix milliseconds the activity started.

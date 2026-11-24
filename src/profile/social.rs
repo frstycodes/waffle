@@ -40,7 +40,7 @@ impl Waffle {
     // A mutual friend's line under their name: what they're doing, else their custom status.
     pub(super) fn presence_line(&self, user: &User) -> Option<String> {
         let presence = self.presences.get(&user.id)?;
-        let doing = presence.activity.as_ref().map(|a| format!("{} {}", super::activity::activity_heading(a.kind), a.text));
+        let doing = presence.activity.as_ref().map(|a| format!("{} {}", super::activity_text::activity_heading(a.kind), a.text));
         doing.or_else(|| presence.custom.clone())
     }
 
