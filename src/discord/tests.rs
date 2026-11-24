@@ -742,7 +742,7 @@ fn parses_profile() {
         "badges": [{ "id": "premium", "description": "Subscriber since", "icon": "2ba85e8026a8614b640c2837bcdfe21b", "link": "https://discord.com/settings/premium" }, { "id": "broken" }],
         "mutual_friends": [{ "id": "1", "username": "a" }, { "id": "2", "username": "b" }],
         "mutual_friend_count": 5,
-        "mutual_guilds": [{ "id": "g", "nick": null }],
+        "mutual_guilds": [{ "id": "g", "nick": null }, { "id": "h", "nick": "wrenny" }, { "nick": "no id" }],
         "guild_member": { "roles": ["r"], "joined_at": "2022-06-18T10:00:00+00:00" },
         "connected_accounts": [{ "type": "spotify", "id": "s1", "name": "wren", "verified": true }, { "type": "steam", "id": "7656" }, { "name": "no type" }],
         "guild_member_profile": { "collectibles": [{ "sku_id": "old", "type": 1, "expires_at": "2001-01-01T00:00:00+00:00" }] },
@@ -754,7 +754,9 @@ fn parses_profile() {
     assert_eq!(p.theme, Some((0x4C004C, 0xB05EAA)));
     assert_eq!(p.badges.len(), 1);
     assert_eq!(p.badges[0].icon, "https://cdn.discordapp.com/badge-icons/2ba85e8026a8614b640c2837bcdfe21b.png");
-    assert_eq!((p.mutual_friends.len(), p.mutual_friend_count, p.mutual_server_count), (2, 5, 1));
+    assert_eq!(p.badges[0].link.as_deref(), Some("https://discord.com/settings/premium"));
+    assert_eq!((p.mutual_friends.len(), p.mutual_friend_count, p.mutual_server_count), (2, 5, 2));
+    assert_eq!(p.mutual_guilds, [MutualGuild { id: "g".into(), nick: None }, MutualGuild { id: "h".into(), nick: Some("wrenny".into()) }]);
     assert!(p.decoration.unwrap().contains("/avatar-decoration-presets/deco.png"));
     assert_eq!(p.roles, ["r"]);
     assert_eq!(p.joined.as_deref(), Some("2022-06-18T10:00:00+00:00"));

@@ -394,7 +394,11 @@ impl Client {
             path.push_str(&format!("&guild_id={guild}"));
         }
         let body = self.run(self.request(reqwest::Method::GET, &path)).await?;
-        Ok(parse_profile(user_id, &body))
+        let mut profile = parse_profile(user_id, &body);
+        // No note answers 404, which reads as none.
+        let note = self.run(self.request(reqwest::Method::GET, &format!("/users/@me/notes/{user_id}"))).await.ok();
+        profile.note = note.and_then(|n| n["note"].as_str().map(str::to_owned)).filter(|n| !n.is_empty());
+        Ok(profile)
     }
 
     // A profile effect's layers, from the collectibles product its sku names.

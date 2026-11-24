@@ -231,9 +231,15 @@ pub(crate) fn parse_profile(user_id: &str, body: &Value) -> Profile {
         .as_array()
         .into_iter()
         .flatten()
-        .filter_map(|b| Some(Badge { description: b["description"].as_str().unwrap_or_default().to_owned(), icon: format!("{CDN}/badge-icons/{}.png", b["icon"].as_str()?) }))
+        .filter_map(|b| Some(Badge { description: b["description"].as_str().unwrap_or_default().to_owned(), icon: format!("{CDN}/badge-icons/{}.png", b["icon"].as_str()?), link: b["link"].as_str().map(str::to_owned) }))
         .collect();
     let mutual_friends: Vec<User> = body["mutual_friends"].as_array().into_iter().flatten().map(parse_user).collect();
+    let mutual_guilds: Vec<MutualGuild> = body["mutual_guilds"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|g| Some(MutualGuild { id: g["id"].as_str()?.to_owned(), nick: g["nick"].as_str().map(str::to_owned) }))
+        .collect();
     let mutual_friend_count = body["mutual_friend_count"].as_u64().or(body["mutual_friends_count"].as_u64()).map_or(mutual_friends.len(), |n| n as usize);
     Profile {
         username: user["username"].as_str().unwrap_or_default().to_owned(),
@@ -247,7 +253,9 @@ pub(crate) fn parse_profile(user_id: &str, body: &Value) -> Profile {
         badges,
         mutual_friends,
         mutual_friend_count,
-        mutual_server_count: body["mutual_guilds"].as_array().map_or(0, Vec::len),
+        mutual_server_count: mutual_guilds.len(),
+        mutual_guilds,
+        note: None,
         games: Vec::new(),
         joined: body["guild_member"]["joined_at"].as_str().map(str::to_owned),
         connections: body["connected_accounts"]

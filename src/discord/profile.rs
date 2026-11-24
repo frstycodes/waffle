@@ -16,6 +16,10 @@ pub struct Profile {
     pub mutual_friends: Vec<User>,
     pub mutual_friend_count: usize,
     pub mutual_server_count: usize,
+    // The servers you share, each with their nickname there (`mutual_guilds[]`, `{id, nick}`).
+    pub mutual_guilds: Vec<MutualGuild>,
+    // Your private note on them (`GET /users/@me/notes/{id}`); None until fetched or when there is none.
+    pub note: Option<String>,
     // GAP: the API field behind Discord's Game Collection is unknown, so only the demo fills this (icon URLs).
     pub games: Vec<String>,
     // When they joined the server the profile was fetched for (`guild_member.joined_at`, ISO 8601).
@@ -23,6 +27,12 @@ pub struct Profile {
     pub connections: Vec<Connection>,
     // The profile effect they wear: its collectible's sku, resolved through `/collectibles-products/{sku}`.
     pub effect_sku: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MutualGuild {
+    pub id: String,
+    pub nick: Option<String>,
 }
 
 // An account linked on their profile (`connected_accounts[]`); `kind` is Discord's platform type ("spotify").
@@ -49,6 +59,9 @@ pub struct EffectLayer {
 pub struct Badge {
     pub description: String,
     pub icon: String,
+    // Where a click on it goes (Nitro's page, a quest): Discord's `badges[].link`.
+    #[serde(default)]
+    pub link: Option<String>,
 }
 
 #[derive(Clone, Debug)]

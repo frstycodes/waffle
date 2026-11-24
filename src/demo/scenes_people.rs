@@ -63,7 +63,7 @@ pub(super) fn demo_profile(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
     zoe.tag = Some(GuildTag { text: "wony".into(), badge: Some("brand/icons/sticker.png".into()) });
     zoe.decoration = Some("demo/decoration.png".into());
     waffle.open_profile(zoe, demo_at(520., 120.), cx);
-    let badge = |name: &str, description: &str| crate::discord::Badge { description: description.into(), icon: format!("brand/icons/{name}.png") };
+    let badge = |name: &str, description: &str| crate::discord::Badge { description: description.into(), icon: format!("brand/icons/{name}.png"), link: Some("https://discord.com/nitro".into()) };
     let profile = crate::discord::Profile {
         username: "wren.lark".into(),
         bio: Some("LUCKY VICKY <a:aWonUwu:1328465377218269257>\n**gpui** fan, _probably_ in voice".into()),
