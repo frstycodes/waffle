@@ -2,7 +2,10 @@
 // memory, else from disk once the background read lands, so it survives a restart), a background fetch
 // refreshes it when it's stale or known to have changed, and the fresh value replaces it in place. Once
 // something has been seen, it never shows a loading state again. The tiers are `tiered::Tiered`'s.
-use std::{collections::HashSet, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    time::{Duration, Instant},
+};
 
 use serde::{Serialize, de::DeserializeOwned};
 
@@ -11,12 +14,16 @@ use crate::tiered::{Caps, Codec, Tiered};
 // Values are small JSON (profiles, previews, icon URLs).
 const MEMORY: usize = 2 << 20;
 const DISK: u64 = 16 << 20;
+// After a failed fetch, as Discord's profile store does after a 404 or 429: no retry for a minute.
+const FAILED_FOR: Duration = Duration::from_secs(60);
 
 pub struct Query<V> {
     tiers: Tiered<V>,
     // Known to have changed (a gateway update): kept on screen, but fetched again on next use.
     changed: HashSet<String>,
     in_flight: HashSet<String>,
+    // lint-allow(unbounded-growth): a key leaves once its cooldown is over and it's asked for again, or once it's stored
+    failed_at: HashMap<String, Instant>,
 }
 
 impl<V: Clone + Serialize + DeserializeOwned + Send + 'static> Query<V> {
@@ -26,7 +33,7 @@ impl<V: Clone + Serialize + DeserializeOwned + Send + 'static> Query<V> {
     }
 
     pub(crate) fn from_tiers(tiers: Tiered<V>) -> Self {
-        Self { tiers, changed: HashSet::new(), in_flight: HashSet::new() }
+        Self { tiers, changed: HashSet::new(), in_flight: HashSet::new(), failed_at: HashMap::new() }
     }
 
     #[cfg(test)]
@@ -57,9 +64,10 @@ impl<V: Clone + Serialize + DeserializeOwned + Send + 'static> Query<V> {
     // Whether to fetch `key` now: never fetched, stale, or changed, and no fetch already running. A yes
     // counts as the fetch starting; finish it with `store` or `failed`.
     pub fn should_fetch(&mut self, key: &str) -> bool {
-        if self.in_flight.contains(key) {
+        if self.in_flight.contains(key) || self.failed_at.get(key).is_some_and(|at| at.elapsed() < FAILED_FOR) {
             return false;
         }
+        self.failed_at.remove(key);
         self.tiers.drain();
         if !self.changed.contains(key) && self.tiers.fresh(key) {
             return false;
@@ -70,13 +78,15 @@ impl<V: Clone + Serialize + DeserializeOwned + Send + 'static> Query<V> {
 
     pub fn store(&mut self, key: &str, value: V) {
         self.in_flight.remove(key);
+        self.failed_at.remove(key);
         self.changed.remove(key);
         self.tiers.put(key, value);
     }
 
-    // The fetch failed; whatever was cached stays, and the next use tries again.
+    // The fetch failed; whatever was cached stays, and a use after `FAILED_FOR` tries again.
     pub fn failed(&mut self, key: &str) {
         self.in_flight.remove(key);
+        self.failed_at.insert(key.to_owned(), Instant::now());
     }
 
     // Marks every key `matches` picks as changed, keeping their values until the refetch lands.
@@ -90,6 +100,16 @@ impl<V: Clone + Serialize + DeserializeOwned + Send + 'static> Query<V> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_fetch_waits_before_retrying() {
+        let mut q: Query<String> = Query::memory_only(Duration::from_secs(300));
+        assert!(q.should_fetch("1"));
+        q.failed("1");
+        assert!(!q.should_fetch("1"), "no retry straight after a failure");
+        q.failed_at.insert("1".into(), Instant::now() - FAILED_FOR);
+        assert!(q.should_fetch("1"), "retried once the cooldown is over");
+    }
 
     #[test]
     fn fetches_once_then_serves_the_cache() {

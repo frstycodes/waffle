@@ -99,7 +99,9 @@ fn http_failures_retry_only_where_discord_allows() {
     assert_eq!(retry_wait(502, &Value::Null, None, true, 0), Some(Duration::from_secs(1)));
     assert_eq!(retry_wait(502, &Value::Null, None, false, 0), None, "a POST never repeats on 5xx");
     assert_eq!(retry_wait(502, &Value::Null, None, true, 1), None);
-    for status in [400, 401, 403, 404, 405] {
+    assert_eq!(retry_wait(429, &json!({ "retry_after": 3.0 }), Some(2.), true, 0), Some(Duration::from_secs(2)), "the header wins, as in Discord's client");
+    assert_eq!(retry_wait(429, &Value::Null, None, true, 0), Some(Duration::from_secs(5)), "5s when nothing says");
+    for status in [400, 401, 403, 404, 405, 500, 503] {
         assert_eq!(retry_wait(status, &Value::Null, None, true, 0), None, "{status}");
     }
     assert_eq!(error_text(403, &json!({ "message": "Missing Permissions", "code": 50013 })), "Missing Permissions");
@@ -886,3 +888,4 @@ mod saved_tests {
         assert_eq!(super::bookmark_ids(&list), ["1", "2"]);
     }
 }
+

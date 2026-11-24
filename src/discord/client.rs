@@ -7,6 +7,9 @@ pub struct Client {
     pub(super) commands: mpsc::UnboundedSender<Value>,
     // The voice engine's view of this gateway: it sends its own ops and sees VOICE_* / STREAM_* dispatches.
     pub voice: crate::voice::GatewayHandle,
+    // Read acks waiting on their channel's timer (pacing.rs), newest message per channel.
+    pub(super) acks: std::sync::Arc<std::sync::Mutex<HashMap<String, String>>>,
+    pub(super) subscriptions: pacing::SharedSubscriptions,
 }
 
 // One runtime for the gateway, REST and QR sign-in; GPUI awaits its results on its own executor.
@@ -18,15 +21,20 @@ pub fn runtime() -> &'static Runtime {
 pub fn connect(token: String) -> (Client, mpsc::UnboundedReceiver<Event>) {
     let (commands, command_rx) = mpsc::unbounded();
     let (voice, voice_out) = crate::voice::GatewayHandle::new();
-    let client = Client { http: reqwest::Client::new(), token: token.clone(), commands, voice: voice.clone() };
+    let subscriptions = pacing::SharedSubscriptions::default();
+    let client = Client { http: reqwest::Client::new(), token: token.clone(), commands, voice: voice.clone(), acks: Default::default(), subscriptions: subscriptions.clone() };
     let (tx, rx) = mpsc::unbounded();
-    runtime().spawn(run_gateway(token, tx, Outbound { commands: command_rx, voice, voice_out }));
+    runtime().spawn(run_gateway(token, tx, Outbound { commands: command_rx, voice, voice_out, subscriptions }));
     (client, rx)
 }
 
 impl Client {
+    fn authorized(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        req.header("Authorization", &self.token)
+    }
+
     pub(super) fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
-        self.http.request(method, format!("{API}{path}")).header("Authorization", &self.token)
+        self.authorized(self.http.request(method, format!("{API}{path}")))
     }
 
     pub(super) async fn run(&self, req: reqwest::RequestBuilder) -> Result<Value, String> {
@@ -69,13 +77,6 @@ impl Client {
             res.bytes().await
         }));
         (&mut fetch.0).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())
-    }
-
-    pub fn request_member_list(&self, guild_id: &str, channel_id: &str) {
-        self.gateway(json!({
-            "op": 14,
-            "d": { "guild_id": guild_id, "typing": true, "activities": true, "threads": true, "channels": { channel_id: [[0, 99]] } }
-        }));
     }
 
     /// Members per role across the server, by role id.
@@ -304,7 +305,7 @@ impl Client {
         if !query.is_empty() {
             url.query_pairs_mut().append_pair("q", query);
         }
-        let body = self.run(self.http.get(url).header("Authorization", &self.token)).await?;
+        let body = self.run(self.authorized(self.http.get(url))).await?;
         Ok(body
             .as_array()
             .into_iter()
@@ -355,7 +356,7 @@ impl Client {
         // path_segments_mut percent-encodes the emoji, which unicode reactions need.
         url.path_segments_mut().map_err(|_| "Bad URL")?.push(&emoji.key()).push("@me");
         let method = if add { reqwest::Method::PUT } else { reqwest::Method::DELETE };
-        self.run(self.http.request(method, url).header("Authorization", &self.token)).await.map(|_| ())
+        self.run(self.authorized(self.http.request(method, url))).await.map(|_| ())
     }
 
     /// One page of who reacted with `emoji`, in reaction order, starting after the user id `after`.
@@ -631,7 +632,7 @@ impl Client {
                 pairs.append_pair(name, value);
             }
         }
-        let body = self.run(self.http.get(url).header("Authorization", &self.token)).await?;
+        let body = self.run(self.authorized(self.http.get(url))).await?;
         // Each hit is a small array of messages around the match; the match is the one marked `hit`.
         let messages = body["messages"]
             .as_array()

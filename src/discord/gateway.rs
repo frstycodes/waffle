@@ -4,15 +4,19 @@ pub(super) struct Outbound {
     pub(super) commands: mpsc::UnboundedReceiver<Value>,
     pub(super) voice: crate::voice::GatewayHandle,
     pub(super) voice_out: mpsc::UnboundedReceiver<String>,
+    pub(super) subscriptions: pacing::SharedSubscriptions,
 }
 
 // A drop RESUMEs the session (its id, the URL READY named and the last sequence) so Discord replays
 // what was missed and keeps everything bound to it, a voice connection included: a fresh IDENTIFY
-// ends the old session, and the voice server closes with 4014. Only an invalid session identifies anew.
+// ends the old session, and the voice server closes with 4014. Only an invalid session, or one that
+// fails to come back in a few tries, identifies anew.
 pub(super) async fn run_gateway(token: String, tx: mpsc::UnboundedSender<Event>, mut outbound: Outbound) {
     let mut resume: Option<Resume> = None;
+    let mut fails = 0u32;
     loop {
-        let reason = match session(&token, &tx, &mut outbound, &mut resume).await {
+        let mut up = false;
+        let reason = match session(&token, &tx, &mut outbound, &mut resume, &mut up).await {
             Ok(()) => return,
             Err(GatewayError::AuthFailed) => {
                 let _ = tx.unbounded_send(Event::AuthFailed);
@@ -27,9 +31,13 @@ pub(super) async fn run_gateway(token: String, tx: mpsc::UnboundedSender<Event>,
         if tx.unbounded_send(Event::Disconnected(reason)).is_err() {
             return;
         }
-        // A resumable drop goes straight back; a fresh session waits, as Discord asks after op 9.
-        let wait = if resume.is_some() { Duration::from_millis(500) } else { Duration::from_secs(3) };
-        tokio::time::sleep(wait).await;
+        // Discord's gateway backoff: it restarts once a session is up (READY or RESUMED), and a session
+        // that can't be resumed in a few tries is given up for a fresh IDENTIFY.
+        fails = if up { 1 } else { fails + 1 };
+        if fails > pacing::RESUME_FAILS {
+            resume = None;
+        }
+        tokio::time::sleep(pacing::reconnect_wait(fails, rand::random::<f64>())).await;
     }
 }
 
@@ -100,7 +108,7 @@ pub(super) enum GatewayError {
     Fatal(String),
 }
 
-pub(super) async fn session(token: &str, tx: &mpsc::UnboundedSender<Event>, outbound: &mut Outbound, resume: &mut Option<Resume>) -> Result<(), GatewayError> {
+pub(super) async fn session(token: &str, tx: &mpsc::UnboundedSender<Event>, outbound: &mut Outbound, resume: &mut Option<Resume>, up: &mut bool) -> Result<(), GatewayError> {
     let dropped = |e: &dyn std::fmt::Display| GatewayError::Dropped(e.to_string());
     let url = resume.as_ref().map(|r| format!("{}/?v=10&encoding=json", r.url.trim_end_matches('/'))).unwrap_or_else(|| GATEWAY.to_owned());
     let (ws, _) = tokio_tungstenite::connect_async(url.as_str()).await.map_err(|e| {
@@ -115,9 +123,16 @@ pub(super) async fn session(token: &str, tx: &mpsc::UnboundedSender<Event>, outb
     // change): Discord's guidance is to drop it and reconnect rather than wait for TCP to notice.
     let mut acked = true;
     let mut greeted = false;
+    let mut presence = pacing::Presence::default();
 
     loop {
+        let presence_wake = presence.wake();
         tokio::select! {
+            _ = tokio::time::sleep_until(presence_wake.unwrap_or_else(tokio::time::Instant::now)), if presence_wake.is_some() => {
+                if let Some(update) = presence.release(tokio::time::Instant::now()) {
+                    sink.send(WsMessage::Text(update.to_string())).await.map_err(|e| dropped(&e))?;
+                }
+            }
             _ = heartbeat.tick() => {
                 if !acked {
                     return Err(GatewayError::Dropped("No heartbeat ACK".into()));
@@ -128,7 +143,13 @@ pub(super) async fn session(token: &str, tx: &mpsc::UnboundedSender<Event>, outb
             }
             // Held until IDENTIFY or RESUME is out: anything earlier is answered with a 4003 close.
             Some(command) = outbound.commands.next(), if greeted => {
-                sink.send(WsMessage::Text(command.to_string())).await.map_err(|e| dropped(&e))?;
+                let command = match command["op"].as_u64() {
+                    Some(3) => presence.offer(command, tokio::time::Instant::now()),
+                    _ => Some(command),
+                };
+                if let Some(command) = command {
+                    sink.send(WsMessage::Text(command.to_string())).await.map_err(|e| dropped(&e))?;
+                }
             }
             Some(text) = outbound.voice_out.next(), if greeted => {
                 sink.send(WsMessage::Text(text)).await.map_err(|e| dropped(&e))?;
@@ -196,8 +217,16 @@ pub(super) async fn session(token: &str, tx: &mpsc::UnboundedSender<Event>, outb
                                 // No resume URL: resume through the regular gateway.
                                 let url = d["resume_gateway_url"].as_str().unwrap_or("wss://gateway.discord.gg").to_owned();
                                 *resume = d["session_id"].as_str().map(|id| Resume { session_id: id.to_owned(), url, seq });
+                                *up = true;
+                                // A fresh session holds no subscriptions.
+                                if let Ok(mut subscriptions) = outbound.subscriptions.lock() {
+                                    subscriptions.clear();
+                                }
                             }
-                            "RESUMED" => _ = tx.unbounded_send(Event::Resumed),
+                            "RESUMED" => {
+                                *up = true;
+                                _ = tx.unbounded_send(Event::Resumed);
+                            }
                             _ => {}
                         }
                         outbound.voice.dispatch(kind, &payload["d"]);

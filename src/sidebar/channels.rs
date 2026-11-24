@@ -518,7 +518,7 @@ impl Waffle {
                 }
             }
         };
-        let row = self.track_row_hover(self.channel_draggable(row, channel, guild, cx), &channel.id, !is_voice, cx);
+        let row = self.track_row_hover(self.channel_draggable(row, channel, guild, cx), &channel.id, cx);
         let keep = selected || unread;
         if !is_voice {
             let open = channel.clone();
@@ -561,14 +561,12 @@ impl Waffle {
 
     // Rows show their hover-only controls from this, not from `group_hover`: gpui resolves group hover
     // only while painting, so a `display` toggled by it paints children that were never prepainted.
-    pub(super) fn track_row_hover(&self, row: Stateful<Div>, id: &str, prefetch: bool, cx: &mut Context<Self>) -> Stateful<Div> {
+    pub(super) fn track_row_hover(&self, row: Stateful<Div>, id: &str, cx: &mut Context<Self>) -> Stateful<Div> {
         let id = id.to_owned();
         row.on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
-            match *hovered {
-                true if prefetch => this.prefetch(&id, cx),
-                true => {}
-                false if this.hovered_row.as_deref() != Some(id.as_str()) => return,
-                false => {}
+            // Hover only shows the row's controls: like Discord's client, it fetches nothing.
+            if !*hovered && this.hovered_row.as_deref() != Some(id.as_str()) {
+                return;
             }
             this.hovered_row = hovered.then(|| id.clone());
             this.redraw(crate::part::Column::Nav, cx);

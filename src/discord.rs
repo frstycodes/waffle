@@ -27,6 +27,7 @@ mod guild;
 mod http;
 mod message;
 mod parse;
+mod pacing;
 mod parse_chat;
 mod people;
 mod profile;

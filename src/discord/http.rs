@@ -108,10 +108,12 @@ pub(super) const MAX_RETRY_WAIT: f64 = 10.;
 pub(super) fn retry_wait(status: u16, body: &Value, header_wait: Option<f64>, idempotent: bool, retries: u32) -> Option<Duration> {
     match status {
         429 if retries < 2 => {
-            let secs = body["retry_after"].as_f64().or(header_wait).unwrap_or(1.);
+            // Discord's client reads the header first and waits 5s when neither says.
+            let secs = header_wait.or(body["retry_after"].as_f64()).unwrap_or(5.);
             (secs <= MAX_RETRY_WAIT).then(|| Duration::from_secs_f64(secs.max(0.)))
         }
-        500 | 502 | 503 | 504 if idempotent && retries == 0 => Some(Duration::from_secs(1)),
+        // The gateway errors Discord's client retries; it leaves 500 and 503 to the caller.
+        502 | 504 if idempotent && retries == 0 => Some(Duration::from_secs(1)),
         _ => None,
     }
 }
