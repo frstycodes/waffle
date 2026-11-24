@@ -1,5 +1,11 @@
 // The profile card's activity: a stream, rich presence, or the voice channel they're in.
+use gpui_kit::{FontWeight, Stateful, component::ActiveTheme};
+
 use super::*;
+use crate::{
+    discord::{ActivityKind, RichPresence},
+    ui::{RADIUS_MD, RADIUS_SM},
+};
 
 pub(super) fn game_collection(games: &[String], ink: Ink) -> Option<Div> {
     if games.is_empty() {
@@ -53,15 +59,13 @@ pub(super) fn ask_to_join(ink: Ink) -> Stateful<Div> {
 }
 
 impl Waffle {
-    // Discord's popout shows one activity card: their stream, else their first activity, else the voice
-    // channel they're in. More than one peeks from under it; clicking the peek lists them all in place.
-    pub(super) fn profile_activity(&self, card: &ProfileCard, ink: Ink, cx: &mut Context<Self>) -> Option<AnyElement> {
+    // Everything they're doing, in Discord's order: the stream, each activity, then voice when not streaming.
+    pub(super) fn profile_activity_cards(&self, card: &ProfileCard, ink: Ink, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let place = self.guilds.iter().find_map(|g| {
             let state = g.voice_states.iter().find(|v| v.user_id == card.user.id)?;
             let channel = g.channels.iter().find(|c| Some(&c.id) == state.channel_id.as_ref())?;
             Some((g, channel, state.streaming))
         });
-        // Discord's order: the stream, each activity, then voice when not streaming.
         let mut cards: Vec<AnyElement> = Vec::new();
         if let Some((guild, channel, true)) = place {
             cards.push(self.stream_activity(card, guild, channel, ink, cx));
@@ -72,6 +76,13 @@ impl Waffle {
         if let Some((guild, channel, false)) = place {
             cards.push(self.voice_activity(card, guild, channel, ink, cx));
         }
+        cards
+    }
+
+    // Discord's popout shows one activity card; more than one peeks from under it, and clicking the peek
+    // lists them all in place.
+    pub(super) fn profile_activity(&self, card: &ProfileCard, ink: Ink, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let mut cards = self.profile_activity_cards(card, ink, cx);
         if cards.len() <= 1 {
             return cards.pop();
         }
@@ -212,11 +223,13 @@ impl Waffle {
     }
 
     pub(super) fn activity_card(&self, card: &ProfileCard, rich: &RichPresence, ink: Ink, cx: &mut Context<Self>) -> Div {
-        let (user, guild_id) = (card.user.clone(), card.guild_id.clone());
-        let more = ui::icon_button("profile-activity-more", Glyph::More, "More", cx)
-            .scoped(gpui_kit::transparent_black(), ink.tile, ink.muted, ink.strong)
-            .small()
-            .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_user_menu(user.clone(), guild_id.clone(), menu_surface(guild_id.is_some()), event.position(), cx)));
+        let (user, menu_rich) = (card.user.clone(), rich.clone());
+        let more = (!self.activity_menu(&card.user, rich).is_empty()).then(|| {
+            ui::icon_button("profile-activity-more", Glyph::More, "More", cx)
+                .scoped(gpui_kit::transparent_black(), ink.tile, ink.muted, ink.strong)
+                .small()
+                .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_activity_menu(user.clone(), menu_rich.clone(), event.position(), cx)))
+        });
         let art = match &rich.image {
             Some(url) => ui::media(url.clone(), ui::all(RADIUS_SM)).size(px(ACTIVITY_ART)).flex_none().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
             None => ui::row().size(px(ACTIVITY_ART)).flex_none().squircle(RADIUS_SM).bg(ink.tile).justify_center().text_color(ink.muted).child(Icon::new(Glyph::Game).size_8()).into_any_element(),
@@ -244,7 +257,13 @@ impl Waffle {
             .gap_2p5()
             .squircle(RADIUS_MD)
             .bg(ink.tile)
-            .child(ui::row().justify_between().child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(activity_heading(rich.kind))).child(more))
+            .group(ACTIVITY_GROUP)
+            .child(
+                ui::row()
+                    .justify_between()
+                    .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(activity_heading(rich.kind)))
+                    .child(ui::row().gap_1().children(self.interaction_toolbar(card, Source::Activity(rich.name.clone()), ACTIVITY_GROUP, ink, cx)).children(more)),
+            )
             .child(ui::row().gap_3().child(art).child(facts))
             .when(rich.joinable, |c| c.child(ask_to_join(ink))).children(self.activity_join_button(&card.user.id, rich, cx))
     }

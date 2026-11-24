@@ -90,7 +90,8 @@ pub struct RolesView {
     pub perm_search: Entity<InputState>,
     pub name: Entity<InputState>,
     pub open: Option<RoleEdit>,
-    // A role just created: its editor opens on the next draw, which has the window its name field needs.
+    // A role to open: just created, or picked from a role mention. Its editor opens on the next draw after the
+    // list loads, which has the window its name field needs.
     pub pending_open: Option<String>,
 }
 
@@ -193,7 +194,8 @@ impl Waffle {
     }
 
     pub(crate) fn ss_roles_page(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        if let Some(id) = self.server_settings.as_mut().and_then(|v| v.roles.pending_open.take()) {
+        // Held until the list arrives: a role can be asked for before it loads (a role mention's menu).
+        if let Some(id) = self.server_settings.as_mut().filter(|v| matches!(v.roles.list, Load::Ready(_))).and_then(|v| v.roles.pending_open.take()) {
             self.open_role(id, window, cx);
         }
         let Some(view) = self.server_settings.as_ref() else { return Vec::new() };

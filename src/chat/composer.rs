@@ -151,7 +151,14 @@ impl Waffle {
     }
 
     pub(super) fn composer_editor(&self, ink: Hsla, cx: &mut Context<Self>) -> AnyElement {
-        let field = Textarea::new(&self.composer).appearance(false).with_size(Size::XSmall).text_size(ui::TEXT_MD).line_height(ui::LINE_LEAD).text_color(ink).token(composer_tokens(cx));
+        let waffle = cx.weak_entity();
+        // An empty OS menu shows nothing; Waffle draws its own in its place.
+        let menu = move |_, window: &mut Window, cx: &mut App| {
+            let at = window.mouse_position();
+            waffle.update(cx, |this, cx| this.open_text_box_menu(at, cx)).ok();
+            gpui_kit::component::native_menu::NativeMenu::new()
+        };
+        let field = Textarea::new(&self.composer).context_menu(menu).appearance(false).with_size(Size::XSmall).text_size(ui::TEXT_MD).line_height(ui::LINE_LEAD).text_color(ink).token(composer_tokens(cx));
         // XSmall gives the editor 0/4px padding of its own; with these, the design's 4/6.
         // The option boxes paint after the field: they read where its text landed this frame.
         div().relative().flex_1().min_w_0().child(field.py_1().px_0p5()).children(self.option_boxes(cx)).into_any_element()
@@ -177,8 +184,14 @@ impl Waffle {
         }
     }
 
-    // Right-clicking a user's mention: their member menu, as on their name.
+    // Right-clicking a mention: a user's member menu, as on their name; a channel's or role's own menu.
     pub(super) fn open_mention_menu(&mut self, url: &str, at: gpui_kit::Point<Pixels>, cx: &mut Context<Self>) {
+        if let Some(id) = url.strip_prefix("waffle://channel/").map(str::to_owned) {
+            return self.open_live_menu(at, move |this| this.channel_mention_menu(&id), cx);
+        }
+        if let Some(id) = url.strip_prefix("waffle://role/").map(str::to_owned) {
+            return self.open_live_menu(at, move |this| this.role_mention_menu(&id), cx);
+        }
         let Some(id) = url.strip_prefix("waffle://user/") else { return };
         // A mention of someone not loaded yet still gets the menu; its items need only the id.
         let user = self.known_users().into_iter().find(|u| u.id == id).unwrap_or_else(|| crate::discord::User {
@@ -508,5 +521,86 @@ impl Waffle {
                 .transform_origin(point(gpui_kit::relative(0.5), gpui_kit::relative(1.)))
                 .with_animation("autocomplete", Animation::new(ui::DUR_POP).with_easing(gpui_kit::ease_out_quint()), |el, t| el.opacity(t).scale(0.95 + 0.05 * t)),
         )
+    }
+}
+
+// Discord's text box menu (its desktop app's), drawn as Waffle's menu instead of the OS one: Cut and Copy
+// with a selection, then Paste. Spellcheck, AI rewrites and Paste as Plain Text need what Waffle lacks.
+fn text_box_entries(selected: bool) -> Vec<crate::menu::Entry> {
+    use crate::menu::item;
+    use gpui_kit::component::input::{Copy, Cut, Paste};
+    let mut out = Vec::new();
+    if selected {
+        out.push(item("Cut", |this, window, cx| this.composer_action(&Cut, window, cx)).shortcut("secondary+x").entry());
+        out.push(item("Copy", |this, window, cx| this.composer_action(&Copy, window, cx)).shortcut("secondary+c").entry());
+    }
+    out.push(item("Paste", |this, window, cx| this.composer_action(&Paste, window, cx)).shortcut("secondary+v").entry());
+    out
+}
+
+impl Waffle {
+    pub(crate) fn open_text_box_menu(&mut self, at: gpui_kit::Point<Pixels>, cx: &mut Context<Self>) {
+        let selected = self.composer.read(cx).selected_text().len() > 0;
+        self.open_menu(at, text_box_entries(selected), cx);
+    }
+
+    fn composer_action(&mut self, action: &dyn gpui_kit::Action, window: &mut Window, cx: &mut Context<Self>) {
+        let focus = self.composer.read(cx).focus_handle(cx);
+        focus.focus(window, cx);
+        focus.dispatch_action(action, window, cx);
+    }
+}
+
+// Discord's channel- and role-mention menus: Mention (into the draft), then Copy link or Open in Server
+// Settings, then the ID.
+impl Waffle {
+    fn channel_mention_menu(&self, id: &str) -> Vec<crate::menu::Entry> {
+        use crate::menu::{Entry, item};
+        let Some((guild, channel)) = self.guilds.iter().find_map(|g| g.channels.iter().find(|c| c.id == id).map(|c| (g, c))) else { return Vec::new() };
+        let mut out = Vec::new();
+        if self.can_mention_here() {
+            let (raw, shown) = (format!("<#{id}>"), format!("#{}", channel.name));
+            out.push(item("Mention", move |this, window, cx| this.insert_mention(raw.clone(), shown.clone(), window, cx)).entry());
+            out.push(Entry::Separator);
+        }
+        let link = format!("https://discord.com/channels/{}/{id}", guild.id);
+        out.push(item("Copy link", move |this, _, cx| this.copy_text(link.clone(), cx)).icon(Glyph::Link).entry());
+        if self.developer_mode {
+            let id = id.to_owned();
+            out.push(item("Copy channel ID", move |this, _, cx| this.copy_text(id.clone(), cx)).icon(Glyph::Id).entry());
+        }
+        out
+    }
+
+    fn role_mention_menu(&self, id: &str) -> Vec<crate::menu::Entry> {
+        use crate::menu::{Entry, item};
+        let Some((guild, role)) = self.guilds.iter().find_map(|g| g.roles.iter().find(|r| r.id == id).map(|r| (g, r))) else { return Vec::new() };
+        let mut out = Vec::new();
+        if self.can_mention_here() {
+            let (raw, shown) = (format!("<@&{id}>"), format!("@{}", role.name));
+            out.push(item("Mention", move |this, window, cx| this.insert_mention(raw.clone(), shown.clone(), window, cx)).entry());
+            out.push(Entry::Separator);
+        }
+        if guild.can(self.my_id(), crate::discord::perm::MANAGE_ROLES) {
+            let (gid, rid) = (guild.id.clone(), id.to_owned());
+            out.push(item("Open in Server Settings", move |this, window, cx| {
+                this.open_server_settings(gid.clone(), window, cx);
+                this.open_server_page(crate::server_settings::access::Page::Roles, cx);
+                if let Some(view) = this.server_settings.as_mut() {
+                    view.roles.pending_open = Some(rid.clone());
+                }
+            }).entry());
+            out.push(Entry::Separator);
+        }
+        if self.developer_mode {
+            let id = id.to_owned();
+            out.push(item("Copy role ID", move |this, _, cx| this.copy_text(id.clone(), cx)).icon(Glyph::Id).entry());
+        }
+        out
+    }
+
+    // Discord offers Mention while the open channel takes messages from us.
+    fn can_mention_here(&self) -> bool {
+        self.channel.as_ref().is_some_and(|c| c.kind == crate::discord::ChannelKind::Dm || self.can_in(&c.id, crate::discord::perm::SEND_MESSAGES))
     }
 }

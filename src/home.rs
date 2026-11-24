@@ -386,6 +386,7 @@ impl Waffle {
             .text_size(ui::TEXT_SM)
             // The main view's header: a hard edge, never a hairline.
             .child(ui::hard_edge(|| false, cx).child(header))
+            .children(self.voice_notice_bar(cx))
             .child(
                 div().id("inbox-page").flex_1().min_h_0().overflow_y_scrollbar().pt_4().px_4().pb_6().child(
                     ui::row().w_full().justify_center().child(ui::col().w_full().max_w(px(INBOX_WIDTH)).gap_3().child(self.inbox_head(false, window, cx)).child(self.inbox_body(None, cx))),
@@ -487,6 +488,7 @@ impl Waffle {
             .text_color(palette::text(cx))
             .text_size(ui::TEXT_SM)
             .child(ui::hard_edge(|| false, cx).child(header))
+            .children(self.voice_notice_bar(cx))
             .child(
                 ui::row().items_stretch()
                     .flex_1()
@@ -627,7 +629,7 @@ impl Waffle {
                 })),
                 friend_action(("more", &id), Glyph::MoreVertical, "More", None, cx).on_mouse_down(gpui_kit::MouseButton::Left, {
                     let user = user.clone();
-                    cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_user_menu(user.clone(), None, crate::user_menu::Surface::Generic, e.position, cx))
+                    cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_friend_row_menu(user.clone(), e.position, cx))
                 }),
             ],
             Relation::Incoming => vec![

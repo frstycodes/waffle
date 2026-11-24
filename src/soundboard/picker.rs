@@ -169,8 +169,41 @@ impl Waffle {
             .group_hover(group.clone(), |s| s.opacity(1.))
             .child(preview)
             .child(star);
-        let played = sound.clone();
-        tile.cursor_pointer().hover(move |s| s.bg(hover)).child(tools).on_click(cx.listener(move |this, _, _, cx| this.play_soundboard_sound(played.clone(), cx)))
+        let (played, menu) = (sound.clone(), sound.clone());
+        tile.cursor_pointer()
+            .hover(move |s| s.bg(hover))
+            .child(tools)
+            .on_mouse_down(gpui_kit::MouseButton::Right, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_menu(e.position, this.sound_menu(&menu), cx)))
+            .on_click(cx.listener(move |this, _, _, cx| this.play_soundboard_sound(played.clone(), cx)))
+    }
+
+    // Discord's sound menu: Edit Sound for whoever manages the server's expressions, Download Sound (not for
+    // its default sounds, server "0"), then the ID. GAP: Edit Sound renames only (Discord's dialog also sets
+    // the emoji and volume), and the Nitro join/leave sound items aren't here.
+    fn sound_menu(&self, sound: &SoundboardSound) -> Vec<crate::menu::Entry> {
+        let mut out = Vec::new();
+        let manage = self.guilds.iter().find(|g| g.id == sound.guild_id).is_some_and(|g| g.can(self.my_id(), crate::server_settings::perms::MANAGE_GUILD_EXPRESSIONS));
+        if manage {
+            let (gid, id, name) = (sound.guild_id.clone(), sound.id.clone(), sound.name.clone());
+            out.push(crate::menu::item("Edit Sound", move |this, window, cx| {
+                let path = format!("/guilds/{gid}/soundboard-sounds/{id}");
+                this.prompt("Edit Sound", "Sound name", &name, "Save", move |this, name, _, cx| {
+                    this.rest(crate::discord::Method::PATCH, path.clone(), Some(serde_json::json!({ "name": name.trim() })), |_, _| {}, cx);
+                }, window, cx);
+            }).entry());
+        }
+        if sound.guild_id != "0" {
+            let (url, id) = (sound.url(), sound.id.clone());
+            out.push(crate::menu::item("Download Sound", move |this, _, cx| {
+                let id = id.clone();
+                this.save_download(url.clone(), move |mime| format!("{id}.{}", if mime.contains("ogg") { "ogg" } else { "mp3" }), cx);
+            }).entry());
+        }
+        if self.developer_mode {
+            let id = sound.id.clone();
+            out.push(crate::menu::item("Copy Sound ID", move |this, _, cx| this.copy_text(id.clone(), cx)).icon(crate::icons::Glyph::Id).entry());
+        }
+        out
     }
 
     // Favorites, Frequently Used, each server's sounds we may play, the servers we can't below a line, then

@@ -72,6 +72,7 @@ impl Waffle {
             .text_color(palette::text(cx))
             .text_size(ui::TEXT_SM)
             .child(ui::hard_edge(move || ui::scrolled(&scroll), cx).child(header))
+            .children(self.voice_notice_bar(cx))
             .child(ui::scroll_area(div().id("guide-page").pt_2().px_6().pb_8().child(column), &self.join.guide.scroll))
             .into_any_element()
     }

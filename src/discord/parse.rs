@@ -467,6 +467,7 @@ pub fn parse_user(user: &Value) -> User {
             (Some(gid), Some(badge)) => Some(format!("{CDN}/guild-tag-badges/{gid}/{badge}.png?size=32")),
             _ => None,
         },
+        guild_id: guild["identity_guild_id"].as_str().map(str::to_owned),
     });
     let plate = &user["collectibles"]["nameplate"];
     let nameplate = plate["asset"].as_str().map(|asset| Nameplate {

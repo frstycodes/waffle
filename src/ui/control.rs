@@ -104,6 +104,28 @@ pub fn icon_button(id: impl Into<ElementId>, glyph: Glyph, tooltip: impl Into<Sh
     control.tooltip(move |window: &mut Window, cx: &mut App| super::tip(tooltip.clone(), window, cx))
 }
 
+// The × that takes a chip away (a picked member, a role on a profile), in the chip's own `ink`, `strong` under
+// the pointer; the click stops at it, so the chip's own click doesn't fire.
+// Keywords: remove x, chip close, dismiss chip, delete token, clear tag, remove role
+pub fn chip_remove(id: impl Into<ElementId>, ink: Hsla, strong: Hsla, size: f32, remove: impl Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) + 'static) -> Stateful<Div> {
+    div()
+        .id(id)
+        .flex_none()
+        .rounded_full()
+        .text_color(ink)
+        .cursor_pointer()
+        .hover(move |s| s.text_color(strong))
+        .child(Icon::new(Glyph::X).size(px(size)))
+        .on_click(move |event, window, cx| {
+            cx.stop_propagation();
+            remove(event, window, cx);
+        })
+}
+
+// The × on a removable chip, and the smaller one on a role (Discord's 12px).
+const REMOVE_GLYPH: f32 = 14.;
+pub const REMOVE_GLYPH_SM: f32 = 12.;
+
 // An icon button whose face is any element instead of a glyph (a server's tile in a picker's category rail, an
 // svg nav icon): the same size, fills, hover and `.toggled` look as `icon_button`. Add the face with `.child`.
 // Keywords: icon slot, category tab, rail tab, tile button, custom icon button, picker tab
@@ -328,21 +350,8 @@ impl Control {
     // A chip that can be taken away (a picked member, a search token, an attached file): a small × after its
     // label calls `remove`, without the click reaching the chip.
     pub fn removable(self, remove: impl Fn(&gpui_kit::ClickEvent, &mut Window, &mut App) + 'static, cx: &App) -> Self {
-        let (muted, strong) = (palette::muted(cx), palette::strong(cx));
         let id = part(&self.id, "remove");
-        self.child(
-            div()
-                .id(id)
-                .flex_none()
-                .rounded_full()
-                .text_color(muted)
-                .hover(move |s| s.text_color(strong))
-                .child(Icon::new(Glyph::X).size(px(14.)))
-                .on_click(move |event, window, cx| {
-                    cx.stop_propagation();
-                    remove(event, window, cx);
-                }),
-        )
+        self.child(chip_remove(id, palette::muted(cx), palette::strong(cx), REMOVE_GLYPH, remove))
     }
 
     // A toggle that's on: the accent tint for buttons, the selected fill for icon buttons.

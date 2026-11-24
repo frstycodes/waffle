@@ -446,6 +446,7 @@ impl Waffle {
             .h_full()
             .bg(palette::surface(Level::Page, cx))
             .child(self.forum_header(&forum, cx))
+            .children(self.voice_notice_bar(cx))
             .child(ui::col().flex_none().w_full().items_center().child(toolbar))
             .child(div().id("forum-scroll").flex_1().min_h_0().overflow_y_scrollbar().child(ui::col().w_full().items_center().child(body)))
             .into_any_element()

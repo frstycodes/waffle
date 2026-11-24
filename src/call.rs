@@ -256,7 +256,7 @@ impl Waffle {
             Some(big) => self.focus_view(big, tiles, shown, cx),
             None => self.card_stage(tiles, shown, cx),
         };
-        Some(self.stage_root(cx).child(body).child(self.stage_chrome(shown, cx)).into_any_element())
+        Some(self.stage_root(cx).child(body).child(self.stage_chrome(shown, self.stage_reaches_edge(window, cx), cx)).into_any_element())
     }
 
     // The stage's size in the window, beside the rail, the channel list and the call's chat.

@@ -271,7 +271,7 @@ pub(super) fn messages() -> Vec<Message> {
     };
     let me = user("4194304", "kiwi");
     let mut abyss = user("12582912", "moss lantern");
-    abyss.tag = Some(GuildTag { text: "FNC".into(), badge: None });
+    abyss.tag = Some(GuildTag { text: "FNC".into(), badge: None, guild_id: None });
     let zoe = user("8388608", "Wren");
     let mut first = message("101", abyss.clone(), &["r2"], "2026-11-13T17:18:00Z", "Morning! Anyone tried the new **gpui** list? It virtualises rows, so long channels stay cheap.");
     first.reactions = vec![Reaction { emoji: Emoji::unicode("🔥"), count: 3, me: true }, Reaction { emoji: Emoji::unicode("👀"), count: 1, me: false }];

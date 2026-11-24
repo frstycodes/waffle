@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use gpui_kit::{
-    Animation, AnimationExt, AnyElement, App, Div, ElementId, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, div, px,
+    Animation, AnimationExt, AnyElement, App, Div, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString, Styled, div, px,
 };
 
 use super::{HAIRLINE, LINE_SM, RADIUS_LG, RADIUS_MD, RADIUS_SM, Squircle, TEXT_SM, TEXT_XS, mix, row, shadow_pop};
@@ -84,3 +84,23 @@ pub fn surface_in(fill: Hsla, ring: Hsla, cx: &App) -> Div {
 pub fn panel(cx: &App) -> Div {
     super::col().squircle(RADIUS_LG).bg(palette::surface(palette::Level::Raised, cx)).border_1().border_color(palette::line(cx))
 }
+
+// A thought bubble: a pill of `content` in `fill` with a hairline `edge`, and two dots trailing up-left from it
+// towards whoever's thinking it (a custom status beside an avatar). The pill paints over the larger dot, so
+// only its top shows, like the bubble's tail.
+// Keywords: thought bubble, status bubble, speech bubble, custom status, callout bubble, tail
+pub fn thought_bubble(id: impl Into<ElementId>, content: impl IntoElement, fill: Hsla, edge: Hsla) -> gpui_kit::Stateful<Div> {
+    let dot = |size: f32| div().absolute().size(px(size)).rounded_full().bg(fill).border_1().border_color(edge);
+    div()
+        .id(id)
+        .relative()
+        .min_w_0()
+        .child(dot(BUBBLE_DOT_SMALL).left_neg_2().top_neg_3p5())
+        .child(dot(BUBBLE_DOT_LARGE).left_1().top_neg_2())
+        .child(row().relative().min_h_9().px_3().py_2().rounded(px(BUBBLE_RADIUS)).bg(fill).border_1().border_color(edge).text_size(TEXT_SM).line_height(super::LINE_DETAIL).child(content))
+}
+
+// The bubble's pill corner and its two trailing dots.
+const BUBBLE_RADIUS: f32 = 18.;
+const BUBBLE_DOT_SMALL: f32 = 8.;
+const BUBBLE_DOT_LARGE: f32 = 16.;

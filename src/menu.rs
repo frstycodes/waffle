@@ -352,6 +352,16 @@ impl Waffle {
         }
     }
 
+    // Demo scenes open a top-level submenu by its label.
+    #[cfg(debug_assertions)]
+    pub(crate) fn open_submenu_named(&mut self, label: &str) {
+        let Some(build) = self.menu.as_ref().map(|m| m.build.clone()) else { return };
+        let index = build(self).iter().position(|e| matches!(e, Entry::Item(item) if item.label == label));
+        if let (Some(menu), Some(index)) = (&mut self.menu, index) {
+            menu.sub = vec![index];
+        }
+    }
+
     // Hovering a row opens its submenu and closes any deeper one from a sibling, unless the pointer is
     // tunnelling across the sibling toward the open submenu: then the switch waits for the grace.
     fn hover_menu_row(&mut self, row: &[usize], next: Vec<usize>, at: Point<Pixels>, cx: &mut Context<Self>) {
@@ -487,12 +497,14 @@ impl Waffle {
         let (at_x, at_y, height) = (f32::from(menu.at.x), f32::from(menu.at.y), card_height(&entries));
         let width = menu.width.unwrap_or(if entries.iter().any(Entry::has_shortcut) { WIDTH_WITH_KEYS } else { WIDTH });
         let (flip_x, flip_y) = (at_x + width > vw - 8., at_y + height > vh - 8.);
+        // Never over the window's title line, where the traffic lights and Windows' caption buttons sit.
+        let floor = f32::from(ui::FLOAT_EDGES.top);
         let x = if flip_x { (at_x - width).max(8.) } else { at_x };
-        let y = if flip_y { (at_y - height).max(8.) } else { at_y };
+        let y = if flip_y { (at_y - height).max(floor) } else { at_y.max(floor) };
         // Keyed by where it opened, so a fresh right-click replays the rise.
         let open_key = format!("{at_x:.0}-{at_y:.0}");
-        let mut bounds = vec![Bounds::new(point(px(x), px(y)), size(px(width), px(height.min(vh - 16.))))];
-        let top = self.menu_card(&entries, &[], menu.sub.first().copied(), menu.cursor.filter(|_| menu.sub.is_empty()), width, cx).left(px(x)).top(px(y)).max_h(px(vh - 16.)).overflow_y_scroll();
+        let mut bounds = vec![Bounds::new(point(px(x), px(y)), size(px(width), px(height.min(vh - floor - 8.))))];
+        let top = self.menu_card(&entries, &[], menu.sub.first().copied(), menu.cursor.filter(|_| menu.sub.is_empty()), width, cx).left(px(x)).top(px(y)).max_h(px(vh - floor - 8.)).overflow_y_scroll();
         let mut cards = vec![ui::rise(top.transform_origin(ui::corner(flip_x, flip_y)), SharedString::from(format!("menu-rise-{open_key}")), Duration::ZERO).into_any_element()];
         // One flyout per open level beside its parent row, its first row level with that row; it
         // flips to the left at the window's edge.
@@ -505,7 +517,7 @@ impl Waffle {
             let sub_w = if item.sub.iter().any(Entry::has_check) { SUB_WIDE } else { SUB_WIDTH };
             let flip = card_x + card_w + 4. + sub_w >= vw;
             card_x = if flip { card_x - sub_w - 4. } else { card_x + card_w + 4. };
-            card_y = (card_y + offset(level, i)).min(vh - card_height(&item.sub) - 8.).max(8.);
+            card_y = (card_y + offset(level, i)).min(vh - card_height(&item.sub) - 8.).max(floor);
             card_w = sub_w;
             bounds.push(Bounds::new(point(px(card_x), px(card_y)), size(px(sub_w), px(card_height(&item.sub)))));
             let path = &menu.sub[..=depth];

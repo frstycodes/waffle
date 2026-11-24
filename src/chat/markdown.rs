@@ -65,8 +65,8 @@ impl MarkdownPlugin for MentionBadges {
             .cursor_pointer()
             .hover(move |s| s.bg(hover))
             .child(gpui_kit::canvas(move |b, _, _| measured.set(Some(b)), |_, _, _, _| {}).absolute().size_full())
-            // A user's mention opens the same member menu their name does.
-            .when(mention.url.starts_with("waffle://user/"), |badge| {
+            // A user's mention opens the same member menu their name does; a channel's or role's its own.
+            .when(mention.url != "waffle://everyone", |badge| {
                 let (this, url) = (this.clone(), mention.url.clone());
                 badge.on_mouse_down(gpui_kit::MouseButton::Right, move |event, _, cx| {
                     cx.stop_propagation();

@@ -737,6 +737,64 @@ fn presence_mark_follows_device_and_stream() {
 }
 
 #[test]
+fn parses_a_live_profile_effect() {
+    // The shape of a real `/collectibles-products/{sku}` answer for an effect (2026-11-24).
+    let body = json!({ "sku_id": "1", "items": [{ "type": 1, "sku_id": "1", "animationType": 2, "effects": [
+        { "src": "https://cdn/a", "loop": false, "height": 880, "width": 450, "duration": 7833, "start": 0, "loopDelay": 0, "position": { "x": 0, "y": 0 }, "zIndex": 100, "randomizedSources": [] },
+        { "src": "https://cdn/b", "loop": true, "height": 880, "width": 450, "duration": 4250, "start": 9000, "loopDelay": 3000, "position": { "x": 0, "y": 0 }, "zIndex": 101, "randomizedSources": [] },
+    ] }] });
+    let layers = parse_profile_effect(&body);
+    assert_eq!(layers.len(), 2, "{layers:?}");
+    assert_eq!((layers[1].start, layers[1].duration, layers[1].looping, layers[1].loop_delay), (9000., 4250., true, 3000.));
+}
+
+#[test]
+fn parses_profile_frame() {
+    let body = json!({ "items": [{ "type": 3, "inner_width": 1200, "overflow_top": 120, "overflow_bottom": 80, "overflow_horizontal": 24, "layers": [
+        { "id": "top", "type": "staple", "order": "front", "anchor": "top" },
+        { "id": "side", "type": "rail", "order": "back", "anchor": "center" },
+        { "id": "odd", "type": "sparkle" },
+    ] }] });
+    let frame = parse_profile_frame("sku1", &body).expect("a frame");
+    assert_eq!((frame.inner_width, frame.overflow_top, frame.overflow_horizontal), (1200., 120., 24.));
+    assert_eq!(frame.layers.len(), 2);
+    assert_eq!((frame.layers[0].kind, frame.layers[0].front, frame.layers[0].anchor), (FrameKind::Staple, true, FrameAnchor::Top));
+    assert_eq!(frame.layers[1].src, "https://cdn.discordapp.com/media/v1/collectibles-shop/sku1/side/static");
+    assert!(parse_profile_frame("x", &json!({ "items": [] })).is_none());
+    let worn = parse_profile("9", &json!({ "user_profile": { "collectibles": [{ "sku_id": "fr", "type": 3 }] } }));
+    assert_eq!(worn.frame_sku.as_deref(), Some("fr"));
+    // A server profile overrides the main one where it sets a field.
+    let server = parse_profile("9", &json!({
+        "user": { "id": "9", "banner": "main" },
+        "user_profile": { "bio": "main bio", "pronouns": "she/her", "theme_colors": [1, 2] },
+        "guild_member_profile": { "guild_id": "g", "banner": "a_srv", "bio": "server bio", "pronouns": "", "theme_colors": [3, 4] },
+        "badges": [{ "description": "Nitro", "icon": "n" }],
+        "guild_badges": [{ "description": "Booster", "icon": "b" }],
+    }));
+    assert_eq!(server.bio.as_deref(), Some("server bio"));
+    assert_eq!(server.pronouns.as_deref(), Some("she/her"));
+    assert_eq!(server.theme, Some((3, 4)));
+    assert_eq!(server.banner.as_deref(), Some("https://cdn.discordapp.com/guilds/g/users/9/banners/a_srv.gif?size=600"));
+    assert_eq!(server.badges.len(), 2);
+}
+
+#[test]
+fn parses_outbox() {
+    let body = json!({ "entries": [
+        { "id": "1", "content_type": 1, "extra": { "game_name": "Celeste", "application_id": "9" }, "traits": [{ "type": 1, "first_time": true }, { "type": 2, "duration_seconds": 9000 }, { "type": 8, "streak_count_days": 4 }] },
+        { "id": "2", "content_type": 2, "extra": { "media_title": "Frieren", "media_subtitle": "S1E3" }, "traits": [] },
+        { "id": "3", "content_type": 5, "extra": { "entries": [{ "media": { "title": "Aqua Regia", "artists": [{ "name": "Sleep Token" }] } }] } },
+        { "id": "4", "content_type": 7, "extra": {} },
+        { "content_type": 1, "extra": { "game_name": "no id" } },
+    ] });
+    let rows = parse_outbox(&body);
+    assert_eq!(rows.len(), 3);
+    assert_eq!((rows[0].kind, rows[0].title.as_str(), rows[0].first_time, rows[0].marathon_hours, rows[0].streak_days), (RecentKind::Played, "Celeste", true, Some(3), Some(4)));
+    assert_eq!((rows[1].kind, rows[1].subtitle.as_deref()), (RecentKind::Watched, Some("S1E3")));
+    assert_eq!((rows[2].kind, rows[2].title.as_str(), rows[2].subtitle.as_deref()), (RecentKind::Listened, "Aqua Regia", Some("Sleep Token")));
+}
+
+#[test]
 fn parses_profile() {
     let body = json!({
         "user": { "id": "9", "username": "aayurene", "global_name": "Aayurene", "banner": "a_b", "avatar_decoration_data": { "asset": "deco" } },
@@ -744,7 +802,7 @@ fn parses_profile() {
         "badges": [{ "id": "premium", "description": "Subscriber since", "icon": "2ba85e8026a8614b640c2837bcdfe21b", "link": "https://discord.com/settings/premium" }, { "id": "broken" }],
         "mutual_friends": [{ "id": "1", "username": "a" }, { "id": "2", "username": "b" }],
         "mutual_friend_count": 5,
-        "mutual_guilds": [{ "id": "g", "nick": null }],
+        "mutual_guilds": [{ "id": "g", "nick": null }, { "id": "h", "nick": "wrenny" }, { "nick": "no id" }],
         "guild_member": { "roles": ["r"], "joined_at": "2022-06-18T10:00:00+00:00" },
         "connected_accounts": [{ "type": "spotify", "id": "s1", "name": "wren", "verified": true }, { "type": "steam", "id": "7656" }, { "name": "no type" }],
         "guild_member_profile": { "collectibles": [{ "sku_id": "old", "type": 1, "expires_at": "2001-01-01T00:00:00+00:00" }] },
@@ -756,7 +814,9 @@ fn parses_profile() {
     assert_eq!(p.theme, Some((0x4C004C, 0xB05EAA)));
     assert_eq!(p.badges.len(), 1);
     assert_eq!(p.badges[0].icon, "https://cdn.discordapp.com/badge-icons/2ba85e8026a8614b640c2837bcdfe21b.png");
-    assert_eq!((p.mutual_friends.len(), p.mutual_friend_count, p.mutual_server_count), (2, 5, 1));
+    assert_eq!(p.badges[0].link.as_deref(), Some("https://discord.com/settings/premium"));
+    assert_eq!((p.mutual_friends.len(), p.mutual_friend_count, p.mutual_server_count), (2, 5, 2));
+    assert_eq!(p.mutual_guilds, [MutualGuild { id: "g".into(), nick: None }, MutualGuild { id: "h".into(), nick: Some("wrenny".into()) }]);
     assert!(p.decoration.unwrap().contains("/avatar-decoration-presets/deco.png"));
     assert_eq!(p.roles, ["r"]);
     assert_eq!(p.joined.as_deref(), Some("2022-06-18T10:00:00+00:00"));
