@@ -113,7 +113,7 @@
   .d-roles { display: flex; flex-wrap: wrap; gap: 4px; }
   .d-role { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border-radius: 4px; background: var(--d-mod-subtle); font-size: 12px; font-weight: 500; color: var(--d-default); }
   .d-role i { width: 12px; height: 12px; border-radius: 50%; background: var(--rc); }
-  .d-role .x, .w-role .x { font-size: 10px; opacity: 0; cursor: pointer; } .d-role:hover .x, .w-role:hover .x { opacity: 1; } .d-role.add, .w-role.add { background: none; cursor: pointer; }
+  .d-role .x, .w-role .x { font-size: 10px; cursor: pointer; } .d-role .x { opacity: 0; } .d-role:hover .x { opacity: 1; } .w-role .x { color: var(--tm, var(--text-muted)); } .d-role.add, .w-role.add { background: none; cursor: pointer; }
   .d-card { border-radius: 8px; background: var(--d-overlay); border: 1px solid var(--d-border-muted); padding: 12px; display: grid; gap: 8px; }
   .d-card .hd { font-size: 12px; font-weight: 600; color: var(--d-default); }
   .d-card .row { display: grid; grid-template-columns: 60px 1fr; gap: 12px; align-items: center; }
@@ -282,7 +282,7 @@
   <table class="gaps">
     <thead><tr><th>Element</th><th>Discord</th><th>Waffle on main</th><th>This change</th></tr></thead>
     <tbody>
-      <tr><td>Role chip</td><td>A ✕ appears on hover for every role you can take away (Manage Roles, below your highest role, not managed); tooltip "Remove Role". Takes it away at once.</td><td>Static chip; removing meant finding the role in the user menu.</td><td>The ✕ on hover, removed at once and restored if Discord refuses.</td></tr>
+      <tr><td>Role chip</td><td>A ✕ appears on hover for every role you can take away (Manage Roles, below your highest role, not managed); tooltip "Remove Role". Takes it away at once.</td><td>Static chip; removing meant finding the role in the user menu.</td><td>A 12px ✕ on every role you can remove, shown at rest rather than on hover (Waffle's call: nothing removable hides); removed at once and restored if Discord refuses.</td></tr>
       <tr><td>Role right-click</td><td>"Copy Role ID" with Developer Mode on.</td><td>Nothing.</td><td>Same.</td></tr>
       <tr><td>Add role</td><td>A "+" button (tooltip "Add role") opening a role picker with a search field, listing roles they don't have.</td><td>An "Add role" text button opening the whole user menu.</td><td>The "+" opens a picker: a search field over the roles you can give them that they don't hold; a pick adds it at once.</td></tr>
       <tr><td>Many roles</td><td>The popout folds them to two rows; "+N" (tooltip "View All Roles") unfolds the rest in place.</td><td>Every role, the card growing.</td><td>Two rows by estimate from the names, "+N" unfolds.</td></tr>
