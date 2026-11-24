@@ -1,18 +1,17 @@
 use super::*;
 
-// The composer row's vertical padding, and the glass card's blur and hairline edge.
-const ROW_PAD_Y: f32 = 7.;
+// The composer row's vertical padding, and the glass card's blur.
+const ROW_PAD_Y: f32 = 8.;
 const GLASS_BLUR: f32 = 24.;
-const GLASS_EDGE: f32 = 0.5;
 // The typing pill's blur.
 const PILL_BLUR: f32 = 16.;
 // A tray tile's tag gap, picture height and card width.
-const TAG_GAP: f32 = 3.;
+const TAG_GAP: f32 = 4.;
 const WELL_HEIGHT: f32 = 140.;
 const TRAY_CARD_WIDTH: f32 = 184.;
 // The popups above the composer: the lift off its top edge, Hold Up!'s side padding, the suggestion detail's
 // widest, and the list's tallest.
-const POPUP_LIFT: f32 = 9.;
+const POPUP_LIFT: f32 = 8.;
 const HOLD_UP_PAD_X: f32 = 18.;
 const SUGGEST_DETAIL_MAX: f32 = 180.;
 const SUGGEST_MAX_H: f32 = 340.;
@@ -52,7 +51,7 @@ impl Waffle {
             // on top of it drew a line three times as heavy as the design's.
             .shadow(ui::shadow_pop_on(gpui_kit::transparent_black(), cx))
             // A hairline: one device pixel on Retina; a full point read heavy around the glass.
-            .border(px(GLASS_EDGE))
+            .border(ui::HAIRLINE)
             .border_color(if focused { palette::line_strong(cx) } else { palette::line(cx) })
             .when(locked.is_none(), |card| {
                 card.children(self.autocomplete_popup(cx))
@@ -151,7 +150,7 @@ impl Waffle {
     }
 
     pub(super) fn composer_editor(&self, ink: Hsla, cx: &mut Context<Self>) -> AnyElement {
-        let field = Textarea::new(&self.composer).appearance(false).with_size(Size::XSmall).text_size(ui::TEXT_LEAD).line_height(ui::LINE_LEAD).text_color(ink).token(composer_tokens(cx));
+        let field = Textarea::new(&self.composer).appearance(false).with_size(Size::XSmall).text_size(ui::TEXT_MD).line_height(ui::LINE_LEAD).text_color(ink).token(composer_tokens(cx));
         // XSmall gives the editor 0/4px padding of its own; with these, the design's 4/6.
         // The option boxes paint after the field: they read where its text landed this frame.
         div().relative().flex_1().min_w_0().child(field.py_1().px_0p5()).children(self.option_boxes(cx)).into_any_element()

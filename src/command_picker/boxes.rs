@@ -7,11 +7,11 @@ use super::*;
 /// The transparent space an option's name chip leaves before itself, so neighbouring boxes don't touch.
 pub(crate) const OPTION_GAP: f32 = 8.;
 // How far a box runs past its value's last glyph: the start of its end chip.
-pub(super) const VALUE_PAD: f32 = 5.;
+pub(super) const VALUE_PAD: f32 = 6.;
 /// An end chip's width: the box's padding after its value, then a gap before what follows it.
-pub(crate) const END_CHIP: f32 = VALUE_PAD + 3.;
+pub(crate) const END_CHIP: f32 = VALUE_PAD + 2.;
 pub(super) const BOX_RADIUS: f32 = 6.;
-pub(super) const PLACEHOLDER_SIZE: f32 = 13.;
+pub(super) const PLACEHOLDER_SIZE: f32 = 14.;
 
 // One option drawn as a box: its name chip, then its value, as byte offsets into the composer's text.
 pub(super) struct OptionBox {

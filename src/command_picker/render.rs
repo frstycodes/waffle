@@ -133,11 +133,11 @@ impl Waffle {
             .items_baseline()
             .gap_1p5()
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(StyledText::new(format!("/{}", c.display_name())).with_highlights(mark(name, 1))))
-            .when(!args.is_empty(), |d| d.child(ui::line(args.join(" ")).text_size(ui::TEXT_DETAIL).text_color(faint)));
+            .when(!args.is_empty(), |d| d.child(ui::line(args.join(" ")).text_size(ui::TEXT_SM).text_color(faint)));
         let what = ui::col().min_h_0()
             .flex_1()
             .child(title)
-            .child(div().min_w_0().truncate().child(StyledText::new(c.description.clone()).with_highlights(mark(description, 0))).text_size(ui::TEXT_DETAIL).text_color(muted)); // lint-allow(raw-truncate): ui::line takes plain text; this one is a highlighted StyledText (the match marks)
+            .child(div().min_w_0().truncate().child(StyledText::new(c.description.clone()).with_highlights(mark(description, 0))).text_size(ui::TEXT_SM).text_color(muted)); // lint-allow(raw-truncate): ui::line takes plain text; this one is a highlighted StyledText (the match marks)
         let app = app.cloned().unwrap_or_else(|| app_commands::App { id: c.application_id.clone(), name: String::new(), icon: None });
         ui::menu_row(SharedString::from(format!("command-{command}")), cx)
             .highlighted(on)
@@ -160,8 +160,8 @@ impl Waffle {
             .items_baseline()
             .gap_1p5()
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(StyledText::new(send_options::TTS).with_highlights(name)))
-            .child(ui::line("message").text_size(ui::TEXT_DETAIL).text_color(faint));
-        let what = ui::col().min_h_0().flex_1().child(title).child(ui::line(send_options::TTS_DESCRIPTION).text_size(ui::TEXT_DETAIL).text_color(muted));
+            .child(ui::line("message").text_size(ui::TEXT_SM).text_color(faint));
+        let what = ui::col().min_h_0().flex_1().child(title).child(ui::line(send_options::TTS_DESCRIPTION).text_size(ui::TEXT_SM).text_color(muted));
         ui::menu_row("command-tts", cx)
             .highlighted(on)
             .min_h_11()
@@ -184,7 +184,7 @@ impl Waffle {
                 ui::col().min_h_0()
                     .flex_1()
                     .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Couldn't load this server's commands"))
-                    .child(ui::line(error.to_owned()).text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx))),
+                    .child(ui::line(error.to_owned()).text_size(ui::TEXT_SM).text_color(palette::muted(cx))),
             )
             .child(ui::button("command-index-retry", ui::Tone::Secondary, cx).small().child("Try again").on_click(cx.listener(|this, _, _, cx| this.fetch_command_index(cx))))
     }
@@ -393,5 +393,5 @@ pub(super) fn picker_note(title: impl Into<SharedString>, body: impl Into<Shared
         .py_3p5()
         .gap_0p5()
         .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(title.into()))
-        .child(div().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child(body.into()))
+        .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(body.into()))
 }
