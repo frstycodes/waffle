@@ -22,7 +22,6 @@ const REMOTE_AUTH: &str = "wss://remote-auth-gateway.discord.gg/?v=2";
 #[cfg(not(debug_assertions))]
 const KEYRING_SERVICE: &str = "waffle";
 const KEYRING_USER: &str = "discord-token";
-const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
 pub enum AuthEvent {
     Qr(String),
@@ -147,9 +146,11 @@ async fn qr_session(tx: &mpsc::UnboundedSender<AuthEvent>) -> Result<String, Out
     let public_key = key.to_public_key().to_public_key_der().map_err(|e| failed(&e))?;
 
     let mut request = REMOTE_AUTH.into_client_request().map_err(|e| failed(&e))?;
-    // The gateway refuses connections without Discord's own origin and a browser user agent.
+    // The gateway refuses (403) a connection without Discord's own origin; it takes Waffle's user agent.
     request.headers_mut().insert("Origin", HeaderValue::from_static("https://discord.com"));
-    request.headers_mut().insert("User-Agent", HeaderValue::from_static(USER_AGENT));
+    if let Ok(agent) = HeaderValue::from_str(&crate::discord::identity().user_agent) {
+        request.headers_mut().insert("User-Agent", agent);
+    }
     let (ws, _) = tokio_tungstenite::connect_async(request).await.map_err(|e| Outcome::Failed(format!("QR gateway: {}", describe_ws_error(&e))))?;
     let (mut sink, mut stream) = ws.split();
     let mut heartbeat = tokio::time::interval(Duration::from_secs(3600));
@@ -238,24 +239,14 @@ const LOGIN_API: &str = "https://discord.com/api/v9";
 
 async fn exchange_ticket(tx: &mpsc::UnboundedSender<AuthEvent>, key: &RsaPrivateKey, ticket: &str) -> Result<String, Outcome> {
     let failed = |e: String| Outcome::Failed(format!("Ticket exchange: {e}"));
-    let client = reqwest::Client::builder().cookie_store(true).user_agent(USER_AGENT).build().map_err(|e| failed(e.to_string()))?;
+    let client = reqwest::Client::builder().cookie_store(true).user_agent(&crate::discord::identity().user_agent).build().map_err(|e| failed(e.to_string()))?;
     let fingerprint = web_fingerprint(&client).await;
-    let locale = sys_locale::get_locale().unwrap_or_else(|| "en-US".into());
-    let timezone = iana_time_zone::get_timezone().ok();
     let mut solved: Option<(captcha::Challenge, String)> = None;
     // Discord may ask for a captcha, and occasionally asks again after one is solved.
     for attempt in 1..=3 {
-        let mut req = client
-            .post(format!("{LOGIN_API}/users/@me/remote-auth/login"))
-            .header("Origin", "https://discord.com")
-            .header("Referer", "https://discord.com/login")
-            .header("X-Discord-Locale", &locale)
-            .json(&json!({ "ticket": ticket }));
+        let mut req = crate::discord::identity().headers(client.post(format!("{LOGIN_API}/users/@me/remote-auth/login")).header("Origin", "https://discord.com").header("Referer", "https://discord.com/login").json(&json!({ "ticket": ticket })));
         if let Some(fingerprint) = &fingerprint {
             req = req.header("X-Fingerprint", fingerprint);
-        }
-        if let Some(timezone) = &timezone {
-            req = req.header("X-Discord-Timezone", timezone);
         }
         if let Some((challenge, answer)) = &solved {
             for (name, value) in challenge.headers(answer) {

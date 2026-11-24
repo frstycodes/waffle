@@ -1,8 +1,12 @@
-// The Advanced page's own rows: with Developer mode on, the crash logs Waffle kept (crash.rs), each one
-// saved anywhere through the system save panel, and the folder one click away.
-use gpui_kit::{App, Context, ParentElement, StatefulInteractiveElement, Styled, div, prelude::FluentBuilder as _};
+// The Advanced page's own rows, with Developer mode on: how much Waffle tells Discord about itself, and the
+// crash logs Waffle kept (crash.rs), each one saved anywhere through the system save panel, and the folder
+// one click away.
+use gpui_kit::{App, Context, ParentElement, StatefulInteractiveElement, Styled, Window, div, prelude::FluentBuilder as _};
 
-use super::Section;
+use super::{
+    Section,
+    registry::{self, Toggle},
+};
 use crate::{
     Waffle, palette,
     ui::{self, Tone},
@@ -12,10 +16,15 @@ use crate::{
 const SHOWN: usize = 5;
 
 impl Waffle {
-    pub(super) fn advanced_page(&self, cx: &mut Context<Self>) -> Vec<Section> {
+    pub(super) fn advanced_page(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<Section> {
         if !self.developer_mode {
             return Vec::new();
         }
+        let identity = registry::SETTINGS.iter().find(|s| s.id == "full-identity").map(|setting| {
+            let card = ui::settings_card(cx).child(self.toggle_row(setting, Toggle::FullIdentity, false, window, cx));
+            let caption = "For testing how Discord treats Waffle. Requests change at once; the connection after Waffle reconnects or restarts.";
+            Section::keyed(setting.group, ui::settings_group(setting.group, cx).child(card).child(ui::settings_caption(caption, cx)))
+        });
         let logs = crate::crash::saved();
         let mut card = ui::settings_card(cx);
         if logs.is_empty() {
@@ -35,7 +44,7 @@ impl Waffle {
                 .when_some(folder, |row, dir| row.on_click(move |_, _, cx: &mut App| cx.reveal_path(&dir)))
         });
         let caption = "Waffle keeps its last 20 crashes. Attach one when you report a bug; it holds no messages or tokens.";
-        vec![Section::keyed("Crash logs", ui::settings_group("Crash logs", cx).child(card.children(show)).child(ui::settings_caption(caption, cx)))]
+        identity.into_iter().chain([Section::keyed("Crash logs", ui::settings_group("Crash logs", cx).child(card.children(show)).child(ui::settings_caption(caption, cx)))]).collect()
     }
 
     fn save_crash_log(&mut self, path: std::path::PathBuf, cx: &mut Context<Self>) {

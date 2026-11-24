@@ -258,7 +258,7 @@ pub(super) fn identify(token: &str) -> String {
         "d": {
             "token": token,
             "capabilities": 0,
-            "properties": { "os": std::env::consts::OS, "browser": "Waffle", "device": "" },
+            "properties": identity().properties(),
             "presence": { "status": "online", "since": 0, "activities": [], "afk": false },
             "compress": false,
         }

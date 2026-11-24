@@ -83,6 +83,7 @@ impl Waffle {
             Toggle::Clock24 => self.prefs.clock_24h,
             Toggle::ImageDescriptions => self.prefs.show_image_descriptions,
             Toggle::AutoDownloadUpdates => self.prefs.auto_download_updates,
+            Toggle::FullIdentity => self.prefs.full_identity,
             Toggle::RenderEmbeds => account.render_embeds,
             Toggle::RenderReactions => account.render_reactions,
             Toggle::TtsCommand => self.prefs.tts_command,
@@ -140,6 +141,10 @@ impl Waffle {
             }
             Toggle::TtsCommand => return self.update_prefs(cx, |p| p.tts_command = on),
             Toggle::AutoDownloadUpdates => return self.set_auto_download(on, cx),
+            Toggle::FullIdentity => {
+                crate::discord::set_full_identity(on);
+                return self.update_prefs(cx, |p| p.full_identity = on);
+            }
             Toggle::CompactAvatars => return self.update_prefs(cx, |p| p.compact_avatars = on),
             Toggle::SendButton => return self.update_prefs(cx, |p| p.send_button = on),
             Toggle::UnderlineLinks => return self.update_prefs(cx, |p| p.underline_links = on),

@@ -29,8 +29,9 @@ pub fn connect(token: String) -> (Client, mpsc::UnboundedReceiver<Event>) {
 }
 
 impl Client {
+    // Every API request carries the token and Waffle's identity headers (identity.rs).
     fn authorized(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        req.header("Authorization", &self.token)
+        identity().headers(req.header("Authorization", &self.token))
     }
 
     pub(super) fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {

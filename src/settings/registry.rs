@@ -47,6 +47,7 @@ pub enum Toggle {
     Clock24,
     ImageDescriptions,
     AutoDownloadUpdates,
+    FullIdentity,
     RenderEmbeds,
     RenderReactions,
     TtsCommand,
@@ -220,6 +221,7 @@ pub static SETTINGS: &[Setting] = &[
     // Advanced
     s("developer-mode", Advanced, "Developer", "Developer mode", Some("Adds Copy ID to the menus of servers, channels, people and messages"), &["copy id", "developer", "debug", "ids"], Switch(Toggle::DeveloperMode)),
     // Listed while Developer mode is on.
+    s("full-identity", Advanced, "Client details", "Send full client details", Some("Waffle's version, your OS version, locale and timezone, on every connection and request. Off sends only your OS and Waffle's name"), &["identity", "client", "super properties", "user agent", "developer", "flag"], Custom),
     s("crash-logs", Advanced, "Crash logs", "Crash logs", Some("Save a crash report to attach to a bug"), &["crash", "log", "report", "bug", "debug", "panic"], Custom),
     // Updates
     // One row holds the version, the status and its action (check, download, or restart to update).

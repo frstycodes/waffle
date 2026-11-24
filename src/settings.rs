@@ -296,7 +296,7 @@ impl Waffle {
             Page::Keybinds => self.keybinds_page(cx),
             Page::Appearance => self.appearance_page(window, cx),
             Page::Updates => self.updates_page(window, cx),
-            Page::Advanced => self.advanced_page(cx),
+            Page::Advanced => self.advanced_page(window, cx),
             Page::Accessibility => self.accessibility_page(window, cx),
             Page::ActivityPrivacy => [self.activity_sharing_page(window, cx), self.games_page(window, cx)].into_iter().flatten().collect(),
             Page::ContentSocial | Page::Chat => Vec::new(),
