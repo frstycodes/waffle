@@ -21,6 +21,7 @@ pub(super) fn notices(cx: &App) -> impl IntoElement {
                     .child(ui::toast_text("ds-toast-text", "Copied link", cx))
                     .child(ui::number_mark(1, cx))
                     .child(ui::number_mark(12, cx))
+                    .child(ui::role_chip("Rustacean", palette::data_color(0xE67E22), cx).child(ui::chip_remove("ds-role-remove", palette::muted(cx), palette::strong(cx), ui::REMOVE_GLYPH_SM, |_, _, _| {})))
                     .child(div().pt_4().pl_3().w_48().child(ui::thought_bubble("ds-thought", "🍯 drizzling honey on everything", palette::surface(palette::Level::Raised, cx), palette::line(cx))))
                     .child(ui::panel(cx).w_64().p_3().child("A static panel, no pointer")),
             )

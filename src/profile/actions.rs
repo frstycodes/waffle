@@ -73,25 +73,18 @@ impl Waffle {
         Some(ui::row().flex_wrap().gap_1().children(chips).children(more).children(add))
     }
 
-    // One role: its colour and name, a ✕ while hovered when you can remove it, Copy Role ID on right-click
+    // One role: its colour and name, a small ✕ when you can remove it, Copy Role ID on right-click
     // with Developer Mode on.
     fn role_chip(&self, card: &ProfileCard, guild_id: &str, role: &Role, removable: bool, ink: Ink, cx: &mut Context<Self>) -> AnyElement {
         let color = if role.color == 0 { palette::status_in(crate::discord::Status::Offline, cx) } else { palette::data_color(role.color) };
         let group = SharedString::from(format!("profile-role-{}", role.id));
         let remove = removable.then(|| {
             let (guild, user, role_id) = (guild_id.to_owned(), card.user.id.clone(), role.id.clone());
-            ui::icon_button(SharedString::from(format!("profile-role-remove-{}", role.id)), Glyph::X, "Remove Role", cx)
-                .scoped(gpui_kit::transparent_black(), ink.tile, ink.muted, ink.strong)
-                .size_4()
-                .opacity(0.)
-                .group_hover(group.clone(), |s| s.opacity(1.))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    this.remove_profile_role(&guild, &user, &role_id, cx);
-                }))
+            let remove = cx.listener(move |this, _: &ClickEvent, _, cx| this.remove_profile_role(&guild, &user, &role_id, cx));
+            ui::chip_remove(SharedString::from(format!("profile-role-remove-{}", role.id)), ink.muted, ink.strong, ui::REMOVE_GLYPH_SM, remove).tooltip(|window, cx| ui::tip("Remove Role", window, cx))
         });
         let copy = self.developer_mode.then(|| role.id.clone());
-        let chip = ui::role_chip(role.name.clone(), color, cx).bg(ink.tile).text_color(ink.text).children(remove).group(group.clone()).id(group);
+        let chip = ui::role_chip(role.name.clone(), color, cx).bg(ink.tile).text_color(ink.text).children(remove).id(group);
         match copy {
             Some(role_id) => chip
                 .on_mouse_down(

@@ -79,6 +79,8 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::Control`
 - `ui::button` — A text button, 36px tall (`.large()` 44, `.small()` 30).
 - `ui::icon_button` — A square icon-only button that fills on hover, with its tooltip: 32px (`.small()` 24, `.large()` 40).
+- `ui::chip_remove` — The × that takes a chip away (a picked member, a role on a profile), in the chip's own `ink`, `strong` under the pointer; the click stops at
+- `ui::REMOVE_GLYPH_SM`
 - `ui::icon_slot` — An icon button whose face is any element instead of a glyph (a server's tile in a picker's category rail, an svg nav icon): the same size, f
 - `ui::round_button` — A round icon button over video or the call stage (`size` 28 or 40).
 - `ui::card` — A clickable card (a template, a post, a launcher entry, a theme): a quiet fill on the page that deepens on hover, rounded large; `.toggled` 

@@ -51,7 +51,7 @@ mod notice;
 mod roll;
 pub mod prelude;
 
-pub use control::{Control, Pressable, button, card, icon_slot, chip, chip_lead, hover_fade, hover_state, icon_button, menu_row, pressable, round_button, swatch, tip};
+pub use control::{Control, Pressable, REMOVE_GLYPH_SM, button, card, chip_remove, icon_slot, chip, chip_lead, hover_fade, hover_state, icon_button, menu_row, pressable, round_button, swatch, tip};
 pub use date::{date_field, time_field};
 pub use dialog::{dialog, dialog_body, dialog_scroll, modal};
 pub use feedback::{media_track, progress_bar, meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
