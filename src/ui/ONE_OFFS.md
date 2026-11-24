@@ -321,6 +321,7 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/poll.rs` — the poll creator is drawn by the root's overlays, over every column
 - `src/poll.rs` — the poll creator is drawn by the root's overlays, over every column
 - `src/profile.rs` — the effect draws on the popout and on the DM panel's card
+- `src/profile.rs` — the frame draws on the popout and on the DM panel's card
 - `src/profile.rs` — the profile draws in the popout and in the DM panel
 - `src/profile/activity.rs` — joining a call changes the rail, the channel list and the call stage
 - `src/profile/dm_panel.rs` — showing or hiding the side panel resizes the main column beside it
@@ -527,8 +528,8 @@ _Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_ro
 - `src/joining/browse.rs` — ui::list_row has no held state (dimmed check, no hover or click) or end-of-row note
 - `src/overlays/emoji.rs` — ui::icon_button is a square taking a Glyph; an emoji cell is a ninth of the grid's width.
 - `src/panel.rs` — ui::list_row is a flat 48px row; a member row also carries a nameplate, its fade and a per-row hover plate.
-- `src/profile/connections.rs` — ui::chip is a palette-toned filter that toggles; this one wears the card's themed ink and opens the account.
-- `src/profile/full.rs` — ui::text_area is the editor itself; this is the note at rest, a click from becoming one.
+- `src/profile/connections.rs` — a link row, as Discord's: the account's name underlines on hover; ui::button would give it a fill.
+- `src/profile/full.rs` — ui::text_area is the editor itself; this is the note at rest, plain text a click from becoming one, as Discord's.
 - `src/profile/parts.rs` — the username is a link, as Discord's; ui::button would give it a fill and padding.
 - `src/settings.rs` — ui::settings_nav_item has no icon-less, indented sub-entry
 - `src/settings/voice_pages.rs` — ui::icon_button has no hover to the danger ink without the danger fill, which this quiet remove must not take
@@ -593,6 +594,7 @@ _Label: ui::badge, ui::tag, ui::count_badge, ui::pill or ui::role_chip; add a va
 - `src/panel.rs` — ui::tip is one line of text; this tip lists each thing someone is doing, with its icon.
 - `src/profile/activity.rs` — ui::button(...).disabled(true) takes a palette tone; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
 - `src/profile/parts.rs` — ui::badge is a 20px solid label in 11px type; the guild tag is 22px in the card's 14px type and ink.
+- `src/profile/social.rs` — ui::strip takes a palette fill; this notice wears the profile theme's tint (Ink), as the card's other tiles do.
 - `src/settings/accessibility.rs` — ui::settings_card has no body-font-size option; this card sets the preview's message size
 - `src/sidebar/channels.rs` — ui::callout leads with an icon and a title; this banner is a dot and one line, slid in by its motion frame.
 - `src/sidebar/tiles.rs` — ui::badge is a label; this is a server's letter tile, scaled with the rail tile.
@@ -749,7 +751,6 @@ _A function named like a component builds it from the design system: wrap the ui
 - `src/joining/guide.rs` — ui::icon_tile only holds a glyph, not an emoji's image or text
 - `src/login.rs` — ui::card is a clickable raised card; this is the sign-in QR code painted on white in both themes.
 - `src/profile/actions.rs` — ui::text_field is the settings field frame; this one wears the card's themed fill.
-- `src/profile/connections.rs` — ui::chip is a palette-toned filter that toggles; this chip wears the card's themed ink and opens the account.
 - `src/sidebar/tiles.rs` — ui::server_tile sets initials on the selected fill; the rail's letters sit on the lifted raised tone.
 - `src/soundboard/picker.rs` — ui::card lacks a sound tile with a lock and a favourite toggle
 - `src/video.rs` — ui::media is an image, not a player; this wraps a cached VideoPlayer entity and builds no design-system piece itself
@@ -985,6 +986,7 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/poll.rs` — the subscription ends when the input or Waffle is dropped
 - `src/profile.rs` — ends itself when the card closes, and holds only a WeakEntity.
 - `src/profile.rs` — ends when the effect request returns, and holds only a WeakEntity.
+- `src/profile.rs` — ends when the product request returns, and holds only a WeakEntity.
 - `src/profile.rs` — ends when the profile request returns, and holds only a WeakEntity.
 - `src/profile/actions.rs` — ends when the send returns, and holds only a WeakEntity.
 - `src/profile/actions.rs` — the subscription lives as long as the field, dropped with the card.

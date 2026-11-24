@@ -129,7 +129,7 @@ impl Waffle {
         let text_viewer = self.text_files.borrow_mut().viewer.take().is_some();
         let open = text_viewer
             | self.role_popout.close()
-            | self.profile_card.take().is_some()
+            | self.close_profile_card()
             | std::mem::take(&mut self.status_menu)
             | self.status_editor.take().is_some()
             | self.poll_creator.take().is_some()

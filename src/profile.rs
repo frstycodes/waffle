@@ -29,11 +29,12 @@ mod full;
 mod media;
 mod parts;
 mod popovers;
+mod social;
 use activity::game_collection;
 use connections::*;
 pub(crate) use media::{BANNER, banner};
 use media::BANNER_FULL;
-use media::effect_overlay;
+use media::{effect_overlay, frame_layers};
 pub(crate) use parts::{Ink, bio_view, inner_radius, name_block, profile_key, themed_card};
 use parts::*;
 pub(crate) use popovers::{CardPop, Source};
@@ -78,6 +79,8 @@ pub(crate) struct ProfileCard {
     pub(crate) recent: Option<Vec<crate::discord::RecentEntry>>,
     // A long status shown whole, after its chevron.
     pub(crate) status_expanded: bool,
+    // The DM side panel's own card: it holds the panel's popovers and state, and draws no popout.
+    pub(crate) panel: bool,
     // The full profile's card body and tab list.
     pub(crate) card_scroll: ScrollHandle,
     pub(crate) tab_scroll: ScrollHandle,
@@ -93,7 +96,7 @@ pub(crate) enum FullTab {
 
 impl ProfileCard {
     fn new(user: User, guild_id: Option<String>, at: Point<Pixels>, profile: Option<Profile>, full: Option<FullTab>) -> Self {
-        Self { user, guild_id, at, profile, all_activity: false, avatar_full: false, full, note: None, message: None, all_roles: false, pop: None, reacting: None, toast: None, recent: None, status_expanded: false, card_scroll: ScrollHandle::new(), tab_scroll: ScrollHandle::new() }
+        Self { user, guild_id, at, profile, all_activity: false, avatar_full: false, full, note: None, message: None, all_roles: false, pop: None, reacting: None, toast: None, recent: None, status_expanded: false, panel: false, card_scroll: ScrollHandle::new(), tab_scroll: ScrollHandle::new() }
     }
 }
 
@@ -125,6 +128,14 @@ impl Waffle {
         self.fetch_profile(user, guild_id, cx);
     }
 
+    // Closes an open popout or full profile; the DM panel's own card isn't open in that sense and stays.
+    pub(crate) fn close_profile_card(&mut self) -> bool {
+        if self.profile_card.as_ref().is_some_and(|c| c.panel) {
+            return false;
+        }
+        self.profile_card.take().is_some()
+    }
+
     // The full profile on `tab`: the open popout on this user grows into it, anywhere else it opens fresh.
     pub(crate) fn view_full_profile(&mut self, user: &User, tab: FullTab, cx: &mut Context<Self>) {
         let Some(card) = self.profile_card.as_mut().filter(|c| c.user.id == user.id) else { return self.open_full_profile(user.clone(), tab, cx) };
@@ -148,6 +159,7 @@ impl Waffle {
                 let Ok(profile) = fetched else { return this.profiles.failed(&key) };
                 this.profiles.store(&key, profile.clone());
                 this.fetch_profile_effect(profile.effect_sku.clone(), cx);
+                this.fetch_profile_frame(&key, &user.id, profile.frame_sku.clone(), cx);
                 if let Some(card) = this.profile_card.as_mut().filter(|c| c.user.id == user.id) {
                     card.profile = Some(profile);
                 }
@@ -156,6 +168,29 @@ impl Waffle {
             .ok();
         })
         // lint-allow(detached-task): ends when the profile request returns, and holds only a WeakEntity.
+        .detach();
+    }
+
+    // The frame's layers, once the profile names one; kept on the cached profile so every surface draws it.
+    fn fetch_profile_frame(&mut self, key: &str, user_id: &str, sku: Option<String>, cx: &mut Context<Self>) {
+        let Some(sku) = sku else { return };
+        let Some(client) = self.client.clone() else { return };
+        let (key, user_id) = (key.to_owned(), user_id.to_owned());
+        cx.spawn(async move |this, cx| {
+            let Ok(Some(frame)) = client.profile_frame(&sku).await else { return };
+            this.update(cx, |this, cx| {
+                if let Some(mut profile) = this.profiles.peek(&key) {
+                    profile.frame = Some(frame.clone());
+                    this.profiles.seed(&key, profile);
+                }
+                if let Some(profile) = this.profile_card.as_mut().filter(|c| c.user.id == user_id).and_then(|c| c.profile.as_mut()) {
+                    profile.frame = Some(frame);
+                }
+                cx.notify(); // lint-allow(global-notify): the frame draws on the popout and on the DM panel's card
+            })
+            .ok();
+        })
+        // lint-allow(detached-task): ends when the product request returns, and holds only a WeakEntity.
         .detach();
     }
 
@@ -213,6 +248,10 @@ impl Waffle {
         if card.full.is_some() {
             return self.full_profile_overlay(window, cx);
         }
+        if card.panel {
+            let pop = self.card_popover(card, window, cx)?;
+            return Some(crate::overlays::backdrop("profile-backdrop", cx).child(pop).into_any_element());
+        }
         // Animated pictures move only under the pointer, as Discord's.
         let (hovered, on_hover) = ui::hover_state(SharedString::from(format!("profile-hover-{}", card.user.id)), window, cx);
         let viewport = window.viewport_size();
@@ -230,7 +269,7 @@ impl Waffle {
             false => self.message_field(card, ink, cx).into_any_element(),
         };
         let inner = inner.child(self.profile_header(card, &profile, Header::Popout, hovered, ink, cx)).child(body).child(footer);
-        let effect = profile.effect_sku.as_ref().and_then(|sku| self.profile_effects.get(sku)).and_then(|layers| layers.as_deref()).and_then(effect_overlay);
+        let dressing = self.dressing(&profile, WIDTH, FRAME_MIN_POPOUT, window);
         let card_el = outer
             .id("profile-card")
             .group(CARD_GROUP)
@@ -240,7 +279,8 @@ impl Waffle {
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_hover(on_hover)
             .child(inner)
-            .children(effect);
+            .children(dressing.effect);
+        let card_el = div().relative().w(px(WIDTH)).children(dressing.back).child(card_el).children(dressing.front);
         // It rises from the corner nearest where it was asked for: pushed in from an edge, from that side.
         let origin = ui::corner(x < f32::from(card.at.x), y < f32::from(card.at.y));
         let rise = ui::rise(card_el.transform_origin(origin), SharedString::from(format!("profile-{}", card.user.id)), Duration::ZERO);
@@ -249,6 +289,14 @@ impl Waffle {
         let placed = gpui_kit::anchored().position(card.at).snap_to_window_with_margin(ui::FLOAT_EDGES).child(rise);
         let pop = self.card_popover(card, window, cx);
         Some(crate::overlays::backdrop("profile-backdrop", cx).child(placed).children(pop).into_any_element())
+    }
+
+    // What a card wears around it, `width` wide: its profile effect over it, and its frame behind and in front.
+    // Discord drops the frame from a window shorter than `frame_min`.
+    pub(super) fn dressing(&self, profile: &Profile, width: f32, frame_min: f32, window: &Window) -> Dressing {
+        let effect = profile.effect_sku.as_ref().and_then(|sku| self.profile_effects.get(sku)).and_then(|layers| layers.as_deref()).and_then(|layers| effect_overlay(layers, width));
+        let frame = profile.frame.as_ref().filter(|_| f32::from(window.viewport_size().height) >= frame_min);
+        Dressing { effect, back: frame.and_then(|f| frame_layers(f, width, false)), front: frame.and_then(|f| frame_layers(f, width, true)) }
     }
 
     // Discord's popout body: name, mutuals, bio, activity, then roles in a server.
@@ -262,6 +310,7 @@ impl Waffle {
             .child(self.clickable_name(card, profile, ink, cx))
             // Not fetched yet: where the mutuals and bio will be.
             .when(card.profile.is_none(), |b| b.child(profile_skeleton(cx)))
+            .children(self.relationship_notice(card, ink, cx))
             .children((!is_me).then(|| self.mutuals_row(&card.user, profile, ink, cx)).flatten())
             .children(profile.bio.as_ref().map(|bio| self.short_bio(&card.user, bio, ink, cx)))
             .children(self.profile_activity(card, ink, cx))
@@ -348,6 +397,10 @@ impl Waffle {
             .bg(palette::accent())
             .justify_center()
             .children(crate::icons::brand_mark("discord").map(|path| gpui_kit::svg().path(path).size_3p5().text_color(palette::on_accent())));
+        // With no server date it's the date alone, as Discord's; beside one, each carries its mark.
+        if joined.is_none() {
+            return Some(div().text_size(ui::TEXT_SM).text_color(ink.text).child(short_date(&created)));
+        }
         let row = ui::row()
             .flex_wrap()
             .gap_2p5()
@@ -356,20 +409,19 @@ impl Waffle {
                 let icon = ui::server_tile(guild.icon.as_deref(), &guild.name, 20., cx);
                 row.child(div().size_1().rounded_full().bg(ink.muted)).child(since_date("profile-since-server", icon, guild.name.clone().into(), &joined, ink))
             });
-        Some(section(if card.user.bot { "Created On" } else { "Member Since" }, row, ink))
+        Some(row)
     }
 
-    pub(super) fn friends_since(&self, card: &ProfileCard, ink: Ink) -> Option<Div> {
+    pub(super) fn friends_since(&self, card: &ProfileCard) -> Option<String> {
         let friend = self.relationships.iter().find(|r| r.user.id == card.user.id && r.kind == Relation::Friend)?;
-        let since = parse_time(friend.since.as_deref()?)?;
-        Some(section("Friends Since", div().text_size(ui::TEXT_SM).text_color(ink.text).child(short_date(&since)), ink))
+        Some(short_date(&parse_time(friend.since.as_deref()?)?))
     }
 
     // Banner with its round actions, then the avatar overlapping its foot and the custom status bubble beside it.
     fn profile_header(&self, card: &ProfileCard, profile: &Profile, kind: Header, hovered: bool, ink: Ink, cx: &mut Context<Self>) -> Div {
         let user = &card.user;
         let is_me = self.me.as_ref().is_some_and(|me| me.id == user.id);
-        let (banner, banner_height) = banner(profile, ink, kind.radius(ink), hovered, BANNER, cx);
+        let (banner, banner_height) = banner(profile, ink, kind.radius(ink), self.banner_plays(kind == Header::Panel, hovered), BANNER, cx);
         ui::col()
             .relative()
             .flex_none()
@@ -377,6 +429,7 @@ impl Waffle {
             .when(!is_me, |h| h.child(self.banner_actions(card, cx)))
             // lint-allow(raw-margin): the avatar row pulls up over the banner's foot, which padding can't do.
             .child(ui::row().px(px(CARD_INSET - AVATAR_RING)).mt(px(-(AVATAR / 2. + AVATAR_RING))).mb_2().child(self.profile_face(card, AVATAR, hovered, ink, cx)))
+            .children(card_toast(card, banner_height, cx))
             .children(self.status_bubble_for(card, ink, cx).map(|bubble| bubble.absolute().top(px(banner_height + BUBBLE_DROP)).left(px(kind.bubble_left())).right_3()))
     }
 
@@ -428,8 +481,15 @@ impl Waffle {
                     this.redraw_overlays(cx);
                 }))
         });
-        let bubble = div().relative().group(BUBBLE_GROUP).child(status_bubble(text, card.status_expanded, ink, cx)).children(toolbar).children(chevron);
+        let bubble = div().relative().min_w_0().group(BUBBLE_GROUP).child(status_bubble(text, card.status_expanded, ink, cx)).children(toolbar).children(chevron);
         Some(ui::row().items_start().child(bubble))
+    }
+
+    // Discord's rule for an animated banner: with GIFs autoplaying it plays whenever the popout or full profile
+    // is open, and on the DM's side panel while the card is hovered; with autoplay off, only while hovered.
+    pub(super) fn banner_plays(&self, panel: bool, hovered: bool) -> bool {
+        let autoplay = self.account_settings.gif_auto_play && !self.prefs.reduces_motion();
+        hovered || (autoplay && !panel)
     }
 
     // Their custom status, as the bubble beside the avatar shows it.
@@ -513,6 +573,26 @@ impl Waffle {
         self.switch_profile_tab(tab, window, cx);
     }
 }
+
+// "Reply sent" or "Reaction sent", centred over the banner while it lasts.
+pub(super) fn card_toast(card: &ProfileCard, banner_height: f32, cx: &App) -> Option<Div> {
+    let text = card.toast?;
+    Some(ui::row().absolute().left_0().right_0().top(px(banner_height / 2. - TOAST_HALF)).justify_center().child(ui::toast_text(SharedString::from(format!("profile-toast-{text}")), text, cx)))
+}
+
+// Half a one-line toast's height, to centre it on the banner.
+const TOAST_HALF: f32 = 20.;
+
+pub(super) struct Dressing {
+    pub(super) effect: Option<Div>,
+    pub(super) back: Option<Div>,
+    pub(super) front: Option<Div>,
+}
+
+// The window heights below which Discord hides a frame: the popout's, the side panel's and the full profile's.
+const FRAME_MIN_POPOUT: f32 = 480.;
+pub(super) const FRAME_MIN_PANEL: f32 = 510.;
+pub(super) const FRAME_MIN_FULL: f32 = 785.;
 
 // Which card a header sits on: where its banner's corners round and where the status bubble starts.
 #[derive(Clone, Copy, PartialEq, Eq)]

@@ -18,11 +18,24 @@ pub(super) const PROFILE_SCENES: &[&str] = &[
     "profile-tag",
     "profile-note",
     "profile-status-long",
+    "profile-gif",
+    "profile-gif-still",
+    "profile-frame",
+    "profile-frame-full",
+    "profile-frame-dm",
 ];
 
 pub(super) fn demo_profile_scene(waffle: &mut Waffle, scene: &str, window: &mut Window, cx: &mut Context<Waffle>) {
-    if scene == "profile-dm" {
-        return demo_profile_dm(waffle, window, cx);
+    if scene == "profile-dm" || scene == "profile-frame-dm" {
+        demo_profile_dm(waffle, window, cx);
+        if scene == "profile-frame-dm" {
+            let key = crate::profile::profile_key("8388608", None);
+            if let Some(mut profile) = waffle.profiles.peek(&key) {
+                profile.frame = Some(frame_fixture());
+                waffle.profiles.seed(&key, profile);
+            }
+        }
+        return;
     }
     if scene == "profile-full-empty" {
         return demo_full_empty(waffle, cx);
@@ -32,7 +45,7 @@ pub(super) fn demo_profile_scene(waffle: &mut Waffle, scene: &str, window: &mut 
     let worst = scene.ends_with("-worst");
     if let Some(card) = waffle.profile_card.as_mut() {
         card.full = match scene {
-            "profile-full" | "profile-full-plain" | "profile-full-note" | "profile-full-worst" => Some(FullTab::Activity),
+            "profile-full" | "profile-full-plain" | "profile-full-note" | "profile-full-worst" | "profile-frame-full" => Some(FullTab::Activity),
             "profile-full-friends" => Some(FullTab::MutualFriends),
             "profile-full-servers" => Some(FullTab::MutualServers),
             _ => None,
@@ -40,6 +53,12 @@ pub(super) fn demo_profile_scene(waffle: &mut Waffle, scene: &str, window: &mut 
         if let Some(profile) = card.profile.as_mut() {
             profile.mutual_guilds = vec![crate::discord::MutualGuild { id: "1".into(), nick: Some("wrenny".into()) }];
             profile.note = (scene == "profile-full-note").then(|| "Met in the gpui server. Owes me a waffle recipe.".into());
+            if scene.starts_with("profile-frame") {
+                profile.frame = Some(frame_fixture());
+            }
+            if scene.starts_with("profile-gif") {
+                profile.banner = Some("demo/banner.gif".into());
+            }
             if scene == "profile-full-plain" {
                 (profile.theme, profile.banner) = (None, None);
             }
@@ -63,11 +82,29 @@ pub(super) fn demo_profile_scene(waffle: &mut Waffle, scene: &str, window: &mut 
         "profile-status-long" => waffle.presences.entry("8388608".into()).or_default().custom = Some("currently translating the entire gpui codebase into a sea shanty, verse 47 of 312".into()),
         _ => {}
     }
+    if scene == "profile-gif-still" {
+        waffle.account_settings.gif_auto_play = false;
+    }
     if worst {
         waffle.presences.entry("8388608".into()).or_default().custom = Some("currently translating the entire gpui codebase into a sea shanty, verse 47 of 312, send snacks".into());
         if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
             guild.roles.extend((0..14).map(|r| crate::discord::Role { id: format!("wr{r}"), name: format!("very long role name number {r}"), color: 0x3BA55C + r * 0x0B0B0B, position: 10 + r as i64, permissions: 0, managed: false, icon: None }));
         }
+    }
+}
+
+// A honey ribbon stapled over the top edge, in front, and rails down both sides behind the card.
+fn frame_fixture() -> crate::discord::ProfileFrame {
+    use crate::discord::{FrameAnchor, FrameKind, FrameLayer, ProfileFrame};
+    ProfileFrame {
+        inner_width: 1200.,
+        overflow_top: 200.,
+        overflow_bottom: 0.,
+        overflow_horizontal: 48.,
+        layers: vec![
+            FrameLayer { src: "demo/frame-rail.png".into(), kind: FrameKind::Rail, front: false, anchor: FrameAnchor::Center },
+            FrameLayer { src: "demo/frame-top.png".into(), kind: FrameKind::Staple, front: true, anchor: FrameAnchor::Top },
+        ],
     }
 }
 

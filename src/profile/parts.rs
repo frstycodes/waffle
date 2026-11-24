@@ -18,6 +18,7 @@ use crate::{
 // The guild tag chip's height, a badge's size.
 const TAG_HEIGHT: f32 = 22.;
 const BADGE_SIZE: f32 = 20.;
+const BADGE_PILL: f32 = 26.;
 const MAX_BADGES: usize = 6;
 
 // The card's colours. Themed: the user's two colours washed toward the theme's ground for the body,
@@ -120,7 +121,7 @@ pub(crate) fn name_block(user: &User, profile: &Profile, ink: Ink, open: Option<
         // lint-allow(custom-button): the username is a link, as Discord's; ui::button would give it a fill and padding.
         div().id("profile-username").min_w_0().child(ui::line(handle)).when_some(open, |h, open| h.cursor_pointer().on_click(move |e, w, cx| open(e, w, cx)))
     });
-    let badges = badges(&profile.badges);
+    let badges = badges(&profile.badges, ink);
     ui::col()
         .gap_0p5()
         .child(ui::row().gap_1().child(name).children(note))
@@ -128,7 +129,7 @@ pub(crate) fn name_block(user: &User, profile: &Profile, ink: Ink, open: Option<
 }
 
 // Their badges, bare, trailing the username row as Discord's; past six the rest wait behind "+N".
-fn badges(badges: &[Badge]) -> Option<Div> {
+fn badges(badges: &[Badge], ink: Ink) -> Option<Div> {
     if badges.is_empty() {
         return None;
     }
@@ -144,7 +145,8 @@ fn badges(badges: &[Badge]) -> Option<Div> {
             .when_some(link, |b, url| b.cursor_pointer().on_click(move |_, _, cx| cx.open_url(&url)))
     });
     let more = badges.len().saturating_sub(MAX_BADGES);
-    let row = ui::row().id("profile-badges").flex_none().gap_0p5().children(shown).when(more > 0, |p| p.child(div().pl_0p5().text_size(ui::TEXT_XS).child(format!("+{more}"))));
+    // Discord holds them in a pill of the card's tint, "+N" at its end.
+    let row = ui::row().id("profile-badges").flex_none().h(px(BADGE_PILL)).px_1().gap_0p5().squircle(RADIUS_XS).bg(ink.tile).children(shown).when(more > 0, |p| p.child(div().px_0p5().text_size(ui::TEXT_XS).text_color(ink.text).child(format!("+{more}"))));
     let row = match more > 0 {
         true => ui::overflow_list(row, "Badges", badges.iter().map(|b| ui::Entry::item(b.icon.clone(), b.description.clone())).collect()),
         false => row,

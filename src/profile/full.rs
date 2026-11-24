@@ -3,7 +3,7 @@
 use gpui_kit::{
     AnyElement, Context, Div, Focusable, SharedString, Window,
     component::input::{InputEvent, Textarea, TextareaState},
-    div, img, px, uniform_list,
+    div, px, uniform_list,
 };
 
 use super::*;
@@ -49,7 +49,9 @@ impl Waffle {
         let width = (vw - 2. * MODAL_CLEARANCE).min(MODAL_WIDTH);
         let height = (vh - 2. * MODAL_CLEARANCE).min(MODAL_HEIGHT).max(MODAL_MIN_HEIGHT.min(vh - 2. * ui::SURFACE_INSET));
         let card_width = (CARD_SHARE * vw - CARD_OFFSET).clamp(CARD_MIN, CARD_MAX);
-        let left = self.full_card(card, &profile, hovered, ink, cx).w(px(card_width)).flex_none();
+        let dressing = self.dressing(&profile, card_width, super::FRAME_MIN_FULL, window);
+        let left = self.full_card(card, &profile, hovered, ink, cx).w(px(card_width)).flex_none().relative().children(dressing.effect);
+        let left = ui::col().relative().flex_none().w(px(card_width)).children(dressing.back).child(left.flex_1()).children(dressing.front);
         let right = self.full_tabs(card, &profile, tab, ink, window, cx);
         let fill = match ink.border {
             Some(_) => ink.wash(),
@@ -63,7 +65,7 @@ impl Waffle {
                 .left_0()
                 .right_0()
                 .h(px(BACKDROP_DEPTH))
-                .child(img(url).size_full().object_fit(gpui_kit::ObjectFit::Cover).opacity(0.3))
+                .child(ui::media(url, ui::top(ui::RADIUS_XL)).size_full().object_fit(gpui_kit::ObjectFit::Cover).opacity(0.3))
                 .child(div().absolute().inset_0().bg(gpui_kit::linear_gradient(180., gpui_kit::linear_color_stop(fade.opacity(0.4), 0.), gpui_kit::linear_color_stop(fade, 1.))))
         });
         let close = ui::icon_button("full-profile-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| {
@@ -73,23 +75,25 @@ impl Waffle {
             .id("full-profile")
             .relative()
             .size_full()
+            .squircle(ui::RADIUS_XL)
             .bg(fill)
             .on_hover(on_hover)
             .children((ink.border.is_none()).then_some(backdrop_art).flatten())
             .child(ui::row().relative().items_stretch().size_full().pt(px(PADDING)).pl(px(PADDING)).child(left).child(right))
             .child(ui::row().absolute().top_2().right_2().gap_2().child(close));
-        let body = div().h(px(height)).child(inner);
+        let body = inner;
         let avatar = card.avatar_full.then(|| avatar_viewer(&card.user, window, cx));
         let pop = self.card_popover(card, window, cx);
         let backdrop = crate::overlays::backdrop("full-profile-backdrop", cx);
-        let dialog = ui::dialog("full-profile-dialog", width, body, window, cx);
+        // Unclipped, so a frame's top reaches past the dialog's edge, as Discord's does.
+        let dialog = ui::dialog_fixed("full-profile-dialog", width, height, body, cx);
         Some(div().absolute().inset_0().child(ui::modal(backdrop, dialog, cx)).children(pop).children(avatar).into_any_element())
     }
 
     // The left card: header, then a scrolling body in Discord's order.
     fn full_card(&self, card: &ProfileCard, profile: &Profile, hovered: bool, ink: Ink, cx: &mut Context<Self>) -> Div {
         let radius = inner_radius(ink);
-        let (banner, _) = banner(profile, ink, radius, hovered, BANNER_FULL, cx);
+        let (banner, _) = banner(profile, ink, radius, self.banner_plays(false, hovered), BANNER_FULL, cx);
         let bubble = self.status_bubble_for(card, ink, cx).map(|bubble| {
             bubble.absolute().top(px(BANNER_FULL - BUBBLE_RISE)).left(px(PADDING + AVATAR_FULL + BUBBLE_FROM_AVATAR)).right_4()
         });
@@ -99,6 +103,7 @@ impl Waffle {
             .child(banner)
             // lint-allow(raw-margin): the avatar pulls up over the banner's foot by half its size, which padding can't do.
             .child(ui::row().px(px(PADDING - AVATAR_RING)).mt(px(-(AVATAR_FULL / 2. + AVATAR_RING))).child(self.profile_face(card, AVATAR_FULL, hovered, ink, cx)))
+            .children(super::card_toast(card, BANNER_FULL, cx))
             .children(bubble);
         let is_me = self.me.as_ref().is_some_and(|me| me.id == card.user.id);
         let sections = ui::col()
@@ -108,12 +113,13 @@ impl Waffle {
             .gap_6()
             .child(self.clickable_name(card, profile, ink, cx))
             .when(card.profile.is_none(), |b| b.child(profile_skeleton(cx)))
+            .children(self.relationship_notice(card, ink, cx))
             .child(self.full_buttons(card, is_me, cx))
             .children(profile.bio.as_ref().map(|bio| bio_view(&card.user.id, bio, ink)))
-            .children(self.member_since(card, profile, ink, cx))
-            .children(self.friends_since(card, ink))
-            .children(self.roles_row(card, profile, false, ink, cx).map(|roles| section("Roles", roles, ink)))
-            .children(connections(&profile.connections, ink, cx))
+            .children(self.member_since(card, profile, ink, cx).map(|row| full_section(if card.user.bot { "Created On" } else { "Member Since" }, row, ink)))
+            .children(self.friends_since(card).map(|date| full_section("Friends Since", date, ink)))
+            .children(self.roles_row(card, profile, false, ink, cx).map(|roles| full_section("Roles", roles, ink)))
+            .children(connection_list(&profile.connections, ink, cx).map(|list| full_section("Connections", list, ink)))
             .children(game_collection(&profile.games, ink))
             .children((!is_me).then(|| self.note_section(card, profile, ink, cx)));
         // A block around the column: inside the full-height scroller, a flex column would squeeze its rows to fit.
@@ -158,24 +164,20 @@ impl Waffle {
                 let text = profile.note.clone();
                 let shown = text.clone().unwrap_or_else(|| "Click to add a note".into());
                 let ink_for = if text.is_some() { ink.text } else { ink.muted };
-                // lint-allow(custom-button): ui::text_area is the editor itself; this is the note at rest, a click from becoming one.
+                // lint-allow(custom-button): ui::text_area is the editor itself; this is the note at rest, plain text a click from becoming one, as Discord's.
                 ui::row()
                     .id("full-profile-note-rest")
-                    .min_h_9()
-                    .px_2p5()
-                    .py_2()
                     .items_start()
-                    .squircle(RADIUS_XS)
-                    .bg(ink.tile)
                     .cursor_text()
-                    .text_size(ui::TEXT_SM)
+                    .text_size(ui::TEXT_MD)
                     .text_color(ink_for)
+                    .when(text.is_none(), |n| n.italic())
                     .child(div().min_w_0().child(shown))
                     .on_click(cx.listener(move |this, _, window, cx| this.edit_profile_note(text.clone().unwrap_or_default(), window, cx)))
                     .into_any_element()
             }
         };
-        section("Note (only visible to you)", field, ink)
+        full_section("Note (only visible to you)", field, ink)
     }
 
     // Swaps the note's text for a field holding it; leaving the field saves it.
@@ -253,7 +255,7 @@ impl Waffle {
         let panel = match tab {
             FullTab::Activity => self.activity_tab(card, ink, cx),
             FullTab::MutualFriends => self.mutual_friends_tab(card, profile, cx),
-            FullTab::MutualServers => self.mutual_servers_tab(profile, cx),
+            FullTab::MutualServers => self.mutual_servers_tab(card, cx),
         };
         ui::col().flex_1().min_w_0().min_h_0().pl(px(PADDING)).pr(px(PADDING)).gap_5().child(div().pr_8().child(strip)).child(panel.flex_1().min_h_0().pb_4())
     }
@@ -340,19 +342,25 @@ impl Waffle {
         if profile.mutual_friends.is_empty() {
             return ui::col().justify_center().child(ui::empty_state("full-profile-no-friends", Mood::Idle, "You don't have any friends in common", pick(NO_FRIENDS, &card.user.id), cx));
         }
-        let people: Vec<(User, Option<crate::discord::Mark>)> = profile.mutual_friends.iter().map(|u| (u.clone(), self.presences.get(&u.id).map(|p| p.mark()))).collect();
+        let people: Vec<(User, Option<crate::discord::Mark>, Option<String>)> = profile.mutual_friends.iter().map(|u| (u.clone(), self.presences.get(&u.id).map(|p| p.mark()), self.presence_line(u))).collect();
         let surface = palette::surface(palette::Level::Page, cx);
         let this = cx.weak_entity();
         let list = uniform_list("full-profile-mutual-friends", people.len(), move |range, _, cx| {
             people[range]
                 .iter()
-                .map(|(user, mark)| {
-                    let (this, target) = (this.clone(), user.clone());
+                .map(|(user, mark, line)| {
+                    let (this, target, menu_this, menu_user) = (this.clone(), user.clone(), this.clone(), user.clone());
+                    let title = ui::row().gap_1().child(ui::line(user.name.clone())).children(user.tag.as_ref().map(|tag| crate::chat::guild_tag(tag, cx)));
                     ui::list_row(SharedString::from(format!("mutual-friend-{}", user.id)), user.name.clone(), cx)
+                        .title_element(title)
                         .lead(decorated_avatar(&user.avatar, user.decoration.as_deref(), MUTUAL_FACE_FULL, *mark, surface))
+                        .when_some(line.clone(), |r, line| r.subtitle(ui::line(line)))
                         .height(RowHeight::Exact(MUTUAL_ROW))
                         .on_click(move |_, _, cx| {
                             this.update(cx, |this, cx| this.open_full_profile(target.clone(), FullTab::Activity, cx)).ok();
+                        })
+                        .on_mouse_down(gpui_kit::MouseButton::Right, move |event, _, cx| {
+                            menu_this.update(cx, |this, cx| this.open_user_menu(menu_user.clone(), None, crate::user_menu::Surface::Generic, event.position, cx)).ok();
                         })
                 })
                 .collect()
@@ -360,12 +368,8 @@ impl Waffle {
         ui::col().child(list.size_full())
     }
 
-    fn mutual_servers_tab(&self, profile: &Profile, cx: &mut Context<Self>) -> Div {
-        let servers: Vec<(String, String, Option<String>, Option<String>)> = profile
-            .mutual_guilds
-            .iter()
-            .filter_map(|m| self.guilds.iter().find(|g| g.id == m.id).map(|g| (g.id.clone(), g.name.clone(), g.icon.clone(), m.nick.clone())))
-            .collect();
+    fn mutual_servers_tab(&self, card: &ProfileCard, cx: &mut Context<Self>) -> Div {
+        let servers = self.mutual_servers_in_order(card);
         if servers.is_empty() {
             let id = self.profile_card.as_ref().map(|c| c.user.id.clone()).unwrap_or_default();
             return ui::col().justify_center().child(ui::empty_state("full-profile-no-servers", Mood::Idle, "You don't have any servers in common", pick(NO_SERVERS, &id), cx));
@@ -375,7 +379,7 @@ impl Waffle {
             servers[range]
                 .iter()
                 .map(|(id, name, icon, nick)| {
-                    let (this, target) = (this.clone(), id.clone());
+                    let (this, target, menu_this, menu_id) = (this.clone(), id.clone(), this.clone(), id.clone());
                     ui::list_row(SharedString::from(format!("mutual-server-{id}")), name.clone(), cx)
                         .lead(ui::server_tile(icon.as_deref(), name, MUTUAL_FACE_FULL, cx))
                         .when_some(nick.clone(), |r, nick| r.subtitle(ui::line(nick)))
@@ -387,11 +391,19 @@ impl Waffle {
                             })
                             .ok();
                         })
+                        .on_mouse_down(gpui_kit::MouseButton::Right, move |event, _, cx| {
+                            menu_this.update(cx, |this, cx| this.open_server_menu(menu_id.clone(), event.position, false, cx)).ok();
+                        })
                 })
                 .collect()
         });
         ui::col().child(list.size_full())
     }
+}
+
+// The full profile's sections: a muted heading over a 16px value, as Discord's.
+fn full_section(title: &'static str, content: impl IntoElement, ink: Ink) -> Div {
+    ui::col().gap_1().child(div().text_size(ui::TEXT_SM).font_weight(gpui_kit::FontWeight::MEDIUM).text_color(ink.muted).child(title)).child(div().text_size(ui::TEXT_MD).text_color(ink.text).child(content))
 }
 
 // Discord's short "ago": seconds, minutes, hours, days, weeks, then months.
