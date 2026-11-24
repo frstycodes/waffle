@@ -475,7 +475,6 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/viewer.rs` — the media viewer is drawn by the root, over every column
 - `src/viewer.rs` — the media viewer is drawn by the root, over every column
 - `src/viewer.rs` — the media viewer is drawn by the root, over every column
-- `src/viewer.rs` — the media viewer is drawn by the root, over every column
 - `src/voice_calls.rs` — a failed watch shows on the call tile and in the PiP outside the columns
 - `src/voice_calls.rs` — a missing-picture issue shows on the call tile, the dock and the PiP outside the columns
 - `src/voice_calls.rs` — a reconnecting stream shows on the call tile and in the PiP outside the columns
@@ -1075,7 +1074,6 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/user_menu.rs` — ends when the invite request returns, and holds only a WeakEntity.
 - `src/video.rs` — one open: ends when it returns, or when the player is dropped
 - `src/video.rs` — the tick loop ends when tick says stop or the player is dropped
-- `src/viewer.rs` — one count fetch: ends when the request returns, or when Waffle is dropped
 - `src/voice_calls.rs` — one 1.5 second timer, then it ends
 - `src/voice_calls.rs` — one 60 second timer, then it ends
 - `src/voice_calls.rs` — one LIVE_LAPSE timer, then it ends
@@ -1103,6 +1101,7 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/components.rs` — a copy of the picks above for one render, dropped with the frame; it holds the same few dozen at most
 - `src/components.rs` — one entry per select the user changed, a few dozen at most
 - `src/discord/message.rs` — capped at four pictures per embed, as the comment above says.
+- `src/discord/pacing.rs` — one entry per server opened, cleared on every READY
 - `src/drafts.rs` — one pick per option of one typed command, 25 at most (Discord's cap)
 - `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
 - `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
@@ -1130,6 +1129,7 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/main.rs` — one thumbnail url per streamer seen, a handful of live streams at a time
 - `src/main.rs` — one u64 per channel the gateway reported, bounded by the user's channel count
 - `src/profile.rs` — one entry per profile effect sku seen, a catalogue of a few hundred at most
+- `src/query.rs` — a key leaves once its cooldown is over and it's asked for again, or once it's stored
 - `src/reactions.rs` — the name spans of one card sentence, three at most, rebuilt for each card
 - `src/report.rs` — one pick per form element of the node on screen, a handful
 - `src/report.rs` — the reasons of one menu node, a few dozen at most

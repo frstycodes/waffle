@@ -166,7 +166,7 @@ impl Waffle {
     pub(crate) fn automod_alert_action(&mut self, alert: &Message, action: AlertAction, cx: &mut Context<Self>) {
         let Some(guild_id) = alert.guild_id.clone() else { return };
         let body = serde_json::json!({ "message_id": alert.id, "channel_id": alert.channel_id, "alert_action_type": action as u8 });
-        self.rest(reqwest::Method::POST, format!("/guilds/{guild_id}/auto-moderation/alert-action"), Some(body), |_, _| {}, cx);
+        self.rest(crate::discord::Method::POST, format!("/guilds/{guild_id}/auto-moderation/alert-action"), Some(body), |_, _| {}, cx);
     }
 
     // Report Issues: Discord's "Did we get it wrong?" confirm, then the feedback alert action.

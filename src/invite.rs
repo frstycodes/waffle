@@ -13,7 +13,7 @@ use gpui_kit::{
     prelude::*,
     px,
 };
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::json;
 
 use crate::{

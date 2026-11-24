@@ -376,10 +376,10 @@ impl Waffle {
         if read.last_read >= last && read.mentions == 0 {
             return;
         }
+        let mentioned = read.mentions > 0;
         read.last_read = last;
         read.mentions = 0;
-        let id = channel.id.clone();
-        discord::runtime().spawn(async move { client.ack(&id, &last.to_string()).await });
+        client.ack_soon(&channel.id, &last.to_string(), mentioned);
         let _ = cx;
     }
     pub(crate) fn open_pins(&mut self, cx: &mut Context<Self>) {

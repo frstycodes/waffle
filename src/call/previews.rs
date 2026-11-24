@@ -2,7 +2,7 @@ use super::*;
 
 impl Waffle {
     // Discord's stream thumbnails (GET /streams/{key}/preview) for everyone live in the open server
-    // and our call, refetched when older than a minute.
+    // and our call. Each entry holds the picture, when it may be fetched again, and the failures in a row.
     pub(crate) fn refresh_stream_previews(&mut self, cx: &mut Context<Self>) {
         let Some(client) = self.client.clone() else { return };
         let wanted: Vec<String> = [self.guild_id.clone(), self.call.as_ref().and_then(|c| c.guild_id.clone())].into_iter().flatten().collect();
@@ -10,19 +10,19 @@ impl Waffle {
         for guild in self.guilds.iter().filter(|g| wanted.contains(&g.id)) {
             for state in guild.voice_states.iter().filter(|v| v.streaming) {
                 let Some(channel) = &state.channel_id else { continue };
-                let fresh = self.stream_previews.get(&state.user_id).is_some_and(|(_, at)| at.elapsed() < PREVIEW_AGE);
+                let fresh = self.stream_previews.get(&state.user_id).is_some_and(|(_, due, _)| std::time::Instant::now() < *due);
                 if !fresh {
                     keys.push((state.user_id.clone(), format!("guild:{}:{channel}:{}", guild.id, state.user_id)));
                 }
             }
         }
         for (user_id, key) in keys {
-            // Marked fetched now so a burst of events doesn't fire duplicate requests.
-            let old = self.stream_previews.get(&user_id).map(|(url, _)| url.clone()).unwrap_or_default();
-            self.stream_previews.insert(user_id.clone(), (old, std::time::Instant::now()));
+            // Not due again until this one answers, so a burst of events doesn't fire duplicate requests.
+            let (old, fails) = self.stream_previews.get(&user_id).map(|(url, _, fails)| (url.clone(), *fails)).unwrap_or_default();
+            self.stream_previews.insert(user_id.clone(), (old.clone(), std::time::Instant::now() + PREVIEW_AGE, fails));
             let client = client.clone();
             cx.spawn(async move |this, cx| {
-                let result = client.call(reqwest::Method::GET, format!("/streams/{key}/preview"), None).await;
+                let result = client.call(crate::discord::Method::GET, format!("/streams/{key}/preview"), None).await;
                 if cfg!(debug_assertions) && std::env::var_os("WAFFLE_STREAM_DEBUG").is_some() {
                     eprintln!("stream preview {key}: {:?}", result.as_ref().map(|b| b.to_string()));
                 }
@@ -33,19 +33,17 @@ impl Waffle {
                 let Some(url) = url else {
                     // Often just too early: the streamer uploads its first preview a few seconds
                     // after going live. Ask again soon instead of waiting for the next voice event.
-                    cx.background_executor().timer(PREVIEW_RETRY).await;
-                    this.update(cx, |this, cx| {
-                        this.expire_stream_preview(&user_id);
-                        this.refresh_stream_previews(cx);
-                    })
-                    .ok();
+                    let wait = PREVIEW_RETRY_STEP * (fails + 1);
+                    this.update(cx, |this, _| _ = this.stream_previews.insert(user_id.clone(), (old, std::time::Instant::now() + wait, fails + 1))).ok();
+                    cx.background_executor().timer(wait).await;
+                    this.update(cx, |this, cx| this.refresh_stream_previews(cx)).ok();
                     return;
                 };
                 if std::env::var_os("WAFFLE_STREAM_DEBUG").is_some() {
                     eprintln!("stream preview fetched for {key}");
                 }
                 this.update(cx, |this, cx| {
-                    this.stream_previews.insert(user_id, (url, std::time::Instant::now()));
+                    this.stream_previews.insert(user_id, (url, std::time::Instant::now() + PREVIEW_AGE, 0));
                     cx.notify(); // lint-allow(global-notify): the stage tiles (main), the voice rows (nav) and profile cards (overlays) all show it
                 })
                 .ok();
@@ -56,10 +54,8 @@ impl Waffle {
 
     // Lets the next refresh fetch this streamer's preview again, keeping the picture shown so far.
     pub(crate) fn expire_stream_preview(&mut self, user_id: &str) {
-        if let Some((_, at)) = self.stream_previews.get_mut(user_id)
-            && let Some(old) = std::time::Instant::now().checked_sub(PREVIEW_AGE)
-        {
-            *at = old;
+        if let Some((_, due, _)) = self.stream_previews.get_mut(user_id) {
+            *due = std::time::Instant::now();
         }
     }
 
@@ -104,7 +100,7 @@ impl Waffle {
                 let thumbnail = cx.background_spawn(async move { voice::thumbnail(source, 512).ok().and_then(|frame| jpeg_data_url(&frame)) }).await;
                 let sent = match thumbnail {
                     Some(url) => {
-                        let result = client.call(reqwest::Method::POST, format!("/streams/{key}/preview"), Some(serde_json::json!({ "thumbnail": url }))).await;
+                        let result = client.call(crate::discord::Method::POST, format!("/streams/{key}/preview"), Some(serde_json::json!({ "thumbnail": url }))).await;
                         if let Err(e) = &result {
                             eprintln!("stream preview upload {key} failed: {e}");
                         } else {
@@ -133,7 +129,7 @@ impl Waffle {
     }
 
     pub(crate) fn stream_preview(&self, user_id: &str) -> Option<String> {
-        self.stream_previews.get(user_id).map(|(url, _)| url.clone()).filter(|url| !url.is_empty())
+        self.stream_previews.get(user_id).map(|(url, _, _)| url.clone()).filter(|url| !url.is_empty())
     }
 }
 

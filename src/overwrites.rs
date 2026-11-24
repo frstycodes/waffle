@@ -1,7 +1,7 @@
 // Permission overwrites as Discord edits them, for any settings page that grants per role or member
 // (channel settings now; server settings' role pages later): the deny / inherit / allow model, the
 // requests that save a changed set, category sync, the Private switch, and Discord web's permission groups.
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::{Value, json};
 
 use crate::{

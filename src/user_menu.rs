@@ -2,7 +2,7 @@
 // message.md, read from Discord web 2026-11-14). Each item carries Discord's show-condition; items
 // for features Waffle doesn't have (activities, apps, E2EE codes) are left out.
 use gpui_kit::{Context, Pixels, Point, Window};
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::json;
 
 use crate::{

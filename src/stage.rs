@@ -1,7 +1,7 @@
 // Stage channels (Discord type 13): what a stage moderator, speaker or audience member can do, as
 // Discord's client does it (docs/discord-stage-re.md). The stage's look is design/explore-stage.html.
 use gpui_kit::Context;
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::{Value, json};
 
 use crate::{

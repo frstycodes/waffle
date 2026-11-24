@@ -218,7 +218,7 @@ impl Waffle {
             }
         }
         if changed {
-            self.rest(reqwest::Method::PUT, format!("/users/@me/notes/{user_id}"), Some(serde_json::json!({ "note": note })), |_, _| {}, cx);
+            self.rest(crate::discord::Method::PUT, format!("/users/@me/notes/{user_id}"), Some(serde_json::json!({ "note": note })), |_, _| {}, cx);
         }
         self.redraw_overlays(cx);
     }

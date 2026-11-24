@@ -188,7 +188,7 @@ impl Waffle {
             out.push(crate::menu::item("Edit Sound", move |this, window, cx| {
                 let path = format!("/guilds/{gid}/soundboard-sounds/{id}");
                 this.prompt("Edit Sound", "Sound name", &name, "Save", move |this, name, _, cx| {
-                    this.rest(reqwest::Method::PATCH, path.clone(), Some(serde_json::json!({ "name": name.trim() })), |_, _| {}, cx);
+                    this.rest(crate::discord::Method::PATCH, path.clone(), Some(serde_json::json!({ "name": name.trim() })), |_, _| {}, cx);
                 }, window, cx);
             }).entry());
         }

@@ -31,7 +31,7 @@ impl Waffle {
         }
         self.status = Status::Reconnecting("Checking your sign-in…".into());
         cx.spawn(async move |this, cx| {
-            let refused = client.call(reqwest::Method::GET, "/users/@me".into(), None).await.err().is_some_and(|e| crate::discord::is_unauthorized(&e));
+            let refused = client.call(crate::discord::Method::GET, "/users/@me".into(), None).await.err().is_some_and(|e| crate::discord::is_unauthorized(&e));
             this.update(cx, |this, cx| match refused {
                 true => {
                     eprintln!("gateway: token refused (4004 and REST 401), signing out");
@@ -397,7 +397,7 @@ impl Waffle {
                 let ours = self.call.as_ref().map(|c| c.channel.id.clone());
                 let me = self.me.as_ref().map(|m| m.id.clone());
                 if Some(&state.user_id) == me.as_ref() && state.channel_id.is_some() && session.is_some_and(|s| s != self.gateway_session) {
-                    self.taken_elsewhere();
+                    self.taken_elsewhere(state.guild_id.as_deref());
                 }
                 // Someone answering our ring joins the DM call: the ringtone stops.
                 if state.channel_id.is_some() && state.channel_id == self.ringing_out && Some(&state.user_id) != me.as_ref() {

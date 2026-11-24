@@ -16,7 +16,7 @@ use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, Bounds, BoxShadow, Context, Div, Entity, FontWeight, IntoElement, Pixels, Point, Radians, Render, SharedString, SizeRefinement, SpringConfig,
     SpringState, WeakEntity, Window, anchored, canvas, component::Icon, deferred, div, point, prelude::*, px, relative,
 };
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::json;
 
 use crate::{

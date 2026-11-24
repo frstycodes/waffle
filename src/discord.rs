@@ -25,17 +25,22 @@ mod client;
 mod gateway;
 mod guild;
 mod http;
+mod identity;
 mod message;
 mod parse;
+mod pacing;
 mod parse_chat;
 mod people;
 mod profile;
 #[cfg(test)]
 mod tests;
+pub mod transport;
+pub use transport::Method;
 
 pub use client::*;
 pub use guild::*;
 pub use http::*;
+pub use identity::{identity, load_build_number};
 pub use message::*;
 pub use parse::*;
 pub use parse_chat::*;

@@ -608,7 +608,7 @@ pub struct Waffle {
     menu: Option<menu::OpenMenu>,
     // Go Live thumbnails by streamer: the CDN url and when it was fetched.
     // lint-allow(unbounded-growth): one thumbnail url per streamer seen, a handful of live streams at a time
-    stream_previews: HashMap<String, (String, Instant)>,
+    stream_previews: HashMap<String, (String, Instant, u32)>,
     // Forum channels' archived posts and post previews, by forum id.
     // lint-allow(unbounded-growth): one forum state per forum channel opened, bounded by the user's forum channels
     forums: HashMap<String, forum::ForumState>,

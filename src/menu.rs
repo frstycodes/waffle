@@ -754,7 +754,7 @@ impl Waffle {
     // Runs a REST call in the background; a failure shows as a toast, success runs `then`.
     pub(crate) fn rest(
         &mut self,
-        method: reqwest::Method,
+        method: crate::discord::Method,
         path: String,
         body: Option<serde_json::Value>,
         then: impl FnOnce(&mut Waffle, &mut Context<Waffle>) + 'static,
@@ -780,7 +780,7 @@ impl Waffle {
     // in the background, and if Discord refuses, `revert` puts it back and a toast says why.
     pub(crate) fn rest_optimistic(
         &mut self,
-        method: reqwest::Method,
+        method: crate::discord::Method,
         path: String,
         body: Option<serde_json::Value>,
         apply: impl FnOnce(&mut Waffle),

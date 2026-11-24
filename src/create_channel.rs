@@ -14,7 +14,7 @@ use gpui_kit::{
     prelude::FluentBuilder as _,
     px,
 };
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::{Value, json};
 
 use crate::{

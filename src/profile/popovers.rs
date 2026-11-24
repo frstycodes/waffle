@@ -10,7 +10,7 @@ use gpui_kit::{
     },
     div, img, prelude::*, px,
 };
-use reqwest::Method;
+use crate::discord::Method;
 
 use super::{Ink, ProfileCard};
 use crate::{

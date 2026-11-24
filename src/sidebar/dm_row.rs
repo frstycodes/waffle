@@ -101,7 +101,7 @@ impl Waffle {
                 this.close_dm(&close_id, cx);
             }));
         let row = channel_row(SharedString::from(channel.id.clone()), group.clone(), state, cx);
-        self.track_row_hover(row, &channel.id, true, cx)
+        self.track_row_hover(row, &channel.id, cx)
             .h(px(DM_ROW_HEIGHT))
             .gap_3()
             .font_weight(FontWeight::NORMAL)

@@ -175,7 +175,7 @@ impl Waffle {
         let (Some(client), me) = (self.client.clone(), self.my_id().to_owned()) else { return };
         // Not verified: the decline endpoint and body, taken from Discord's client traffic as documented by third parties.
         crate::discord::runtime().spawn(async move {
-            let _ = client.call(reqwest::Method::POST, format!("/channels/{channel_id}/call/stop-ringing"), Some(serde_json::json!({ "recipients": [me] }))).await;
+            let _ = client.call(crate::discord::Method::POST, format!("/channels/{channel_id}/call/stop-ringing"), Some(serde_json::json!({ "recipients": [me] }))).await;
         });
         cx.notify(); // lint-allow(global-notify): the ringing card is an overlay and the DM list marks the call in the nav
     }
@@ -185,7 +185,7 @@ impl Waffle {
         let Some(client) = self.client.clone() else { return };
         self.ring_out(channel_id.clone(), cx);
         crate::discord::runtime().spawn(async move {
-            let _ = client.call(reqwest::Method::POST, format!("/channels/{channel_id}/call/ring"), Some(serde_json::json!({ "recipients": null }))).await;
+            let _ = client.call(crate::discord::Method::POST, format!("/channels/{channel_id}/call/ring"), Some(serde_json::json!({ "recipients": null }))).await;
         });
     }
 
