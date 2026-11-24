@@ -33,7 +33,7 @@ pub(super) fn files(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> Ve
                 });
             }
             let copied = ctx.copied.as_deref() == Some(file.url.as_str());
-            crate::text_file::inline(format!("text-{}-{}", message.id, file.name), file, state, text_files.expanded.contains(&file.url), copied, ctx.this.clone(), cx).into_any_element()
+            crate::text_file::inline(format!("text-{}-{}", message.id, file.name), file, state, text_files.view(&file.url), copied, ctx.this.clone(), cx).into_any_element()
         })
         .collect()
 }

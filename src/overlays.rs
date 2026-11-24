@@ -87,7 +87,12 @@ impl Waffle {
 
     /// Puts an @name chip at the end of the composer, sent as a real mention.
     pub(crate) fn mention_user(&mut self, user: &User, window: &mut Window, cx: &mut Context<Self>) {
-        let chip = gpui_kit::component::input::InlineToken::new(format!("<@{}>", user.id), format!("@{}", user.name));
+        self.insert_mention(format!("<@{}>", user.id), format!("@{}", user.name), window, cx);
+    }
+
+    // A mention chip at the end of the draft: `raw` is what's sent, `shown` what the chip reads.
+    pub(crate) fn insert_mention(&mut self, raw: String, shown: String, window: &mut Window, cx: &mut Context<Self>) {
+        let chip = gpui_kit::component::input::InlineToken::new(raw, shown);
         self.composer.update(cx, |state, cx| {
             let text = state.value();
             let end = text.len();
@@ -116,6 +121,10 @@ impl Waffle {
             self.redraw_overlays(cx);
             return true;
         }
+        // A profile's popover (role picker, note, reply) closes alone, back to its card.
+        if self.close_card_pop(cx) {
+            return true;
+        }
         // The full-size avatar closes alone, back to the popout it opened from.
         if let Some(card) = self.profile_card.as_mut().filter(|c| c.avatar_full) {
             card.avatar_full = false;
@@ -125,7 +134,7 @@ impl Waffle {
         let text_viewer = self.text_files.borrow_mut().viewer.take().is_some();
         let open = text_viewer
             | self.role_popout.close()
-            | self.profile_card.take().is_some()
+            | self.close_profile_card()
             | std::mem::take(&mut self.status_menu)
             | self.status_editor.take().is_some()
             | self.poll_creator.take().is_some()
@@ -357,7 +366,7 @@ impl Waffle {
                 .flex_wrap()
                 .gap_1()
                 .children(gifs.iter().enumerate().map(|(i, g)| {
-                    let url = g.url.clone();
+                    let (url, link) = (g.url.clone(), g.url.clone());
                     let height = column_width * g.height / g.width.max(1.);
                     ui::pressable(div().id(SharedString::from(format!("gif-{i}"))), 0.97)
                         .w(px(column_width))
@@ -368,6 +377,11 @@ impl Waffle {
                         .cursor_pointer()
                         .hover(|s| s.opacity(0.85))
                         .child(img(g.preview.clone()).size_full().object_fit(gpui_kit::ObjectFit::Cover).squircle(RADIUS_MD))
+                        // Discord's GIF menu: Copy Link, only.
+                        .on_mouse_down(gpui_kit::MouseButton::Right, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| {
+                            let link = link.clone();
+                            this.open_menu(e.position, vec![crate::menu::item("Copy Link", move |this, _, cx| this.copy_text(link.clone(), cx)).icon(Glyph::Link).entry()], cx);
+                        }))
                         .on_click(cx.listener(move |this, _, window, cx| this.send_gif(url.clone(), window, cx)))
                 }))
                 .into_any_element(),

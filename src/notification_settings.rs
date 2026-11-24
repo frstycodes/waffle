@@ -30,8 +30,8 @@ const FOREVER: i64 = -1;
 const LEVELS: [(&str, u8); 3] = [("All Messages", 0), ("Only @mentions", 1), ("Nothing", 2)];
 const SEGMENTS: [&str; 3] = ["All", "Mentions", "Nothing"];
 // Discord's notify_highlights values for the Suppress Highlights switch.
-const HIGHLIGHTS_DISABLED: u8 = 1;
-const HIGHLIGHTS_ENABLED: u8 = 2;
+pub(crate) const HIGHLIGHTS_DISABLED: u8 = 1;
+pub(crate) const HIGHLIGHTS_ENABLED: u8 = 2;
 // The mute-duration select's height: the dropdown hangs from its bottom edge.
 const SELECT_HEIGHT: f32 = 40.;
 // A select's width, the least height of a settings row and of an override row, and the channel list's cap.

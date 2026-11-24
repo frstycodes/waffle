@@ -629,7 +629,7 @@ impl Waffle {
                 })),
                 friend_action(("more", &id), Glyph::MoreVertical, "More", None, cx).on_mouse_down(gpui_kit::MouseButton::Left, {
                     let user = user.clone();
-                    cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_user_menu(user.clone(), None, crate::user_menu::Surface::Generic, e.position, cx))
+                    cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_friend_row_menu(user.clone(), e.position, cx))
                 }),
             ],
             Relation::Incoming => vec![

@@ -294,9 +294,7 @@ impl Waffle {
         let nav = ui::col().relative().flex_none().h_full().w(px(self.settings_width)).child(ui::settings_nav_edge(cx)).child(nav).child(self.resize_handle(Edge::Settings, cx));
         // The page's top band drags the window too, as every other column's header does; it stops above
         // the close button, which sits below the caption buttons.
-        // lint-allow(titlebar-clearance): a bare drag band under the caption buttons, which occlude it; nothing in it to cover
-        let drag = div().absolute().top_0().left_0().right_0().h(px(TITLE_HEIGHT)).window_control_area(gpui_kit::WindowControlArea::Drag);
-        let main = ui::row().items_stretch().relative().flex_1().h_full().child(main).child(drag);
+        let main = ui::row().items_stretch().relative().flex_1().h_full().child(main).child(title_drag_band());
         ui::settings_window(id, nav, main, cx)
     }
 
@@ -610,4 +608,11 @@ pub(crate) fn window_drag(
     )
     .absolute()
     .size_0()
+}
+
+// A band across the window's top that drags it: over a view that covers the window, or a modal's backdrop, which
+// would otherwise take the press. It takes the pointer, so a press there neither reaches nor dismisses what's under it.
+pub(crate) fn title_drag_band() -> gpui_kit::Stateful<Div> {
+    // lint-allow(titlebar-clearance): a bare drag band under the caption buttons, which occlude it; nothing in it to cover
+    div().id("title-drag-band").absolute().top_0().left_0().right_0().h(px(TITLE_HEIGHT)).occlude().window_control_area(gpui_kit::WindowControlArea::Drag)
 }

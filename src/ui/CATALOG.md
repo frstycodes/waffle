@@ -79,6 +79,8 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::Control`
 - `ui::button` — A text button, 36px tall (`.large()` 44, `.small()` 30).
 - `ui::icon_button` — A square icon-only button that fills on hover, with its tooltip: 32px (`.small()` 24, `.large()` 40).
+- `ui::chip_remove` — The × that takes a chip away (a picked member, a role on a profile), in the chip's own `ink`, `strong` under the pointer; the click stops at
+- `ui::REMOVE_GLYPH_SM`
 - `ui::icon_slot` — An icon button whose face is any element instead of a glyph (a server's tile in a picker's category rail, an svg nav icon): the same size, f
 - `ui::round_button` — A round icon button over video or the call stage (`size` 28 or 40).
 - `ui::card` — A clickable card (a template, a post, a launcher entry, a theme): a quiet fill on the page that deepens on hover, rounded large; `.toggled` 
@@ -100,6 +102,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 ## src/ui/dialog.rs
 
 - `ui::dialog` — A dialog's card around `body`, `width` wide.
+- `ui::dialog_fixed` — A dialog of a fixed size whose content may draw past its edge (a profile's frame over the full profile): the same card, shadow and pop as `d
 - `ui::dialog_scroll` — The part of a dialog between its fixed header and footer that scrolls when the window is too short, fading out at whichever edge has more be
 - `ui::dialog_body` — A dialog's usual body: 24px in, sections 16px apart.
 - `ui::modal` — Dims the window behind `dialog` and centres it.
@@ -214,6 +217,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::divider_with` — A divider whose label and line colour come from data (a day's date, a state's ink): rules either side of the label, inside the parent's gutt
 - `ui::surface_in` — A floating surface in a scope's own colours (the call stage's dark overlay and ring, a menu in its ink): the kit's surface with its `fill` a
 - `ui::panel` — A card that only holds things (a quoted embed, a preview): the raised fill, a hairline edge, rounded large, content in a column.
+- `ui::thought_bubble` — A thought bubble: a pill of `content` in `fill` with a hairline `edge`, and two dots trailing up-left from it towards whoever's thinking it 
 
 ## src/ui/overflow.rs
 

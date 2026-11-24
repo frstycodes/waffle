@@ -72,6 +72,7 @@ impl Waffle {
         match target {
             EmojiTarget::Reaction(message) => self.toggle_reaction(&message, emoji, cx),
             EmojiTarget::PollAnswer(ix) => self.set_poll_emoji(ix, emoji),
+            EmojiTarget::ProfileReaction => self.send_profile_reaction(emoji, cx),
             EmojiTarget::CustomStatus => {
                 if let Some(editor) = self.status_editor.as_mut() {
                     editor.emoji = Some(emoji);
