@@ -650,6 +650,7 @@ _One-line text: ui::line(text), or ui::truncating(key, text) when the cut text s
 - `src/command_picker/render.rs` — ui::line takes plain text; this one is a highlighted StyledText (the match marks)
 - `src/forum/helpers.rs` — ui::line clamps to one line; a post's title clamps to two
 - `src/link_preview.rs` — ui::line is one line; a quote clamps at three lines
+- `src/profile/parts.rs` — ui::line ends one line in an ellipsis; this clamps the status to two lines and ends the second.
 - `src/profile/parts.rs` — ui::line takes plain text; this is the user's name set in their chosen name font and styled runs.
 
 ## raw-margin

@@ -1,2 +1,1 @@
 # Left from before the rules (tools/ui_lint.py). Only ever lower: `python3 tools/ui_lint.py --update`.
-src/profile/parts.rs	raw-truncate	1

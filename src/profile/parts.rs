@@ -192,6 +192,7 @@ pub(super) fn status_bubble(text: String, expanded: bool, ink: Ink, cx: &App) ->
     // A status past two lines takes the text's whole width: wrapped any narrower, gpui lays the clamped lines out
     // wider than the bubble and cuts their ends.
     let long = super::status_runs_long(&text);
+    // lint-allow(raw-truncate): ui::line ends one line in an ellipsis; this clamps the status to two lines and ends the second.
     let content = div().min_w_0().max_w(px(BUBBLE_TEXT)).when(long, |c| c.w(px(BUBBLE_TEXT))).when(!expanded, |c| c.line_clamp(2).text_ellipsis()).text_color(ink.text).child(text);
     ui::row().items_start().child(ui::thought_bubble("profile-status-bubble", content, fill, palette::line(cx)).max_w(px(BUBBLE_MAX)))
 }
