@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Activity cards</title>
+<meta name="description" content="Discord's activity cards in the profile popout, DM side panel, full profile and the Friends page's Active Now, each case beside Waffle's, a playground, and what Waffle changes to match.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..800&family=Noto+Sans:wght@400..700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="site.css">
+<link rel="stylesheet" href="css/primitives.css">
+<script>try{const p=JSON.parse(localStorage.getItem("waffle-ds")||"{}"),r=document.documentElement;if(p.theme)r.dataset.theme=p.theme}catch{}</script>
+<style>
+  main { max-width: 1320px; }
+  .src { font-size: var(--text-xs); color: var(--text-faint); max-width: 110ch; }
+  .src code { font-family: var(--font-mono); font-size: 11px; }
+  .nv { color: var(--warning-ink); }
+
+  /* Playground and case layout, as the other compare pages. */
+  .play { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+  .knobs { display: grid; gap: var(--space-4); padding: var(--space-4); background: var(--bg-raised); border-radius: var(--radius-lg); position: sticky; top: var(--space-4); max-height: calc(100vh - 32px); overflow: auto; }
+  .knobs fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+  .knobs legend { font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--text-faint); margin-bottom: var(--space-1); }
+  .knobs label { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text); min-width: 0; }
+  .knobs label > span { flex: none; width: 80px; color: var(--text-muted); }
+  .knobs select { flex: 1; min-width: 0; height: 32px; padding: 0 var(--space-2); border-radius: var(--radius-xs); border: 1px solid var(--line-strong); background: var(--bg-page); color: var(--text-strong); font: inherit; }
+  .knobs input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+  .stages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); min-width: 0; }
+  .stage { display: grid; gap: var(--space-2); min-width: 0; align-content: start; }
+  .stage h3 { margin: 0; }
+  @media (max-width: 960px) { .play { grid-template-columns: minmax(0, 1fr); } .knobs { position: static; max-height: none; } }
+  @media (max-width: 720px) { .stages { grid-template-columns: minmax(0, 1fr); } }
+  .cases { display: grid; gap: var(--space-2); }
+  .case { display: grid; grid-template-columns: 200px minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; padding: var(--space-3) 0; border-top: 1px solid var(--line); }
+  .case h4 { margin: 0 0 var(--space-1); font-size: var(--text-sm); color: var(--text-strong); }
+  .case p { margin: 0; font-size: var(--text-xs); line-height: 1.45; color: var(--text-muted); text-wrap: pretty; }
+  .case .frame { min-width: 0; overflow: hidden; }
+  .group-h { margin: var(--space-6) 0 0; font-size: var(--text-md); color: var(--text-strong); }
+  .colhead { display: grid; grid-template-columns: 200px minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--text-faint); position: sticky; top: 57px; background: var(--bg-page); padding: var(--space-2) 0; z-index: 5; }
+  @media (max-width: 900px) { .case, .colhead { grid-template-columns: minmax(0, 1fr); } .colhead { display: none; } .case .frame::before { content: attr(data-side); display: block; font-size: var(--text-xs); color: var(--text-faint); margin-bottom: 4px; } }
+  .gaps { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+  .gaps th, .gaps td { text-align: left; vertical-align: top; padding: var(--space-2) var(--space-3) var(--space-2) 0; border-top: 1px solid var(--line); line-height: 1.45; }
+  .gaps th { font-size: var(--text-xs); color: var(--text-faint); font-weight: var(--weight-semibold); }
+  .gaps td:first-child { color: var(--text-strong); font-weight: var(--weight-medium); white-space: nowrap; }
+  .gaps-wrap { overflow-x: auto; }
+
+  /* Shared stand-ins: monogram avatars, art squares, brand marks. */
+  .av { position: relative; flex: none; width: var(--s, 32px); height: var(--s, 32px); border-radius: 50%; display: grid; place-items: center; color: #fff; font: 700 calc(var(--s, 32px) * .4)/1 "Figtree", sans-serif; background: linear-gradient(135deg, hsl(var(--h) 70% 62%), hsl(calc(var(--h) + 40) 65% 45%)); }
+  .av .st { position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; border-radius: 50%; background: #23a55a; border: 3px solid var(--ring); }
+  .art { flex: none; width: var(--a); height: var(--a); background: linear-gradient(135deg, hsl(var(--h) 60% 55%), hsl(calc(var(--h) + 60) 55% 35%)); position: relative; }
+  .art.unk { background: var(--unk); display: grid; place-items: center; color: var(--unk-ink); font: 800 calc(var(--a) * .4)/1 sans-serif; }
+  .art .sm { position: absolute; right: -4px; bottom: -4px; width: var(--b); height: var(--b); border-radius: 50%; background: linear-gradient(135deg, #f0b232, #bf7d06); box-shadow: 0 0 0 2px var(--ring); }
+  .faces { display: flex; flex: none; } .faces .av { --s: var(--fs); font-size: 8px; box-shadow: 0 0 0 2px var(--ring); } .faces .av + .av, .faces .more { margin-left: calc(var(--fs) / -4); }
+  .faces .more { flex: none; height: var(--fs); min-width: var(--fs); padding: 0 4px; border-radius: 99px; display: grid; place-items: center; font-size: 10px; font-weight: 600; background: var(--more); color: var(--muted); box-shadow: 0 0 0 2px var(--ring); }
+  .live { flex: none; height: 16px; padding: 0 6px; border-radius: 99px; background: #d22d39; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; }
+  .clip { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── Discord: values from its shipped CSS (.theme-dark / .theme-light, 2026-11-24). ── */
+  .dc { --card: #3f4048; --page: #232428; --ring: #3f4048; --strong: #fff; --text: #f3f3f4; --muted: #c5c6ca; --icon: #abacb2; --green: #7fd49a; --btn: hsl(240 4% 60.8% / .12); --btn-h: hsl(240 4% 60.8% / .16); --track: hsl(240 4% 60.8% / .16); --more: #2c2d32; --unk: #fff; --unk-ink: #3f4048;
+        --an-card: #2c2d32; --an-head: hsl(240 4% 60.8% / .06); --an-line: hsl(240 4% 60.8% / .12);
+        font: 500 14px/1.25 "gg sans", "Noto Sans", system-ui, sans-serif; color: var(--text); }
+  :root[data-theme="light"] .dc { --card: #fff; --page: #f3f3f4; --ring: #fff; --strong: #28282d; --text: #2e2e34; --muted: #595a63; --icon: #6c6d76; --green: #017240; --more: #f3f3f4; --unk: #000; --unk-ink: #fff; --an-card: #fff; --an-line: hsl(240 4% 60.8% / .2); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme]) .dc { --card: #fff; --page: #f3f3f4; --ring: #fff; --strong: #28282d; --text: #2e2e34; --muted: #595a63; --icon: #6c6d76; --green: #017240; --more: #f3f3f4; --unk: #000; --unk-ink: #fff; --an-card: #fff; --an-line: hsl(240 4% 60.8% / .2); } }
+  /* ── Waffle: tokens.css, the app's squircle radii (cards 14, wide cards 20, art 11/14), Figtree. ── */
+  .wf { --card: var(--bg-group); --page: var(--bg-overlay); --ring: var(--bg-group); --strong: var(--text-strong); --muted: var(--text-muted); --icon: var(--text-muted); --green: var(--online-ink); --btn: var(--hover); --btn-h: var(--press); --track: var(--line-strong); --more: var(--bg-page); --unk: var(--text-strong); --unk-ink: var(--bg-group);
+        --an-card: var(--bg-raised); --an-head: var(--hover); --an-line: var(--line);
+        font: 500 14px/1.25 "Figtree", system-ui, sans-serif; color: var(--text); }
+
+  .pop { width: 300px; max-width: 100%; box-sizing: border-box; background: var(--page); border-radius: 12px; padding: 12px 16px; display: grid; gap: 8px; }
+  .full { background: var(--page); border-radius: 16px; padding: 16px; display: grid; gap: 8px; }
+  .ac { background: var(--card); border-radius: 8px; padding: 8px; display: grid; gap: 8px; min-width: 0; }
+  .wf .ac { border-radius: 14px; corner-shape: superellipse(1.4); } .wf .art, .wf .prev, .wf .btn, .wf .anc, .wf .empty { corner-shape: superellipse(1.4); }
+  .wide .ac { padding: 12px; border-radius: 12px; } .wf .wide .ac { border-radius: 20px; }
+  .ac .hd { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: var(--strong); min-width: 0; }
+  .ac .hd .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ac .hd .mk { color: var(--icon); font-size: 12px; } .ac .hd .menu { margin-left: auto; color: var(--icon); font-size: 16px; }
+  .ac .bd { display: flex; gap: 8px; min-width: 0; } .wide .ac .bd { gap: 12px; align-items: flex-start; }
+  .ac .art { --a: 60px; --b: 24px; border-radius: 8px; } .wide .ac .art { --a: 100px; --b: 32px; } .wf .ac .art, .wf .prev { border-radius: 11px; } .wf .wide .ac .art { border-radius: 14px; }
+  .ac .dt { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+  .ac .l1 { font-size: 14px; line-height: 18px; font-weight: 600; } .ac .l2 { font-size: 12px; line-height: 16px; font-weight: 400; }
+  .pop .ac .l1, .pop .ac .l2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ac .bdg { display: flex; flex-wrap: wrap; column-gap: 8px; font-size: 12px; color: var(--muted); } .ac .bdg span { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+  .ac .bdg .tm { color: var(--green); font-variant-numeric: tabular-nums; }
+  .ac .pg { display: flex; align-items: center; gap: 8px; font: 400 12px/16px var(--font-mono); } .ac .pg .bar { flex: 1; height: 2px; border-radius: 2px; background: var(--track); } .ac .pg .bar i { display: block; height: 100%; width: 18%; border-radius: inherit; background: var(--strong); }
+  .wf .ac .pg .bar { height: 4px; display: flex; gap: 4px; background: none; } .wf .ac .pg .bar i { flex: 0 0 18%; border-radius: 2px 1px 1px 2px; } .wf .ac .pg .bar::after { content: ""; flex: 1; border-radius: 1px 2px 2px 1px; background: var(--track); }
+  .ac .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; } .wide .ac .acts { margin-top: 0; }
+  .btn { flex: 1 1 auto; min-width: calc(50% - 8px); height: 32px; padding: 0 11px; border-radius: 8px; background: var(--btn); color: var(--strong); font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; overflow: hidden; }
+  .wf .btn { border-radius: 11px; height: 30px; } .btn.ic { flex: 0 0 32px; min-width: 32px; padding: 0; } .btn.off { opacity: .5; } .wide .btn { flex: 0 0 auto; min-width: 0; }
+  .prev { width: 100%; aspect-ratio: 16/9; border-radius: 8px; background: linear-gradient(135deg, #2c6b7a, #6a2a7d); display: grid; place-items: center; }
+  .prev span { padding: 7px 16px; border-radius: 8px; background: rgba(0,0,0,.6); color: #fff; font-size: 14px; }
+  .place { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; } .place .g { width: 16px; height: 16px; border-radius: 4px; background: #5865f2; flex: none; }
+  .rule { height: 1px; background: var(--an-line); }
+  .deck { height: 8px; margin: -8px 8px 0; border-radius: 0 0 8px 8px; background: var(--card); opacity: .6; }
+  .showmore { justify-self: start; padding: 4px 8px; border-radius: 8px; color: var(--muted); font-size: 14px; }
+  .vtile { --a: 60px; border-radius: 8px; background: hsl(240 4% 60.8% / .12); position: relative; } .vtile .av { position: absolute; font-size: 7px; box-shadow: 0 0 0 2px var(--ring); }
+
+  /* Active Now */
+  .an { width: 360px; max-width: 100%; display: grid; gap: 12px; }
+  .an h2 { margin: 8px 0 0; font-size: 20px; line-height: 24px; color: var(--strong); }
+  .anc { background: var(--an-card); border: 1px solid var(--an-line); border-radius: 16px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.14); }
+  .wf .anc { border-radius: 20px; box-shadow: none; }
+  .anc header { display: grid; grid-template-columns: 32px minmax(20px, 1fr) auto; gap: 12px; align-items: center; padding: 16px; background: var(--an-head); }
+  .anc header .ti { font-size: 16px; font-weight: 600; } .anc header .su { font-size: 14px; color: var(--muted); font-weight: 400; }
+  .anc header .ic { width: 24px; height: 24px; border-radius: 4px; }
+  .anc section { display: grid; grid-template-columns: 32px minmax(20px, 1fr) auto; gap: 12px; align-items: center; padding: 16px; border-top: 1px solid var(--an-line); }
+  .anc section .p { font-size: 14px; font-weight: 600; } .anc section .s { font-size: 12px; color: var(--muted); font-weight: 400; }
+  .anc .gi { position: relative; width: 32px; height: 32px; border-radius: 50%; background: #5865f2; display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 700; }
+  .wf .anc .gi { border-radius: 11px; }
+  .anc .gi b { position: absolute; right: -2px; bottom: -2px; width: 16px; height: 16px; border-radius: 50%; background: var(--page); display: grid; place-items: center; font-size: 10px; color: var(--text); box-shadow: 0 0 0 2px var(--an-card); }
+  .anc .join { height: 30px; padding: 0 12px; border-radius: 11px; background: var(--btn); color: var(--strong); display: grid; place-items: center; font-size: 14px; }
+  .empty { border-radius: 8px; background: var(--an-card); padding: 16px; text-align: center; } .wf .empty { border: 1px solid var(--an-line); border-radius: 20px; }
+  .empty b { display: block; font-size: 16px; color: var(--strong); margin-bottom: 4px; } .empty span { font-size: 14px; color: var(--muted); font-weight: 400; }
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div class="layout">
+<nav class="toc" id="toc" aria-label="Design system"></nav>
+<main>
+<section id="activity-cards">
+  <h1>Activity cards</h1>
+  <p class="lede">What someone is doing, as a card: in the profile popout, the DM side panel, the full profile's Activity tab, and the Friends page's Active Now. Discord's side is read from its shipped client (bundle and CSS, 2026-11-24); Waffle's is <code>src/profile/activity*.rs</code> and <code>src/active_now/</code> on this branch. Both columns follow the page theme.</p>
+  <p class="src">Discord source: card frame <code>584904</code>, header text <code>770689</code>, details <code>802880</code>, image <code>623671</code> (<code>1AI0dL</code>), badges <code>282197</code>, track bar <code>753713</code>, Spotify <code>960549</code>, stream <code>842241</code>, voice <code>287746</code>, deck <code>80330</code>; Active Now column <code>925065</code>, cards <code>438879</code>/<code>356772</code>/<code>939233</code>, party faces <code>484859</code>. Art, avatars and brand marks are stand-ins.</p>
+  <p class="src nv">Not verified: the gap between cards in the full profile (its CSS file is gone from the CDN; drawn as 8px), the dark card's border (read as none), Active Now's card grid and mask geometry (read by a second pass, not re-checked).</p>
+</section>
+
+<section id="playground">
+  <h2>Playground</h2>
+  <p class="lede">Pick the surface, the activity and the worst-case data; both sides redraw.</p>
+  <div class="play">
+    <form class="knobs" id="knobs" onsubmit="return false">
+      <fieldset><legend>Where</legend>
+        <label><span>Surface</span><select name="surface"><option value="pop">Popout / DM panel</option><option value="full">Full profile</option><option value="an">Active Now</option></select></label>
+      </fieldset>
+      <fieldset><legend>What</legend>
+        <label><span>Activity</span><select name="kind"><option value="game">Playing (rich presence)</option><option value="spotify">Spotify</option><option value="watching">Watching</option><option value="twitch">Streaming (Twitch)</option><option value="golive">Go Live</option><option value="voice">In voice</option><option value="custom">Custom buttons</option></select></label>
+        <label><span>Time</span><select name="time"><option value="7">7 min</option><option value="185">3 hours</option><option value="0">none</option></select></label>
+        <label><span>Party</span><select name="party"><option value="none">none</option><option value="3/4" selected>3 of 4</option><option value="99/100">99 of 100</option></select></label>
+        <label><span>Also doing</span><select name="extra"><option value="0">nothing else</option><option value="1">1 more</option><option value="3">3 more</option></select></label>
+      </fieldset>
+      <fieldset><legend>Worst case</legend>
+        <label><input type="checkbox" name="noart"> No large image</label>
+        <label><input type="checkbox" name="nosmall"> No small image</label>
+        <label><input type="checkbox" name="long"> Long names</label>
+        <label><input type="checkbox" name="me"> Your own profile</label>
+      </fieldset>
+    </form>
+    <div class="stages"><div class="stage"><h3>Discord</h3><div id="pd"></div></div><div class="stage"><h3>Waffle</h3><div id="pw"></div></div></div>
+  </div>
+</section>
+
+<section id="cases">
+  <h2>Every case</h2>
+  <div class="colhead"><span>Case</span><span>Discord</span><span>Waffle</span></div>
+  <div class="cases" id="cases-list"></div>
+</section>
+
+<section id="changes">
+  <h2>What changes</h2>
+  <div class="gaps-wrap">
+  <table class="gaps">
+    <thead><tr><th>Part</th><th>Discord</th><th>Waffle before</th><th>Waffle now</th></tr></thead>
+    <tbody>
+      <tr><td>Which activities</td><td>Every activity but the custom status, deduplicated by app: stream, each activity, then voice.</td><td>Only the first activity; a second (Spotify while gaming) never showed.</td><td>Every activity, in Discord's order.</td></tr>
+      <tr><td>Card shell</td><td>8px padding, 8px radius, 8px gaps; 12px padding and radius in the full profile.</td><td>12px padding, 14px radius everywhere.</td><td>Discord's paddings at Waffle's own squircle radii: 14 in the popout and panel, 20 in the full profile; art and previews 11 and 14.</td></tr>
+      <tr><td>Header</td><td>12px medium: "Playing", "Listening to Spotify", "Streaming Twitch", "Watching Crunchyroll", "Competing in {name}", the brand's 12px mark, then the menu.</td><td>14px, the kind alone ("Listening to"), no brand mark.</td><td>Discord's text and marks.</td></tr>
+      <tr><td>Art</td><td>60px (100 in the full profile), 8px corners; small image 24 (32) as a circle hanging 4px past the corner, cut out of the large one. No art: a solid square with a question mark.</td><td>72px, no small image; a grey tile with a controller.</td><td>Discord's sizes and small image (a ring in the card colour stands in for the cut). The app's icon fills in before the question mark.</td></tr>
+      <tr><td>Lines</td><td>Game: name, details, state. Others: details, state, the large image's text. Shows: two lines. One line each in the popout, wrapped in the full profile.</td><td>Name, details, state for every kind.</td><td>Discord's lines per kind.</td></tr>
+      <tr><td>Badges</td><td>Party "{state} ({n} of {max})" with a group icon, then the green clock (M:SS / H:MM:SS); a show's "S2E5".</td><td>Party in the state line; clock in the code font.</td><td>Discord's badges, clock in the body font.</td></tr>
+      <tr><td>Spotify</td><td>Track, artists, a 2px bar with "00:42" and "03:10" at its ends; Play on Spotify and a Listen Along icon button.</td><td>Not drawn (first activity only).</td><td>Same, with Waffle's split bar (done and left apart by a gap). Listen Along shows, disabled (Waffle has no Spotify player link yet).</td></tr>
+      <tr><td>Buttons</td><td>The activity's own links (two share a row), Watch for a stream, Join / Ask to Join; full width except in the full profile.</td><td>Ask to Join only.</td><td>All of them. A link Discord didn't send is shown disabled with a reason.</td></tr>
+      <tr><td>More than one</td><td>Popout and panel: the first card with the next one's edge tucked under it; clicking it opens the full profile.</td><td>"Show 1 more activity" as a filled button.</td><td>The first card and a plain "Show 2 more" under it that lists the rest in place; "Show less" folds them. Waffle keeps a label over Discord's peeking edge.</td></tr>
+      <tr><td>Go Live</td><td>"Streaming {game}" + LIVE, the 16:9 preview with "Watch Stream" on hover, a hairline, the server › channel row with faces, Join Voice; in the full profile a 100px preview beside the channel.</td><td>Preview without the hover label or the hairline; hidden Join once in.</td><td>Discord's; "Open Voice" once you're in.</td></tr>
+      <tr><td>In voice</td><td>"In voice", a 60px tile with up to four faces at set seats ("+N" past four), the channel and "in {server}", Join Voice / Open Voice.</td><td>The breadcrumb row and Join Voice.</td><td>Discord's tile and heading.</td></tr>
+      <tr><td>Active Now card</td><td>16px radius, hairline edge; a tinted header (32px face with status, names, what they're doing, a 24px icon), then a section per voice channel, stream and activity, each under a hairline. A click opens a menu.</td><td>One padded card with inner tiles; a click opened the first person's profile.</td><td>Discord's header and sections; a click opens Discord's menu (Message, Join Channel, Go to Server, Watch, Play on Spotify, the people).</td></tr>
+      <tr><td>Active Now subtitle</td><td>"Hades – 12m" (minutes, hours, days; "just now"), "Listening to Spotify", "Watching {name}", "Streaming on Twitch", "In a Voice Channel", "Playing Multiple Games".</td><td>A running clock "1:12:06".</td><td>Discord's.</td></tr>
+      <tr><td>Active Now sections</td><td>Voice: server with a speaker badge, server and channel, two faces. Game: 32px art, details, state, "1:12:11 elapsed". Party: game, "2 People", faces. Spotify: square album, song, artists, no bar.</td><td>Tiles with a 48px art and a Spotify progress bar.</td><td>Discord's, plus Waffle's Join button on the voice section (Discord joins only from the menu or by clicking the channel's name).</td></tr>
+      <tr><td>Column edge</td><td>A 1px border-subtle line between the friends list and the column.</td><td>A hairline.</td><td>No line: the two sit on one surface, as Waffle's other columns do.</td></tr>
+      <tr><td>Empty</td><td>A small card: "It's quiet for now..." and Discord's line, no art.</td><td>The mascot empty state with a reworded line.</td><td>Discord's card and copy.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+</main>
+</div>
+<script src="site.js"></script>
+<script>
+const BASE = { surface: "pop", kind: "game", time: "7", party: "3/4", extra: "0", noart: false, nosmall: false, long: false, me: false };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const face = (n, s = 32, h = 30) => `<span class="av" style="--s:${s}px;--h:${h}">${esc(n[0].toUpperCase())}</span>`;
+const clock = m => m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}:04` : `${m}:04`;
+function data(s) {
+  const L = s.long;
+  return {
+    game: { head: "Playing", mark: "", name: L ? "The Legend of Heroes: Trails through Daybreak II Ultimate Deluxe Edition" : "PUBG: BATTLEGROUNDS", l2: L ? "Chapter 4: The Long Road Through the Honeycomb Marshes, Part Two" : "Normal, Erangel, 58/99", state: L ? "Searching for a party that will take a support main" : "4 Squad", party: true, join: true, h: 220 },
+    spotify: { head: "Listening to Spotify", mark: "ph-spotify-logo", name: L ? "A Song Whose Title Runs Far Past The Card's Edge (Extended Mix)" : "Midnight City", l2: L ? "An Artist With A Very Long Name, Another One, And A Third" : "M83, Anthony Gonzalez", bar: true, spotify: true, h: 35 },
+    watching: { head: "Watching Crunchyroll", mark: "ph-crown-simple", name: L ? "Frieren: Beyond Journey's End, the Extended Director's Cut" : "Frieren: Beyond Journey's End", l2: "The Land Where Souls Rest", ep: "S2E5", links: ["Watch"], h: 300 },
+    twitch: { head: "Streaming Twitch", mark: "ph-twitch-logo", name: L ? "any% honey run, day 12, no resets until the waffle iron melts" : "any% honey run, day 12", l2: "Celeste", watch: true, h: 270 },
+    custom: { head: "Playing", mark: "", name: "Waffle Iron Simulator", l2: "Honeycomb Hills, level 12", state: "Flipping for the high score", links: L ? ["Join the Honeycomb Marshes Discord Community Server", "View My Absolutely Enormous Profile"] : ["Play Now", "Leaderboard"], h: 40 },
+  };
+}
+function liveCard(s, side, kind, wide) {
+  const d = data(s)[kind] || data(s).game;
+  const t = +s.time, party = d.party && s.party !== "none" ? s.party.split("/") : null;
+  const art = s.noart ? (s.nosmall ? `<span class="art unk">?</span>` : `<span class="art" style="--h:45"></span>`) : `<span class="art" style="--h:${d.h}">${s.nosmall || d.bar ? "" : `<span class="sm"></span>`}</span>`;
+  const l3 = !party && d.state ? `<div class="l2">${esc(d.state)}</div>` : "";
+  const bdg = [party ? `<span><i class="ph-fill ph-users"></i><span class="clip">${esc(d.state)} (${party[0]} of ${party[1]})</span></span>` : "", t && !d.bar ? `<span class="tm"><i class="ph-fill ${d.ep ? "ph-television-simple" : "ph-game-controller"}"></i>${clock(t)}</span>` : "", d.ep ? `<span><i class="ph-fill ph-television-simple"></i>${d.ep}</span>` : ""].join("");
+  let acts = "";
+  if (!s.me) {
+    if (d.spotify) acts = `<span class="btn"><i class="ph-fill ph-spotify-logo"></i>Play on Spotify</span><span class="btn ic ${side === "w" ? "off" : ""}"><i class="ph-fill ph-user-sound"></i></span>`;
+    else if (d.watch) acts = `<span class="btn">Watch</span>`;
+    else if (d.links) acts = d.links.map((l, i) => `<span class="btn ${side === "w" && i ? "off" : ""}"><span class="clip">${esc(l)}</span></span>`).join("");
+    if (d.join && party) acts += `<span class="btn ${side === "w" ? "off" : ""}"><i class="ph-fill ph-game-controller"></i>Ask to Join</span>`;
+  }
+  const actsEl = acts ? `<div class="acts">${acts}</div>` : "";
+  const bar = d.bar ? `<div class="pg"><span>00:42</span><span class="bar"><i></i></span><span>04:03</span></div>` : "";
+  const details = `<div class="dt"><div><div class="l1">${esc(d.name)}</div><div class="l2">${esc(d.l2)}</div>${l3}</div>${bdg ? `<div class="bdg">${bdg}</div>` : ""}${bar}${wide ? actsEl : ""}</div>`;
+  return `<div class="ac"><div class="hd"><span class="t">${esc(d.head)}</span>${d.mark ? `<i class="ph-fill ${d.mark} mk"></i>` : ""}<i class="ph-bold ph-dots-three menu"></i></div><div class="bd">${art}${details}</div>${wide ? "" : actsEl}</div>`;
+}
+const SEATS = [[[15, 15, 28]], [[7, 7, 20], [25, 25, 26]], [[5, 10, 18], [15, 31, 22], [29, 5, 24]], [[5, 5, 22], [7, 33, 18], [33, 7, 18], [31, 31, 22]]];
+function voiceCard(s, side, wide, stream) {
+  const k = wide ? 100 / 60 : 1, n = 4;
+  const tile = `<span class="art vtile" style="--a:${wide ? 100 : 60}px">${SEATS[n - 1].map(([t, l, z], i) => `<span class="av" style="--s:${z * k}px;top:${t * k}px;left:${l * k}px;--h:${i * 80}">${"WMTF"[i]}</span>`).join("")}</span>`;
+  const join = s.me ? "" : `<span class="btn">${wide ? "Join" : "Join Voice"}</span>`;
+  const heading = `<div><div class="l1"><i class="ph-fill ph-speaker-high" style="font-size:12px"></i> hangout</div><div class="l2">in Night Owls</div></div>`;
+  if (stream) {
+    const game = s.long ? "The Legend of Heroes: Trails through Daybreak II" : "PUBG: BATTLEGROUNDS";
+    const head = `<div class="hd"><span class="t">Streaming ${esc(game)}</span><span class="live">LIVE</span></div>`;
+    if (wide) return `<div class="ac">${head}<div class="bd"><span class="art prev" style="--a:100px;aspect-ratio:auto"></span><div class="dt">${heading}<span class="faces" style="--fs:16px">${face("W", 16, 0)}${face("M", 16, 80)}<span class="more">+2</span></span>${join ? `<div class="acts">${join}</div>` : ""}</div></div></div>`;
+    return `<div class="ac">${head}<div class="prev"><span>${s.me ? "You’re Streaming!" : "Watch Stream"}</span></div><div class="rule"></div><div class="place"><span class="g"></span><i class="ph ph-caret-right"></i><i class="ph-fill ph-speaker-high"></i><span class="clip" style="flex:1">hangout</span><span class="faces" style="--fs:16px">${face("W", 16, 0)}${face("M", 16, 80)}<span class="more">+2</span></span></div>${join}</div>`;
+  }
+  return `<div class="ac"><div class="hd"><span class="t">In voice</span></div><div class="bd">${tile}<div class="dt">${heading}${wide && join ? `<div class="acts">${join}</div>` : ""}</div></div>${!wide && join ? join : ""}</div>`;
+}
+function profile(s, side) {
+  const wide = s.surface === "full";
+  const card = k => k === "voice" ? voiceCard(s, side, wide) : k === "golive" ? voiceCard(s, side, wide, true) : liveCard(s, side, k, wide);
+  const extra = ["spotify", "watching", "custom"].slice(0, +s.extra);
+  if (wide) return `<div class="full wide">${[s.kind, ...extra].map(card).join("")}</div>`;
+  const more = extra.length ? (side === "d" ? `<div class="deck" title="View More"></div>` : `<span class="showmore">Show ${extra.length} more</span>`) : "";
+  return `<div class="pop">${card(s.kind)}${more}</div>`;
+}
+function activeNow(s, side, set) {
+  const long = s.long ? " Featherstonehaugh the Third" : "";
+  const cards = {
+    voice: `<div class="anc"><header>${face("M", 32, 30)}<div style="min-width:0"><div class="ti clip">moss lantern${long} and Wren</div><div class="su clip">In a Voice Channel</div></div></header><section><span class="gi">NO<b><i class="ph-fill ph-speaker-high"></i></b></span><div style="min-width:0"><div class="p clip">Night Owls</div><div class="s clip">hangout</div></div><span style="display:flex;gap:8px;align-items:center"><span class="faces" style="--fs:24px">${face("M", 24, 30)}${face("W", 24, 120)}<span class="more">+3</span></span>${side === "w" ? `<span class="join">Join</span>` : ""}</span></section></div>`,
+    game: `<div class="anc"><header>${face("R", 32, 250)}<div style="min-width:0"><div class="ti clip">rosa${long}</div><div class="su clip">Celeste – ${s.time === "185" ? "3h" : s.time === "0" ? "just now" : "7m"}</div></div><span class="art ic" style="--a:24px;--h:200"></span></header><section style="align-items:start"><span class="art" style="--a:32px;--h:200;border-radius:4px"></span><div style="min-width:0"><div class="p clip">Chapter 7</div><div class="s clip">The Summit</div><div class="s">${clock(+s.time || 72)} elapsed</div></div></section></div>`,
+    party: `<div class="anc"><header>${face("J", 32, 160)}<div style="min-width:0"><div class="ti clip">juniper and pip</div><div class="su clip">PUBG: BATTLEGROUNDS – 7m</div></div><span class="art ic" style="--a:24px;--h:220"></span></header><section><span class="art" style="--a:32px;--h:220;border-radius:4px"></span><div><div class="p">PUBG: BATTLEGROUNDS</div><div class="s">2 People</div></div><span class="faces" style="--fs:24px">${face("J", 24, 160)}${face("P", 24, 100)}</span></section></div>`,
+    spotify: `<div class="anc"><header>${face("M", 32, 0)}<div style="min-width:0"><div class="ti clip">mikey</div><div class="su clip">Listening to Spotify</div></div><i class="ph-fill ph-spotify-logo" style="font-size:24px;color:#1db954"></i></header><section style="align-items:start"><span class="art" style="--a:32px;--h:35;border-radius:0"></span><div style="min-width:0"><div class="p clip">Midnight City</div><div class="s clip">M83, Anthony Gonzalez</div></div></section></div>`,
+  };
+  const body = set === "empty" ? `<div class="empty"><b>It's quiet for now...</b><span>When a friend starts an activity—like playing a game or hanging out on voice—we’ll show it here!</span></div>` : (set || ["voice", "party", "game", "spotify"]).map(k => cards[k]).join("");
+  return `<div class="an"><h2>Active Now</h2>${body}</div>`;
+}
+function render(s, side) { return s.surface === "an" ? activeNow(s, side, s.kind === "voice" ? ["voice"] : s.kind === "spotify" ? ["spotify"] : null) : profile(s, side); }
+const wrap = (side, html) => `<div class="${side === "d" ? "dc" : "wf"}">${html}</div>`;
+function draw() {
+  const f = document.getElementById("knobs"), s = { ...BASE };
+  for (const el of f.elements) if (el.name) s[el.name] = el.type === "checkbox" ? el.checked : el.value;
+  document.getElementById("pd").innerHTML = wrap("d", render(s, "d"));
+  document.getElementById("pw").innerHTML = wrap("w", render(s, "w"));
+}
+document.getElementById("knobs").addEventListener("input", draw);
+draw();
+
+const CASES = [
+  ["Profile popout and DM panel", [
+    ["Playing, party, elapsed", "Name, details; the party badge and green clock; Ask to Join.", { kind: "game" }],
+    ["Spotify", "Track, artists, the bar with both times; Play on Spotify and Listen Along.", { kind: "spotify" }],
+    ["Watching", "Details, state, clock and episode; the activity's own Watch link.", { kind: "watching" }],
+    ["Streaming (Twitch)", "Brand mark in the header; Watch opens the stream.", { kind: "twitch" }],
+    ["Go Live", "LIVE, the preview with its hover label, where it is and who's there.", { kind: "golive" }],
+    ["In voice", "The channel's tile with four faces at their seats.", { kind: "voice" }],
+    ["Custom rich presence", "Large and small image, details, state, two link buttons sharing a row.", { kind: "custom" }],
+    ["No images", "The unknown-app square.", { kind: "game", noart: true, nosmall: true, party: "none" }],
+    ["Several at once", "Discord tucks the next card's edge under the first; Waffle says Show 2 more.", { kind: "game", extra: "3" }],
+    ["Worst case", "Long names everywhere, 99 of 100, three hours.", { kind: "game", long: true, party: "99/100", time: "185" }],
+  ]],
+  ["Full profile", [
+    ["Every card, wide", "100px art, lines wrap, buttons sit under the details at their own width.", { surface: "full", kind: "golive", extra: "3" }],
+    ["Worst case", "Long names wrap instead of cutting off.", { surface: "full", kind: "custom", long: true }],
+  ]],
+  ["Active Now", [
+    ["Voice group, party, player, listener", "The stack in Discord's order.", { surface: "an" }],
+    ["Voice channel group", "Two names, In a Voice Channel, the server with its speaker, faces.", { surface: "an", kind: "voice" }],
+    ["Listening", "Album square, no bar.", { surface: "an", kind: "spotify" }],
+    ["Worst case", "Long names cut to one line.", { surface: "an", long: true }],
+    ["Empty", "Discord's card and copy.", { surface: "an", kind: "empty" }],
+  ]],
+];
+document.getElementById("cases-list").innerHTML = CASES.map(([group, rows]) => `<h3 class="group-h">${group}</h3>` + rows.map(([t, p, o]) => {
+  const s = { ...BASE, ...o };
+  const r = side => s.kind === "empty" ? wrap(side, activeNow(s, side, "empty")) : wrap(side, render(s, side));
+  return `<div class="case"><div><h4>${t}</h4><p>${p}</p></div><div class="frame" data-side="Discord">${r("d")}</div><div class="frame" data-side="Waffle">${r("w")}</div></div>`;
+}).join("")).join("");
+</script>
+</body>
+</html>
