@@ -397,7 +397,7 @@ impl Waffle {
                 let ours = self.call.as_ref().map(|c| c.channel.id.clone());
                 let me = self.me.as_ref().map(|m| m.id.clone());
                 if Some(&state.user_id) == me.as_ref() && state.channel_id.is_some() && session.is_some_and(|s| s != self.gateway_session) {
-                    self.taken_elsewhere();
+                    self.taken_elsewhere(state.guild_id.as_deref());
                 }
                 // Someone answering our ring joins the DM call: the ringtone stops.
                 if state.channel_id.is_some() && state.channel_id == self.ringing_out && Some(&state.user_id) != me.as_ref() {

@@ -45,8 +45,10 @@ pub(super) async fn join_voice(shared: &Arc<Shared>, dispatches: &mut broadcast:
         let result = serve(shared, target.clone(), dispatches, |kind, d| voice_dispatch(shared, kind, d)).await;
         let mut moved = take_moved(shared);
         // The old server closes with 4022 when the call moves, possibly before the update naming the new
-        // one arrives (Discord sends a null-endpoint update first). Not verified live: the order isn't documented.
-        if moved.is_none() && result.as_ref().is_err_and(|reason| call_terminated(reason)) {
+        // one arrives (Discord sends a null-endpoint update first). A 4006 after a quick channel switch
+        // means we identified with a token Discord had already replaced; its replacement follows, as
+        // Discord's own client reconnects on every server update. Not verified live: the order isn't documented.
+        if moved.is_none() && result.as_ref().is_err_and(|reason| call_terminated(reason) || reason.ends_with("(4006)")) {
             moved = tokio::time::timeout(MOVE_TIMEOUT, await_move(shared, dispatches)).await.ok().flatten();
         }
         let Some(server) = moved else { return result };
@@ -72,7 +74,7 @@ pub(super) async fn await_move(shared: &Shared, dispatches: &mut broadcast::Rece
 // Follows our channel's voice states while connected; ends the connection if we were moved out.
 pub(super) fn voice_dispatch(shared: &Shared, kind: &str, d: &Value) -> Option<String> {
     if kind == "VOICE_SERVER_UPDATE" {
-        let for_us = d["guild_id"].as_str().or(d["channel_id"].as_str()) == Some(shared.server_id());
+        let for_us = d["guild_id"].as_str().or(d["channel_id"].as_str()) == Some(shared.server_id()) && d["channel_id"].as_str().is_none_or(|c| c == shared.channel_id);
         // A null endpoint means another update follows with the new server; wait for that one.
         let server = parse_server(d).filter(|_| for_us)?;
         if let Ok(mut moved) = shared.moved_server.lock() {
@@ -85,7 +87,7 @@ pub(super) fn voice_dispatch(shared: &Shared, kind: &str, d: &Value) -> Option<S
     }
     let user_id = d["user_id"].as_str()?;
     let in_channel = d["channel_id"].as_str() == Some(&shared.channel_id);
-    if user_id == shared.user_id && taken_elsewhere(shared.session_id.lock().ok().and_then(|id| id.clone()).as_deref(), d) {
+    if user_id == shared.user_id && taken_elsewhere(shared.session_id.lock().ok().and_then(|id| id.clone()).as_deref(), shared.guild_id.as_deref(), d) {
         shared.taken_elsewhere.store(true, Ordering::Release);
         return Some(ANOTHER_LOCATION.into());
     }
@@ -107,13 +109,15 @@ pub(super) fn voice_dispatch(shared: &Shared, kind: &str, d: &Value) -> Option<S
     None
 }
 
-// Why a call ended when another client of ours joined voice, any channel, and took it from this one.
+// Why a call ended when another client of ours joined voice in the same server and took it from this one.
 pub const ANOTHER_LOCATION: &str = "Connected at another location";
 
-// Our account in voice under another session: one of our other clients joined.
-pub(super) fn taken_elsewhere(our_session: Option<&str>, d: &Value) -> bool {
+// Our account in voice under another session in the same server (or, for DMs, in another call): one of
+// our other clients took this call. Discord's own client keeps its call when another session joins voice
+// in a different server, so each client can hold a call in its own server.
+pub(super) fn taken_elsewhere(our_session: Option<&str>, our_guild: Option<&str>, d: &Value) -> bool {
     let theirs = d["session_id"].as_str();
-    our_session.zip(theirs).is_some_and(|(ours, theirs)| ours != theirs) && d["channel_id"].is_string()
+    our_session.zip(theirs).is_some_and(|(ours, theirs)| ours != theirs) && d["channel_id"].is_string() && d["guild_id"].as_str() == our_guild
 }
 
 pub(super) enum Left<'a> {
@@ -123,14 +127,14 @@ pub(super) enum Left<'a> {
 }
 
 // What a voice state of ours outside our channel means. Our own session in another channel is a move,
-// and with no channel a disconnect. Another session of ours joining voice (another client) takes the
-// call from us; another session leaving voice, or a stale one being cleaned up, says nothing about ours.
-// With either session unknown, it's taken as a removal.
+// and with no channel a disconnect. Another session of ours (another client) says nothing about ours
+// here: one joining our server is caught first by `taken_elsewhere`. With either session unknown, it's
+// taken as a removal.
 pub(super) fn ours_left<'a>(our_session: Option<&str>, d: &'a Value) -> Left<'a> {
     let (theirs, channel) = (d["session_id"].as_str(), d["channel_id"].as_str());
     match (our_session.zip(theirs).map(|(a, b)| a == b), channel) {
         (Some(true), Some(channel)) => Left::MovedTo(channel),
-        (Some(false), None) => Left::Not,
+        (Some(false), _) => Left::Not,
         _ => Left::Removed,
     }
 }
@@ -165,11 +169,14 @@ pub(super) async fn await_voice_server(shared: &Shared, dispatches: &mut broadca
     loop {
         let (kind, d) = next_dispatch(dispatches).await.ok_or("Gateway closed")?;
         let for_us = d["guild_id"].as_str().or(d["channel_id"].as_str()) == Some(shared.server_id());
+        // A quick drag through several channels leaves the skipped channels' updates in flight: their
+        // token identifies a session Discord has already moved on from (4006).
+        let other_channel = d["channel_id"].as_str().is_some_and(|c| c != shared.channel_id);
         match kind.as_str() {
-            "VOICE_STATE_UPDATE" if d["user_id"].as_str() == Some(&shared.user_id) && for_us => {
+            "VOICE_STATE_UPDATE" if d["user_id"].as_str() == Some(&shared.user_id) && for_us && !other_channel => {
                 session_id = d["session_id"].as_str().map(str::to_owned);
             }
-            "VOICE_SERVER_UPDATE" if for_us => server = parse_server(&d).or(server),
+            "VOICE_SERVER_UPDATE" if for_us && !other_channel => server = parse_server(&d).or(server),
             _ => {}
         }
         if let (Some(id), Some(server)) = (&session_id, &server) {

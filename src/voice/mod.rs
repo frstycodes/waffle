@@ -836,7 +836,7 @@ mod tests {
         let state = |session: &str, channel: Option<&str>| json!({ "session_id": session, "channel_id": channel });
         assert!(matches!(ours_left(Some("me"), &state("me", Some("c2"))), Left::MovedTo("c2")));
         assert!(matches!(ours_left(Some("me"), &state("me", None)), Left::Removed));
-        assert!(matches!(ours_left(Some("me"), &state("phone", Some("c2"))), Left::Removed), "another client joined voice");
+        assert!(matches!(ours_left(Some("me"), &state("phone", Some("c2"))), Left::Not), "another client in voice elsewhere isn't us");
         assert!(matches!(ours_left(Some("me"), &state("phone", None)), Left::Not), "another client leaving isn't us");
     }
 
@@ -973,7 +973,9 @@ mod tests {
     fn moved_session_follows_without_leaving() {
         let (shared, mut rx) = shared();
         *shared.session_id.lock().unwrap() = Some("s".into());
-        assert_eq!(voice_dispatch(&shared, "VOICE_STATE_UPDATE", &json!({ "user_id": "me", "session_id": "other", "channel_id": "d" })).as_deref(), Some(ANOTHER_LOCATION));
+        assert!(voice_dispatch(&shared, "VOICE_STATE_UPDATE", &json!({ "user_id": "me", "session_id": "other", "guild_id": "g2", "channel_id": "x" })).is_none(), "another client in another server keeps its own call");
+        assert!(!shared.taken_elsewhere.load(Ordering::Acquire));
+        assert_eq!(voice_dispatch(&shared, "VOICE_STATE_UPDATE", &json!({ "user_id": "me", "session_id": "other", "guild_id": "g", "channel_id": "d" })).as_deref(), Some(ANOTHER_LOCATION));
         assert!(!shared.superseded.load(Ordering::Acquire), "another client's join is not a move");
         assert!(shared.taken_elsewhere.load(Ordering::Acquire), "another client's join must not send the leave");
         shared.taken_elsewhere.store(false, Ordering::Release);
