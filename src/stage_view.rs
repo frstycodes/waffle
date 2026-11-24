@@ -74,7 +74,7 @@ impl Waffle {
         self.stage_root(cx)
             .flex()
             .flex_col()
-            .child(self.stage_head(self.stage_header(&room, cx)))
+            .child(self.stage_head(self.stage_header(&room, cx), self.stage_reaches_edge(window, cx)))
             .child(body)
             .child(self.stage_foot(&room, cx))
             .when(requests_open, |d| d.child(self.requests_popover(&room, height, window, cx)))

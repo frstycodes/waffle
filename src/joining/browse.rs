@@ -67,6 +67,7 @@ impl Waffle {
             .text_size(ui::TEXT_SM)
             // The main view's header: a hard edge, never a hairline.
             .child(ui::hard_edge(|| false, cx).child(self.channels_roles_header(has_prompts, tab, window, cx)))
+            .children(self.voice_notice_bar(cx))
             .child(div().id("channels-roles").flex_1().min_h_0().overflow_y_scrollbar().pt_4().px_4().pb_6().child(ui::col().w_full().items_center().child(div().w_full().max_w(px(PAGE_WIDTH)).child(body))))
             .into_any_element()
     }
