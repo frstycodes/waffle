@@ -5,19 +5,21 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::{AnyElement, App, Context, Div, FontWeight, Hsla, SharedString, Window, component::Icon, div, prelude::*, px};
+use gpui_kit::{AnyElement, App, Context, Div, FontWeight, Window, div, prelude::*, px};
 
+use crate::part::Column;
 use crate::{
     Waffle,
     discord::{ActivityKind, Guild, Presence, Relation, RichPresence, User},
     home::FriendsTab,
-    icons::Glyph,
-    mascot::Mood,
     palette,
-    sidebar::Nav,
-    ui::{self, Squircle, Tone},
+    profile::activity_text::is_spotify,
+    ui,
 };
-use crate::part::Column;
+
+mod sections;
+pub(crate) use sections::watch_label;
+
 
 // Discord hides the column at this window width and below.
 const BREAKPOINT: f32 = 1200.;
@@ -51,16 +53,6 @@ impl Party {
     }
 }
 
-pub enum Subtitle {
-    Text(String),
-    // Unix milliseconds the shared activity started, shown as a running clock.
-    Since(i64),
-}
-
-pub fn is_spotify(rich: &RichPresence) -> bool {
-    rich.kind == ActivityKind::Listening && rich.name == "Spotify"
-}
-
 pub fn voice_seats(guilds: &[Guild]) -> Vec<Seat> {
     guilds
         .iter()
@@ -81,7 +73,7 @@ pub fn parties(friends: &[User], blocked: &HashSet<&str>, presences: &HashMap<St
     let mut parties: Vec<Party> = Vec::new();
     for friend in friends.iter().filter(|f| !f.bot) {
         let seat = seats.iter().find(|s| s.user_id == friend.id);
-        let rich = presences.get(&friend.id).and_then(|p| p.rich.as_ref());
+        let rich = presences.get(&friend.id).and_then(Presence::rich);
         let key = match (seat, rich.and_then(|r| r.party_id.as_ref())) {
             (Some(seat), _) => format!("channel-{}", seat.channel_id),
             (None, Some(party)) => format!("party-{party}"),
@@ -101,9 +93,8 @@ pub fn parties(friends: &[User], blocked: &HashSet<&str>, presences: &HashMap<St
         if seat.is_some_and(|s| s.streaming) {
             party.streamers.push(friend.id.clone());
         }
-        if let Some(rich) = rich.filter(|r| r.kind != ActivityKind::Custom) {
-            let app = |r: &RichPresence| r.app_id.clone().unwrap_or_else(|| r.name.clone());
-            if !party.activities.iter().any(|a| app(a) == app(rich)) {
+        for rich in presences.get(&friend.id).map(|p| p.activities.as_slice()).unwrap_or_default().iter().filter(|r| r.kind != ActivityKind::Custom) {
+            if !party.activities.iter().any(|a| app_key(a) == app_key(rich)) {
                 party.activities.push(rich.clone());
             }
         }
@@ -122,6 +113,11 @@ pub fn parties(friends: &[User], blocked: &HashSet<&str>, presences: &HashMap<St
     parties
 }
 
+// One entry per application, as Discord de-duplicates them.
+pub fn app_key(rich: &RichPresence) -> String {
+    rich.app_id.clone().unwrap_or_else(|| rich.name.clone())
+}
+
 pub fn title(names: &[&str]) -> String {
     match names {
         [] => String::new(),
@@ -132,36 +128,41 @@ pub fn title(names: &[&str]) -> String {
     }
 }
 
-pub fn subtitle(party: &Party) -> Option<Subtitle> {
-    let text = |s: String| Some(Subtitle::Text(s));
-    match party.activities.as_slice() {
-        [] if party.voice.is_some() => text("In a Voice Channel".into()),
+// The line under the names: what the one person is doing, else what the group shares, else Discord's catch-alls.
+pub fn subtitle(party: &Party, now: i64) -> Option<String> {
+    if let ([_], Some(first)) = (party.members.as_slice(), party.activities.first()) {
+        return Some(match first.kind {
+            ActivityKind::Playing | ActivityKind::Competing => since(first, now),
+            ActivityKind::Streaming => "Streaming on Twitch".into(),
+            ActivityKind::Listening => format!("Listening to {}", first.name),
+            ActivityKind::Watching => format!("Watching {}", first.name),
+            ActivityKind::Custom => "In a Voice Channel".into(),
+        });
+    }
+    let games: Vec<&RichPresence> = party.activities.iter().filter(|a| !is_spotify(a)).collect();
+    match games.as_slice() {
+        [] if party.voice.is_some() => Some("In a Voice Channel".into()),
+        [] if !party.activities.is_empty() => Some("Listening to Spotify".into()),
         [] => None,
-        [one] => match one.kind {
-            ActivityKind::Playing | ActivityKind::Competing => Some(one.started.map_or_else(|| Subtitle::Text(format!("Playing {}", one.name)), Subtitle::Since)),
-            ActivityKind::Streaming => text("Streaming on Twitch".into()),
-            ActivityKind::Listening => text(format!("Listening to {}", one.name)),
-            ActivityKind::Watching => text(format!("Watching {}", one.name)),
-            ActivityKind::Custom => text("In a Voice Channel".into()),
-        },
-        _ => text("Playing Multiple Games".into()),
+        [game] => Some(since(game, now)),
+        _ => Some("Playing Multiple Games".into()),
     }
 }
 
-// How far into a track `now` is, 0 to 1.
-fn progress(started: i64, ends: i64, now: i64) -> f32 {
-    if ends <= started {
-        return 0.;
+// "{game} – 12m": how long they've played, in the largest whole unit; "just now" under a minute.
+pub fn since(rich: &RichPresence, now: i64) -> String {
+    let Some(start) = rich.started else { return rich.name.clone() };
+    let minutes = (now - start).max(0) / 60_000;
+    match minutes {
+        0 => format!("{} - just now", rich.name),
+        m if m < 60 => format!("{} \u{2013} {m}m", rich.name),
+        m if m < 24 * 60 => format!("{} \u{2013} {}h", rich.name, m / 60),
+        m => format!("{} \u{2013} {}d", rich.name, m / (24 * 60)),
     }
-    ((now - started) as f32 / (ends - started) as f32).clamp(0., 1.)
 }
 
-fn now_ms() -> i64 {
+pub(crate) fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
-}
-
-fn clock_since(start: i64) -> String {
-    crate::call::clock(((now_ms() - start).max(0) / 1000) as u64)
 }
 
 impl Waffle {
@@ -180,7 +181,7 @@ impl Waffle {
         if parties.iter().any(|p| p.activities.iter().any(|a| a.started.is_some())) {
             self.tick_active_now(cx);
         }
-        let heading = div().text_size(ui::TEXT_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Active Now");
+        let heading = div().pt_2().pb_0p5().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Active Now");
         let body = match parties.is_empty() {
             true => quiet_state(cx).into_any_element(),
             false => ui::col().gap_3().children(parties.iter().map(|p| self.party_card(p, cx))).into_any_element(),
@@ -190,14 +191,12 @@ impl Waffle {
             .w(px(WIDTH))
             .flex_none()
             .h_full()
-            .border_l_1()
-            .border_color(palette::line(cx))
             .overflow_y_scrollbar()
-            .child(ui::col().p_4().gap_3().child(heading).child(body));
+            .child(ui::col().pt_1p5().px_4().pb_4().gap_3().child(heading).child(body));
         Some(column.into_any_element())
     }
 
-    // Repaints once a second for the play clocks and track progress, while the column is up.
+    // Repaints once a second for the play clocks, while the column is up.
     fn tick_active_now(&self, cx: &mut Context<Self>) {
         if self.active_now_ticking.replace(true) {
             return;
@@ -223,118 +222,17 @@ impl Waffle {
         })
         .detach(); // lint-allow(detached-task): ends itself when the panel stops showing, holding a WeakEntity
     }
-
-    fn party_card(&self, party: &Party, cx: &mut Context<Self>) -> AnyElement {
-        let raised = palette::surface(palette::Level::Raised, cx);
-        let names: Vec<&str> = party.members.iter().map(|m| m.name.as_str()).collect();
-        let people: Vec<ui::Entry> = party.members.iter().map(|m| ui::Entry::person(m.avatar.clone(), m.name.clone())).collect();
-        let faces = ui::listed_stack(SharedString::from(format!("active-now-people-{}", party.key)), "People", people, 3, 32., raised, palette::surface(palette::Level::Group, cx), palette::muted(cx));
-        let sub = subtitle(party).map(|s| match s {
-            Subtitle::Text(text) => text,
-            Subtitle::Since(start) => clock_since(start),
-        });
-        let who = ui::col().min_h_0()
-            .flex_1()
-            .child(ui::line(title(&names)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
-            .children(sub.map(|s| ui::line(s).text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx))));
-        let head = ui::row().gap_2p5().child(faces).child(who).children(head_mark(party, cx));
-        let first = party.members[0].clone();
-        ui::card(SharedString::from(format!("active-now-{}", party.key)), cx)
-            .bordered(cx)
-            .flex_col()
-            .items_stretch()
-            .justify_start()
-            .gap_2p5()
-            .child(head)
-            .children(self.voice_section(party, cx))
-            .children(party.activities.iter().map(|a| activity_section(a, cx)))
-            .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_profile(first.clone(), event.position(), cx)))
-            .into_any_element()
-    }
-
-    fn voice_section(&self, party: &Party, cx: &mut Context<Self>) -> Option<Div> {
-        let (guild_id, channel_id) = party.voice.clone()?;
-        let guild = self.guilds.iter().find(|g| g.id == guild_id)?;
-        let channel = guild.channels.iter().find(|c| c.id == channel_id)?.clone();
-        let group = palette::surface(palette::Level::Group, cx);
-        let occupants: Vec<ui::Entry> = party.occupants.iter().map(|id| ui::Entry::person(self.user_avatar(id), self.user_name(id))).collect();
-        let channel_name = channel.name.clone();
-        let joined = self.call.as_ref().is_some_and(|c| c.channel.id == channel.id);
-        let join = ui::button(SharedString::from(format!("active-now-join-{channel_id}")), Tone::Secondary, cx)
-            .small()
-            .disabled(joined)
-            .child(if joined { "Joined" } else { "Join" })
-            .on_click(cx.listener(move |this, _, _, cx| this.join_voice_in(Some(guild_id.clone()), channel.clone(), cx)));
-        let meta = ui::col().min_h_0()
-            .flex_1()
-            .child(
-                ui::row()
-                    .gap_1p5()
-                    .child(ui::line(channel_name).text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
-                    .when(!party.streamers.is_empty(), |d| d.child(ui::live_badge())),
-            )
-            .child(ui::line(guild.name.clone()).text_size(ui::TEXT_XS).text_color(palette::muted(cx)));
-        Some(
-            inner(cx)
-                .child(div().flex_none().text_color(palette::muted(cx)).child(Icon::new(Glyph::VolumeHigh).size(ui::ICON_XL)))
-                .child(meta)
-                .child(ui::listed_stack(SharedString::from(format!("active-now-voice-{channel_id}")), "In voice", occupants, 3, 20., group, palette::surface(palette::Level::Raised, cx), palette::muted(cx)))
-                // The button keeps its press, so the card's own click (the profile) never fires with it.
-                .child(div().flex_none().on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| cx.stop_propagation()).child(join)),
-        )
-    }
 }
 
-// The mark beside the title: Spotify's notes, the game's icon, or a pad for several games.
-fn head_mark(party: &Party, cx: &App) -> Option<AnyElement> {
-    let muted = palette::muted(cx);
-    let glyph = |icon: Icon, ink: Hsla| div().flex_none().text_color(ink).child(icon.size(ui::ICON_XL)).into_any_element();
-    match party.activities.as_slice() {
-        [] => None,
-        [one] if is_spotify(one) => Some(glyph(Nav::MusicFill.icon(), palette::positive_ink(cx))),
-        [one] => Some(match &one.image {
-            Some(url) => ui::media(url.clone(), ui::all(ui::RADIUS_XS)).size_6().flex_none().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
-            None => glyph(crate::sidebar::activity_glyph(one.kind).unwrap_or(Nav::GameFill.icon()), muted),
-        }),
-        _ => Some(glyph(Nav::GameFill.icon(), muted)),
-    }
-}
-
-fn inner(cx: &App) -> Div {
-    ui::row().p_2p5().gap_2p5().squircle(ui::RADIUS_MD).bg(palette::surface(palette::Level::Group, cx))
-}
-
-fn art(image: Option<&String>, fallback: Icon, cx: &App) -> AnyElement {
-    match image {
-        Some(url) => ui::media(url.clone(), ui::all(ui::RADIUS_SM)).size_12().flex_none().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
-        None => ui::row().size_12().flex_none().squircle(ui::RADIUS_SM).bg(palette::surface(palette::Level::Raised, cx)).text_color(palette::muted(cx)).justify_center().child(fallback.size_6()).into_any_element(),
-    }
-}
-
-// A game's rich presence, or a Spotify track with its progress.
-fn activity_section(rich: &RichPresence, cx: &App) -> Div {
-    let line = |text: String| ui::line(text).text_size(ui::TEXT_XS).text_color(palette::muted(cx));
-    let name = |text: String| ui::line(text).text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx));
-    let meta = ui::col().min_h_0().flex_1().gap_0p5();
-    if is_spotify(rich) {
-        let artists = rich.state.as_ref().map(|s| format!("by {}", s.replace("; ", ", ")));
-        let track = rich.started.zip(rich.ends).map(|(start, end)| {
-            let done = progress(start, end, now_ms());
-            div().pt_1p5().child(ui::progress_bar(done, cx).fill(palette::muted(cx)).track(palette::line_strong(cx)).thin().joined())
-        });
-        let meta = meta.child(name(rich.details.clone().unwrap_or_else(|| rich.name.clone()))).children(artists.map(line)).children(track);
-        return inner(cx).child(art(rich.image.as_ref(), Nav::MusicFill.icon(), cx)).child(meta);
-    }
-    let state = rich.state.clone().map(|state| match rich.party {
-        Some((current, max)) => format!("{state} ({current} of {max})"),
-        None => state,
-    });
-    let meta = meta.child(name(rich.name.clone())).children(rich.details.clone().map(line)).children(state.map(line));
-    inner(cx).child(art(rich.image.as_ref(), Icon::new(Glyph::Game), cx)).child(meta)
-}
-
+// Discord's empty card: no art here, only the line and what will show up.
 fn quiet_state(cx: &App) -> Div {
-    ui::empty_state("active-now-empty", Mood::Idle, "It's quiet for now...", "When a friend starts an activity, like playing a game or hanging out on voice, we'll show it here!", cx)
+    ui::panel(cx)
+        .p_4()
+        .gap_1()
+        .items_center()
+        .text_center()
+        .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("It's quiet for now..."))
+        .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child("When a friend starts an activity\u{2014}like playing a game or hanging out on voice\u{2014}we\u{2019}ll show it here!"))
 }
 
 #[cfg(test)]
@@ -351,12 +249,12 @@ mod tests {
 
     fn playing(name: &str, party: Option<&str>) -> Presence {
         let rich = RichPresence { kind: ActivityKind::Playing, name: name.into(), app_id: Some(format!("app-{name}")), party_id: party.map(Into::into), started: Some(1), ..Default::default() };
-        Presence { rich: Some(rich), ..Default::default() }
+        Presence { activities: vec![rich], ..Default::default() }
     }
 
     fn spotify() -> Presence {
         let rich = RichPresence { kind: ActivityKind::Listening, name: "Spotify".into(), party_id: Some("spotify:x".into()), ..Default::default() };
-        Presence { rich: Some(rich), ..Default::default() }
+        Presence { activities: vec![rich], ..Default::default() }
     }
 
     fn keys(parties: &[Party]) -> Vec<&str> {
@@ -376,7 +274,7 @@ mod tests {
     #[test]
     fn keeps_only_parties_with_something_to_show() {
         let friends = [friend("1", "ana"), friend("2", "bo"), User { bot: true, ..friend("3", "bot") }];
-        let custom = Presence { rich: Some(RichPresence { kind: ActivityKind::Custom, name: "brb".into(), ..Default::default() }), ..Default::default() };
+        let custom = Presence { activities: vec![RichPresence { kind: ActivityKind::Custom, name: "brb".into(), ..Default::default() }], ..Default::default() };
         let presences = HashMap::from([("1".into(), custom), ("3".into(), playing("Hades", None))]);
         assert!(parties(&friends, &HashSet::new(), &presences, &[]).is_empty());
     }
@@ -408,26 +306,22 @@ mod tests {
 
     #[test]
     fn subtitles_follow_the_activity() {
-        let text = |party: &Party| match subtitle(party) {
-            Some(Subtitle::Text(t)) => t,
-            Some(Subtitle::Since(at)) => format!("since {at}"),
-            None => String::new(),
-        };
+        let now = 10 * 86_400_000;
         let base = Party { key: "k".into(), members: vec![friend("1", "a")], voice: None, occupants: Vec::new(), activities: Vec::new(), streamers: Vec::new() };
         let with = |kind, name: &str| Party { activities: vec![RichPresence { kind, name: name.into(), ..Default::default() }], ..base.clone() };
-        assert_eq!(text(&Party { voice: Some(("g".into(), "c".into())), ..base.clone() }), "In a Voice Channel");
-        assert_eq!(text(&with(ActivityKind::Listening, "Spotify")), "Listening to Spotify");
-        assert_eq!(text(&with(ActivityKind::Streaming, "Twitch")), "Streaming on Twitch");
-        assert_eq!(text(&with(ActivityKind::Watching, "YouTube")), "Watching YouTube");
-        assert_eq!(text(&Party { activities: vec![RichPresence { started: Some(5), ..Default::default() }], ..base.clone() }), "since 5");
-        let two = Party { activities: vec![RichPresence::default(), RichPresence::default()], ..base };
-        assert_eq!(text(&two), "Playing Multiple Games");
-    }
-
-    #[test]
-    fn progress_clamps_to_the_track() {
-        assert_eq!(progress(0, 100, 50), 0.5);
-        assert_eq!(progress(0, 100, 150), 1.);
-        assert_eq!(progress(100, 100, 150), 0.);
+        let pair = |party: Party| Party { members: vec![friend("1", "a"), friend("2", "b")], ..party };
+        assert_eq!(subtitle(&Party { voice: Some(("g".into(), "c".into())), ..base.clone() }, now).as_deref(), Some("In a Voice Channel"));
+        assert_eq!(subtitle(&with(ActivityKind::Listening, "Spotify"), now).as_deref(), Some("Listening to Spotify"));
+        assert_eq!(subtitle(&with(ActivityKind::Streaming, "Twitch"), now).as_deref(), Some("Streaming on Twitch"));
+        assert_eq!(subtitle(&with(ActivityKind::Watching, "YouTube"), now).as_deref(), Some("Watching YouTube"));
+        let hades = |mins: i64| Party { activities: vec![RichPresence { name: "Hades".into(), started: Some(now - mins * 60_000), ..Default::default() }], ..base.clone() };
+        assert_eq!(subtitle(&hades(0), now).as_deref(), Some("Hades - just now"));
+        assert_eq!(subtitle(&hades(12), now).as_deref(), Some("Hades \u{2013} 12m"));
+        assert_eq!(subtitle(&hades(150), now).as_deref(), Some("Hades \u{2013} 2h"));
+        assert_eq!(subtitle(&hades(3 * 24 * 60), now).as_deref(), Some("Hades \u{2013} 3d"));
+        assert_eq!(subtitle(&pair(with(ActivityKind::Listening, "Spotify")), now).as_deref(), Some("Listening to Spotify"));
+        let two = pair(Party { activities: vec![RichPresence { name: "x".into(), ..Default::default() }, RichPresence { name: "y".into(), ..Default::default() }], ..base.clone() });
+        assert_eq!(subtitle(&two, now).as_deref(), Some("Playing Multiple Games"));
+        assert_eq!(subtitle(&pair(base), now), None);
     }
 }

@@ -23,6 +23,9 @@ use crate::{
 
 mod actions;
 mod activity;
+mod activity_card;
+pub(crate) mod activity_text;
+mod activity_voice;
 mod connections;
 mod dm_panel;
 mod full;
@@ -48,8 +51,7 @@ const ESTIMATED_HEIGHT: f32 = 560.;
 const MAX_GAMES: usize = 3;
 // The card's side inset.
 const CARD_INSET: f32 = 16.;
-// An activity's art, a brand mark's glyph inside its tile, and the skeleton that stands for the badges.
-const ACTIVITY_ART: f32 = 72.;
+// A brand mark's glyph inside its tile, and the skeleton that stands for the badges.
 const BRAND_GLYPH: f32 = 13.;
 const SKELETON_BADGES: f32 = 120.;
 
@@ -59,7 +61,7 @@ pub(crate) struct ProfileCard {
     pub(crate) guild_id: Option<String>,
     pub(crate) at: Point<Pixels>,
     pub(crate) profile: Option<Profile>,
-    // Every activity card, after the peeking card under the first was clicked.
+    // Every activity card, after "Show N more" under the first was clicked.
     pub(crate) all_activity: bool,
     // Their avatar full size over the window.
     pub(crate) avatar_full: bool,
@@ -121,7 +123,7 @@ impl Waffle {
         self.profile_card = Some(ProfileCard::new(user.clone(), guild_id.clone(), at, cached, full));
         self.fetch_profile_effect(effect, cx);
         self.redraw_overlays(cx);
-        if self.presences.get(&user.id).and_then(|p| p.rich.as_ref()).is_some_and(|r| r.started.is_some()) {
+        if self.presences.get(&user.id).is_some_and(|p| p.activities.iter().any(|r| r.started.is_some())) {
             self.tick_profile_timer(user.id.clone(), cx);
         }
         if full.is_some() {

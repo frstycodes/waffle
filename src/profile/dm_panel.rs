@@ -78,7 +78,7 @@ impl Waffle {
             .children(self.mutuals_row(&card.user, profile, ink, cx))
             .children(profile.bio.as_ref().map(|bio| super::bio_view(&card.user.id, bio, ink)))
             .children(self.member_since(card, profile, ink, cx).map(|row| super::section(if card.user.bot { "Created On" } else { "Member Since" }, row, ink)))
-            .children(self.profile_activity_cards(card, ink, cx))
+            .children(self.profile_activity(card, ink, cx))
     }
 
     // The header's side panel toggle: in a 1:1 DM it shows the person's profile, in a server or group the

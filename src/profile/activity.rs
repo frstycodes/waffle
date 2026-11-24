@@ -1,11 +1,43 @@
-// The profile card's activity: a stream, rich presence, or the voice channel they're in.
-use gpui_kit::{FontWeight, Stateful, component::ActiveTheme};
+// The profile's activity cards, as Discord draws them: a Go Live stream, one card per activity, then the voice
+// channel they're in. The popout and the DM side panel show the first card with the rest peeking under it; the
+// full profile lists them all, larger.
+use gpui_kit::{FontWeight, Hsla};
 
+use super::activity_voice::{hairline, voice_heading};
 use super::*;
-use crate::{
-    discord::{ActivityKind, RichPresence},
-    ui::{RADIUS_MD, RADIUS_SM},
-};
+use crate::discord::{Channel, Guild};
+
+// An activity's art and the badge on its corner: Discord's 60/24 in the popout and side panel, 100/32 in the
+// full profile, the badge hanging 4px past the art's corner.
+const ART: f32 = 60.;
+const ART_WIDE: f32 = 100.;
+const BADGE: f32 = 24.;
+const BADGE_WIDE: f32 = 32.;
+const BADGE_HANG: f32 = -4.;
+// The gap ringing the badge where it covers the art, standing in for Discord's mask hole.
+const BADGE_GAP: f32 = 2.;
+
+// The popout and side panel's compact card, or the full profile's wide one.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Fit {
+    Compact,
+    Wide,
+}
+
+impl Fit {
+    pub(super) fn art(self) -> f32 {
+        if self == Fit::Wide { ART_WIDE } else { ART }
+    }
+
+    // Art and previews inside the card: one squircle step under the card's own.
+    pub(super) fn inner_radius(self) -> f32 {
+        if self == Fit::Wide { ui::RADIUS_MD } else { ui::RADIUS_SM }
+    }
+
+    fn badge(self) -> f32 {
+        if self == Fit::Wide { BADGE_WIDE } else { BADGE }
+    }
+}
 
 pub(super) fn game_collection(games: &[String], ink: Ink) -> Option<Div> {
     if games.is_empty() {
@@ -23,44 +55,74 @@ pub(super) fn game_collection(games: &[String], ink: Ink) -> Option<Div> {
             .py_2p5()
             .justify_between()
             .gap_2()
-            .squircle(RADIUS_MD)
+            .squircle(ui::RADIUS_MD)
             .bg(ink.tile)
             .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child("Game Collection"))
             .child(ui::row().items_stretch().gap_1().children(icons).children(overflow)),
     )
 }
 
-pub(super) fn activity_heading(kind: ActivityKind) -> &'static str {
-    match kind {
-        ActivityKind::Streaming => "Streaming",
-        ActivityKind::Listening => "Listening to",
-        ActivityKind::Watching => "Watching",
-        ActivityKind::Competing => "Competing in",
-        ActivityKind::Playing | ActivityKind::Custom => "Playing",
+// The card's fill: compact cards are 8px in from their edge, wide ones 12, at the app's control and surface
+// rounding rather than Discord's 8 and 12.
+pub(super) fn shell(fit: Fit, ink: Ink) -> Div {
+    let card = ui::col().w_full().gap_2().bg(ink.tile);
+    match fit {
+        Fit::Compact => card.p_2().squircle(ui::RADIUS_MD),
+        Fit::Wide => card.p_3().squircle(ui::RADIUS_LG),
     }
 }
 
-// GAP: the join request endpoint isn't wired, so the button shows the party is open but can't send yet.
-pub(super) fn ask_to_join(ink: Ink) -> Stateful<Div> {
-    // lint-allow(custom-badge): ui::button(...).disabled(true) takes a palette tone; the card wears the user's profile colours (Ink), which ui::button's palette tones can't take.
-    ui::row()
-        .id("profile-ask-to-join")
-        .h_9()
-        .justify_center()
-        .gap_2()
-        .squircle(RADIUS_SM)
-        .bg(ink.tile)
-        .text_color(ink.muted)
-        .text_size(ui::TEXT_SM)
-        .opacity(0.7)
-        .child(Icon::new(Glyph::Game).size(ui::ICON_MD))
-        .child("Ask to Join")
-        .tooltip(|window, cx| ui::tip("Joining from Waffle isn't supported yet", window, cx))
+// The header: what they're doing in small strong type, the brand's mark, any tag (LIVE), and the card's menu.
+pub(super) fn head(text: String, mark: Option<&'static str>, tag: Option<AnyElement>, menu: Option<AnyElement>, ink: Ink) -> Div {
+    let mark = mark.and_then(crate::icons::brand_mark).map(|path| gpui_kit::svg().path(path).size(ui::ICON_XS).flex_none().text_color(ink.muted));
+    let title = ui::row().flex_1().gap_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(ui::line(text)).children(mark).children(tag);
+    ui::row().gap_1().justify_between().child(title).children(menu)
+}
+
+// The large image with the small one on its corner, the small one taking the large's place when it's alone,
+// and Discord's unknown-app square when there's neither.
+pub(super) fn art(large: Option<String>, small: Option<String>, fit: Fit, ink: Ink) -> Div {
+    let (size, badge) = (fit.art(), fit.badge());
+    let (large, small) = match large {
+        Some(large) => (Some(large), small),
+        None => (small, None),
+    };
+    let radius = fit.inner_radius();
+    let big = match large {
+        Some(url) => ui::media(url, ui::all(radius)).size_full().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
+        None => unknown_app(radius, ink).into_any_element(),
+    };
+    let corner = small.map(|url| {
+        div()
+            .absolute()
+            .bottom(px(BADGE_HANG))
+            .right(px(BADGE_HANG))
+            .size(px(badge))
+            .child(ui::gap(solid_tile(ink), BADGE_GAP))
+            .child(ui::avatar(url, badge))
+    });
+    div().relative().flex_none().size(px(size)).child(big).children(corner)
+}
+
+// Discord's stand-in for an app with no art: a solid square in the card's strongest ink with a question mark.
+fn unknown_app(radius: f32, ink: Ink) -> Div {
+    // lint-allow(custom-badge): ui::badge is a small label; this is the art slot itself, Discord's unknown-app square.
+    ui::row().size_full().justify_center().squircle(radius).bg(ink.strong).text_color(solid_tile(ink)).font_weight(FontWeight::BOLD).text_size(ui::TEXT_LG).child("?")
+}
+
+// The card's fill made opaque over the card's own top colour, for rings that must read as gaps.
+pub(super) fn solid_tile(ink: Ink) -> Hsla {
+    ui::mix(ink.top, ink.tile.opacity(1.), ink.tile.a)
+}
+
+// A button on a card, in the card's own colours: Discord's small secondary.
+pub(super) fn card_button(id: impl Into<gpui_kit::ElementId>, ink: Ink, cx: &App) -> ui::Control {
+    ui::button(id, ui::Tone::Secondary, cx).small().scoped(ink.strong.opacity(0.1), ink.strong.opacity(0.16), ink.strong, ink.strong)
 }
 
 impl Waffle {
     // Everything they're doing, in Discord's order: the stream, each activity, then voice when not streaming.
-    pub(super) fn profile_activity_cards(&self, card: &ProfileCard, ink: Ink, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    pub(super) fn profile_activity_cards(&self, card: &ProfileCard, fit: Fit, ink: Ink, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let place = self.guilds.iter().find_map(|g| {
             let state = g.voice_states.iter().find(|v| v.user_id == card.user.id)?;
             let channel = g.channels.iter().find(|c| Some(&c.id) == state.channel_id.as_ref())?;
@@ -68,79 +130,72 @@ impl Waffle {
         });
         let mut cards: Vec<AnyElement> = Vec::new();
         if let Some((guild, channel, true)) = place {
-            cards.push(self.stream_activity(card, guild, channel, ink, cx));
+            cards.push(self.stream_activity(card, guild, channel, fit, ink, cx));
         }
-        if let Some(rich) = self.presences.get(&card.user.id).and_then(|p| p.rich.as_ref()) {
-            cards.push(self.activity_card(card, rich, ink, cx).into_any_element());
+        let activities = self.presences.get(&card.user.id).map(|p| p.activities.clone()).unwrap_or_default();
+        for (at, rich) in activities.iter().enumerate() {
+            cards.push(self.activity_card(card, at, rich, fit, ink, cx).into_any_element());
         }
         if let Some((guild, channel, false)) = place {
-            cards.push(self.voice_activity(card, guild, channel, ink, cx));
+            cards.push(self.voice_activity(card, guild, channel, fit, ink, cx));
         }
         cards
     }
 
-    // Discord's popout shows one activity card; more than one peeks from under it, and clicking the peek
-    // lists them all in place.
+    // The popout and side panel show the first card and a plain "Show 2 more" under it, which lists the rest in
+    // place. Discord tucks the next card's edge under the first instead; a label says what it does.
     pub(super) fn profile_activity(&self, card: &ProfileCard, ink: Ink, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let mut cards = self.profile_activity_cards(card, ink, cx);
+        let mut cards = self.profile_activity_cards(card, Fit::Compact, ink, cx);
         if cards.len() <= 1 {
             return cards.pop();
         }
-        if card.all_activity {
-            let less = div()
-                .id("profile-activity-less")
-                .text_size(ui::TEXT_SM)
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(ink.muted)
-                .cursor_pointer()
-                .hover(move |s| s.text_color(ink.strong))
-                .child("Show less")
-                .on_click(cx.listener(|this, _, _, cx| this.show_all_activity(false, cx)));
-            return Some(ui::col().items_start().gap_2().children(cards.into_iter().map(|c| div().w_full().child(c))).child(less).into_any_element());
-        }
         let more = cards.len() - 1;
-        let first = cards.into_iter().next()?;
-        Some(self.activity_more(first, more, ink, cx).into_any_element())
-    }
-
-    // The first card, then a button under it that unfolds the rest in place.
-    pub(super) fn activity_more(&self, first: AnyElement, more: usize, ink: Ink, cx: &mut Context<Self>) -> Div {
-        let label = if more == 1 { "Show 1 more activity".to_owned() } else { format!("Show {more} more activities") };
-        let button = ui::button("profile-activity-view-more", ui::Tone::Ghost, cx)
-            .scoped(ink.tile, ink.tile, ink.muted, ink.strong)
-            .h_7()
-            .squircle(RADIUS_SM)
+        let all = card.all_activity;
+        let label = if all { "Show less".to_owned() } else { format!("Show {more} more") };
+        let toggle = ui::button("profile-activity-more-cards", ui::Tone::Ghost, cx)
+            .scoped(gpui_kit::transparent_black(), ink.strong.opacity(0.1), ink.muted, ink.strong)
+            .small()
             .child(label)
-            .on_click(cx.listener(|this, _, _, cx| this.show_all_activity(true, cx)));
-        ui::col().gap_1p5().child(first).child(button)
+            .on_click(cx.listener(move |this, _, _, cx| this.show_all_activity(!all, cx)));
+        let shown = if all { cards.len() } else { 1 };
+        Some(ui::col().gap_2().children(cards.into_iter().take(shown)).child(div().child(toggle)).into_any_element())
     }
 
-    pub(super) fn show_all_activity(&mut self, all: bool, cx: &mut Context<Self>) {
-        if let Some(card) = &mut self.profile_card {
-            card.all_activity = all;
+    fn show_all_activity(&mut self, all: bool, cx: &mut Context<Self>) {
+        let Some(card) = &mut self.profile_card else { return };
+        card.all_activity = all;
+        match card.panel {
+            true => self.redraw(crate::part::Column::Panel, cx),
+            false => self.redraw_overlays(cx),
         }
-        self.redraw_overlays(cx);
     }
-
-    // Discord's rich presence card: heading and menu, the large image, then name, details, state with
-    // the party size, the elapsed time, and Ask to Join when the party is open.
 
     // .profile-stream: "Streaming {game}" with LIVE, the stream's preview (a click watches it, joining the
     // call first if need be), where it is, and Join Voice.
-    pub(super) fn stream_activity(&self, card: &ProfileCard, guild: &crate::discord::Guild, channel: &crate::discord::Channel, ink: Ink, cx: &mut Context<Self>) -> AnyElement {
+    fn stream_activity(&self, card: &ProfileCard, guild: &Guild, channel: &Channel, fit: Fit, ink: Ink, cx: &mut Context<Self>) -> AnyElement {
         let user_id = card.user.id.clone();
         let is_me = self.me.as_ref().is_some_and(|me| me.id == user_id);
-        let game = self.presences.get(&user_id).and_then(|p| p.activity.as_ref()).filter(|a| a.kind == ActivityKind::Playing).map(|a| a.text.clone());
+        let game = self.presences.get(&user_id).and_then(|p| p.activity.as_ref()).filter(|a| a.kind == crate::discord::ActivityKind::Playing).map(|a| a.text.clone());
         let heading = game.map_or_else(|| "Streaming".to_owned(), |game| format!("Streaming {game}"));
         let connected = self.call.as_ref().is_some_and(|c| c.channel.id == channel.id && c.connected);
         let watch_channel = channel.clone();
+        let label = match (is_me, connected) {
+            (true, _) => "You\u{2019}re Streaming!",
+            (false, true) => "Watch Stream",
+            (false, false) => "Join Voice Channel",
+        };
         let preview = div()
             .id("profile-stream-preview")
             .relative()
-            .w_full()
-            .aspect_ratio(16. / 9.)
-            .child(crate::call::stream_fill(RADIUS_SM).absolute().inset_0())
-            .children(self.stream_preview(&user_id).map(|url| ui::media(url, ui::all(RADIUS_SM)).absolute().size_full().object_fit(gpui_kit::ObjectFit::Cover)))
+            .group("profile-stream-preview")
+            .flex_none()
+            .map(|d| match fit {
+                Fit::Compact => d.w_full().aspect_ratio(16. / 9.),
+                Fit::Wide => d.size(px(ART_WIDE)),
+            })
+            .child(crate::call::stream_fill(fit.inner_radius()).absolute().inset_0())
+            .children(self.stream_preview(&user_id).map(|url| ui::media(url, ui::all(fit.inner_radius())).absolute().size_full().object_fit(gpui_kit::ObjectFit::Cover)))
+            .when(fit == Fit::Compact, |d| d.child(ui::row().absolute().inset_0().justify_center().child(crate::active_now::watch_label("profile-stream-preview", label))))
             .when(!is_me, |d| {
                 d.cursor_pointer().on_click(cx.listener(move |this, _, window, cx| {
                     this.profile_card = None;
@@ -151,120 +206,27 @@ impl Waffle {
                     this.show_call(watch_channel.clone(), window, cx);
                 }))
             });
-        let head = ui::row()
-            .gap_2()
-            .child(ui::line(heading).text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong))
-            .child(ui::live_badge());
-        ui::col()
-            .p_3()
-            .gap_2p5()
-            .squircle(RADIUS_MD)
-            .bg(ink.tile)
-            .child(head)
-            .child(preview)
-            .child(self.voice_place_row(guild, channel, ink))
-            .children((!is_me && !connected).then(|| self.join_voice_button(guild, channel, cx)))
-            .into_any_element()
+        let head = head(heading, None, Some(ui::live_badge().into_any_element()), None, ink);
+        let join = (!is_me).then(|| self.voice_way_in(guild, channel, fit, ink, cx));
+        match fit {
+            Fit::Compact => shell(fit, ink).child(head).child(preview).child(hairline(ink)).child(self.voice_place_row(guild, channel, ink, cx)).children(join).into_any_element(),
+            Fit::Wide => {
+                let details = ui::col().flex_1().gap_1().child(voice_heading(guild, channel, ink)).child(self.voice_faces(guild, channel, ink)).children(join);
+                shell(fit, ink).child(head).child(ui::row().items_start().gap_3().child(preview).child(details)).into_any_element()
+            }
+        }
     }
 
-    // .profile-voice: "In voice", who's there, where, and Join Voice.
-    pub(super) fn voice_activity(&self, card: &ProfileCard, guild: &crate::discord::Guild, channel: &crate::discord::Channel, ink: Ink, cx: &mut Context<Self>) -> AnyElement {
+    // .profile-voice: "In voice", the channel's tile with who's there, where it is, and Join Voice.
+    fn voice_activity(&self, card: &ProfileCard, guild: &Guild, channel: &Channel, fit: Fit, ink: Ink, cx: &mut Context<Self>) -> AnyElement {
         let is_me = self.me.as_ref().is_some_and(|me| me.id == card.user.id);
-        let connected = self.call.as_ref().is_some_and(|c| c.channel.id == channel.id && c.connected);
-        ui::col()
-            .p_3()
-            .gap_2p5()
-            .squircle(RADIUS_MD)
-            .bg(ink.tile)
-            .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child("In voice"))
-            .child(self.voice_place_row(guild, channel, ink))
-            .children((!is_me && !connected).then(|| self.join_voice_button(guild, channel, cx)))
-            .into_any_element()
-    }
-
-    // The server › channel breadcrumb, and who's in it.
-    pub(super) fn voice_place_row(&self, guild: &crate::discord::Guild, channel: &crate::discord::Channel, ink: Ink) -> Div {
-        let people: Vec<ui::Entry> = guild
-            .voice_states
-            .iter()
-            .filter(|v| v.channel_id.as_ref() == Some(&channel.id))
-            .map(|v| match &v.user {
-                Some(u) => ui::Entry::person(u.avatar.clone(), u.name.clone()),
-                None => ui::Entry::person(crate::discord::avatar_url(&v.user_id, None), v.user_id.clone()),
-            })
-            .collect();
-        let server = match &guild.icon {
-            Some(icon) => ui::media(icon.clone(), ui::all(RADIUS_XS)).size_5().flex_none().into_any_element(),
-            None => div().size_5().flex_none().squircle(RADIUS_XS).bg(ink.top).into_any_element(),
+        let join = (!is_me).then(|| self.voice_way_in(guild, channel, fit, ink, cx));
+        let details = ui::col().flex_1().min_w_0().gap_1().justify_center().child(voice_heading(guild, channel, ink));
+        let (details, foot) = match fit {
+            Fit::Wide => (details.children(join), None),
+            Fit::Compact => (details, join),
         };
-        ui::row()
-            .gap_1p5()
-            .text_size(ui::TEXT_SM)
-            .text_color(ink.text)
-            .child(server)
-            .child(Icon::new(Glyph::ChevronRight).size(ui::ICON_SM).flex_none().text_color(ink.muted))
-            .child(crate::sidebar::channel_glyph(channel).size_4().flex_none().text_color(ink.muted))
-            .child(ui::line(channel.name.clone()).flex_1())
-            .child(ui::listed_stack(SharedString::from(format!("profile-voice-{}", channel.id)), "In voice", people, 3, 20., ink.tile, ink.top, ink.strong))
-    }
-
-    pub(super) fn join_voice_button(&self, guild: &crate::discord::Guild, channel: &crate::discord::Channel, cx: &mut Context<Self>) -> AnyElement {
-        let (guild_id, channel) = (guild.id.clone(), channel.clone());
-        ui::button("profile-join-voice", ui::Tone::Secondary, cx)
-            .w_full()
-            .justify_center()
-            .child("Join Voice")
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.profile_card = None;
-                this.join_voice_in(Some(guild_id.clone()), channel.clone(), cx);
-                cx.notify(); // lint-allow(global-notify): joining a call changes the rail, the channel list and the call stage
-            }))
-            .into_any_element()
-    }
-
-    pub(super) fn activity_card(&self, card: &ProfileCard, rich: &RichPresence, ink: Ink, cx: &mut Context<Self>) -> Div {
-        let (user, menu_rich) = (card.user.clone(), rich.clone());
-        let more = (!self.activity_menu(&card.user, rich).is_empty()).then(|| {
-            ui::icon_button("profile-activity-more", Glyph::More, "More", cx)
-                .scoped(gpui_kit::transparent_black(), ink.tile, ink.muted, ink.strong)
-                .small()
-                .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_activity_menu(user.clone(), menu_rich.clone(), event.position(), cx)))
-        });
-        let art = match &rich.image {
-            Some(url) => ui::media(url.clone(), ui::all(RADIUS_SM)).size(px(ACTIVITY_ART)).flex_none().object_fit(gpui_kit::ObjectFit::Cover).into_any_element(),
-            None => ui::row().size(px(ACTIVITY_ART)).flex_none().squircle(RADIUS_SM).bg(ink.tile).justify_center().text_color(ink.muted).child(Icon::new(Glyph::Game).size_8()).into_any_element(),
-        };
-        let line = |text: String| ui::line(text).text_color(ink.text);
-        let state = rich.state.clone().map(|state| match rich.party {
-            Some((current, max)) => format!("{state} ({current} of {max})"),
-            None => state,
-        });
-        let elapsed = rich.started.map(|start| crate::call::clock(((chrono::Utc::now().timestamp_millis() - start).max(0) / 1000) as u64));
-        let mono = cx.theme().mono_font_family.clone();
-        let facts = ui::col()
-            .gap_0p5()
-            .text_size(ui::TEXT_SM)
-            .child(ui::line(rich.name.clone()).text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(ink.strong))
-            .children(rich.details.clone().map(line))
-            .children(state.map(|s| ui::row().gap_1().text_color(ink.text).when(rich.party.is_some(), |d| d.child(Icon::new(Glyph::Users).size(ui::ICON_SM).flex_none())).child(ui::line(s))))
-            .children(elapsed.map(|time| {
-                // Status green is ~2:1 on a light card; a deeper green keeps it readable there.
-                let green = if luminance(ink.strong) < 0.5 { palette::online_on_light() } else { palette::status(crate::discord::Status::Online) };
-                ui::row().gap_1().text_color(green).child(Icon::new(Glyph::Game).size(ui::ICON_SM)).child(div().font_family(mono).child(time))
-            }));
-        ui::col()
-            .p_3()
-            .gap_2p5()
-            .squircle(RADIUS_MD)
-            .bg(ink.tile)
-            .group(ACTIVITY_GROUP)
-            .child(
-                ui::row()
-                    .justify_between()
-                    .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(ink.strong).child(activity_heading(rich.kind)))
-                    .child(ui::row().gap_1().children(self.interaction_toolbar(card, Source::Activity(rich.name.clone()), ACTIVITY_GROUP, ink, cx)).children(more)),
-            )
-            .child(ui::row().gap_3().child(art).child(facts))
-            .when(rich.joinable, |c| c.child(ask_to_join(ink))).children(self.activity_join_button(&card.user.id, rich, cx))
+        let body = ui::row().map(|r| if fit == Fit::Wide { r.gap_3() } else { r.gap_2() }).child(self.voice_tile(guild, channel, fit, ink)).child(details);
+        shell(fit, ink).child(head("In voice".into(), None, None, None, ink)).child(body).children(foot).into_any_element()
     }
 }

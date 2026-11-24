@@ -159,7 +159,7 @@ fn demo_full_empty(waffle: &mut Waffle, cx: &mut Context<Waffle>) {
 }
 
 // Wren's DM with her profile in the side panel.
-fn demo_profile_dm(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<Waffle>) {
+pub(super) fn demo_profile_dm(waffle: &mut Waffle, window: &mut Window, cx: &mut Context<Waffle>) {
     demo_profile(waffle, cx);
     let profile = waffle.profile_card.take().and_then(|c| c.profile);
     let wren = user("8388608", "Wren");

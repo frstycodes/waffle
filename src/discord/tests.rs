@@ -857,7 +857,7 @@ fn parses_rich_presence() {
         { "type": 0, "name": "PUBG: BATTLEGROUNDS", "application_id": "530196305138417685", "details": "Normal, Erangel, 58/99", "state": "4 Squad",
           "party": { "id": "p", "size": [4, 4] }, "timestamps": { "start": 1700000000000i64 }, "flags": 2, "assets": { "large_image": "123" } },
     ]}));
-    let rich = p.rich.unwrap();
+    let rich = p.rich().unwrap().clone();
     assert_eq!(rich.name, "PUBG: BATTLEGROUNDS");
     assert_eq!(rich.party, Some((4, 4)));
     assert_eq!(rich.started, Some(1700000000000));
