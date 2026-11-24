@@ -47,9 +47,10 @@ pub const VOICE_HEIGHT: f32 = 99.;
 pub(crate) const PANEL_PAD: f32 = 10.;
 // The error bar is the voicebar without its buttons.
 const ERROR_HEIGHT: f32 = 59.;
-const PREVIEW_AGE: std::time::Duration = std::time::Duration::from_secs(60);
-// After a failed preview fetch, how long until the next try.
-const PREVIEW_RETRY: std::time::Duration = std::time::Duration::from_secs(20);
+// Discord's client keeps a stream preview two minutes, and after each failed fetch in a row waits
+// ten seconds longer before the next.
+const PREVIEW_AGE: std::time::Duration = std::time::Duration::from_secs(120);
+const PREVIEW_RETRY_STEP: std::time::Duration = std::time::Duration::from_secs(10);
 // The stage (.call): the 48px header line (FOCUS_HEAD) over a 32px header row, then 16px padding and gaps
 // around the tiles and 48px controls.
 // Long enough that a hiccup in a streamer's capture doesn't read as stalled.

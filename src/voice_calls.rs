@@ -108,13 +108,14 @@ impl Waffle {
         // lint-allow(global-notify): joining changes the dock, the rail and the participant list as well as the main column
         cx.notify();
     }
-    // Another client of ours joined voice. The voice server can drop this one (4006) before that
-    // client's voice state reaches us, so a call that ended moments ago is explained after the fact.
-    pub(crate) fn taken_elsewhere(&mut self) {
+    // Another client of ours joined voice in `guild_id` (None for a DM call). The voice server can drop
+    // this one (4006) before that client's voice state reaches us, so a call in the same server that
+    // ended moments ago is explained after the fact. One in another server is a call of its own.
+    pub(crate) fn taken_elsewhere(&mut self, guild_id: Option<&str>) {
         if self.call.is_some() {
             return;
         }
-        let Some(last) = self.last_call.take().filter(|c| c.at.elapsed() < TAKEN_ELSEWHERE_WINDOW) else { return };
+        let Some(last) = self.last_call.take_if(|c| c.at.elapsed() < TAKEN_ELSEWHERE_WINDOW && c.guild_id.as_deref() == guild_id) else { return };
         self.voice_error = None;
         self.voice_notice = Some(last);
     }
@@ -344,7 +345,10 @@ impl Waffle {
                 }
                 match reason.as_str() {
                     "Left" => {}
-                    voice::ANOTHER_LOCATION => self.taken_elsewhere(),
+                    voice::ANOTHER_LOCATION => {
+                        let guild_id = self.last_call.as_ref().and_then(|c| c.guild_id.clone());
+                        self.taken_elsewhere(guild_id.as_deref());
+                    }
                     _ => self.voice_error = Some(reason.into()),
                 }
             }

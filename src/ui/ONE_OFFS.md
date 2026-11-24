@@ -465,12 +465,12 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/stickers.rs` — the sticker picker is drawn by the root's overlays, over every column
 - `src/stickers.rs` — the sticker picker is drawn by the root's overlays, over every column
 - `src/stickers.rs` — the sticker picker is drawn by the root's overlays, over every column
+- `src/text_file.rs` — the full-size viewer is drawn by the root, over the columns
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
 - `src/toast.rs` — the toast is drawn by the root, over every column
-- `src/viewer.rs` — the media viewer is drawn by the root, over every column
 - `src/viewer.rs` — the media viewer is drawn by the root, over every column
 - `src/viewer.rs` — the media viewer is drawn by the root, over every column
 - `src/viewer.rs` — the media viewer is drawn by the root, over every column
@@ -812,11 +812,13 @@ _A notify in a pointer-move or scroll handler, or a timer loop, runs dozens of t
 
 _A repeating animation redraws every frame while it's on screen: run it only while its state holds (speaking, loading) and say when it stops in lint-allow(endless-animation)._
 
+- `src/design_system/faces.rs` — drawn only on the design-system page, which exists to show it moving.
 - `src/dm_call.rs` — pulses only on a face still being rung (pending); it stops when they answer
 - `src/dm_call.rs` — pulses only while the ringing card is up; answering or declining removes it
 - `src/mascot.rs` — plays only while a loader is drawn, and reduce-motion gets the still mark above.
 - `src/mascot.rs` — plays only while the mascot is drawn, and reduce-motion gets the still mark above.
 - `src/settings/meter.rs` — shown only while a keybind is recording; the ring is dropped when recording ends
+- `src/ui/status_mark.rs` — the typing mark shows only while someone is typing, which Discord ends after 10 seconds.
 - `src/video.rs` — drawn only while the clip loads; the view swaps it out when it is ready or has failed
 
 ## detached-task
@@ -900,6 +902,7 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/demo/scenes_apps.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
 - `src/demo/scenes_calls.rs` — the loop returns once the view is gone and the update fails
 - `src/demo/scenes_calls.rs` — the loop returns once the view is gone and the update fails
+- `src/demo/scenes_calls.rs` — the loop returns once the view is gone and the update fails
 - `src/demo/scenes_chat.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
 - `src/demo/scenes_chat.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
 - `src/demo/scenes_chat.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
@@ -970,6 +973,8 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/menu.rs` — ends itself after the one grace timer, and holds only a WeakEntity.
 - `src/menu.rs` — ends when the request returns, and holds only a WeakEntity.
 - `src/menu.rs` — ends when the request returns, and holds only a WeakEntity.
+- `src/message_menu/target.rs` — ends after one fetch, the save dialog's answer and one write, holding only a WeakEntity
+- `src/message_menu/target.rs` — ends when the one fetch returns, holding only a WeakEntity
 - `src/mod_view.rs` — a single timer that ends after MEMBER_WAIT, holding only a WeakEntity
 - `src/mod_view.rs` — one request that ends when the reply lands, holding only a WeakEntity
 - `src/mod_view.rs` — the loop breaks once Mod View closes or the member changes, and ends when the app entity drops
@@ -1073,7 +1078,6 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/user_menu.rs` — ends when the invite request returns, and holds only a WeakEntity.
 - `src/video.rs` — one open: ends when it returns, or when the player is dropped
 - `src/video.rs` — the tick loop ends when tick says stop or the player is dropped
-- `src/viewer.rs` — one count fetch: ends when the request returns, or when Waffle is dropped
 - `src/voice_calls.rs` — one 1.5 second timer, then it ends
 - `src/voice_calls.rs` — one 60 second timer, then it ends
 - `src/voice_calls.rs` — one LIVE_LAPSE timer, then it ends
@@ -1101,6 +1105,7 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/components.rs` — a copy of the picks above for one render, dropped with the frame; it holds the same few dozen at most
 - `src/components.rs` — one entry per select the user changed, a few dozen at most
 - `src/discord/message.rs` — capped at four pictures per embed, as the comment above says.
+- `src/discord/pacing.rs` — one entry per server opened, cleared on every READY
 - `src/drafts.rs` — one pick per option of one typed command, 25 at most (Discord's cap)
 - `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
 - `src/forum.rs` — bounded by the posts loaded from one forum, 25 per page of scrolling
@@ -1128,6 +1133,7 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/main.rs` — one thumbnail url per streamer seen, a handful of live streams at a time
 - `src/main.rs` — one u64 per channel the gateway reported, bounded by the user's channel count
 - `src/profile.rs` — one entry per profile effect sku seen, a catalogue of a few hundred at most
+- `src/query.rs` — a key leaves once its cooldown is over and it's asked for again, or once it's stored
 - `src/reactions.rs` — the name spans of one card sentence, three at most, rebuilt for each card
 - `src/report.rs` — one pick per form element of the node on screen, a handful
 - `src/report.rs` — the reasons of one menu node, a few dozen at most

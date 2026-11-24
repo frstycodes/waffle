@@ -11,7 +11,7 @@ use std::{
 
 use gpui_kit::{AnyElement, ClickEvent, Context, Div, FontWeight, MouseButton, Pixels, Point, SharedString, Window, component::Icon, div, prelude::*, px};
 use rand::seq::SliceRandom;
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::{Value, json};
 
 use crate::{

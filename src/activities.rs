@@ -216,7 +216,7 @@ impl Waffle {
         let id = app_id.to_owned();
         self.activities.apps.insert(id.clone(), ShelfApp::bare(id.clone(), "Activity".into(), String::new(), None));
         cx.spawn(async move |this, cx| {
-            let Ok(app) = client.call(reqwest::Method::GET, format!("/applications/{id}/rpc"), None).await else { return };
+            let Ok(app) = client.call(crate::discord::Method::GET, format!("/applications/{id}/rpc"), None).await else { return };
             let icon = app["icon"].as_str().map(|icon| discord::app_icon_url(&id, icon));
             let name = app["name"].as_str().unwrap_or("Activity").to_owned();
             let description = app["description"].as_str().unwrap_or_default().to_owned();

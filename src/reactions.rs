@@ -311,7 +311,7 @@ impl Waffle {
         let path = format!("/channels/{channel_id}/messages/{message_id}/reactions/{}/{user_id}", emoji.path());
         let undo_key = key.clone();
         self.rest_optimistic(
-            reqwest::Method::DELETE,
+            crate::discord::Method::DELETE,
             path,
             None,
             move |this| {

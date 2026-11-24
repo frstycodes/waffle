@@ -40,17 +40,11 @@ pub(super) fn badged_faces(cx: &App) -> impl IntoElement {
 const TILE: f32 = 44.;
 
 // Avatars at every size, and presence in each of its shapes.
-pub(super) fn avatars(cx: &App) -> impl IntoElement {
+pub(super) fn avatars(window: &mut Window, cx: &mut App) -> impl IntoElement {
     let ring = palette::surface(Level::Sidebar, cx);
     let page = palette::surface(Level::Page, cx);
-    let sized = |size: f32| {
-        let mark = ui::monogram("Mira", size);
-        if size < 32. {
-            return div().child(mark);
-        }
-        div().child(ui::badged(mark, size, ui::Shape::Round, page).status(Some(Status::Online)))
-    };
-    let person = |name: &'static str, label: &'static str, status: Option<Status>| {
+    let sized = |size: f32| div().child(ui::badged(ui::monogram("Mira", size), size, ui::Shape::Round, page).status(Some(Status::Online)));
+    let person = |name: &'static str, label: &'static str, status: Option<Mark>| {
         let avatar = match status {
             Some(status) => ui::badged(ui::monogram(name, 40.), 40., ui::Shape::Round, ring).status(Some(status)).into_any_element(),
             None => ui::monogram(name, 40.).shadow(ui::speaking_ring(ring)).into_any_element(),
@@ -58,19 +52,23 @@ pub(super) fn avatars(cx: &App) -> impl IntoElement {
         row().child(avatar).child(div().text_color(palette::muted(cx)).child(label))
     };
     let more = ui::badge(palette::surface(Level::Overlay, cx), palette::strong(cx)).size_6().rounded_full().px_0().justify_center().child("+3");
-    section("Avatars and status", "Status is never colour alone: online is a dot, idle a moon, do not disturb a bar, offline a ring. Speaking is the accent ring plus the bars.", cx).child(
+    section("Avatars and status", "Status is never colour alone: online is a dot, idle a moon, do not disturb a bar, offline a ring, a phone for mobile, a play disc while streaming, a pill of dots while typing. Each mark is its own shape with real holes, sized, ringed and inset from Discord's avatar table.", cx).child(
         board(cx)
             .gap_6()
-            .child(row().gap_4().items_end().children([16., 20., 24., 32., 40., 56., 80.].map(sized)).child(note("16 20 24 32 40 56 80 · below 24 no initials, no status", cx)))
+            .child(row().gap_4().items_end().children([16., 20., 24., 32., 40., 56., 80., 120.].map(sized)).child(note("16 20 24 32 40 56 80 120 · below 24 no initials", cx)))
             .child(
                 row()
                     .gap_6()
-                    .child(person("Mira", "Online", Some(Status::Online)))
-                    .child(person("Ana", "Idle", Some(Status::Idle)))
-                    .child(person("Theo", "Do not disturb", Some(Status::Dnd)))
-                    .child(person("Jun", "Offline", Some(Status::Offline)))
+                    .child(person("Mira", "Online", Some(Status::Online.into())))
+                    .child(person("Ana", "Idle", Some(Status::Idle.into())))
+                    .child(person("Theo", "Do not disturb", Some(Status::Dnd.into())))
+                    .child(person("Jun", "Offline", Some(Status::Offline.into())))
+                    .child(person("Kai", "Mobile", Some(Mark::Mobile)))
+                    .child(person("Lu", "Streaming", Some(Mark::Streaming)))
+                    .child(person("Ivy", "Typing", Some(Mark::Typing)))
                     .child(person("Rosa", "Speaking", None)),
             )
+            .child(morphing(window, cx))
             .child(
                 row()
                     .gap_3()
@@ -79,3 +77,25 @@ pub(super) fn avatars(cx: &App) -> impl IntoElement {
             ),
     )
 }
+
+// One face stepping through every status every 1.2s, so the morph between marks can be watched.
+fn morphing(window: &mut Window, cx: &mut App) -> impl IntoElement {
+    let started = *window.use_keyed_state("ds-morph-start", cx, |_, _| std::time::Instant::now()).read(cx);
+    let step = (started.elapsed().as_millis() / MORPH_STEP.as_millis()) as usize % MORPH_MARKS.len();
+    // lint-allow(endless-animation): drawn only on the design-system page, which exists to show it moving.
+    window.request_animation_frame();
+    let (mark, label) = MORPH_MARKS[step];
+    let face = |size: f32| ui::badged(ui::monogram("Mira", size), size, ui::Shape::Round, palette::surface(Level::Page, cx)).status(Some(mark)).morph(("ds-morph", size as usize));
+    row().gap_6().child(face(32.)).child(face(80.)).child(face(120.)).child(note(label, cx))
+}
+
+const MORPH_STEP: std::time::Duration = std::time::Duration::from_millis(1200);
+const MORPH_MARKS: [(Mark, &str); 7] = [
+    (Mark::Status(Status::Online), "Morphing · Online"),
+    (Mark::Status(Status::Idle), "Morphing · Idle"),
+    (Mark::Status(Status::Dnd), "Morphing · Do not disturb"),
+    (Mark::Status(Status::Offline), "Morphing · Offline"),
+    (Mark::Mobile, "Morphing · Mobile"),
+    (Mark::Streaming, "Morphing · Streaming"),
+    (Mark::Typing, "Morphing · Typing"),
+];

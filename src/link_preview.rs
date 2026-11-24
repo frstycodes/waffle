@@ -513,7 +513,7 @@ mod tests {
         assert!(q.should_fetch("i-gone"));
         q.failed("i-gone");
         assert!(q.cached("i-gone").is_none(), "a network failure caches nothing");
-        assert!(q.should_fetch("i-gone"), "and is tried again");
+        assert!(!q.should_fetch("i-gone"), "and isn't asked for again straight away");
     }
 
     #[test]

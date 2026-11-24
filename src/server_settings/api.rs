@@ -2,7 +2,7 @@
 // Routes and fields from discord-api-docs (read 2026-11-18) unless a line says "user client": those are
 // what Discord's own app calls, undocumented. Not verified live.
 use base64::Engine;
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::{Map, Value, json};
 
 use crate::discord::Client;

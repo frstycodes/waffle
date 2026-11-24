@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use gpui_kit::{AnyElement, App, ClickEvent, Context, Div, FontWeight, SharedString, Window, component::Icon, div, prelude::*, px};
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::{Value, json};
 
 use crate::{

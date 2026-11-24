@@ -9,12 +9,12 @@ use crate::discord::{ActivityKind, RichPresence};
 
 impl Waffle {
     pub(super) fn activity_card(&self, card: &ProfileCard, at: usize, rich: &RichPresence, fit: Fit, ink: Ink, cx: &mut Context<Self>) -> Div {
-        let (user, guild_id) = (card.user.clone(), card.guild_id.clone());
-        let more = (!card.user.bot).then(|| {
+        let (user, menu_rich) = (card.user.clone(), rich.clone());
+        let more = (!card.user.bot && !self.activity_menu(&card.user, rich).is_empty()).then(|| {
             ui::icon_button(("profile-activity-more", at), Glyph::More, "More", cx)
                 .scoped(gpui_kit::transparent_black(), ink.tile, ink.muted, ink.strong)
                 .small()
-                .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_user_menu(user.clone(), guild_id.clone(), menu_surface(guild_id.is_some()), event.position(), cx)))
+                .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_activity_menu(user.clone(), menu_rich.clone(), event.position(), cx)))
         });
         let toolbar = self.interaction_toolbar(card, Source::Activity(rich.name.clone()), ACTIVITY_GROUP, ink, cx);
         let menu = ui::row().flex_none().gap_1().children(toolbar).children(more).into_any_element();

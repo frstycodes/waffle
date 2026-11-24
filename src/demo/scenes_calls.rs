@@ -38,14 +38,22 @@ pub(super) fn call_scenes(waffle: &mut Waffle, scene: &str, window: &mut Window,
             }
         }
         // One DM per presence, so each status mark shows its cutout on the sidebar.
-        "home-presence" => {
-            for (id, name, status) in [("12582912", "moss lantern", Presence_::Idle), ("16777216", "toma reed", Presence_::Dnd), ("25165824", "ferris", Presence_::Offline)] {
+        // "presence-morph" walks juniper through every status, so each mark morphs into the next.
+        "home-presence" | "presence-morph" => {
+            let people = [("12582912", "moss lantern", Presence_::Idle, false), ("16777216", "toma reed", Presence_::Dnd, false), ("25165824", "ferris", Presence_::Offline, false), ("33554432", "pip", Presence_::Online, true), ("41943040", "juniper", Presence_::Online, false)];
+            for (id, name, status, streaming) in people {
                 let mut dm = waffle.dms[0].clone();
                 dm.id = format!("dm-{id}");
                 dm.name = name.into();
                 dm.recipient = Some(user(id, name));
                 waffle.dms.push(dm);
-                waffle.presences.insert(id.into(), Presence { status, ..Default::default() });
+                waffle.presences.insert(id.into(), Presence { status, streaming, ..Default::default() });
+            }
+            // Every presence mark the DM list draws, typing included.
+            let until = std::time::Instant::now() + std::time::Duration::from_secs(3600);
+            waffle.typing.insert("dm-41943040".into(), vec![crate::Typer { user_id: "41943040".into(), name: "juniper".into(), until }]);
+            if scene == "presence-morph" {
+                demo_presence_morph(window, cx);
             }
             waffle.restore = None;
             waffle.open_home(cx);
@@ -356,4 +364,24 @@ pub(super) fn call_scenes(waffle: &mut Waffle, scene: &str, window: &mut Window,
         _ if scene.starts_with("stage") => demo_stage(waffle, scene, window, cx),
         _ => {}
     }
+}
+
+// Every 1.2s juniper's mark steps to the next status (typing, online, idle, dnd, offline, mobile, streaming).
+fn demo_presence_morph(window: &mut Window, cx: &mut Context<Waffle>) {
+    let steps = [(None, Presence_::Online, false, false), (None, Presence_::Idle, false, false), (None, Presence_::Dnd, false, false), (None, Presence_::Offline, false, false), (None, Presence_::Online, true, false), (None, Presence_::Online, false, true), (Some(()), Presence_::Online, false, false)];
+    cx.spawn_in(window, async move |this, cx| loop {
+        for (typing, status, mobile_only, streaming) in steps {
+            cx.background_executor().timer(std::time::Duration::from_millis(1200)).await;
+            let alive = this.update(cx, |this, cx| {
+                let until = std::time::Instant::now() + std::time::Duration::from_secs(if typing.is_some() { 3600 } else { 0 });
+                this.typing.insert("dm-41943040".into(), vec![crate::Typer { user_id: "41943040".into(), name: "juniper".into(), until }]);
+                this.presences.insert("41943040".into(), Presence { status, mobile_only, streaming, ..Default::default() });
+                this.redraw(crate::part::Column::Nav, cx);
+            });
+            if alive.is_err() {
+                return;
+            }
+        }
+    })
+    .detach(); // lint-allow(detached-task): the loop returns once the view is gone and the update fails
 }

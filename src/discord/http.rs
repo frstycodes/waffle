@@ -75,8 +75,8 @@ pub fn demo_media(url: &str) -> Option<bytes::Bytes> {
 // `retry_after` and tries again; a 5xx is retried once, only for methods that are safe to repeat, so a
 // message never sends twice; 401 means the token is no longer accepted. Every other failure shows
 // Discord's own message (its JSON `message`, field errors included).
-pub async fn send(req: reqwest::RequestBuilder) -> Result<Value, String> {
-    let idempotent = req.try_clone().and_then(|r| r.build().ok()).is_some_and(|r| matches!(*r.method(), reqwest::Method::GET | reqwest::Method::PUT | reqwest::Method::DELETE | reqwest::Method::HEAD));
+pub async fn send(req: transport::Request) -> Result<Value, String> {
+    let idempotent = req.try_clone().and_then(|r| r.build().ok()).is_some_and(|r| matches!(*r.method(), transport::Method::GET | transport::Method::PUT | transport::Method::DELETE | transport::Method::HEAD));
     let mut req = req;
     let mut retries = 0;
     loop {
@@ -84,8 +84,8 @@ pub async fn send(req: reqwest::RequestBuilder) -> Result<Value, String> {
         let again = req.try_clone();
         let res = req.send().await.map_err(|e| e.to_string())?;
         let status = res.status();
-        let url = res.url().path().to_owned();
-        let header_wait = res.headers().get(reqwest::header::RETRY_AFTER).and_then(|v| v.to_str().ok()?.parse::<f64>().ok());
+        let url = res.uri().path().to_owned();
+        let header_wait = res.headers().get(transport::header::RETRY_AFTER).and_then(|v| v.to_str().ok()?.parse::<f64>().ok());
         let body: Value = res.json().await.unwrap_or(Value::Null);
         if status.is_success() {
             return Ok(body);
@@ -108,10 +108,12 @@ pub(super) const MAX_RETRY_WAIT: f64 = 10.;
 pub(super) fn retry_wait(status: u16, body: &Value, header_wait: Option<f64>, idempotent: bool, retries: u32) -> Option<Duration> {
     match status {
         429 if retries < 2 => {
-            let secs = body["retry_after"].as_f64().or(header_wait).unwrap_or(1.);
+            // Discord's client reads the header first and waits 5s when neither says.
+            let secs = header_wait.or(body["retry_after"].as_f64()).unwrap_or(5.);
             (secs <= MAX_RETRY_WAIT).then(|| Duration::from_secs_f64(secs.max(0.)))
         }
-        500 | 502 | 503 | 504 if idempotent && retries == 0 => Some(Duration::from_secs(1)),
+        // The gateway errors Discord's client retries; it leaves 500 and 503 to the caller.
+        502 | 504 if idempotent && retries == 0 => Some(Duration::from_secs(1)),
         _ => None,
     }
 }
@@ -120,14 +122,14 @@ pub(super) fn retry_wait(status: u16, body: &Value, header_wait: Option<f64>, id
 pub(super) const INDEX_TRIES: u32 = 3;
 
 // A command index GET: 202 (Discord still building it) waits 5 s, 429 waits `retry_after`.
-pub(super) async fn fetch_index(req: reqwest::RequestBuilder) -> Result<Value, String> {
+pub(super) async fn fetch_index(req: transport::Request) -> Result<Value, String> {
     let mut req = req;
     let mut tries = 1;
     loop {
         let again = req.try_clone();
         let res = req.send().await.map_err(|e| e.to_string())?;
         let status = res.status().as_u16();
-        let header_wait = res.headers().get(reqwest::header::RETRY_AFTER).and_then(|v| v.to_str().ok()?.parse::<f64>().ok());
+        let header_wait = res.headers().get(transport::header::RETRY_AFTER).and_then(|v| v.to_str().ok()?.parse::<f64>().ok());
         let body: Value = res.json().await.unwrap_or(Value::Null);
         if let (Some(wait), Some(next)) = (index_wait(status, &body, header_wait).filter(|_| tries < INDEX_TRIES), again) {
             tokio::time::sleep(wait).await;
@@ -170,7 +172,7 @@ pub(super) const INVALID_FORM_BODY: u64 = 50035;
 // Not verified: Discord's UNKNOWN_INTEGRATION is believed to be API code 10005.
 pub(super) const UNKNOWN_INTEGRATION: u64 = 10005;
 
-pub(super) async fn send_interaction(req: reqwest::RequestBuilder) -> Result<(), InteractError> {
+pub(super) async fn send_interaction(req: transport::Request) -> Result<(), InteractError> {
     let res = req.send().await.map_err(|_| InteractError::default())?;
     let status = res.status().as_u16();
     let body: Value = res.json().await.unwrap_or(Value::Null);
@@ -235,7 +237,7 @@ pub(super) fn error_text(status: u16, body: &Value) -> String {
         401 => SESSION_EXPIRED.to_owned(),
         _ if let Some(why) = body["code"].as_u64().and_then(launch_error) => why.to_owned(),
         // 40002 (verify your account), 50035 (invalid form) and the rest read as Discord words them.
-        _ => api_error(body).unwrap_or_else(|| reqwest::StatusCode::from_u16(status).map_or_else(|_| status.to_string(), |s| s.to_string())),
+        _ => api_error(body).unwrap_or_else(|| transport::StatusCode::from_u16(status).map_or_else(|_| status.to_string(), |s| s.to_string())),
     }
 }
 
@@ -376,7 +378,7 @@ pub(super) fn forward_body(original: &Message, guild_id: Option<&str>, nonce: &s
 
 // The PUT to a signed storage URL: no Authorization (the URL is the credential), streamed in chunks so
 // `sent` follows the bytes out. Content-Length is set so the body isn't sent chunked.
-pub(super) async fn put_file(http: reqwest::Client, url: String, path: PathBuf, sent: std::sync::Arc<std::sync::atomic::AtomicU64>) -> Result<(), String> {
+pub(super) async fn put_file(url: String, path: PathBuf, sent: std::sync::Arc<std::sync::atomic::AtomicU64>) -> Result<(), String> {
     use std::sync::atomic::Ordering;
     let bytes = bytes::Bytes::from(tokio::fs::read(&path).await.map_err(|e| e.to_string())?);
     let len = bytes.len();
@@ -386,7 +388,7 @@ pub(super) async fn put_file(http: reqwest::Client, url: String, path: PathBuf, 
         sent.fetch_add(chunk.len() as u64, Ordering::Relaxed);
         Ok::<_, std::io::Error>(chunk)
     });
-    let res = http.put(url).header(reqwest::header::CONTENT_LENGTH, len).body(reqwest::Body::wrap_stream(stream)).send().await.map_err(|e| e.to_string())?;
+    let res = transport::plain(transport::Method::PUT, url).header(transport::header::CONTENT_LENGTH, len).body(transport::Body::wrap_stream(stream)).send().await.map_err(|e| e.to_string())?;
     if res.status().is_success() {
         return Ok(());
     }
@@ -416,7 +418,7 @@ pub(super) fn api_error(body: &Value) -> Option<String> {
 }
 
 // `send` for lookups where 403 and 404 are answers ("not there for you"), not failures to retry.
-pub(super) async fn send_or_gone(req: reqwest::RequestBuilder) -> Result<Option<Value>, String> {
+pub(super) async fn send_or_gone(req: transport::Request) -> Result<Option<Value>, String> {
     let res = req.send().await.map_err(|e| e.to_string())?;
     let status = res.status();
     if matches!(status.as_u16(), 403 | 404) {

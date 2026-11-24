@@ -3,7 +3,7 @@
 // bookmarks, reminders, apps, report to mods) are left out. Report is hidden on your own messages and call records;
 // GAP: Discord also hides it on system-user messages and type 67 (friend request accepted), which `Message` doesn't carry.
 use gpui_kit::{Context, Pixels, Point};
-use reqwest::Method;
+use crate::discord::Method;
 
 use crate::{
     EmojiTarget, Waffle,
@@ -12,15 +12,23 @@ use crate::{
     menu::{Entry, item, submenu},
 };
 
+mod target;
+pub(crate) use target::MenuTarget;
+
 // Discord's padding for the frequent-emoji rows when there's no history yet.
 pub const QUICK_PAD: [&str; 12] = ["👍", "❤️", "😂", "💯", "😆", "💖", "🔥", "😭", "🙏", "👀", "😮", "🎉"];
 
 impl Waffle {
     pub(crate) fn open_message_menu(&mut self, message: Message, at: Point<Pixels>, cx: &mut Context<Self>) {
-        self.open_live_menu(at, move |this| this.message_menu(&message), cx);
+        self.open_message_menu_on(message, None, at, cx);
     }
 
-    pub(crate) fn message_menu(&self, message: &Message) -> Vec<Entry> {
+    // The menu with Discord's items for the image or link that was right-clicked.
+    pub(crate) fn open_message_menu_on(&mut self, message: Message, target: Option<MenuTarget>, at: Point<Pixels>, cx: &mut Context<Self>) {
+        self.open_live_menu(at, move |this| this.message_menu(&message, target.as_ref()), cx);
+    }
+
+    pub(crate) fn message_menu(&self, message: &Message, target: Option<&MenuTarget>) -> Vec<Entry> {
         if message.state == SendState::Failed {
             let (retry, delete) = (message.clone(), message.clone());
             return vec![
@@ -111,6 +119,12 @@ impl Waffle {
             out.push(item("Report Message", move |this, _, cx| this.open_report(crate::report::ReportTarget::Message(Box::new(m.clone())), cx)).danger().icon(Glyph::Flag).entry());
         }
         out.push(Entry::Separator);
+
+        // G7, G8: the image or link under the pointer.
+        if let Some(target) = target {
+            out.extend(self.target_entries(target));
+            out.push(Entry::Separator);
+        }
 
         // G9: developer.
         out.extend(action(MessageAction::CopyId));

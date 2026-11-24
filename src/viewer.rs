@@ -29,7 +29,7 @@ const PAD: f32 = 4.;
 const RING_OUT: f32 = 3.;
 // Thumbnails loaded either side of the visible stretch, so a short scroll finds them ready.
 const MARGIN: usize = 4;
-// Space the stage leaves for the top buttons and for the counter and strip below it.
+// Space the stage leaves for the top buttons and for the strip below it.
 const STAGE_INSET: (f32, f32) = (200., 220.);
 
 pub(crate) struct Viewer {
@@ -43,9 +43,6 @@ pub(crate) struct Viewer {
     // Thumbnails asked for last frame, so the ones scrolled away can be dropped.
     loaded: Cell<Range<usize>>,
     channel_id: String,
-    // Messages in the whole channel carrying an image or a video, from Discord's search; None until it answers.
-    // GAP: search counts messages, not files, so a message with several images counts once.
-    channel_total: Option<usize>,
 }
 
 impl Waffle {
@@ -55,44 +52,14 @@ impl Waffle {
         let items = feed_media(&feed.messages);
         let Some(index) = items.iter().position(|m| m.url == url) else { return };
         self.open_viewer_on(items, index, channel.id.clone(), window, cx);
-        self.count_channel_media(&channel, cx);
     }
 
     // The viewer at `items[index]`, paging through `items` alone. A Components V2 gallery passes no
     // `channel_id`, so the channel's history never replaces its items.
     pub(crate) fn open_viewer_on(&mut self, items: Vec<Media>, index: usize, channel_id: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.viewer = Some(Viewer { items, index, from: index, strip: ScrollHandle::new(), reveal: Cell::new(true), loaded: Cell::new(0..0), channel_id, channel_total: None });
+        self.viewer = Some(Viewer { items, index, from: index, strip: ScrollHandle::new(), reveal: Cell::new(true), loaded: Cell::new(0..0), channel_id });
         window.focus(&self.focus, cx);
         cx.notify(); // lint-allow(global-notify): the media viewer is drawn by the root, over every column
-    }
-
-    // Asks Discord's search how many messages in the channel carry an image and a video, for the counter.
-    fn count_channel_media(&mut self, channel: &discord::Channel, cx: &mut Context<Self>) {
-        let Some(client) = self.client.clone() else { return };
-        let scope = match &self.guild_id {
-            Some(guild) => format!("guilds/{guild}"),
-            None => format!("channels/{}", channel.id),
-        };
-        let channel_id = channel.id.clone();
-        let params = |has: &str| {
-            let mut params = vec![("has".to_owned(), has.to_owned())];
-            if scope.starts_with("guilds/") {
-                params.push(("channel_id".to_owned(), channel_id.clone()));
-            }
-            params
-        };
-        let (images, videos) = (params("image"), params("video"));
-        cx.spawn(async move |this, cx| {
-            let (images, videos) = futures::join!(client.search(&scope, "", &images), client.search(&scope, "", &videos));
-            let (Ok(images), Ok(videos)) = (images, videos) else { return };
-            this.update(cx, |this, cx| {
-                let Some(viewer) = this.viewer.as_mut().filter(|v| v.channel_id == channel_id) else { return };
-                viewer.channel_total = Some((images.total + videos.total) as usize);
-                cx.notify(); // lint-allow(global-notify): the media viewer is drawn by the root, over every column
-            })
-            .ok();
-        })
-        .detach(); // lint-allow(detached-task): one count fetch: ends when the request returns, or when Waffle is dropped
     }
 
     // The open channel's history grew: the viewer takes in what was added, keeping its place.
@@ -163,9 +130,6 @@ impl Waffle {
         let viewer = self.viewer.as_ref()?;
         let item = viewer.items.get(viewer.index)?.clone();
         let (index, count) = (viewer.index, viewer.items.len());
-        // Counted from the newest, as the media is: the channel's older media sits before what's loaded.
-        let total = viewer.channel_total.map_or(count, |total| total.max(count));
-        let position = total - (count - index) + 1;
         let viewport = window.viewport_size();
         let viewport = (f32::from(viewport.width), f32::from(viewport.height));
         let (w, h) = stage_size(&item, viewport);
@@ -203,8 +167,6 @@ impl Waffle {
             .left_0()
             .right_0()
             .items_center()
-            .gap_2()
-            .child(div().text_size(ui::TEXT_SM).text_color(gpui_kit::white().opacity(0.8)).child(format!("{position} / {total}")))
             .child(strip);
         Some(
             ui::row()

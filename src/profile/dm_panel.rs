@@ -15,7 +15,6 @@ impl Waffle {
     // without a theme). The banner, avatar and decoration play while the pointer is over it.
     pub(crate) fn dm_profile(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let user = self.dm_recipient()?.clone();
-        // GAP: a failed fetch is retried on the panel's next redraw; fine while redraws are occasional.
         self.fetch_profile(user.clone(), None, cx);
         let profile = self.profiles.peek(&profile_key(&user.id, None));
         // A cached profile skips the fetch that would ask for its effect.

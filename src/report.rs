@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use gpui_kit::{AnyElement, Context, FontWeight, SharedString, Window, component::Icon, div, img, prelude::*, px};
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::{Map, Value, json};
 
 use crate::{

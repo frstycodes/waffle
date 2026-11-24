@@ -212,7 +212,7 @@ impl Waffle {
         let before = self.custom_status.clone();
         let setting = custom.as_ref().map(CustomStatus::setting);
         self.rest_optimistic(
-            reqwest::Method::PATCH,
+            crate::discord::Method::PATCH,
             "/users/@me/settings".into(),
             Some(serde_json::json!({ "custom_status": setting })),
             move |this| {
@@ -553,7 +553,7 @@ fn presence_choice(status: Status, label: &'static str, detail: &'static str, on
         .squircle(ui::RADIUS_MD)
         .gap_3()
         .when(on, |r| r.bg(palette::selected(cx)))
-        .child(ui::status_mark(status, 14., palette::surface(palette::Level::Raised, cx), cx).border_0())
+        .child(ui::status_mark(status, 14.))
         .child(
             ui::col().min_h_0()
                 .flex_1()

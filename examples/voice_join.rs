@@ -8,10 +8,21 @@
 #[allow(dead_code)]
 mod voice;
 
+// The real handshake, so the harness joins voice the way the app does.
+#[path = "../src/discord/identity.rs"]
+#[allow(dead_code)]
+mod identity;
+#[path = "../src/discord/transport.rs"]
+#[allow(dead_code, unused_imports)]
+pub mod transport;
+use identity::identity;
+
 mod discord {
     use std::sync::OnceLock;
 
     use tokio::runtime::Runtime;
+
+    pub use crate::transport;
 
     pub fn runtime() -> &'static Runtime {
         static RUNTIME: OnceLock<Runtime> = OnceLock::new();

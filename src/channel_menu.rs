@@ -3,7 +3,7 @@
 // apps and the full server-settings screens aren't built, so their items are left out. Favorites-mode
 // menus live in favorites.rs.
 use gpui_kit::{Context, Pixels, Point, SharedString, Window};
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::{Value, json};
 
 mod server;
@@ -201,7 +201,7 @@ impl Waffle {
     }
 
     // Mute and its six lengths, or Unmute with when it ends: the same shape for channels and servers.
-    fn mute_entry(&self, label: &str, unmute: &str, muted: bool, end: Option<&str>, apply: impl Fn(&mut Waffle, Value, &mut Context<Waffle>) + Clone + 'static) -> Entry {
+    pub(crate) fn mute_entry(&self, label: &str, unmute: &str, muted: bool, end: Option<&str>, apply: impl Fn(&mut Waffle, Value, &mut Context<Waffle>) + Clone + 'static) -> Entry {
         if muted {
             let hint = end.and_then(|e| chrono::DateTime::parse_from_rfc3339(e).ok()).map(|e| format!("Muted until {}", until(e.with_timezone(&chrono::Local), chrono::Local::now())));
             let apply = apply.clone();

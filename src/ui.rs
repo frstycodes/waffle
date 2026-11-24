@@ -46,6 +46,7 @@ mod tunnel;
 mod tokens;
 mod layout;
 mod face;
+mod status_mark;
 mod kit;
 mod notice;
 mod roll;
@@ -66,7 +67,8 @@ pub use tokens::*;
 pub use roll::{hover_roll};
 pub use notice::{StripFill, divider_with, number_mark, panel, rule, strip, surface_in, thought_bubble, toast_text};
 pub use kit::{Heading, RowHeight, dialog_header, list_row, media_label, section_label, toolbar};
-pub use face::{Badge, MarkFill, Shape, Spot, app_tile, avatar, badge_of, badged, dm_face, gap, monogram, name_hue, server_tile, status_mark};
+pub use face::{Badge, Badged, MarkFill, Shape, Spot, app_tile, avatar, badge_of, badged, dm_face, gap, monogram, name_hue, server_tile};
+pub use status_mark::{status_mark};
 pub use layout::{FLOAT_EDGES, rich_line, room_above, col, floating, floating_at, line, row, sized, visible_rows};
 
 /// Rounds an element with the design's soft squircle.

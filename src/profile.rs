@@ -481,7 +481,8 @@ impl Waffle {
         let face = match hovered {
             true => playing_avatar(&format!("profile-{}", user.id), &user.avatar, decoration.as_deref(), size, status, ink.top),
             false => decorated_avatar(&user.avatar, decoration.as_deref(), size, status, ink.top),
-        };
+        }
+        .morph(format!("profile-presence-{}", user.id));
         let target = user.clone();
         let face = div().id("profile-avatar").p(px(AVATAR_RING)).rounded_full().bg(ink.top).cursor_pointer().child(face).on_click(cx.listener(move |this, _, _, cx| {
             match this.profile_card.as_mut().filter(|c| c.user.id == target.id && c.full.is_some()) {

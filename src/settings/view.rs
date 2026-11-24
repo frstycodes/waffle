@@ -267,7 +267,7 @@ impl Waffle {
 
     // Shown at once, saved to Discord after; if Discord refuses, `before` (the settings ahead of the change)
     // comes back with a toast.
-    pub(super) fn save_account_settings(&mut self, before: crate::discord::AccountSettings, patch: serde_json::Value, cx: &mut Context<Self>) {
+    pub(crate) fn save_account_settings(&mut self, before: crate::discord::AccountSettings, patch: serde_json::Value, cx: &mut Context<Self>) {
         // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
         cx.notify();
         let Some(client) = self.client.clone() else { return };
@@ -291,7 +291,7 @@ impl Waffle {
         cx.notify();
         let Some(client) = self.client.clone() else { return };
         cx.spawn(async move |this, cx| {
-            if client.call(reqwest::Method::PATCH, "/users/@me/settings-proto/1".into(), Some(json!({ "settings": settings }))).await.is_err() {
+            if client.call(crate::discord::Method::PATCH, "/users/@me/settings-proto/1".into(), Some(json!({ "settings": settings }))).await.is_err() {
                 let _ = this.update(cx, |this, cx| {
                     this.account_settings = before;
                     this.show_toast("Couldn't save that setting", cx);

@@ -352,6 +352,16 @@ impl Waffle {
         }
     }
 
+    // Demo scenes open a top-level submenu by its label.
+    #[cfg(debug_assertions)]
+    pub(crate) fn open_submenu_named(&mut self, label: &str) {
+        let Some(build) = self.menu.as_ref().map(|m| m.build.clone()) else { return };
+        let index = build(self).iter().position(|e| matches!(e, Entry::Item(item) if item.label == label));
+        if let (Some(menu), Some(index)) = (&mut self.menu, index) {
+            menu.sub = vec![index];
+        }
+    }
+
     // Hovering a row opens its submenu and closes any deeper one from a sibling, unless the pointer is
     // tunnelling across the sibling toward the open submenu: then the switch waits for the grace.
     fn hover_menu_row(&mut self, row: &[usize], next: Vec<usize>, at: Point<Pixels>, cx: &mut Context<Self>) {
@@ -611,8 +621,8 @@ pub(crate) fn menu_item_row(id: SharedString, item: &Item, sub_open: bool, lead_
     let lead = item.lead.as_ref().map(|lead| match lead {
         Lead::Glyph(glyph) => div().when_some(plain_icon(item, cx), |d, ink| d.text_color(ink)).child(Icon::new(*glyph).size(px(LEAD))).into_any_element(),
         Lead::Emoji(emoji) => emoji_face(emoji, LEAD).into_any_element(),
-        // The 14px presence mark with no ring of its own; its cut-outs take the menu's colour.
-        Lead::Status(status) => ui::status_mark(*status, 14., palette::surface(palette::Level::Overlay, cx), cx).border_0().into_any_element(),
+        // The 14px presence mark with no ring of its own.
+        Lead::Status(status) => ui::status_mark(*status, 14.).into_any_element(),
         Lead::Dot(color) => div().size_3().rounded_full().bg(palette::data_color(*color)).into_any_element(),
         Lead::Server { icon, name } => ui::server_tile(icon.as_deref(), name, 20., cx),
     });
@@ -744,7 +754,7 @@ impl Waffle {
     // Runs a REST call in the background; a failure shows as a toast, success runs `then`.
     pub(crate) fn rest(
         &mut self,
-        method: reqwest::Method,
+        method: crate::discord::Method,
         path: String,
         body: Option<serde_json::Value>,
         then: impl FnOnce(&mut Waffle, &mut Context<Waffle>) + 'static,
@@ -770,7 +780,7 @@ impl Waffle {
     // in the background, and if Discord refuses, `revert` puts it back and a toast says why.
     pub(crate) fn rest_optimistic(
         &mut self,
-        method: reqwest::Method,
+        method: crate::discord::Method,
         path: String,
         body: Option<serde_json::Value>,
         apply: impl FnOnce(&mut Waffle),

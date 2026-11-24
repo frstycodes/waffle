@@ -7,7 +7,7 @@ use std::collections::HashSet;
 
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::{AnyElement, Context, Div, FontWeight, SharedString, Window, WindowControlArea, component::Icon, div, prelude::*, px};
-use reqwest::Method;
+use crate::discord::Method;
 use serde_json::json;
 
 use crate::{

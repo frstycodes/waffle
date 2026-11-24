@@ -97,7 +97,7 @@ impl Waffle {
             true => playing_avatar("me", &me.avatar, me.decoration.as_deref(), 32., mark, ring),
             false => decorated_avatar(&me.avatar, me.decoration.as_deref(), 32., mark, ring),
         };
-        let face = div().flex_none().rounded_full().when(speaking, |d| d.shadow(ui::speaking_ring(card))).child(face);
+        let face = div().flex_none().rounded_full().when(speaking, |d| d.shadow(ui::speaking_ring(card))).child(face.morph("me-presence"));
         let username = if me.username.is_empty() { me.name.clone() } else { me.username.clone() };
         let second = ui::hover_roll("me-roll", self.my_status_line(&me, cx), ui::line(username), hovered, ui::LINE_XS, window, cx);
         let who = ui::list_row("me", me.name.clone(), cx)

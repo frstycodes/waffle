@@ -125,7 +125,7 @@ impl Waffle {
         let (channel_id, id) = (message.channel_id.clone(), message.id.clone());
         let before = message.media[index].clone();
         self.rest_optimistic(
-            reqwest::Method::PATCH,
+            crate::discord::Method::PATCH,
             path,
             Some(body),
             |this| {
