@@ -53,7 +53,7 @@ pub mod prelude;
 
 pub use control::{Control, Pressable, REMOVE_GLYPH_SM, button, card, chip_remove, icon_slot, chip, chip_lead, hover_fade, hover_state, icon_button, menu_row, pressable, round_button, swatch, tip};
 pub use date::{date_field, time_field};
-pub use dialog::{dialog, dialog_body, dialog_scroll, modal};
+pub use dialog::{dialog, dialog_body, dialog_fixed, dialog_scroll, modal};
 pub use feedback::{media_track, progress_bar, meter, meter_with, progress, progress_indeterminate, progress_live, ring, skeleton, skeleton_circle, slider_live, slider_track, squiggle};
 pub use field::{Align, check_options, code_cell, drop_zone, dropdown, field, field_error, field_marked, field_frame, field_hint, menu_dropdown, search_button, search_field, search_frame, select, select_options, stepper, text_area, text_field};
 pub use group::{settings_caption, settings_card, settings_choice, settings_close, settings_column, settings_group, SettingsHighlight, settings_warning, settings_nav_item, settings_page, SETTINGS_NAV_WIDTH, SETTINGS_WIDTH, settings_row, settings_nav_edge, settings_sidebar, settings_switch, settings_text, settings_title, settings_window};

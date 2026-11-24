@@ -102,6 +102,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 ## src/ui/dialog.rs
 
 - `ui::dialog` — A dialog's card around `body`, `width` wide.
+- `ui::dialog_fixed` — A dialog of a fixed size whose content may draw past its edge (a profile's frame over the full profile): the same card, shadow and pop as `d
 - `ui::dialog_scroll` — The part of a dialog between its fixed header and footer that scrolls when the window is too short, fading out at whichever edge has more be
 - `ui::dialog_body` — A dialog's usual body: 24px in, sections 16px apart.
 - `ui::modal` — Dims the window behind `dialog` and centres it.
