@@ -188,7 +188,7 @@ impl ActivityFrame {
         let Some(webview) = &self.webview else { return };
         #[cfg(target_os = "macos")]
         if let Some(composed) = self.composed.take() {
-            composed.release(cx);
+            composed.release();
         }
         move_webview(webview, window);
         #[cfg(target_os = "macos")]
@@ -270,7 +270,7 @@ impl Drop for ActivityFrame {
     fn drop(&mut self) {
         self.webview = None;
         if let Some(composed) = self.composed.take() {
-            composed.release_later();
+            composed.release();
         }
     }
 }
@@ -431,15 +431,11 @@ mod compose {
             }
         }
 
-        // Takes the surface out of its window's composition, which draws again so the pointer reaches what
-        // was under it.
-        pub(super) fn release(self, cx: &mut App) {
-            let id = self.surface.id();
-            _ = self.window.update(cx, |_, window, _| remove(window, id));
-        }
-
-        // `release` from where the app may be borrowed (a drop): on the next turn of the main thread.
-        pub(super) fn release_later(self) {
+        // Takes the surface out of its window's composition on the next turn of the main thread, which draws
+        // again so the pointer reaches what was under it. Never synchronously: a pop-out moves the frame from a
+        // click in the window it leaves, and updating a window mid-update fails, leaving an empty surface
+        // there that swallows the pointer.
+        pub(super) fn release(self) {
             let (id, window) = (self.surface.id(), self.window);
             self.cx
                 .spawn(async move |cx| _ = window.update(cx, |_, window, _| remove(window, id)))
