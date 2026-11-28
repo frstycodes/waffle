@@ -93,6 +93,8 @@ pub enum VoiceEvent {
     // One of Discord's AV error conditions (`issues`) started or cleared for `user_id` (ours for what
     // we send).
     Issue { user_id: String, code: u16, active: bool },
+    // Discord created the stream we asked to watch (STREAM_CREATE and its server): the watch no longer times out.
+    StreamCreated { user_id: String },
     // A watched Go Live's media connection is up (Discord's RTC_CONNECTED for the stream).
     StreamConnected { user_id: String },
     // `reason` is STREAM_DELETE's (`STREAM_DELETE_*` below), "Stopped" when we ended it, or the

@@ -198,6 +198,10 @@ impl Waffle {
                     self.ring_dm(channel, cx);
                 }
                 start_watch = self.watch_on_connect.take();
+                let me = self.me.as_ref().map(|m| m.id.clone());
+                for live in self.participants().into_iter().filter(|p| p.streaming && Some(&p.user_id) != me.as_ref()) {
+                    self.auto_watch(live.user_id, cx);
+                }
                 self.activity_on_connect(cx);
                 let Some(call) = &mut self.call else { return };
                 call.connected = true;
@@ -319,6 +323,11 @@ impl Waffle {
                     false => call.issues.remove(&(user_id, code)),
                 };
             }
+            voice::VoiceEvent::StreamCreated { user_id } => {
+                if let Some(watching) = call.watching.iter_mut().find(|w| w.streamer_id == user_id && matches!(w.state, WatchState::Connecting(_))) {
+                    watching.state = WatchState::Connecting(None);
+                }
+            }
             voice::VoiceEvent::StreamConnected { user_id } => {
                 if let Some(watching) = call.watching.iter_mut().find(|w| w.streamer_id == user_id)
                     && matches!(watching.state, WatchState::Connecting(_) | WatchState::Reconnecting)
@@ -383,6 +392,18 @@ impl Waffle {
         cx.notify();
     }
     // Adds `streamer_id`'s Go Live to the streams we watch and focuses it; Discord lets you watch several.
+    // In a DM call or on a stage Discord watches every stream as it starts, without taking the focus.
+    pub(crate) fn auto_watch(&mut self, streamer_id: String, cx: &mut Context<Self>) {
+        let Some(call) = &self.call else { return };
+        if call.guild_id.is_some() && call.channel.raw_type != STAGE_CHANNEL || call.watched(&streamer_id).is_some() {
+            return;
+        }
+        let focus = call.focus.clone();
+        self.watch_stream(streamer_id, cx);
+        if let Some(call) = &mut self.call {
+            call.focus = focus;
+        }
+    }
     // Discord's media sink wants: other people's cameras that are on and not disabled set the quality,
     // the focused one gets full quality, a disabled one none.
     fn sync_video_wants(&self) {
@@ -428,7 +449,7 @@ impl Waffle {
     }
     pub(crate) fn watch_timed_out(&mut self, streamer_id: &str, timeout: Duration, cx: &mut Context<Self>) {
         let Some(watching) = self.call.as_mut().and_then(|c| c.watching.iter_mut().find(|w| w.streamer_id == streamer_id)) else { return };
-        if matches!(watching.state, WatchState::Connecting(since) if since.elapsed() >= timeout) {
+        if matches!(watching.state, WatchState::Connecting(Some(since)) if since.elapsed() >= timeout) {
             watching.state = WatchState::Failed(STREAM_FAILED_TO_START);
             // lint-allow(global-notify): a failed watch shows on the call tile and in the PiP outside the columns
             cx.notify();
@@ -437,12 +458,18 @@ impl Waffle {
     // A watched stream's connection ended, handled as Discord handles STREAM_DELETE: unavailable or a
     // dropped connection reconnects, unauthorized fails, full closes with a notice, anything else ends.
     pub(crate) fn on_watch_ended(&mut self, streamer_id: String, reason: String, cx: &mut Context<Self>) {
-        let name = self.user_name(&streamer_id);
         let Some(watching) = self.call.as_mut().and_then(|c| c.watching.iter_mut().find(|w| w.streamer_id == streamer_id)) else { return };
         match reason.as_str() {
             voice::STREAM_DELETE_FULL => {
                 self.unwatch_stream(&streamer_id, cx);
-                self.voice_error = Some(format!("{name}'s stream is full").into());
+                self.alert("Stream is Full", "Sorry, this stream has the max number of viewers.", cx);
+            }
+            voice::STREAM_DELETE_RATE_LIMITED => {
+                let guild_id = self.call.as_ref().and_then(|c| c.guild_id.clone());
+                let server = self.guilds.iter().find(|g| Some(&g.id) == guild_id.as_ref()).map_or_else(|| "This server".to_owned(), |g| g.name.clone());
+                self.end_watch(streamer_id, cx);
+                let body = format!("{server} has temporarily lost access to some Discord features because it broke Discord's rules for servers. Please see the Help Center for more information.");
+                self.alert("This server's features are limited", body, cx);
             }
             voice::STREAM_DELETE_UNAUTHORIZED => fail_watch(watching, cx),
             // Already failed: the delete that follows a failure keeps it failed, as Discord's.

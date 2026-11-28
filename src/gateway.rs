@@ -439,7 +439,11 @@ impl Waffle {
                 if let Some(key) = live_key {
                     self.stream_live_since.entry(key).or_insert_with(Instant::now);
                 }
+                let started = (!mine && !was_live && is_live).then(|| state.user_id.clone());
                 upsert_voice_state(states, state);
+                if let Some(streamer) = started {
+                    self.auto_watch(streamer, cx);
+                }
             }
             Event::Call { channel_id, ringing } => self.on_dm_call(channel_id, ringing, cx),
             Event::CallEnded { channel_id } => self.on_dm_call_ended(&channel_id),

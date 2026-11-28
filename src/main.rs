@@ -404,8 +404,8 @@ pub(crate) struct Watching {
 // Discord's active-stream states (its web client, 2026-11-21), less ENDED, which is `Call::ended`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum WatchState {
-    // Since when: Discord fails a watch that hasn't connected in 5 s (12 s on a Stage).
-    Connecting(Instant),
+    // Since when: Discord fails a watch with no STREAM_CREATE in 5 s (12 s on a Stage); None once it came.
+    Connecting(Option<Instant>),
     Active,
     Reconnecting,
     // With Discord's error code, shown on the tile.
@@ -428,7 +428,7 @@ const LIVE_LAPSE: Duration = Duration::from_secs(180);
 
 impl Watching {
     pub(crate) fn new(streamer_id: String, frame: Option<Arc<RenderImage>>, watch: Option<voice::StreamWatch>) -> Self {
-        let state = if watch.is_some() { WatchState::Connecting(Instant::now()) } else { WatchState::Active };
+        let state = if watch.is_some() { WatchState::Connecting(Some(Instant::now())) } else { WatchState::Active };
         Self { streamer_id, frame, arrivals: Default::default(), watch, state, rejoins: 0 }
     }
 

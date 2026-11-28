@@ -320,8 +320,9 @@ pub(super) async fn connect_stream(
     let (rtc, server) = tokio::time::timeout(SERVER_TIMEOUT, await_stream_server(key, dispatches))
         .await
         .map_err(|_| "Stream server did not respond".to_owned())??;
-    if role.broadcasts() {
-        shared.gateway.send(22, json!({ "stream_key": key, "paused": false }));
+    match role.broadcasts() {
+        true => shared.gateway.send(22, json!({ "stream_key": key, "paused": false })),
+        false => shared.emit(VoiceEvent::StreamCreated { user_id: streamer.to_owned() }),
     }
     let mut target = Target { server_id: rtc.server_id, dave_channel: rtc.channel_id, session_id, server, role, streamer: streamer.to_owned() };
     let moved = Mutex::new(None);
