@@ -404,9 +404,25 @@ impl Waffle {
         });
     }
 
+    // Discord's camera limit: with more people in the call's channel than the server allows video for,
+    // a camera that's off can't come on. The limit, when it's reached.
+    pub(crate) fn camera_limit(&self) -> Option<u32> {
+        let call = self.call.as_ref()?;
+        let guild = self.guilds.iter().find(|g| Some(&g.id) == call.guild_id.as_ref())?;
+        let here = guild.voice_states.iter().filter(|v| v.channel_id.as_ref() == Some(&call.channel.id)).count() as u32;
+        match call.channel.raw_type == crate::discord::STAGE_TYPE {
+            true => (here > guild.max_stage_video_users).then_some(guild.max_stage_video_users),
+            false => (guild.max_video_users > 0 && here > guild.max_video_users).then_some(guild.max_video_users),
+        }
+    }
+
     pub(crate) fn toggle_camera(&mut self, cx: &mut Context<Self>) {
+        let limited = self.camera_limit().is_some();
         let Some(call) = &mut self.call else { return };
         let on = !call.camera_on;
+        if on && limited {
+            return;
+        }
         let camera = on.then(|| self.prefs.camera.clone().or_else(|| voice::cameras().into_iter().next().map(|c| c.id))).flatten();
         if on && camera.is_none() {
             self.voice_error = Some("No camera found".into());

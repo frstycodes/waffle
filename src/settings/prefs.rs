@@ -135,6 +135,9 @@ pub struct Prefs {
     // Discord's per-user "Mute Soundboard" and "Disable Video", kept locally like the volume.
     pub soundboard_mutes: Vec<String>,
     pub hidden_video: Vec<String>,
+    // Voice channels where the call shows only cameras and streams (Discord's "Show Non-Video Participants" off).
+    // lint-allow(unbounded-growth): one entry per voice channel you turned it off in, a few dozen at most
+    pub video_only_channels: Vec<String>,
     // Discord's Soundboard Volume as it stores it: amplitude, 100 = as uploaded, 0 = soundboard muted.
     // Shown on its perceptual scale (soundboard::perceptual).
     pub soundboard_volume: f32,
@@ -257,6 +260,7 @@ impl Default for Prefs {
             trusted_link_domains: Vec::new(),
             soundboard_mutes: Vec::new(),
             hidden_video: Vec::new(),
+            video_only_channels: Vec::new(),
             soundboard_volume: 100.,
             soundboard_favorites: Vec::new(),
             soundboard_uses: Vec::new(),

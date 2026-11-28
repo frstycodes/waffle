@@ -1157,6 +1157,7 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/settings/prefs.rs` — one entry per distinct emoji you have sent, a few hundred in practice
 - `src/settings/prefs.rs` — one entry per distinct emoji you have sent, a few hundred in practice, each keeping only its last FRECENCY_SAMPLES times
 - `src/settings/prefs.rs` — one entry per distinct sticker you have sent, a few dozen in practice
+- `src/settings/prefs.rs` — one entry per voice channel you turned it off in, a few dozen at most
 - `src/settings/prefs.rs` — one volume per person whose volume you moved, a few dozen at most
 - `src/settings/prefs.rs` — the posts whose bump notice you hid, a few dozen at most
 - `src/soundboard.rs` — one entry per joined server, a few dozen at most

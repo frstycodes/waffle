@@ -115,6 +115,8 @@ pub(super) fn parse_guild(g: &Value) -> Option<Guild> {
         threads: g["threads"].as_array().into_iter().flatten().filter_map(|t| parse_channel(t, id)).collect(),
         my_roles: Vec::new(),
         premium_tier: props["premium_tier"].as_u64().or(g["premium_tier"].as_u64()).unwrap_or(0) as u8,
+        max_video_users: props["max_video_channel_users"].as_u64().or(g["max_video_channel_users"].as_u64()).unwrap_or(0) as u32,
+        max_stage_video_users: props["max_stage_video_channel_users"].as_u64().or(g["max_stage_video_channel_users"].as_u64()).unwrap_or(0) as u32,
         afk_channel_id: props["afk_channel_id"].as_str().or(g["afk_channel_id"].as_str()).map(str::to_owned),
         timed_out_until: None,
         system_channel_flags: props["system_channel_flags"].as_u64().or(g["system_channel_flags"].as_u64()).unwrap_or(0),
