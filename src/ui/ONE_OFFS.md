@@ -1087,6 +1087,8 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/user_menu.rs` — ends when the invite request returns, and holds only a WeakEntity.
 - `src/video.rs` — one open: ends when it returns, or when the player is dropped
 - `src/video.rs` — the tick loop ends when tick says stop or the player is dropped
+- `src/voice_calls.rs` — a one-shot request that ends when it returns
+- `src/voice_calls.rs` — a one-shot request that ends when it returns
 - `src/voice_calls.rs` — one 1.5 second timer, then it ends
 - `src/voice_calls.rs` — one 60 second timer, then it ends
 - `src/voice_calls.rs` — one LIVE_LAPSE timer, then it ends

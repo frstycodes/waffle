@@ -2,6 +2,10 @@
 
 use crate::*;
 
+// Discord's go-live notify goes out only in servers of this many members (StreamNotificationsGuildMaxSize).
+const GO_LIVE_NOTIFY_FROM: u32 = 31;
+const GO_LIVE_NOTIFY_UP_TO: u32 = 50;
+
 impl Waffle {
     pub(crate) fn set_talk_key(&mut self, down: bool) {
         if self.talk_key_down == down {
@@ -323,6 +327,7 @@ impl Waffle {
                     false => call.issues.remove(&(user_id, code)),
                 };
             }
+            voice::VoiceEvent::StreamCreated { user_id } if self.me.as_ref().is_some_and(|m| m.id == user_id) => return self.notify_go_live(cx),
             voice::VoiceEvent::StreamCreated { user_id } => {
                 if let Some(watching) = call.watching.iter_mut().find(|w| w.streamer_id == user_id && matches!(w.state, WatchState::Connecting(_))) {
                     watching.state = WatchState::Connecting(None);
@@ -392,6 +397,52 @@ impl Waffle {
         cx.notify();
     }
     // Adds `streamer_id`'s Go Live to the streams we watch and focuses it; Discord lets you watch several.
+    // The call's voice channel as the server now has it, for its region.
+    fn call_channel_region(&self) -> Option<String> {
+        let call = self.call.as_ref()?;
+        let guild = self.guilds.iter().find(|g| Some(&g.id) == call.guild_id.as_ref())?;
+        guild.channels.iter().find(|c| c.id == call.channel.id)?.props.rtc_region.clone()
+    }
+    // Our Go Live's key, as Discord builds it.
+    pub(crate) fn own_stream_key(&self) -> Option<String> {
+        let (call, me) = (self.call.as_ref()?, self.me.as_ref()?);
+        Some(match &call.guild_id {
+            Some(guild) => format!("guild:{guild}:{}:{}", call.channel.id, me.id),
+            None => format!("call:{}:{}", call.channel.id, me.id),
+        })
+    }
+    // Discord tells friends we went live in a server of 31 to 50 members, when the setting is on.
+    fn notify_go_live(&mut self, cx: &mut Context<Self>) {
+        let guild = self.call.as_ref().and_then(|c| c.guild_id.as_ref()).and_then(|id| self.guilds.iter().find(|g| &g.id == id));
+        let mid_size = guild.is_some_and(|g| (GO_LIVE_NOTIFY_FROM..=GO_LIVE_NOTIFY_UP_TO).contains(&g.member_count));
+        let (Some(client), Some(key)) = (self.client.clone(), self.own_stream_key()) else { return };
+        if !mid_size || !self.account_settings.notify_friends_on_go_live {
+            return;
+        }
+        cx.background_spawn(async move {
+            if let Err(e) = client.call(crate::discord::Method::POST, format!("/streams/{key}/notify"), None).await {
+                eprintln!("go live notify {key}: {e}");
+            }
+        })
+        // lint-allow(detached-task): a one-shot request that ends when it returns
+        .detach();
+    }
+    // The voice channel's region changed while we're live: Discord moves the stream there too.
+    pub(crate) fn follow_stream_region(&mut self, cx: &mut Context<Self>) {
+        let region = self.call_channel_region();
+        let live = self.call.as_ref().is_some_and(|c| c.sharing.is_some());
+        let (Some(client), Some(key), true) = (self.client.clone(), self.own_stream_key(), live) else { return };
+        if let Some(call) = &self.call {
+            call.session.set_stream_region(region.clone());
+        }
+        cx.background_spawn(async move {
+            if let Err(e) = client.call(crate::discord::Method::PATCH, format!("/streams/{key}"), Some(serde_json::json!({ "region": region }))).await {
+                eprintln!("stream region {key}: {e}");
+            }
+        })
+        // lint-allow(detached-task): a one-shot request that ends when it returns
+        .detach();
+    }
     // In a DM call or on a stage Discord watches every stream as it starts, without taking the focus.
     pub(crate) fn auto_watch(&mut self, streamer_id: String, cx: &mut Context<Self>) {
         let Some(call) = &self.call else { return };
@@ -636,7 +687,9 @@ impl Waffle {
     }
     // Starts (or restarts) our Go Live of `source` with the current quality prefs.
     pub(crate) fn go_live(&mut self, source: voice::ShareSource, cx: &mut Context<Self>) -> bool {
+        let region = self.call_channel_region();
         let Some(call) = &mut self.call else { return false };
+        call.session.set_stream_region(region);
         let options = voice::GoLiveOptions { resolution: self.prefs.stream_resolution, fps: self.prefs.stream_fps, audio: self.prefs.stream_audio };
         match call.session.go_live_with_options(source, options, call.sharing.take()) {
             Ok(live) => {

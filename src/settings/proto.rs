@@ -7,6 +7,9 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use crate::discord::AccountSettings;
 
 const TEXT_AND_IMAGES: u64 = 6;
+const NOTIFICATIONS: u64 = 7;
+// NotificationSettings.notify_friends_on_go_live, a google.protobuf.BoolValue.
+const NOTIFY_FRIENDS_ON_GO_LIVE: u64 = 2;
 const PRIVACY: u64 = 8;
 // TextAndImagesSettings.dm_spam_filter_v2, enum DmSpamFilterV2.
 const DM_SPAM_FILTER_V2: u64 = 27;
@@ -38,6 +41,9 @@ impl AccountSettings {
         // An empty BoolValue is false.
         if let Some(Field::Bytes(restricted)) = find(&bytes, &[PRIVACY, DEFAULT_MESSAGE_REQUEST_RESTRICTED]) {
             self.message_requests = !matches!(find(restricted, &[BOOL_VALUE]), Some(Field::Varint(1..)));
+        }
+        if let Some(Field::Bytes(notify)) = find(&bytes, &[NOTIFICATIONS, NOTIFY_FRIENDS_ON_GO_LIVE]) {
+            self.notify_friends_on_go_live = matches!(find(notify, &[BOOL_VALUE]), Some(Field::Varint(1..)));
         }
         if let Some(Field::Varint(level)) = find(&bytes, &[PRIVACY, DEFAULT_GUILDS_ACTIVITY_RESTRICTED]) {
             self.default_guilds_activity_restricted = level.min(2) as u8;

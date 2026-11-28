@@ -175,7 +175,9 @@ impl Waffle {
                 }
             }
             Event::ChannelUpsert { guild_id, channel } => {
+                let ours = self.call.as_ref().is_some_and(|c| c.channel.id == channel.id);
                 let Some(guild) = self.guilds.iter_mut().find(|g| g.id == guild_id) else { return };
+                let region_moved = ours && guild.channels.iter().find(|c| c.id == channel.id).is_some_and(|old| old.props.rtc_region != channel.props.rtc_region);
                 let list = if channel.kind == ChannelKind::Thread { &mut guild.threads } else { &mut guild.channels };
                 match list.iter_mut().find(|c| c.id == channel.id) {
                     Some(existing) => {
@@ -189,6 +191,9 @@ impl Waffle {
                     None => list.push(channel),
                 }
                 guild.channels.sort_by_key(|c| c.position);
+                if region_moved {
+                    self.follow_stream_region(cx);
+                }
             }
             Event::ScheduledEvent(event) => {
                 let Some(guild) = self.guilds.iter_mut().find(|g| g.id == event.guild_id) else { return };

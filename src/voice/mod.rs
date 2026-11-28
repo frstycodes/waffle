@@ -96,7 +96,8 @@ pub enum VoiceEvent {
     // One of Discord's AV error conditions (`issues`) started or cleared for `user_id` (ours for what
     // we send).
     Issue { user_id: String, code: u16, active: bool },
-    // Discord created the stream we asked to watch (STREAM_CREATE and its server): the watch no longer times out.
+    // Discord created a stream we asked for (STREAM_CREATE and its server): a watch no longer times out, and
+    // our own Go Live may notify friends.
     StreamCreated { user_id: String },
     // A watched Go Live's media connection is up (Discord's RTC_CONNECTED for the stream).
     StreamConnected { user_id: String },
@@ -412,6 +413,8 @@ struct Shared {
     server_muted: AtomicBool,
     // Who is talking as a priority speaker (op 5's speaking flag 4): everyone else plays at a tenth meanwhile.
     priority: Mutex<std::collections::HashSet<String>>,
+    // The voice channel's region, which our Go Live is created in (op 18); None lets Discord pick.
+    stream_region: Mutex<Option<String>>,
     // What video we ask the SFU for (op 15), and a wake-up for the connection to send it again.
     video_wants: Mutex<VideoWants>,
     wants_changed: tokio::sync::Notify,
@@ -590,6 +593,7 @@ pub fn join(
         deafened: AtomicBool::new(false),
         server_muted: AtomicBool::new(false),
         priority: Mutex::default(),
+        stream_region: Mutex::default(),
         video_wants: Mutex::default(),
         wants_changed: tokio::sync::Notify::new(),
         flags_pending: AtomicBool::new(false),
@@ -625,6 +629,12 @@ impl VoiceSession {
         self.shared.muted.store(muted, Ordering::Relaxed);
         self.shared.deafened.store(deafened, Ordering::Relaxed);
         send_flags_soon(&self.shared);
+    }
+
+    pub fn set_stream_region(&self, region: Option<String>) {
+        if let Ok(mut current) = self.shared.stream_region.lock() {
+            *current = region;
+        }
     }
 
     // Asks the SFU for this video from now on; only a change goes out.
@@ -926,6 +936,8 @@ mod tests {
             deafened: AtomicBool::new(false),
             server_muted: AtomicBool::new(false),
             priority: Mutex::default(),
+            stream_region: Mutex::default(),
+        stream_region: Mutex::default(),
         video_wants: Mutex::default(),
             wants_changed: tokio::sync::Notify::new(),
             flags_pending: AtomicBool::new(false),

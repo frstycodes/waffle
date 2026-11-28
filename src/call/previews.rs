@@ -86,11 +86,7 @@ impl Waffle {
     // 512px-wide JPEG half a second after going live, then every five minutes. A failure, or a paused
     // stream, tries again a minute later.
     pub(crate) fn upload_stream_previews(&mut self, source: voice::ShareSource, cx: &mut Context<Self>) {
-        let (Some(client), Some(call), Some(me)) = (self.client.clone(), self.call.as_ref(), self.me.as_ref()) else { return };
-        let key = match &call.guild_id {
-            Some(guild) => format!("guild:{guild}:{}:{}", call.channel.id, me.id),
-            None => format!("call:{}:{}", call.channel.id, me.id),
-        };
+        let (Some(client), Some(key)) = (self.client.clone(), self.own_stream_key()) else { return };
         self.preview_generation += 1;
         let generation = self.preview_generation;
         cx.spawn(async move |this, cx| {

@@ -266,7 +266,7 @@ pub(super) async fn stream(shared: Arc<Shared>, role: Role, streamer: String, ke
     let mut dispatches = shared.gateway.dispatches.subscribe();
     if role.broadcasts() {
         let kind = if shared.guild_id.is_some() { "guild" } else { "call" };
-        let create = json!({ "type": kind, "guild_id": shared.guild_id, "channel_id": shared.channel_id, "preferred_region": null });
+        let create = json!({ "type": kind, "guild_id": shared.guild_id, "channel_id": shared.channel_id, "preferred_region": shared.stream_region.lock().ok().and_then(|r| r.clone()) });
         shared.gateway.send(18, create);
     } else {
         shared.gateway.send(20, json!({ "stream_key": key }));
@@ -320,10 +320,10 @@ pub(super) async fn connect_stream(
     let (rtc, server) = tokio::time::timeout(SERVER_TIMEOUT, await_stream_server(key, dispatches))
         .await
         .map_err(|_| "Stream server did not respond".to_owned())??;
-    match role.broadcasts() {
-        true => shared.gateway.send(22, json!({ "stream_key": key, "paused": false })),
-        false => shared.emit(VoiceEvent::StreamCreated { user_id: streamer.to_owned() }),
+    if role.broadcasts() {
+        shared.gateway.send(22, json!({ "stream_key": key, "paused": false }));
     }
+    shared.emit(VoiceEvent::StreamCreated { user_id: streamer.to_owned() });
     let mut target = Target { server_id: rtc.server_id, dave_channel: rtc.channel_id, session_id, server, role, streamer: streamer.to_owned() };
     let moved = Mutex::new(None);
     let on_dispatch = |kind: &str, d: &Value| stream_dispatch(key, kind, d, &moved);
