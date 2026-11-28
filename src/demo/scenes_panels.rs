@@ -19,6 +19,27 @@ pub(super) fn panel_scenes(waffle: &mut Waffle, scene: &str, window: &mut Window
             waffle.open_message_menu_on(message, target, demo_at(700., 120.), cx);
         }
         "text-box-menu" => waffle.open_text_box_menu(demo_at(600., 700.), cx),
+        // Wren mentions you in #media three seconds in: a real desktop notification, which opens #media when clicked.
+        "desktop-notification" => {
+            // The fixture account is on Do Not Disturb, which silences notifications.
+            waffle.my_status = crate::discord::Status::Online;
+            cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(std::time::Duration::from_secs(3)).await;
+                let mention = Message {
+                    id: "950".into(),
+                    channel_id: "media".into(),
+                    guild_id: Some("1".into()),
+                    author: user("8388608", "Wren"),
+                    mentions: vec![user("4194304", "kiwi")],
+                    content: "the new build is up, can you try it?".into(),
+                    timestamp: "2026-11-13T17:30:00Z".into(),
+                    ..Default::default()
+                };
+                this.update(cx, |this, cx| this.on_message(mention, cx)).ok();
+            })
+            // lint-allow(detached-task): one-shot fixture step; ends after one timer and update, or when the view is gone
+            .detach();
+        }
         // The channel header's bell with its menu open.
         "notify-bell" => {
             if let Some(channel) = waffle.channel.clone() {

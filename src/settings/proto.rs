@@ -1,4 +1,4 @@
-// The two message-request settings, which live only in Discord's protobuf user settings
+// The settings that live only in Discord's protobuf user settings: message requests, activity sharing, quiet mode
 // (PreloadedUserSettings, `PATCH /users/@me/settings-proto/1`). Field numbers are from the protobuf-ts
 // descriptors in Discord's web bundle (web.355a76e660bee7a5.js, 2026-11-22). Just enough wire format to read
 // and write them: varints and length-delimited fields.
@@ -11,6 +11,8 @@ const NOTIFICATIONS: u64 = 7;
 // NotificationSettings.notify_friends_on_go_live, a google.protobuf.BoolValue.
 const NOTIFY_FRIENDS_ON_GO_LIVE: u64 = 2;
 const PRIVACY: u64 = 8;
+// NotificationSettings.quiet_mode, a google.protobuf.BoolValue.
+const QUIET_MODE: u64 = 5;
 // TextAndImagesSettings.dm_spam_filter_v2, enum DmSpamFilterV2.
 const DM_SPAM_FILTER_V2: u64 = 27;
 // PrivacySettings.default_message_request_restricted, a google.protobuf.BoolValue.
@@ -44,6 +46,9 @@ impl AccountSettings {
         }
         if let Some(Field::Bytes(notify)) = find(&bytes, &[NOTIFICATIONS, NOTIFY_FRIENDS_ON_GO_LIVE]) {
             self.notify_friends_on_go_live = matches!(find(notify, &[BOOL_VALUE]), Some(Field::Varint(1..)));
+        }
+        if let Some(Field::Bytes(quiet)) = find(&bytes, &[NOTIFICATIONS, QUIET_MODE]) {
+            self.quiet_mode = matches!(find(quiet, &[BOOL_VALUE]), Some(Field::Varint(1..)));
         }
         if let Some(Field::Varint(level)) = find(&bytes, &[PRIVACY, DEFAULT_GUILDS_ACTIVITY_RESTRICTED]) {
             self.default_guilds_activity_restricted = level.min(2) as u8;
@@ -166,6 +171,14 @@ mod tests {
         assert!(read(&message_requests(true)).message_requests);
         assert_eq!(read(&guild_activity_default(1)).default_guilds_activity_restricted, 1);
         assert_eq!(read(&guild_activity_default(9)).default_guilds_activity_restricted, 2);
+    }
+
+    #[test]
+    fn reads_quiet_mode() {
+        let quiet = |on: u64| STANDARD.encode(message(NOTIFICATIONS, &message(QUIET_MODE, &varint_field(BOOL_VALUE, on))));
+        assert!(read(&quiet(1)).quiet_mode);
+        assert!(!read(&quiet(0)).quiet_mode);
+        assert!(!read(&spam_filter(1)).quiet_mode);
     }
 
     #[test]

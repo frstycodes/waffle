@@ -920,6 +920,7 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/demo/scenes_files.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
 - `src/demo/scenes_media.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
 - `src/demo/scenes_panels.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
+- `src/demo/scenes_panels.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
 - `src/demo/scenes_people.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
 - `src/design_system/flows.rs` — ends itself after its timer and holds only a weak handle
 - `src/dm_call.rs` — ends after its one timer fires, holding a WeakEntity
@@ -996,6 +997,7 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/navigation.rs` — one request for the messages around the target, then it ends
 - `src/navigation.rs` — one request for the pins, then it ends
 - `src/notification_settings.rs` — the input subscription ends with its entity, and the dialog it redraws is built by render_root
+- `src/notify.rs` — ends when Waffle is dropped (the update fails) or the click channel closes.
 - `src/overlays.rs` — ends when the DM request returns, and holds only a WeakEntity.
 - `src/overlays/read.rs` — ends when Discord answers the delete, and holds only a WeakEntity.
 - `src/panel.rs` — ends when the feed request returns, and holds only a WeakEntity.
