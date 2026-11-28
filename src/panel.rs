@@ -44,18 +44,37 @@ impl Waffle {
         }
     }
 
+    // 0 hidden to 1 shown: the panel's width rides one critically damped spring, the call chat's, so a toggle
+    // mid-slide reverses from where it is and reduced motion lands at once.
+    fn panel_reveal(&self, window: &mut Window, cx: &mut App) -> f32 {
+        let target = if self.panel_shown() { 1. } else { 0. };
+        gpui_kit::base::spring("panel-reveal", target, gpui_kit::base::Spring::new(ui::DUR_PANEL), window, cx)
+    }
+
+    // The panel column inside a clip at the window's right edge: it sits against the clip's right side, so it slides in with the edge, and keeps its full width while the
+    // clip grows, so its rows never reflow. Closing keeps drawing the members it was showing until it's gone.
+    pub(crate) fn slid_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let reveal = self.panel_reveal(window, cx);
+        if reveal <= 0.001 {
+            return None;
+        }
+        let width = self.panel_column_width().unwrap_or(self.panel_width);
+        let part = self.part(crate::part::Column::Panel, gpui_kit::StyleRefinement::default().w(px(width)).h_full().flex_none(), cx);
+        Some(ui::row().relative().w(px(width * reveal)).h_full().flex_none().overflow_hidden().child(div().absolute().top_0().right_0().h_full().w(px(width)).child(part)).into_any_element())
+    }
+
     pub fn render_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         self.close_mod_view_if_barred();
-        let width = self.panel_column_width()?;
-        if matches!(self.right_panel, RightPanel::Members) && self.dm_recipient().is_some() {
+        // Hidden only follows the members, so a closing panel keeps drawing them while it slides out.
+        let width = self.panel_column_width().unwrap_or(self.panel_width);
+        if matches!(self.right_panel, RightPanel::Members | RightPanel::Hidden) && self.dm_recipient().is_some() {
             return self.dm_profile(window, cx);
         }
         // Its header sits on the window's top line beside the channel header's: "Members", or the search's
         // query with a way back to the members.
         let (head, body, foot): (Div, AnyElement, Option<AnyElement>) = match &self.right_panel {
-            RightPanel::Hidden => return None,
-            RightPanel::Members if self.guild_id.is_none() => (self.panel_head("Members".into(), None, Vec::new(), false, cx), self.group_member_list(cx), self.group_invite_foot(cx)),
-            RightPanel::Members => (self.panel_head("Members".into(), None, Vec::new(), false, cx), self.member_list(window, cx), None),
+            RightPanel::Members | RightPanel::Hidden if self.guild_id.is_none() => (self.panel_head("Members".into(), None, Vec::new(), false, cx), self.group_member_list(cx), self.group_invite_foot(cx)),
+            RightPanel::Members | RightPanel::Hidden => (self.panel_head("Members".into(), None, Vec::new(), false, cx), self.member_list(window, cx), None),
             RightPanel::Activity => (self.panel_head("Activity".into(), None, Vec::new(), true, cx), self.activity_cards(usize::MAX, cx), None),
             RightPanel::Search(results) => {
                 let head = self.panel_frame(cx).child(self.search_head(results, self.back_button(cx), cx));

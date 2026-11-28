@@ -33,7 +33,7 @@ impl Waffle {
     // app's quicker pace.
     pub(super) fn call_chat_reveal(&self, window: &mut Window, cx: &mut App) -> f32 {
         let target = if self.call_chat_shown() { 1. } else { 0. };
-        gpui_kit::base::spring("call-chat-reveal", target, gpui_kit::base::Spring::new(CHAT_SLIDE), window, cx)
+        gpui_kit::base::spring("call-chat-reveal", target, gpui_kit::base::Spring::new(ui::DUR_PANEL), window, cx)
     }
 
     pub(super) fn call_chat_drawer(&mut self, channel: &discord::Channel, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {

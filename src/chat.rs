@@ -119,7 +119,7 @@ impl Waffle {
             // The feed stops above the composer and fades into the page there (feed_edge.rs).
             .child(self.feed_above_composer(body, cx).children(unread_bar).child(composer));
         // The members column beside the feed runs to the window's top with a header of its own on the same line.
-        let panel = self.panel_column_width().map(|w| self.part(crate::part::Column::Panel, gpui_kit::StyleRefinement::default().w(px(w)).h_full().flex_none(), cx));
+        let panel = self.slid_panel(window, cx);
         let drop_zone = self.drop_zone(&channel, cx);
         main.children(above).child(ui::row().items_stretch().flex_1().min_h_0().child(chat.child(drop_zone)).children(panel))
     }
