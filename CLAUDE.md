@@ -8,6 +8,14 @@ These rules bind every session. Hand-written UI values and app-wide redraws are 
 
 Several names (`Field::new`, `Dialog::new`, `Alert::new`, `Item::new`, …) are façades: the shadcn name over the builder the design system already had, kept as private functions inside `src/ui/`. Reach for the façade; a new component goes in `src/ui/<shadcn_name>.rs` the same way.
 
+## Vendored code: no patching without permission
+
+`vendor/` is other people's framework (gpui and its platform crates), carried with Waffle's patches. Do not edit it unless the user has said so for that change; ask first, say what you would change and why, and wait. An earlier yes covers that change only, never the next one.
+
+- **Style and feel never go in vendor.** Timing, easing, entrance and exit animations, colours, radii, delays, scroll feel, whether links underline: these are Waffle's decisions and live in `src/` (`src/ui/` for the design system). If the framework hard-codes one, the fix is a hook or a setting in the framework and the value on our side, and that framework change needs permission too.
+- **A bug in the framework is reported, not quietly patched.** Say what is wrong and where, show the smallest fix, and ask. A patch the user approves carries a `Waffle patch:` comment saying what it fixes, so the next upgrade can drop it.
+- **Look before you work around.** If the app does something the app code does not explain (an animation, a delay, a tilt), search `vendor/` for `Waffle patch` before changing `src/`: the cause may be in the framework.
+
 ## Design system first
 
 `crate::ui` is the design system: tokens, layout primitives and every component, ported from `design/` (the HTML source of truth). Colours are `palette`, curves and springs `motion`, glyphs `icons::Glyph`. Start UI files with `use crate::ui::prelude::*;`. The catalog at the end of this file lists everything it has.
