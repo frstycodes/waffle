@@ -526,6 +526,9 @@ impl Render for VideoPlayer {
             .when(bar.target().alpha() > 0.01, |d| d.child(self.bar(bar.target().alpha(), window, cx)))
             .when(self.corners_shown(), |d| d.child(self.corners(window, cx)))
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
+                if this.hovered == *hovered {
+                    return;
+                }
                 this.hovered = *hovered;
                 cx.notify();
             }))

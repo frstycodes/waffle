@@ -75,7 +75,10 @@ gpui notifies `window.current_view()`, the view whose render built the element, 
 
 The lint enforces this section (each rule's message says what to do; a genuine exception carries `lint-allow(<rule>): <reason>`):
 - `render-work`: sorting, parsing, file reads, `cx.new` or `cx.subscribe`/`observe` in a function that builds elements (handlers inside it don't count; they run later).
-- `hot-notify`: `cx.notify()` in a pointer-move or scroll handler, or a timer loop, with no check that anything changed first.
+- `hot-notify`: `cx.notify()` in a pointer-move, hover or scroll handler, or a timer loop, with no check that anything changed first. Hover counts: while a list scrolls, every row passes under a still pointer.
+- `waffle-notify`: `cx.notify()` in a free function handed Waffle (`Entity`, `WeakEntity` or `Context<Waffle>`), the app-wide redraw `global-notify` can't see from outside `impl Waffle`.
+- `full-refresh`: `window.refresh()`, which re-renders every view past the column caches.
+- `render-scan`: a scan of every server, channel or DM (`guilds.iter()`, `dms.iter()`, `place_of`) in a function that builds elements; it runs on every redraw, once per row in a list.
 - `main-thread-io`: `std::fs`, `thread::sleep`, `block_on` or blocking HTTP in a function that takes `cx`/`window`, outside `background_spawn`.
 - `endless-animation`: a `.repeat()` animation; the allow says when it stops. `detached-task`: `.detach()`; the allow says how the task ends itself.
 - `unbounded-growth`: a collection field the app grows and never shrinks, resets or evicts from; cap it, or the allow states the natural bound.

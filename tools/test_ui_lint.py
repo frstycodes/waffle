@@ -103,6 +103,17 @@ def performance():
     assert counts(tick).get("hot-notify") == 1, counts(tick)
     guarded = "fn t(cx: &mut App) {\n    loop {\n        timer(ms).await;\n        if left != before { cx.notify(); }\n    }\n}"
     assert "hot-notify" not in counts(guarded)
+    # A hover handler is high-rate too: rows pass under a still pointer while a list scrolls.
+    hover = "fn v(&self, cx: &mut Context<Self>) {\n    div().on_hover(cx.listener(|this, h: &bool, _, cx| {\n        this.h = *h;\n        cx.notify();\n    }))\n}"
+    assert counts(hover).get("hot-notify") == 1, counts(hover)
+    # A free function handed Waffle notifies every column; a method on another view doesn't count.
+    handed = "fn set_hovered(this: &WeakEntity<Waffle>, cx: &mut App) {\n    this.update(cx, |this, cx| cx.notify()).ok();\n}"
+    assert counts(handed).get("waffle-notify") == 1, counts(handed)
+    assert "waffle-notify" not in counts("fn tick(&mut self, cx: &mut Context<Self>) { cx.notify(); }")
+    # A full-window refresh, and a scan of every server on the render path (not in its handlers).
+    assert counts("fn f(window: &mut Window) { window.refresh(); }").get("full-refresh") == 1
+    scan = "fn row(&self, cx: &App) -> Div {\n    let g = self.guilds.iter().find(|g| g.id == id);\n    div().on_click(|_, _, _| self.dms.iter().count())\n}"
+    assert counts(scan).get("render-scan") == 1, counts(scan)
     # Memory: a field the app grows and never shrinks, resets or lends out.
     grows = "struct S {\n    seen_ids_xyz: HashMap<String, u32>,\n}\nfn f(s: &mut S) { s.seen_ids_xyz.insert(k, 1); }"
     ui_lint._CORPUS = grows

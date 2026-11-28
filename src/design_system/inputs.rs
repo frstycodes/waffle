@@ -98,6 +98,9 @@ impl DesignSystem {
             .id("f-drop")
             .max_w_96()
             .on_hover(cx.listener(|this, over: &bool, _, cx| {
+                if this.drop_over == *over {
+                    return;
+                }
                 this.drop_over = *over;
                 cx.notify();
             }))

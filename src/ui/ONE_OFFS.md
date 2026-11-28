@@ -808,7 +808,7 @@ _Blocking I/O on the UI thread stalls every frame: move it into cx.background_sp
 
 ## hot-notify
 
-_A notify in a pointer-move or scroll handler, or a timer loop, runs dozens of times a second: compare the new value with the old and notify only when what's drawn changed; a fast source gets its own entity (CLAUDE.md, Rendering)._
+_A notify in a pointer-move, hover or scroll handler, or a timer loop, runs dozens of times a second (while a list scrolls, every row passes under a still pointer and fires its hover): compare the new value with the old and notify only when what's drawn changed; a fast source gets its own entity (CLAUDE.md, Rendering)._
 
 - `src/demo/scenes_calls.rs` — one step per 1.5 s, and each step changes a rail unread badge
 - `src/forum/composer.rs` — ticks once a second only while a post slowmode runs down, redrawing the app-level dialog's clock, and stops when it ends
