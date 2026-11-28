@@ -38,7 +38,6 @@ use tokio_tungstenite::tungstenite::Message as WsMessage;
 use super::{
     GoLiveOptions, InputMode, MicLevel, QOS_TOS, Role, ShareSource, Shared, Ssrcs, VideoKind, VideoSource, VoiceEvent,
     audio::{AudioSettings, FRAME_LEN, FRAME_SAMPLES, Mixer, SAMPLE_RATE},
-    camera::{self, CameraCapture},
     feedback::{self, Feedback, RemoteVideo},
     issues,
     rtp::{self, Cipher},
@@ -433,13 +432,16 @@ fn seal(link: &Link, out: &mut RtpOut, opus: &[u8]) -> Option<Vec<u8>> {
 }
 
 // Follows `Shared::camera`: starts and stops the camera, its encoder and the op 12 announcement.
-fn camera_loop(link: &Arc<Link>, feedback: &Arc<Feedback>, stop: &AtomicBool) {
-    let mut current: Option<(String, CameraCapture)> = None;
+fn camera_loop(link: &Arc<Link>, feedback: &Arc<Feedback>, stop: &Arc<AtomicBool>) {
+    let mut current: Option<String> = None;
     while !stop.load(Ordering::Relaxed) {
         let want = link.shared.camera.lock().ok().and_then(|c| c.clone());
-        if current.as_ref().map(|(id, _)| id) != want.as_ref() {
+        if current.as_ref() != want.as_ref() {
             let was_on = current.take().is_some();
-            match want.map(|id| start_camera(link, feedback, &id).map(|capture| (id, capture))) {
+            if want.is_none() {
+                super::held_camera::release(&link.shared);
+            }
+            match want.map(|id| start_camera(link, feedback, &id, stop).map(|()| id)) {
                 Some(Ok(started)) => current = Some(started),
                 Some(Err(e)) => {
                     eprintln!("voice: camera: {e}");
@@ -461,20 +463,15 @@ fn camera_loop(link: &Arc<Link>, feedback: &Arc<Feedback>, stop: &AtomicBool) {
 }
 
 // Frames go to the encoder (dropped if it lags) and back to the UI as our self-preview.
-fn start_camera(link: &Arc<Link>, feedback: &Arc<Feedback>, id: &str) -> Result<CameraCapture, String> {
+fn start_camera(link: &Arc<Link>, feedback: &Arc<Feedback>, id: &str, stop: &Arc<AtomicBool>) -> Result<(), String> {
     let (tx, frames) = std_mpsc::sync_channel::<Arc<VideoFrame>>(1);
-    let (shared, me) = (link.shared.clone(), link.my_id.clone());
-    let capture = camera::start(id, CAMERA_SIZE, move |frame| {
-        let frame = Arc::new(frame);
-        let _ = tx.try_send(frame.clone());
-        shared.publish_frame(&me, VideoSource::Camera, frame);
-    })?;
+    super::held_camera::attach(&link.shared, id, CAMERA_SIZE, tx)?;
     link.keyframe.store(true, Ordering::Relaxed);
-    let (l, f) = (link.clone(), feedback.clone());
+    let (l, f, s) = (link.clone(), feedback.clone(), stop.clone());
     let bitrate = video_bitrate(CAMERA_SIZE.0, CAMERA_SIZE.1, CAMERA_FPS);
-    // The loop ends when the capture is dropped (its frame sender goes with it).
-    spawn("waffle-camera-send", move || video_send_loop(&l, &f, Feed { frames, covered: Arc::default() }, CAMERA_FPS, bitrate, &AtomicBool::new(false)))?;
-    Ok(capture)
+    // The loop ends with the connection, or when the held camera's sender moves on (another camera, or off).
+    spawn("waffle-camera-send", move || video_send_loop(&l, &f, Feed { frames, covered: Arc::default() }, CAMERA_FPS, bitrate, &s))?;
+    Ok(())
 }
 
 // Audio goes into the speaker's jitter buffer in the mixer, which decodes it as the device plays.

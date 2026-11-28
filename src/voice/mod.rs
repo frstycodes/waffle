@@ -36,6 +36,7 @@ pub use wants::VideoWants;
 use reconnect::{Backoff, Reconnect, close_label, reconnect};
 mod media;
 mod pacer;
+mod held_camera;
 mod rtp;
 mod vad;
 mod video;
@@ -431,6 +432,8 @@ struct Shared {
     listening: Mutex<HashMap<String, (f32, bool)>>,
     // Per-streamer Go Live volume (0..=2), on top of their listening volume.
     stream_volume: Mutex<HashMap<String, f32>>,
+    // The open camera device, which outlives any one connection.
+    camera_feed: Mutex<Option<held_camera::HeldCamera>>,
     // The camera the user wants on (None = off); the voice connection follows it.
     camera: Mutex<Option<String>>,
     attenuation: Mutex<Attenuation>,
@@ -605,6 +608,7 @@ pub fn join(
         mixer: Arc::default(),
         listening: Mutex::new(HashMap::new()),
         stream_volume: Mutex::new(HashMap::new()),
+        camera_feed: Mutex::default(),
         camera: Mutex::new(None),
         attenuation: Mutex::new(settings.attenuation),
         qos: settings.qos,
@@ -949,7 +953,8 @@ mod tests {
             mixer: Arc::default(),
             listening: Mutex::new(HashMap::new()),
             stream_volume: Mutex::new(HashMap::new()),
-            camera: Mutex::new(None),
+            camera_feed: Mutex::default(),
+        camera: Mutex::new(None),
             attenuation: Mutex::new(Attenuation { strength: 40, ..Attenuation::default() }),
             qos: false,
             self_speaking: AtomicBool::new(false),
