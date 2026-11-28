@@ -727,6 +727,7 @@ async fn connection(
                         ws: out.clone(),
                         nonce: Default::default(),
                         keyframe: AtomicBool::new(true),
+                        keyframe_every: AtomicU64::new(d["keyframe_interval"].as_u64().unwrap_or(0)),
                         counters: counters.clone(),
                         connection: media::connection_id(),
                     },
@@ -773,6 +774,12 @@ async fn connection(
                     if let Some(media) = &media {
                         media.user_left(user);
                     }
+                }
+            }
+            // A session update may change the keyframe interval mid-call.
+            Some(14) => {
+                if let (Some(media), Some(ms)) = (&media, d["keyframe_interval"].as_u64()) {
+                    media.set_keyframe_interval(ms);
                 }
             }
             Some(op @ (21 | 22 | 24)) => dave.handle_json(op, d),

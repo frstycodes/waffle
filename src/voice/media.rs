@@ -8,7 +8,7 @@ use std::{
     net::UdpSocket,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicU32, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
         mpsc::{self as std_mpsc, Receiver, RecvTimeoutError, SyncSender},
     },
     thread,
@@ -56,9 +56,6 @@ const CAMERA_POLL: Duration = Duration::from_millis(200);
 const KEYFRAME_REQUEST_GAP: Duration = Duration::from_secs(1);
 // The fewest keyframes we send while streaming, however many viewers ask.
 const KEYFRAME_MIN_GAP: Duration = Duration::from_millis(500);
-// libwebrtc's pacing factor (Not verified that it's still 2.5); bursts under PACING_SLACK go out unpaced.
-const PACING_FACTOR: f64 = 2.5;
-const PACING_SLACK: Duration = Duration::from_millis(5);
 const RECV_BUFFER: usize = 4 << 20;
 // Frames waiting for a picture's decoder, about 70 ms at 60 fps.
 const DECODE_QUEUE: usize = 4;
@@ -110,6 +107,8 @@ pub struct Link {
     pub nonce: AtomicU32,
     // Set when a viewer asks for a keyframe (or when sending starts).
     pub keyframe: AtomicBool,
+    // The server's keyframe interval in ms (op 4 / op 14), 0 for none: a keyframe at least this often.
+    pub keyframe_every: AtomicU64,
     pub counters: Arc<Counters>,
     // From `connection_id`: tags this connection's tracks in the shared mixer.
     pub connection: u32,
@@ -251,6 +250,10 @@ impl Media {
             }
         };
         Ok(Self { stop, link, users, _devices: devices })
+    }
+
+    pub fn set_keyframe_interval(&self, ms: u64) {
+        self.link.keyframe_every.store(ms, Ordering::Relaxed);
     }
 
     pub fn user_left(&self, user_id: &str) {
@@ -780,10 +783,14 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, feed: Feed, fps: u32, 
         }
     };
     let mut last_keyframe: Option<Instant> = None;
-    let mut pacer = Pacer::new(bitrate);
+    let mut pacer = super::pacer::Pacer::new(bitrate);
     while !stop.load(Ordering::Relaxed) {
         // Every viewer's request forces one, and each is the largest frame there is: answering them
         // all would flood the link and lose more packets, which brings more requests.
+        let every = link.keyframe_every.load(Ordering::Relaxed);
+        if every > 0 && last_keyframe.is_some_and(|at| at.elapsed() >= Duration::from_millis(every)) {
+            link.keyframe.store(true, Ordering::Relaxed);
+        }
         let keyframe_due = link.keyframe.load(Ordering::Relaxed) && last_keyframe.is_none_or(|at| at.elapsed() >= KEYFRAME_MIN_GAP);
         // ScreenCaptureKit only delivers frames when the screen changes; repeating the last one
         // keeps the stream alive and lets keyframe requests be answered on a still screen.
@@ -866,27 +873,6 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, feed: Feed, fps: u32, 
 fn clear_send_issues(link: &Link, who: &str, low_code: u16) {
     for code in [low_code, issues::SENDER_READY_TIMEOUT] {
         link.shared.issue(who, code, false);
-    }
-}
-
-// Spreads a frame's packets at PACING_FACTOR times the target bitrate instead of sending them in
-// one burst, which overflows send buffers and router queues on every keyframe.
-struct Pacer {
-    bits_per_second: f64,
-    next: Instant,
-}
-
-impl Pacer {
-    fn new(bitrate: u32) -> Self {
-        Self { bits_per_second: f64::from(bitrate) * PACING_FACTOR, next: Instant::now() }
-    }
-
-    fn wait(&mut self, bytes: usize) {
-        let now = Instant::now();
-        if self.next > now + PACING_SLACK {
-            thread::sleep(self.next - now);
-        }
-        self.next = self.next.max(now) + Duration::from_secs_f64(bytes as f64 * 8.0 / self.bits_per_second);
     }
 }
 

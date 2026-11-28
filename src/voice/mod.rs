@@ -35,6 +35,7 @@ mod wants;
 pub use wants::VideoWants;
 use reconnect::{Backoff, Reconnect, close_label, reconnect};
 mod media;
+mod pacer;
 mod rtp;
 mod vad;
 mod video;
@@ -45,7 +46,7 @@ use std::{
     collections::{HashMap, VecDeque},
     sync::{
         Arc, Mutex, Weak,
-        atomic::{AtomicBool, AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
     },
     thread,
     time::{Duration, Instant},
