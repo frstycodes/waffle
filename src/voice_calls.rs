@@ -429,19 +429,19 @@ impl Waffle {
     }
     pub(crate) fn reconnect_watch(&mut self, streamer_id: String, cx: &mut Context<Self>) {
         let Some(watching) = self.call.as_mut().and_then(|c| c.watching.iter_mut().find(|w| w.streamer_id == streamer_id)) else { return };
-        if watching.rejoins >= MAX_REJOINS {
-            return fail_watch(watching, cx);
-        }
+        // Waits longer each time, up to six REJOIN_AFTERs, for as long as the streamer is live.
+        let wait = REJOIN_AFTER * u32::from(watching.rejoins.min(5) + 1);
+        watching.rejoins = watching.rejoins.saturating_add(1);
         watching.state = WatchState::Reconnecting;
         // The tile shows the reconnecting state rather than a frozen picture.
         if let Some(frame) = watching.frame.take() {
             cx.drop_image(frame, None);
         }
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(REJOIN_AFTER).await;
+            cx.background_executor().timer(wait).await;
             this.update(cx, |this, cx| this.rewatch(streamer_id, cx)).ok();
         })
-        // lint-allow(detached-task): one REJOIN_AFTER timer, then it ends
+        // lint-allow(detached-task): one rejoin timer, then it ends
         .detach();
         // lint-allow(global-notify): a reconnecting stream shows on the call tile and in the PiP outside the columns
         cx.notify();
@@ -455,11 +455,9 @@ impl Waffle {
             return self.end_watch(streamer_id, cx);
         }
         match call.session.watch_stream(&streamer_id) {
-            Ok(watch) => {
-                watching.watch = Some(watch);
-                watching.rejoins += 1;
-            }
-            Err(_) => fail_watch(watching, cx),
+            Ok(watch) => watching.watch = Some(watch),
+            // Voice is reconnecting: try again once it's back.
+            Err(_) => return self.reconnect_watch(streamer_id, cx),
         }
         // lint-allow(global-notify): a rewatched stream shows on the call tile and in the PiP outside the columns
         cx.notify();
