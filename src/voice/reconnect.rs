@@ -65,6 +65,42 @@ impl Backoff {
     }
 }
 
+// How long an expedited heartbeat (after waking) waits for its ack before the socket counts as dead.
+pub(super) const EXPEDITED_ACK: Duration = Duration::from_secs(5);
+const WAKE_TICK: Duration = Duration::from_secs(2);
+// The wall clock running this far ahead of the monotonic one between ticks means the machine slept.
+const SLEPT_PAST: Duration = Duration::from_secs(5);
+
+// Notices waking from sleep without an OS hook: the monotonic clock stops while asleep (macOS), the wall clock
+// doesn't. Not verified on Windows, where it may run through sleep and so never notice.
+pub(super) struct WakeWatch {
+    tick: tokio::time::Interval,
+    mono: std::time::Instant,
+    wall: std::time::SystemTime,
+}
+
+impl WakeWatch {
+    pub(super) fn new() -> Self {
+        Self { tick: tokio::time::interval(WAKE_TICK), mono: std::time::Instant::now(), wall: std::time::SystemTime::now() }
+    }
+
+    pub(super) async fn tick(&mut self) {
+        self.tick.tick().await;
+    }
+
+    // Whether the machine slept since the last call.
+    pub(super) fn woke(&mut self) -> bool {
+        let (mono, wall) = (std::time::Instant::now(), std::time::SystemTime::now());
+        let slept = slept(mono - self.mono, wall.duration_since(self.wall).unwrap_or_default());
+        (self.mono, self.wall) = (mono, wall);
+        slept
+    }
+}
+
+fn slept(mono: Duration, wall: Duration) -> bool {
+    wall > mono + SLEPT_PAST
+}
+
 // Voice close codes (docs.discord.com, Opcodes and Status Codes; 4013 from docs.discord.food), as the
 // reason a reconnect logs.
 pub(super) fn close_label(code: u16) -> Option<&'static str> {
@@ -112,6 +148,13 @@ mod tests {
         assert_eq!(reconnect(None, 4, true, FRESH), Reconnect::Identify, "four failed resumes");
         assert_eq!(reconnect(None, 0, false, FRESH), Reconnect::Identify, "no session described yet");
         assert_eq!(reconnect(None, 0, true, Duration::from_secs(61)), Reconnect::Identify, "no ack for a minute");
+    }
+
+    #[test]
+    fn a_wall_clock_jump_means_the_machine_slept() {
+        assert!(!slept(Duration::from_secs(2), Duration::from_secs(2)));
+        assert!(!slept(Duration::from_secs(2), Duration::from_secs(6)), "a little drift isn't sleep");
+        assert!(slept(Duration::from_secs(2), Duration::from_secs(600)));
     }
 
     #[test]

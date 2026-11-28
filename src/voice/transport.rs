@@ -518,6 +518,8 @@ async fn connection(
     let mut stats = Stats { endpoint: host.clone(), ..Stats::default() };
     let mut resumes = 0;
     let mut senders = wants::VideoSsrcs::new();
+    let mut wake = reconnect::WakeWatch::new();
+    let mut expedited: Option<Instant> = None;
     let mut socket_backoff = Backoff::socket();
     let mut acked = false;
     let mut last_ack = Instant::now();
@@ -565,6 +567,16 @@ async fn connection(
                 Ok(None)
             }
             Some(msg) = out_rx.next() => sink.send(msg).await.map(|()| None).map_err(|e| (e.to_string(), None)),
+            // Back from sleep, Discord beats at once and gives the socket 5 s to answer.
+            _ = wake.tick() => match (wake.woke(), expedited) {
+                (_, Some(deadline)) if Instant::now() >= deadline && !acked => Err(("Heartbeat timeout after wake".to_owned(), None)),
+                (true, _) => {
+                    acked = false;
+                    expedited = Some(Instant::now() + reconnect::EXPEDITED_ACK);
+                    sink.send(beat(seq_ack)).await.map(|()| None).map_err(|e| (e.to_string(), None))
+                }
+                _ => Ok(None),
+            },
             () = shared.wants_changed.notified(), if is_voice && media.is_some() => {
                 sink.send(sink_wants(shared, &target, &senders)).await.map(|()| None).map_err(|e| (e.to_string(), None))
             }
@@ -642,6 +654,7 @@ async fn connection(
             }
             Some(6) => {
                 acked = true;
+                expedited = None;
                 last_ack = Instant::now();
                 if let Some(sent) = d["t"].as_i64() {
                     pings.record(sent);
