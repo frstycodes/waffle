@@ -1,0 +1,3 @@
+# `cargo run` starts the app from a dev bundle so macOS notifications post as Waffle (tools/macos-run.sh).
+[target.'cfg(target_os = "macos")']
+runner = "tools/macos-run.sh"

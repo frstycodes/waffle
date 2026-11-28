@@ -394,6 +394,7 @@ impl Waffle {
             })
             .ok();
         });
+        Self::open_clicked_notifications(window, cx);
         waffle.apply_prefs();
         waffle
     }

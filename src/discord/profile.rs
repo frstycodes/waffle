@@ -297,6 +297,8 @@ pub struct AccountSettings {
     pub activity_restricted_guilds: Vec<String>,
     // Whether servers you join go on the activity list: 0 none, 1 those over 200 members, 2 all.
     pub default_guilds_activity_restricted: u8,
+    // NotificationSettings.quiet_mode: Discord's account-wide switch that silences every notification.
+    pub quiet_mode: bool,
 }
 
 impl Default for AccountSettings {
@@ -323,6 +325,7 @@ impl Default for AccountSettings {
             restricted_guilds: Vec::new(),
             activity_restricted_guilds: Vec::new(),
             default_guilds_activity_restricted: 0,
+            quiet_mode: false,
         }
     }
 }

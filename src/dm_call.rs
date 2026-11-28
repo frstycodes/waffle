@@ -121,10 +121,7 @@ impl Waffle {
             sounds::ring(sounds::Cue::CallRinging);
             if !self.window_active {
                 let caller = self.dm_caller(&channel_id);
-                // Not verified: whether macOS shows an unbundled binary's notification; the main window doesn't take focus.
-                std::thread::spawn(move || {
-                    let _ = notify_rust::Notification::new().summary(&caller).body("Incoming call").show();
-                });
+                crate::notify::post(&caller, "Incoming call", format!("https://discord.com/channels/@me/{channel_id}"));
             }
         } else if was_ringing_me && (!rings_me || in_it) {
             self.stop_ringing_in();
