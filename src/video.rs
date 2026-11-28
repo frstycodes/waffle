@@ -503,6 +503,7 @@ impl Render for VideoPlayer {
             window,
             cx,
         );
+        let corners = ui::pip_reveal(&"video-corners".into(), self.corners_shown(), window, cx);
         let painted = self.unpainted_since.clone();
         // The centring lives on the full-size layer: the motion wrapper doesn't take the layer's size.
         let center = center.render(|f| ui::row().absolute().inset_0().justify_center().child(f.apply(div().child(self.center_button(window, cx)))));
@@ -520,11 +521,11 @@ impl Render for VideoPlayer {
             .when(!self.fullscreen, |d| d.rounded(px(RADIUS)))
             .cursor_pointer()
             .child(canvas(move |_, _, _| painted.set(None), |_, _, _, _| {}).absolute().size_full())
-            .child(picture.size_full().object_fit(ObjectFit::Contain).when(!self.fullscreen, |i| i.rounded(px(RADIUS))))
+            .child(picture.absolute().inset_0().size_full().object_fit(ObjectFit::Contain).when(!self.fullscreen, |i| i.rounded(px(RADIUS))))
             .child(center)
             .children(failed.map(failed_note))
             .when(bar.target().alpha() > 0.01, |d| d.child(self.bar(bar.target().alpha(), window, cx)))
-            .when(self.corners_shown(), |d| d.child(self.corners(window, cx)))
+            .when(corners > 0.01, |d| d.child(self.corners(corners, window, cx)))
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
                 if this.hovered == *hovered {
                     return;
