@@ -89,7 +89,7 @@ const OPTION_EDGE: f32 = 4.;
 const TAG_HEIGHT: f32 = 16.;
 
 // A mention as messages draw it; the composer's mention chips wear the same.
-// lint-allow(custom-component): ui::badge is a 20px block, and a mention must run inside a line of text at its size
+// lint-allow(custom-component): ui::Badge is a 20px block, and a mention must run inside a line of text at its size
 pub(super) fn mention_badge(label: SharedString, fill: Hsla, ink: Hsla) -> Div {
     div().px(px(MENTION_PAD)).rounded_sm().bg(fill).text_color(ink).font_weight(FontWeight::MEDIUM).whitespace_nowrap().child(label)
 }
@@ -369,9 +369,9 @@ pub(super) fn hide_spoilers(text: &str, revealed: bool) -> String {
 }
 
 // A user's server tag (Discord's guild tag): its badge and text, as it follows their name.
-pub(crate) fn guild_tag(tag: &crate::discord::GuildTag, cx: &App) -> Div {
+pub(crate) fn guild_tag(tag: &crate::discord::GuildTag) -> ui::Badge {
     // Discord's chip: 16px tall, 4px in, its 14px badge 2px before 12px semibold text in the default ink.
-    ui::badge(palette::selected(cx), palette::text(cx)).h(px(TAG_HEIGHT)).px_1().gap_0p5().text_size(ui::TEXT_XS).font_weight(gpui_kit::FontWeight::SEMIBOLD).children(tag.badge.clone().map(|b| img(b).size_3p5())).child(tag.text.clone())
+    ui::Badge::empty().variant(ui::BadgeVariant::Secondary).h(px(TAG_HEIGHT)).px_1().gap_0p5().text_size(ui::TEXT_XS).font_weight(gpui_kit::FontWeight::SEMIBOLD).children(tag.badge.clone().map(|b| img(b).size_3p5())).child(tag.text.clone())
 }
 
 // A display name in its Discord style's colours, one run per character, each colour stepped in lightness

@@ -13,7 +13,7 @@ use crate::{
     layout::decorated_avatar,
     palette::{self, Level},
     profile::profile_key,
-    ui::{self, Tone},
+    ui::{self},
 };
 
 pub(crate) mod channel_start;
@@ -138,10 +138,10 @@ pub(crate) fn dm_start_header(start: &DmStart, this: WeakEntity<Waffle>, cx: &Ap
 fn actions(start: &DmStart, this: WeakEntity<Waffle>, cx: &App) -> Option<AnyElement> {
     let person = start.person.clone()?;
     let row = ui::row().pt_3().flex_wrap().gap_2();
-    let act = move |id: &'static str, tone: Tone, label: &'static str, glyph: Option<Glyph>, run: fn(&mut Waffle, User, &mut Context<Waffle>)| {
+    let act = move |id: &'static str, variant: ui::ButtonVariant, label: &'static str, glyph: Option<Glyph>, run: fn(&mut Waffle, User, &mut Context<Waffle>)| {
         let (this, person) = (this.clone(), person.clone());
-        ui::button(id, tone, cx)
-            .small()
+        ui::Button::new(id).variant(variant)
+            .size(ui::ButtonSize::Sm)
             .children(glyph.map(|g| gpui_kit::component::Icon::new(g).size(ui::ICON_MD)))
             .child(label)
             .on_click(move |_, _, cx| {
@@ -152,17 +152,17 @@ fn actions(start: &DmStart, this: WeakEntity<Waffle>, cx: &App) -> Option<AnyEle
     let state = |glyph: Glyph, label: &'static str| {
         ui::row().gap_1p5().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(glyph).size(ui::ICON_LG).text_color(palette::positive_ink(cx))).child(label)
     };
-    let block = || act("dm-start-block", Tone::Ghost, "Block", None, |this, user, cx| this.ask_block(user, cx));
+    let block = || act("dm-start-block", ui::ButtonVariant::Ghost, "Block", None, |this, user, cx| this.ask_block(user, cx));
     let row = match start.next {
         Next::Nothing => return None,
         Next::Friends => row.child(state(Glyph::Users, "Friends")),
-        Next::Befriend => row.child(act("dm-start-add", Tone::Primary, "Add friend", Some(Glyph::GroupPlus), |this, user, cx| this.befriend(user, cx))).child(block()),
-        Next::Accept => row.child(act("dm-start-accept", Tone::Primary, "Accept friend request", Some(Glyph::GroupPlus), |this, user, cx| this.befriend(user, cx))).child(block()),
+        Next::Befriend => row.child(act("dm-start-add", ui::ButtonVariant::Default, "Add friend", Some(Glyph::GroupPlus), |this, user, cx| this.befriend(user, cx))).child(block()),
+        Next::Accept => row.child(act("dm-start-accept", ui::ButtonVariant::Default, "Accept friend request", Some(Glyph::GroupPlus), |this, user, cx| this.befriend(user, cx))).child(block()),
         Next::Pending => row
             .child(state(Glyph::CheckCircle, "Friend request sent"))
-            .child(act("dm-start-cancel", Tone::Ghost, "Cancel request", None, |this, user, cx| this.drop_relation(&user.id, cx)))
+            .child(act("dm-start-cancel", ui::ButtonVariant::Ghost, "Cancel request", None, |this, user, cx| this.drop_relation(&user.id, cx)))
             .child(block()),
-        Next::Blocked => row.child(act("dm-start-unblock", Tone::Ghost, "Unblock", None, |this, user, cx| this.drop_relation(&user.id, cx))),
+        Next::Blocked => row.child(act("dm-start-unblock", ui::ButtonVariant::Ghost, "Unblock", None, |this, user, cx| this.drop_relation(&user.id, cx))),
         Next::BlockOnly => row.child(block()),
     };
     Some(row.into_any_element())

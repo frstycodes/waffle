@@ -724,7 +724,7 @@ impl Waffle {
                 .child(favorite_glyph(&channel).size(ui::ICON_LG).flex_none().text_color(if selected { palette::muted(cx) } else { faint }))
                 .child(ui::truncating(format!("fav-name-{}", channel.id), name.clone()).flex_1())
                 .children(origin.map(|o| ui::line(o).flex_none().max_w_24().text_size(ui::TEXT_XS).font_weight(FontWeight::NORMAL).text_color(faint)))
-                .when(mentions > 0, |r| r.child(ui::count_badge(mentions))),
+                .when(mentions > 0, |r| r.child(ui::Badge::count(mentions))),
         };
         let size = point(px(self.channels_width - 16.), px(row_height()));
         let look = Look::Channel { channel: Box::new(Channel { name, ..channel.clone() }), people: Vec::new() };

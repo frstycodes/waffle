@@ -159,10 +159,10 @@ impl Waffle {
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Forward message"))
                     .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(format!("{} · {}", self.forward_subtitle(&dialog.message), picked_count(dialog.picked.len())))),
             )
-            .child(ui::icon_button("forward-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_forward(cx))));
+            .child(ui::Button::new("forward-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_forward(cx))));
         let places = self.forward_places(&query);
         let list: AnyElement = if places.is_empty() {
-            ui::empty_state("forward-empty", crate::mascot::Mood::Waiting, format!("Nothing called “{query}”"), "Search channels, DMs and group DMs by name.", cx).into_any_element()
+            ui::Empty::new("forward-empty", crate::mascot::Mood::Waiting, format!("Nothing called “{query}”"), "Search channels, DMs and group DMs by name.", cx).into_any_element()
         } else {
             let rows: Vec<AnyElement> = places
                 .into_iter()
@@ -173,13 +173,13 @@ impl Waffle {
                 .collect();
             ui::col().id("forward-places").gap_0p5().max_h(px(LIST_HEIGHT)).overflow_y_scroll().children(rows).into_any_element()
         };
-        let body = ui::dialog_body()
+        let body = ui::DialogContent::new()
             .child(head)
-            .child(ui::search_field("forward-search", &dialog.search, cx))
+            .child(ui::InputGroup::search("forward-search", &dialog.search, cx))
             .child(list)
             .children(self.forward_preview(&dialog.message, cx))
             .child(self.note_row(dialog, cx));
-        Some(ui::modal(backdrop("forward-backdrop", cx), ui::dialog("forward-dialog", DIALOG_WIDTH, body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop("forward-backdrop", cx), ui::Dialog::new("forward-dialog", DIALOG_WIDTH, body, window, cx), cx))
     }
 
     // "Rosa's message from #general"; a DM's needs no place.
@@ -192,7 +192,7 @@ impl Waffle {
     }
 
     // The place's mark, name and where it is, then its check, or a lock where you can't post.
-    fn place_row(&self, place: Place, on: bool, full: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn place_row(&self, place: Place, on: bool, full: bool, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let id = place.channel.id.clone();
         let text = ui::col().min_h_0()
             .flex_1()
@@ -200,10 +200,10 @@ impl Waffle {
             .child(ui::line(place.detail.clone()).text_size(ui::TEXT_XS).text_color(palette::muted(cx)));
         let mark = match place.locked {
             true => div().text_color(palette::faint(cx)).child(Icon::new(Glyph::HashtagLock).size(ui::ICON_LG)).into_any_element(),
-            false => ui::check_live(SharedString::from(format!("forward-check-{id}")), if on { Check::On } else { Check::Off }, window, cx).into_any_element(),
+            false => ui::Checkbox::new(SharedString::from(format!("forward-check-{id}"))).checked(if on { Check::On } else { Check::Off }).into_any_element(),
         };
         let lead = self.place_lead(&place, cx);
-        let row = ui::menu_row(SharedString::from(format!("forward-place-{id}")), cx).disabled(place.locked || full).child(lead).child(text).child(mark);
+        let row = ui::DropdownMenuItem::new(SharedString::from(format!("forward-place-{id}")), cx).disabled(place.locked || full).child(lead).child(text).child(mark);
         if place.locked || full {
             return row.into_any_element();
         }
@@ -257,10 +257,10 @@ impl Waffle {
     // The note, with its emoji button inside, and Send beside it.
     fn note_row(&self, dialog: &ForwardDialog, cx: &mut Context<Self>) -> AnyElement {
         let focus = dialog.note.read(cx).focus_handle(cx);
-        let emoji = ui::icon_button("forward-note-emoji", Glyph::Emoji, "Add emoji", cx).small().on_click(cx.listener(|this, _, window, cx| this.open_emoji_picker(EmojiTarget::ForwardNote, window, cx)));
-        let note = ui::text_field("forward-note", Input::new(&dialog.note).appearance(false), &focus).trailing(emoji);
+        let emoji = ui::Button::new("forward-note-emoji").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::Emoji).tooltip_text("Add emoji").on_click(cx.listener(|this, _, window, cx| this.open_emoji_picker(EmojiTarget::ForwardNote, window, cx)));
+        let note = ui::Input::new("forward-note", Input::new(&dialog.note).appearance(false), &focus).trailing(emoji);
         // The field's height, so the two read as one row.
-        let send = ui::button("forward-send", ui::Tone::Primary, cx)
+        let send = ui::Button::new("forward-send")
             .h_10()
             .disabled(dialog.picked.is_empty())
             .child(Icon::new(Glyph::PaperPlane).size(ui::ICON_LG))

@@ -28,11 +28,11 @@ impl Render for ServerPreview {
         let muted = palette::muted(cx);
         let (wash, strong) = (palette::selected(cx), palette::strong(cx));
         let row = |key: &'static str, title: &'static str, glyph: Glyph, people: &[ui::Entry]| {
-            ui::row().gap_2().child(Icon::new(glyph).size(ui::ICON_MD).text_color(muted)).child(ui::listed_stack(key, title, people.to_vec(), PREVIEW_FACES, ui::AVATAR_MD, surface, wash, strong))
+            ui::row().gap_2().child(Icon::new(glyph).size(ui::ICON_MD).text_color(muted)).child(ui::AvatarGroup::listed(key, title, people.to_vec(), PREVIEW_FACES, ui::AVATAR_MD, surface, wash, strong))
         };
         // Anchored flush to the tile; plain tooltips get their 12px gap from Tooltip's own margin.
         div().pl_3().child(
-            ui::surface(cx)
+            ui::PopoverContent::new(cx)
                 .max_w(px(PREVIEW_WIDTH))
                 .p_3()
                 .gap_2()

@@ -84,9 +84,9 @@ impl Waffle {
             list.push(self.switcher_row(i == selected, guild_id, channel, place, &query, cx).into_any_element());
         }
         let is_empty = list.is_empty();
-        let field = div().flex_none().child(ui::search_field("switcher-search", &self.switcher_input, cx));
+        let field = div().flex_none().child(ui::InputGroup::search("switcher-search", &self.switcher_input, cx));
         let hint = |keys: Vec<AnyElement>, label: &'static str| ui::row().gap_1().children(keys).child(label);
-        let key = |glyph: Glyph| crate::ui::kbd("", cx).child(Icon::new(glyph).size(ui::ICON_XS)).into_any_element();
+        let key = |glyph: Glyph| crate::ui::Kbd::new("").child(Icon::new(glyph).size(ui::ICON_XS)).into_any_element();
         let foot = ui::row()
             .pt_2p5()
             .px_2p5()
@@ -98,10 +98,10 @@ impl Waffle {
             .border_color(palette::line(cx))
             .text_size(ui::TEXT_XS)
             .text_color(palette::muted(cx))
-            .when(!is_empty, |f| f.child(hint(vec![key(Glyph::ChevronUp), key(Glyph::ChevronDown)], "Move")).child(hint(vec![crate::ui::kbd("Enter", cx).into_any_element()], "Open")))
-            .child(hint(vec![crate::ui::kbd("Esc", cx).into_any_element()], "Close"));
+            .when(!is_empty, |f| f.child(hint(vec![key(Glyph::ChevronUp), key(Glyph::ChevronDown)], "Move")).child(hint(vec![crate::ui::Kbd::new("Enter").into_any_element()], "Open")))
+            .child(hint(vec![crate::ui::Kbd::new("Esc").into_any_element()], "Close"));
         let body: AnyElement = if is_empty {
-            crate::ui::empty_state("switcher-empty", crate::mascot::Mood::Waiting, format!("Nothing called “{query}”"), "Check the spelling, or search messages in a channel instead.", cx).into_any_element()
+            crate::ui::Empty::new("switcher-empty", crate::mascot::Mood::Waiting, format!("Nothing called “{query}”"), "Check the spelling, or search messages in a channel instead.", cx).into_any_element()
         } else {
             ui::col().id("switcher-list").gap_0p5().max_h(px(SWITCHER_LIST_HEIGHT)).overflow_y_scroll().children(list).into_any_element()
         };
@@ -115,7 +115,7 @@ impl Waffle {
         Some(
             backdrop("switcher-backdrop", cx)
                 .bg(palette::scrim(cx))
-                .child(ui::row().items_stretch().absolute().top(px(SWITCHER_TOP)).left_0().right_0().justify_center().child(ui::dialog("switcher", SWITCHER_WIDTH, body, window, cx)))
+                .child(ui::row().items_stretch().absolute().top(px(SWITCHER_TOP)).left_0().right_0().justify_center().child(ui::Dialog::new("switcher", SWITCHER_WIDTH, body, window, cx)))
                 .into_any_element(),
         )
     }
@@ -146,7 +146,7 @@ impl Waffle {
         let strong = palette::strong(cx);
         let mark = name.to_lowercase().find(&query.to_lowercase()).filter(|_| !query.is_empty()).map(|at| at..at + query.len()).filter(|r| name.is_char_boundary(r.start) && name.is_char_boundary(r.end));
         let label = StyledText::new(name.clone()).with_highlights(mark.map(|r| (r, HighlightStyle { color: Some(strong), font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() })));
-        ui::list_row(SharedString::from(format!("switch-{}", channel.id)), name.clone(), cx)
+        ui::Item::new(SharedString::from(format!("switch-{}", channel.id)), name.clone(), cx)
             .height(ui::RowHeight::Dense)
             .px_2p5()
             .flex_none()

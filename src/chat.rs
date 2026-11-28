@@ -160,7 +160,7 @@ impl Waffle {
         let topic = channel.topic.clone().map(|topic| div().flex_1().min_w_0().pl_3().border_l_1().border_color(palette::line_strong(cx)).text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(ui::truncating("header-topic", topic)));
         let threads = (channel.kind == ChannelKind::Text && self.guild_id.is_some()).then(|| {
             let id = channel.id.clone();
-            ui::icon_button("threads-button", Glyph::Thread, "Threads", cx)
+            ui::Button::new("threads-button").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Thread).tooltip_text("Threads")
                 .occlude()
                 .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_threads_popout(id.clone(), e.position, cx)))
         });
@@ -170,7 +170,7 @@ impl Waffle {
             let muted = self.guild_settings.get(&guild_id).is_some_and(|s| s.channel_muted(&channel.id));
             let (label, glyph) = if muted { ("Unmute or change notifications", Glyph::BellSlash) } else { ("Notification Settings", Glyph::Bell) };
             let open = channel.clone();
-            ui::icon_button("notify-button", glyph, label, cx)
+            ui::Button::new("notify-button").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(glyph).tooltip_text(label)
                 .occlude()
                 .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| {
                     if e.modifiers.shift {
@@ -180,7 +180,7 @@ impl Waffle {
                 }))
         });
         let pins_x = self.pins_button_x.clone();
-        let pins = ui::icon_button("pins-button", Glyph::Pin, "Pinned Messages", cx)
+        let pins = ui::Button::new("pins-button").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Pin).tooltip_text("Pinned Messages")
             .occlude()
             .child(gpui_kit::canvas(move |bounds, _, _| pins_x.set(f32::from(bounds.center().x)), |_, _, _, _| {}).absolute().size_full())
             .when(self.pins.is_some(), |b| b.bg(selected).text_color(strong))
@@ -195,14 +195,14 @@ impl Waffle {
         let calls = can_call.then(|| {
             let (voice, video) = (channel.clone(), channel.clone());
             [
-                ui::icon_button("dm-voice-call", Glyph::Phone, "Start Voice Call", cx).occlude().on_click(cx.listener(move |this, _, _, cx| this.start_dm_call(voice.clone(), false, cx))),
-                ui::icon_button("dm-video-call", Glyph::Video, "Start Video Call", cx).occlude().on_click(cx.listener(move |this, _, _, cx| this.start_dm_call(video.clone(), true, cx))),
+                ui::Button::new("dm-voice-call").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Phone).tooltip_text("Start Voice Call").occlude().on_click(cx.listener(move |this, _, _, cx| this.start_dm_call(voice.clone(), false, cx))),
+                ui::Button::new("dm-video-call").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Video).tooltip_text("Start Video Call").occlude().on_click(cx.listener(move |this, _, _, cx| this.start_dm_call(video.clone(), true, cx))),
             ]
         });
         let add_members = (channel.kind == ChannelKind::Dm).then(|| {
             let tip = if channel.raw_type == 3 { "Add Members" } else { "Add Friends to DM" };
             let from = channel.clone();
-            ui::icon_button("dm-add-members", Glyph::GroupPlus, tip, cx).occlude().on_click(cx.listener(move |this, _, window, cx| this.open_group_picker(Some(from.clone()), window, cx)))
+            ui::Button::new("dm-add-members").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::GroupPlus).tooltip_text(tip).occlude().on_click(cx.listener(move |this, _, window, cx| this.open_group_picker(Some(from.clone()), window, cx)))
         });
         let members = self.members_toggle(channel, cx);
         let search = Some(self.channel_search(window, cx));
@@ -255,7 +255,7 @@ impl Waffle {
             .flex_none()
             .occlude()
             .squircle(RADIUS_MD)
-            .child(ui::search_frame("channel-search", Input::new(&self.search_input).token(move |token, _, cx| crate::search_menu::render_token(token, &avatars, cx)), &handle).quiet(!open))
+            .child(ui::InputGroup::search_around("channel-search", Input::new(&self.search_input).token(move |token, _, cx| crate::search_menu::render_token(token, &avatars, cx)), &handle).quiet(!open))
             .capture_key_down(cx.listener(Self::on_search_key))
             .when(!open, |d| {
                 d.cursor_pointer().hover(move |s| s.bg(hover)).on_click(cx.listener(move |this, _, window, cx| {
@@ -314,11 +314,11 @@ impl Waffle {
         let label = unread_label(fresh.len(), estimated, &first.timestamp);
         let tint = ui::mix(palette::surface(Level::Page, cx), palette::accent(), 0.16);
         let press = palette::accent().opacity(0.14);
-        // lint-allow(custom-button): ui::button has no tone that washes the accent over a tinted bar
+        // lint-allow(custom-button): ui::Button has no scope that washes the accent over a tinted bar
         let button = move |id: &'static str| ui::row().id(id).h_7().px_2().gap_1p5().squircle(RADIUS_XS).cursor_pointer().hover(move |s| s.bg(press));
         let (first_id, channel_id) = (first.id.clone(), channel_id.to_owned());
         Some(
-            // lint-allow(custom-badge, custom-mark): ui::callout is inline, not floating over a list; ui::floating_bar docks at the foot, this one hangs from the feed's top
+            // lint-allow(custom-badge, custom-mark): ui::Alert::new is inline, not floating over a list; ui::Popover::bar docks at the foot, this one hangs from the feed's top
             ui::row()
                 .id("unread-bar")
                 // Floats over the feed: the messages under it must not take its hover or clicks.

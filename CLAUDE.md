@@ -2,6 +2,12 @@
 
 These rules bind every session. Hand-written UI values and app-wide redraws are counted by `tools/ui_lint.py`: before you edit a file it tells you what that file still carries, after the edit it blocks anything new, and `cargo test` fails on it (`tests/ui_rules.rs`). `python3 tools/ui_lint.py` lists what's left across the app.
 
+## shadcn names
+
+`crate::ui` mirrors shadcn/ui, so what a model knows of shadcn is what it should write. A component is the shadcn name (`Button`, `Badge`, `Toggle`, `Separator`, `Kbd`, `Skeleton`, `Progress`, `Switch`, `Checkbox`, `RadioGroupItem`, `Slider`, `Tabs`, `ToggleGroup`, `Tooltip`, `Input`, `Textarea`, `InputGroup`, `Select`, `Field`, `Dialog`, `Alert`, `Sonner`, `Empty`, `Popover`, `HoverCard`, `DropdownMenu`, `Card`, `Item`, `Avatar`, `ScrollArea`, `Spinner`, `Table`) with shadcn's props as builder methods: `.variant()`, `.size()`, `.checked()`, `.pressed()`, `.value()`, `.on_value_change()`, `.disabled()`, `.open()`. Variants and sizes are enums with one `match` that says what each looks like (`ButtonVariant::look`), as cva does; where a surface has its own ink (media, art, the call stage) it is a scope (`ButtonScope`), never a lookalike. Colours are `ui::theme` (`background`, `foreground`, `card`, `popover`, `primary`, `secondary`, `muted`, `accent_wash`, `destructive`, `border`, `input`, `ring`, `sidebar::*`; shadcn's `accent` is `accent_wash` because honey is `primary`), mirrored in `design/tokens.css`. Shadcn has no name for Waffle's server tile, presence mark, role chip or speaking ring: they stay domain wrappers around the primitive.
+
+Several names (`Field::new`, `Dialog::new`, `Alert::new`, `Item::new`, …) are façades: the shadcn name over the builder the design system already had, kept as private functions inside `src/ui/`. Reach for the façade; a new component goes in `src/ui/<shadcn_name>.rs` the same way.
+
 ## Design system first
 
 `crate::ui` is the design system: tokens, layout primitives and every component, ported from `design/` (the HTML source of truth). Colours are `palette`, curves and springs `motion`, glyphs `icons::Glyph`. Start UI files with `use crate::ui::prelude::*;`. The catalog at the end of this file lists everything it has.
@@ -23,14 +29,14 @@ A flex child's minimum size is its content's, so long text pushes its row past i
 - Rows and columns are `ui::row()` / `ui::col()`, which shrink across (`min_w_0`) so their text truncates. A column keeps its content's height: one that may shrink in height squeezes its items together inside a scrolling list. The column that stretches to fill a bounded parent is `ui::col().min_h_0().flex_1()`. Scrolling content goes through `ui::scroll_area`, which keeps the list at its content's height.
 - In a row, the piece that stretches is `flex_1()` + `min_w_0()`; fixed pieces (icons, avatars, badges, buttons, counts) are `flex_none()`.
 - Text that must stay on one line is `ui::line(text)`, or `ui::truncating(key, text)` when the cut text should show in a tooltip. Running text wraps inside a width-bounded parent. Never let a name, title, channel or server label size its container.
-- Anything with a variable number of children scrolls: a bounded height (`flex_1` + `min_h_0`, or `max_h`), then `ui::scroll_area` or `list`/`uniform_list`. Popovers cap their height and scroll inside; `ui::floating` keeps them in the window.
+- Anything with a variable number of children scrolls: a bounded height (`flex_1` + `min_h_0`, or `max_h`), then `ui::ScrollArea::new` or `list`/`uniform_list`. Popovers cap their height and scroll inside; `ui::floating` keeps them in the window.
 - Check before calling it done: the longest real name you can find, a 99+ count, an empty list, a missing avatar, and the window at its minimum width. Nothing may clip mid-glyph, overlap, or push past its parent.
 
 ## Pointer: nothing floats without occluding
 
 gpui hit-tests every hitbox under the pointer, front to back, until one occludes. An element drawn over others (popover, hover card, menu card, floating bar, toast, PiP, overlay button row, anything `absolute()`/`anchored()`/`deferred()` over content) passes hover and clicks through to whatever is behind it unless it blocks them.
 
-- Floating surfaces are `ui::floating(id, content)` or `ui::floating_at(id, at, corner, content)`: deferred, kept in the window, and occluding. Anything else floating gets `.id(...)` and `.occlude()` on its outermost element, in the same edit that creates it. Use `.block_mouse_except_scroll()` instead only when the content under it must keep scrolling (a header over a list).
+- Floating surfaces are `ui::Popover::floating(id, content)` or `ui::Popover::floating_at(id, at, corner, content)`: deferred, kept in the window, and occluding. Anything else floating gets `.id(...)` and `.occlude()` on its outermost element, in the same edit that creates it. Use `.block_mouse_except_scroll()` instead only when the content under it must keep scrolling (a header over a list).
 - A backdrop that occludes covers the surface only if the surface sits inside it; a card beside its backdrop still needs its own.
 - Decoration inside an element that already handles the pointer (a badge, a scrim, a label on a tile) needs nothing. A transparent full-window layer (the GIF layer, drag ghosts) must not occlude.
 - Hover-to-open surfaces keep themselves open with their own `on_hover`, since occluding takes the hover from the row under them.
@@ -70,7 +76,7 @@ The lint enforces this section (each rule's message says what to do; a genuine e
 
 ## Idiomatic Rust and gpui
 
-- A stateless piece of UI is a function returning an element the caller keeps composing (`-> Div`, `-> Stateful<Div>`), like `ui::badge`. When it has several options, it's a `#[derive(IntoElement)]` struct with builder methods and `RenderOnce`, like `ui::TextField`. An `Entity` exists only to hold state.
+- A stateless piece of UI is a function returning an element the caller keeps composing (`-> Div`, `-> Stateful<Div>`), like `ui::Separator`. When it has several options, it's a `#[derive(IntoElement)]` struct with builder methods and `RenderOnce`, like `ui::TextField`. An `Entity` exists only to hold state.
 - Views talk through gpui: `cx.emit` + `cx.subscribe` for events, `cx.observe` for "it changed". Not `Rc<RefCell<…>>` shared between views.
 - Handlers on a view's state use `cx.listener(...)`. Spawned tasks hold a `WeakEntity` and end when `update` fails; `.detach()` a task only when it ends itself, otherwise keep the `Task` in the view so dropping the view cancels it.
 - Element ids are stable and unique: keyed by the data's id (`("message", id)`), never by index in a list that reorders.

@@ -16,7 +16,7 @@ use crate::{
     icons::Glyph,
     mascot::Mood,
     palette::{self, Level},
-    ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, Squircle, Tone},
+    ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, Squircle},
 };
 
 const BANNER_HEIGHT: f32 = 140.;
@@ -73,7 +73,7 @@ impl Waffle {
             .text_size(ui::TEXT_SM)
             .child(ui::hard_edge(move || ui::scrolled(&scroll), cx).child(header))
             .children(self.voice_notice_bar(cx))
-            .child(ui::scroll_area(div().id("guide-page").pt_2().px_6().pb_8().child(column), &self.join.guide.scroll))
+            .child(ui::ScrollArea::new(div().id("guide-page").pt_2().px_6().pb_8().child(column), &self.join.guide.scroll))
             .into_any_element()
     }
 
@@ -105,7 +105,7 @@ impl Waffle {
                 .p_4()
                 .squircle(RADIUS_LG)
                 .bg(palette::surface(Level::Group, cx))
-                .child(ui::avatar(avatar, 40.))
+                .child(ui::Avatar::new(avatar, 40.))
                 .child(
                     ui::col().min_h_0()
                         .flex_1()
@@ -132,7 +132,7 @@ impl Waffle {
             .gap_3()
             .py_6()
             .child(div().text_size(ui::TEXT_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("You're all set!"))
-            .children(first.map(|channel| ui::button("guide-explore", Tone::Primary, cx).child("Explore the Server").on_click(cx.listener(move |this, _, window, cx| this.open_channel(channel.clone(), window, cx)))))
+            .children(first.map(|channel| ui::Button::new("guide-explore").child("Explore the Server").on_click(cx.listener(move |this, _, window, cx| this.open_channel(channel.clone(), window, cx)))))
     }
 
     // Over the composer in a to-do's channel: its title and action, then what's next.
@@ -147,7 +147,7 @@ impl Waffle {
         let empty = HashSet::new();
         let done = self.join.done_actions.get(&guild.id).unwrap_or(&empty);
         let ink = palette::accent_ink(cx);
-        let bar = ui::strip(ui::StripFill::Accent, cx)
+        let bar = ui::Alert::strip(ui::StripFill::Accent, cx)
             .id("guide-action-bar")
             // lint-allow(raw-margin): insets the bar from the composer column it is returned into, which has no padding of its own
             .mx_4()
@@ -156,7 +156,7 @@ impl Waffle {
             .gap_2p5();
         if !done.contains(&todo.channel_id) {
             let send = (todo.kind == ActionKind::Chat).then(|| {
-                ui::button("guide-send", Tone::Primary, cx).small().child("Send a message").on_click(cx.listener(|this, _, window, cx| this.composer.update(cx, |state, cx| state.focus(window, cx))))
+                ui::Button::new("guide-send").size(ui::ButtonSize::Sm).child("Send a message").on_click(cx.listener(|this, _, window, cx| this.composer.update(cx, |state, cx| state.focus(window, cx))))
             });
             return Some(
                 bar.child(Icon::new(Glyph::ChatRound).size(ui::ICON_LG).text_color(ink))
@@ -170,7 +170,7 @@ impl Waffle {
         Some(
             bar.child(Icon::new(Glyph::CheckCircle).size(ui::ICON_LG).text_color(ink))
                 .child(ui::row().items_stretch().flex_1().gap_1().child("Next:").child(ui::line(next.title.clone()).font_weight(FontWeight::SEMIBOLD)))
-                .child(ui::button("guide-go", Tone::Secondary, cx).small().child("Go").on_click(cx.listener(move |this, _, window, cx| this.open_channel(target.clone(), window, cx))))
+                .child(ui::Button::new("guide-go").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Go").on_click(cx.listener(move |this, _, window, cx| this.open_channel(target.clone(), window, cx))))
                 .into_any_element(),
         )
     }
@@ -309,7 +309,7 @@ fn todo_row(guild: &Guild, todo: &MemberAction, done: bool, cx: &mut Context<Waf
         true => state.bg(cx.theme().success).text_color(gpui_kit::white()).child(Icon::new(Glyph::Checkmark).size(ui::ICON_SM)),
         false => state.border(px(STATE_RING)).border_color(palette::line_strong(cx)),
     };
-    ui::menu_row(SharedString::from(format!("guide-todo-{}", todo.channel_id)), cx)
+    ui::DropdownMenuItem::new(SharedString::from(format!("guide-todo-{}", todo.channel_id)), cx)
         .min_h(px(TODO_HEIGHT))
         .px_3()
         .py_2()
@@ -327,7 +327,7 @@ fn todo_row(guild: &Guild, todo: &MemberAction, done: bool, cx: &mut Context<Waf
         .when_some(channel, |row, channel| row.on_click(cx.listener(move |this, _, window, cx| this.open_channel(channel.clone(), window, cx))))
 }
 
-// lint-allow(custom-component): ui::icon_tile only holds a glyph, not an emoji's image or text
+// lint-allow(custom-component): ui::ItemMedia::icon only holds a glyph, not an emoji's image or text
 fn emoji_tile(emoji: Option<&OptionEmoji>, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
     let tile = ui::row().size_9().flex_none().squircle(RADIUS_SM).bg(palette::surface(Level::Raised, cx)).justify_center();
     match (emoji.and_then(OptionEmoji::url), emoji.and_then(|e| e.name.clone())) {
@@ -354,15 +354,15 @@ fn resource_card(ix: usize, channel: &Channel, title: &str, description: Option<
         .on_click(cx.listener(move |this, _, window, cx| this.open_channel(channel.clone(), window, cx)))
 }
 
-fn guide_skeleton(cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
+fn guide_skeleton(_cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
     ui::col()
         .gap_3()
-        .child(ui::skeleton("guide-skeleton-welcome", RADIUS_LG, cx).h(px(SKELETON_WELCOME)).w_full())
-        .child(ui::skeleton("guide-skeleton-todos", RADIUS_LG, cx).h(px(SKELETON_TODOS)).w_full())
+        .child(ui::Skeleton::new("guide-skeleton-welcome").radius(RADIUS_LG).h(px(SKELETON_WELCOME)).w_full())
+        .child(ui::Skeleton::new("guide-skeleton-todos").radius(RADIUS_LG).h(px(SKELETON_TODOS)).w_full())
 }
 
 fn guide_failed(guild_id: String, error: String, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
-    ui::empty_state("guide-failed", Mood::Idle, "Couldn't load the Server Guide", error, cx).child(ui::button("guide-retry", Tone::Secondary, cx).child("Try again").on_click(cx.listener(move |this, _, _, cx| {
+    ui::Empty::new("guide-failed", Mood::Idle, "Couldn't load the Server Guide", error, cx).child(ui::Button::new("guide-retry").variant(ui::ButtonVariant::Secondary).child("Try again").on_click(cx.listener(move |this, _, _, cx| {
         this.join.welcome.remove(&guild_id);
         this.fetch_welcome(&guild_id, cx);
         cx.notify();

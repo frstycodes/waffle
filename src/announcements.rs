@@ -523,21 +523,21 @@ impl Waffle {
         let rows: Vec<AnyElement> = match self.announcements.followed.get(guild_id) {
             None | Some(Load::Loading) => vec![crate::server_settings::view::loading_line("Loading followed channels…", cx)],
             Some(Load::Failed(error)) => vec![crate::server_settings::view::failed("Couldn't load followed channels", error, cx)],
-            Some(Load::Ready(list)) if list.is_empty() => vec![ui::settings_row("ss-followed-empty", false, cx).child(ui::settings_text("No Channels Followed", None::<String>, cx)).into_any_element()],
+            Some(Load::Ready(list)) if list.is_empty() => vec![ui::Item::setting("ss-followed-empty", false, cx).child(ui::settings_text("No Channels Followed", None::<String>, cx)).into_any_element()],
             Some(Load::Ready(list)) => list.iter().enumerate().map(|(i, followed)| self.followed_row(guild_id, followed, i > 0, cx)).collect(),
         };
-        ui::settings_group("Channels Followed", cx).child(ui::settings_card(cx).id("ss-followed").children(rows)).into_any_element()
+        ui::settings_group("Channels Followed", cx).child(ui::Card::new(cx).id("ss-followed").children(rows)).into_any_element()
     }
 
     fn followed_row(&self, guild_id: &str, followed: &Followed, line: bool, cx: &mut Context<Self>) -> AnyElement {
         let into = self.channel_by_id(&followed.channel_id).map(|(_, c)| format!(", into #{}", c.name)).unwrap_or_default();
         let detail = format!("#{} from {}{into}", followed.source_channel, followed.source_guild);
         let (guild, target) = (guild_id.to_owned(), followed.clone());
-        let unfollow = ui::button(SharedString::from(format!("ss-unfollow-{}", followed.id)), ui::Tone::Secondary, cx)
-            .small()
+        let unfollow = ui::Button::new(SharedString::from(format!("ss-unfollow-{}", followed.id))).variant(ui::ButtonVariant::Secondary)
+            .size(ui::ButtonSize::Sm)
             .child("Unfollow")
             .on_click(cx.listener(move |this, _, _, cx| this.ask_unfollow(guild.clone(), target.clone(), cx)));
-        ui::settings_row(SharedString::from(format!("ss-followed-{}", followed.id)), line, cx)
+        ui::Item::setting(SharedString::from(format!("ss-followed-{}", followed.id)), line, cx)
             .child(ui::server_tile(followed.source_icon.as_deref(), &followed.source_guild, 32., cx))
             .child(ui::settings_text(followed.name.clone(), Some(detail), cx))
             .child(unfollow)
@@ -577,23 +577,23 @@ impl Waffle {
             .child(
                 ui::col()
                     .gap_1()
-                    .child(ui::row().gap_1p5().child(ui::line(name.clone()).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx))).child(ui::tag(if source.official { "Official" } else { "Server" }, cx)))
+                    .child(ui::row().gap_1p5().child(ui::line(name.clone()).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx))).child(ui::Badge::new(if source.official { "Official" } else { "Server" }).variant(ui::BadgeVariant::Accent)))
                     .child(ui::row().gap_1().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Icon::new(Glyph::Megaphone).size(ui::ICON_SM)).child(ui::line(source.channel.clone()))),
             );
         let action = match member {
-            Some(_) => ui::button("source-card-go", ui::Tone::Primary, cx).w_full().child("Go to Server").on_click(cx.listener(move |this, _, window, cx| this.go_to_source(&source, window, cx))),
+            Some(_) => ui::Button::new("source-card-go").w_full().child("Go to Server").on_click(cx.listener(move |this, _, window, cx| this.go_to_source(&source, window, cx))),
             // GAP: Waffle joins only through invites and can't lurk, so Join Server opens the source channel on
             // discord.com, where Discord offers to join. Not verified: that it does so for every server.
             None => {
                 let url = format!("https://discord.com/channels/{}/{}", source.guild_id, source.channel_id);
-                ui::button("source-card-join", ui::Tone::Primary, cx).w_full().child("Join Server").on_click(cx.listener(move |this, _, _, cx| {
+                ui::Button::new("source-card-join").w_full().child("Join Server").on_click(cx.listener(move |this, _, _, cx| {
                     this.announcements.source_card = None;
                     cx.open_url(&url);
                     cx.notify(); // lint-allow(global-notify): the dialog is drawn by the Overlays view, which re-renders only with the app
                 }))
             }
         };
-        let surface = ui::surface(cx)
+        let surface = ui::PopoverContent::new(cx)
             .id("source-card")
             .occlude()
             .w(px(SOURCE_CARD_WIDTH))
@@ -758,8 +758,8 @@ impl Waffle {
         }
         let source = channel.clone();
         Some(
-            ui::button("follow-button", ui::Tone::Secondary, cx)
-                .small()
+            ui::Button::new("follow-button").variant(ui::ButtonVariant::Secondary)
+                .size(ui::ButtonSize::Sm)
                 .occlude()
                 .child(Icon::new(Glyph::Plus).size(ui::ICON_MD))
                 .child("Follow")
@@ -780,7 +780,7 @@ impl Waffle {
             .flex_1()
             .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Follow to get this channel's updates in your own server."))
             .children(following_line(self.follower_stats(&channel.id)).map(|line| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(line)));
-        let card = ui::strip(ui::StripFill::Raised, cx)
+        let card = ui::Alert::strip(ui::StripFill::Raised, cx)
             .id("follow-blocker")
             .occlude()
             .min_h(px(BLOCKER_HEIGHT))
@@ -789,7 +789,7 @@ impl Waffle {
             .gap_3()
             .child(Icon::new(Glyph::Megaphone).size(ui::ICON_XL).text_color(palette::muted(cx)))
             .child(text)
-            .child(ui::button("follow-blocker-button", ui::Tone::Primary, cx).child("Follow").on_click(cx.listener(move |this, _, _, cx| this.open_follow(source.clone(), cx))));
+            .child(ui::Button::new("follow-blocker-button").child("Follow").on_click(cx.listener(move |this, _, _, cx| this.open_follow(source.clone(), cx))));
         Some(div().absolute().left_0().right_0().bottom_0().px_4().pb_2().child(card).into_any_element())
     }
 
@@ -801,24 +801,24 @@ impl Waffle {
             Dialog::Follow(follow) => (FOLLOW_WIDTH, self.follow_dialog(follow, cx)),
             Dialog::Followed(adjective) => (DIALOG_WIDTH, followed_dialog(adjective, cx)),
         };
-        Some(ui::modal(backdrop("announcement-backdrop", cx), ui::dialog("announcement-dialog", width, body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop("announcement-backdrop", cx), ui::Dialog::new("announcement-dialog", width, body, window, cx), cx))
     }
 
     fn publish_dialog(&self, message: &Message, publishing: bool, cx: &mut Context<Self>) -> Div {
         let text = publish_text(self.follower_stats(&message.channel_id).guilds_following);
-        ui::dialog_body()
+        ui::DialogContent::new()
             .child(dialog_title("Are you sure?", cx))
             .child(div().line_height(ui::LINE_SM).text_color(palette::muted(cx)).child(crate::chat::emphasised(&text, palette::strong(cx))))
             .child(quota(self.published_this_hour(&message.channel_id), cx))
             .child(
                 footer()
                     .child(self.cancel_button("publish-cancel", cx))
-                    .child(ui::button("publish-confirm", ui::Tone::Primary, cx).loading(publishing.then_some("Publishing…")).child("Confirm").on_click(cx.listener(|this, _, _, cx| this.publish(cx)))),
+                    .child(ui::Button::new("publish-confirm").loading(publishing.then_some("Publishing…")).child("Confirm").on_click(cx.listener(|this, _, _, cx| this.publish(cx)))),
             )
     }
 
-    fn cancel_button(&self, id: &'static str, cx: &mut Context<Self>) -> ui::Control {
-        ui::button(id, ui::Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_announcement_dialog(cx)))
+    fn cancel_button(&self, id: &'static str, cx: &mut Context<Self>) -> ui::Button {
+        ui::Button::new(id).variant(ui::ButtonVariant::Secondary).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_announcement_dialog(cx)))
     }
 
     fn follow_dialog(&self, follow: &Follow, cx: &mut Context<Self>) -> Div {
@@ -830,7 +830,7 @@ impl Waffle {
             .items_start()
             .gap_3()
             .child(dialog_title("Add this channel's updates to your server!", cx).flex_1().min_w_0())
-            .child(ui::icon_button("follow-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_announcement_dialog(cx))));
+            .child(ui::Button::new("follow-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_announcement_dialog(cx))));
         let source = ui::row()
             .gap_2p5()
             .py_2p5()
@@ -847,27 +847,27 @@ impl Waffle {
             .text_color(palette::muted(cx))
             .child("Select where you want these updates to go. You can remove this at any time in Server Settings > Integrations > Channels Followed.")
             .when(follow.source.props.nsfw, |d| d.child(div().text_color(palette::danger_ink(cx)).child("Note: This is an age-restricted channel.")));
-        let server_select = ui::select("follow-server", None, guild.map_or(SharedString::from("Select a server"), |(g, _)| g.name.clone().into()), false, cx)
+        let server_select = ui::Select::new("follow-server", None, guild.map_or(SharedString::from("Select a server"), |(g, _)| g.name.clone().into()), false, cx)
             .disabled(destinations.is_empty())
             .on_click(cx.listener(|this, e: &ClickEvent, _, cx| this.open_follow_guilds(e.position(), cx)));
-        let channel_select = ui::select("follow-channel", Some(Glyph::Hashtag), channel.map_or(SharedString::from("Select a channel"), |c| c.name.clone().into()), false, cx)
+        let channel_select = ui::Select::new("follow-channel", Some(Glyph::Hashtag), channel.map_or(SharedString::from("Select a channel"), |c| c.name.clone().into()), false, cx)
             .disabled(guild.is_none())
             .on_click(cx.listener(|this, e: &ClickEvent, _, cx| this.open_follow_channels(e.position(), cx)));
         let hint = match follow.error {
-            Some(error) => ui::field_error(error, cx),
+            Some(error) => ui::FieldError::new(error, cx),
             None if destinations.is_empty() => div().text_size(ui::TEXT_XS).text_color(palette::danger_ink(cx)).child(NO_WEBHOOK_SERVERS),
-            None => ui::field_hint("Only servers and channels you have webhook permissions in are shown.", None, cx),
+            None => ui::FieldDescription::new("Only servers and channels you have webhook permissions in are shown.", None, cx),
         };
         let ready = channel.is_some();
-        ui::dialog_body()
+        ui::DialogContent::new()
             .child(head)
             .child(source)
             .child(intro)
-            .child(ui::field("Send to", cx).child(server_select))
-            .child(ui::field("Select channel", cx).child(channel_select).child(hint))
+            .child(ui::Field::new("Send to", cx).child(server_select))
+            .child(ui::Field::new("Select channel", cx).child(channel_select).child(hint))
             .child(
                 footer().child(self.cancel_button("follow-cancel", cx)).child(
-                    ui::button("follow-confirm", ui::Tone::Primary, cx)
+                    ui::Button::new("follow-confirm")
                         .disabled(!ready)
                         .loading(follow.following.then_some("Following…"))
                         .child("Follow")

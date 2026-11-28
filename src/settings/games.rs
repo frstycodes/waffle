@@ -9,17 +9,17 @@ use crate::{
     games::{Added, Seen},
     icons::Glyph,
     palette,
-    ui::{self, Tone},
+    ui::{self},
 };
 
 impl Waffle {
     pub(super) fn games_page(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<Section> {
         let now = chrono::Utc::now().timestamp_millis();
-        let mut card = ui::settings_card(cx);
+        let mut card = ui::Card::new(cx);
         let playing = match &self.games.mine {
-            Some(game) => ui::settings_row("registered-games", false, cx).child(ui::settings_text(format!("Now playing: {}", game.name), Some("Shown on your profile while Activity status is on"), cx)),
+            Some(game) => ui::Item::setting("registered-games", false, cx).child(ui::settings_text(format!("Now playing: {}", game.name), Some("Shown on your profile while Activity status is on"), cx)),
             None => {
-                let add = ui::button("game-add-it", Tone::Secondary, cx).small().child("Add it!").on_click(cx.listener(|this, _, _, cx| {
+                let add = ui::Button::new("game-add-it").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Add it!").on_click(cx.listener(|this, _, _, cx| {
                     let open = this.settings.as_ref().is_some_and(|s| s.adding_game.is_some());
                     if let Some(view) = &mut this.settings {
                         view.adding_game = (!open).then(crate::games::addable);
@@ -27,17 +27,17 @@ impl Waffle {
                     // lint-allow(global-notify): the settings window is built in Waffle's own render_root, not in a column, so only an app redraw shows this change
                     cx.notify();
                 }));
-                ui::settings_row("registered-games", false, cx).child(ui::settings_text("No game detected", Some("Not seeing your game?"), cx)).child(add)
+                ui::Item::setting("registered-games", false, cx).child(ui::settings_text("No game detected", Some("Not seeing your game?"), cx)).child(add)
             }
         };
         card = card.child(playing);
         if let Some(programs) = self.settings.as_ref().and_then(|s| s.adding_game.clone()) {
             if programs.is_empty() {
-                card = card.child(ui::settings_row("game-add-none", true, cx).child(ui::settings_text("No programs running that could be a game", None::<&str>, cx)));
+                card = card.child(ui::Item::setting("game-add-none", true, cx).child(ui::settings_text("No programs running that could be a game", None::<&str>, cx)));
             }
             for (i, (path, name)) in programs.into_iter().enumerate() {
                 let added = Added { path: path.clone(), name: name.clone() };
-                let row = ui::settings_choice(ui::settings_row(SharedString::from(format!("game-add-{i}")), true, cx), cx)
+                let row = ui::settings_choice(ui::Item::setting(SharedString::from(format!("game-add-{i}")), true, cx), cx)
                     .child(ui::settings_text(name, Some(path), cx))
                     .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::Plus).size(ui::ICON_MD)))
                     .on_click(cx.listener(move |this, _, _, cx| this.add_game(added.clone(), cx)));
@@ -46,9 +46,9 @@ impl Waffle {
         }
         let mut seen = self.prefs.games_seen.clone();
         seen.sort_by_key(|s| std::cmp::Reverse(s.last));
-        let mut list = ui::settings_card(cx);
+        let mut list = ui::Card::new(cx);
         if seen.is_empty() {
-            list = list.child(ui::settings_row("games-seen-none", false, cx).child(ui::settings_text("Games you play will show here", None::<&str>, cx)));
+            list = list.child(ui::Item::setting("games-seen-none", false, cx).child(ui::settings_text("Games you play will show here", None::<&str>, cx)));
         }
         for (i, game) in seen.into_iter().enumerate() {
             list = list.child(self.seen_row(i, game, now, window, cx));
@@ -60,7 +60,7 @@ impl Waffle {
         )]
     }
 
-    fn seen_row(&self, i: usize, game: Seen, now: i64, window: &mut Window, cx: &mut Context<Self>) -> gpui_kit::Stateful<gpui_kit::Div> {
+    fn seen_row(&self, i: usize, game: Seen, now: i64, _window: &mut Window, cx: &mut Context<Self>) -> gpui_kit::Stateful<gpui_kit::Div> {
         let on = !self.prefs.games_off.contains(&game.id);
         let added = self.prefs.games_added.iter().any(|a| a.path == game.id);
         let playing = self.games.mine.as_ref().is_some_and(|g| g.app_id == game.id);
@@ -70,12 +70,12 @@ impl Waffle {
             (false, false) => format!("Last played {}", crate::panel::ago(now - game.last).to_lowercase()),
         };
         let id = game.id.clone();
-        let switch = ui::switch_live(SharedString::from(format!("game-detect-{i}")), on, window, cx).on_click(cx.listener(move |this, _, _, cx| this.toggle_game_detection(&id, cx)));
+        let switch = ui::Switch::new(SharedString::from(format!("game-detect-{i}"))).checked(on).on_click(cx.listener(move |this, _, _, cx| this.toggle_game_detection(&id, cx)));
         let remove = added.then(|| {
             let path = game.id.clone();
-            ui::icon_button(SharedString::from(format!("game-remove-{i}")), Glyph::X, "Remove game", cx).on_click(cx.listener(move |this, _, _, cx| this.remove_game(&path, cx)))
+            ui::Button::new(SharedString::from(format!("game-remove-{i}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Remove game").on_click(cx.listener(move |this, _, _, cx| this.remove_game(&path, cx)))
         });
-        ui::settings_row(SharedString::from(format!("game-seen-{i}")), i > 0, cx).child(ui::settings_text(game.name, Some(detail), cx)).children(remove).child(switch).when(!on, |r| r.opacity(0.7))
+        ui::Item::setting(SharedString::from(format!("game-seen-{i}")), i > 0, cx).child(ui::settings_text(game.name, Some(detail), cx)).children(remove).child(switch).when(!on, |r| r.opacity(0.7))
     }
 
     fn add_game(&mut self, added: Added, cx: &mut Context<Self>) {

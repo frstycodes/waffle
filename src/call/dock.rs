@@ -87,15 +87,15 @@ impl Waffle {
         // The ping mark shows only once connected, in its quality's colour; it says the ping under the pointer.
         let mark = ping.filter(|_| connected).map(|ms| {
             let bars = match ms {
-                ms if ms > PING_BAD => ui::bars_weak(ping_color(ms, cx), 12.),
-                ms => ui::bars_still(ping_color(ms, cx), 12.),
+                ms if ms > PING_BAD => ui::Spinner::weak(ping_color(ms, cx), 12.),
+                ms => ui::Spinner::still(ping_color(ms, cx), 12.),
             };
-            div().id("voice-ping").flex_none().child(bars).tooltip(move |window, cx| ui::tip(format!("{ms} ms"), window, cx))
+            div().id("voice-ping").flex_none().child(bars).tooltip(move |window, cx| ui::Tooltip::new(format!("{ms} ms")).build(window, cx))
         });
         let (hovered, on_hover) = ui::hover_state("voice-status-hover", window, cx);
         let details = if video { "Video Details" } else { "Voice Details" };
         let word = ui::hover_roll("voice-status-roll", ui::line(word), ui::line(details), hovered, ui::LINE_SM, window, cx).flex_1();
-        let status = div() // lint-allow(custom-button): ui::button and ui::menu_row fill on hover; Discord's status is a bare link with no fill
+        let status = div() // lint-allow(custom-button): ui::Button and ui::DropdownMenuItem::new fill on hover; Discord's status is a bare link with no fill
             .id("voice-status")
             .flex_1()
             .min_w_0()
@@ -110,13 +110,13 @@ impl Waffle {
         let leave_tip = if crate::discord::STAGE_TYPE == call.channel.raw_type { "Disconnect Quietly" } else { "Disconnect" };
         // Noise suppression and Disconnect, as Discord's; noise suppression opens its popover.
         let noise_open = self.voice_popover == Some(VoicePopover::Noise);
-        let noise = ui::icon_button("voice-noise", Glyph::Soundwave, "Noise Suppression", cx)
-            .toggled(noise_open, cx)
+        let noise = ui::Button::new("voice-noise").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Soundwave).tooltip_text("Noise Suppression")
+            .toggled(noise_open)
             .on_click(cx.listener(|this, _, _, cx| {
                 this.toggle_voice_popover(VoicePopover::Noise);
                 cx.notify(); // lint-allow(global-notify): the button lights in the nav dock and its popover is an overlay
             }));
-        let top = ui::row().gap_1().child(status).child(noise).child(ui::icon_button("hang-up", Glyph::CallEnd, leave_tip, cx).on_click(cx.listener(|this, _, _, cx| this.leave_call_asking(cx))));
+        let top = ui::row().gap_1().child(status).child(noise).child(ui::Button::new("hang-up").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::CallEnd).tooltip_text(leave_tip).on_click(cx.listener(|this, _, _, cx| this.leave_call_asking(cx))));
         let wait = if state == ConnState::Error { "Available once you're reconnected" } else { "Available once you're connected" };
         let ready = |label: &'static str| if connected { label } else { wait };
         let sharing = call.sharing.is_some();
@@ -145,7 +145,7 @@ impl Waffle {
             .gap_2()
             .rounded_t(px(RADIUS_MD)).corner_shape(ui::SQUIRCLE)
             .relative()
-            .child(ui::inset_rule(PANEL_PAD, cx))
+            .child(ui::Separator::new().inset(PANEL_PAD))
             .children(self.activity_panel_row(cx)).child(top)
             // A stage's audience has no camera, share or activities, as Discord's.
             .when(!self.in_stage_audience(), |v| v.child(ui::row().items_stretch().gap_2().child(camera).child(share).children(soundboard).child(activities)));
@@ -163,7 +163,7 @@ impl Waffle {
                 .gap_2()
                 .rounded_t(px(RADIUS_MD)).corner_shape(ui::SQUIRCLE)
                 .relative()
-                .child(ui::inset_rule(PANEL_PAD, cx))
+                .child(ui::Separator::new().inset(PANEL_PAD))
                 .child(
                     div()
                         .flex_1()
@@ -171,7 +171,7 @@ impl Waffle {
                         .child(ui::row().h_5().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(tone).child("Voice disconnected"))
                         .child(why_line(error, tone)),
                 )
-                .child(ui::icon_button("dismiss-voice", Glyph::X, "Dismiss", cx).on_click(cx.listener(|this, _, _, cx| {
+                .child(ui::Button::new("dismiss-voice").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Dismiss").on_click(cx.listener(|this, _, _, cx| {
                     this.voice_error = None;
                     this.redraw(Column::Nav, cx);
                 })))
@@ -196,12 +196,12 @@ impl Waffle {
         // meter follows the test while it runs, the call's mic otherwise.
         let testing = self.mic_test.is_some();
         let level = ((if testing { self.mic_level } else { call.level.0 }) + 100.) / 100.;
-        let test = ui::button("noise-mic-test", ui::Tone::Secondary, cx)
-            .small()
+        let test = ui::Button::new("noise-mic-test").variant(ui::ButtonVariant::Secondary)
+            .size(ui::ButtonSize::Sm)
             .flex_none()
             .child(if testing { "Stop" } else { "Test" })
             .on_click(cx.listener(|this, _, _, cx| this.toggle_mic_test(cx)));
-        let card = ui::surface(cx)
+        let card = ui::PopoverContent::new(cx)
             .w(px(NOISE_WIDTH))
             .p_4()
             .gap_3()
@@ -213,7 +213,7 @@ impl Waffle {
                     .gap_2()
                     .cursor_pointer()
                     .child(div().text_color(strong).font_weight(FontWeight::MEDIUM).child("Noise Suppression"))
-                    .child(ui::switch_live("noise-switch", on, window, cx))
+                    .child(ui::Switch::new("noise-switch").checked(on))
                     .on_click(cx.listener(|this, _, _, cx| this.toggle_noise_suppression(cx))),
             )
             .child(div().text_color(muted).child("Make some noise, like clapping your hands, while speaking. Your friends will hear nothing but your beautiful voice."))
@@ -225,7 +225,7 @@ impl Waffle {
             );
         let sidebar = RAIL_WIDTH + self.channels_width;
         let at = gpui_kit::point(px(sidebar - 8.), window.viewport_size().height - px(self.panel_stack_height() + 16.));
-        Some(call_backdrop("noise-backdrop", cx).child(ui::floating_at("noise-card", at, gpui_kit::Anchor::BottomRight, ui::rise(card.transform_origin(ui::corner(true, true)), "noise-card", Duration::ZERO))).into_any_element())
+        Some(call_backdrop("noise-backdrop", cx).child(ui::Popover::floating_at("noise-card", at, gpui_kit::Anchor::BottomRight, ui::rise(card.transform_origin(ui::corner(true, true)), "noise-card", Duration::ZERO))).into_any_element())
     }
 
     // .connpop: how the connection is doing, ping over the last few minutes, the numbers behind it,
@@ -257,7 +257,7 @@ impl Waffle {
             .bg(palette::surface(palette::Level::Page, cx))
             .items_end()
             .gap_0p5()
-            .children(stats.last_pings.iter().map(|&p| div().flex_1().min_w_0p5().h(relative((p as f32 / peak).clamp(0.06, 1.))).rounded_t_xs().rounded_b(ui::HAIRLINE).bg(ping_color(p, cx)))); // lint-allow(custom-divider): ui::progress_bar lacks a ping graph; these are data-sized bars, not dividers
+            .children(stats.last_pings.iter().map(|&p| div().flex_1().min_w_0p5().h(relative((p as f32 / peak).clamp(0.06, 1.))).rounded_t_xs().rounded_b(ui::HAIRLINE).bg(ping_color(p, cx)))); // lint-allow(custom-divider): ui::Progress lacks a ping graph; these are data-sized bars, not dividers
         let swatch = |color: Hsla, text: &'static str| ui::row().gap_1().child(div().size_2().rounded_xs().bg(color)).child(text);
         let legend = ui::row().items_stretch()
             .flex_wrap()
@@ -281,7 +281,7 @@ impl Waffle {
         let positive = palette::positive_ink(cx);
         // The server by its short name, as Discord's ("rotterdam8412").
         let host = stats.endpoint.split('.').next().unwrap_or_default().to_owned();
-        let card = ui::col() // lint-allow(custom-badge, custom-mark, custom-surface): ui::surface lacks the stage-scoped quality card (stage colours, not palette)
+        let card = ui::col() // lint-allow(custom-badge, custom-mark, custom-surface): ui::PopoverContent::new lacks the stage-scoped quality card (stage colours, not palette)
             .id("connection-card")
             .occlude()
             .absolute()
@@ -378,7 +378,7 @@ pub(super) fn panel_action(id: &'static str, glyph: Glyph, tip: &'static str, en
         .child(Icon::new(glyph).size(ui::ICON_LG))
         .when(enabled, |b| b.cursor_pointer().hover(move |s| s.bg(press)))
         .when(!enabled, |b| b.opacity(0.45).cursor(gpui_kit::CursorStyle::OperationNotAllowed))
-        .tooltip(move |window, cx| ui::tip(tip, window, cx))
+        .tooltip(move |window, cx| ui::Tooltip::new(tip).build(window, cx))
 }
 
 // A connection state's kind, which sets its word's ink: Discord's positive, warning and critical.

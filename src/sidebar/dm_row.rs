@@ -63,7 +63,7 @@ impl Waffle {
         // word; a group counts its members.
         let line = |key: &str, cx: &gpui_kit::App| -> Option<Div> {
             let line = match (typing && !dm_typing, presence.clone(), channel.recipient.as_ref()) {
-                (true, _, _) => Some(div().child(ui::bars(SharedString::from(format!("dm-typing-{}{key}", channel.id)), faint, 10.)).child("Typing…")),
+                (true, _, _) => Some(div().child(ui::Spinner::new(SharedString::from(format!("dm-typing-{}{key}", channel.id)), faint, 10.)).child("Typing…")),
                 (false, Some(p), Some(user)) => crate::panel::activity_status(user, &p, None).map(|status| div().child(status.line(cx))),
                 (false, Some(_), None) => None,
                 // A group always counts us and at least one other, so never "1 Member".
@@ -78,7 +78,7 @@ impl Waffle {
                     ui::row()
                         .gap_1()
                         .child(ui::line(channel.name.clone()).text_size(ui::TEXT_MD).line_height(ui::LINE_SM).font_weight(FontWeight::MEDIUM))
-                        .children(channel.recipient.as_ref().and_then(|u| u.tag.as_ref()).map(|tag| crate::chat::guild_tag(tag, cx).flex_none())),
+                        .children(channel.recipient.as_ref().and_then(|u| u.tag.as_ref()).map(|tag| crate::chat::guild_tag(tag).flex_none())),
                 )
                 .children(line(key, cx).map(|l| l.flex().items_center().gap_1().min_w_0().text_size(ui::TEXT_XS).text_color(faint)))
         };

@@ -19,7 +19,7 @@ use crate::{
     discord::{Message, MediaKind},
     icons::Glyph,
     palette,
-    ui::{self, Check, RADIUS_LG, Squircle as _, Tone},
+    ui::{self, Check, RADIUS_LG, Squircle as _},
 };
 
 // Discord's textarea limit; it shows no counter or error, it just stops.
@@ -150,19 +150,19 @@ impl Waffle {
         let strong = palette::strong(cx);
         let head = ui::row()
             .child(div().flex_1().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(strong).child("Modify Attachment"))
-            .child(ui::icon_button("modify-attachment-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_modify_attachment(cx))));
+            .child(ui::Button::new("modify-attachment-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_modify_attachment(cx))));
         let name_focus = gpui_kit::Focusable::focus_handle(self.dialog_input.read(cx), cx);
-        let name = ui::text_field("modify-attachment-name", Input::new(&self.dialog_input).appearance(false).disabled(sent), &name_focus).disabled(sent);
+        let name = ui::Input::new("modify-attachment-name", Input::new(&self.dialog_input).appearance(false).disabled(sent), &name_focus).disabled(sent);
         let description = form.kind.describable().then(|| {
             let focus = gpui_kit::Focusable::focus_handle(self.alt_input.read(cx), cx);
-            ui::field("Description (Alt Text)", cx).child(ui::text_area("modify-attachment-alt", Textarea::new(&self.alt_input).appearance(false).px_0().text_size(ui::TEXT_SM), &focus))
+            ui::Field::new("Description (Alt Text)", cx).child(ui::Textarea::new("modify-attachment-alt", Textarea::new(&self.alt_input).appearance(false).px_0().text_size(ui::TEXT_SM), &focus))
         });
         let checked = if form.spoiler || forced { Check::On } else { Check::Off };
         let spoiler = ui::row()
             .id("modify-attachment-spoiler")
             .gap_2p5()
             .text_color(if forced { palette::muted(cx) } else { strong })
-            .child(ui::check_live("modify-attachment-spoiler-box", checked, window, cx))
+            .child(ui::Checkbox::new("modify-attachment-spoiler-box").checked(checked))
             .child("Mark as spoiler")
             .when(forced, |row| row.opacity(0.6))
             .when(!forced, |row| {
@@ -176,9 +176,9 @@ impl Waffle {
         let actions = ui::row().items_stretch()
             .justify_end()
             .gap_2()
-            .child(ui::button("modify-attachment-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_modify_attachment(cx))))
-            .child(ui::button("modify-attachment-save", Tone::Primary, cx).child("Save").on_click(cx.listener(|this, _, _, cx| this.save_modify_attachment(cx))));
-        let body = ui::dialog_body()
+            .child(ui::Button::new("modify-attachment-cancel").variant(ui::ButtonVariant::Secondary).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_modify_attachment(cx))))
+            .child(ui::Button::new("modify-attachment-save").child("Save").on_click(cx.listener(|this, _, _, cx| this.save_modify_attachment(cx))));
+        let body = ui::DialogContent::new()
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
                 if e.keystroke.key == "escape" {
                     this.close_modify_attachment(cx);
@@ -186,12 +186,12 @@ impl Waffle {
             }))
             .child(head)
             .child(self.modify_preview(form, cx))
-            .child(ui::field("Filename", cx).child(name))
+            .child(ui::Field::new("Filename", cx).child(name))
             .children(description)
             .child(spoiler)
             .child(actions);
         let backdrop = div().id("modify-attachment-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_modify_attachment(cx)));
-        Some(ui::modal(backdrop, ui::dialog("modify-attachment", 440., body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("modify-attachment", 440., body, window, cx), cx))
     }
 
     // The picture as the tile shows it, or the file's type icon.

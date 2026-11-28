@@ -175,7 +175,7 @@ impl Render for Setup {
                 .bg(palette::surface(Level::Page, cx))
                 .items_center()
                 // lint-allow(titlebar-clearance): the setup window opens with titlebar: None, so no caption buttons or traffic lights share its top; its own close button ends this row.
-                .child(ui::row().id("setup-drag").w_full().justify_end().window_control_area(WindowControlArea::Drag).child(ui::icon_button("setup-close", Glyph::X, "Close", cx).on_click(|_, _, cx| cx.quit())))
+                .child(ui::row().id("setup-drag").w_full().justify_end().window_control_area(WindowControlArea::Drag).child(ui::Button::new("setup-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(|_, _, cx| cx.quit())))
                 .child(img(Illustration::InstallerWaffle.path()).size(px(ART)).flex_none().opacity(if failed { 0.45 } else { 1. }))
                 .child(
                     ui::col()
@@ -186,13 +186,13 @@ impl Render for Setup {
                         .items_center()
                         .child(ui::line(title).text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
                         .child(div().w_full().text_center().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(palette::muted(cx)).child(detail))
-                        .children((!failed).then(|| div().pt_3().w(px(TRACK)).child(ui::progress_bar(self.fraction(), cx).joined().track(palette::track(cx)))))
+                        .children((!failed).then(|| div().pt_3().w(px(TRACK)).child(ui::Progress::new(self.fraction()).joined().track(palette::track(cx)))))
                         .children(failed.then(|| {
                             ui::row()
                                 .pt_3()
                                 .gap_2()
-                                .child(ui::button("setup-quit", Tone::Secondary, cx).child("Close").on_click(|_, _, cx| cx.quit()))
-                                .child(ui::button("setup-retry", Tone::Primary, cx).child("Try again").on_click(cx.listener(|this, _, _, cx| this.start(cx))))
+                                .child(ui::Button::new("setup-quit").variant(ui::ButtonVariant::Secondary).child("Close").on_click(|_, _, cx| cx.quit()))
+                                .child(ui::Button::new("setup-retry").child("Try again").on_click(cx.listener(|this, _, _, cx| this.start(cx))))
                         })),
                 ),
         )

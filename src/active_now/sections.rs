@@ -26,7 +26,7 @@ impl Waffle {
         let raised = palette::surface(palette::Level::Raised, cx);
         let lead = &party.members[0];
         let names: Vec<&str> = party.members.iter().map(|m| m.name.as_str()).collect();
-        let face = ui::badged(ui::avatar(lead.avatar.clone(), ui::AVATAR_LG), ui::AVATAR_LG, ui::Shape::Round, header_fill(cx)).status(self.presences.get(&lead.id).map(|p| p.mark()));
+        let face = ui::badged(ui::Avatar::new(lead.avatar.clone(), ui::AVATAR_LG), ui::AVATAR_LG, ui::Shape::Round, header_fill(cx)).status(self.presences.get(&lead.id).map(|p| p.mark()));
         let who = ui::col()
             .flex_1()
             .child(ui::line(title(&names)).text_size(ui::TEXT_MD).line_height(ui::LINE_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::text(cx)))
@@ -40,7 +40,7 @@ impl Waffle {
             sections.push(self.party_activity(party, rich, cx));
         }
         let key = party.key.clone();
-        ui::card(SharedString::from(format!("active-now-{key}")), cx)
+        ui::Card::interactive(SharedString::from(format!("active-now-{key}")), cx)
             .scoped(raised, palette::surface(palette::Level::Overlay, cx), palette::text(cx), palette::text(cx))
             .bordered(cx)
             .stacked()
@@ -76,8 +76,8 @@ impl Waffle {
         let occupants: Vec<ui::Entry> = party.occupants.iter().map(|id| ui::Entry::person(self.user_avatar(id), self.user_name(id))).collect();
         let joined = self.call.as_ref().is_some_and(|c| c.channel.id == channel.id);
         // Waffle's own: Discord joins from the menu or the channel's name; a button says it plainly.
-        let join = ui::button(SharedString::from(format!("active-now-join-{channel_id}")), ui::Tone::Secondary, cx)
-            .small()
+        let join = ui::Button::new(SharedString::from(format!("active-now-join-{channel_id}"))).variant(ui::ButtonVariant::Secondary)
+            .size(ui::ButtonSize::Sm)
             .disabled(joined)
             .child(if joined { "Joined" } else { "Join" })
             .on_click(cx.listener(move |this, _, _, cx| {
@@ -92,7 +92,7 @@ impl Waffle {
     fn party_stream(&self, party: &Party, user_id: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         let user = party.members.iter().find(|m| m.id == user_id)?;
         let doing = self.presences.get(user_id).and_then(|p| p.activity.as_ref()).map(|a| a.text.clone()).unwrap_or_else(|| "Sharing their screen".into());
-        let row = ui::row().gap_3().child(ui::avatar(user.avatar.clone(), ui::AVATAR_LG)).child(two_lines(user.name.clone(), Some(doing), cx)).child(ui::live_badge());
+        let row = ui::row().gap_3().child(ui::Avatar::new(user.avatar.clone(), ui::AVATAR_LG)).child(two_lines(user.name.clone(), Some(doing), cx)).child(ui::Badge::live());
         let group = SharedString::from(format!("active-now-stream-{user_id}"));
         let preview = div()
             .relative()
@@ -200,7 +200,7 @@ fn two_lines(first: String, second: Option<String>, cx: &App) -> Div {
 
 fn faces(id: &str, people: Vec<ui::Entry>, cx: &App) -> Stateful<Div> {
     let raised = palette::surface(palette::Level::Raised, cx);
-    ui::listed_stack(SharedString::from(id.to_owned()), "People", people, FACES, ui::AVATAR_MD, raised, palette::surface(palette::Level::Page, cx), palette::text(cx))
+    ui::AvatarGroup::listed(SharedString::from(id.to_owned()), "People", people, FACES, ui::AVATAR_MD, raised, palette::surface(palette::Level::Page, cx), palette::text(cx))
 }
 
 fn brand(kind: &str, ink: Hsla) -> Div {

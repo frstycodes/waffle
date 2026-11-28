@@ -10,7 +10,7 @@ use gpui_kit::{
     div, prelude::FluentBuilder, px,
 };
 
-use super::{RADIUS_MD, RADIUS_SM, Squircle, control::{TabKind, part, tab_option}, count_badge, seg_lift};
+use super::{RADIUS_MD, RADIUS_SM, Squircle, control::{TabKind, part, tab_option}, Badge, seg_lift};
 use crate::{icons::Glyph, motion, palette};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -51,21 +51,20 @@ impl Tab {
     }
 }
 
-// Underline tabs split a page into views.
-pub fn tabs(id: impl Into<ElementId>, items: &[Tab], selected: usize, on_select: impl Fn(usize, &mut Window, &mut App) + 'static, window: &mut Window, cx: &mut App) -> Div {
+
+fn underline(id: impl Into<ElementId>, items: &[Tab], selected: usize, on_select: impl Fn(usize, &mut Window, &mut App) + 'static, window: &mut Window, cx: &mut App) -> Div {
     strip(id.into(), Style::Underline, items, selected, Rc::new(on_select), window, cx)
 }
 
 // Pill tabs filter a list inside one view.
-pub fn pill_tabs(id: impl Into<ElementId>, items: &[Tab], selected: usize, on_select: impl Fn(usize, &mut Window, &mut App) + 'static, window: &mut Window, cx: &mut App) -> Div {
+fn pills(id: impl Into<ElementId>, items: &[Tab], selected: usize, on_select: impl Fn(usize, &mut Window, &mut App) + 'static, window: &mut Window, cx: &mut App) -> Div {
     strip(id.into(), Style::Pills, items, selected, Rc::new(on_select), window, cx)
 }
 
 // A recessed track with one raised thumb that springs between options sized to their labels.
-pub fn segmented_live(id: impl Into<ElementId>, labels: &[&'static str], selected: usize, on_select: impl Fn(usize, &mut Window, &mut App) + 'static, window: &mut Window, cx: &mut App) -> Div {
-    let items: Vec<Tab> = labels.iter().map(|l| Tab::new(*l)).collect();
+fn segmented(id: impl Into<ElementId>, items: &[Tab], selected: usize, on_select: impl Fn(usize, &mut Window, &mut App) + 'static, window: &mut Window, cx: &mut App) -> Div {
     // A row wrapper takes whatever width the parent stretches it to, so the track itself hugs its options.
-    div().flex().child(strip(id.into(), Style::Segmented, &items, selected, Rc::new(on_select), window, cx))
+    div().flex().child(strip(id.into(), Style::Segmented, items, selected, Rc::new(on_select), window, cx))
 }
 
 type OnSelect = Rc<dyn Fn(usize, &mut Window, &mut App)>;
@@ -88,7 +87,7 @@ fn strip(id: ElementId, style: Style, items: &[Tab], selected: usize, on_select:
         let on_select = on_select.clone();
         tab_option(part_n(&id, i), kind, i == selected, tab.glyph, cx)
             .child(tab.label.clone())
-            .when_some(tab.count, |o, n| o.child(count_badge(n)))
+            .when_some(tab.count, |o, n| o.child(Badge::count(n)))
             .when(tab.accent, |o| o.text_color(accent_ink).when(i != selected, |o| o.squircle(RADIUS_SM).bg(accent_tint)))
             .on_click(move |_, window, cx| on_select(i, window, cx))
     });
@@ -139,4 +138,124 @@ fn slide(id: &ElementId, style: Style, measured: &Entity<Measured>, selected: us
 
 fn part_n(id: &ElementId, i: usize) -> ElementId {
     ElementId::NamedChild(std::sync::Arc::new(id.clone()), SharedString::from(format!("option-{i}")))
+}
+
+// How tabs look: the recessed segmented track, or the underline strip.
+// Keywords: tabs variant, segmented, underline, line tabs, shadcn
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum TabsVariant {
+    // A recessed track with one raised thumb that springs between options sized to their labels.
+    #[default]
+    Default,
+    // Underline tabs split a page into views.
+    Line,
+}
+
+type OnValueChange = Box<dyn Fn(usize, &mut Window, &mut App) + 'static>;
+
+// shadcn/ui's Tabs: `Tabs::new(id).tabs(&[Tab::new("Overview")]).value(0).on_value_change(|i, window, cx| ..)`. The default
+// variant is the segmented track, `Line` the underline strip.
+// Keywords: tabs, segmented control, underline tabs, view switch, tab strip, segment, shadcn
+#[derive(gpui_kit::IntoElement)]
+pub struct Tabs {
+    base: Div,
+    id: ElementId,
+    variant: TabsVariant,
+    items: Vec<Tab>,
+    value: usize,
+    on_value_change: Option<OnValueChange>,
+}
+
+impl Tabs {
+    pub fn new(id: impl Into<ElementId>) -> Self {
+        Self { base: div(), id: id.into(), variant: TabsVariant::default(), items: Vec::new(), value: 0, on_value_change: None }
+    }
+
+    pub fn variant(mut self, variant: TabsVariant) -> Self {
+        self.variant = variant;
+        self
+    }
+
+    pub fn tabs(mut self, items: &[Tab]) -> Self {
+        self.items = items.to_vec();
+        self
+    }
+
+    // Tabs of plain labels.
+    pub fn labels(mut self, labels: &[&'static str]) -> Self {
+        self.items = labels.iter().map(|l| Tab::new(*l)).collect();
+        self
+    }
+
+    pub fn value(mut self, value: usize) -> Self {
+        self.value = value;
+        self
+    }
+
+    pub fn on_value_change(mut self, change: impl Fn(usize, &mut Window, &mut App) + 'static) -> Self {
+        self.on_value_change = Some(Box::new(change));
+        self
+    }
+}
+
+impl gpui_kit::RenderOnce for Tabs {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl gpui_kit::IntoElement {
+        let change = self.on_value_change.unwrap_or_else(|| Box::new(|_, _, _| {}));
+        let strip = match self.variant {
+            TabsVariant::Line => underline(self.id, &self.items, self.value, change, window, cx),
+            TabsVariant::Default => segmented(self.id, &self.items, self.value, change, window, cx),
+        };
+        self.base.child(strip)
+    }
+}
+
+// shadcn/ui's ToggleGroup, single choice: pill options that filter a list inside one view.
+// Keywords: toggle group, pill tabs, filter pills, filter strip, chips row, single choice, shadcn
+#[derive(gpui_kit::IntoElement)]
+pub struct ToggleGroup {
+    base: Div,
+    id: ElementId,
+    items: Vec<Tab>,
+    value: usize,
+    on_value_change: Option<OnValueChange>,
+}
+
+impl ToggleGroup {
+    pub fn new(id: impl Into<ElementId>) -> Self {
+        Self { base: div(), id: id.into(), items: Vec::new(), value: 0, on_value_change: None }
+    }
+
+    pub fn items(mut self, items: &[Tab]) -> Self {
+        self.items = items.to_vec();
+        self
+    }
+
+    pub fn value(mut self, value: usize) -> Self {
+        self.value = value;
+        self
+    }
+
+    pub fn on_value_change(mut self, change: impl Fn(usize, &mut Window, &mut App) + 'static) -> Self {
+        self.on_value_change = Some(Box::new(change));
+        self
+    }
+}
+
+impl gpui_kit::RenderOnce for ToggleGroup {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl gpui_kit::IntoElement {
+        let change = self.on_value_change.unwrap_or_else(|| Box::new(|_, _, _| {}));
+        self.base.child(pills(self.id, &self.items, self.value, change, window, cx))
+    }
+}
+
+impl Styled for Tabs {
+    fn style(&mut self) -> &mut gpui_kit::StyleRefinement {
+        self.base.style()
+    }
+}
+
+impl Styled for ToggleGroup {
+    fn style(&mut self) -> &mut gpui_kit::StyleRefinement {
+        self.base.style()
+    }
 }

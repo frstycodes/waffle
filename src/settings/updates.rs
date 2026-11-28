@@ -9,7 +9,7 @@ use crate::{
     Waffle,
     icons::Glyph,
     palette,
-    ui::{self, Tone},
+    ui::{self},
     updater::{CURRENT, Command, Status},
 };
 
@@ -17,21 +17,21 @@ impl Waffle {
     pub(super) fn updates_page(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<Section> {
         let status = &self.updates.status;
         let notes_version = status.version().unwrap_or(CURRENT).to_owned();
-        let notes = ui::settings_choice(ui::settings_row("whats-new", true, cx).child(ui::settings_text(format!("What's new in {notes_version}"), Some("Release notes on GitHub"), cx)), cx)
+        let notes = ui::settings_choice(ui::Item::setting("whats-new", true, cx).child(ui::settings_text(format!("What's new in {notes_version}"), Some("Release notes on GitHub"), cx)), cx)
             .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)))
             .on_click(move |_, _, cx: &mut App| cx.open_url(&crate::updater::release_notes(&notes_version)));
         let checked = self.updates.checked_at.map_or_else(|| "Not yet".to_owned(), |at| crate::panel::ago(elapsed_ms(at)));
-        let last_checked = ui::settings_row("last-checked", true, cx).child(ui::settings_text("Last checked", None::<&str>, cx)).child(div().text_color(palette::muted(cx)).child(checked));
-        let card = ui::settings_card(cx).child(self.update_status_row(window, cx)).child(notes).child(last_checked);
+        let last_checked = ui::Item::setting("last-checked", true, cx).child(ui::settings_text("Last checked", None::<&str>, cx)).child(div().text_color(palette::muted(cx)).child(checked));
+        let card = ui::Card::new(cx).child(self.update_status_row(window, cx)).child(notes).child(last_checked);
         vec![Section::keyed("Waffle", ui::settings_group("Waffle", cx).child(card).child(ui::settings_caption("Waffle checks for a new version about every hour.", cx)))]
     }
 
     // The app icon, the version, where the updater is, and the action that moves it on.
-    fn update_status_row(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn update_status_row(&self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let status = &self.updates.status;
         let progress = match status {
-            Status::Downloading { done, total: Some(total), .. } => Some(ui::progress_live("update-progress", *done as f32 / (*total).max(1) as f32, window, cx).into_any_element()),
-            Status::Downloading { total: None, .. } => Some(ui::progress_indeterminate("update-progress", cx)),
+            Status::Downloading { done, total: Some(total), .. } => Some(ui::Progress::new(*done as f32 / (*total).max(1) as f32).animated("update-progress").into_any_element()),
+            Status::Downloading { total: None, .. } => Some(ui::Progress::indeterminate("update-progress").into_any_element()),
             _ => None,
         };
         let text = ui::col().min_h_0()
@@ -40,19 +40,19 @@ impl Waffle {
             .child(ui::line(format!("Waffle {CURRENT}")).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
             .child(div().text_size(ui::TEXT_XS).line_height(ui::LINE_DETAIL).text_color(palette::muted(cx)).child(status_line(status, self.updates.updater.is_some())))
             .children(progress.map(|bar| div().pt_1p5().child(bar)));
-        ui::settings_row("update-status", false, cx).child(img(self.prefs.app_icon.asset()).size_12().flex_none()).child(text).child(self.update_action(cx)).into_any_element()
+        ui::Item::setting("update-status", false, cx).child(img(self.prefs.app_icon.asset()).size_12().flex_none()).child(text).child(self.update_action(cx)).into_any_element()
     }
 
     fn update_action(&self, cx: &mut Context<Self>) -> AnyElement {
         match &self.updates.status {
             Status::Ready(staged) => {
                 let staged = staged.clone();
-                ui::button("restart-to-update-page", Tone::Primary, cx).child("Restart to update").on_click(cx.listener(move |this, _, _, cx| this.request_restart(Some(staged.clone()), cx))).into_any_element()
+                ui::Button::new("restart-to-update-page").child("Restart to update").on_click(cx.listener(move |this, _, _, cx| this.request_restart(Some(staged.clone()), cx))).into_any_element()
             }
-            Status::Available(_) | Status::DownloadFailed(_) => ui::button("download-update", Tone::Primary, cx).child("Download update").on_click(cx.listener(|this, _, _, cx| this.ask_updater(Command::Download, cx))).into_any_element(),
+            Status::Available(_) | Status::DownloadFailed(_) => ui::Button::new("download-update").child("Download update").on_click(cx.listener(|this, _, _, cx| this.ask_updater(Command::Download, cx))).into_any_element(),
             status => {
                 let busy = matches!(status, Status::Checking | Status::Downloading { .. });
-                ui::button("check-for-updates", Tone::Secondary, cx)
+                ui::Button::new("check-for-updates").variant(ui::ButtonVariant::Secondary)
                     .child("Check for updates")
                     .disabled(busy)
                     .loading(matches!(status, Status::Checking).then_some("Checking"))

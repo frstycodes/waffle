@@ -163,7 +163,7 @@ pub(super) fn mini_slot(i: usize, shown: usize) -> (f32, f32) {
 // lint-allow(custom-component): ui::server_tile sets initials on the selected fill; the rail's letters sit on the lifted raised tone.
 pub(super) fn letters_tile(label: &str, size: f32, radius: f32, cx: &App) -> Div {
     let label: String = if size < 24. { label.chars().take(1).collect() } else { label.to_owned() };
-    // lint-allow(custom-badge): ui::badge is a label; this is a server's letter tile, scaled with the rail tile.
+    // lint-allow(custom-badge): ui::Badge is a label; this is a server's letter tile, scaled with the rail tile.
     ui::row()
         .size(px(size))
         .flex_none()
@@ -193,7 +193,7 @@ pub(super) fn rail_action(id: &'static str, icon: Icon, tooltip: &'static str, c
         .text_color(palette::muted(cx))
         .hover(move |s| s.bg(raised).text_color(strong))
         .child(icon.size(ui::ICON_XL))
-        .tooltip(move |window, cx| ui::tip(tooltip, window, cx))
+        .tooltip(move |window, cx| ui::Tooltip::new(tooltip).build(window, cx))
         .tooltip_placement(TooltipPlacement::Side)
 }
 

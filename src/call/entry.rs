@@ -32,20 +32,20 @@ impl Waffle {
         let invite = self.call.as_ref().and_then(|c| Some((c.guild_id.clone()?, c.channel.id.clone())));
         let invite_button = move |cx: &mut Context<Self>| {
             let invite = invite.clone();
-            ui::button("entry-invite", ui::Tone::Overlay, cx).small().child("Invite to Voice").on_click(cx.listener(move |this, _, window, cx| {
+            ui::Button::new("entry-invite").scope(ui::ButtonScope::Art).size(ui::ButtonSize::Sm).child("Invite to Voice").on_click(cx.listener(move |this, _, window, cx| {
                 if let Some((guild, channel)) = invite.clone() {
                     this.show_invite(guild, channel, window, cx);
                 }
             }))
         };
-        let choose = |tone: ui::Tone, cx: &mut Context<Self>| {
-            ui::button("entry-activity", tone, cx).small().child("Choose Activity").on_click(cx.listener(|this, e: &gpui_kit::ClickEvent, window, cx| this.toggle_launcher(e.position(), window, cx)))
+        let choose = |scope: ui::ButtonScope, cx: &mut Context<Self>| {
+            ui::Button::new("entry-activity").scope(scope).size(ui::ButtonSize::Sm).child("Choose Activity").on_click(cx.listener(|this, e: &gpui_kit::ClickEvent, window, cx| this.toggle_launcher(e.position(), window, cx)))
         };
         let pitch = div().text_size(ui::TEXT_SM).text_color(stage::muted()).child("Looking for something to do? Start a game or video playlist instantly.");
         if w < ENTRY_FULL {
             return match alone {
                 true => card.child(invite_button(cx)),
-                false => card.child(ui::button("entry-activity", ui::Tone::Overlay, cx).small().child("Start An Activity").on_click(cx.listener(|this, e: &gpui_kit::ClickEvent, window, cx| this.toggle_launcher(e.position(), window, cx)))),
+                false => card.child(ui::Button::new("entry-activity").scope(ui::ButtonScope::Art).size(ui::ButtonSize::Sm).child("Start An Activity").on_click(cx.listener(|this, e: &gpui_kit::ClickEvent, window, cx| this.toggle_launcher(e.position(), window, cx)))),
             }
             .into_any_element();
         }
@@ -53,7 +53,7 @@ impl Waffle {
             return card
                 .child(Icon::new(Glyph::ActivitiesFill).size_8().text_color(palette::logo()))
                 .child(pitch)
-                .child(ui::row().gap_2().child(invite_button(cx)).child(choose(ui::Tone::Stage, cx)))
+                .child(ui::row().gap_2().child(invite_button(cx)).child(choose(ui::ButtonScope::Stage, cx)))
                 .into_any_element();
         }
         // GAP: "Don't show again" lasts the session; Discord keeps it in its settings.
@@ -64,8 +64,8 @@ impl Waffle {
         card.child(div().absolute().top_2().right_2().child(stage_icon_button("entry-close", Glyph::X, "Close", false, cx).on_click(cx.listener(move |this, _, _, cx| dismiss(this, cx)))))
             .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child("Start An Activity"))
             .child(pitch)
-            .child(choose(ui::Tone::Overlay, cx))
-            .child(ui::button("entry-never", ui::Tone::Ghost, cx).small().on_stage().child("Don't show again").on_click(cx.listener(move |this, _, _, cx| dismiss(this, cx))))
+            .child(choose(ui::ButtonScope::Art, cx))
+            .child(ui::Button::new("entry-never").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Sm).scope(ui::ButtonScope::Stage).child("Don't show again").on_click(cx.listener(move |this, _, _, cx| dismiss(this, cx))))
             .into_any_element()
     }
 
@@ -77,11 +77,11 @@ impl Waffle {
         let names: Vec<String> = people.iter().map(|p| p.user.as_ref().map(|u| u.name.clone()).unwrap_or_else(|| self.user_name(&p.user_id))).collect();
         let faces = people.iter().take(JOIN_FACES).map(|p| {
             let avatar = p.user.as_ref().map(|u| u.avatar.clone()).unwrap_or_else(|| self.user_avatar(&p.user_id));
-            ui::row().size(px(JOIN_FACE)).flex_none().justify_center().child(ui::avatar(avatar, ui::AVATAR_XL))
+            ui::row().size(px(JOIN_FACE)).flex_none().justify_center().child(ui::Avatar::new(avatar, ui::AVATAR_XL))
         });
         let locked = !self.can_in(&channel.id, crate::discord::perm::CONNECT);
         let join = channel.clone();
-        let button = ui::button("join-voice", ui::Tone::Overlay, cx).child(if locked { "Channel Locked" } else { "Join Voice" }).disabled(locked).on_click(cx.listener(move |this, _, _, cx| {
+        let button = ui::Button::new("join-voice").scope(ui::ButtonScope::Art).child(if locked { "Channel Locked" } else { "Join Voice" }).disabled(locked).on_click(cx.listener(move |this, _, _, cx| {
             this.stage_ui.join = None;
             this.join_voice(join.clone(), cx);
         }));

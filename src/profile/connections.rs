@@ -14,7 +14,7 @@ pub(super) fn connection_list(list: &[Connection], ink: Ink, cx: &App) -> Option
 }
 
 // The service's mark on its colour, the account name, Discord's verified seal, and ↗ with a click to the account.
-// lint-allow(custom-component): ui::chip is a palette-toned filter that toggles; this chip wears the card's themed ink and opens the account.
+// lint-allow(custom-component): ui::Toggle is a palette-toned filter that toggles; this chip wears the card's themed ink and opens the account.
 fn connection_chip(i: usize, c: &Connection, ink: Ink, cx: &App) -> Stateful<Div> {
     let (platform, color) = platform(&c.kind);
     let url = connection_url(c);
@@ -26,7 +26,7 @@ fn connection_chip(i: usize, c: &Connection, ink: Ink, cx: &App) -> Stateful<Div
     // The seal takes the info ink on the plain card; on a themed one, the card's own ink reads better.
     let seal = if ink.border.is_some() { ink.strong } else { palette::info_ink(cx) };
     let hover = ink.strong.opacity(0.16);
-    // lint-allow(custom-button): ui::chip is a palette-toned filter that toggles; this one wears the card's themed ink and opens the account.
+    // lint-allow(custom-button): ui::Toggle is a palette-toned filter that toggles; this one wears the card's themed ink and opens the account.
     ui::row()
         .id(("profile-connection", i))
         .h_7()
@@ -42,7 +42,7 @@ fn connection_chip(i: usize, c: &Connection, ink: Ink, cx: &App) -> Stateful<Div
         .child(brand_tile(&c.kind, platform, color))
         .child(ui::line(name))
         .when(c.verified, |d| d.child(Icon::new(Glyph::CheckCircle).size(ui::ICON_SM).flex_none().text_color(seal)))
-        .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
+        .tooltip(move |window, cx| ui::Tooltip::new(tip.clone()).build(window, cx))
         .when_some(url, |d, url| d.cursor_pointer().hover(move |s| s.bg(hover)).child(Icon::new(Glyph::Open).size(ui::ICON_SM).flex_none().text_color(ink.muted)).on_click(move |_, _, cx| cx.open_url(&url)))
 }
 

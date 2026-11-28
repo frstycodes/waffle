@@ -503,7 +503,7 @@ fn bot_join_sentence(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Sente
     let s = Sentence::new(&message.id, cx);
     let app = |s: Sentence| {
         let name = chat::profile_trigger(format!("app-{}", message.id), &message.author, ctx).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).hover(|s| s.underline()).child(ctx.name_of(&message.author));
-        let badge = ui::tag_with(Glyph::Checkmark, "APP", cx);
+        let badge = ui::Badge::new("APP").variant(ui::BadgeVariant::Accent).icon(Glyph::Checkmark);
         s.part(ui::row().gap(px(WORD_GAP)).child(name).child(badge))
     };
     match &message.actor {
@@ -512,13 +512,13 @@ fn bot_join_sentence(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Sente
     }
 }
 
-fn wave_button(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Option<AnyElement> {
+fn wave_button(message: &Message, ctx: &Rc<RowContext>, _cx: &App) -> Option<AnyElement> {
     if !ctx.notices.greet || message.author.bot {
         return None;
     }
     let (this, join) = (ctx.this(), message.clone());
-    let button = ui::button(SharedString::from(format!("wave-{}", message.id)), ui::Tone::Secondary, cx)
-        .small()
+    let button = ui::Button::new(SharedString::from(format!("wave-{}", message.id))).variant(ui::ButtonVariant::Secondary)
+        .size(ui::ButtonSize::Sm)
         .child(Icon::new(Glyph::Sticker).size(ui::ICON_MD))
         .child("Wave to say hi!")
         .on_click(move |_, _, cx| {
@@ -560,7 +560,7 @@ fn starter_row(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) -> AnyElem
         return notice_line(&message.id, Glyph::Thread, palette::muted(cx), Sentence::new(&message.id, cx).text(copy), None, Vec::new(), cx);
     };
     let (this, guild_id, channel_id, id) = (ctx.this(), parent.guild_id.clone().or_else(|| message.guild_id.clone()), parent.channel_id.clone(), parent.id.clone());
-    let jump = ui::button(SharedString::from(format!("starter-jump-{}", message.id)), ui::Tone::Secondary, cx).small().child("Jump").on_click(move |_, window, cx| {
+    let jump = ui::Button::new(SharedString::from(format!("starter-jump-{}", message.id))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Jump").on_click(move |_, window, cx| {
         cx.stop_propagation();
         this.update(cx, |this, cx| this.open_message(guild_id.clone(), &channel_id, id.clone(), window, cx)).ok();
     });

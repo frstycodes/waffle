@@ -86,8 +86,8 @@ pub fn settings_text(title: impl Into<SharedString>, detail: Option<impl Into<Sh
 }
 
 // A settings row with a switch at its end; the whole row toggles (the caller adds `on_click`).
-pub fn settings_switch(id: &'static str, title: &'static str, detail: &'static str, on: bool, line: bool, window: &mut Window, cx: &mut App) -> Stateful<Div> {
-    let row = settings_row(id, line, cx).child(settings_text(title, Some(detail), cx)).child(super::switch_live(SharedString::from(format!("{id}-switch")), on, window, cx));
+pub fn settings_switch(id: &'static str, title: &'static str, detail: &'static str, on: bool, line: bool, _window: &mut Window, cx: &mut App) -> Stateful<Div> {
+    let row = settings_row(id, line, cx).child(settings_text(title, Some(detail), cx)).child(super::Switch::new(SharedString::from(format!("{id}-switch"))).checked(on));
     settings_choice(row, cx)
 }
 

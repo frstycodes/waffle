@@ -532,7 +532,7 @@ impl Waffle {
     }
 
     // A select field in the app form: the same field and menu as a message's, its picks the form's.
-    // lint-allow(custom-component): ui::select_options is the open list; this builds a modal's select field from app data and wraps the kit's select
+    // lint-allow(custom-component): ui::Select::options is the open list; this builds a modal's select field from app data and wraps the kit's select
     pub(crate) fn modal_select(&self, ix: usize, select: &Select, picks: &[String], cx: &mut Context<Self>) -> AnyElement {
         let host = SelectHost::Modal(ix);
         let key = host.key(select);
@@ -637,8 +637,9 @@ fn button(message: &Message, b: &Button, path: &str, ctx: &Rc<RowContext>, cx: &
     let (this, m, press) = (ctx.this(), message.clone(), b.clone());
     // GAP: Waffle can't buy, so a premium button never opens Discord's SKU modal; it stays disabled.
     // GAP: no shop glyph in Waffle's icon set; the tag stands in for Discord's ShopIcon.
-    ui::button(SharedString::from(format!("component-{}-{path}", message.id)), tone(b.style), cx)
-        .small()
+    let (variant, scope) = button_look(b.style);
+    ui::Button::new(SharedString::from(format!("component-{}-{path}", message.id))).variant(variant).scope(scope)
+        .size(ui::ButtonSize::Sm)
         .disabled(b.disabled || blocked || premium.is_some() || message.state != SendState::Sent)
         .when(premium.is_some(), |c| c.child(Icon::new(Glyph::Tag).size(ui::ICON_SM)))
         .children(b.emoji.as_deref().map(|e| menu::emoji_face(&as_emoji(e), 18.)))
@@ -676,13 +677,14 @@ fn custom_id(c: &Component) -> Option<String> {
     }
 }
 
-// An app's button colours in Waffle's tones: Discord draws Premium in the brand colour like Primary.
-fn tone(style: ButtonStyle) -> ui::Tone {
+// An app's button look in Waffle's variants: Discord draws Premium in the brand colour like Primary.
+fn button_look(style: ButtonStyle) -> (ui::ButtonVariant, ui::ButtonScope) {
+    use ui::{ButtonScope::Page, ButtonVariant::*};
     match style {
-        ButtonStyle::Primary | ButtonStyle::Premium => ui::Tone::Primary,
-        ButtonStyle::Success => ui::Tone::Positive,
-        ButtonStyle::Danger => ui::Tone::Danger,
-        ButtonStyle::Secondary | ButtonStyle::Link => ui::Tone::Secondary,
+        ButtonStyle::Primary | ButtonStyle::Premium => (Default, Page),
+        ButtonStyle::Success => (Default, ui::ButtonScope::Success),
+        ButtonStyle::Danger => (Destructive, Page),
+        ButtonStyle::Secondary | ButtonStyle::Link => (Secondary, Page),
     }
 }
 
@@ -762,12 +764,13 @@ mod tests {
 
     #[test]
     fn button_styles_take_waffle_tones() {
-        assert_eq!(tone(ButtonStyle::Primary), ui::Tone::Primary);
-        assert_eq!(tone(ButtonStyle::Premium), ui::Tone::Primary, "Discord draws premium in the brand colour");
-        assert_eq!(tone(ButtonStyle::Success), ui::Tone::Positive);
-        assert_eq!(tone(ButtonStyle::Danger), ui::Tone::Danger);
+        use ui::{ButtonScope::Page, ButtonVariant::*};
+        assert_eq!(button_look(ButtonStyle::Primary), (Default, Page));
+        assert_eq!(button_look(ButtonStyle::Premium), (Default, Page), "Discord draws premium in the brand colour");
+        assert_eq!(button_look(ButtonStyle::Success), (Default, ui::ButtonScope::Success));
+        assert_eq!(button_look(ButtonStyle::Danger), (Destructive, Page));
         for neutral in [ButtonStyle::Secondary, ButtonStyle::Link] {
-            assert_eq!(tone(neutral), ui::Tone::Secondary);
+            assert_eq!(button_look(neutral), (Secondary, Page));
         }
     }
 

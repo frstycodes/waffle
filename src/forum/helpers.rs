@@ -90,7 +90,7 @@ pub(super) fn post_age(post: &Channel) -> String {
 pub(super) fn post_time(post: &Channel, by_creation: bool) -> Stateful<Div> {
     let since = if by_creation { post.id.as_str() } else { post.last_message_id.as_deref().unwrap_or(&post.id) };
     let posted = chrono::DateTime::from_timestamp_millis(snowflake_ms(&post.id)).map(|t| t.with_timezone(&chrono::Local).format("%-d %B %Y %H:%M").to_string()).unwrap_or_default();
-    div().id(SharedString::from(format!("post-time-{}", post.id))).child(ago(since)).tooltip(move |window, cx| ui::tip(format!("Posted {posted}"), window, cx))
+    div().id(SharedString::from(format!("post-time-{}", post.id))).child(ago(since)).tooltip(move |window, cx| ui::Tooltip::new(format!("Posted {posted}")).build(window, cx))
 }
 
 // The first message's pictures, four at most: its images and videos' posters, else an embed's thumbnail.
@@ -242,14 +242,14 @@ pub(super) fn attachment_entry(index: usize, file: &crate::discord::Upload) -> V
 }
 
 // A file waiting in the composer: its kind, name and size; callers add the remove button.
-// lint-allow(custom-component): ui::chip is a pressable filter; this is a static file label with its size
+// lint-allow(custom-component): ui::Toggle is a pressable filter; this is a static file label with its size
 pub(super) fn file_chip(file: &PendingFile, cx: &Context<Waffle>) -> Div {
     let glyph = match file.kind() {
         FileKind::Image => Glyph::Image,
         FileKind::Video => Glyph::Video,
         FileKind::Other => Glyph::File,
     };
-    // lint-allow(custom-badge): ui::badge is a 20px solid label; this is a 32px file row with an icon and its size
+    // lint-allow(custom-badge): ui::Badge is a 20px solid label; this is a 32px file row with an icon and its size
     ui::row()
         .h_8()
         .pl_2p5()
@@ -272,11 +272,11 @@ pub(super) fn slowmode_clock(secs: u64, cx: &Context<Waffle>) -> Stateful<Div> {
         .text_color(palette::muted(cx))
         .child(Icon::new(Glyph::Timer).size(ui::ICON_SM))
         .child(countdown(secs))
-        .tooltip(|window, cx| ui::tip("Slowmode is enabled", window, cx))
+        .tooltip(ui::Tooltip::text("Slowmode is enabled"))
 }
 
-pub(super) fn tag_chip(id: SharedString, tag: &ForumTag, on: bool, cx: &Context<Waffle>) -> ui::Control {
-    ui::chip_lead(id, tag.emoji.as_ref().map(|e| emoji_face(e, 16.)), tag.name.clone(), on, cx)
+pub(super) fn tag_chip(id: SharedString, tag: &ForumTag, on: bool) -> ui::Toggle {
+    ui::Toggle::new(id).pressed(on).when_some(tag.emoji.as_ref().map(|e| emoji_face(e, 16.)), |t, l| t.lead(l)).child(tag.name.clone())
 }
 
 pub(super) fn tag_item(tag: &ForumTag, act: impl Fn(&mut Waffle, &mut Window, &mut Context<Waffle>) + 'static) -> crate::menu::Item {
@@ -288,13 +288,13 @@ pub(super) fn tag_item(tag: &ForumTag, act: impl Fn(&mut Waffle, &mut Window, &m
 }
 
 // A tag on a card; one being filtered by takes the accent.
-pub(super) fn post_tag_badge(emoji: Option<&Emoji>, name: impl Into<SharedString>, hit: bool, cx: &Context<Waffle>) -> Div {
+pub(super) fn post_tag_badge(emoji: Option<&Emoji>, name: impl Into<SharedString>, hit: bool, cx: &Context<Waffle>) -> ui::Badge {
     let (fill, ink) = if hit { (palette::accent_soft(cx), palette::accent_ink(cx)) } else { (palette::selected(cx), palette::text(cx)) };
-    ui::badge(fill, ink).h(px(TAG_HEIGHT)).gap_1().children(emoji.map(|e| emoji_face(e, 14.))).child(name.into())
+    ui::Badge::empty().colors(fill, ink).h(px(TAG_HEIGHT)).gap_1().children(emoji.map(|e| emoji_face(e, 14.))).child(name.into())
 }
 
-pub(super) fn reaction_chip(emoji: Emoji, count: Option<u32>, cx: &Context<Waffle>) -> Div {
-    ui::badge(palette::selected(cx), palette::text(cx)).h(px(TAG_HEIGHT)).gap_1().child(emoji_face(&emoji, 14.)).children(count.map(|c| c.to_string()))
+pub(super) fn reaction_chip(emoji: Emoji, count: Option<u32>) -> ui::Badge {
+    ui::Badge::empty().variant(ui::BadgeVariant::Secondary).h(px(TAG_HEIGHT)).gap_1().child(emoji_face(&emoji, 14.)).children(count.map(|c| c.to_string()))
 }
 
 pub(super) fn no_history_notice(forum: &Channel, cx: &Context<Waffle>) -> Div {
@@ -304,13 +304,13 @@ pub(super) fn no_history_notice(forum: &Channel, cx: &Context<Waffle>) -> Div {
     let at = text.find(&name).unwrap_or(0);
     ui::col()
         .gap_2()
-        .child(ui::divider(Some("Older Posts"), cx))
+        .child(ui::Separator::new().label("Older Posts"))
         .child(div().text_center().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(StyledText::new(text.clone()).with_highlights([(at..at + name.len(), bold)])))
 }
 
 // A post card still loading: title, two lines of its opening message, and the foot.
 pub(super) fn post_skeleton(i: usize, cx: &gpui_kit::App) -> AnyElement {
-    let line = |part: &str, width: f32| ui::skeleton(SharedString::from(format!("post-skel-{part}-{i}")), 4., cx).h_3().w(gpui_kit::relative(width));
+    let line = |part: &str, width: f32| ui::Skeleton::new(SharedString::from(format!("post-skel-{part}-{i}"))).radius(4.).h_3().w(gpui_kit::relative(width));
     ui::col()
         .p_4()
         .gap_2p5()

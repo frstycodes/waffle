@@ -159,8 +159,8 @@ impl Waffle {
             .right_4()
             .gap_2()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(ui::button("viewer-open", ui::Tone::Stage, cx).small().h_8().px_3().gap_1p5().child(Icon::new(Glyph::Open).size(ui::ICON_MD)).child("Open in Browser").on_click(move |_, _, cx| cx.open_url(&url)))
-            .child(ui::icon_button("viewer-close", Glyph::X, "Close", cx).tone(ui::Tone::Stage, cx).sized(TOP_BUTTON).on_click(cx.listener(|this, _, _, cx| this.close_viewer(cx))));
+            .child(ui::Button::new("viewer-open").scope(ui::ButtonScope::Stage).size(ui::ButtonSize::Sm).h_8().px_3().gap_1p5().child(Icon::new(Glyph::Open).size(ui::ICON_MD)).child("Open in Browser").on_click(move |_, _, cx| cx.open_url(&url)))
+            .child(ui::Button::new("viewer-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Square(TOP_BUTTON)).scope(ui::ButtonScope::Stage).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_viewer(cx))));
         let foot = ui::col()
             .absolute()
             .bottom_4()
@@ -222,7 +222,7 @@ impl Waffle {
             let current = i == viewer.index;
             let picture = range.contains(&i).then(|| img(discord::thumb_url(item, side)).absolute().inset_0().size(px(THUMB)).object_fit(ObjectFit::Cover).squircle(ui::RADIUS_XS));
             let is_video = matches!(item.kind, MediaKind::Video { .. });
-            // lint-allow(custom-button): ui::icon_button takes a glyph and fills on hover; a thumbnail is a picture that dims and brightens
+            // lint-allow(custom-button): ui::Button takes a glyph and fills on hover; a thumbnail is a picture that dims and brightens
             div()
                 .id(("viewer-thumb", i))
                 .relative()

@@ -20,7 +20,7 @@ pub(super) fn automod_row(message: &Message, ctx: &Rc<RowContext>, cx: &mut App)
         .gap_2()
         .line_height(ui::LINE_LEAD)
         .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(palette::accent_ink(cx)).child("AutoMod"))
-        .child(ui::tag_with(Glyph::Checkmark, "OFFICIAL", cx))
+        .child(ui::Badge::new("OFFICIAL").variant(ui::BadgeVariant::Accent).icon(Glyph::Checkmark))
         .child(div().relative().top_px().whitespace_nowrap().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(chat::format_stamp(&message.timestamp)));
     let avatar = ui::row()
         .size(px(AVATAR))
@@ -92,7 +92,7 @@ pub(super) fn flagged_card(message: &Message, text: &str, matched: Option<&str>,
         .squircle(RADIUS_MD)
         .bg(strong.opacity(0.05))
         .gap_2p5()
-        .child(ui::avatar(message.author.avatar.clone(), 24.).flex_none())
+        .child(ui::Avatar::new(message.author.avatar.clone(), 24.).flex_none())
         .child(
             ui::col().min_h_0()
                 .flex_1()
@@ -120,10 +120,10 @@ pub(super) fn timeout_label(seconds: &str) -> Option<String> {
     Some(format!("{n} {unit}{}", if n == 1 { "" } else { "s" }))
 }
 
-pub(super) fn automod_actions(message: &Message, channel_id: Option<String>, flagged_id: Option<String>, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
+pub(super) fn automod_actions(message: &Message, channel_id: Option<String>, flagged_id: Option<String>, ctx: &Rc<RowContext>, _cx: &App) -> AnyElement {
     let key = &message.id;
     let (this, author) = (ctx.this(), message.author.clone());
-    let actions = ui::button(SharedString::from(format!("automod-actions-{key}")), ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::Shield).size(ui::ICON_MD)).child("Actions").on_click(move |event, _, cx| {
+    let actions = ui::Button::new(SharedString::from(format!("automod-actions-{key}"))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child(Icon::new(Glyph::Shield).size(ui::ICON_MD)).child("Actions").on_click(move |event, _, cx| {
         cx.stop_propagation();
         let at = event.position();
         this.update(cx, |this, cx| this.open_author_menu(author.clone(), at, cx)).ok();
@@ -131,14 +131,14 @@ pub(super) fn automod_actions(message: &Message, channel_id: Option<String>, fla
     let target = channel_id.zip(flagged_id);
     let jump = target.clone().map(|(channel_id, id)| {
         let (this, guild_id) = (ctx.this(), message.guild_id.clone());
-        ui::button(SharedString::from(format!("automod-jump-{key}")), ui::Tone::Secondary, cx).small().child("Jump to Surrounding").on_click(move |_, window, cx| {
+        ui::Button::new(SharedString::from(format!("automod-jump-{key}"))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Jump to Surrounding").on_click(move |_, window, cx| {
             cx.stop_propagation();
             this.update(cx, |this, cx| this.open_message(guild_id.clone(), &channel_id, id.clone(), window, cx)).ok();
         })
     });
     let report = {
         let (this, alert) = (ctx.this(), message.clone());
-        ui::button(SharedString::from(format!("automod-report-{key}")), ui::Tone::Secondary, cx).small().child("Report Issues").on_click(move |_, _, cx| {
+        ui::Button::new(SharedString::from(format!("automod-report-{key}"))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Report Issues").on_click(move |_, _, cx| {
             cx.stop_propagation();
             let alert = alert.clone();
             this.update(cx, |this, cx| this.report_automod(alert, cx)).ok();
@@ -147,7 +147,7 @@ pub(super) fn automod_actions(message: &Message, channel_id: Option<String>, fla
     // GAP: Discord hides Delete once `alert_actions_execution` says the message is gone; that field isn't read yet.
     let delete = target.filter(|(channel_id, _)| ctx.notices.moderated.contains(channel_id)).map(|_| {
         let (this, alert) = (ctx.this(), message.clone());
-        ui::button(SharedString::from(format!("automod-delete-{key}")), ui::Tone::Secondary, cx).small().child("Delete User's Message").on_click(move |_, _, cx| {
+        ui::Button::new(SharedString::from(format!("automod-delete-{key}"))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Delete User's Message").on_click(move |_, _, cx| {
             cx.stop_propagation();
             this.update(cx, |this, cx| this.automod_alert_action(&alert, AlertAction::DeleteUserMessage, cx)).ok();
         })

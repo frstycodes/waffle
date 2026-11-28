@@ -23,7 +23,7 @@ use crate::{
     icons::Glyph,
     palette,
     sidebar::Nav,
-    ui::{self, Check, Squircle as _, Tone},
+    ui::{self, Check, Squircle as _},
 };
 
 // Discord's API channel types.
@@ -232,7 +232,7 @@ impl Waffle {
             true => self.access_step(form, guild, window, cx),
             false => self.info_step(form, guild, window, cx),
         };
-        let body = ui::dialog_body()
+        let body = ui::DialogContent::new()
             .gap_5()
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| match e.keystroke.key.as_str() {
                 "enter" => this.advance_create_channel(window, cx),
@@ -241,7 +241,7 @@ impl Waffle {
             }))
             .children(step);
         let backdrop = div().id("create-channel-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_create_channel(cx)));
-        Some(ui::modal(backdrop, ui::dialog("create-channel", 460., body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("create-channel", 460., body, window, cx), cx))
     }
 
     // Step one: the type, the name, and Private channel.
@@ -249,12 +249,12 @@ impl Waffle {
         let rows: Vec<AnyElement> = offered_types(guild, self.my_id()).into_iter().map(|kind| type_row(kind, form.private, kind == form.kind, window, cx).into_any_element()).collect();
         let empty = self.dialog_input.read(cx).value().trim().is_empty();
         let focus = gpui_kit::Focusable::focus_handle(self.dialog_input.read(cx), cx);
-        let name = ui::text_field("create-channel-name", Input::new(&self.dialog_input).appearance(false), &focus).leading(type_icon(form.kind, form.private).size_4());
+        let name = ui::Input::new("create-channel-name", Input::new(&self.dialog_input).appearance(false), &focus).leading(type_icon(form.kind, form.private).size_4());
         let primary = if needs_access_step(form) { "Next" } else { "Create channel" };
         let actions = ui::row().items_stretch()
             .gap_2()
-            .child(ui::button("create-channel-cancel", Tone::Secondary, cx).flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_create_channel(cx))))
-            .child(ui::button("create-channel-submit", Tone::Primary, cx).flex_1().disabled(empty).child(primary).on_click(cx.listener(|this, _, window, cx| this.advance_create_channel(window, cx))));
+            .child(ui::Button::new("create-channel-cancel").variant(ui::ButtonVariant::Secondary).flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_create_channel(cx))))
+            .child(ui::Button::new("create-channel-submit").flex_1().disabled(empty).child(primary).on_click(cx.listener(|this, _, window, cx| this.advance_create_channel(window, cx))));
         let category = form.category.clone().map(|c| SharedString::from(format!("in {c}")));
         let mut step = vec![
             dialog_head("Create channel", None, category, cx).into_any_element(),
@@ -277,8 +277,8 @@ impl Waffle {
         let primary = if form.picked.is_empty() { "Skip" } else { "Create channel" };
         let actions = ui::row().items_stretch()
             .gap_2()
-            .child(ui::button("create-channel-back", Tone::Secondary, cx).flex_1().child("Back").on_click(cx.listener(|this, _, window, cx| this.back_to_channel_info(window, cx))))
-            .child(ui::button("create-channel-create", Tone::Primary, cx).flex_1().child(primary).on_click(cx.listener(|this, _, _, cx| this.submit_create_channel(cx))));
+            .child(ui::Button::new("create-channel-back").variant(ui::ButtonVariant::Secondary).flex_1().child("Back").on_click(cx.listener(|this, _, window, cx| this.back_to_channel_info(window, cx))))
+            .child(ui::Button::new("create-channel-create").flex_1().child(primary).on_click(cx.listener(|this, _, _, cx| this.submit_create_channel(cx))));
         vec![
             dialog_head(title, Some(type_icon(form.kind, form.private)), Some(name), cx).into_any_element(),
             self.access_picker(form, guild, window, cx),
@@ -316,7 +316,7 @@ impl Waffle {
                 }))
                 .into_any_element(),
         };
-        group(head).children(explainer).child(ui::search_field("create-channel-search", &form.search, cx)).children(pills).child(list).into_any_element()
+        group(head).children(explainer).child(ui::InputGroup::search("create-channel-search", &form.search, cx)).children(pills).child(list).into_any_element()
     }
 }
 
@@ -468,7 +468,7 @@ fn dialog_head(title: &'static str, icon: Option<Icon>, sub: Option<SharedString
     ui::row()
         .items_start()
         .child(ui::col().min_h_0().flex_1().gap_0p5().child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(title)).children(sub))
-        .child(ui::icon_button("create-channel-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_create_channel(cx))))
+        .child(ui::Button::new("create-channel-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_create_channel(cx))))
 }
 
 fn group(label: gpui_kit::Div) -> gpui_kit::Div {
@@ -484,15 +484,15 @@ fn announcement_note(cx: &Context<Waffle>) -> impl IntoElement {
 }
 
 // One type: radio, then the glyph inline with its name and its line under; the chosen one carries the selected fill.
-fn type_row(kind: u64, private: bool, on: bool, window: &mut Window, cx: &mut Context<Waffle>) -> impl IntoElement {
+fn type_row(kind: u64, private: bool, on: bool, _window: &mut Window, cx: &mut Context<Waffle>) -> impl IntoElement {
     let (name, hint) = type_label(kind);
-    let radio = ui::radio_live(SharedString::from(format!("create-channel-radio-{kind}")), on, window, cx);
+    let radio = ui::RadioGroupItem::new(SharedString::from(format!("create-channel-radio-{kind}"))).checked(on);
     ui::pick_row_icon(SharedString::from(format!("create-channel-type-{kind}")), radio, type_icon(kind, private && allows_private(kind)), name, Some(hint.into()), cx)
         .toggled(on, cx)
         .on_click(cx.listener(move |this, _, window, cx| this.set_channel_kind(kind, window, cx)))
 }
 
-fn private_row(on: bool, window: &mut Window, cx: &mut Context<Waffle>) -> impl IntoElement {
+fn private_row(on: bool, _window: &mut Window, cx: &mut Context<Waffle>) -> impl IntoElement {
     let (strong, muted) = (palette::strong(cx), palette::muted(cx));
     ui::row()
         .id("create-channel-private")
@@ -505,13 +505,13 @@ fn private_row(on: bool, window: &mut Window, cx: &mut Context<Waffle>) -> impl 
                 .child(ui::row().gap_1p5().text_color(strong).child(Icon::new(Glyph::HashtagLock).size(ui::ICON_MD)).child(div().font_weight(FontWeight::MEDIUM).child("Private channel")))
                 .child(div().text_size(ui::TEXT_XS).line_height(px(NOTE_LEADING)).text_color(muted).child("Only selected members and roles will be able to view this channel.")),
         )
-        .child(ui::switch_live("create-channel-private-switch", on, window, cx))
+        .child(ui::Switch::new("create-channel-private-switch").checked(on))
         .on_click(cx.listener(|this, _, window, cx| this.toggle_create_private(window, cx)))
 }
 
 fn pick_pill(pick: &Pick, cx: &mut Context<Waffle>) -> impl IntoElement {
     let remove = pick.clone();
-    // lint-allow(custom-badge): ui::chip's removable look is an outlined chip, not this filled selected-tone pill
+    // lint-allow(custom-badge): ui::Toggle's removable look is an outlined chip, not this filled selected-tone pill
     ui::row()
         .h(px(PILL_HEIGHT))
         .pl_2()
@@ -525,16 +525,15 @@ fn pick_pill(pick: &Pick, cx: &mut Context<Waffle>) -> impl IntoElement {
         .whitespace_nowrap()
         .child(pick.name.clone())
         .child(
-            ui::icon_button(SharedString::from(format!("create-channel-unpick-{}", pick.id)), Glyph::X, format!("Remove {}", pick.name), cx)
-                .small()
+            ui::Button::new(SharedString::from(format!("create-channel-unpick-{}", pick.id))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::X).tooltip_text(format!("Remove {}", pick.name))
                 .on_click(cx.listener(move |this, _, _, cx| this.toggle_access(remove.clone(), cx))),
         )
 }
 
-fn candidate_row(candidate: Candidate, on: bool, window: &mut Window, cx: &mut Context<Waffle>) -> AnyElement {
+fn candidate_row(candidate: Candidate, on: bool, _window: &mut Window, cx: &mut Context<Waffle>) -> AnyElement {
     let id = candidate.pick.id.clone();
     let mark: AnyElement = match &candidate.mark {
-        Mark::Avatar(url) => ui::avatar(url.clone(), 32.).into_any_element(),
+        Mark::Avatar(url) => ui::Avatar::new(url.clone(), 32.).into_any_element(),
         Mark::Role(color) => {
             let dot = if *color == 0 { palette::faint(cx) } else { palette::role_ink(*color, cx.theme().is_dark()) };
             ui::row().size_8().flex_none().rounded_full().bg(palette::selected(cx)).justify_center().child(div().size_3().rounded_full().bg(dot)).into_any_element()
@@ -545,8 +544,8 @@ fn candidate_row(candidate: Candidate, on: bool, window: &mut Window, cx: &mut C
         .child(ui::line(candidate.pick.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
         .child(ui::line(candidate.detail).text_size(ui::TEXT_XS).text_color(palette::muted(cx)));
     let pick = candidate.pick;
-    ui::menu_row(SharedString::from(format!("create-channel-access-{id}")), cx)
-        .child(ui::check_live(SharedString::from(format!("create-channel-check-{id}")), if on { Check::On } else { Check::Off }, window, cx))
+    ui::DropdownMenuItem::new(SharedString::from(format!("create-channel-access-{id}")), cx)
+        .child(ui::Checkbox::new(SharedString::from(format!("create-channel-check-{id}"))).checked(if on { Check::On } else { Check::Off }))
         .child(mark)
         .child(text)
         .on_click(cx.listener(move |this, _, _, cx| this.toggle_access(pick.clone(), cx)))

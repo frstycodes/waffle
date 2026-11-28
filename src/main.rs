@@ -141,6 +141,7 @@ mod stage;
 mod stage_dialogs;
 mod stage_view;
 mod updater;
+#[cfg(debug_assertions)]
 mod design_system;
 mod app_icon;
 mod fonts;
@@ -207,6 +208,7 @@ fn main() {
         cx.set_reduce_motion(settings::Prefs::load().reduces_motion());
         settings::Prefs::load().app_icon.apply();
         // WAVE_DESIGN=1 opens only the design system gallery, no sign-in needed.
+        #[cfg(debug_assertions)]
         if std::env::var_os("WAVE_DESIGN").is_some() {
             design_system::open(cx);
             return;
@@ -787,6 +789,9 @@ pub struct Waffle {
     profile_card: Option<profile::ProfileCard>,
     role_popout: role_popout::RolePopouts,
     status_menu: bool,
+    // Debug builds only: the design system shown in place of the whole app.
+    #[cfg(debug_assertions)]
+    design_system: Option<Entity<design_system::DesignSystem>>,
     // The channel or DM row under the pointer, which shows its hover-only controls.
     hovered_row: Option<String>,
     // The message under the pointer, which shows its toolbar and, on a continuation, its time.

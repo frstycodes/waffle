@@ -54,20 +54,18 @@ impl Waffle {
             self.role_chip(card, &guild.id, role, removable, ink, cx)
         }).collect::<Vec<_>>();
         let more = (hidden > 0).then(|| {
-            ui::button("profile-roles-more", ui::Tone::Ghost, cx)
-                .scoped(ink.tile, ink.strong.opacity(0.16), ink.text, ink.strong)
+            ui::Button::new("profile-roles-more").variant(ui::ButtonVariant::Ghost)
+                .scope(ui::ButtonScope::Themed { rest: ink.tile, hover: ink.strong.opacity(0.16), ink: ink.text, ink_hover: ink.strong })
                 .h_6()
                 .px_2()
                 .squircle(RADIUS_XS)
                 .text_size(ui::TEXT_XS)
                 .child(format!("+{hidden}"))
-                .tooltip(|window, cx| ui::tip("View All Roles", window, cx))
+                .tooltip(ui::Tooltip::text("View All Roles"))
                 .on_click(cx.listener(|this, _, _, cx| this.show_all_roles(true, cx)))
         });
         let add = can_manage.then(|| {
-            ui::icon_button("profile-add-role", Glyph::Plus, "Add role", cx)
-                .scoped(gpui_kit::transparent_black(), ink.tile, ink.muted, ink.strong)
-                .small()
+            ui::Button::new("profile-add-role").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).scope(ui::ButtonScope::Themed { rest: gpui_kit::transparent_black(), hover: ink.tile, ink: ink.muted, ink_hover: ink.strong }).icon(Glyph::Plus).tooltip_text("Add role")
                 .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| this.open_role_picker(event.position(), window, cx)))
         });
         Some(ui::row().flex_wrap().gap_1().children(chips).children(more).children(add))
@@ -81,7 +79,7 @@ impl Waffle {
         let remove = removable.then(|| {
             let (guild, user, role_id) = (guild_id.to_owned(), card.user.id.clone(), role.id.clone());
             let remove = cx.listener(move |this, _: &ClickEvent, _, cx| this.remove_profile_role(&guild, &user, &role_id, cx));
-            ui::chip_remove(SharedString::from(format!("profile-role-remove-{}", role.id)), ink.muted, ink.strong, ui::REMOVE_GLYPH_SM, remove).tooltip(|window, cx| ui::tip("Remove Role", window, cx))
+            ui::chip_remove(SharedString::from(format!("profile-role-remove-{}", role.id)), ink.muted, ink.strong, ui::REMOVE_GLYPH_SM, remove).tooltip(ui::Tooltip::text("Remove Role"))
         });
         let copy = self.developer_mode.then(|| role.id.clone());
         let chip = ui::role_chip(role.name.clone(), color, cx).bg(ink.tile).text_color(ink.text).children(remove).id(group);
@@ -166,7 +164,7 @@ impl Waffle {
     }
 
     // The popout's foot: "Message @name", a real field once clicked; Enter sends it to your DM with them.
-    // lint-allow(custom-component): ui::text_field is the settings field frame; this one wears the card's themed fill.
+    // lint-allow(custom-component): ui::Input::new is the settings field frame; this one wears the card's themed fill.
     pub(super) fn message_field(&self, card: &ProfileCard, ink: Ink, cx: &mut Context<Self>) -> Div {
         let user = card.user.clone();
         let content = match &card.message {

@@ -18,7 +18,7 @@ fn history_height() -> f32 {
 }
 
 // Rows shaped like messages above the oldest one, while older history loads.
-pub(crate) fn history_skeleton(cx: &App) -> AnyElement {
+pub(crate) fn history_skeleton(_cx: &App) -> AnyElement {
     let row = |i: usize| {
         let width = HISTORY_WIDTHS[i % HISTORY_WIDTHS.len()];
         ui::row()
@@ -27,14 +27,14 @@ pub(crate) fn history_skeleton(cx: &App) -> AnyElement {
             .items_start()
             .gap_4()
             .pt_2()
-            .child(ui::skeleton_circle(("history-skeleton-avatar", i), AVATAR, cx))
+            .child(ui::Skeleton::circle(("history-skeleton-avatar", i), AVATAR))
             .child(
                 ui::col()
                     .flex_1()
                     .gap_2()
                     .pt_1()
-                    .child(ui::skeleton(("history-skeleton-name", i), ui::RADIUS_SM, cx).w(gpui_kit::relative(0.2)).h_3())
-                    .child(ui::skeleton(("history-skeleton-line", i), ui::RADIUS_SM, cx).w(px(width)).max_w_full().h_3()),
+                    .child(ui::Skeleton::new(("history-skeleton-name", i)).radius(ui::RADIUS_SM).w(gpui_kit::relative(0.2)).h_3())
+                    .child(ui::Skeleton::new(("history-skeleton-line", i)).radius(ui::RADIUS_SM).w(px(width)).max_w_full().h_3()),
             )
     };
     // lint-allow(unvirtualized-list): a fixed twelve placeholder rows inside one list item

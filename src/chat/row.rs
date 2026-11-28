@@ -152,8 +152,8 @@ pub(super) fn fold_line(first_id: &str, run: &Run, ctx: &Rc<RowContext>, cx: &Ap
         n => format!("{n} {word} messages"),
     };
     let (this, key) = (ctx.this.clone(), first_id.to_owned());
-    let toggle = ui::button(SharedString::from(format!("fold-{first_id}")), ui::Tone::Ghost, cx)
-        .small()
+    let toggle = ui::Button::new(SharedString::from(format!("fold-{first_id}"))).variant(ui::ButtonVariant::Ghost)
+        .size(ui::ButtonSize::Sm)
         .h_7()
         .px_2()
         // lint-allow(raw-margin): optical, keeps Show's wash off the label before it
@@ -198,7 +198,7 @@ pub(crate) fn search_hit(message: &Message, ctx: &Rc<RowContext>, cx: &mut App) 
     ui::row().items_stretch()
         .gap_3()
         // lint-allow(raw-margin): optical, lines the avatar's top with the name's cap height
-        .child(ui::avatar(message.author.avatar.clone(), 36.).flex_none().mt_0p5())
+        .child(ui::Avatar::new(message.author.avatar.clone(), 36.).flex_none().mt_0p5())
         .child(body)
 }
 
@@ -274,9 +274,9 @@ pub(super) fn author(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Div {
                 .child(StyledText::new(name).with_highlights(runs)),
         )
         .children(dot.map(role_dot))
-        .children(message.author.tag.as_ref().map(|tag| guild_tag(tag, cx)))
+        .children(message.author.tag.as_ref().map(guild_tag))
         .when(crate::announcements::is_crosspost(message), |h| h.child(crate::announcements::server_tag(message, cx)))
-        .when(message.author.bot && !crate::announcements::is_crosspost(message), |h| h.child(ui::tag_with(Glyph::Checkmark, "APP", cx)))
+        .when(message.author.bot && !crate::announcements::is_crosspost(message), |h| h.child(ui::Badge::new("APP").variant(ui::BadgeVariant::Accent).icon(Glyph::Checkmark)))
 }
 
 // Not verified: Discord's compact time column and avatar; 52px and 18px in design/explore-settings.html,
@@ -306,7 +306,7 @@ pub(super) fn compact_line(message: &Message, starts_group: bool, text: Option<A
         return text;
     }
     let line = ctx.body_line();
-    let avatar = ctx.compact_avatars.then(|| profile_trigger(format!("avatar-{}", message.id), &message.author, ctx).flex_none().h(px(line)).flex().items_center().child(ui::avatar(message.author.avatar.clone(), COMPACT_AVATAR)));
+    let avatar = ctx.compact_avatars.then(|| profile_trigger(format!("avatar-{}", message.id), &message.author, ctx).flex_none().h(px(line)).flex().items_center().child(ui::Avatar::new(message.author.avatar.clone(), COMPACT_AVATAR)));
     Some(
         ui::row()
             .items_start()
@@ -325,7 +325,7 @@ pub(super) fn silent_mark(id: &str, cx: &App) -> impl IntoElement + use<> {
         .flex_none()
         .self_center()
         .text_color(palette::faint(cx))
-        .tooltip(|window, cx| ui::tip("This is a @silent message.", window, cx))
+        .tooltip(ui::Tooltip::text("This is a @silent message."))
         .child(Icon::new(Glyph::BellZ).size(ui::ICON_MD))
 }
 

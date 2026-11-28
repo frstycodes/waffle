@@ -290,8 +290,8 @@ impl Waffle {
             Page::Permissions => "All granted permissions",
             Page::AuditLog => "Moderator action log",
         };
-        let back = (view.page != Page::Info).then(|| ui::icon_button("mod-view-back", Glyph::ChevronLeft, "Back", cx).occlude().on_click(cx.listener(|this, _, _, cx| this.set_mod_view_page(Page::Info, cx))));
-        let refresh = (view.page == Page::Info).then(|| ui::icon_button("mod-view-refresh", Glyph::Retry, "Refresh", cx).occlude().on_click(cx.listener(|this, _, _, cx| this.refresh_mod_view(cx))));
+        let back = (view.page != Page::Info).then(|| ui::Button::new("mod-view-back").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::ChevronLeft).tooltip_text("Back").occlude().on_click(cx.listener(|this, _, _, cx| this.set_mod_view_page(Page::Info, cx))));
+        let refresh = (view.page == Page::Info).then(|| ui::Button::new("mod-view-refresh").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Retry).tooltip_text("Refresh").occlude().on_click(cx.listener(|this, _, _, cx| this.refresh_mod_view(cx))));
         self.panel_head(title.into(), back, refresh.into_iter().collect(), true, cx)
     }
 
@@ -348,25 +348,25 @@ impl Waffle {
         let name = user.name.clone();
         let message = {
             let u = u.clone();
-            ui::icon_button("mod-view-message", Glyph::ChatRound, "Message", cx).disabled(is_me).on_click(cx.listener(move |this, _, window, cx| this.message_user(u.clone(), window, cx)))
+            ui::Button::new("mod-view-message").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::ChatRound).tooltip_text("Message").disabled(is_me).on_click(cx.listener(move |this, _, window, cx| this.message_user(u.clone(), window, cx)))
         };
         let kick = {
             let (g, u, name) = (g.clone(), u.clone(), name.clone());
             let can = member && self.can_manage(&g, &u, perm::KICK_MEMBERS);
-            ui::icon_button("mod-view-kick", Glyph::DoorOpen, "Kick", cx).disabled(!can).on_click(cx.listener(move |this, _, _, cx| this.ask_kick(g.clone(), u.clone(), name.clone(), cx)))
+            ui::Button::new("mod-view-kick").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::DoorOpen).tooltip_text("Kick").disabled(!can).on_click(cx.listener(move |this, _, _, cx| this.ask_kick(g.clone(), u.clone(), name.clone(), cx)))
         };
         let ban = {
             let (g, u, name) = (g.clone(), u.clone(), name.clone());
             let can = !user.bot && self.can_manage(&g, &u, perm::BAN_MEMBERS);
-            ui::icon_button("mod-view-ban", Glyph::Gavel, "Ban", cx).disabled(!can).on_click(cx.listener(move |this, _, _, cx| this.ask_ban(g.clone(), u.clone(), name.clone(), cx)))
+            ui::Button::new("mod-view-ban").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Gavel).tooltip_text("Ban").disabled(!can).on_click(cx.listener(move |this, _, _, cx| this.ask_ban(g.clone(), u.clone(), name.clone(), cx)))
         };
         let can_timeout = member && self.can_timeout(&g, &u);
         let timeout = match timed_out {
-            true => ui::icon_button("mod-view-timeout", Glyph::Timer, "Remove timeout", cx).disabled(!can_timeout).on_click(cx.listener({
+            true => ui::Button::new("mod-view-timeout").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Timer).tooltip_text("Remove timeout").disabled(!can_timeout).on_click(cx.listener({
                 let (g, u) = (g.clone(), u.clone());
                 move |this, _, _, cx| this.set_timeout(g.clone(), u.clone(), None, cx)
             })),
-            false => ui::icon_button("mod-view-timeout", Glyph::Timer, "Timeout", cx).disabled(!can_timeout).on_click(cx.listener({
+            false => ui::Button::new("mod-view-timeout").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Timer).tooltip_text("Timeout").disabled(!can_timeout).on_click(cx.listener({
                 let (g, u) = (g.clone(), u.clone());
                 move |this, event: &ClickEvent, _, cx| {
                     let entries = this.timeout_entries(&g, &u);
@@ -374,7 +374,7 @@ impl Waffle {
                 }
             })),
         };
-        let copy = ui::icon_button("mod-view-copy-id", Glyph::Id, "Copy ID", cx).on_click(cx.listener(move |this, _, _, cx| this.copy_text(u.clone(), cx)));
+        let copy = ui::Button::new("mod-view-copy-id").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Id).tooltip_text("Copy ID").on_click(cx.listener(move |this, _, _, cx| this.copy_text(u.clone(), cx)));
         ui::row().items_stretch().gap_1().px_1().child(message).child(kick).child(ban).child(timeout).child(copy)
     }
 
@@ -422,7 +422,7 @@ impl Waffle {
         let bits = granted(guild, &view.user_id, roles);
         let held = mod_permissions(bits);
         let all = perms::all().filter(|p| bits & p.bit != 0).count();
-        let more = ui::button("mod-view-all-perms", ui::Tone::Link, cx).small().child(format!("All ({all})")).on_click(cx.listener(|this, _, _, cx| this.set_mod_view_page(Page::Permissions, cx)));
+        let more = ui::Button::new("mod-view-all-perms").variant(ui::ButtonVariant::Link).size(ui::ButtonSize::Sm).child(format!("All ({all})")).on_click(cx.listener(|this, _, _, cx| this.set_mod_view_page(Page::Permissions, cx)));
         let head = ui::row().justify_between().pr_2().child(group_label("Mod permissions", cx)).child(more);
         let body = match held.is_empty() {
             true => div().px_1p5().text_color(palette::positive_ink(cx)).child("No mod permissions"),
@@ -438,13 +438,13 @@ impl Waffle {
             let color = if r.color == 0 { palette::status_in(Status::Offline, cx) } else { palette::data_color(r.color) };
             let chip = ui::role_chip(r.name.clone(), color, cx).id(SharedString::from(format!("mod-view-role-{}", r.id)));
             match i {
-                0 => chip.tooltip(|window, cx| ui::tip("Highest role", window, cx)).into_any_element(),
+                0 => chip.tooltip(ui::Tooltip::text("Highest role")).into_any_element(),
                 _ => chip.into_any_element(),
             }
         }).collect::<Vec<_>>();
         let add = manage.then(|| {
             let (g, u) = (view.guild_id.clone(), view.user_id.clone());
-            ui::icon_button("mod-view-add-role", Glyph::Plus, "Add role", cx).small().on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+            ui::Button::new("mod-view-add-role").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::Plus).tooltip_text("Add role").on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
                 let (g, u) = (g.clone(), u.clone());
                 this.open_live_menu(event.position(), move |this| this.guilds.iter().find(|x| x.id == g).map(|guild| this.role_entries(guild, &u)).unwrap_or_default(), cx);
             }))
@@ -673,21 +673,21 @@ impl Count {
 // The main page before the member lands: real section labels, rows shaped like the loaded ones. Signals is
 // left out, since whether it shows depends on the member.
 fn info_skeleton(cx: &App) -> Div {
-    let bar = |id: (&'static str, usize), w: f32| ui::skeleton(id, ui::RADIUS_XS, cx).h_3().w(px(w));
+    let bar = |id: (&'static str, usize), w: f32| ui::Skeleton::new(id).radius(ui::RADIUS_XS).h_3().w(px(w));
     let rows = |key: &'static str, widths: &[(f32, f32)]| {
         widths.iter().enumerate().fold(ui::col().gap_0p5(), |d, (i, &(label, value))| {
             d.child(line(cx).child(bar((key, i * 2), label)).child(div().flex_1()).child(bar((key, i * 2 + 1), value)))
         })
     };
     let pills = |key: &'static str, widths: &[f32]| {
-        widths.iter().enumerate().fold(ui::row().items_stretch().px_1p5().flex_wrap().gap_1(), |d, (i, &w)| d.child(ui::skeleton((key, i), ui::RADIUS_XS, cx).h(px(PILL_HEIGHT)).w(px(w))))
+        widths.iter().enumerate().fold(ui::row().items_stretch().px_1p5().flex_wrap().gap_1(), |d, (i, &w)| d.child(ui::Skeleton::new((key, i)).radius(ui::RADIUS_XS).h(px(PILL_HEIGHT)).w(px(w))))
     };
     let who = ui::row()
         .gap_3()
         .px_2()
-        .child(ui::skeleton_circle("mv-sk-face", 48., cx))
+        .child(ui::Skeleton::circle("mv-sk-face", 48.))
         .child(ui::col().gap_2().child(bar(("mv-sk-name", 0), 120.).h_3p5()).child(bar(("mv-sk-name", 1), 80.)));
-    let actions = (0..5usize).fold(ui::row().items_stretch().gap_1().px_1(), |d, i| d.child(ui::skeleton(("mv-sk-act", i), ui::RADIUS_SM, cx).size_8()));
+    let actions = (0..5usize).fold(ui::row().items_stretch().gap_1().px_1(), |d, i| d.child(ui::Skeleton::new(("mv-sk-act", i)).radius(ui::RADIUS_SM).size_8()));
     ui::col()
         .gap_4()
         .child(ui::col().gap_3().child(who).child(actions))
@@ -704,8 +704,8 @@ fn audit_skeleton(cx: &App) -> Div {
             line(cx)
                 .py_1p5()
                 .items_start()
-                .child(ui::skeleton_circle(("mv-sk-audit-glyph", i), 16., cx))
-                .child(ui::col().gap_1p5().child(ui::skeleton(("mv-sk-audit", i * 2), ui::RADIUS_XS, cx).h_3().w(px(title))).child(ui::skeleton(("mv-sk-audit", i * 2 + 1), ui::RADIUS_XS, cx).h_2p5().w(px(meta)))),
+                .child(ui::Skeleton::circle(("mv-sk-audit-glyph", i), 16.))
+                .child(ui::col().gap_1p5().child(ui::Skeleton::new(("mv-sk-audit", i * 2)).radius(ui::RADIUS_XS).h_3().w(px(title))).child(ui::Skeleton::new(("mv-sk-audit", i * 2 + 1)).radius(ui::RADIUS_XS).h_2p5().w(px(meta)))),
         )
     })
 }
@@ -738,7 +738,7 @@ fn signal_row(signal: &Signal, now: DateTime<Utc>, cx: &App) -> Div {
 fn count_row(id: SharedString, glyph: Glyph, label: &'static str, count: Count, cx: &App) -> gpui_kit::Stateful<Div> {
     let muted = palette::muted(cx);
     let value = match count {
-        Count::Loading => div().child(ui::bars(SharedString::from(format!("{id}-wait")), muted, 12.)).into_any_element(),
+        Count::Loading => div().child(ui::Spinner::new(SharedString::from(format!("{id}-wait")), muted, 12.)).into_any_element(),
         Count::Failed => div().text_color(palette::danger_ink(cx)).child("This is awkward").into_any_element(),
         Count::Ready(n) => div().font_features(crate::call::tabular()).child(grouped(n)).into_any_element(),
     };
@@ -787,9 +787,9 @@ fn permissions_page(view: &ModView, guild: &Guild, roles: &[String], cx: &App) -
             ui::role_chip(r.name.clone(), color, cx)
         });
         let tag = kind.map(|k| {
-            let tag = ui::tag(k, cx).id(SharedString::from(format!("mod-view-kind-{}", p.bit)));
+            let tag = div().id(SharedString::from(format!("mod-view-kind-{}", p.bit))).flex_none().child(ui::Badge::new(k).variant(ui::BadgeVariant::Accent));
             match k {
-                "Elevated" => tag.tooltip(|window, cx| ui::tip("Elevated permissions grant higher levels of access to server settings, and should only be granted to highly trusted mods.", window, cx)).into_any_element(),
+                "Elevated" => tag.tooltip(ui::Tooltip::text("Elevated permissions grant higher levels of access to server settings, and should only be granted to highly trusted mods.")).into_any_element(),
                 _ => tag.into_any_element(),
             }
         });
@@ -811,7 +811,7 @@ fn permissions_page(view: &ModView, guild: &Guild, roles: &[String], cx: &App) -
 fn audit_page(view: &ModView, cx: &App) -> AnyElement {
     let (entries, names) = match &view.audit {
         None => return audit_skeleton(cx).into_any_element(),
-        Some(Err(error)) => return ui::callout(ui::Notice::Danger, Glyph::WarningCircle, "Couldn't load the action log", error.clone(), cx).into_any_element(),
+        Some(Err(error)) => return ui::Alert::new(ui::Notice::Danger, Glyph::WarningCircle, "Couldn't load the action log", error.clone(), cx).into_any_element(),
         Some(Ok(page)) => page,
     };
     if entries.is_empty() {

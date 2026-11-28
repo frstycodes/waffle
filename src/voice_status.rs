@@ -19,7 +19,7 @@ use crate::{
     menu::{Entry, item},
     overlays::backdrop,
     palette,
-    ui::{self, Tone},
+    ui::{self},
 };
 
 // The line heights of the status line under a channel and of the dialog's prompt.
@@ -232,7 +232,7 @@ impl Waffle {
             line.occlude()
                 .cursor_pointer()
                 .hover(move |s| s.text_color(strong))
-                .tooltip(|window, cx| ui::tip("Set a channel status", window, cx))
+                .tooltip(ui::Tooltip::text("Set a channel status"))
                 .on_click(cx.listener(move |this, _, window, cx| this.open_voice_status(&open, window, cx))),
         )
     }
@@ -255,10 +255,10 @@ impl Waffle {
             // greys the middle, and a diagonal leaves the lower corner tinted, both read as a hard edge.
             .bg(gpui_kit::linear_gradient(180., gpui_kit::linear_color_stop(palette::accent_soft(cx), 0.), gpui_kit::linear_color_stop(palette::accent_soft(cx).opacity(0.), 1.)))
             .child(img(ART).w(px(ART_WIDTH)).h(px(ART_WIDTH * 640. / 1024.)))
-            .child(div().absolute().top_3().right_3().child(ui::icon_button("voice-status-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_voice_status(cx)))));
+            .child(div().absolute().top_3().right_3().child(ui::Button::new("voice-status-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_voice_status(cx)))));
         let focus = dialog.input.read(cx).focus_handle(cx);
-        let emoji = ui::icon_button("voice-status-emoji", Glyph::Emoji, "Add emoji", cx).small().on_click(cx.listener(|this, _, window, cx| this.open_emoji_picker(EmojiTarget::VoiceStatus, window, cx)));
-        let field = ui::text_field("voice-status-field", Input::new(&dialog.input).appearance(false), &focus).trailing(emoji).error(over || dialog.error.is_some());
+        let emoji = ui::Button::new("voice-status-emoji").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::Emoji).tooltip_text("Add emoji").on_click(cx.listener(|this, _, window, cx| this.open_emoji_picker(EmojiTarget::VoiceStatus, window, cx)));
+        let field = ui::Input::new("voice-status-field", Input::new(&dialog.input).appearance(false), &focus).trailing(emoji).error(over || dialog.error.is_some());
         let remaining = (typed > SHOW_REMAINING_AFTER).then(|| {
             div().flex_none().font_features(crate::call::tabular()).text_color(if over { palette::danger_ink(cx) } else { palette::faint(cx) }).child((MAX_CHARS as i64 - typed as i64).to_string())
         });
@@ -268,13 +268,13 @@ impl Waffle {
             .justify_between()
             .gap_2()
             .text_size(ui::TEXT_XS)
-            .child(div().min_w_0().children(dialog.error.clone().map(|e| ui::field_error(e, cx))))
+            .child(div().min_w_0().children(dialog.error.clone().map(|e| ui::FieldError::new(e, cx))))
             .children(remaining);
         let actions = ui::row().items_stretch()
             .gap_2()
-            .child(ui::button("voice-status-cancel", Tone::Secondary, cx).flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_voice_status(cx))))
+            .child(ui::Button::new("voice-status-cancel").variant(ui::ButtonVariant::Secondary).flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_voice_status(cx))))
             .child(
-                ui::button("voice-status-submit", Tone::Primary, cx)
+                ui::Button::new("voice-status-submit")
                     .flex_1()
                     .disabled(over)
                     .loading(dialog.sending.then_some("Set status"))
@@ -298,8 +298,8 @@ impl Waffle {
             .child(meta)
             .child(div().pt_1().child(actions));
         let card = ui::col().child(hero).child(body);
-        let card = div().id("voice-status").occlude().child(ui::dialog("voice-status-dialog", WIDTH, card, window, cx));
-        Some(ui::modal(backdrop("voice-status-backdrop", cx), card, cx))
+        let card = div().id("voice-status").occlude().child(ui::Dialog::new("voice-status-dialog", WIDTH, card, window, cx));
+        Some(ui::Dialog::modal(backdrop("voice-status-backdrop", cx), card, cx))
     }
 }
 

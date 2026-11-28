@@ -21,7 +21,7 @@ pub(crate) fn used_command(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
             .mb(px(chat::ACCESSORY_GAP)) // lint-allow(raw-margin): Discord's gap under the command line, as under a reply; the row's children have no parent gap
             .text_size(ui::TEXT_SM)
             .text_color(palette::muted(cx))
-            .child(ui::avatar(meta.user.avatar.clone(), 16.))
+            .child(ui::Avatar::new(meta.user.avatar.clone(), 16.))
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(name))
             .child(div().flex_none().child("used"))
             .child(ui::line(format!("/{command}")).font_weight(FontWeight::MEDIUM).text_color(palette::accent_ink(cx)))
@@ -37,7 +37,7 @@ pub(crate) fn interaction_status(message: &Message, ctx: &Rc<RowContext>, cx: &A
             .gap_2()
             .italic()
             .text_color(palette::muted(cx))
-            .child(ui::bars(SharedString::from(format!("thinking-{}", message.id)), palette::accent_ink(cx), 14.))
+            .child(ui::Spinner::new(SharedString::from(format!("thinking-{}", message.id)), palette::accent_ink(cx), 14.))
             .child(text)
             .into_any_element()
     };
@@ -70,7 +70,7 @@ pub(crate) fn ephemeral_tint(cx: &App) -> Hsla {
 pub(crate) fn only_you(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
     let (this, channel_id, id) = (ctx.this(), message.channel_id.clone(), message.id.clone());
     let reason = message.interaction.as_ref().and_then(|m| m.ephemerality_reason).map(ephemerality_reason);
-    let dismiss = ui::button(SharedString::from(format!("dismiss-{}", message.id)), ui::Tone::Link, cx)
+    let dismiss = ui::Button::new(SharedString::from(format!("dismiss-{}", message.id))).variant(ui::ButtonVariant::Link)
         .text_size(ui::TEXT_XS)
         .child(if reason.is_some() { "Dismiss" } else { "Dismiss message" })
         .on_click(move |_, _, cx| {

@@ -266,7 +266,7 @@ fn preview_card(preview: &Preview, ctx: &std::rc::Rc<crate::chat::RowContext>) -
         let (glyph, label) = crate::forward::attachment_summary(message)?;
         Some(ui::row().gap_1p5().text_color(stage::muted()).child(Icon::new(glyph).size(ui::ICON_MD)).child(label).into_any_element())
     });
-    // lint-allow(custom-surface): ui::surface rings and shadows in the app's overlay colours, and this card is the call stage's own dark overlay
+    // lint-allow(custom-surface): ui::PopoverContent::new rings and shadows in the app's overlay colours, and this card is the call stage's own dark overlay
     ui::row().items_stretch()
         .id(SharedString::from(format!("call-preview-{}", message.id)))
         .relative()
@@ -277,7 +277,7 @@ fn preview_card(preview: &Preview, ctx: &std::rc::Rc<crate::chat::RowContext>) -
         .bg(stage::overlay())
         .shadow(shadows)
         .gap_2()
-        .child(ui::avatar(message.author.avatar.clone(), AVATAR))
+        .child(ui::Avatar::new(message.author.avatar.clone(), AVATAR))
         .child(
             ui::col().min_h_0()
                 .flex_1()

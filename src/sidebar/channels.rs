@@ -30,7 +30,7 @@ pub(crate) fn channel_row(id: SharedString, group: SharedString, state: RowState
         (false, true) => palette::faint(cx),
         (false, false) => palette::muted(cx),
     };
-    // lint-allow(custom-button): ui::list_row has fixed heights (36/48/60) and no unread pill; a channel row follows UI density.
+    // lint-allow(custom-button): ui::Item::new has fixed heights (36/48/60) and no unread pill; a channel row follows UI density.
     ui::row()
         .id(id)
         .group(group)
@@ -81,7 +81,7 @@ pub(super) fn cat_add(id: impl Into<gpui_kit::ElementId>, reveal_on: Option<Shar
 // A category head's trailing action: a 24px target with a 14px glyph, so every head's action is one size.
 pub(crate) fn category_action(id: impl Into<gpui_kit::ElementId>, icon: Icon, reveal_on: Option<SharedString>, tooltip: &'static str, cx: &App) -> Stateful<Div> {
     let strong = palette::strong(cx);
-    // lint-allow(custom-button, custom-mark): ui::icon_button fills on hover and takes a Glyph; this action only strengthens its ink and sits at the head's end.
+    // lint-allow(custom-button, custom-mark): ui::Button fills on hover and takes a Glyph; this action only strengthens its ink and sits at the head's end.
     ui::row()
         .id(id)
         .absolute()
@@ -94,13 +94,13 @@ pub(crate) fn category_action(id: impl Into<gpui_kit::ElementId>, icon: Icon, re
         .hover(move |s| s.text_color(strong))
         .when_some(reveal_on, |add, group| add.opacity(0.).group_hover(group, |s| s.opacity(1.)))
         .child(icon.size(ui::ICON_SM))
-        .tooltip(move |window, cx| ui::tip(tooltip, window, cx))
+        .tooltip(move |window, cx| ui::Tooltip::new(tooltip).build(window, cx))
 }
 
 // A 24px action inside a row (.ch .acts button).
 pub(super) fn row_action(id: SharedString, icon: Icon, tooltip: &'static str, cx: &App) -> Stateful<Div> {
     let strong = palette::strong(cx);
-    // lint-allow(custom-button): ui::icon_button fills on hover and takes a Glyph; a row's action only strengthens its ink.
+    // lint-allow(custom-button): ui::Button fills on hover and takes a Glyph; a row's action only strengthens its ink.
     ui::row()
         .id(id)
         .size_6()
@@ -109,7 +109,7 @@ pub(super) fn row_action(id: SharedString, icon: Icon, tooltip: &'static str, cx
         .text_color(palette::muted(cx))
         .hover(move |s| s.text_color(strong))
         .child(icon.size(ui::ICON_MD))
-        .tooltip(move |window, cx| ui::tip(tooltip, window, cx))
+        .tooltip(move |window, cx| ui::Tooltip::new(tooltip).build(window, cx))
 }
 
 // The pencil on a row whose channel holds an unsent draft.
@@ -150,7 +150,7 @@ pub(super) fn channel_label(channel: &Channel, topic: Option<String>, cx: &App) 
 
 // The DM list's header: a field-shaped button that opens the quick switcher.
 pub(super) fn dm_find(cx: &App) -> Stateful<Div> {
-    ui::search_button("dm-find", "Find or start a conversation", cx).occlude()
+    ui::InputGroup::search_button("dm-find", "Find or start a conversation", cx).occlude()
 }
 
 // Every channel we can see, by category (uncategorised first), with no pins, opt-in or Active Now: what
@@ -232,7 +232,7 @@ pub(crate) fn channel_list(category: Option<&Channel>) -> SharedString {
 // The open server's name as one button that drops the server menu, heading the channel list.
 pub(crate) fn server_name_button(name: SharedString, cx: &mut Context<Waffle>) -> Stateful<Div> {
     let hover = palette::hover(cx);
-    // lint-allow(custom-button): ui::button(Tone::Ghost) is 36px with a 14px label; this one is the header's full-width name button, 16px semibold.
+    // lint-allow(custom-button): ui::Button (Ghost) is 36px with a 14px label; this one is the header's full-width name button, 16px semibold.
     ui::row()
         .id("server-header")
         .occlude()
@@ -341,7 +341,7 @@ impl Waffle {
         let banner = banner.render(|frame| {
             ui::col().px_2().pb_2().child(
                 frame.apply(
-                    // lint-allow(custom-badge): ui::callout leads with an icon and a title; this banner is a dot and one line, slid in by its motion frame.
+                    // lint-allow(custom-badge): ui::Alert::new leads with an icon and a title; this banner is a dot and one line, slid in by its motion frame.
                     ui::row()
                         .px_3()
                         .py_2()
@@ -349,7 +349,7 @@ impl Waffle {
                         .bg(warning.opacity(0.12))
                         .text_size(ui::TEXT_XS)
                         .gap_2()
-                        .child(ui::unread_dot().size_1p5().bg(warning))
+                        .child(ui::Badge::dot().size_1p5().bg(warning))
                         .child(ui::line(format!("Reconnecting… {}", reconnecting.clone().unwrap_or_default()))),
                 ),
             )
@@ -372,7 +372,7 @@ impl Waffle {
             .text_size(ui::TEXT_SM)
             // The list stops under the header, a hard edge (ui::hard_edge).
             .child(ui::hard_edge(self.sidebar_scrolled(window), cx).child(header))
-            .child(ui::scroll_area(
+            .child(ui::ScrollArea::new(
                 ui::col()
                     .id("channels")
                     .pt_2()
@@ -510,7 +510,7 @@ impl Waffle {
                     .children(elapsed)
                     .children(meta.filter(|_| !actions_shown).map(|icon| ui::row().items_stretch().flex_none().text_color(faint).child(icon)))
                     .when(actions_shown, |r| r.child(self.row_actions(channel, guild, cx)))
-                    .when(mentions > 0, |r| r.child(ui::count_badge(mentions)));
+                    .when(mentions > 0, |r| r.child(ui::Badge::count(mentions)));
                 let row = row.when(carried == RowDrag::Hidden, |r| r.invisible()).when(welcomes, |r| r.bg(palette::accent_soft(cx)).text_color(palette::strong(cx)));
                 match status_line {
                     Some(status) => row.h_auto().py(px((row_height() - 20.) / 2.)).flex_col().items_stretch().gap_0p5().child(line.min_h_5()).child(status),
@@ -704,7 +704,7 @@ impl Waffle {
                 let (menu_thread, guild_id) = (thread.clone(), guild.id.clone());
                 // The first branch starts just below its parent, never touching the parent's fill.
                 let gap = if i == 0 { -4. } else { row_gap() };
-                // lint-allow(custom-mark): ui::divider draws straight rules; this is an elbow that joins the thread to its channel.
+                // lint-allow(custom-mark): ui::Separator draws straight rules; this is an elbow that joins the thread to its channel.
                 let branch = div().absolute().left_4().top(px(-gap)).w_3().h(px(THREAD_HEIGHT / 2. + gap)).border_l(px(THICK_LINE)).border_b(px(THICK_LINE)).rounded_bl_lg().border_color(line);
                 let trunk = (i + 1 < count).then(|| div().absolute().left_4().top(px(THREAD_HEIGHT / 2. - 8.)).bottom_0().w(px(THICK_LINE)).bg(line));
                 let state = RowState { selected, unread, muted: false, strong: false };

@@ -524,7 +524,7 @@ impl Waffle {
         let Some(m) = self.server_settings.as_ref().map(|v| &v.lists.members) else { return div().into_any_element() };
         let (filter, pop) = (&m.filter, m.pop.clone());
         let caret = || Icon::new(Glyph::ChevronDown).size(ui::ICON_XS);
-        let signals_chip = ui::chip("ss-member-signals", Some(Glyph::Warning), "Signals", !filter.signals.is_empty(), cx).child(caret()).on_click(cx.listener(|this, _, _, cx| this.member_pop(Some(Pop::Signals), cx)));
+        let signals_chip = ui::Toggle::new("ss-member-signals").pressed(!filter.signals.is_empty()).icon(Glyph::Warning).child("Signals").child(caret()).on_click(cx.listener(|this, _, _, cx| this.member_pop(Some(Pop::Signals), cx)));
         let signals_menu = (pop == Some(Pop::Signals)).then(|| {
             let options: Vec<(String, String, bool)> = Signal::ALL.iter().enumerate().map(|(i, s)| (i.to_string(), signal_label(*s).to_owned(), filter.signals.contains(s))).collect();
             let this = cx.entity();
@@ -532,10 +532,10 @@ impl Waffle {
                 let Some(signal) = id.parse::<usize>().ok().and_then(|i| Signal::ALL.get(i).copied()) else { return };
                 this.update(cx, |this, cx| this.toggle_member_signal(signal, cx));
             };
-            ui::check_options("ss-member-signals-menu", &options, 30., toggle, self.member_dismiss(cx), cx)
+            ui::Select::check_options("ss-member-signals-menu", &options, 30., toggle, self.member_dismiss(cx), cx)
         });
         let sort_glyph = if matches!(filter.sort, MemberSort::JoinedOldest | MemberSort::AccountOldest) { Glyph::ArrowUp } else { Glyph::ArrowDown };
-        let sort_chip = ui::chip("ss-member-sort", Some(sort_glyph), sort_label(filter.sort), false, cx).child(caret()).on_click(cx.listener(|this, _, _, cx| this.member_pop(Some(Pop::Sort), cx)));
+        let sort_chip = ui::Toggle::new("ss-member-sort").pressed(false).icon(sort_glyph).child(sort_label(filter.sort)).child(caret()).on_click(cx.listener(|this, _, _, cx| this.member_pop(Some(Pop::Sort), cx)));
         let sort_menu = (pop == Some(Pop::Sort)).then(|| {
             let options: Vec<(String, String)> = SORTS.iter().map(|s| ((*s as u8).to_string(), sort_label(*s).to_owned())).collect();
             let this = cx.entity();
@@ -543,11 +543,11 @@ impl Waffle {
                 let Some(sort) = SORTS.into_iter().find(|s| (*s as u8).to_string() == id) else { return };
                 this.update(cx, |this, cx| this.pick_member_sort(sort, cx));
             };
-            ui::select_options("ss-member-sort-menu", &options, &(filter.sort as u8).to_string(), 30., pick, self.member_dismiss(cx), cx)
+            ui::Select::options("ss-member-sort-menu", &options, &(filter.sort as u8).to_string(), 30., pick, self.member_dismiss(cx), cx)
         });
         ui::row()
             .gap_2()
-            .child(div().flex_1().min_w_0().child(ui::search_field("ss-member-search-field", &m.search, cx)))
+            .child(div().flex_1().min_w_0().child(ui::InputGroup::search("ss-member-search-field", &m.search, cx)))
             .child(div().relative().flex_none().child(signals_chip).children(signals_menu))
             .child(div().relative().flex_none().child(sort_chip).children(sort_menu))
             .into_any_element()
@@ -581,13 +581,13 @@ impl Waffle {
         .flatten()
         .collect();
         let cols: Vec<Col> = columns.iter().map(|(c, _)| *c).collect();
-        let head = ui::table_head(&cols, columns.into_iter().map(|(_, cell)| cell), cx);
+        let head = ui::Table::head(&cols, columns.into_iter().map(|(_, cell)| cell), cx);
         let guild_roles = self.guilds.iter().find(|g| g.id == guild_id).map(|g| g.roles.clone()).unwrap_or_default();
         let now = Utc::now();
         let mut rows: Vec<AnyElement> = Vec::new();
         if shown.is_empty() {
             let note = if m.more { "Loading members…" } else { "No members match this search." };
-            rows.push(ui::table_row("ss-members-none", &[Col::Grow { weight: 1., min: 0. }], [div().text_color(palette::muted(cx)).child(note).into_any_element()], cx).into_any_element());
+            rows.push(ui::Table::row("ss-members-none", &[Col::Grow { weight: 1., min: 0. }], [div().text_color(palette::muted(cx)).child(note).into_any_element()], cx).into_any_element());
         }
         for member in shown {
             let picked = m.selected.contains(&member.id);
@@ -609,7 +609,7 @@ impl Waffle {
             cells.push(self.member_actions(member, powers, cx));
             // Right-click opens the row's More menu, as Discord's members table does.
             let pop = Pop::Row(member.id.clone());
-            let row = ui::table_row(SharedString::from(format!("ss-member-{}", member.id)), &cols, cells, cx)
+            let row = ui::Table::row(SharedString::from(format!("ss-member-{}", member.id)), &cols, cells, cx)
                 .when(picked, |r| r.bg(palette::selected(cx)))
                 .when(powers.any(), |r| {
                     r.on_mouse_down(gpui_kit::MouseButton::Right, cx.listener(move |this, _, _, cx| {
@@ -621,7 +621,7 @@ impl Waffle {
                 });
             rows.push(row.into_any_element());
         }
-        ui::table("ss-members-table", ui::table_min_width(&cols), head, rows, cx).into_any_element()
+        ui::Table::new("ss-members-table", ui::table_min_width(&cols), head, rows, cx).into_any_element()
     }
 
     // Open Mod View, then the row's moderation menu.
@@ -631,7 +631,7 @@ impl Waffle {
         let gated = !self.can_mod_view(&guild_id);
         let user_id = id.clone();
         // Settings cover the window, so they close first; unsaved changes keep them open and Mod View shut.
-        let mod_view = ui::icon_button(SharedString::from(format!("ss-modview-{id}")), Glyph::Shield, "Open Mod View", cx).small().disabled(gated).on_click(cx.listener(move |this, _, window, cx| {
+        let mod_view = ui::Button::new(SharedString::from(format!("ss-modview-{id}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::Shield).tooltip_text("Open Mod View").disabled(gated).on_click(cx.listener(move |this, _, window, cx| {
             this.close_server_settings(false, cx);
             if this.server_settings.is_none() {
                 this.open_mod_view(guild_id.clone(), user_id.clone(), window, cx);
@@ -643,8 +643,8 @@ impl Waffle {
         }
         let open = self.server_settings.as_ref().is_some_and(|v| v.lists.members.pop == Some(Pop::Row(id.clone())));
         let pop = Pop::Row(id.clone());
-        let more = ui::icon_button(SharedString::from(format!("ss-member-more-{id}")), Glyph::MoreVertical, "More options", cx).small().on_click(cx.listener(move |this, _, _, cx| this.member_pop(Some(pop.clone()), cx)));
-        let menu = open.then(|| ui::menu_dropdown(SharedString::from(format!("ss-member-menu-{id}")), 24., Align::End, self.member_menu_rows(member, powers, cx), self.member_dismiss(cx), cx));
+        let more = ui::Button::new(SharedString::from(format!("ss-member-more-{id}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::MoreVertical).tooltip_text("More options").on_click(cx.listener(move |this, _, _, cx| this.member_pop(Some(pop.clone()), cx)));
+        let menu = open.then(|| ui::DropdownMenu::menu(SharedString::from(format!("ss-member-menu-{id}")), 24., Align::End, self.member_menu_rows(member, powers, cx), self.member_dismiss(cx), cx));
         cell = cell.child(div().relative().child(more).children(menu));
         cell.into_any_element()
     }
@@ -652,7 +652,7 @@ impl Waffle {
     fn member_menu_rows(&self, member: &Member, powers: Powers, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let (id, name) = (member.id.clone(), member.name.clone());
         let mut rows = Vec::new();
-        let row = |key: &str, glyph: Glyph, label: String, cx: &mut Context<Self>| ui::menu_row(SharedString::from(format!("ss-member-{key}-{id}")), cx).child(Icon::new(glyph).size(ui::ICON_MD)).child(ui::line(label).flex_1());
+        let row = |key: &str, glyph: Glyph, label: String, cx: &mut Context<Self>| ui::DropdownMenuItem::new(SharedString::from(format!("ss-member-{key}-{id}")), cx).child(Icon::new(glyph).size(ui::ICON_MD)).child(ui::line(label).flex_1());
         if powers.timeout {
             let lift = member.timed_out_until.is_some_and(|t| t > Utc::now());
             let label = if lift { "Remove time out" } else { "Time out for 1 hour" };
@@ -700,7 +700,7 @@ impl Waffle {
     fn members_footer(&self, cx: &mut Context<Self>) -> AnyElement {
         let Some(m) = self.server_settings.as_ref().map(|v| &v.lists.members) else { return div().into_any_element() };
         let (page, size, total) = (m.page, m.page_size, m.total);
-        let size_chip = ui::chip("ss-member-page-size", None, size.to_string(), false, cx).child(Icon::new(Glyph::ChevronDown).size(ui::ICON_XS)).on_click(cx.listener(|this, _, _, cx| this.member_pop(Some(Pop::PageSize), cx)));
+        let size_chip = ui::Toggle::new("ss-member-page-size").pressed(false).child(size.to_string()).child(Icon::new(Glyph::ChevronDown).size(ui::ICON_XS)).on_click(cx.listener(|this, _, _, cx| this.member_pop(Some(Pop::PageSize), cx)));
         let size_menu = (m.pop == Some(Pop::PageSize)).then(|| {
             let options: Vec<(String, String)> = PAGE_SIZES.iter().map(|n| (n.to_string(), n.to_string())).collect();
             let this = cx.entity();
@@ -708,10 +708,10 @@ impl Waffle {
                 let Ok(size) = id.parse() else { return };
                 this.update(cx, |this, cx| this.pick_member_page_size(size, cx));
             };
-            ui::select_options("ss-member-page-size-menu", &options, &size.to_string(), 30., pick, self.member_dismiss(cx), cx)
+            ui::Select::options("ss-member-page-size-menu", &options, &size.to_string(), 30., pick, self.member_dismiss(cx), cx)
         });
-        let prev = ui::icon_button("ss-member-prev", Glyph::ChevronLeft, "Previous page", cx).small().disabled(page == 0).on_click(cx.listener(move |this, _, _, cx| this.show_members_page(page.saturating_sub(1), cx)));
-        let next = ui::icon_button("ss-member-next", Glyph::ChevronRight, "Next page", cx).small().disabled(((page + 1) * size) as u64 >= total).on_click(cx.listener(move |this, _, _, cx| this.show_members_page(page + 1, cx)));
+        let prev = ui::Button::new("ss-member-prev").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::ChevronLeft).tooltip_text("Previous page").disabled(page == 0).on_click(cx.listener(move |this, _, _, cx| this.show_members_page(page.saturating_sub(1), cx)));
+        let next = ui::Button::new("ss-member-next").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::ChevronRight).tooltip_text("Next page").disabled(((page + 1) * size) as u64 >= total).on_click(cx.listener(move |this, _, _, cx| this.show_members_page(page + 1, cx)));
         ui::row()
             .gap_2()
             .px_1()
@@ -731,9 +731,9 @@ impl Waffle {
 fn name_cell(member: &Member, cx: &App) -> AnyElement {
     ui::row()
         .gap_2()
-        .child(ui::avatar(member.avatar.clone(), 28.))
+        .child(ui::Avatar::new(member.avatar.clone(), 28.))
         .child(ui::truncating(format!("ss-mn-{}", member.id), member.name.clone()).text_color(palette::strong(cx)))
-        .when(member.bot, |d| d.child(ui::tag("App", cx).flex_none()))
+        .when(member.bot, |d| d.child(ui::Badge::new("App").variant(ui::BadgeVariant::Accent).flex_none()))
         .child(ui::line(member.username.clone()).flex_1().flex_basis(gpui_kit::Pixels::ZERO).text_size(ui::TEXT_XS).text_color(palette::muted(cx)))
         .into_any_element()
 }
@@ -756,7 +756,7 @@ fn roles_cell(member: &Member, guild_roles: &[Role], cx: &App) -> AnyElement {
         .gap_1()
         .child(ui::role_chip(top.name.clone(), color, cx).flex_shrink(1.).min_w_0().overflow_hidden())
         .when(roles.len() > 1, |d| d.child(div().flex_none().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(format!("+{}", roles.len() - 1))))
-        .tooltip(move |window, cx| ui::tip(names.clone(), window, cx))
+        .tooltip(move |window, cx| ui::Tooltip::new(names.clone()).build(window, cx))
         .into_any_element()
 }
 
@@ -771,7 +771,7 @@ fn signals_cell(member: &Member, now: DateTime<Utc>, cx: &App) -> AnyElement {
                 .id(SharedString::from(format!("ss-signal-{}-{signal:?}", member.id)))
                 .text_color(if red { danger } else { muted })
                 .child(Icon::new(glyph).size(ui::ICON_MD))
-                .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
+                .tooltip(move |window, cx| ui::Tooltip::new(tip.clone()).build(window, cx))
         }))
         .into_any_element()
 }

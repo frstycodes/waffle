@@ -11,7 +11,7 @@ use crate::{
     discord::{Channel, ChannelKind, perm},
     icons::Glyph,
     palette,
-    ui::{self, Tone},
+    ui::{self},
 };
 
 // Discord's intro disc, and the glyph inside it.
@@ -66,7 +66,7 @@ fn channel_start_header(start: &ChannelStart, this: WeakEntity<Waffle>, cx: &App
     let disc = ui::row().size(px(DISC)).flex_none().rounded_full().justify_center().bg(palette::hover(cx)).text_color(palette::strong(cx)).child(Icon::new(glyph).size(px(DISC_GLYPH)));
     let edit = start.can_edit.then(|| {
         let (channel, guild_id) = (channel.clone(), start.guild_id.clone());
-        ui::button(SharedString::from(format!("edit-channel-{}", channel.id)), Tone::Secondary, cx).small().child(Icon::new(Glyph::Pen).size(ui::ICON_MD)).child("Edit Channel").on_click(move |_, window, cx| {
+        ui::Button::new(SharedString::from(format!("edit-channel-{}", channel.id))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child(Icon::new(Glyph::Pen).size(ui::ICON_MD)).child("Edit Channel").on_click(move |_, window, cx| {
             cx.stop_propagation();
             this.update(cx, |this, cx| this.open_channel_settings(channel.clone(), guild_id.clone(), window, cx)).ok();
         })

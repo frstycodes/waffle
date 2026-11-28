@@ -23,9 +23,9 @@ impl Waffle {
         let options: Vec<(String, String)> = JOIN_DEFAULTS.iter().map(|(value, label)| (value.to_string(), (*label).to_owned())).collect();
         let value = JOIN_DEFAULTS.iter().find(|(v, _)| *v == chosen).map_or(JOIN_DEFAULTS[0].1, |(_, label)| label);
         let field = div().w(px(JOIN_FIELD_WIDTH)).flex_none().child(self.select_field(Select::JoinActivity, None, &options, &chosen.to_string(), value.into(), 36., cx));
-        let join = ui::settings_row("activity-join-default", false, cx).child(ui::settings_text("When joining a server", Some("Whether new servers see your activity"), cx)).child(field);
+        let join = ui::Item::setting("activity-join-default", false, cx).child(ui::settings_text("When joining a server", Some("Whether new servers see your activity"), cx)).child(field);
         let sharing = account.show_current_game;
-        let mut card = ui::settings_card(cx).child(join);
+        let mut card = ui::Card::new(cx).child(join);
         for guild in &self.guilds {
             let shared = !account.activity_restricted_guilds.contains(&guild.id);
             card = card.child(self.guild_activity_row(&guild.id, guild.icon.as_deref(), &guild.name, shared, sharing, window, cx));
@@ -36,12 +36,12 @@ impl Waffle {
 
     // With sharing off the rows dim but stay switchable, as in Discord: the list still saves for later.
     #[allow(clippy::too_many_arguments)]
-    fn guild_activity_row(&self, id: &str, icon: Option<&str>, name: &str, shared: bool, sharing: bool, window: &mut Window, cx: &mut Context<Self>) -> gpui_kit::Stateful<gpui_kit::Div> {
+    fn guild_activity_row(&self, id: &str, icon: Option<&str>, name: &str, shared: bool, sharing: bool, _window: &mut Window, cx: &mut Context<Self>) -> gpui_kit::Stateful<gpui_kit::Div> {
         let key = format!("activity-guild-{id}");
         let label = div().flex_1().min_w_0().text_color(palette::strong(cx)).child(ui::truncating(format!("{key}-name"), name.to_owned()));
-        let switch = ui::switch_live(SharedString::from(format!("{key}-switch")), shared, window, cx);
+        let switch = ui::Switch::new(SharedString::from(format!("{key}-switch"))).checked(shared);
         let guild_id = id.to_owned();
-        ui::settings_choice(ui::settings_row(key, true, cx), cx)
+        ui::settings_choice(ui::Item::setting(key, true, cx), cx)
             .when(!sharing, |row| row.opacity(0.6))
             .child(ui::server_tile(icon, name, 24., cx))
             .child(label)

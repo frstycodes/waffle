@@ -553,12 +553,12 @@ impl Waffle {
             .iter()
             .enumerate()
             .map(|(i, entry)| match entry {
-                Entry::Separator => separator(cx).into_any_element(),
+                Entry::Separator => separator().into_any_element(),
                 Entry::Header { lead, title, subtitle } => menu_header(lead, title.clone(), subtitle.clone(), cx).into_any_element(),
                 Entry::Slider { label, key, value, on_set } => self.menu_range(label.clone(), key.clone(), *value, on_set.clone(), cx).into_any_element(),
                 Entry::Emojis { quick, more } => quick_reactions(quick, more.clone(), cx).into_any_element(),
                 Entry::Label(text) => menu_label(text.clone(), cx).into_any_element(),
-                Entry::Search(input) => div().h(px(SEARCH_ROW)).pb_1().child(ui::search_field(SharedString::from(format!("menu-search-{path:?}")), input, cx)).into_any_element(),
+                Entry::Search(input) => div().h(px(SEARCH_ROW)).pb_1().child(ui::InputGroup::search(SharedString::from(format!("menu-search-{path:?}")), input, cx)).into_any_element(),
                 Entry::Item(item) => {
                     let mut item_path = path.to_vec();
                     item_path.push(i);
@@ -566,7 +566,7 @@ impl Waffle {
                 }
             })
             .collect();
-        ui::surface(cx).w(px(width)).id(SharedString::from(format!("menu-{path:?}"))).absolute().on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()).children(rows)
+        ui::PopoverContent::new(cx).w(px(width)).id(SharedString::from(format!("menu-{path:?}"))).absolute().on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()).children(rows)
     }
 
     fn menu_range(&self, label: SharedString, key: SharedString, value: f32, on_set: SetValue, cx: &mut Context<Self>) -> Div {
@@ -614,9 +614,9 @@ pub(crate) fn menu_item_row(id: SharedString, item: &Item, sub_open: bool, lead_
     let has_sub = !item.sub.is_empty();
     let chosen = item.chosen();
     let row = match item.tone {
-        Tone::Danger => ui::menu_row(id.clone(), cx).danger(cx),
-        Tone::Accent => ui::menu_row(id.clone(), cx).accent(cx),
-        Tone::Plain => ui::menu_row(id.clone(), cx).toggled(chosen, cx),
+        Tone::Danger => ui::DropdownMenuItem::new(id.clone(), cx).danger(cx),
+        Tone::Accent => ui::DropdownMenuItem::new(id.clone(), cx).accent(cx),
+        Tone::Plain => ui::DropdownMenuItem::new(id.clone(), cx).toggled(chosen, cx),
     };
     let lead = item.lead.as_ref().map(|lead| match lead {
         Lead::Glyph(glyph) => div().when_some(plain_icon(item, cx), |d, ink| d.text_color(ink)).child(Icon::new(*glyph).size(px(LEAD))).into_any_element(),
@@ -648,9 +648,9 @@ pub(crate) fn menu_item_row(id: SharedString, item: &Item, sub_open: bool, lead_
                         .child(text)
                 })),
         )
-        .when_some(item.shortcut, |d, combo| d.child(crate::settings::key_caps(&crate::feed_keys::platform_combo(combo), cx)))
+        .when_some(item.shortcut, |d, combo| d.child(crate::settings::key_caps(&crate::feed_keys::platform_combo(combo))))
         .when_some(item.mark, |d, mark| match mark {
-            Mark::Check(on) => d.child(ui::check(if on { ui::Check::On } else { ui::Check::Off }, cx).size(ui::ICON_LG)),
+            Mark::Check(on) => d.child(ui::Checkbox::mark(if on { ui::Check::On } else { ui::Check::Off }).size(ui::ICON_LG)),
             Mark::Radio(_) => d,
         })
         .when(has_sub, |d| d.child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_SM))))
@@ -681,8 +681,8 @@ fn hint_inks(item: &Item, cx: &App) -> (Hsla, Hsla) {
     }
 }
 
-pub(crate) fn separator(cx: &App) -> Div {
-    div().h(px(SEPARATOR)).flex_none().py_1().px_2().child(ui::divider(None, cx))
+pub(crate) fn separator() -> Div {
+    div().h(px(SEPARATOR)).flex_none().py_1().px_2().child(ui::Separator::new().w_full())
 }
 
 fn menu_label(text: SharedString, cx: &App) -> Div {

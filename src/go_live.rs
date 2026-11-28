@@ -291,7 +291,7 @@ impl Waffle {
             .gap_0p5()
             .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(format!("Go live in {channel}")))
             .child(div().text_color(palette::muted(cx)).child("Choose a screen, a window or a capture device."));
-        let body = ui::dialog_body()
+        let body = ui::DialogContent::new()
             .child(head)
             .child(self.share_tabs(picker, window, cx))
             .child(self.share_sources(picker, cx))
@@ -302,16 +302,16 @@ impl Waffle {
             this.close_share_picker(cx);
             cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
         }));
-        let dialog = ui::dialog("share-picker", DIALOG_WIDTH, body, window, cx);
-        Some(ui::modal(backdrop, dialog, cx))
+        let dialog = ui::Dialog::new("share-picker", DIALOG_WIDTH, body, window, cx);
+        Some(ui::Dialog::modal(backdrop, dialog, cx))
     }
 
-    fn share_tabs(&self, picker: &SharePicker, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn share_tabs(&self, picker: &SharePicker, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         const TABS: [ShareTab; 3] = [ShareTab::Screens, ShareTab::Windows, ShareTab::Devices];
         let items = [ui::Tab::new("Screens").glyph(Glyph::Screen), ui::Tab::new("Windows").glyph(Glyph::AppWindow), ui::Tab::new("Devices").glyph(Glyph::Usb)];
         let selected = TABS.iter().position(|t| *t == picker.tab).unwrap_or_default();
         let this = cx.entity().downgrade();
-        ui::tabs("share-tabs", &items, selected, move |i, _, cx| {
+        ui::Tabs::new("share-tabs").variant(ui::TabsVariant::Line).tabs(&items).value(selected).on_value_change(move |i, _, cx| {
             this.update(cx, |this, cx| {
                 if let Some(picker) = &mut this.share_picker {
                     picker.tab = TABS[i];
@@ -319,7 +319,7 @@ impl Waffle {
                 cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
             })
             .ok();
-        }, window, cx)
+        })
     }
 
     // .srcs: three across, 12px apart; each a live still and its name.
@@ -371,7 +371,7 @@ impl Waffle {
             Some(image) => img(image).size_4().flex_none().into_any_element(),
             None => Icon::new(glyph(source)).size(ui::ICON_MD).flex_none().text_color(muted).into_any_element(),
         };
-        ui::card(SharedString::from(format!("share-{key}")), cx)
+        ui::Card::interactive(SharedString::from(format!("share-{key}")), cx)
             .flat()
             .stacked()
             .p_1()
@@ -391,38 +391,24 @@ impl Waffle {
     }
 
     // .quality: resolution and frame rate side by side, each a segmented control.
-    fn share_quality(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn share_quality(&self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         const RESOLUTIONS: [(u32, &str); 4] = [(720, "720p"), (1080, "1080p"), (1440, "1440p"), (0, "Source")];
         const RATES: [(u32, &str); 3] = [(15, "15 fps"), (30, "30 fps"), (60, "60 fps")];
         let resolution = RESOLUTIONS.iter().position(|(v, _)| *v == self.prefs.stream_resolution).unwrap_or(1);
         let rate = RATES.iter().position(|(v, _)| *v == self.prefs.stream_fps).unwrap_or(1);
         let (this, that) = (cx.entity().downgrade(), cx.entity().downgrade());
-        let resolutions = ui::segmented_live(
-            "share-resolution",
-            &RESOLUTIONS.map(|(_, l)| l),
-            resolution,
-            move |i, _, cx| {
+        let resolutions = ui::Tabs::new("share-resolution").labels(&RESOLUTIONS.map(|(_, l)| l)).value(resolution).on_value_change(move |i, _, cx| {
                 this.update(cx, |this, cx| this.update_prefs(cx, |p| p.stream_resolution = RESOLUTIONS[i].0)).ok();
-            },
-            window,
-            cx,
-        );
-        let rates = ui::segmented_live(
-            "share-rate",
-            &RATES.map(|(_, l)| l),
-            rate,
-            move |i, _, cx| {
+            });
+        let rates = ui::Tabs::new("share-rate").labels(&RATES.map(|(_, l)| l)).value(rate).on_value_change(move |i, _, cx| {
                 that.update(cx, |this, cx| this.update_prefs(cx, |p| p.stream_fps = RATES[i].0)).ok();
-            },
-            window,
-            cx,
-        );
-        let field = |label: &'static str, control: Div| ui::col().min_h_0().flex_1().gap_1p5().child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(label)).child(control);
+            });
+        let field = |label: &'static str, control: ui::Tabs| ui::col().min_h_0().flex_1().gap_1p5().child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(label)).child(control);
         ui::row().items_stretch().gap_4().child(field("Resolution", resolutions)).child(field("Frame rate", rates))
     }
 
     // The sound switch, saying whose sound viewers get.
-    fn share_audio(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn share_audio(&self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let what = match (self.share_choice, &self.share_choice_label) {
             (Some(ShareSource::Screen(_)) | None, _) => "Viewers hear everything except Waffle".to_owned(),
             (Some(_), Some(label)) => format!("Viewers hear {label}, not your other apps"),
@@ -434,19 +420,19 @@ impl Waffle {
             .gap_3()
             .cursor_pointer()
             .child(div().flex_1().min_w_0().child(div().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child("Share audio")).child(ui::line(what).text_size(ui::TEXT_XS).text_color(palette::muted(cx))))
-            .child(ui::switch_live("stream-audio-switch", self.prefs.stream_audio, window, cx))
+            .child(ui::Switch::new("stream-audio-switch").checked(self.prefs.stream_audio))
             .on_click(cx.listener(|this, _, _, cx| this.update_prefs(cx, |p| p.stream_audio = !p.stream_audio)))
     }
 
     // The footer: who can watch (or the keybind), Cancel, and Go live.
     fn share_footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let ready = self.share_choice.is_some();
-        let go = ui::button("go-live", ui::Tone::Primary, cx)
+        let go = ui::Button::new("go-live")
             .child(Icon::new(Glyph::StreamBold).size(ui::ICON_LG))
             .child("Go live")
             .when(!ready, |b| b.opacity(0.45).cursor(gpui_kit::CursorStyle::OperationNotAllowed))
             .when(ready, |b| b.on_click(cx.listener(|this, _, _, cx| this.go_live_from_picker(cx))));
-        let cancel = ui::button("go-live-cancel", ui::Tone::Ghost, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| {
+        let cancel = ui::Button::new("go-live-cancel").variant(ui::ButtonVariant::Ghost).child("Cancel").on_click(cx.listener(|this, _, _, cx| {
             this.close_share_picker(cx);
             cx.notify(); // lint-allow(global-notify): the share picker is an overlay, which only follows the app
         }));

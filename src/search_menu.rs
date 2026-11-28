@@ -366,8 +366,8 @@ impl Waffle {
                 let first_recent = rows.iter().position(|r| matches!(r, Row::Recent(_)));
                 for (i, row) in rows.iter().enumerate() {
                     if Some(i) == first_recent {
-                        out.push(div().px_2().py_1().child(ui::divider(None, cx)).into_any_element());
-                        let clear = ui::icon_button("search-history-clear", Glyph::Trash, "Clear history", cx).small().on_click(cx.listener(|this, _, _, cx| this.clear_search_history(cx)));
+                        out.push(div().px_2().py_1().child(ui::Separator::new().w_full()).into_any_element());
+                        let clear = ui::Button::new("search-history-clear").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::Trash).tooltip_text("Clear history").on_click(cx.listener(|this, _, _, cx| this.clear_search_history(cx)));
                         out.push(group("History", cx).child(ui::row().flex_1().justify_end().child(clear)).into_any_element());
                     }
                     out.push(self.search_row(i, row, pick, &avatars, cx));
@@ -376,7 +376,7 @@ impl Waffle {
             }
             Menu::Calendar(key) => vec![self.calendar(*key, cx)],
         };
-        let card = ui::surface(cx)
+        let card = ui::PopoverContent::new(cx)
             .id("search-popover")
             .w(px(WIDTH))
             .max_h(px(POPOVER_MAX))
@@ -393,7 +393,7 @@ impl Waffle {
 
     fn search_row(&self, index: usize, row: &Row, pick: Option<usize>, avatars: &HashMap<String, String>, cx: &mut Context<Self>) -> AnyElement {
         let (muted, strong) = (palette::muted(cx), palette::strong(cx));
-        let base = ui::menu_row(("search-row", index), cx).highlighted(pick == Some(index)).on_click(cx.listener(move |this, _, window, cx| this.accept_search_row(index, window, cx)));
+        let base = ui::DropdownMenuItem::new(("search-row", index), cx).highlighted(pick == Some(index)).on_click(cx.listener(move |this, _, window, cx| this.accept_search_row(index, window, cx)));
         let lead = |glyph: Glyph| div().flex_none().text_color(muted).child(Icon::new(glyph).size(ui::ICON_LG));
         match row {
             Row::Filter(key) => base
@@ -423,7 +423,7 @@ impl Waffle {
             }
             Row::Value(pick) => {
                 let lead_el = match &pick.lead {
-                    Lead::Avatar(url) => ui::avatar(url.clone(), 24.).flex_none().into_any_element(),
+                    Lead::Avatar(url) => ui::Avatar::new(url.clone(), 24.).flex_none().into_any_element(),
                     Lead::Glyph(glyph) => lead(*glyph).into_any_element(),
                 };
                 base.child(lead_el).child(ui::line(pick.label.clone()).flex_1().text_color(strong)).into_any_element()
@@ -455,7 +455,7 @@ impl Waffle {
                 .child(n.to_string())
         });
         let step = |id: &'static str, glyph, tip, months: i32| {
-            ui::icon_button(id, glyph, tip, cx).small().on_click(cx.listener(move |this, _, _, cx| {
+            ui::Button::new(id).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(glyph).tooltip_text(tip).on_click(cx.listener(move |this, _, _, cx| {
                 let moved = if months < 0 { this.search_day.checked_sub_months(Months::new(1)) } else { this.search_day.checked_add_months(Months::new(1)) };
                 this.search_day = moved.unwrap_or(this.search_day).min(today());
                 this.redraw(Column::Main, cx);
@@ -485,7 +485,7 @@ pub(crate) fn token_chip(key: &str, label: &str, avatar: Option<String>, in_fiel
         .text_size(ui::TEXT_SM)
         .text_color(palette::strong(cx))
         .child(div().font_weight(FontWeight::SEMIBOLD).text_color(word).child(format!("{key}:")))
-        .children(avatar.map(|url| ui::avatar(url, 16.)))
+        .children(avatar.map(|url| ui::Avatar::new(url, 16.)))
         .child(div().whitespace_nowrap().child(shown(key, label)))
 }
 

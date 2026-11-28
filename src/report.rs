@@ -251,27 +251,27 @@ impl Waffle {
 
     pub(crate) fn report_overlay(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let dialog = self.report_dialog.as_ref()?;
-        let close = ui::icon_button("report-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_report(cx)));
+        let close = ui::Button::new("report-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_report(cx)));
         let body = match &dialog.menu {
-            Load::Loading => ui::dialog_body().child(head(SharedString::from("Report"), None, close, cx)).child(
-                ui::col().gap_2().children((0..4usize).map(|i| ui::skeleton(("report-loading", i), RADIUS_MD, cx).h_11().w_full())),
+            Load::Loading => ui::DialogContent::new().child(head(SharedString::from("Report"), None, close, cx)).child(
+                ui::col().gap_2().children((0..4usize).map(|i| ui::Skeleton::new(("report-loading", i)).radius(RADIUS_MD).h_11().w_full())),
             ),
-            Load::Failed => ui::dialog_body().child(head(SharedString::from("Report"), None, close, cx)).child(
-                ui::empty_state("report-failed", Illustration::LoadFailed, "Couldn't load the report menu", "Discord didn't send it. Close this and try again in a moment.", cx),
+            Load::Failed => ui::DialogContent::new().child(head(SharedString::from("Report"), None, close, cx)).child(
+                ui::Empty::new("report-failed", Illustration::LoadFailed, "Couldn't load the report menu", "Discord didn't send it. Close this and try again in a moment.", cx),
             ),
             Load::Ready(menu) => self.report_node(dialog, menu, close, window, cx),
         };
-        Some(ui::modal(backdrop("report-backdrop", cx), ui::dialog("report-dialog", DIALOG_WIDTH, body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop("report-backdrop", cx), ui::Dialog::new("report-dialog", DIALOG_WIDTH, body, window, cx), cx))
     }
 
-    fn report_node(&self, dialog: &ReportDialog, menu: &ReportMenu, close: ui::Control, window: &mut Window, cx: &mut Context<Self>) -> gpui_kit::Div {
+    fn report_node(&self, dialog: &ReportDialog, menu: &ReportMenu, close: ui::Button, window: &mut Window, cx: &mut Context<Self>) -> gpui_kit::Div {
         let node = &menu.nodes[&dialog.node];
         let has = |kind: &str| node.elements.iter().any(|e| e.kind == kind);
         let success = has("success");
         let ctx = self.row_context_everywhere(&[], DIALOG_WIDTH, cx);
         let markdown = |text: &str, cx: &mut Context<Self>| crate::chat::content(&Message { content: text.to_owned(), ..Default::default() }, &ctx, cx);
         let subheader = node.subheader.as_deref().and_then(|s| markdown(s, cx));
-        let mut body = ui::dialog_body();
+        let mut body = ui::DialogContent::new();
         if success {
             body = body.child(ui::row().items_stretch().justify_center().pt_2().child(img(Illustration::ReportSent.path()).w(px(SENT_ART_WIDTH)).h(px(SENT_ART_HEIGHT))));
         }
@@ -304,7 +304,7 @@ impl Waffle {
         if !node.children.is_empty() {
             let rows = node.children.iter().enumerate().map(|(i, (label, to))| {
                 let (to, label_owned) = (to.clone(), label.clone());
-                ui::menu_row(SharedString::from(format!("report-child-{}-{i}", dialog.node)), cx)
+                ui::DropdownMenuItem::new(SharedString::from(format!("report-child-{}-{i}", dialog.node)), cx)
                     .min_h_11()
                     .text_size(ui::TEXT_LEAD)
                     .text_color(palette::strong(cx))
@@ -326,20 +326,20 @@ impl Waffle {
 
     fn report_footer(&self, dialog: &ReportDialog, node: &Node, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let kind = node.button.as_ref().map(|(kind, _)| kind.as_str());
-        let back = (!dialog.history.is_empty() && kind != Some("done")).then(|| ui::button("report-back", ui::Tone::Secondary, cx).child("Back").on_click(cx.listener(|this, _, _, cx| this.report_back(cx))));
+        let back = (!dialog.history.is_empty() && kind != Some("done")).then(|| ui::Button::new("report-back").variant(ui::ButtonVariant::Secondary).child("Back").on_click(cx.listener(|this, _, _, cx| this.report_back(cx))));
         let primary = match node.button.clone() {
             Some((kind, _)) if kind == "submit" => Some(
-                ui::button("report-submit", ui::Tone::Danger, cx)
+                ui::Button::new("report-submit").variant(ui::ButtonVariant::Destructive)
                     .disabled(!node.ready(&dialog.picks))
                     .loading(dialog.sending.then_some("Submitting"))
                     .child("Submit Report")
                     .on_click(cx.listener(|this, _, _, cx| this.submit_report(cx))),
             ),
             Some((kind, Some(target))) if kind == "next" => Some(
-                ui::button("report-next", ui::Tone::Primary, cx).disabled(!node.ready(&dialog.picks)).child("Next").on_click(cx.listener(move |this, _, _, cx| this.report_step(target.clone(), None, cx))),
+                ui::Button::new("report-next").disabled(!node.ready(&dialog.picks)).child("Next").on_click(cx.listener(move |this, _, _, cx| this.report_step(target.clone(), None, cx))),
             ),
-            Some((kind, _)) if kind == "cancel" => Some(ui::button("report-cancel", ui::Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_report(cx)))),
-            Some(_) => Some(ui::button("report-done", ui::Tone::Primary, cx).child("Done").on_click(cx.listener(|this, _, _, cx| this.close_report(cx)))),
+            Some((kind, _)) if kind == "cancel" => Some(ui::Button::new("report-cancel").variant(ui::ButtonVariant::Secondary).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_report(cx)))),
+            Some(_) => Some(ui::Button::new("report-done").child("Done").on_click(cx.listener(|this, _, _, cx| this.close_report(cx)))),
             None => None,
         };
         if back.is_none() && primary.is_none() {
@@ -355,13 +355,13 @@ impl Waffle {
         !person.bot && self.relation(&person.id) != Some(Relation::Blocked)
     }
 
-    fn also_block_toggle(&self, on: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn also_block_toggle(&self, on: bool, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         ui::row()
             .id("report-also-block")
             .gap_2()
             .mr_2() // lint-allow(raw-margin): spacing from the footer's neighbouring button, whose row sets no gap
             .cursor_pointer()
-            .child(ui::check_live("report-also-block-check", if on { Check::On } else { Check::Off }, window, cx))
+            .child(ui::Checkbox::new("report-also-block-check").checked(if on { Check::On } else { Check::Off }))
             .child("Also block")
             .on_click(cx.listener(|this, _, _, cx| {
                 if let Some(dialog) = this.report_dialog.as_mut() {
@@ -377,12 +377,12 @@ impl Waffle {
         let preview = self.forward_preview(m, cx).unwrap_or_else(|| div().into_any_element());
         let who = ui::row()
             .gap_2()
-            .child(ui::avatar(m.author.avatar.clone(), PREVIEW_AVATAR / 1.5))
+            .child(ui::Avatar::new(m.author.avatar.clone(), PREVIEW_AVATAR / 1.5))
             .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(m.author.name.clone()));
         Some(labelled("Selected message", well(cx).flex_col().items_start().gap_1p5().child(who).child(div().w_full().child(preview)), cx).into_any_element())
     }
 
-    fn report_choices(&self, dialog: &ReportDialog, element: &Element, many: bool, id: &str, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn report_choices(&self, dialog: &ReportDialog, element: &Element, many: bool, id: &str, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         // A checkbox group's data is [[value, label, subtitle, checked by default], ...]; a radio group's is
         // { title, options: [{ label, value }] }.
         let options: Vec<(String, String, Option<String>)> = match many {
@@ -398,8 +398,8 @@ impl Waffle {
             };
             let row_id = SharedString::from(format!("{id}-{i}"));
             let mark = match many {
-                true => ui::check_live(SharedString::from(format!("{row_id}-mark")), if on { Check::On } else { Check::Off }, window, cx).into_any_element(),
-                false => ui::radio_live(SharedString::from(format!("{row_id}-mark")), on, window, cx).into_any_element(),
+                true => ui::Checkbox::new(SharedString::from(format!("{row_id}-mark"))).checked(if on { Check::On } else { Check::Off }).into_any_element(),
+                false => ui::RadioGroupItem::new(SharedString::from(format!("{row_id}-mark"))).checked(on).into_any_element(),
             };
             let name = element.name.clone();
             ui::pick_row(row_id, mark, label, detail.map(Into::into), cx).on_click(cx.listener(move |this, _, _, cx| this.report_pick(name.clone(), value.clone(), many, cx)))
@@ -431,7 +431,7 @@ impl Waffle {
         };
         // Block and ignore toggle so a slip can be undone here; a deleted message can't come back.
         let deleted = action == "delete" && active;
-        let button = ui::button(SharedString::from(format!("report-{action}")), ui::Tone::Secondary, cx).small().disabled(deleted).child(if active { undo } else { verb });
+        let button = ui::Button::new(SharedString::from(format!("report-{action}"))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).disabled(deleted).child(if active { undo } else { verb });
         let button = match deleted {
             true => button,
             false => button.on_click(cx.listener(move |this, _, _, cx| this.report_follow_up(action, person.clone(), cx))),
@@ -440,7 +440,7 @@ impl Waffle {
             ui::row()
                 .gap_3()
                 .p_2()
-                .child(ui::icon_tile(glyph, palette::selected(cx), palette::strong(cx)))
+                .child(ui::ItemMedia::icon(glyph, palette::selected(cx), palette::strong(cx)))
                 .child(ui::col().min_h_0().flex_1().child(ui::line(title).text_color(palette::strong(cx))).child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail)))
                 .child(button)
                 .into_any_element(),
@@ -530,7 +530,7 @@ fn key(id: &Value) -> String {
     id.as_str().map_or_else(|| id.to_string(), str::to_owned)
 }
 
-fn head(title: SharedString, subheader: Option<AnyElement>, close: ui::Control, cx: &mut Context<Waffle>) -> gpui_kit::Div {
+fn head(title: SharedString, subheader: Option<AnyElement>, close: ui::Button, cx: &mut Context<Waffle>) -> gpui_kit::Div {
     let text = ui::col().min_h_0()
         .flex_1()
         .gap_1()
@@ -552,7 +552,7 @@ fn notice(body: AnyElement, cx: &mut Context<Waffle>) -> gpui_kit::Div {
 }
 
 fn user_preview(user: &User, cx: &mut Context<Waffle>) -> gpui_kit::Div {
-    well(cx).items_center().gap_3().child(ui::avatar(user.avatar.clone(), 40.)).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(user.name.clone()))
+    well(cx).items_center().gap_3().child(ui::Avatar::new(user.avatar.clone(), 40.)).child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(user.name.clone()))
 }
 
 // The reasons picked so far, under Discord's "Report Category".

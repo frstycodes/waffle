@@ -68,6 +68,31 @@ fn cell_box(col: Col) -> Div {
     }
 }
 
+// shadcn's names for the above.
+
+// The box, its header band and the sideways scroller. The band is painted on the box, not the scrolling
+// header row: gpui clips to rectangles, so a moving band would poke square corners past the rounded border.
+// Keywords: table, shadcn
+pub struct Table;
+
+impl Table {
+    // The box, its header band and the sideways scroller. The band is painted on the box, not the scrolling
+    // header row: gpui clips to rectangles, so a moving band would poke square corners past the rounded border.
+    pub fn new(id: impl Into<SharedString>, min_width: f32, head: Div, rows: impl IntoIterator<Item = AnyElement>, cx: &App) -> Stateful<Div> {
+        super::table(id, min_width, head, rows, cx)
+    }
+
+    // The header row on the band: 12px muted labels, a fixed height so the band under it lines up.
+    pub fn head(cols: &[Col], cells: impl IntoIterator<Item = AnyElement>, cx: &App) -> Div {
+        super::table_head(cols, cells, cx)
+    }
+
+    // A body row under a full-width divider.
+    pub fn row(id: impl Into<ElementId>, cols: &[Col], cells: impl IntoIterator<Item = AnyElement>, cx: &App) -> Stateful<Div> {
+        super::table_row(id, cols, cells, cx)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

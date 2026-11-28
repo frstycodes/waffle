@@ -17,7 +17,7 @@ use crate::{
     menu::item,
     palette::{self, stage},
     stage::{STAGE, hand_queue, ordinal, requests_allowed},
-    ui::{self, RADIUS_SM, Squircle, Tone},
+    ui::{self, RADIUS_SM, Squircle},
 };
 use crate::part::Column;
 
@@ -148,7 +148,7 @@ impl Waffle {
                 cx.set_global(StageRequests((!open).then(|| channel_id.clone())));
                 this.redraw(Column::Main, cx);
             })))
-            .when(room.hands > 0, |d| d.child(ui::count_badge(room.hands as u32).absolute().top(px(-REQUEST_BADGE_TOP)).right(px(-REQUEST_BADGE_RIGHT))));
+            .when(room.hands > 0, |d| d.child(ui::Badge::count(room.hands as u32).absolute().top(px(-REQUEST_BADGE_TOP)).right(px(-REQUEST_BADGE_RIGHT))));
         ui::row()
             .h_10()
             .gap_2p5()
@@ -160,9 +160,9 @@ impl Waffle {
                     .child(ui::line(title).text_size(ui::TEXT_LEAD).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()))
                     .child(ui::line(line).text_size(ui::TEXT_XS).text_color(stage::muted()).font_features(tabular())),
             )
-            .when(live, |d| d.child(ui::live_badge()))
+            .when(live, |d| d.child(ui::Badge::live()))
             .when(manage, |d| d.child(edit).child(requests))
-            .child(ui::seam(cx).bg(stage::wash(0.14)))
+            .child(ui::Separator::new().orientation(ui::Orientation::Vertical).bg(stage::wash(0.14)))
             .child(self.chat_toggle(cx))
     }
 
@@ -198,7 +198,7 @@ impl Waffle {
             (None, OnStage::Invited) => Some("Invited".to_owned()),
             _ => None,
         };
-        ui::card(SharedString::from(format!("stage-face-{id}")), cx)
+        ui::Card::interactive(SharedString::from(format!("stage-face-{id}")), cx)
             .flat()
             .on_stage()
             .stacked()
@@ -207,7 +207,7 @@ impl Waffle {
             .py_2()
             .items_center()
             .gap_1()
-            .child(ui::badged(ui::avatar(avatar, FACE), FACE, ui::Shape::Round, stage::bg()).when_some(place, |face, place| face.mark(ui::Spot::TopRight, ui::badge_of(hand_badge(place)))))
+            .child(ui::badged(ui::Avatar::new(avatar, FACE), FACE, ui::Shape::Round, stage::bg()).when_some(place, |face, place| face.mark(ui::Spot::TopRight, ui::avatar_badge(hand_badge(place)))))
             .child(ui::line(name).max_w(relative(1.)).text_size(ui::TEXT_XS).text_color(stage::text()))
             .children(why.map(|why| div().text_size(ui::TEXT_XXS).font_weight(FontWeight::SEMIBOLD).text_color(palette::accent()).font_features(tabular()).child(why)))
             .on_mouse_down(MouseButton::Right, cx.listener(move |this, e: &MouseDownEvent, _, cx| this.voice_user_menu(&id, e.position, cx)))
@@ -224,11 +224,11 @@ impl Waffle {
             .items_center()
             .justify_center()
             .gap_2()
-            .child(div().pb_1().child(ui::icon_tile(Glyph::Stage, stage::wash(0.08), stage::strong()).size(px(EMPTY_ART))))
+            .child(div().pb_1().child(ui::ItemMedia::icon(Glyph::Stage, stage::wash(0.08), stage::strong()).size(px(EMPTY_ART))))
             .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::SEMIBOLD).text_color(stage::strong()).child(title))
             .child(div().text_size(ui::TEXT_DETAIL).text_color(stage::muted()).child(body))
             .when(room.moderator, |d| {
-                d.child(div().pt_2().child(ui::button("stage-start", ui::Tone::Primary, cx).child("Start Stage").on_click(cx.listener(move |this, _, window, cx| this.open_stage_topic(guild_id.clone(), channel_id.clone(), window, cx)))))
+                d.child(div().pt_2().child(ui::Button::new("stage-start").child("Start Stage").on_click(cx.listener(move |this, _, window, cx| this.open_stage_topic(guild_id.clone(), channel_id.clone(), window, cx)))))
             })
     }
 
@@ -276,20 +276,20 @@ impl Waffle {
     fn disconnect_control(&self, room: &Room, cx: &mut Context<Self>) -> AnyElement {
         let (guild_id, channel_id) = (room.guild.id.clone(), room.channel.id.clone());
         let can_end = room.moderator && room.topic.is_some();
-        let leave = ui::button("stage-disconnect", Tone::Danger, cx)
+        let leave = ui::Button::new("stage-disconnect").variant(ui::ButtonVariant::Destructive)
             .h(px(CONTROLS_HEIGHT))
             .px_3p5()
             .child(Icon::new(Glyph::CallEnd).size(ui::ICON_XL))
-            .tooltip(|window, cx| ui::tip("Disconnect Quietly", window, cx))
+            .tooltip(ui::Tooltip::text("Disconnect Quietly"))
             .on_click(cx.listener(move |this, _, _, cx| this.disconnect_from_stage(guild_id.clone(), channel_id.clone(), cx)));
         if !can_end {
             return leave.into_any_element();
         }
         let channel_id = room.channel.id.clone();
-        let more = ui::button("stage-disconnect-more", Tone::Danger, cx)
+        let more = ui::Button::new("stage-disconnect-more").variant(ui::ButtonVariant::Destructive)
             .h(px(CONTROLS_HEIGHT))
             .child(Icon::new(Glyph::ChevronUpBold).size(ui::ICON_XS))
-            .tooltip(|window, cx| ui::tip("More ways to leave", window, cx))
+            .tooltip(ui::Tooltip::text("More ways to leave"))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, e: &MouseDownEvent, _, cx| {
@@ -299,15 +299,15 @@ impl Waffle {
                     this.open_menu(e.position, vec![end], cx);
                 }),
             );
-        ui::split(leave, more).into_any_element()
+        ui::ButtonGroup::new().item(leave).item(more.px_2()).into_any_element()
     }
 
     // Requests to Speak: whether @everyone may ask, then each raised hand in line, then anyone invited and
     // not yet up.
-    fn requests_popover(&self, room: &Room, stage_height: f32, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn requests_popover(&self, room: &Room, stage_height: f32, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let allowed = requests_allowed(room.guild, &room.channel.overwrites);
         let (guild_id, channel_id) = (room.guild.id.clone(), room.channel.id.clone());
-        let allow = ui::card("stage-allow-requests", cx)
+        let allow = ui::Card::interactive("stage-allow-requests", cx)
             .flat()
             .on_stage()
             .min_h(px(OPTION_ROW))
@@ -323,7 +323,7 @@ impl Waffle {
                     .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(stage::strong()).child("Allow requests from @everyone"))
                     .child(div().text_size(ui::TEXT_XS).text_color(stage::muted()).child("Turn off to stop new hands going up.")),
             )
-            .child(ui::switch_live("stage-allow-switch", allowed, window, cx))
+            .child(ui::Switch::new("stage-allow-switch").checked(allowed))
             .on_click(cx.listener(move |this, _, _, cx| this.allow_requests(&guild_id, &channel_id, !allowed, cx)));
         let asks: Vec<(&VoiceState, Option<usize>)> = room.audience.iter().filter(|(v, place)| place.is_some() || v.on_stage() == OnStage::Invited).copied().collect();
         let list: AnyElement = match asks.is_empty() {
@@ -333,7 +333,7 @@ impl Waffle {
                 ui::col().min_h_0().id("stage-requests-list").flex_1().overflow_y_scroll().gap_0p5().children(rows).into_any_element()
             }
         };
-        let card = ui::surface_in(stage::overlay(), stage::wash(0.14), cx)
+        let card = ui::PopoverContent::scoped(stage::overlay(), stage::wash(0.14), cx)
             .id("stage-requests")
             .occlude()
             .absolute()
@@ -353,10 +353,10 @@ impl Waffle {
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(stage::strong())
                     .child(div().flex_1().child("Requests to Speak"))
-                    .when(room.hands > 0, |d| d.child(ui::count_badge(room.hands as u32))),
+                    .when(room.hands > 0, |d| d.child(ui::Badge::count(room.hands as u32))),
             )
             .child(allow)
-            .child(div().px_2p5().py_1().child(ui::rule(stage::wash(0.08))))
+            .child(div().px_2p5().py_1().child(ui::Separator::new().color(stage::wash(0.08))))
             .child(list);
         // It hangs from the header's hand button, so it grows from its top right.
         ui::rise(card.transform_origin(gpui_kit::point(relative(1.), relative(0.))), "stage-requests", Duration::ZERO).into_any_element()
@@ -376,8 +376,8 @@ impl Waffle {
         let (guild_id, channel_id) = (room.guild.id.clone(), room.channel.id.clone());
         let (dismiss_guild, dismiss_channel, dismiss_user) = (guild_id.clone(), channel_id.clone(), id.clone());
         let user = id.clone();
-        let invite = ui::button(SharedString::from(format!("stage-invite-{id}")), ui::Tone::Primary, cx)
-            .small()
+        let invite = ui::Button::new(SharedString::from(format!("stage-invite-{id}")))
+            .size(ui::ButtonSize::Sm)
             .disabled(invited)
             .child(if invited { "Invite Sent" } else { "Invite to Speak" })
             .when(!invited, |b| b.on_click(cx.listener(move |this, _, _, cx| this.answer_request(&guild_id, &channel_id, &user, true, cx))));
@@ -391,7 +391,7 @@ impl Waffle {
             .gap_2p5()
             .hover(|s| s.bg(stage::wash(0.05)))
             .child(ui::row().items_stretch().w_4().flex_none().justify_center().text_size(ui::TEXT_DETAIL).font_weight(FontWeight::BOLD).text_color(palette::accent()).font_features(tabular()).children(place.map(|n| n.to_string())))
-            .child(ui::avatar(avatar, 32.))
+            .child(ui::Avatar::new(avatar, 32.))
             .child(
                 div()
                     .flex_1()
@@ -412,7 +412,7 @@ impl Waffle {
         let width = (stage_width - 24.).min(INVITE_WIDTH);
         let (guild_id, channel_id) = (room.guild.id.clone(), room.channel.id.clone());
         let (accept_guild, accept_channel) = (guild_id.clone(), channel_id.clone());
-        let card = ui::surface_in(stage::overlay(), stage::wash(0.14), cx)
+        let card = ui::PopoverContent::scoped(stage::overlay(), stage::wash(0.14), cx)
             .flex_row()
             .items_center()
             .id("stage-invite")
@@ -425,7 +425,7 @@ impl Waffle {
             .pl_3p5()
             .pr_3()
             .gap_3()
-            .child(ui::icon_tile(Glyph::Stage, stage::wash(0.08), stage::strong()))
+            .child(ui::ItemMedia::icon(Glyph::Stage, stage::wash(0.08), stage::strong()))
             .child(
                 div()
                     .flex_1()
@@ -442,7 +442,7 @@ impl Waffle {
                     ),
             )
             .child(stage_button("stage-invite-later", "Not Now", cx).on_click(cx.listener(move |this, _, _, cx| this.set_my_suppress(&guild_id, &channel_id, true, false, cx))))
-            .child(ui::button("stage-invite-accept", ui::Tone::Primary, cx).small().child("Accept").on_click(cx.listener(move |this, _, _, cx| this.set_my_suppress(&accept_guild, &accept_channel, false, false, cx))));
+            .child(ui::Button::new("stage-invite-accept").size(ui::ButtonSize::Sm).child("Accept").on_click(cx.listener(move |this, _, _, cx| this.set_my_suppress(&accept_guild, &accept_channel, false, false, cx))));
         ui::rise(card.transform_origin(gpui_kit::point(relative(0.5), relative(1.))), "stage-invite", Duration::ZERO).into_any_element()
     }
 }
@@ -453,7 +453,7 @@ pub(crate) fn moderator_mark(user_id: &str) -> Stateful<Div> {
         .id(SharedString::from(format!("stage-moderator-{user_id}")))
         .flex_none()
         .child(Icon::new(Glyph::Shield).size(ui::ICON_SM).text_color(gpui_kit::white()))
-        .tooltip(|window, cx| ui::tip("Stage Moderator", window, cx))
+        .tooltip(ui::Tooltip::text("Stage Moderator"))
 }
 
 // A section's label over its people, sentence case, counts in tabular figures.
@@ -464,8 +464,8 @@ fn section(glyph: Glyph, label: String) -> Div {
 }
 
 // The raised hand on a face, carrying its place in line.
-fn hand_badge(place: usize) -> Div {
-    ui::badge(palette::accent(), palette::on_accent())
+fn hand_badge(place: usize) -> ui::Badge {
+    ui::Badge::empty()
         .h(ui::LINE_LEAD)
         .min_w(ui::LINE_LEAD)
         .pl(px(HAND_BADGE_PAD))

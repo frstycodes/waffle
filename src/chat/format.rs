@@ -211,7 +211,7 @@ pub(crate) fn bar_label(label: StyledText) -> Div {
 // A suggestion's face: an avatar, a channel's #, an emoji.
 pub(crate) fn suggest_lead(lead: &crate::SuggestLead, cx: &App) -> AnyElement {
     match lead {
-        crate::SuggestLead::Avatar(url) => ui::avatar(url.clone(), 28.).into_any_element(),
+        crate::SuggestLead::Avatar(url) => ui::Avatar::new(url.clone(), 28.).into_any_element(),
         crate::SuggestLead::Channel => ui::row().size_7().flex_none().rounded_full().bg(palette::selected(cx)).text_color(palette::muted(cx)).justify_center().child(Icon::new(Glyph::Hashtag).size(ui::ICON_MD)).into_any_element(),
         crate::SuggestLead::Emoji(emoji) => ui::row().size_7().flex_none().justify_center().child(crate::menu::emoji_face(emoji, 22.)).into_any_element(),
         crate::SuggestLead::Command(glyph) => ui::row().size_7().flex_none().justify_center().text_color(palette::muted(cx)).child(Icon::new(*glyph).size(ui::ICON_XL)).into_any_element(),
@@ -226,19 +226,19 @@ const UNREAD_STUB: f32 = 9.;
 const UNREAD_STUB_TOP: f32 = 7.5;
 
 // Placeholders shaped like the real transcript.
-pub(super) fn skeleton(cx: &App) -> AnyElement {
+pub(super) fn skeleton(_cx: &App) -> AnyElement {
     let row = |(i, w): (usize, f32)| {
         ui::row()
             .items_stretch()
             .gap_4()
-            .child(ui::skeleton_circle(("skeleton-avatar", i), AVATAR, cx))
+            .child(ui::Skeleton::circle(("skeleton-avatar", i), AVATAR))
             .child(
                 ui::col().min_h_0()
                     .flex_1()
                     .gap_2()
                     .pt_1()
-                    .child(ui::skeleton(("skeleton-name", i), SKELETON_RADIUS, cx).w(px(SKELETON_NAME)).h_3())
-                    .child(ui::skeleton(("skeleton-line", i), SKELETON_RADIUS, cx).w(px(w)).h_3()),
+                    .child(ui::Skeleton::new(("skeleton-name", i)).radius(SKELETON_RADIUS).w(px(SKELETON_NAME)).h_3())
+                    .child(ui::Skeleton::new(("skeleton-line", i)).radius(SKELETON_RADIUS).w(px(w)).h_3()),
             )
     };
     ui::col()
@@ -262,21 +262,21 @@ pub(super) fn unread_line() -> AnyElement {
         .w_10()
         .h_4()
         // The rule runs on under the tag to its body, so it meets the sharp tip at full thickness.
-        .child(ui::rule(alert).absolute().left_neg_px().w(px(UNREAD_STUB)).top(px(UNREAD_STUB_TOP)))
+        .child(ui::Separator::new().color(alert).absolute().left_neg_px().w(px(UNREAD_STUB)).top(px(UNREAD_STUB_TOP)))
         .child(gpui_kit::svg().path(crate::icons::NEW_TAG).absolute().inset_0().size_full().text_color(alert))
         .child(ui::row().absolute().top_0().bottom_0().left_2().right_0().justify_center().text_color(gpui_kit::white()).text_size(ui::TEXT_XXS).font_weight(FontWeight::BOLD).child("NEW"));
-    let row = ui::row().w_full().px_4().child(ui::rule(alert).flex_1()).child(tag);
+    let row = ui::row().w_full().px_4().child(ui::Separator::new().color(alert).flex_1()).child(tag);
     div().py_2().child(row).into_any_element()
 }
 
 // Between dates, inside the feed's gutters, never edge to edge.
 pub(super) fn day_divider(timestamp: &str, cx: &App) -> AnyElement {
     let label = day(timestamp).map(|d| d.format("%A, %B %-d, %Y").to_string()).unwrap_or_default();
-    div().pt(px(DIVIDER_PAD.0)).pb(px(DIVIDER_PAD.1)).px(px(GUTTER)).child(ui::divider_with(label, palette::faint(cx), palette::line(cx))).into_any_element()
+    div().pt(px(DIVIDER_PAD.0)).pb(px(DIVIDER_PAD.1)).px(px(GUTTER)).child(ui::Separator::new().label(label).ink(palette::faint(cx)).color(palette::line(cx))).into_any_element()
 }
 
 pub(super) fn empty_state(id: &'static str, art: impl Into<ui::Art>, title: &'static str, detail: impl Into<SharedString>, cx: &App) -> AnyElement {
-    ui::row().size_full().justify_center().child(ui::empty_state(id, art, title, detail, cx)).into_any_element()
+    ui::row().size_full().justify_center().child(ui::Empty::new(id, art, title, detail, cx)).into_any_element()
 }
 
 pub(super) fn continues(previous: &Message, message: &Message) -> bool {
@@ -364,7 +364,7 @@ pub(crate) fn format_size(bytes: u64) -> String {
 // A breadcrumb back up the hierarchy: muted until hovered.
 pub(super) fn crumb(id: &'static str, cx: &App) -> Stateful<Div> {
     let (hover, strong) = (palette::hover(cx), palette::strong(cx));
-    // lint-allow(custom-button): ui::button has no breadcrumb look, muted ink that strengthens on hover and takes the surrounding type
+    // lint-allow(custom-button): ui::Button has no breadcrumb look (ui::Breadcrumb, once it exists, is the home), muted ink that strengthens on hover and takes the surrounding type
     ui::row()
         .id(id)
         .occlude()

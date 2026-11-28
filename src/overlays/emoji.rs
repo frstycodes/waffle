@@ -125,7 +125,7 @@ impl Waffle {
             return None;
         }
         let picker = picker_frame("emoji-picker", PICKER_SIZE.1, cx).children(self.emoji_content(window, cx));
-        Some(backdrop("emoji-backdrop", cx).child(ui::floating_at("emoji-float", self.popover_at, gpui_kit::Anchor::BottomRight, ui::rise(picker.transform_origin(ui::corner(true, true)), "emoji-picker", Duration::ZERO))).into_any_element())
+        Some(backdrop("emoji-backdrop", cx).child(ui::Popover::floating_at("emoji-float", self.popover_at, gpui_kit::Anchor::BottomRight, ui::rise(picker.transform_origin(ui::corner(true, true)), "emoji-picker", Duration::ZERO))).into_any_element())
     }
 
     // Search, the category rail beside the grid, and the hovered emoji named at the foot.
@@ -150,7 +150,7 @@ impl Waffle {
                 let scroll = scroll.clone();
                 // A line sets the server's own emoji apart from the Unicode groups after them.
                 let after_server = i > 0 && matches!(sections[i - 1].lead, SectionLead::Server { .. }) && !matches!(section.lead, SectionLead::Server { .. });
-                let line = after_server.then(|| ui::col().py_1().items_center().flex_none().child(ui::divider(None, cx).w_5()).into_any_element());
+                let line = after_server.then(|| ui::col().py_1().items_center().flex_none().child(ui::Separator::new().w_full().w_5()).into_any_element());
                 let tab = ui::icon_slot(("emoji-cat", i), section.name.clone(), cx)
                     .sized(36.)
                     .toggled(i == in_view, cx)
@@ -168,7 +168,7 @@ impl Waffle {
             };
             let (picked, shown) = (emoji.clone(), (emoji, source));
             let hovered = hovered.clone();
-            // lint-allow(custom-button): ui::icon_button is a square taking a Glyph; an emoji cell is a ninth of the grid's width.
+            // lint-allow(custom-button): ui::Button is a square taking a Glyph; an emoji cell is a ninth of the grid's width.
             ui::row()
                 .id(SharedString::from(key))
                 .w(relative(1. / 9.))
@@ -238,7 +238,7 @@ impl Waffle {
                     )
             }));
         // GAP: the design's skin-tone button sits beside search; Waffle has no skin tones yet.
-        let head = div().p_2p5().child(ui::search_field("emoji-search", &self.emoji_search, cx));
+        let head = div().p_2p5().child(ui::InputGroup::search("emoji-search", &self.emoji_search, cx));
         vec![
             head.into_any_element(),
             ui::row().items_stretch().flex_1().min_h_0().child(rail).child(ui::row().items_stretch().flex_1().h_full().relative().child(grid).child(gpui_kit::component::scroll::Scrollbar::vertical(&scroll))).into_any_element(),

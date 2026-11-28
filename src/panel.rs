@@ -77,7 +77,7 @@ impl Waffle {
                 .text_size(ui::TEXT_SM)
                 // The list stops under the header, a hard edge with the sidebar's hairline once it has scrolled.
                 .child(ui::hard_edge(move || ui::scrolled(&scroll), cx).child(head))
-                .child(ui::scroll_area(ui::col().id("right-panel").pt_2().px_2().pb_2().gap_0p5().child(body), &self.panel_scroll))
+                .child(ui::ScrollArea::new(ui::col().id("right-panel").pt_2().px_2().pb_2().gap_0p5().child(body), &self.panel_scroll))
                 .child(self.resize_handle(Edge::Panel, cx))
                 .children(foot.map(|pager| div().flex_none().py_2().border_t_1().border_color(line).child(pager)))
                 .into_any_element(),
@@ -86,7 +86,7 @@ impl Waffle {
 
     // The column's header row, clear of Windows' caption buttons at the window's top right: an optional
     // leading control, the title, the panel's own tools, and with `close` the way back to the members.
-    pub(crate) fn panel_head(&self, title: SharedString, lead: Option<ui::Control>, tools: Vec<ui::Control>, close: bool, cx: &mut Context<Self>) -> Div {
+    pub(crate) fn panel_head(&self, title: SharedString, lead: Option<ui::Button>, tools: Vec<ui::Button>, close: bool, cx: &mut Context<Self>) -> Div {
         let close = close.then(|| self.back_button(cx));
         self.panel_frame(cx)
             .children(lead)
@@ -105,8 +105,8 @@ impl Waffle {
             .text_color(palette::strong(cx))
     }
 
-    fn back_button(&self, cx: &mut Context<Self>) -> ui::Control {
-        ui::icon_button("close-panel", Glyph::X, "Back to members", cx).occlude().on_click(cx.listener(|this, _, _, cx| {
+    fn back_button(&self, cx: &mut Context<Self>) -> ui::Button {
+        ui::Button::new("close-panel").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Back to members").occlude().on_click(cx.listener(|this, _, _, cx| {
             this.right_panel = RightPanel::Members;
             cx.notify(); // lint-allow(global-notify): the panel's width and header follow which panel is open
         }))
@@ -136,7 +136,7 @@ impl Waffle {
         if group.recipients.len() + 1 >= crate::group_dm::LIMIT {
             return None;
         }
-        let invite = ui::button("group-invite", ui::Tone::Ghost, cx)
+        let invite = ui::Button::new("group-invite").variant(ui::ButtonVariant::Ghost)
             .w_full()
             .child(Icon::new(Glyph::GroupPlus).size(ui::ICON_LG))
             .child("Invite to Group DM")
@@ -292,7 +292,7 @@ impl Waffle {
                 .children(activity_glyph(entry.kind).or_else(|| activity_glyph(ActivityKind::Playing)).map(|icon| icon.size(ui::ICON_XL)))
                 .into_any_element(),
         };
-        ui::card(SharedString::from(format!("activity-{i}")), cx)
+        ui::Card::interactive(SharedString::from(format!("activity-{i}")), cx)
             .on_page(cx)
             .gap_2p5()
             .px_2p5()
@@ -301,7 +301,7 @@ impl Waffle {
                 ui::col().min_h_0()
                     .flex_1()
                     .gap_px()
-                    .child(ui::row().gap_1p5().text_size(ui::TEXT_XS).child(ui::avatar(member.user.avatar.clone(), 14.).flex_none()).child(ui::line(member.user.name.clone()).text_color(name_ink)))
+                    .child(ui::row().gap_1p5().text_size(ui::TEXT_XS).child(ui::Avatar::new(member.user.avatar.clone(), 14.).flex_none()).child(ui::line(member.user.name.clone()).text_color(name_ink)))
                     .child(ui::line(entry.title.clone()).font_weight(FontWeight::MEDIUM).text_color(strong))
                     .child(meta),
             )
@@ -338,18 +338,18 @@ impl Waffle {
                 .gap_1()
                 .child(crate::name_fonts::styled(ui::truncating(key, member.user.name.clone()).text_size(ui::TEXT_MD).line_height(ui::LINE_SM).font_weight(FontWeight::MEDIUM).text_color(name_ink), name_style))
                 .children(dot.map(crate::chat::role_dot))
-                .children(member.user.tag.as_ref().map(|tag| crate::chat::guild_tag(tag, cx)))
-                .when(member.user.bot, |r| r.child(ui::tag("App", cx)))
+                .children(member.user.tag.as_ref().map(crate::chat::guild_tag))
+                .when(member.user.bot, |r| r.child(ui::Badge::new("App").variant(ui::BadgeVariant::Accent)))
                 .when(owner, |r| {
                     let id = SharedString::from(format!("member-owner-{}", member.user.id));
-                    r.child(div().id(id).flex_none().child(Icon::new(Glyph::Crown).size(ui::ICON_SM).text_color(crown)).tooltip(|window, cx| ui::tip("Server Owner", window, cx)))
+                    r.child(div().id(id).flex_none().child(Icon::new(Glyph::Crown).size(ui::ICON_SM).text_color(crown)).tooltip(ui::Tooltip::text("Server Owner")))
                 })
                 .children(boosting.clone().map(|since| {
                     div()
                         .id(SharedString::from(format!("member-boost-{}", member.user.id)))
                         .flex_none()
                         .child(Icon::new(Glyph::Gem).size(ui::ICON_SM).text_color(boost))
-                        .tooltip(move |window, cx| ui::tip(format!("Server boosting since {since}"), window, cx))
+                        .tooltip(move |window, cx| ui::Tooltip::new(format!("Server boosting since {since}")).build(window, cx))
                 }))
         };
         let status = self.member_status(member);
@@ -366,7 +366,7 @@ impl Waffle {
         let plate = member.user.nameplate.as_ref().map(|plate| row_nameplate(plate, names(format!("member-name-mask-{}", member.user.id)), row));
         let plated = plate.is_some();
         let hover_id = member.user.id.clone();
-        // lint-allow(custom-button): ui::list_row is a flat 48px row; a member row also carries a nameplate, its fade and a per-row hover plate.
+        // lint-allow(custom-button): ui::Item::new is a flat 48px row; a member row also carries a nameplate, its fade and a per-row hover plate.
         ui::row()
             .id(SharedString::from(format!("member-{}", member.user.id)))
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
@@ -553,7 +553,7 @@ impl Render for ActivityTip {
             });
             ui::row().gap_1p5().children(item.icon.icon(green)).child(div().flex_none().child(item.text.clone())).children(channel)
         });
-        // lint-allow(custom-badge): ui::tip is one line of text; this tip lists each thing someone is doing, with its icon.
+        // lint-allow(custom-badge): ui::Tooltip is one line of text; this tip lists each thing someone is doing, with its icon.
         ui::col()
             .max_w(px(ACTIVITY_TIP_WIDTH))
             .px_2p5()
@@ -675,7 +675,7 @@ pub(crate) fn group_label(text: impl Into<SharedString>, cx: &App) -> Div {
 
 // A wait names what it waits on, beside the mini wave (.pwait).
 pub(crate) fn wait_line(id: &'static str, text: &'static str, cx: &App) -> Div {
-    ui::row().min_h_8().px_2().gap_2().text_color(palette::muted(cx)).font_weight(FontWeight::NORMAL).child(ui::bars(id, palette::muted(cx), 12.)).child(text)
+    ui::row().min_h_8().px_2().gap_2().text_color(palette::muted(cx)).font_weight(FontWeight::NORMAL).child(ui::Spinner::new(id, palette::muted(cx), 12.)).child(text)
 }
 
 // The list before Discord sends it: the static label, no false count, rows shaped like the real ones.

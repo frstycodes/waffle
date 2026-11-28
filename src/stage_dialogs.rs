@@ -14,7 +14,7 @@ use crate::{
     icons::Glyph,
     palette,
     stage::{NOTIFY_BY_DEFAULT_UP_TO, TOPIC_MAX},
-    ui::{self, Tone},
+    ui::{self},
 };
 
 const PLACEHOLDER: &str = "The debate is over: diet is better than regular";
@@ -125,7 +125,7 @@ impl Waffle {
         };
         let count = div().flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(format!("{length}/{TOPIC_MAX}"));
         let focus = gpui_kit::Focusable::focus_handle(self.dialog_input.read(cx), cx);
-        let topic = ui::field("Stage Topic", cx).child(ui::text_field("stage-topic-field", Input::new(&self.dialog_input).appearance(false), &focus).trailing(count));
+        let topic = ui::Field::new("Stage Topic", cx).child(ui::Input::new("stage-topic-field", Input::new(&self.dialog_input).appearance(false), &focus).trailing(count));
         let head = ui::row()
             .items_start()
             .gap_2()
@@ -136,10 +136,10 @@ impl Waffle {
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(strong).child(title))
                     .child(div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(muted).child(subtitle)),
             )
-            .child(ui::icon_button("stage-topic-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_stage_topic(cx))));
+            .child(ui::Button::new("stage-topic-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_stage_topic(cx))));
         let notify = (!form.editing).then(|| {
             let detail: SharedString = format!("Everyone in {} gets a notification that the Stage started.", form.guild_name).into();
-            let check = ui::check_live("stage-topic-notify-check", if form.notify { ui::Check::On } else { ui::Check::Off }, window, cx);
+            let check = ui::Checkbox::new("stage-topic-notify-check").checked(if form.notify { ui::Check::On } else { ui::Check::Off });
             ui::pick_row("stage-topic-notify", check, "Notify @everyone", Some(detail), cx).on_click(cx.listener(|this, _, _, cx| {
                 if let Some(form) = this.stage_topic.as_mut() {
                     form.notify = !form.notify;
@@ -149,9 +149,9 @@ impl Waffle {
         });
         let actions = ui::row().items_stretch()
             .gap_2()
-            .child(ui::button("stage-topic-cancel", Tone::Secondary, cx).flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_stage_topic(cx))))
-            .child(ui::button("stage-topic-submit", Tone::Primary, cx).flex_1().child(submit).disabled(empty).on_click(cx.listener(|this, _, window, cx| this.submit_stage_topic(window, cx))));
-        let body = ui::dialog_body()
+            .child(ui::Button::new("stage-topic-cancel").variant(ui::ButtonVariant::Secondary).flex_1().child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_stage_topic(cx))))
+            .child(ui::Button::new("stage-topic-submit").flex_1().child(submit).disabled(empty).on_click(cx.listener(|this, _, window, cx| this.submit_stage_topic(window, cx))));
+        let body = ui::DialogContent::new()
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
                 if e.keystroke.key == "escape" {
                     this.close_stage_topic(cx);
@@ -162,7 +162,7 @@ impl Waffle {
             .children(notify)
             .child(actions);
         let backdrop = div().id("stage-topic-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_stage_topic(cx)));
-        Some(ui::modal(backdrop, ui::dialog("stage-topic", 420., body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("stage-topic", 420., body, window, cx), cx))
     }
 }
 

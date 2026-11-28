@@ -236,7 +236,7 @@ impl Waffle {
             .when(active, |d| d.child(ui::line(menu.filter.label()).font_weight(FontWeight::SEMIBOLD)))
             .child(Icon::new(if active { Glyph::Filter } else { Glyph::ChevronDown }).size(ui::ICON_XS).flex_none())
             .on_click(cx.listener(move |this, _, _, cx| this.member_pop(Some(Pop::Date(column)), cx)));
-        let list = open.then(|| ui::menu_dropdown(SharedString::from(format!("ss-date-menu-{}", column.key())), 20., Align::Start, self.date_menu_rows(column, menu, cx), self.member_dismiss(cx), cx));
+        let list = open.then(|| ui::DropdownMenu::menu(SharedString::from(format!("ss-date-menu-{}", column.key())), 20., Align::Start, self.date_menu_rows(column, menu, cx), self.member_dismiss(cx), cx));
         div().relative().min_w_0().child(trigger).children(list).into_any_element()
     }
 
@@ -246,11 +246,11 @@ impl Waffle {
         if menu.custom_open {
             let field = |id: &str, label: &'static str, state: &Entity<InputState>, cx: &mut Context<Self>| {
                 let focus = state.read(cx).focus_handle(cx);
-                ui::field(label, cx).px_2p5().child(ui::text_field(SharedString::from(format!("ss-date-{key}-{id}")), Input::new(state).appearance(false), &focus)).into_any_element()
+                ui::Field::new(label, cx).px_2p5().child(ui::Input::new(SharedString::from(format!("ss-date-{key}-{id}")), Input::new(state).appearance(false), &focus)).into_any_element()
             };
-            let back = ui::menu_row(SharedString::from(format!("ss-date-{key}-back")), cx).child(Icon::new(Glyph::ChevronLeft).size(ui::ICON_MD)).child("Custom range").on_click(cx.listener(move |this, _, _, cx| this.toggle_custom_range(column, false, cx)));
-            let apply = ui::button(SharedString::from(format!("ss-date-{key}-apply")), ui::Tone::Primary, cx).small().child("Apply").on_click(cx.listener(move |this, _, _, cx| this.apply_custom_range(column, cx)));
-            let error = menu.error.clone().map(|e| ui::field_error(e, cx).px_2p5().into_any_element());
+            let back = ui::DropdownMenuItem::new(SharedString::from(format!("ss-date-{key}-back")), cx).child(Icon::new(Glyph::ChevronLeft).size(ui::ICON_MD)).child("Custom range").on_click(cx.listener(move |this, _, _, cx| this.toggle_custom_range(column, false, cx)));
+            let apply = ui::Button::new(SharedString::from(format!("ss-date-{key}-apply"))).size(ui::ButtonSize::Sm).child("Apply").on_click(cx.listener(move |this, _, _, cx| this.apply_custom_range(column, cx)));
+            let error = menu.error.clone().map(|e| ui::FieldError::new(e, cx).px_2p5().into_any_element());
             return [back.into_any_element(), field("after", "After date", &menu.after, cx), field("before", "Before date", &menu.before, cx)]
                 .into_iter()
                 .chain(error)
@@ -261,7 +261,7 @@ impl Waffle {
         let mut rows: Vec<AnyElement> = PRESETS
             .into_iter()
             .map(|preset| {
-                ui::menu_row(SharedString::from(format!("ss-date-{key}-{preset:?}")), cx)
+                ui::DropdownMenuItem::new(SharedString::from(format!("ss-date-{key}-{preset:?}")), cx)
                     .child(ui::line(preset.label()).flex_1())
                     .child(div().text_color(accent).when(!chosen(preset), |d| d.invisible()).child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD)))
                     .on_click(cx.listener(move |this, _, _, cx| this.pick_date_preset(column, preset, cx)))
@@ -269,9 +269,9 @@ impl Waffle {
             })
             .collect();
         let custom = matches!(menu.filter, DateFilter::Custom { .. });
-        rows.push(div().py_1().child(ui::divider(None, cx)).into_any_element());
+        rows.push(div().py_1().child(ui::Separator::new().w_full()).into_any_element());
         rows.push(
-            ui::menu_row(SharedString::from(format!("ss-date-{key}-custom")), cx)
+            ui::DropdownMenuItem::new(SharedString::from(format!("ss-date-{key}-custom")), cx)
                 .child(ui::line(if custom { menu.filter.label() } else { "Custom range".into() }).flex_1())
                 .child(div().text_color(if custom { accent } else { palette::muted(cx) }).child(Icon::new(if custom { Glyph::Checkmark } else { Glyph::ChevronRight }).size(ui::ICON_MD)))
                 .on_click(cx.listener(move |this, _, _, cx| this.toggle_custom_range(column, true, cx)))

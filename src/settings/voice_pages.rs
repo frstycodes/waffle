@@ -194,7 +194,7 @@ impl Waffle {
         out.push(Section::keyed(
             "Input profile",
             ui::settings_group("Input profile", cx)
-                .child(ui::settings_card(cx).children(profile_rows))
+                .child(ui::Card::new(cx).children(profile_rows))
                 .when(!custom, |g| g.child(ui::settings_caption("This profile sets noise suppression, echo cancellation and sensitivity for you. Pick Custom to change them.", cx))),
         ));
         if !studio {
@@ -204,7 +204,7 @@ impl Waffle {
             let mut lines = Hairlines::default();
             let noise = self.noise_row(lines.next(), window, cx);
             let echo = self.switch_row(SwitchRow { id: "set-echo", title: "Echo cancellation", detail: Some("Stops others hearing themselves through your speakers"), on: prefs.echo_cancellation, enabled: true, field: |p| &mut p.echo_cancellation }, lines.next(), window, cx);
-            out.push(Section::keyed("Voice processing", ui::settings_group("Voice processing", cx).child(ui::settings_card(cx).child(noise).child(echo))));
+            out.push(Section::keyed("Voice processing", ui::settings_group("Voice processing", cx).child(ui::Card::new(cx).child(noise).child(echo))));
         }
         let expander = expander_row("voice-advanced", false, if advanced { "Hide advanced voice settings" } else { "Show advanced voice settings" }, &advanced_summary(custom), advanced, window, cx).on_click(cx.listener(|this, _, _, cx| {
             if let Some(s) = &mut this.settings {
@@ -214,7 +214,7 @@ impl Waffle {
             cx.notify();
         }));
         let advanced_rows = advanced.then(|| reveal("voice-advanced-body", self.advanced_voice_rows(custom, window, cx)));
-        out.push(Section::new(ui::settings_card(cx).child(expander).children(advanced_rows)));
+        out.push(Section::new(ui::Card::new(cx).child(expander).children(advanced_rows)));
 
         let camera = ui::col()
             .gap_1p5()
@@ -224,7 +224,7 @@ impl Waffle {
         // preview the settings page doesn't have yet.
         out.push(Section::with_anchor("Camera", ui::settings_group("Camera", cx).child(card_pad(cx).child(camera))));
         out.push(Section::with_anchor("Sounds", self.sounds_group(window, cx)));
-        out.push(Section::with_anchor("Advanced", ui::settings_group("Advanced", cx).child(ui::settings_card(cx).child(self.reset_row(cx)))));
+        out.push(Section::with_anchor("Advanced", ui::settings_group("Advanced", cx).child(ui::Card::new(cx).child(self.reset_row(cx)))));
         out
     }
 
@@ -248,7 +248,7 @@ impl Waffle {
         // Discord's own name for it; it sits under the speaker it plays through.
         let soundboard = format!("{}%", crate::soundboard::perceptual(prefs.soundboard_volume).round() as i32);
         let soundboard = ui::row().items_stretch().gap_6().child(div().flex_1()).child(div().flex_1().min_w_0().child(self.volume("Soundboard Volume", &soundboard, Slider::SoundboardVolume, cx)));
-        let test_button = ui::button("mic-test", Tone::Primary, cx)
+        let test_button = ui::Button::new("mic-test")
             .min_w(px(MIC_TEST_WIDTH))
             .child(Icon::new(if testing { Glyph::Stop } else { Glyph::Mic }).size(ui::ICON_MD))
             .child(if testing { "Stop testing" } else { "Test mic" })
@@ -271,7 +271,7 @@ impl Waffle {
         let actions = ui::row().items_stretch()
             .flex_wrap()
             .gap_2()
-            .child(ui::button("nomic-pick", Tone::Secondary, cx).small().child("Choose another input").on_click(cx.listener(|this, _, _, cx| {
+            .child(ui::Button::new("nomic-pick").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Choose another input").on_click(cx.listener(|this, _, _, cx| {
                 if let Some(s) = &mut this.settings {
                     s.select = Some(Select::Microphone);
                 }
@@ -279,10 +279,10 @@ impl Waffle {
                 cx.notify();
             })))
             .when(cfg!(target_os = "macos"), |d| {
-                d.child(ui::button("nomic-system", Tone::Ghost, cx).small().child("Open System Settings").on_click(|_, _, cx| cx.open_url(MAC_MIC_PRIVACY)))
+                d.child(ui::Button::new("nomic-system").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Sm).child("Open System Settings").on_click(|_, _, cx| cx.open_url(MAC_MIC_PRIVACY)))
             });
         let actions = div().pt_2().child(actions);
-        ui::callout_with(
+        ui::Alert::with_actions(
             ui::Notice::Warning,
             Glyph::MicOff,
             "No audio detected from your mic",
@@ -316,7 +316,7 @@ impl Waffle {
         let mode = |id: &'static str, title: &'static str, detail: &'static str, on_ptt: bool, line: bool, cx: &mut Context<Self>| {
             radio_row(id, line, title, detail, ptt == on_ptt, cx).on_click(cx.listener(move |this, _, _, cx| this.update_prefs(cx, |p| p.push_to_talk = on_ptt)))
         };
-        let mut card = ui::settings_card(cx).child(mode("mode-vad", "Voice activity", "Transmits when you speak above the sensitivity", false, lines.next(), cx)).child(mode(
+        let mut card = ui::Card::new(cx).child(mode("mode-vad", "Voice activity", "Transmits when you speak above the sensitivity", false, lines.next(), cx)).child(mode(
             "mode-ptt",
             "Push to talk",
             "Transmits while you hold a key",
@@ -327,7 +327,7 @@ impl Waffle {
         if ptt {
             let ptt_index = prefs.keybinds.iter().position(|k| k.action == Action::PushToTalk);
             card = card
-                .child(ui::settings_row("ptt-shortcut", lines.next(), cx).child(ui::settings_text("Shortcut", Some("Also listed under Keybinds"), cx)).children(ptt_index.map(|i| self.keybind_recorder(i, cx).flex_basis(px(RECORDER_BASIS)).flex_shrink(1.))))
+                .child(ui::Item::setting("ptt-shortcut", lines.next(), cx).child(ui::settings_text("Shortcut", Some("Also listed under Keybinds"), cx)).children(ptt_index.map(|i| self.keybind_recorder(i, cx).flex_basis(px(RECORDER_BASIS)).flex_shrink(1.))))
                 .child(
                     stack_row("ptt-delay", lines.next(), cx)
                         .child(numbered("Push to talk release delay", "Keeps transmitting this long after you let go, so word endings aren't cut", &format!("{} ms", prefs.ptt_release_ms), cx))
@@ -374,7 +374,7 @@ impl Waffle {
         }));
         let mut body = Hairlines(true);
         let rest = more.then(|| reveal("more-sounds-body", ui::col().children(MORE_CUES.iter().map(|&(id, label, cue)| self.cue_row(id, label, cue, body.next(), window, cx)))));
-        ui::settings_group("Sounds", cx).child(ui::settings_card(cx).children(first).child(expander).children(rest)).child(ui::settings_caption("Message and mention sounds are under Notifications.", cx))
+        ui::settings_group("Sounds", cx).child(ui::Card::new(cx).children(first).child(expander).children(rest)).child(ui::settings_caption("Message and mention sounds are under Notifications.", cx))
     }
 
     // Reset asks in place, naming what happens; once done it offers Undo for a few seconds.
@@ -382,7 +382,7 @@ impl Waffle {
         let view = self.settings.as_ref().expect("settings are open");
         let (asking, done) = (view.asking == Some(Ask::Reset), view.reset_undo.is_some());
         let trigger = (!asking && !done).then(|| {
-            ui::button("reset-voice", Tone::Secondary, cx).small().text_color(palette::danger_ink(cx)).child("Reset voice settings").on_click(cx.listener(|this, _, _, cx| this.set_ask(Some(Ask::Reset), cx)))
+            ui::Button::new("reset-voice").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).text_color(palette::danger_ink(cx)).child("Reset voice settings").on_click(cx.listener(|this, _, _, cx| this.set_ask(Some(Ask::Reset), cx)))
         });
         let ask = asking.then(|| {
             reveal(
@@ -399,8 +399,8 @@ impl Waffle {
                     .child(
                         ui::row().items_stretch()
                             .gap_2()
-                            .child(ui::button("reset-keep", Tone::Secondary, cx).small().child("Keep my settings").on_click(cx.listener(|this, _, _, cx| this.set_ask(None, cx))))
-                            .child(ui::button("reset-yes", Tone::Danger, cx).small().child("Reset voice settings").on_click(cx.listener(|this, _, _, cx| this.reset_voice(cx)))),
+                            .child(ui::Button::new("reset-keep").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Keep my settings").on_click(cx.listener(|this, _, _, cx| this.set_ask(None, cx))))
+                            .child(ui::Button::new("reset-yes").variant(ui::ButtonVariant::Destructive).size(ui::ButtonSize::Sm).child("Reset voice settings").on_click(cx.listener(|this, _, _, cx| this.reset_voice(cx)))),
                     ),
             )
         });
@@ -411,9 +411,9 @@ impl Waffle {
                 .text_color(palette::positive_ink(cx))
                 .child(Icon::new(Glyph::CheckCircle).size(ui::ICON_MD))
                 .child("Voice and video settings reset")
-                .child(div().pl_1().child(ui::button("reset-undo", ui::Tone::Link, cx).child("Undo").on_click(cx.listener(|this, _, _, cx| this.undo_reset(cx)))))
+                .child(div().pl_1().child(ui::Button::new("reset-undo").variant(ui::ButtonVariant::Link).child("Undo").on_click(cx.listener(|this, _, _, cx| this.undo_reset(cx)))))
         });
-        ui::settings_row("reset", false, cx)
+        ui::Item::setting("reset", false, cx)
             .flex_wrap()
             .child(ui::settings_text("Reset voice and video settings", Some("Puts devices, levels, processing and sounds back to their defaults. Your keybinds and theme stay."), cx))
             .children(trigger)
@@ -456,7 +456,7 @@ impl Waffle {
             .items_start()
             .gap_4()
             .child(ui::col().min_h_0().flex_1().gap_1().child(ui::settings_title("Keybinds", cx)).child(div().text_color(palette::muted(cx)).child("Shortcuts that work everywhere, even while another app is in front.")))
-            .child(ui::button("add-keybind", Tone::Primary, cx).child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("Add a keybind").on_click(cx.listener(|this, _, _, cx| {
+            .child(ui::Button::new("add-keybind").child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("Add a keybind").on_click(cx.listener(|this, _, _, cx| {
                 this.update_prefs(cx, |p| p.keybinds.push(Keybind { action: Action::Unassigned, keys: None }));
                 let index = this.prefs.keybinds.len() - 1;
                 if let Some(s) = &mut this.settings {
@@ -465,7 +465,7 @@ impl Waffle {
             })));
         let mut lines = Hairlines::default();
         let rows: Vec<AnyElement> = self.prefs.keybinds.iter().enumerate().map(|(index, keybind)| self.keybind_row(index, keybind, lines.next(), cx)).collect();
-        let yours = ui::settings_group("Your keybinds", cx).children(self.input_monitoring_notice(cx)).when(!rows.is_empty(), |g| g.child(ui::settings_card(cx).children(rows)));
+        let yours = ui::settings_group("Your keybinds", cx).children(self.input_monitoring_notice(cx)).when(!rows.is_empty(), |g| g.child(ui::Card::new(cx).children(rows)));
         vec![Section::new(header), Section::keyed("Your keybinds", yours), Section::keyed("Default keybinds", self.default_keybinds(cx))]
     }
 
@@ -474,8 +474,8 @@ impl Waffle {
         if !self.keys_unheard() {
             return None;
         }
-        let open = ui::button("keys-system", Tone::Secondary, cx).small().child("Open System Settings").on_click(|_, _, cx| cx.open_url(MAC_INPUT_PRIVACY));
-        Some(ui::callout_with(
+        let open = ui::Button::new("keys-system").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Open System Settings").on_click(|_, _, cx| cx.open_url(MAC_INPUT_PRIVACY));
+        Some(ui::Alert::with_actions(
             ui::Notice::Warning,
             Glyph::Keyboard,
             "Keybinds need Input Monitoring",
@@ -496,7 +496,7 @@ impl Waffle {
         let action = self.select_field(Select::Action(index), None, &actions, &format!("{:?}", keybind.action), sentence(keybind.action.label()).into(), 36., cx);
         let (danger, hover, press) = (palette::danger_ink(cx), palette::hover(cx), palette::press(cx));
         // The design's .iconbtn.rm: ui::icon_button, but hovering to the danger ink.
-        // lint-allow(custom-button): ui::icon_button has no hover to the danger ink without the danger fill, which this quiet remove must not take
+        // lint-allow(custom-button): ui::Button has no hover to the danger ink without the danger fill, which this quiet remove must not take
         let remove = ui::row()
             .id(SharedString::from(format!("keybind-delete-{index}")))
             .size_8()
@@ -508,7 +508,7 @@ impl Waffle {
             .hover(move |s| s.bg(hover).text_color(danger))
             .active(move |s| s.bg(press))
             .child(Icon::new(Glyph::Trash).size(ui::ICON_XL))
-            .tooltip(|window, cx| ui::tip("Remove keybind", window, cx))
+            .tooltip(ui::Tooltip::text("Remove keybind"))
             .on_click(cx.listener(move |this, _, _, cx| {
                 if let Some(s) = &mut this.settings {
                     s.recording = None;
@@ -519,7 +519,7 @@ impl Waffle {
                     }
                 });
             }));
-        ui::settings_row(SharedString::from(format!("keybind-{index}")), line, cx)
+        ui::Item::setting(SharedString::from(format!("keybind-{index}")), line, cx)
             .flex_wrap()
             .gap_3()
             .child(div().flex_grow(1.).flex_basis(Pixels::ZERO).min_w_0().child(action))
@@ -542,7 +542,7 @@ impl Waffle {
                 .child(div().text_color(palette::accent_ink(cx)).child(Icon::new(Glyph::Record).size(ui::ICON_SM)))
                 .child(if self.keys_unheard() { "Allow Input Monitoring first" } else { "Press keys\u{2026}" })
                 .into_any_element(),
-            (Some(keys), false) => key_caps(keys, cx).into_any_element(),
+            (Some(keys), false) => key_caps(keys).into_any_element(),
             (None, false) => div().text_color(palette::muted(cx)).font_weight(FontWeight::NORMAL).child("No keybind set").into_any_element(),
         };
         let border = match (recording, unknown) {
@@ -569,7 +569,7 @@ impl Waffle {
             .gap_2()
             .children(recording.then(|| pulse_ring(SharedString::from(format!("record-ring-{index}")), cx)))
             .child(div().flex_1().min_w_0().p_px().overflow_hidden().whitespace_nowrap().font_weight(FontWeight::NORMAL).text_color(palette::strong(cx)).child(value))
-            .child(ui::button(SharedString::from(format!("record-{index}")), Tone::Secondary, cx).small().child(label).on_click(cx.listener(move |this, _, window, cx| {
+            .child(ui::Button::new(SharedString::from(format!("record-{index}"))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child(label).on_click(cx.listener(move |this, _, window, cx| {
                 if let Some(s) = &mut this.settings {
                     s.recording = if s.recording == Some(index) { None } else { Some(index) };
                 }
@@ -652,7 +652,7 @@ impl Waffle {
 
     // Three options fit in a row, so noise suppression is a segmented control. Krisp is licensed to
     // Discord, so Advanced is DeepFilterNet, an open neural suppressor, in its place.
-    pub(super) fn noise_row(&self, line: bool, window: &mut Window, cx: &mut Context<Self>) -> Stateful<Div> {
+    pub(super) fn noise_row(&self, line: bool, _window: &mut Window, cx: &mut Context<Self>) -> Stateful<Div> {
         let selected = match (self.prefs.noise_suppression, self.prefs.noise_mode) {
             (false, _) => 0,
             (true, NoiseMode::Standard) => 1,
@@ -671,11 +671,7 @@ impl Waffle {
             div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("Reduces background noise from your mic. Advanced is powered by DeepFilterNet.")
         };
         let this = cx.entity().downgrade();
-        let control = ui::segmented_live(
-            "set-noise",
-            &["None", "Standard", "Advanced"],
-            selected,
-            move |i, _, cx| {
+        let control = ui::Tabs::new("set-noise").labels(&["None", "Standard", "Advanced"]).value(selected).on_value_change(move |i, _, cx| {
                 this.update(cx, |this, cx| {
                     this.update_prefs(cx, |p| match i {
                         0 => p.noise_suppression = false,
@@ -684,24 +680,19 @@ impl Waffle {
                     })
                 })
                 .ok();
-            },
-            window,
-            cx,
-        );
-        ui::settings_row("noise", line, cx).child(ui::settings_text("Noise suppression", None::<&str>, cx).child(detail)).child(control.flex_none())
+            });
+        ui::Item::setting("noise", line, cx).child(ui::settings_text("Noise suppression", None::<&str>, cx).child(detail)).child(control.flex_none())
     }
 
     // A sound cue: its preview button beside its switch.
-    pub(super) fn cue_row(&self, id: &'static str, title: &'static str, cue: Cue, line: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn cue_row(&self, id: &'static str, title: &'static str, cue: Cue, line: bool, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let on = !self.prefs.silenced_cues.contains(&cue);
-        let play = ui::icon_button(SharedString::from(format!("preview-{id}")), Glyph::Play, format!("Preview {title}"), cx)
-            .tone(Tone::Secondary, cx)
-            .sized(36.)
+        let play = ui::Button::new(SharedString::from(format!("preview-{id}"))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Icon).icon(Glyph::Play).tooltip_text(format!("Preview {title}"))
             .on_click(move |_, _, cx| {
                 cx.stop_propagation();
                 sounds::preview(cue);
             });
-        let switch = ui::switch_live(id, on, window, cx).on_click(cx.listener(move |this, _, _, cx| {
+        let switch = ui::Switch::new(id).checked(on).on_click(cx.listener(move |this, _, _, cx| {
             this.update_prefs(cx, |p| match p.silenced_cues.iter().position(|c| *c == cue) {
                 Some(i) => {
                     p.silenced_cues.remove(i);
@@ -711,7 +702,7 @@ impl Waffle {
         }));
         // GAP: the play button turns into the mini wave while its sound plays; sounds.rs doesn't report
         // playback yet.
-        ui::settings_row(SharedString::from(format!("cue-{id}")), line, cx)
+        ui::Item::setting(SharedString::from(format!("cue-{id}")), line, cx)
             .min_h(px(CUE_ROW_HEIGHT))
             .child(ui::settings_text(title, None::<&str>, cx))
             .child(ui::row().gap_2().flex_none().child(play).child(switch))
@@ -719,7 +710,7 @@ impl Waffle {
     }
 
     // A switch row toggles from anywhere on it. A disabled one dims its switch and says why.
-    pub(super) fn switch_row(&self, spec: SwitchRow, line: bool, window: &mut Window, cx: &mut Context<Self>) -> Stateful<Div> {
+    pub(super) fn switch_row(&self, spec: SwitchRow, line: bool, _window: &mut Window, cx: &mut Context<Self>) -> Stateful<Div> {
         let SwitchRow { id, title, detail, on, enabled, field } = spec;
         let text = if enabled {
             ui::settings_text(title, detail, cx)
@@ -730,8 +721,8 @@ impl Waffle {
                 .child(ui::line(title).font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)))
                 .child(ui::row().gap_1().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Icon::new(Glyph::Info).size(ui::ICON_SM)).children(detail))
         };
-        let switch = ui::switch_live(id, on, window, cx);
-        let row = ui::settings_row(SharedString::from(format!("row-{id}")), line, cx).child(text);
+        let switch = ui::Switch::new(id).checked(on);
+        let row = ui::Item::setting(SharedString::from(format!("row-{id}")), line, cx).child(text);
         if !enabled {
             return row.child(div().opacity(0.45).child(switch));
         }
@@ -755,7 +746,7 @@ impl Waffle {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn select_field(&self, select: Select, glyph: Option<Glyph>, options: &[(String, String)], chosen: &str, value: SharedString, height: f32, cx: &mut Context<Self>) -> AnyElement {
         let open = self.settings.as_ref().and_then(|s| s.select) == Some(select);
-        let field = ui::select(SharedString::from(format!("select-{select:?}")), glyph, value, open, cx).h(px(height)).on_click(cx.listener(move |this, _, _, cx| {
+        let field = ui::Select::new(SharedString::from(format!("select-{select:?}")), glyph, value, open, cx).h(px(height)).on_click(cx.listener(move |this, _, _, cx| {
             if let Some(s) = &mut this.settings {
                 s.select = if s.select == Some(select) { None } else { Some(select) };
             }
@@ -773,7 +764,7 @@ impl Waffle {
                     cx.notify();
                 })
             };
-            ui::select_options(SharedString::from(format!("options-{select:?}")), options, chosen, height, move |id, window, cx| this.update(cx, |this, cx| this.choose(select, &id, window, cx)), dismiss, cx)
+            ui::Select::options(SharedString::from(format!("options-{select:?}")), options, chosen, height, move |id, window, cx| this.update(cx, |this, cx| this.choose(select, &id, window, cx)), dismiss, cx)
         });
         div().relative().w_full().child(field).children(list).into_any_element()
     }
@@ -829,7 +820,7 @@ impl Waffle {
         let bounds = self.slider_bounds.clone();
         let record = bounds.clone();
         let track = match fill {
-            Fill::Accent => ui::slider_track(fraction, cx).into_any_element(),
+            Fill::Accent => ui::Slider::track(fraction).into_any_element(),
             Fill::Threshold(level) => sensitivity_track(Some(fraction), level.unwrap_or(crate::SILENCE_DB), cx).into_any_element(),
         };
         let (down_key, drag_key, move_key, record_key) = (key.clone(), key.clone(), key.clone(), key.clone());

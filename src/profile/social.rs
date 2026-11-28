@@ -15,7 +15,7 @@ impl Waffle {
         if self.me.as_ref().is_some_and(|me| me.id == user.id) {
             return None;
         }
-        // lint-allow(custom-badge): ui::strip takes a palette fill; this notice wears the profile theme's tint (Ink), as the card's other tiles do.
+        // lint-allow(custom-badge): ui::Alert::strip takes a palette fill; this notice wears the profile theme's tint (Ink), as the card's other tiles do.
         let notice = || ui::col().p_3().gap_2().squircle(RADIUS_MD).bg(ink.tile).text_size(ui::TEXT_SM).text_color(ink.text);
         match self.relation(&user.id) {
             Some(Relation::Incoming) => {
@@ -23,14 +23,14 @@ impl Waffle {
                 let line = ui::row().flex_wrap().child(div_bold(user.name.clone(), ink)).child("\u{a0}sent you a friend request.");
                 let buttons = ui::row()
                     .gap_2()
-                    .child(ui::button("profile-request-accept", ui::Tone::Primary, cx).small().child("Accept").on_click(cx.listener(move |this, _, _, cx| this.befriend(accept.clone(), cx))))
-                    .child(ui::button("profile-request-ignore", ui::Tone::Secondary, cx).small().child("Ignore").on_click(cx.listener(move |this, _, _, cx| this.drop_relation(&ignore, cx))));
+                    .child(ui::Button::new("profile-request-accept").size(ui::ButtonSize::Sm).child("Accept").on_click(cx.listener(move |this, _, _, cx| this.befriend(accept.clone(), cx))))
+                    .child(ui::Button::new("profile-request-ignore").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Ignore").on_click(cx.listener(move |this, _, _, cx| this.drop_relation(&ignore, cx))));
                 Some(notice().child(line).child(buttons))
             }
             Some(Relation::Blocked) => Some(notice().font_weight(FontWeight::SEMIBOLD).child("You blocked them")),
             _ if self.ignored.contains(&user.id) => {
                 let id = user.id.clone();
-                let unignore = ui::button("profile-unignore", ui::Tone::Link, cx).child("Unignore").on_click(cx.listener(move |this, _, _, cx| this.set_ignored(id.clone(), false, cx)));
+                let unignore = ui::Button::new("profile-unignore").variant(ui::ButtonVariant::Link).child("Unignore").on_click(cx.listener(move |this, _, _, cx| this.set_ignored(id.clone(), false, cx)));
                 Some(notice().flex_row().items_center().gap_1().font_weight(FontWeight::SEMIBOLD).child("You ignored them").child("•").child(unignore))
             }
             _ => None,

@@ -5,7 +5,7 @@ use gpui_kit::{
     Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 
-use super::{Control, LINE_LG, RADIUS_SM, Squircle, TEXT_LG, TEXT_SM, TEXT_XS, badge, col, icon_button, line, menu_row, row, shadow_pop};
+use super::{Button, ButtonSize, ButtonVariant, Control, LINE_LG, RADIUS_SM, RADIUS_XS, Squircle, TEXT_LG, TEXT_SM, TEXT_XS, col, line, menu_row, row, shadow_pop};
 use crate::{icons::Glyph, palette};
 
 type OnClick = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
@@ -50,7 +50,7 @@ impl DialogHeader {
 impl RenderOnce for DialogHeader {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let (strong, muted) = (palette::strong(cx), palette::muted(cx));
-        let close = self.on_close.map(|on_close| icon_button(ElementId::NamedChild(std::sync::Arc::new(self.id.clone()), "close".into()), Glyph::X, "Close", cx).on_click(on_close));
+        let close = self.on_close.map(|on_close| Button::new(ElementId::NamedChild(std::sync::Arc::new(self.id.clone()), "close".into())).variant(ButtonVariant::Ghost).size(ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(on_close));
         row()
             .items_start()
             .gap_3()
@@ -91,7 +91,7 @@ pub fn section_label(text: impl Into<SharedString>, kind: Heading, cx: &App) -> 
 // A label over an image or video (a duration, GIF, a muted mark): white on the media scrim, whatever the theme.
 // Keywords: duration, gif label, video badge, overlay label, on media, scrim label
 pub fn media_label() -> Div {
-    badge(palette::media_scrim().opacity(0.72), gpui_kit::white()).gap_1()
+    div().h(px(20.)).px(px(7.)).flex_none().squircle(RADIUS_XS).bg(palette::media_scrim().opacity(0.72)).text_color(gpui_kit::white()).text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).flex().items_center().gap_1()
 }
 
 // How tall a list row is: dense (36, a picker), default (48, a member), tall (60, a friend with a status line),

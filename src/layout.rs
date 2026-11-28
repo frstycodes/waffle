@@ -47,6 +47,10 @@ impl Render for Waffle {
 
 impl Waffle {
     fn render_root(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        #[cfg(debug_assertions)]
+        if let Some(design) = &self.design_system {
+            return design.clone().into_any_element();
+        }
         // Before the rows draw, so a row just let go of lands in its new place rather than as a hole.
         self.finish_sorts(cx);
         self.settle_carry(cx);
@@ -179,8 +183,8 @@ impl Waffle {
             crate::NoticeWhy::Elsewhere => (palette::danger(), gpui_kit::white(), "Your voice has been disconnected because you connected at another location.".to_owned()),
             crate::NoticeWhy::Restarted => (palette::accent(), palette::on_accent(), format!("You left {} when Waffle restarted.", notice.channel.name)),
         };
-        let reconnect = ui::button("voice-notice-reconnect", ui::Tone::Ghost, cx)
-            .small()
+        let reconnect = ui::Button::new("voice-notice-reconnect").variant(ui::ButtonVariant::Ghost)
+            .size(ui::ButtonSize::Sm)
             .h_6()
             .px_2p5()
             .border_1()
@@ -191,8 +195,7 @@ impl Waffle {
             .hover(move |s| s.bg(ink.opacity(0.12)))
             .child("Reconnect")
             .on_click(cx.listener(|this, _, _, cx| this.reconnect_voice(cx)));
-        let close = ui::icon_button("voice-notice-close", crate::icons::Glyph::X, "Dismiss", cx)
-            .small()
+        let close = ui::Button::new("voice-notice-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(crate::icons::Glyph::X).tooltip_text("Dismiss")
             .text_color(ink)
             .hover(move |s| s.bg(ink.opacity(0.12)))
             .on_click(cx.listener(|this, _, _, cx| {
@@ -393,10 +396,10 @@ impl Waffle {
     // Left alone, it installs on the next launch. In a call, Restart asks before leaving it.
     pub(crate) fn update_row(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let staged = self.updates.staged()?;
-        let restart = ui::button("restart-to-update", ui::Tone::Primary, cx)
-            .small()
+        let restart = ui::Button::new("restart-to-update")
+            .size(ui::ButtonSize::Sm)
             .child("Restart")
-            .tooltip(|window, cx| ui::tip("Installs the update and reopens Waffle", window, cx))
+            .tooltip(ui::Tooltip::text("Installs the update and reopens Waffle"))
             .on_click(cx.listener(|this, _, _, cx| this.request_restart(this.updates.staged().cloned(), cx)));
         let row = ui::row()
             .h(px(UPDATE_HEIGHT))
@@ -405,7 +408,7 @@ impl Waffle {
             .pr_1p5()
             .gap_2()
             .relative()
-            .child(ui::inset_rule(crate::call::PANEL_PAD, cx))
+            .child(ui::Separator::new().inset(crate::call::PANEL_PAD))
             .child(Icon::new(Glyph::Download).size(ui::ICON_MD).flex_none().text_color(palette::accent_ink(cx)))
             .child(ui::line(format!("Waffle {} is ready", staged.version)).flex_1().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
             .child(restart);

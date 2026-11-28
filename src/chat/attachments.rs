@@ -73,11 +73,11 @@ pub(super) fn upload_cards(message: &Message, ctx: &Rc<RowContext>, cx: &App) ->
                         .flex_1()
                         .gap_1p5()
                         .child(ui::row().items_baseline().gap_2().child(ui::line(file.name.clone()).flex_1().text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(strong)).child(div().flex_none().text_size(ui::TEXT_XS).text_color(faint).child(status)))
-                        .when(job.error.is_none(), |d| d.child(ui::progress(fraction, cx))),
+                        .when(job.error.is_none(), |d| d.child(ui::Progress::new(fraction))),
                 )
                 .when(job.error.is_none(), |d| {
                     let (this, cancel) = (ctx.this.clone(), message.clone());
-                    d.child(ui::icon_button(SharedString::from(format!("cancel-upload-{}-{ix}", message.id)), Glyph::X, "Cancel upload", cx).small().on_click(move |_, _, cx| {
+                    d.child(ui::Button::new(SharedString::from(format!("cancel-upload-{}-{ix}", message.id))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::X).tooltip_text("Cancel upload").on_click(move |_, _, cx| {
                         cx.stop_propagation();
                         this.update(cx, |this, cx| this.delete(cancel.clone(), cx)).ok();
                     }))
@@ -130,19 +130,18 @@ pub(crate) fn file_card(message: &Message, file: &crate::discord::File, cx: &App
                         .on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&open) }),
                 )
                 // A Components V2 file that matches no attachment comes without a size.
-                .child(ui::row().gap_1p5().text_size(ui::TEXT_XS).text_color(faint).when(file.size > 0, |d| d.child(format_size(file.size))).when(file.spoiler, |d| d.child(ui::tag("Spoiler", cx)))),
+                .child(ui::row().gap_1p5().text_size(ui::TEXT_XS).text_color(faint).when(file.size > 0, |d| d.child(format_size(file.size))).when(file.spoiler, |d| d.child(ui::Badge::new("Spoiler").variant(ui::BadgeVariant::Accent)))),
         )
-        .child(ui::icon_button(SharedString::from(format!("download-{}-{}", message.id, file.name)), Glyph::Download, "Download", cx).on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&download) }));
+        .child(ui::Button::new(SharedString::from(format!("download-{}-{}", message.id, file.name))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Download).tooltip_text("Download").on_click(move |_, _, cx| { cx.stop_propagation(); cx.open_url(&download) }));
     div().pt(px(ACCESSORY_GAP)).child(card).into_any_element()
 }
 
 // Sits in the corner of every code block; it turns to a check, in the online ink, for a moment after.
 // GAP: the design gives code blocks a header line (language, then Copy with its label); TextView owns
 // that layout and only offers this corner slot, so the button stays icon-only.
-pub(super) fn copy_button(code: String, copied: bool, this: WeakEntity<Waffle>, cx: &App) -> AnyElement {
-    ui::icon_button(SharedString::from(format!("copy-{}", code.len())), if copied { Glyph::Checkmark } else { Glyph::Copy }, if copied { "Copied" } else { "Copy" }, cx)
-        .sized(COPY_BUTTON)
-        .succeeded(copied, cx)
+pub(super) fn copy_button(code: String, copied: bool, this: WeakEntity<Waffle>, _cx: &App) -> AnyElement {
+    ui::Button::new(SharedString::from(format!("copy-{}", code.len()))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Square(COPY_BUTTON)).icon(if copied { Glyph::Checkmark } else { Glyph::Copy }).tooltip_text(if copied { "Copied" } else { "Copy" })
+        .succeeded(copied)
         .on_click(move |_, _, cx| { cx.stop_propagation();
             this.update(cx, |this, cx| this.copy_code(code.clone(), code.clone(), cx)).ok();
         })
@@ -177,7 +176,7 @@ pub(super) fn reactions(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Op
     let add = reaction_pill(SharedString::from(format!("react-add-{}", message.id)), false, cx)
         .px(px(REACTION_ADD_PAD))
         .child(Icon::new(Glyph::EmojiAdd).size(ui::ICON_LG))
-        .tooltip(|window, cx| ui::tip("Add Reaction", window, cx))
+        .tooltip(ui::Tooltip::text("Add Reaction"))
         .on_click(move |_, window, cx| { cx.stop_propagation();
             this.update(cx, |this, cx| this.open_emoji_picker(EmojiTarget::Reaction(Box::new(msg.clone())), window, cx)).ok();
         });
@@ -213,7 +212,7 @@ pub(super) fn reaction_pill(id: SharedString, mine: bool, cx: &App) -> ui::Press
 pub(super) fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
     use crate::message_menu::MessageAction as A;
     let (hover, line) = (palette::hover(cx), palette::line(cx));
-    let sep = || ui::seam(cx).bg(line);
+    let sep = || ui::Separator::new().orientation(ui::Orientation::Vertical).bg(line);
     let sent = message.state == SendState::Sent;
     let facts = crate::message_menu::Facts { mine, saved: ctx.saved_ids.contains(&message.id), ..ctx.facts };
     // lint-allow(custom-mark, custom-surface): ui::toolbar occludes the wheel too, and this bar must let the feed scroll under it; it also rides above its row's edge
@@ -251,7 +250,7 @@ pub(super) fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &
             A::CopyId => (Glyph::Id, "Copy Message ID"),
         };
         let (this, msg) = (ctx.this.clone(), message.clone());
-        let button = ui::icon_button(SharedString::from(format!("{action:?}-{}", message.id)), glyph, tip, cx).on_click(move |_, window, cx| {
+        let button = ui::Button::new(SharedString::from(format!("{action:?}-{}", message.id))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(glyph).tooltip_text(tip).on_click(move |_, window, cx| {
             cx.stop_propagation();
             let quick = window.modifiers().shift;
             this.update(cx, |this, cx| this.run_message_action(action, &msg, quick, window, cx)).ok();
@@ -268,7 +267,7 @@ pub(super) fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &
     if !sent {
         // A failed send: Discord's Retry and Delete, nothing else.
         let (this, msg) = (ctx.this.clone(), message.clone());
-        let retry = ui::icon_button(SharedString::from(format!("retry-{}", message.id)), Glyph::Retry, "Retry", cx).on_click(move |_, _, cx| {
+        let retry = ui::Button::new(SharedString::from(format!("retry-{}", message.id))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Retry).tooltip_text("Retry").on_click(move |_, _, cx| {
             cx.stop_propagation();
             this.update(cx, |this, cx| this.retry(msg.clone(), cx)).ok();
         });
@@ -276,7 +275,7 @@ pub(super) fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &
     } else if ctx.shift {
         // Shift: the menu's direct actions laid out on the bar, in Discord's order.
         let (this, msg) = (ctx.this.clone(), message.clone());
-        let link = ui::icon_button(SharedString::from(format!("link-{}", message.id)), Glyph::Link, "Copy Message Link", cx).on_click(move |_, _, cx| {
+        let link = ui::Button::new(SharedString::from(format!("link-{}", message.id))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Link).tooltip_text("Copy Message Link").on_click(move |_, _, cx| {
             cx.stop_propagation();
             this.update(cx, |this, cx| this.copy_text(this.message_link(&msg), cx)).ok();
         });
@@ -298,7 +297,7 @@ pub(super) fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &
                     .cursor_pointer()
                     .hover(move |s| s.bg(hover))
                     .child(face)
-                    .tooltip(|window, cx| ui::tip("Click to react", window, cx))
+                    .tooltip(ui::Tooltip::text("Click to react"))
                     .on_click(move |_, _, cx| { cx.stop_propagation();
                         this.update(cx, |this, cx| this.toggle_reaction(&msg, emoji.clone(), cx)).ok();
                     }),
@@ -313,7 +312,7 @@ pub(super) fn actions(message: &Message, mine: bool, ctx: &Rc<RowContext>, cx: &
     }
     if !ctx.shift && sent {
         let (this, msg) = (ctx.this.clone(), message.clone());
-        bar = bar.child(ui::icon_button(SharedString::from(format!("more-{}", message.id)), Glyph::MoreVertical, "More", cx).on_click(move |event, _, cx| { cx.stop_propagation();
+        bar = bar.child(ui::Button::new(SharedString::from(format!("more-{}", message.id))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::MoreVertical).tooltip_text("More").on_click(move |event, _, cx| { cx.stop_propagation();
             let at = event.position();
             this.update(cx, |this, cx| this.open_message_menu(msg.clone(), at, cx)).ok();
         }));

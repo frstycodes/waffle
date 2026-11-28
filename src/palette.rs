@@ -559,11 +559,6 @@ pub fn success_hover() -> Hsla {
     hex(SUCCESS_HOVER)
 }
 
-// LIVE asks for you, so it takes the accent.
-pub fn live() -> Hsla {
-    alert()
-}
-
 // Counts, unread marks and LIVE: what asks for you.
 pub fn alert() -> Hsla {
     hex(ALERT)

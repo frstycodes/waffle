@@ -93,7 +93,7 @@ impl Waffle {
         let inbox = rail_action("rail-inbox", Icon::new(Glyph::Inbox), "Inbox", cx)
             .relative()
             .when(open, |b| b.bg(palette::selected(cx)).text_color(palette::strong(cx)))
-            .when(mentions, |b| b.child(ui::unread_dot().absolute().top_1p5().right_1p5()))
+            .when(mentions, |b| b.child(ui::Badge::dot().absolute().top_1p5().right_1p5()))
             .on_click(cx.listener(|this, _, _, cx| this.open_inbox(cx)));
         // Under the traffic lights a strip sits above the tiles, a hard edge they scroll up to (ui::hard_edge).
         let lights = crate::layout::traffic_lights_shown(window);
@@ -417,7 +417,7 @@ impl Waffle {
                         let name = name.clone();
                         move |window, cx| match preview.clone().filter(ServerPreview::has_activity) {
                             Some(preview) => cx.new(|_| preview).into(),
-                            None => ui::tip(name.clone(), window, cx),
+                            None => ui::Tooltip::new(name.clone()).build(window, cx),
                         }
                     })
                     .tooltip_placement(TooltipPlacement::Side),

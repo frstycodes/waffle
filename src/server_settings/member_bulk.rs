@@ -17,7 +17,7 @@ use crate::{
     discord::perm,
     icons::Glyph,
     menu::item,
-    ui::{self, Check, Tone},
+    ui::{self, Check},
     user_menu::{TIMEOUTS, role_choices},
 };
 
@@ -237,18 +237,18 @@ impl Waffle {
         }
         let powers = self.with_access(&view.guild_id, |me| BulkPowers::new(|bits| me.has(bits))).unwrap_or_default();
         let (count, busy) = (m.selected.len(), m.bulk_busy);
-        let button = |id: &'static str, glyph: Glyph, label: &'static str, cx: &mut Context<Self>| ui::button(id, Tone::Secondary, cx).disabled(busy).child(gpui_kit::component::Icon::new(glyph).size(ui::ICON_MD)).child(label);
+        let button = |id: &'static str, glyph: Glyph, label: &'static str, _cx: &mut Context<Self>| ui::Button::new(id).variant(ui::ButtonVariant::Secondary).disabled(busy).child(gpui_kit::component::Icon::new(glyph).size(ui::ICON_MD)).child(label);
         let role = powers.role.then(|| button("ss-bulk-role", Glyph::Plus, "Add role", cx).on_click(cx.listener(|this, event: &ClickEvent, _, cx| this.open_bulk_roles(event, cx))));
         let timeout = powers.timeout.then(|| button("ss-bulk-timeout", Glyph::Timer, "Time out", cx).on_click(cx.listener(|this, event: &ClickEvent, _, cx| this.open_bulk_timeout(event, cx))));
-        let kick = powers.kick.then(|| button("ss-bulk-kick", Glyph::DoorExit, "Kick", cx).danger(cx).on_click(cx.listener(|this, _, _, cx| this.ask_bulk_kick(cx))));
+        let kick = powers.kick.then(|| button("ss-bulk-kick", Glyph::DoorExit, "Kick", cx).danger().on_click(cx.listener(|this, _, _, cx| this.ask_bulk_kick(cx))));
         let too_many = count > api::BULK_BAN_MAX;
         let ban = powers.ban.then(|| {
-            let ban = button("ss-bulk-ban", Glyph::Prohibit, "Ban", cx).danger(cx).disabled(busy || too_many).on_click(cx.listener(|this, _, _, cx| this.ask_bulk_ban(cx)));
+            let ban = button("ss-bulk-ban", Glyph::Prohibit, "Ban", cx).danger().disabled(busy || too_many).on_click(cx.listener(|this, _, _, cx| this.ask_bulk_ban(cx)));
             let tip = SharedString::from(format!("Ban up to {} at a time", api::BULK_BAN_MAX));
-            if too_many { ban.tooltip(move |window, cx| ui::tip(tip.clone(), window, cx)) } else { ban }
+            if too_many { ban.tooltip(move |window, cx| ui::Tooltip::new(tip.clone()).build(window, cx)) } else { ban }
         });
-        let clear = ui::icon_button("ss-bulk-clear", Glyph::X, "Clear selection", cx).on_click(cx.listener(|this, _, _, cx| this.clear_member_selection(cx)));
-        let bar = ui::floating_bar("ss-bulk", cx)
+        let clear = ui::Button::new("ss-bulk-clear").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Clear selection").on_click(cx.listener(|this, _, _, cx| this.clear_member_selection(cx)));
+        let bar = ui::Popover::bar("ss-bulk", cx)
             .child(ui::line(format!("{count} selected")).flex_1().font_weight(FontWeight::SEMIBOLD).text_color(crate::palette::strong(cx)))
             .child(ui::row().items_stretch().flex_none().gap_2().children(role).children(timeout).children(kick).children(ban).child(clear));
         Some(ui::foot_dock(bar, "ss-bulk-in").into_any_element())
@@ -256,7 +256,7 @@ impl Waffle {
 
     // A row's or the header's checkbox.
     pub(super) fn member_select_box(&self, id: SharedString, state: Check, on_toggle: impl Fn(&mut Waffle, &mut Context<Waffle>) + 'static, cx: &mut Context<Self>) -> AnyElement {
-        div().id(id).cursor_pointer().child(ui::check(state, cx)).on_click(cx.listener(move |this, _, _, cx| on_toggle(this, cx))).into_any_element()
+        div().id(id).cursor_pointer().child(ui::Checkbox::mark(state)).on_click(cx.listener(move |this, _, _, cx| on_toggle(this, cx))).into_any_element()
     }
 }
 

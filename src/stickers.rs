@@ -200,7 +200,7 @@ impl Waffle {
         let hovered = window.use_keyed_state("sticker-hovered", cx, |_, _| None::<(Sticker, SharedString)>);
         let motion = self.media_prefs().stickers;
         let preview = hovered.read(cx).clone().or_else(|| sections.first().and_then(|s| Some((s.stickers.first()?.clone(), s.name.clone()))));
-        let head = div().p_2p5().child(ui::search_field("sticker-search", &self.sticker_search, cx));
+        let head = div().p_2p5().child(ui::InputGroup::search("sticker-search", &self.sticker_search, cx));
         let loading = self.sticker_packs.is_none() && sections.is_empty();
         let body: AnyElement = match (&self.sticker_packs, sections.is_empty()) {
             _ if loading => note("Loading stickers…", cx),
@@ -229,8 +229,8 @@ impl Waffle {
                 let scroll = scroll.clone();
                 // A line sets Discord's packs apart from yours.
                 let first_pack = matches!(section.lead, Lead::Pack(_)) && i > 0 && !matches!(sections[i - 1].lead, Lead::Pack(_));
-                let line = first_pack.then(|| div().py_1().flex_none().child(ui::divider(None, cx).w_5()).into_any_element());
-                let tab = ui::card(("sticker-pack", i), cx)
+                let line = first_pack.then(|| div().py_1().flex_none().child(ui::Separator::new().w_full().w_5()).into_any_element());
+                let tab = ui::Card::interactive(("sticker-pack", i), cx)
                     .toggled(i == in_view, cx)
                     .size_9()
                     .p_0()
@@ -238,7 +238,7 @@ impl Waffle {
                     .child(section.lead.render(24., motion, cx))
                     .tooltip({
                         let name = section.name.clone();
-                        move |window, cx| ui::tip(name.clone(), window, cx)
+                        move |window, cx| ui::Tooltip::new(name.clone()).build(window, cx)
                     })
                     .on_click(cx.listener(move |_, _, _, cx| {
                         scroll.scroll_to_top_of_item(i);

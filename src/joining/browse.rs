@@ -72,18 +72,18 @@ impl Waffle {
             .into_any_element()
     }
 
-    fn channels_roles_header(&self, has_prompts: bool, tab: BrowseTab, window: &mut Window, cx: &mut Context<Self>) -> Div {
+    fn channels_roles_header(&self, has_prompts: bool, tab: BrowseTab, _window: &mut Window, cx: &mut Context<Self>) -> Div {
         let tabs: Vec<BrowseTab> = if has_prompts { vec![BrowseTab::Customize, BrowseTab::Browse] } else { vec![BrowseTab::Browse] };
         let items: Vec<ui::Tab> = tabs.iter().map(|t| ui::Tab::new(if *t == BrowseTab::Customize { "Customize" } else { "Browse Channels" })).collect();
         let selected = tabs.iter().position(|t| *t == tab).unwrap_or_default();
         let this = cx.entity().downgrade();
-        let strip = ui::pill_tabs("channels-roles-tabs", &items, selected, move |i, _, cx| {
+        let strip = ui::ToggleGroup::new("channels-roles-tabs").items(&items).value(selected).on_value_change(move |i, _, cx| {
             this.update(cx, |this, cx| {
                 this.join.browse.tab = tabs[i];
                 this.redraw(Column::Main, cx);
             })
             .ok();
-        }, window, cx);
+        });
         ui::row()
             .occlude()
             .h(px(crate::layout::HEADER_HEIGHT))
@@ -117,11 +117,11 @@ impl Waffle {
         }
         let onboarding = match self.join.onboarding.get(&guild.id) {
             Some(Load::Ready(onboarding)) => onboarding.clone(),
-            Some(Load::Failed(error)) => return ui::field_error(error.clone(), cx).into_any_element(),
-            _ => return ui::progress_indeterminate("customize-loading", cx),
+            Some(Load::Failed(error)) => return ui::FieldError::new(error.clone(), cx).into_any_element(),
+            _ => return ui::Progress::indeterminate("customize-loading").into_any_element(),
         };
         if onboarding.prompts.is_empty() {
-            return ui::empty_state("customize-empty", Mood::Idle, "There are no customization options yet.", "You can add and remove channels from Browse Channels.", cx).into_any_element();
+            return ui::Empty::new("customize-empty", Mood::Idle, "There are no customization options yet.", "You can add and remove channels from Browse Channels.", cx).into_any_element();
         }
         let count = onboarding.prompts.len();
         let title = if count == 1 { "1 Customization Question".to_owned() } else { format!("{count} Customization Questions") };
@@ -153,7 +153,7 @@ impl Waffle {
             };
             let custom = option.emoji.as_ref().and_then(|e| e.url());
             let (guild_id, prompt_id, option_id) = (guild_id.to_owned(), prompt.id.clone(), option.id.clone());
-            ui::chip(SharedString::from(format!("pick-{}", option.id)), None, label, on, cx)
+            ui::Toggle::new(SharedString::from(format!("pick-{}", option.id))).pressed(on).child(label)
                 .when_some(custom, |c, url| c.child(img(url).size(ui::ICON_LG).flex_none()))
                 .on_click(cx.listener(move |this, _, _, cx| this.pick_option(&guild_id, &prompt_id, &option_id, cx)))
         }).collect();
@@ -224,7 +224,7 @@ impl Waffle {
         }
         ui::col()
             .gap_3()
-            .child(ui::row().gap_3().child(div().flex_1().min_w_0().child(ui::search_field("browse-search", &search, cx))).child(tally))
+            .child(ui::row().gap_3().child(div().flex_1().min_w_0().child(ui::InputGroup::search("browse-search", &search, cx))).child(tally))
             .children(cards)
             .child(div().text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx)).child("Tip: Channels with mentions will always appear on your channel list, even if you hide them."))
             .into_any_element()
@@ -264,7 +264,7 @@ impl Waffle {
                         .text_size(ui::TEXT_DETAIL)
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(palette::text(cx))
-                        .child(ui::check_live(SharedString::from(format!("follow-category-check-{}", category.id)), state, window, cx))
+                        .child(ui::Checkbox::new(SharedString::from(format!("follow-category-check-{}", category.id))).checked(state))
                         .child("Follow Category")
                         .on_click(cx.listener(move |this, _, _, cx| this.set_followed(&guild_id, &id, !category_followed, cx))),
                 )
@@ -279,7 +279,7 @@ impl Waffle {
     }
 
     // A channel and its follow checkbox; the whole row toggles it unless the rules or its category hold it.
-    fn browse_row(&self, guild: &Guild, settings: &GuildSettings, channel: &Channel, under_followed: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn browse_row(&self, guild: &Guild, settings: &GuildSettings, channel: &Channel, under_followed: bool, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let rules = guild.rules_channel_id.as_deref() == Some(channel.id.as_str());
         let own = followed(settings, &channel.id);
         let held = rules || under_followed;
@@ -291,7 +291,7 @@ impl Waffle {
             .flex_1()
             .child(ui::line(channel.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
             .when_some(channel.topic.clone().filter(|t| !t.is_empty()), |d, topic| d.child(ui::line(topic).text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx))));
-        // lint-allow(custom-button): ui::list_row has no held state (dimmed check, no hover or click) or end-of-row note
+        // lint-allow(custom-button): ui::Item::new has no held state (dimmed check, no hover or click) or end-of-row note
         ui::row()
             .id(SharedString::from(format!("browse-{}", channel.id)))
             .w_full()
@@ -303,8 +303,8 @@ impl Waffle {
             .child(channel_glyph(channel).size_5().flex_none().text_color(palette::faint(cx)))
             .child(text)
             .when(rules, |r| r.child(div().flex_none().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("Everyone sees this")))
-            .child(div().flex_none().when(held, |d| d.opacity(0.5)).child(ui::check_live(SharedString::from(format!("browse-check-{}", channel.id)), state, window, cx)))
-            .when_some(why, |r, why| r.tooltip(move |window, cx| ui::tip(why, window, cx)))
+            .child(div().flex_none().when(held, |d| d.opacity(0.5)).child(ui::Checkbox::new(SharedString::from(format!("browse-check-{}", channel.id))).checked(state)))
+            .when_some(why, |r, why| r.tooltip(move |window, cx| ui::Tooltip::new(why).build(window, cx)))
             .when(!held, |r| r.cursor_pointer().hover(move |s| s.bg(hover)).on_click(cx.listener(move |this, _, _, cx| this.set_followed(&guild_id, &id, !own, cx))))
             .into_any_element()
     }

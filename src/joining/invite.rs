@@ -20,7 +20,7 @@ use crate::{
     icons::Glyph,
     link_preview::grouped,
     motion, palette,
-    ui::{self, RADIUS_XL, Squircle, Tone},
+    ui::{self, RADIUS_XL, Squircle},
 };
 
 // Discord's limit on the nickname field.
@@ -129,7 +129,7 @@ impl Waffle {
             }
         };
         let backdrop = div().id("invite-overlay").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_invite(cx)));
-        Some(ui::modal(backdrop, card, cx))
+        Some(ui::Dialog::modal(backdrop, card, cx))
     }
 
     // The nickname field's editor, made the first time an invite that allows one is on screen.
@@ -144,13 +144,13 @@ impl Waffle {
 
     fn invite_column(&self, view: &InviteView, invite: &Invite, window: &mut Window, cx: &mut Context<Self>) -> Div {
         let (name, avatar) = self.me.as_ref().map(|me| (me.name.clone(), me.avatar.clone())).unwrap_or_default();
-        let accept = ui::button("invite-accept", Tone::Primary, cx)
-            .large()
+        let accept = ui::Button::new("invite-accept")
+            .size(ui::ButtonSize::Lg)
             .w_full()
-            .when(!avatar.is_empty(), |b| b.child(ui::avatar(avatar, 20.)))
+            .when(!avatar.is_empty(), |b| b.child(ui::Avatar::new(avatar, 20.)))
             .child(format!("Accept as {name}"))
             .on_click(cx.listener(|this, _, _, cx| this.accept_invite(cx)));
-        let decline = ui::button("invite-decline", Tone::Ghost, cx).large().w_full().child("No Thanks").on_click(cx.listener(|this, _, _, cx| this.close_invite(cx)));
+        let decline = ui::Button::new("invite-decline").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Lg).w_full().child("No Thanks").on_click(cx.listener(|this, _, _, cx| this.close_invite(cx)));
         heading(invite, "You've been invited to join", cx)
             .child(self.invite_settings(view, window, cx))
             .child(actions().child(accept).child(decline))
@@ -161,7 +161,7 @@ impl Waffle {
         let open = view.settings_open;
         let angle = transition("invite-settings-chevron", if open { 90. } else { 0. }, Transition::new(ui::DUR_POP).easing(motion::ease_out()), window, cx);
         let (strong, muted) = (palette::strong(cx), palette::muted(cx));
-        let head = ui::menu_row("invite-settings", cx)
+        let head = ui::DropdownMenuItem::new("invite-settings", cx)
             .gap_3()
             .px_3p5()
             .py_3()
@@ -178,7 +178,7 @@ impl Waffle {
             .on_click(cx.listener(|this, _, _, cx| this.edit_invite(cx, |v| v.settings_open = !v.settings_open)));
         let nickname = view.nickname.as_ref().map(|state| {
             let focus = state.read(cx).focus_handle(cx);
-            ui::field("Server Nickname", cx).child(ui::text_field("invite-nickname", Input::new(state).appearance(false), &focus))
+            ui::Field::new("Server Nickname", cx).child(ui::Input::new("invite-nickname", Input::new(state).appearance(false), &focus))
         });
         let dms = ui::toggle_row("invite-dms", "Allow direct messages", None, view.allow_dms, window, cx).on_click(cx.listener(|this, _, _, cx| this.edit_invite(cx, |v| v.allow_dms = !v.allow_dms)));
         // Discord offers this one only while your activity status is shared at all.
@@ -213,7 +213,7 @@ fn shell(splash: Option<(&str, &str)>, wide: bool, left: Div, window: &mut Windo
         .when(two_columns, |body| body.min_h(px(SPLASH_MIN_HEIGHT)))
         .child(left.when(two_columns, |l| l.w(px(LEFT)).flex_none()).when(!two_columns, |l| l.flex_1()))
         .children(panel);
-    ui::dialog("invite-card", width, body, window, cx).into_any_element()
+    ui::Dialog::new("invite-card", width, body, window, cx).into_any_element()
 }
 
 fn column() -> Div {
@@ -253,19 +253,19 @@ fn heading(invite: &Invite, label: &'static str, cx: &App) -> Div {
         )
 }
 
-fn loading(cx: &App) -> Div {
+fn loading(_cx: &App) -> Div {
     column()
-        .child(div().pb_2p5().child(ui::skeleton("invite-loading-tile", 22., cx).size(px(TILE))))
-        .child(ui::skeleton("invite-loading-label", 7., cx).w(px(SKELETON_LABEL)).h_3p5())
-        .child(ui::skeleton("invite-loading-name", 10., cx).w(px(SKELETON_NAME.0)).h(px(SKELETON_NAME.1)))
-        .child(ui::skeleton("invite-loading-counts", 7., cx).w_40().h_3p5())
-        .child(actions().child(ui::skeleton("invite-loading-accept", ui::RADIUS_MD, cx).w_full().h_11()))
+        .child(div().pb_2p5().child(ui::Skeleton::new("invite-loading-tile").radius(22.).size(px(TILE))))
+        .child(ui::Skeleton::new("invite-loading-label").radius(7.).w(px(SKELETON_LABEL)).h_3p5())
+        .child(ui::Skeleton::new("invite-loading-name").radius(10.).w(px(SKELETON_NAME.0)).h(px(SKELETON_NAME.1)))
+        .child(ui::Skeleton::new("invite-loading-counts").radius(7.).w_40().h_3p5())
+        .child(actions().child(ui::Skeleton::new("invite-loading-accept").radius(ui::RADIUS_MD).w_full().h_11()))
 }
 
 fn invalid(cx: &mut Context<Waffle>) -> Div {
     let tile = div().pb_2p5().child(ui::row().size(px(TILE)).squircle(22.).bg(palette::selected(cx)).justify_center().text_color(palette::faint(cx)).child(Icon::new(Glyph::Prohibit).size_8()));
     // Not verified: the button label on Discord's invalid-invite screen.
-    let okay = ui::button("invite-okay", Tone::Secondary, cx).large().w_full().child("Okay").on_click(cx.listener(|this, _, _, cx| this.close_invite(cx)));
+    let okay = ui::Button::new("invite-okay").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Lg).w_full().child("Okay").on_click(cx.listener(|this, _, _, cx| this.close_invite(cx)));
     column()
         .child(tile)
         .child(div().text_size(px(NAME_SIZE)).line_height(px(NAME_LEADING)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Invite Invalid"))
@@ -275,7 +275,7 @@ fn invalid(cx: &mut Context<Waffle>) -> Div {
 
 fn member(invite: &Invite, cx: &mut Context<Waffle>) -> Div {
     let guild_id = invite.guild_id.clone();
-    let go = ui::button("invite-go", Tone::Primary, cx).large().w_full().child("Go to Server").on_click(cx.listener(move |this, _, _, cx| {
+    let go = ui::Button::new("invite-go").size(ui::ButtonSize::Lg).w_full().child("Go to Server").on_click(cx.listener(move |this, _, _, cx| {
         this.join.invite = None;
         this.open_joined_guild(guild_id.clone(), cx);
     }));

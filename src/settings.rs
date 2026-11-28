@@ -41,7 +41,7 @@ use crate::{
     palette::{self, Level},
     sounds::{self, Cue},
     motion,
-    ui::{self, Squircle, Tone},
+    ui::{self, Squircle},
     voice,
 };
 
@@ -350,16 +350,16 @@ impl Waffle {
         let searching = !query.is_empty();
         // Search first, then you as the My account row, as macOS System Settings does: one compact row
         // instead of an identity block stacked over the field.
-        let search = div().flex_none().pb_3().child(ui::search_field("settings-search", &self.settings_search, cx).on_sidebar());
+        let search = div().flex_none().pb_3().child(ui::InputGroup::search("settings-search", &self.settings_search, cx).on_sidebar());
         let me = (!searching).then(|| self.me.clone()).flatten().map(|me| {
             let sidebar = crate::material::sidebar_fill(cx);
-            let avatar = ui::badged(ui::avatar(me.avatar.clone(), ui::AVATAR_LG), ui::AVATAR_LG, ui::Shape::Round, sidebar).status(self.my_mark());
+            let avatar = ui::badged(ui::Avatar::new(me.avatar.clone(), ui::AVATAR_LG), ui::AVATAR_LG, ui::Shape::Round, sidebar).status(self.my_mark());
             let text = ui::col().min_h_0()
                 .flex_1()
                 .line_height(ui::LINE_DETAIL)
                 .child(ui::line(me.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
                 .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(Page::Account.label()));
-            ui::menu_row("nav-Account", cx).toggled(view.page == Page::Account, cx).h_auto().py_1p5().child(avatar).child(text).on_click(cx.listener(|this, _, window, cx| this.open_page(Page::Account, window, cx)))
+            ui::DropdownMenuItem::new("nav-Account", cx).toggled(view.page == Page::Account, cx).h_auto().py_1p5().child(avatar).child(text).on_click(cx.listener(|this, _, window, cx| this.open_page(Page::Account, window, cx)))
         });
         let mut list: Vec<AnyElement> = Vec::new();
         if searching {
@@ -381,7 +381,7 @@ impl Waffle {
             .child(search)
             .children(me)
             .children(list)
-            .child(div().px_2p5().py_2().flex_none().child(ui::divider(None, cx)))
+            .child(div().px_2p5().py_2().flex_none().child(ui::Separator::new().w_full()))
             .child(self.log_out_item(cx))
             .children(asking.then(|| self.log_out_ask(cx)))
             .child(div().flex_1())
@@ -398,7 +398,7 @@ impl Waffle {
     }
 
     fn log_out_item(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        ui::menu_row("nav-log-out", cx)
+        ui::DropdownMenuItem::new("nav-log-out", cx)
             .danger(cx)
             .child(Icon::new(Glyph::DoorExit).size(ui::ICON_LG))
             .child("Log out")
@@ -409,8 +409,8 @@ impl Waffle {
     fn log_out_ask(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let buttons = ui::row().items_stretch()
             .gap_2()
-            .child(ui::button("log-out-stay", Tone::Secondary, cx).small().flex_1().child("Stay").on_click(cx.listener(|this, _, _, cx| this.set_ask(None, cx))))
-            .child(ui::button("log-out-yes", Tone::Danger, cx).small().flex_1().child("Log out").on_click(cx.listener(|this, _, window, cx| this.sign_out(window, cx))));
+            .child(ui::Button::new("log-out-stay").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).flex_1().child("Stay").on_click(cx.listener(|this, _, _, cx| this.set_ask(None, cx))))
+            .child(ui::Button::new("log-out-yes").variant(ui::ButtonVariant::Destructive).size(ui::ButtonSize::Sm).flex_1().child("Log out").on_click(cx.listener(|this, _, window, cx| this.sign_out(window, cx))));
         reveal(
             "log-out-ask",
             div().py_1().child(
@@ -450,12 +450,12 @@ impl Waffle {
             None => ui::edge(banner_fill, ui::top(ui::RADIUS_XL)).into_any_element(),
         };
         // Over a banner Waffle doesn't choose, so its own scrim, not a theme fill.
-        let banner_button = ui::button("change-banner", Tone::OnMedia, cx).small().child("Change banner").on_click(cx.listener(|this, _, _, cx| this.pick_profile_image(profile::ProfileImage::Banner, cx)));
+        let banner_button = ui::Button::new("change-banner").scope(ui::ButtonScope::Media).size(ui::ButtonSize::Sm).child("Change banner").on_click(cx.listener(|this, _, _, cx| this.pick_profile_image(profile::ProfileImage::Banner, cx)));
         let banner = div().relative().h(px(BANNER_HEIGHT)).child(banner_art).child(div().absolute().top_3().right_3().child(banner_button));
-        let avatar = ui::badged(ui::avatar(me.avatar.clone(), PROFILE_AVATAR).border(px(AVATAR_RING)).border_color(fill), PROFILE_AVATAR, ui::Shape::Round, fill);
+        let avatar = ui::badged(ui::Avatar::new(me.avatar.clone(), PROFILE_AVATAR).border(px(AVATAR_RING)).border_color(fill), PROFILE_AVATAR, ui::Shape::Round, fill);
         // Your presence only once the live connection has confirmed it (see `my_mark`).
         let avatar = match self.my_mark() {
-            Some(status) => avatar.mark(ui::Spot::BottomRight, ui::Badge::status(status, PROFILE_STATUS)),
+            Some(status) => avatar.mark(ui::Spot::BottomRight, ui::AvatarBadge::status(status, PROFILE_STATUS)),
             None => avatar,
         };
         let identity = ui::row()
@@ -466,10 +466,10 @@ impl Waffle {
             .gap_4()
             .child(avatar)
             .child(ui::line(me.name.clone()).flex_1().pb_3().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
-            .child(div().flex_none().pb_2p5().child(ui::button("change-avatar", Tone::Secondary, cx).small().child("Change avatar").on_click(cx.listener(|this, _, _, cx| this.pick_profile_image(profile::ProfileImage::Avatar, cx)))));
+            .child(div().flex_none().pb_2p5().child(ui::Button::new("change-avatar").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Change avatar").on_click(cx.listener(|this, _, _, cx| this.pick_profile_image(profile::ProfileImage::Avatar, cx)))));
         let copied = self.settings.as_ref().is_some_and(|s| s.copied);
         let id = me.id.clone();
-        let copy = ui::button("copy-user-id", Tone::Secondary, cx).small()
+        let copy = ui::Button::new("copy-user-id").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm)
             .min_w_24()
             .when(copied, |b| b.text_color(palette::positive_ink(cx)))
             .child(Icon::new(if copied { Glyph::Checkmark } else { Glyph::Copy }).size(ui::ICON_MD))
@@ -482,7 +482,7 @@ impl Waffle {
             .pb_1()
             .child(self.profile_row("acct-name", profile::ProfileField::DisplayName, "Display name", me.name.clone().into(), lines.next(), cx))
             .child(self.profile_row("acct-username", profile::ProfileField::Username, "Username", self.my_account.username.clone().into(), lines.next(), cx))
-            .child(ui::settings_row("acct-id", lines.next(), cx).child(field_text("User ID", me.id.clone(), cx)).child(copy));
+            .child(ui::Item::setting("acct-id", lines.next(), cx).child(field_text("User ID", me.id.clone(), cx)).child(copy));
         let card = ui::col().squircle(ui::RADIUS_XL).bg(fill).child(banner).child(identity).child(fields);
         vec![Section::keyed("Account info", ui::settings_group("Account info", cx).child(card))]
     }
@@ -490,8 +490,8 @@ impl Waffle {
     // A field with Edit at the end, which turns the value into its input in place.
     fn profile_row(&self, id: &'static str, field: profile::ProfileField, label: &'static str, value: SharedString, line: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let editing = self.settings.as_ref().and_then(|v| v.editing.as_ref()).is_some_and(|e| e.field == field);
-        ui::settings_row(id, line, cx).child(self.profile_value(field, label, value, cx)).when(!editing, |row| {
-            row.child(ui::button(SharedString::from(format!("{id}-edit")), Tone::Secondary, cx).small().child("Edit").on_click(cx.listener(move |this, _, window, cx| this.start_profile_edit(field, window, cx))))
+        ui::Item::setting(id, line, cx).child(self.profile_value(field, label, value, cx)).when(!editing, |row| {
+            row.child(ui::Button::new(SharedString::from(format!("{id}-edit"))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Edit").on_click(cx.listener(move |this, _, window, cx| this.start_profile_edit(field, window, cx))))
         })
     }
 
@@ -523,7 +523,7 @@ impl Waffle {
         vec![Section::keyed(
             "Sounds",
             ui::settings_group("Sounds", cx)
-                .child(ui::settings_card(cx).children(rows))
+                .child(ui::Card::new(cx).children(rows))
                 .child(ui::settings_caption("Sounds Waffle plays for new direct messages and for mentions. Voice sounds are under Voice and video.", cx)),
         )]
     }
@@ -574,14 +574,14 @@ impl Waffle {
             .child(pick("theme-light", ThemePref::Light, mini_window(&MINI_LIGHT).into_any_element(), "Light", None, cx))
             .child(pick("theme-dark", ThemePref::Dark, mini_window(&MINI_DARK).into_any_element(), "Midnight", None, cx))
             .child(pick("theme-system", ThemePref::System, mini_sync(), "Sync with OS", Some(if os_dark { "Midnight now" } else { "Light now" }), cx));
-        let text = ui::settings_card(cx)
+        let text = ui::Card::new(cx)
             .child(self.font_row(Select::UiFont, "Interface font", Some("Menus, messages and everything else"), &self.prefs.ui_font, UI_FONT, false, cx))
             .child(self.font_row(Select::MonoFont, "Code font", Some("Code blocks and inline code"), &self.prefs.mono_font, MONO_FONT, true, cx));
         let material = crate::material::setting_name().map(|name| {
             let row = self.switch_row(SwitchRow { id: "set-native-sidebar", title: name, detail: None, on: self.prefs.native_sidebar, enabled: true, field: |p| &mut p.native_sidebar }, false, window, cx);
             Section::keyed(
                 "Sidebar",
-                ui::settings_group("Sidebar", cx).child(ui::settings_card(cx).child(row)).child(ui::settings_caption("Lets your wallpaper's colour through the sidebar. In full screen the sidebar stays solid.", cx)),
+                ui::settings_group("Sidebar", cx).child(ui::Card::new(cx).child(row)).child(ui::settings_caption("Lets your wallpaper's colour through the sidebar. In full screen the sidebar stays solid.", cx)),
             )
         });
         let mut sections = vec![
@@ -602,7 +602,7 @@ impl Waffle {
             .collect();
         let value: SharedString = if chosen == default { format!("{default} (default)").into() } else { chosen.to_owned().into() };
         let field = div().w(px(FONT_SELECT_WIDTH)).flex_none().font_family(chosen.to_owned()).child(self.select_field(select, None, &options, chosen, value, 36., cx));
-        ui::settings_row(SharedString::from(format!("row-{select:?}")), line, cx).child(ui::settings_text(title, detail, cx)).child(field).into_any_element()
+        ui::Item::setting(SharedString::from(format!("row-{select:?}")), line, cx).child(ui::settings_text(title, detail, cx)).child(field).into_any_element()
     }
 
     fn app_icon_grid(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -784,12 +784,12 @@ fn column(page: Page, child: impl IntoElement) -> Div {
 }
 
 fn card_pad(cx: &App) -> Div {
-    ui::settings_card(cx).p_4().gap_4()
+    ui::Card::new(cx).p_4().gap_4()
 }
 
 // A row whose control sits under its text, full width.
 fn stack_row(id: &'static str, line: bool, cx: &App) -> Stateful<Div> {
-    ui::settings_row(id, line, cx).flex_col().items_stretch().gap_3()
+    ui::Item::setting(id, line, cx).flex_col().items_stretch().gap_3()
 }
 
 // A label over its value, as Account info lists them.
@@ -815,7 +815,7 @@ fn scale(stops: &[&'static str], cx: &App) -> Div {
 }
 
 fn radio_row(id: &'static str, line: bool, title: &'static str, detail: &'static str, on: bool, cx: &App) -> Stateful<Div> {
-    ui::settings_choice(ui::settings_row(id, line, cx), cx).items_start().child(div().pt_0p5().child(ui::radio(on, cx))).child(ui::settings_text(title, Some(detail), cx))
+    ui::settings_choice(ui::Item::setting(id, line, cx), cx).items_start().child(div().pt_0p5().child(ui::RadioGroupItem::mark(on))).child(ui::settings_text(title, Some(detail), cx))
 }
 
 // A row that reveals more rows under it; closed, it names what's inside.
@@ -830,7 +830,7 @@ fn expander_row(id: &'static str, line: bool, title: &str, summary: &str, open: 
         .text_color(palette::strong(cx))
         .justify_center()
         .child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD).rotate(angle));
-    ui::settings_choice(ui::settings_row(id, line, cx), cx).child(ui::settings_text(title.to_owned(), (!open).then(|| summary.to_owned()), cx)).child(chev)
+    ui::settings_choice(ui::Item::setting(id, line, cx), cx).child(ui::settings_text(title.to_owned(), (!open).then(|| summary.to_owned()), cx)).child(chev)
 }
 
 fn error_line(text: &'static str, cx: &App) -> Div {
@@ -846,8 +846,8 @@ fn error_line(text: &'static str, cx: &App) -> Div {
 }
 
 // Keycaps for a recorded binding, with the platform's own key names.
-pub(crate) fn key_caps(keys: &str, cx: &App) -> Div {
-    ui::row().gap_1().children(keys.split('+').map(|key| ui::kbd(key_name(key), cx)))
+pub(crate) fn key_caps(keys: &str) -> Div {
+    ui::row().gap_1().children(keys.split('+').map(|key| ui::Kbd::new(key_name(key))))
 }
 
 // ⌘ ⇧ ⌥ ⌃ on macOS, printed names elsewhere; arrows as arrows, letters upper-case.

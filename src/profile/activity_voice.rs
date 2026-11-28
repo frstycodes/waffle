@@ -31,8 +31,8 @@ pub(super) fn voice_heading(guild: &Guild, channel: &Channel, ink: Ink) -> Div {
     ui::col().min_w_0().child(name).child(ui::line(format!("in {}", guild.name)).text_size(ui::TEXT_XS).text_color(ink.text))
 }
 
-pub(super) fn hairline(ink: Ink) -> Div {
-    ui::rule(ink.strong.opacity(0.12)).w_full().flex_none()
+pub(super) fn hairline(ink: Ink) -> ui::Separator {
+    ui::Separator::new().color(ink.strong.opacity(0.12)).w_full().flex_none()
 }
 
 impl Waffle {
@@ -50,7 +50,7 @@ impl Waffle {
 
     pub(super) fn voice_faces(&self, guild: &Guild, channel: &Channel, ink: Ink) -> gpui_kit::Stateful<Div> {
         let people = self.channel_people(guild, channel);
-        ui::listed_stack(SharedString::from(format!("profile-voice-{}", channel.id)), "Participants", people, FACES, ui::AVATAR_XS, solid_tile(ink), ink.strong.opacity(0.2), ink.muted)
+        ui::AvatarGroup::listed(SharedString::from(format!("profile-voice-{}", channel.id)), "Participants", people, FACES, ui::AVATAR_XS, solid_tile(ink), ink.strong.opacity(0.2), ink.muted)
     }
 
     // The server › channel breadcrumb under a stream, and who's in it.
@@ -76,9 +76,9 @@ impl Waffle {
         let heads = seats.iter().enumerate().map(|(at, &(top, left, head))| {
             let spot = div().absolute().top(px(top * scale)).left(px(left * scale)).size(px(head * scale)).child(ui::gap(solid_tile(ink), SEAT_RING));
             match (more > 1 && at == more_at, people.get(at)) {
-                // lint-allow(custom-badge): ui::capped_stack puts its "+n" at a row's end; Discord's tile puts it at one of the seats.
+                // lint-allow(custom-badge): ui::AvatarGroup::capped puts its "+n" at a row's end; Discord's tile puts it at one of the seats.
                 (true, _) => spot.child(ui::row().size_full().rounded_full().justify_center().bg(solid_tile(ink)).text_size(ui::TEXT_XXS).font_weight(FontWeight::SEMIBOLD).text_color(ink.strong).child(if more > 99 { ">99".to_owned() } else { format!("+{more}") })),
-                (false, Some(person)) => spot.child(ui::avatar(person.icon.clone(), head * scale)),
+                (false, Some(person)) => spot.child(ui::Avatar::new(person.icon.clone(), head * scale)),
                 (false, None) => spot,
             }
         });

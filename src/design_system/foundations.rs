@@ -50,7 +50,7 @@ pub(super) fn space(cx: &App) -> impl IntoElement {
     };
     let sizes = |label: &'static str, marks: Vec<AnyElement>| stack().child(note(label, cx)).child(row().gap_4().items_end().children(marks));
     let icon_sizes = [ui::ICON_XS, ui::ICON_SM, ui::ICON_MD, ui::ICON_LG, ui::ICON_XL].map(|size| Icon::new(Glyph::Pin).size(size).into_any_element()).into();
-    let avatar_sizes = [ui::AVATAR_XS, ui::AVATAR_SM, ui::AVATAR_MD, ui::AVATAR_LG, ui::AVATAR_XL].map(|size| ui::monogram("Mira", size).into_any_element()).into();
+    let avatar_sizes = [ui::AVATAR_XS, ui::AVATAR_SM, ui::AVATAR_MD, ui::AVATAR_LG, ui::AVATAR_XL].map(|size| ui::AvatarFallback::new("Mira", size).into_any_element()).into();
     section("Space and shape", "Spacing is gpui's own scale (`gap_1` 4px … `p_12` 48px; the rem is fixed at 16px). Corners are `ui::RADIUS_*` through `squircle`; nested corners stay concentric.", cx).child(
         div()
             .grid()

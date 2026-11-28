@@ -39,7 +39,7 @@ impl Waffle {
         let ink = Ink::new(profile.theme, cx);
         let content = ui::col().id("dm-profile").child(self.profile_header(&card, &profile, Header::Panel, hovered, ink, cx)).child(self.panel_sections(&card, &profile, ink, cx));
         let target = card.user.clone();
-        let view_full = ui::button("dm-profile-view-full", ui::Tone::Secondary, cx).w_full().justify_center().child("View Full Profile").on_click(cx.listener(move |this, _, _, cx| this.open_full_profile(target.clone(), FullTab::Activity, cx)));
+        let view_full = ui::Button::new("dm-profile-view-full").variant(ui::ButtonVariant::Secondary).w_full().justify_center().child("View Full Profile").on_click(cx.listener(move |this, _, _, cx| this.open_full_profile(target.clone(), FullTab::Activity, cx)));
         // The panel's width: its column less the 8px gap to the window's edge, and less the frame's reach past each
         // side when it wears one: Discord shrinks the whole panel so the frame fits its column.
         let column_width = self.panel_column_width().unwrap_or(super::WIDTH) - PANEL_INSET;
@@ -50,7 +50,7 @@ impl Waffle {
             Some(_) => panel.bg(ink.wash()),
             None => panel.bg(palette::surface(palette::Level::Sidebar, cx)),
         };
-        let panel = panel.child(ui::scroll_area(content, &self.panel_scroll)).child(div().flex_none().p_4().child(view_full)).children(dressing.effect);
+        let panel = panel.child(ui::ScrollArea::new(content, &self.panel_scroll)).child(div().flex_none().p_4().child(view_full)).children(dressing.effect);
         let panel = ui::col().relative().flex_1().min_h_0().children(dressing.back).child(panel).children(dressing.front);
         let column = ui::col()
             .relative()
@@ -83,7 +83,7 @@ impl Waffle {
 
     // The header's side panel toggle: in a 1:1 DM it shows the person's profile, in a server or group the
     // member list.
-    pub(crate) fn members_toggle(&self, channel: &Channel, cx: &mut Context<Self>) -> Option<ui::Control> {
+    pub(crate) fn members_toggle(&self, channel: &Channel, cx: &mut Context<Self>) -> Option<ui::Button> {
         let dm = self.dm_recipient().is_some();
         if !dm && self.guild_id.is_none() && channel.raw_type != 3 {
             return None;
@@ -95,7 +95,7 @@ impl Waffle {
             (false, true) => (Glyph::Users, "Hide Member List"),
             (false, false) => (Glyph::Users, "Show Member List"),
         };
-        let toggle = ui::icon_button("members-toggle", glyph, tip, cx).occlude().when(on, |b| b.bg(palette::selected(cx)).text_color(palette::strong(cx)));
+        let toggle = ui::Button::new("members-toggle").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(glyph).tooltip_text(tip).occlude().when(on, |b| b.bg(palette::selected(cx)).text_color(palette::strong(cx)));
         Some(toggle.on_click(cx.listener(|this, _, _, cx| {
             this.right_panel = if matches!(this.right_panel, RightPanel::Members) { RightPanel::Hidden } else { RightPanel::Members };
             cx.notify(); // lint-allow(global-notify): showing or hiding the side panel resizes the main column beside it

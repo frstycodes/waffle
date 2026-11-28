@@ -184,7 +184,7 @@ impl Waffle {
             Some(app) => self.launcher_detail(app, cx),
             None => self.launcher_list(launcher, cx),
         };
-        let surface = ui::surface(cx).w(px(WIDTH)).h(px(HEIGHT)).flex().flex_col().child(body);
+        let surface = ui::PopoverContent::new(cx).w(px(WIDTH)).h(px(HEIGHT)).flex().flex_col().child(body);
         let backdrop = div().id("launcher-backdrop").absolute().inset_0().occlude().on_mouse_down(
             MouseButton::Left,
             cx.listener(|this, _, _, cx| {
@@ -194,7 +194,7 @@ impl Waffle {
         );
         // From the call bar it rises to the right of the control; from the composer's end, to its left.
         let (at, anchor) = (launcher.at, if launcher.place.voice { Anchor::BottomLeft } else { Anchor::BottomRight });
-        Some(div().absolute().inset_0().child(backdrop).child(ui::floating_at("launcher", at, anchor, ui::rise(surface, "launcher-rise", std::time::Duration::ZERO))).into_any_element())
+        Some(div().absolute().inset_0().child(backdrop).child(ui::Popover::floating_at("launcher", at, anchor, ui::rise(surface, "launcher-rise", std::time::Duration::ZERO))).into_any_element())
     }
 
     fn launcher_list(&self, launcher: &Launcher, cx: &mut Context<Self>) -> AnyElement {
@@ -202,7 +202,7 @@ impl Waffle {
         let mut rows: Vec<AnyElement> = Vec::new();
         if let Some(app_id) = self.activities.frame.as_ref().map(|f| f.read(cx).app_id.clone()) {
             rows.push(
-                ui::menu_row("launcher-leave", cx)
+                ui::DropdownMenuItem::new("launcher-leave", cx)
                     .danger(cx)
                     .child(Icon::new(Glyph::PhoneDisconnect).size(ICON_LG))
                     .child(ui::line(format!("Leave {}", self.app_name(&app_id))).flex_1())
@@ -213,7 +213,7 @@ impl Waffle {
                     .into_any_element(),
             );
             if cfg!(target_os = "macos") && self.activities.popout.is_none() {
-                rows.push(ui::menu_row("launcher-popout", cx).child(Icon::new(Glyph::Open).size(ICON_LG)).child(ui::line("Pop out").flex_1()).on_click(cx.listener(|this, _, _, cx| {
+                rows.push(ui::DropdownMenuItem::new("launcher-popout", cx).child(Icon::new(Glyph::Open).size(ICON_LG)).child(ui::line("Pop out").flex_1()).on_click(cx.listener(|this, _, _, cx| {
                     this.activities.launcher = None;
                     this.pop_out(cx);
                 })).into_any_element());
@@ -249,8 +249,8 @@ impl Waffle {
         let list = ui::col().id("launcher-list").p(px(SURFACE_INSET)).gap_0p5().children(rows);
         ui::col()
             .size_full()
-            .child(ui::row().flex_none().px_3().pt_3().pb_2().child(div().flex_1().child(ui::search_field("launcher-search", &launcher.search, cx))))
-            .child(ui::scroll_area(list, &launcher.scroll))
+            .child(ui::row().flex_none().px_3().pt_3().pb_2().child(div().flex_1().child(ui::InputGroup::search("launcher-search", &launcher.search, cx))))
+            .child(ui::ScrollArea::new(list, &launcher.scroll))
             .into_any_element()
     }
 
@@ -268,7 +268,7 @@ impl Waffle {
                 .flex_none()
                 .cursor_pointer()
                 .child(ui::server_tile(app.icon.as_deref(), &app.name, RECENT_ICON, cx))
-                .tooltip(move |window, cx| ui::tip(name.clone(), window, cx))
+                .tooltip(move |window, cx| ui::Tooltip::new(name.clone()).build(window, cx))
                 .on_click(cx.listener(move |this, _, _, cx| this.open_detail(Some(id.clone()), cx)))
         });
         ui::row().flex_wrap().gap(px(GRID_GAP)).px(px(GRID_GAP / 2.)).pb_2().children(icons).into_any_element()
@@ -303,8 +303,8 @@ impl Waffle {
             .top_2()
             .right_2()
             .gap_1()
-            .when(app.new, |d| d.child(ui::tag("New", cx)))
-            .when(app.age_gate, |d| d.child(ui::tag("18+", cx)));
+            .when(app.new, |d| d.child(ui::Badge::new("New").variant(ui::BadgeVariant::Accent)))
+            .when(app.age_gate, |d| d.child(ui::Badge::new("18+").variant(ui::BadgeVariant::Accent)));
         ui::pressable(div().id(SharedString::from(format!("launch-{}", app.id))), PRESS)
             .w(px(width))
             .flex_none()
@@ -324,7 +324,7 @@ impl Waffle {
                     .flex_none()
                     .child(art)
                     .child(marks)
-                    .when(!faces.is_empty(), |d| d.child(div().absolute().left_2().bottom_2().child(ui::capped_stack(&faces, FACES, AVATAR_SM, palette::surface(palette::Level::Raised, cx), palette::selected(cx), palette::text(cx))))),
+                    .when(!faces.is_empty(), |d| d.child(div().absolute().left_2().bottom_2().child(ui::AvatarGroup::capped(&faces, FACES, AVATAR_SM, palette::surface(palette::Level::Raised, cx), palette::selected(cx), palette::text(cx))))),
             )
             .child(
                 ui::row()
@@ -333,7 +333,7 @@ impl Waffle {
                     .child(ui::server_tile(app.icon.as_deref(), &app.name, AVATAR_XL, cx))
                     .child(ui::col().min_h_0().flex_1().child(ui::line(app.name.clone()).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(palette::strong(cx))).child(ui::line(line).text_size(TEXT_XS).text_color(palette::muted(cx)))),
             )
-            .when_some(blocked, |d, why| d.tooltip(move |window, cx| ui::tip(why, window, cx)))
+            .when_some(blocked, |d, why| d.tooltip(move |window, cx| ui::Tooltip::new(why).build(window, cx)))
             .on_click(cx.listener(move |this, _, _, cx| this.open_detail(Some(id.clone()), cx)))
             .into_any_element()
     }
@@ -350,9 +350,9 @@ impl Waffle {
             .collect::<Vec<_>>()
             .join(" · ");
         let note = match (&outcome, &players) {
-            (Outcome::Blocked(why), _) => Some(ui::callout(ui::Notice::Info, Glyph::Info, *why, blocked_fix(why), cx)),
-            (_, Some(players)) => Some(ui::callout(ui::Notice::Info, Glyph::Users, crate::activities::who_is_playing(players), "You'll join their game.", cx)),
-            _ if app.age_gate => Some(ui::callout(ui::Notice::Warning, Glyph::Warning, "For 18 and over", "Discord asks for your age the first time you play.", cx)),
+            (Outcome::Blocked(why), _) => Some(ui::Alert::new(ui::Notice::Info, Glyph::Info, *why, blocked_fix(why), cx)),
+            (_, Some(players)) => Some(ui::Alert::new(ui::Notice::Info, Glyph::Users, crate::activities::who_is_playing(players), "You'll join their game.", cx)),
+            _ if app.age_gate => Some(ui::Alert::new(ui::Notice::Warning, Glyph::Warning, "For 18 and over", "Discord asks for your age the first time you play.", cx)),
             _ => None,
         };
         let label = match outcome {
@@ -370,7 +370,7 @@ impl Waffle {
                     .px_2()
                     .pt_2()
                     .gap_1()
-                    .child(ui::icon_button("launcher-back", Glyph::ChevronLeft, "Back", cx).on_click(cx.listener(|this, _, _, cx| this.open_detail(None, cx))))
+                    .child(ui::Button::new("launcher-back").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::ChevronLeft).tooltip_text("Back").on_click(cx.listener(|this, _, _, cx| this.open_detail(None, cx))))
                     .child(ui::line(app.name.clone()).flex_1().text_size(TEXT_MD).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(palette::strong(cx))),
             )
             .child(
@@ -389,7 +389,7 @@ impl Waffle {
                     .p_3()
                     .gap_2()
                     .children(note)
-                    .child(ui::button("launcher-go", Tone::Primary, cx).w_full().disabled(blocked).child(label).on_click(cx.listener(move |this, _, _, cx| {
+                    .child(ui::Button::new("launcher-go").w_full().disabled(blocked).child(label).on_click(cx.listener(move |this, _, _, cx| {
                         if !blocked {
                             this.start_from_launcher(id.clone(), cx);
                         }
@@ -399,7 +399,7 @@ impl Waffle {
     }
 
     fn no_matches(&self, query: &str, cx: &mut Context<Self>) -> AnyElement {
-        let clear = ui::button("launcher-clear", Tone::Secondary, cx).small().child("Browse everything").on_click(cx.listener(|this, _, window, cx| {
+        let clear = ui::Button::new("launcher-clear").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Browse everything").on_click(cx.listener(|this, _, window, cx| {
             if let Some(launcher) = &this.activities.launcher {
                 launcher.search.update(cx, |state, cx| state.set_value("", window, cx));
             }
@@ -419,7 +419,7 @@ impl Waffle {
 
     fn shelf_failed(&self, error: &str, cx: &mut Context<Self>) -> AnyElement {
         let guild_id = self.activities.launcher.as_ref().and_then(|l| l.place.guild_id.clone());
-        let retry = ui::button("launcher-retry", Tone::Secondary, cx).small().child("Try again").on_click(cx.listener(move |this, _, _, cx| this.fetch_shelf(guild_id.clone(), cx)));
+        let retry = ui::Button::new("launcher-retry").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Try again").on_click(cx.listener(move |this, _, _, cx| this.fetch_shelf(guild_id.clone(), cx)));
         ui::col()
             .items_center()
             .gap_2()
@@ -455,12 +455,12 @@ fn section_label(text: impl Into<SharedString>, cx: &gpui_kit::App) -> AnyElemen
 }
 
 // A row's shape while the shelf loads.
-fn loading_row(i: usize, cx: &gpui_kit::App) -> AnyElement {
+fn loading_row(i: usize, _cx: &gpui_kit::App) -> AnyElement {
     ui::row()
         .px_2p5()
         .py_1p5()
         .gap_2p5()
-        .child(ui::skeleton(SharedString::from(format!("launcher-skel-icon-{i}")), RADIUS_MD, cx).size(px(AVATAR_XL)).flex_none())
-        .child(ui::col().min_h_0().flex_1().gap_1p5().child(ui::skeleton(SharedString::from(format!("launcher-skel-a-{i}")), RADIUS_XS, cx).h_3().w(relative(0.5))).child(ui::skeleton(SharedString::from(format!("launcher-skel-b-{i}")), RADIUS_XS, cx).h_2p5().w(relative(0.8))))
+        .child(ui::Skeleton::new(SharedString::from(format!("launcher-skel-icon-{i}"))).radius(RADIUS_MD).size(px(AVATAR_XL)).flex_none())
+        .child(ui::col().min_h_0().flex_1().gap_1p5().child(ui::Skeleton::new(SharedString::from(format!("launcher-skel-a-{i}"))).radius(RADIUS_XS).h_3().w(relative(0.5))).child(ui::Skeleton::new(SharedString::from(format!("launcher-skel-b-{i}"))).radius(RADIUS_XS).h_2p5().w(relative(0.8))))
         .into_any_element()
 }

@@ -28,7 +28,7 @@ impl Waffle {
     pub(super) fn floating_chat(&self, panel: AnyElement, width: f32, reveal: f32, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let width = width.min(self.call_stage_room(window) - FLOAT_INSET * 2.);
         self.above_game(
-            // lint-allow(custom-surface, custom-mark): ui::surface insets its content and rings it, and this card's own panel fills it and slides in by a computed offset
+            // lint-allow(custom-surface, custom-mark): ui::PopoverContent::new insets its content and rings it, and this card's own panel fills it and slides in by a computed offset
             div()
                 .id("call-chat-float")
                 .occlude()
@@ -149,7 +149,7 @@ impl Waffle {
             .cursor_pointer()
             .hover(|s| s.bg(palette::danger_hover()))
             .child(icon)
-            .tooltip(move |window, cx| ui::tip(tip, window, cx))
+            .tooltip(move |window, cx| ui::Tooltip::new(tip).build(window, cx))
             .on_click(cx.listener(move |this, _, _, cx| match watching.clone() {
                 Some(id) => {
                     this.call_focus = None;

@@ -360,9 +360,9 @@ impl Waffle {
         let (view, cut) = clamped_bio(&user.id, bio, ink);
         let user = user.clone();
         let more = cut.then(|| {
-            ui::button("profile-full-bio", ui::Tone::Ghost, cx)
-                .scoped(ink.tile, ink.strong.opacity(0.16), ink.text, ink.strong)
-                .small()
+            ui::Button::new("profile-full-bio").variant(ui::ButtonVariant::Ghost)
+                .scope(ui::ButtonScope::Themed { rest: ink.tile, hover: ink.strong.opacity(0.16), ink: ink.text, ink_hover: ink.strong })
+                .size(ui::ButtonSize::Sm)
                 .text_size(ui::TEXT_XS)
                 .child("View Full Bio")
                 .on_click(cx.listener(move |this, _, _, cx| this.view_full_profile(&user, FullTab::Activity, cx)))
@@ -383,12 +383,10 @@ impl Waffle {
     // Beside the name while the card is hovered: Add Note, or Edit Note when there is one. It opens the full
     // profile with the note being edited.
     // GAP: Discord edits the note in a small popover over the card; here it opens the full profile's field.
-    fn note_button(&self, card: &ProfileCard, profile: &Profile, ink: Ink, cx: &mut Context<Self>) -> ui::Control {
+    fn note_button(&self, card: &ProfileCard, profile: &Profile, ink: Ink, cx: &mut Context<Self>) -> ui::Button {
         let label = if profile.note.is_some() { "Edit Note (only visible to you)" } else { "Add Note (only visible to you)" };
         let (user, current) = (card.user.clone(), profile.note.clone().unwrap_or_default());
-        ui::icon_button("profile-note", Glyph::Note, label, cx)
-            .scoped(gpui_kit::transparent_black(), ink.tile, ink.muted, ink.strong)
-            .small()
+        ui::Button::new("profile-note").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).scope(ui::ButtonScope::Themed { rest: gpui_kit::transparent_black(), hover: ink.tile, ink: ink.muted, ink_hover: ink.strong }).icon(Glyph::Note).tooltip_text(label)
             .opacity(0.)
             .group_hover(CARD_GROUP, |s| s.opacity(1.))
             .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, window, cx| {
@@ -402,7 +400,7 @@ impl Waffle {
         let (to_friends, to_servers) = (user.clone(), user.clone());
         let friends = (profile.mutual_friend_count > 0).then(|| {
             let faces = profile.mutual_friends.iter().take(3).map(|u| u.avatar.clone());
-            mutual_link("profile-mutual-friends", Some(ui::avatar_stack(faces, MUTUAL_FACE, ink.top)), mutual_count(profile.mutual_friend_count, "Mutual Friend"), ink)
+            mutual_link("profile-mutual-friends", Some(ui::AvatarGroup::new(faces, MUTUAL_FACE, ink.top)), mutual_count(profile.mutual_friend_count, "Mutual Friend"), ink)
                 .on_click(cx.listener(move |this, _, _, cx| this.view_full_profile(&to_friends, FullTab::MutualFriends, cx)))
         });
         let servers = (profile.mutual_server_count > 0).then(|| {
@@ -506,8 +504,7 @@ impl Waffle {
         let toolbar = self.interaction_toolbar(card, Source::Status(text.clone()), BUBBLE_GROUP, ink, cx).map(|t| t.absolute().top_neg_4().right_neg_2());
         let chevron = long.then(|| {
             let (glyph, tip) = if card.status_expanded { (Glyph::ChevronUp, "Collapse custom status") } else { (Glyph::ChevronDown, "Expand custom status") };
-            ui::icon_button("profile-status-expand", glyph, tip, cx)
-                .scoped(ui::mix(ink.top, ink.strong, 0.08), ink.tile, ink.muted, ink.strong)
+            ui::Button::new("profile-status-expand").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).scope(ui::ButtonScope::Themed { rest: ui::mix(ink.top, ink.strong, 0.08), hover: ink.tile, ink: ink.muted, ink_hover: ink.strong }).icon(glyph).tooltip_text(tip)
                 .size_6()
                 .rounded_full()
                 .absolute()
@@ -569,7 +566,7 @@ impl Waffle {
     }
 
     // More: the user's menu; from a popout or side panel it leads with "View Full Profile", as Discord's.
-    pub(super) fn more_button(&self, card: &ProfileCard, view_full: bool, button: ui::Control, cx: &mut Context<Self>) -> ui::Control {
+    pub(super) fn more_button(&self, card: &ProfileCard, view_full: bool, button: ui::Button, cx: &mut Context<Self>) -> ui::Button {
         let (user, guild_id) = (card.user.clone(), card.guild_id.clone());
         button.on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| {
             let (user, guild_id) = (user.clone(), guild_id.clone());
@@ -587,7 +584,7 @@ impl Waffle {
 
     // Your own card's footer: Edit Profile; opened in a server it asks which profile, as Discord's does.
     pub(super) fn edit_profile_button(&self, guild_id: Option<String>, cx: &mut Context<Self>) -> Div {
-        let button = ui::button("profile-edit", ui::Tone::Primary, cx).w_full().justify_center().child(Icon::new(Glyph::Pen).size(ui::ICON_MD)).child("Edit Profile").on_click(cx.listener(
+        let button = ui::Button::new("profile-edit").w_full().justify_center().child(Icon::new(Glyph::Pen).size(ui::ICON_MD)).child("Edit Profile").on_click(cx.listener(
             move |this, event: &gpui_kit::ClickEvent, window, cx| {
                 if guild_id.is_none() {
                     return this.edit_own_profile(ProfileTab::Main, window, cx);
@@ -616,7 +613,7 @@ impl Waffle {
 // "Reply sent" or "Reaction sent", centred over the banner while it lasts.
 pub(super) fn card_toast(card: &ProfileCard, banner_height: f32, cx: &App) -> Option<Div> {
     let text = card.toast?;
-    Some(ui::row().absolute().left_0().right_0().top(px(banner_height / 2. - TOAST_HALF)).justify_center().child(ui::toast_text(SharedString::from(format!("profile-toast-{text}")), text, cx)))
+    Some(ui::row().absolute().left_0().right_0().top(px(banner_height / 2. - TOAST_HALF)).justify_center().child(ui::Sonner::text(SharedString::from(format!("profile-toast-{text}")), text, cx)))
 }
 
 // Half a one-line toast's height, to centre it on the banner.

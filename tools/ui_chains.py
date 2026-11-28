@@ -112,7 +112,8 @@ def matches(clauses, chain):
 FN = re.compile(r"\bfn\s+([a-z_][a-z0-9_]*)\s*(?:<[^>{]*>)?\s*\(")
 # What an element-building function returns (maybe in an Option).
 ELEMENT = re.compile(r"->\s*(Option<\s*)?(impl\s+IntoElement|impl\s+Element|AnyElement|Div|Stateful<Div>|Img|Svg|Stateful<Img>|(gpui_kit::)?(Div|Stateful<Div>|AnyElement)|AnimationElement<)")
-UI_CALL = re.compile(r"\bui::([a-z_][a-z0-9_]*)\s*\(")
+# A function (`ui::menu_row(`) or a component struct's constructor (`ui::Button::new(`, `ui::Badge::count(`).
+UI_CALL = re.compile(r"\bui::([a-z_][a-z0-9_]*|[A-Z][A-Za-z0-9]*(?=::[a-z_]+\s*\())\s*(?:::[a-z_]+\s*)?\(")
 
 
 def functions(code):

@@ -32,7 +32,7 @@ use crate::{
     discord::{ChannelKind, avatar_url, perm},
     icons::Glyph,
     palette,
-    ui::{self, Tone},
+    ui::{self},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -406,8 +406,8 @@ impl Waffle {
             Load::Ready(items) => items.clone(),
         };
         let can_upload = self.with_access(&guild_id, |me| me.has(perms::MANAGE_GUILD_EXPRESSIONS | perms::CREATE_GUILD_EXPRESSIONS)).unwrap_or(false);
-        let upload = ui::button(SharedString::from(format!("{row_id}-upload")), Tone::Primary, cx).small().disabled(!can_upload).child(Icon::new(Glyph::Upload).size(ui::ICON_MD)).child(format!("Upload {noun}")).on_click(cx.listener(move |this, _, _, cx| this.upload_expression(page, cx)));
-        let head = ui::settings_row(row_id, false, cx).child(ui::settings_text(format!("{} of {cap} slots used", items.len()), Some(match page {
+        let upload = ui::Button::new(SharedString::from(format!("{row_id}-upload"))).size(ui::ButtonSize::Sm).disabled(!can_upload).child(Icon::new(Glyph::Upload).size(ui::ICON_MD)).child(format!("Upload {noun}")).on_click(cx.listener(move |this, _, _, cx| this.upload_expression(page, cx)));
+        let head = ui::Item::setting(row_id, false, cx).child(ui::settings_text(format!("{} of {cap} slots used", items.len()), Some(match page {
             Page::Emoji => "PNG, JPG or GIF up to 256 KB. Names are letters, numbers and underscores.",
             Page::Stickers => "PNG, APNG or GIF, 320 × 320, up to 512 KB.",
             _ => "MP3 or OGG up to 512 KB and 5 seconds.",
@@ -428,22 +428,22 @@ impl Waffle {
                     Page::Stickers => api::delete_sticker(&guild_id, &item.id),
                     _ => api::delete_sound(&guild_id, &item.id),
                 }, page, cx));
-                ui::settings_row(SharedString::from(format!("ss-expr-{}", item.id)), i > 0, cx).child(mark).child(ui::settings_text(label, item.by.as_ref().map(|b| format!("Uploaded by {b}")), cx)).children(delete).into_any_element()
+                ui::Item::setting(SharedString::from(format!("ss-expr-{}", item.id)), i > 0, cx).child(mark).child(ui::settings_text(label, item.by.as_ref().map(|b| format!("Uploaded by {b}")), cx)).children(delete).into_any_element()
             })
             .collect();
         let empty = rows.is_empty().then(|| ui::settings_caption(format!("No {noun}s yet."), cx));
-        vec![ui::settings_card(cx).child(head).into_any_element(), ui::settings_group("Uploaded", cx).child(ui::settings_card(cx).children(rows)).children(empty).into_any_element()]
+        vec![ui::Card::new(cx).child(head).into_any_element(), ui::settings_group("Uploaded", cx).child(ui::Card::new(cx).children(rows)).children(empty).into_any_element()]
     }
 
     // Delete, then in place: Keep / Delete <name>.
     fn ss_delete_control(&self, ask_id: &str, label: &str, call: api::Call, page: Page, cx: &mut Context<Self>) -> AnyElement {
         let ask = ask_id.to_owned();
         if !self.asking(ask_id) {
-            return ui::icon_button(SharedString::from(format!("ss-{ask_id}")), Glyph::Trash, format!("Delete {label}"), cx).on_click(cx.listener(move |this, _, _, cx| this.ask(ask.clone(), cx))).into_any_element();
+            return ui::Button::new(SharedString::from(format!("ss-{ask_id}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Trash).tooltip_text(format!("Delete {label}")).on_click(cx.listener(move |this, _, _, cx| this.ask(ask.clone(), cx))).into_any_element();
         }
-        let keep = ui::button(SharedString::from(format!("ss-keep-{ask_id}")), Tone::Secondary, cx).small().child("Keep").on_click(cx.listener(move |this, _, _, cx| this.ask(ask.clone(), cx)));
+        let keep = ui::Button::new(SharedString::from(format!("ss-keep-{ask_id}"))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Keep").on_click(cx.listener(move |this, _, _, cx| this.ask(ask.clone(), cx)));
         let call = std::cell::Cell::new(Some(call));
-        let yes = ui::button(SharedString::from(format!("ss-yes-{ask_id}")), Tone::Danger, cx).small().child("Delete").on_click(cx.listener(move |this, _, _, cx| {
+        let yes = ui::Button::new(SharedString::from(format!("ss-yes-{ask_id}"))).variant(ui::ButtonVariant::Destructive).size(ui::ButtonSize::Sm).child("Delete").on_click(cx.listener(move |this, _, _, cx| {
             if let Some(call) = call.take() {
                 this.act_and_reload(call, page, cx);
             }
@@ -500,7 +500,7 @@ impl Waffle {
         let options: Vec<(String, String)> = PRUNE_DAYS.iter().map(|d| (d.to_string(), format!("Inactive for {}", plural(u64::from(*d), "day", "days")))).collect();
         let pick = div().w(px(SELECT_WIDTH)).flex_none().child(self.ss_select(Select::PruneDays, &options, &days.to_string(), cx));
         let action: AnyElement = match &view.lists.prune_count {
-            None => ui::button("ss-prune-count", Tone::Secondary, cx).small().child("Count members").on_click(cx.listener(move |this, _, _, cx| {
+            None => ui::Button::new("ss-prune-count").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Count members").on_click(cx.listener(move |this, _, _, cx| {
                 let g = guild_id.clone();
                 if let Some(l) = this.lists() {
                     l.prune_count = Some(Load::Loading);
@@ -510,15 +510,15 @@ impl Waffle {
             Some(Load::Loading) => loading_line("Counting…", cx),
             Some(Load::Failed(e)) => failed("Couldn't count", e, cx),
             Some(Load::Ready(0)) => ui::settings_caption("Nobody would be removed.", cx).into_any_element(),
-            Some(Load::Ready(n)) => ui::button("ss-prune-go", Tone::Danger, cx).small().child(format!("Remove {}", plural(*n, "member", "members"))).on_click(cx.listener(move |this, _, _, cx| {
+            Some(Load::Ready(n)) => ui::Button::new("ss-prune-go").variant(ui::ButtonVariant::Destructive).size(ui::ButtonSize::Sm).child(format!("Remove {}", plural(*n, "member", "members"))).on_click(cx.listener(move |this, _, _, cx| {
                 if let Some(l) = this.lists() {
                     l.prune_count = None;
                 }
                 this.act_and_reload(api::prune(&guild_id, days, &[]), Page::Members, cx);
             })).into_any_element(),
         };
-        let row = ui::settings_row("ss-prune", false, cx).child(ui::settings_text("Prune inactive members", Some("Removes members without a role who haven't been online. They can rejoin with an invite."), cx));
-        ui::settings_group("Prune", cx).child(ui::settings_card(cx).child(row).child(ui::settings_row("ss-prune-pick", true, cx).child(pick).child(div().flex_1()).child(action))).into_any_element()
+        let row = ui::Item::setting("ss-prune", false, cx).child(ui::settings_text("Prune inactive members", Some("Removes members without a role who haven't been online. They can rejoin with an invite."), cx));
+        ui::settings_group("Prune", cx).child(ui::Card::new(cx).child(row).child(ui::Item::setting("ss-prune-pick", true, cx).child(pick).child(div().flex_1()).child(action))).into_any_element()
     }
 
     fn ss_invites_page(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {
@@ -536,7 +536,7 @@ impl Waffle {
             .map(|(i, invite)| {
                 let uses = if invite.max_uses == 0 { plural(invite.uses, "use", "uses") } else { format!("{} of {} uses", invite.uses, invite.max_uses) };
                 let revoke = self.ss_delete_control(&format!("invite-{}", invite.code), &invite.code, api::revoke_invite(&invite.code), Page::Invites, cx);
-                ui::settings_row(SharedString::from(format!("ss-invite-{}", invite.code)), i > 0, cx)
+                ui::Item::setting(SharedString::from(format!("ss-invite-{}", invite.code)), i > 0, cx)
                     .child(ui::settings_text(invite.code.clone(), Some(format!("{} · {} · {uses}", invite.inviter, invite.channel)), cx))
                     .child(div().w(px(EXPIRES_WIDTH)).flex_none().text_color(palette::muted(cx)).child(expires_label(invite.expires_at.as_deref(), now)))
                     .child(revoke)
@@ -545,9 +545,9 @@ impl Waffle {
             .collect();
         let empty = rows.is_empty().then(|| ui::settings_caption("No active invite links.", cx));
         let (g1, g2) = (guild_id.clone(), guild_id);
-        let pause = ui::settings_row("ss-pause-invites", false, cx)
+        let pause = ui::Item::setting("ss-pause-invites", false, cx)
             .child(ui::settings_text("Pause invites", Some("Nobody can join with an invite for 24 hours. Useful during a raid."), cx))
-            .child(ui::button("ss-pause-24", Tone::Secondary, cx).small().child("Pause for 24 hours").on_click(cx.listener(move |this, _, _, cx| {
+            .child(ui::Button::new("ss-pause-24").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Pause for 24 hours").on_click(cx.listener(move |this, _, _, cx| {
                 let until = (chrono::Utc::now() + chrono::Duration::hours(24)).to_rfc3339();
                 let g = g1.clone();
                 this.server_call(api::pause_invites(&g, Some(&until)), move |this, r, cx| match r {
@@ -555,10 +555,10 @@ impl Waffle {
                     Err(e) => this.show_toast(e, cx),
                 }, cx);
             })))
-            .child(ui::button("ss-resume", Tone::Ghost, cx).small().child("Resume").on_click(cx.listener(move |this, _, _, cx| this.act_and_reload(api::pause_invites(&g2, None), Page::Invites, cx))));
+            .child(ui::Button::new("ss-resume").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Sm).child("Resume").on_click(cx.listener(move |this, _, _, cx| this.act_and_reload(api::pause_invites(&g2, None), Page::Invites, cx))));
         vec![
-            ui::settings_group("Invite links", cx).child(ui::settings_card(cx).id("ss-invites").children(rows)).children(empty).into_any_element(),
-            ui::settings_group("Pause", cx).child(ui::settings_card(cx).child(pause)).into_any_element(),
+            ui::settings_group("Invite links", cx).child(ui::Card::new(cx).id("ss-invites").children(rows)).children(empty).into_any_element(),
+            ui::settings_group("Pause", cx).child(ui::Card::new(cx).child(pause)).into_any_element(),
         ]
     }
 
@@ -576,11 +576,11 @@ impl Waffle {
                     .enumerate()
                     .map(|(i, app)| {
                         let remove = self.ss_delete_control(&format!("app-{}", app.id), &app.name, api::remove_integration(&guild_id, &app.id), Page::Integrations, cx);
-                        ui::settings_row(SharedString::from(format!("ss-app-{}", app.id)), i > 0, cx).child(ui::icon_tile(Glyph::AppWindow, palette::selected(cx), palette::strong(cx)).flex_none()).child(ui::settings_text(app.name.clone(), app.by.as_ref().map(|b| format!("Added by {b}")), cx)).child(remove).into_any_element()
+                        ui::Item::setting(SharedString::from(format!("ss-app-{}", app.id)), i > 0, cx).child(ui::ItemMedia::icon(Glyph::AppWindow, palette::selected(cx), palette::strong(cx)).flex_none()).child(ui::settings_text(app.name.clone(), app.by.as_ref().map(|b| format!("Added by {b}")), cx)).child(remove).into_any_element()
                     })
                     .collect(),
             };
-            out.push(ui::settings_group("Bots and apps", cx).child(ui::settings_card(cx).id("ss-integrations").children(apps)).into_any_element());
+            out.push(ui::settings_group("Bots and apps", cx).child(ui::Card::new(cx).id("ss-integrations").children(apps)).into_any_element());
         }
         if manage_hooks {
             let channels = self.text_channels(&guild_id, ChannelKind::Text);
@@ -592,22 +592,22 @@ impl Waffle {
                     .enumerate()
                     .map(|(i, hook)| {
                         let channel = channels.iter().find(|(id, _)| *id == hook.channel_id).map(|(_, n)| n.clone()).unwrap_or_default();
-                        let copy = hook.url.clone().map(|url| ui::button(SharedString::from(format!("ss-hook-copy-{}", hook.id)), Tone::Secondary, cx).small().child("Copy URL").on_click(cx.listener(move |this, _, _, cx| this.copy_text(url.clone(), cx))));
+                        let copy = hook.url.clone().map(|url| ui::Button::new(SharedString::from(format!("ss-hook-copy-{}", hook.id))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Copy URL").on_click(cx.listener(move |this, _, _, cx| this.copy_text(url.clone(), cx))));
                         let remove = self.ss_delete_control(&format!("hook-{}", hook.id), &hook.name, api::delete_webhook(&hook.id), Page::Integrations, cx);
                         let detail = match &hook.by {
                             Some(by) => format!("{channel} · made by {by}"),
                             None => channel,
                         };
-                        ui::settings_row(SharedString::from(format!("ss-hook-{}", hook.id)), i > 0, cx).child(ui::settings_text(hook.name.clone(), Some(detail), cx)).children(copy).child(remove).into_any_element()
+                        ui::Item::setting(SharedString::from(format!("ss-hook-{}", hook.id)), i > 0, cx).child(ui::settings_text(hook.name.clone(), Some(detail), cx)).children(copy).child(remove).into_any_element()
                     })
                     .collect(),
             };
             let first = channels.first().map(|(id, _)| id.clone());
             let create = first.map(|channel| {
-                ui::button("ss-hook-new", Tone::Secondary, cx).small().child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("New webhook").on_click(cx.listener(move |this, _, _, cx| this.act_and_reload(api::create_webhook(&channel, "Captain Hook"), Page::Integrations, cx)))
+                ui::Button::new("ss-hook-new").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("New webhook").on_click(cx.listener(move |this, _, _, cx| this.act_and_reload(api::create_webhook(&channel, "Captain Hook"), Page::Integrations, cx)))
             });
             out.push(self.followed_channels_group(&guild_id, cx));
-            out.push(ui::settings_group("Webhooks", cx).child(ui::settings_card(cx).id("ss-webhooks").children(hooks)).child(ui::row().items_stretch().justify_end().children(create)).into_any_element());
+            out.push(ui::settings_group("Webhooks", cx).child(ui::Card::new(cx).id("ss-webhooks").children(hooks)).child(ui::row().items_stretch().justify_end().children(create)).into_any_element());
         }
         out.push(link_out("app-directory", "App directory", "Find and add apps on Discord.", format!("https://discord.com/application-directory?guild_id={guild_id}"), cx));
         out
@@ -630,9 +630,9 @@ impl Waffle {
                     let call = api::create_automod_rule(&guild_id, &template);
                     let call = std::cell::Cell::new(Some(call));
                     rows.push(
-                        ui::settings_row(SharedString::from(format!("ss-automod-{kind}")), i > 0, cx)
+                        ui::Item::setting(SharedString::from(format!("ss-automod-{kind}")), i > 0, cx)
                             .child(ui::settings_text(template.name.clone(), Some("Not set up"), cx))
-                            .child(ui::button(SharedString::from(format!("ss-automod-setup-{kind}")), Tone::Secondary, cx).small().child("Set up").on_click(cx.listener(move |this, _, _, cx| {
+                            .child(ui::Button::new(SharedString::from(format!("ss-automod-setup-{kind}"))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Set up").on_click(cx.listener(move |this, _, _, cx| {
                                 if let Some(call) = call.take() {
                                     this.act_and_reload(call, Page::AutoMod, cx);
                                 }
@@ -643,8 +643,8 @@ impl Waffle {
             }
         }
         let custom: Vec<AnyElement> = rules.iter().filter(|r| r.trigger_type == automod::KEYWORD).enumerate().map(|(i, r)| self.ss_rule_row(&guild_id, r, i > 0, window, cx)).collect();
-        let words = ui::search_field("ss-automod-words", &view.lists.words, cx);
-        let add = ui::button("ss-automod-add", Tone::Primary, cx).small().child("Create rule").on_click(cx.listener(move |this, _, _, cx| {
+        let words = ui::InputGroup::search("ss-automod-words", &view.lists.words, cx);
+        let add = ui::Button::new("ss-automod-add").size(ui::ButtonSize::Sm).child("Create rule").on_click(cx.listener(move |this, _, _, cx| {
             let Some(view) = &this.server_settings else { return };
             let words = custom_words(&view.lists.words.read(cx).value());
             if words.is_empty() {
@@ -655,17 +655,17 @@ impl Waffle {
             this.act_and_reload(api::create_automod_rule(&g, &rule), Page::AutoMod, cx);
         }));
         vec![
-            ui::settings_group("Rules", cx).child(ui::settings_card(cx).id("ss-automod").children(rows)).child(ui::settings_caption("Matching messages are blocked before they post. Admins and members with Manage server are exempt.", cx)).into_any_element(),
-            ui::settings_group("Custom words", cx).child(ui::settings_card(cx).children(custom)).child(ui::row().gap_3().child(div().flex_1().child(words)).child(add)).child(ui::settings_caption("Up to six custom word rules. Separate words with commas; * matches any letters.", cx)).into_any_element(),
+            ui::settings_group("Rules", cx).child(ui::Card::new(cx).id("ss-automod").children(rows)).child(ui::settings_caption("Matching messages are blocked before they post. Admins and members with Manage server are exempt.", cx)).into_any_element(),
+            ui::settings_group("Custom words", cx).child(ui::Card::new(cx).children(custom)).child(ui::row().gap_3().child(div().flex_1().child(words)).child(add)).child(ui::settings_caption("Up to six custom word rules. Separate words with commas; * matches any letters.", cx)).into_any_element(),
         ]
     }
 
-    fn ss_rule_row(&self, guild_id: &str, rule: &Rule, line: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn ss_rule_row(&self, guild_id: &str, rule: &Rule, line: bool, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let (g, id, enabled) = (guild_id.to_owned(), rule.id.clone(), rule.enabled);
         let detail = if rule.words.is_empty() { None } else { Some(rule.words.join(", ")) };
-        let toggle = ui::switch_live(SharedString::from(format!("ss-rule-switch-{}", rule.id)), enabled, window, cx);
+        let toggle = ui::Switch::new(SharedString::from(format!("ss-rule-switch-{}", rule.id))).checked(enabled);
         let delete = self.ss_delete_control(&format!("rule-{}", rule.id), &rule.name, api::delete_automod_rule(guild_id, &rule.id), Page::AutoMod, cx);
-        let row = ui::settings_row(SharedString::from(format!("ss-rule-{}", rule.id)), line, cx).child(ui::settings_text(rule.name.clone(), detail, cx)).child(delete).child(toggle);
+        let row = ui::Item::setting(SharedString::from(format!("ss-rule-{}", rule.id)), line, cx).child(ui::settings_text(rule.name.clone(), detail, cx)).child(delete).child(toggle);
         // Low stakes and reversible: flips at once, flips back if Discord refuses.
         ui::settings_choice(row, cx)
             .on_click(cx.listener(move |this, _, _, cx| {
@@ -700,18 +700,18 @@ impl Waffle {
             Load::Ready(bans) => bans.clone(),
         };
         let query = view.lists.ban_search.read(cx).value().to_lowercase();
-        let search = ui::search_field("ss-ban-search", &view.lists.ban_search, cx);
+        let search = ui::InputGroup::search("ss-ban-search", &view.lists.ban_search, cx);
         let shown: Vec<&Person> = bans.iter().filter(|b| query.is_empty() || b.name.to_lowercase().contains(&query) || b.id.contains(&query)).collect();
         let rows: Vec<AnyElement> = shown
             .iter()
             .enumerate()
             .map(|(i, b)| {
                 let avatar: AnyElement = match &b.avatar {
-                    Some(url) => ui::avatar(url.clone(), 32.).flex_none().into_any_element(),
-                    None => ui::monogram(&b.name, 32.).flex_none().into_any_element(),
+                    Some(url) => ui::Avatar::new(url.clone(), 32.).flex_none().into_any_element(),
+                    None => ui::AvatarFallback::new(&b.name, 32.).flex_none().into_any_element(),
                 };
                 let (g, id, label) = (guild_id.clone(), b.id.clone(), format!("Unbanned {}", b.name));
-                let unban = ui::button(SharedString::from(format!("ss-unban-{}", b.id)), Tone::Secondary, cx).small().child("Unban").on_click(cx.listener(move |this, _, _, cx| {
+                let unban = ui::Button::new(SharedString::from(format!("ss-unban-{}", b.id))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Unban").on_click(cx.listener(move |this, _, _, cx| {
                     let (g2, id2, label) = (g.clone(), id.clone(), label.clone());
                     if let Some(Load::Ready(bans)) = this.lists().map(|l| &mut l.bans) {
                         bans.retain(|b| b.id != id2);
@@ -725,11 +725,11 @@ impl Waffle {
                     }, cx);
                     cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
                 }));
-                ui::settings_row(SharedString::from(format!("ss-ban-{}", b.id)), i > 0, cx).child(avatar).child(ui::settings_text(b.name.clone(), Some(b.note.clone().unwrap_or_else(|| "No reason given".into())), cx)).child(unban).into_any_element()
+                ui::Item::setting(SharedString::from(format!("ss-ban-{}", b.id)), i > 0, cx).child(avatar).child(ui::settings_text(b.name.clone(), Some(b.note.clone().unwrap_or_else(|| "No reason given".into())), cx)).child(unban).into_any_element()
             })
             .collect();
         let empty = rows.is_empty().then(|| ui::settings_caption(if bans.is_empty() { "Nobody is banned." } else { "No bans match." }, cx));
-        vec![search.into_any_element(), ui::settings_group(plural(bans.len() as u64, "ban", "bans"), cx).child(ui::settings_card(cx).id("ss-bans").children(rows)).children(empty).into_any_element()]
+        vec![search.into_any_element(), ui::settings_group(plural(bans.len() as u64, "ban", "bans"), cx).child(ui::Card::new(cx).id("ss-bans").children(rows)).children(empty).into_any_element()]
     }
 
     fn ss_community_page(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {
@@ -740,7 +740,7 @@ impl Waffle {
         let channels = self.text_channels(&guild_id, ChannelKind::Text);
         let name = |id: &Option<String>| id.as_ref().and_then(|id| channels.iter().find(|(c, _)| c == id)).map(|(_, n)| n.clone()).unwrap_or_else(|| "None".into());
         if !features.iter().any(|f| f == "COMMUNITY") {
-            let enable = ui::button("ss-community-enable", Tone::Primary, cx).child("Enable Community").on_click(cx.listener(move |this, _, window, cx| {
+            let enable = ui::Button::new("ss-community-enable").child("Enable Community").on_click(cx.listener(move |this, _, window, cx| {
                 let call = api::enable_community(&guild_id, &features, None, None);
                 this.server_call(call, |this, r, cx| match r {
                     Ok(body) => {
@@ -752,13 +752,13 @@ impl Waffle {
                 }, cx);
                 let _ = window;
             }));
-            let rows = [("Verified email to chat", "Turns on the low verification level"), ("Scan every image", "Explicit media is filtered for everyone"), ("Rules and updates channels", "Discord creates #rules and #moderator-only")].map(|(t, d)| ui::settings_row(SharedString::from(format!("ss-community-{t}")), true, cx).child(Icon::new(Glyph::CheckCircle).size(ui::ICON_LG)).child(ui::settings_text(t, Some(d), cx)).into_any_element());
+            let rows = [("Verified email to chat", "Turns on the low verification level"), ("Scan every image", "Explicit media is filtered for everyone"), ("Rules and updates channels", "Discord creates #rules and #moderator-only")].map(|(t, d)| ui::Item::setting(SharedString::from(format!("ss-community-{t}")), true, cx).child(Icon::new(Glyph::CheckCircle).size(ui::ICON_LG)).child(ui::settings_text(t, Some(d), cx)).into_any_element());
             return vec![
-                ui::settings_card(cx).id("ss-community").child(ui::settings_row("ss-community-head", false, cx).child(ui::settings_text("Are you building a community?", Some("Community servers get onboarding, insights, announcement channels and Discovery."), cx))).children(rows).into_any_element(),
+                ui::Card::new(cx).id("ss-community").child(ui::Item::setting("ss-community-head", false, cx).child(ui::settings_text("Are you building a community?", Some("Community servers get onboarding, insights, announcement channels and Discovery."), cx))).children(rows).into_any_element(),
                 ui::row().items_stretch().justify_end().child(enable).into_any_element(),
             ];
         }
-        let disable = ui::button("ss-community-disable", Tone::Secondary, cx).small().child("Disable Community").on_click(cx.listener(move |this, _, _, cx| {
+        let disable = ui::Button::new("ss-community-disable").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Disable Community").on_click(cx.listener(move |this, _, _, cx| {
             let call = api::disable_community(&guild_id, &features);
             this.server_call(call, |this, r, cx| match r {
                 Ok(body) => {
@@ -771,9 +771,9 @@ impl Waffle {
         }));
         vec![
             ui::settings_group("Channels", cx)
-                .child(ui::settings_card(cx).id("ss-community").child(ui::settings_row("ss-rules", false, cx).child(ui::settings_text("Rules channel", Some("Where members read the rules"), cx)).child(super::view::value_text(name(&info.rules_channel_id), cx))).child(ui::settings_row("ss-updates", true, cx).child(ui::settings_text("Community updates channel", Some("Where Discord sends notices to moderators"), cx)).child(super::view::value_text(name(&info.updates_channel_id), cx))))
+                .child(ui::Card::new(cx).id("ss-community").child(ui::Item::setting("ss-rules", false, cx).child(ui::settings_text("Rules channel", Some("Where members read the rules"), cx)).child(super::view::value_text(name(&info.rules_channel_id), cx))).child(ui::Item::setting("ss-updates", true, cx).child(ui::settings_text("Community updates channel", Some("Where Discord sends notices to moderators"), cx)).child(super::view::value_text(name(&info.updates_channel_id), cx))))
                 .into_any_element(),
-            ui::settings_card(cx).child(ui::settings_row("ss-community-off", false, cx).child(ui::settings_text("Disable Community", Some("Onboarding, insights and Discovery switch off."), cx)).child(disable)).into_any_element(),
+            ui::Card::new(cx).child(ui::Item::setting("ss-community-off", false, cx).child(ui::settings_text("Disable Community", Some("Onboarding, insights and Discovery switch off."), cx)).child(disable)).into_any_element(),
         ]
     }
 
@@ -788,10 +788,10 @@ impl Waffle {
         let prompts = onboarding["prompts"].as_array().map_or(0, Vec::len) as u64;
         let defaults = onboarding["default_channel_ids"].as_array().map_or(0, Vec::len) as u64;
         vec![
-            ui::settings_card(cx)
-                .child(ui::settings_row("onboarding", false, cx).child(ui::settings_text("Onboarding", Some(if enabled { "On: new members answer questions before they arrive" } else { "Off" }), cx)))
-                .child(ui::settings_row("ss-onboarding-prompts", true, cx).child(ui::settings_text("Questions", Some(plural(prompts, "question", "questions")), cx)))
-                .child(ui::settings_row("ss-onboarding-defaults", true, cx).child(ui::settings_text("Default channels", Some(plural(defaults, "channel", "channels")), cx)))
+            ui::Card::new(cx)
+                .child(ui::Item::setting("onboarding", false, cx).child(ui::settings_text("Onboarding", Some(if enabled { "On: new members answer questions before they arrive" } else { "Off" }), cx)))
+                .child(ui::Item::setting("ss-onboarding-prompts", true, cx).child(ui::settings_text("Questions", Some(plural(prompts, "question", "questions")), cx)))
+                .child(ui::Item::setting("ss-onboarding-defaults", true, cx).child(ui::settings_text("Default channels", Some(plural(defaults, "channel", "channels")), cx)))
                 .into_any_element(),
             link_out("onboarding-edit", "Edit questions and channels on Discord", "Onboarding's question builder isn't in Waffle yet.", "https://discord.com/app", cx),
         ]
@@ -805,23 +805,23 @@ impl Waffle {
             Load::Failed(e) => return vec![failed("Couldn't load the template", e, cx)],
             Load::Ready(t) => t.clone(),
         };
-        let copies = ui::settings_card(cx)
-            .child(ui::settings_row("ss-template-copies", false, cx).child(Icon::new(Glyph::CheckCircle).size(ui::ICON_LG)).child(ui::settings_text("Copies channels, topics, roles, permissions and default settings", None::<&str>, cx)))
-            .child(ui::settings_row("ss-template-skips", true, cx).child(Icon::new(Glyph::XCircle).size(ui::ICON_LG)).child(ui::settings_text("Not messages, members, bots, the icon or boosts", None::<&str>, cx)));
+        let copies = ui::Card::new(cx)
+            .child(ui::Item::setting("ss-template-copies", false, cx).child(Icon::new(Glyph::CheckCircle).size(ui::ICON_LG)).child(ui::settings_text("Copies channels, topics, roles, permissions and default settings", None::<&str>, cx)))
+            .child(ui::Item::setting("ss-template-skips", true, cx).child(Icon::new(Glyph::XCircle).size(ui::ICON_LG)).child(ui::settings_text("Not messages, members, bots, the icon or boosts", None::<&str>, cx)));
         let mut out = vec![ui::settings_group("What it copies", cx).child(copies).into_any_element()];
         match templates.first() {
             Some(t) => {
                 let (g, code) = (guild_id.clone(), t.code.clone());
                 let link = format!("https://discord.new/{}", t.code);
-                let sync = ui::button("ss-template-sync", Tone::Secondary, cx).small().child("Sync").on_click(cx.listener(move |this, _, _, cx| this.act_and_reload(api::sync_template(&g, &code), Page::Template, cx)));
-                let copy = ui::button("ss-template-copy", Tone::Ghost, cx).small().child("Copy link").on_click(cx.listener(move |this, _, _, cx| this.copy_text(link.clone(), cx)));
+                let sync = ui::Button::new("ss-template-sync").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Sync").on_click(cx.listener(move |this, _, _, cx| this.act_and_reload(api::sync_template(&g, &code), Page::Template, cx)));
+                let copy = ui::Button::new("ss-template-copy").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Sm).child("Copy link").on_click(cx.listener(move |this, _, _, cx| this.copy_text(link.clone(), cx)));
                 let delete = self.ss_delete_control(&format!("template-{}", t.code), &t.name, api::delete_template(&guild_id, &t.code), Page::Template, cx);
                 let detail = if t.dirty { "The server changed since the last sync." } else { "In sync with the server." };
-                out.push(ui::settings_group("Template", cx).child(ui::settings_card(cx).id("ss-template").child(ui::settings_row("ss-template-row", false, cx).child(ui::settings_text(format!("discord.new/{}", t.code), Some(format!("{} · {detail}", t.name)), cx)).child(sync).child(copy).child(delete))).into_any_element());
+                out.push(ui::settings_group("Template", cx).child(ui::Card::new(cx).id("ss-template").child(ui::Item::setting("ss-template-row", false, cx).child(ui::settings_text(format!("discord.new/{}", t.code), Some(format!("{} · {detail}", t.name)), cx)).child(sync).child(copy).child(delete))).into_any_element());
             }
             None => {
-                let field = ui::search_field("ss-template-name", &view.lists.template_name, cx);
-                let generate = ui::button("ss-template-make", Tone::Primary, cx).small().child("Generate template").on_click(cx.listener(move |this, _, _, cx| {
+                let field = ui::InputGroup::search("ss-template-name", &view.lists.template_name, cx);
+                let generate = ui::Button::new("ss-template-make").size(ui::ButtonSize::Sm).child("Generate template").on_click(cx.listener(move |this, _, _, cx| {
                     let Some(view) = &this.server_settings else { return };
                     let name = view.lists.template_name.read(cx).value().trim().to_owned();
                     if name.is_empty() {

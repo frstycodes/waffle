@@ -166,7 +166,7 @@ pub(super) fn media_frame(message: &Message, i: usize, size: (f32, f32), corners
             .top_1p5()
             .right_1p5()
             .on_hover(track_tile_hover(ctx.this.clone(), key.clone()))
-            .child(ui::icon_button(SharedString::from(format!("modify-media-{}-{i}", message.id)), Glyph::Pen, "Modify Attachment", cx).on_click(move |_, window, cx| {
+            .child(ui::Button::new(SharedString::from(format!("modify-media-{}-{i}", message.id))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Pen).tooltip_text("Modify Attachment").on_click(move |_, window, cx| {
                 cx.stop_propagation();
                 this.update(cx, |this, cx| this.open_modify_sent(msg.clone(), i, window, cx)).ok();
             }))
@@ -202,7 +202,7 @@ pub(super) fn alt_button(key: String, ctx: &RowContext) -> Stateful<Div> {
         .left_1p5()
         .bottom_1p5()
         .cursor_pointer()
-        .tooltip(|window, cx| ui::tip("Image Description (Alt Text)", window, cx))
+        .tooltip(ui::Tooltip::text("Image Description (Alt Text)"))
         // On press, judged by the state it was drawn with: the popout's own press-outside close fires too.
         .on_mouse_down(gpui_kit::MouseButton::Left, move |_, _, cx| {
             cx.stop_propagation();
@@ -218,7 +218,7 @@ pub(super) fn alt_button(key: String, ctx: &RowContext) -> Stateful<Div> {
 // "Image Description (Alt Text)" over the gallery; a press anywhere else closes it.
 pub(super) fn alt_popout(key: &str, text: String, ctx: &RowContext, cx: &App) -> Stateful<Div> {
     let (this, key) = (ctx.this.clone(), key.to_owned());
-    // lint-allow(custom-surface): ui::surface sits in the flow; this popout hangs absolutely over a gallery tile and sizes itself
+    // lint-allow(custom-surface): ui::PopoverContent::new sits in the flow; this popout hangs absolutely over a gallery tile and sizes itself
     ui::col()
         .id(SharedString::from(format!("alt-popout-{key}")))
         .occlude()

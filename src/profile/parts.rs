@@ -63,7 +63,7 @@ pub(super) fn luminance(color: Hsla) -> f32 {
 // theme. Returns (outer, inner); content goes in the inner.
 pub(crate) fn themed_card(ink: Ink, max_height: f32, cx: &App) -> (Div, Div) {
     let inner = ui::col().max_h(px(max_height - if ink.border.is_some() { 2. * BORDER } else { 0. })).squircle(inner_radius(ink)).bg(ink.wash());
-    // lint-allow(custom-surface): ui::surface is a flat overlay fill; this card is the user's gradient inside a gradient border.
+    // lint-allow(custom-surface): ui::PopoverContent::new is a flat overlay fill; this card is the user's gradient inside a gradient border.
     let outer = div()
         .squircle(RADIUS_LG)
         .shadow(ui::shadow_pop(cx))
@@ -76,8 +76,8 @@ pub(crate) fn inner_radius(ink: Ink) -> f32 {
 }
 
 // Discord's round buttons over the banner: translucent black, as over any media.
-pub(super) fn banner_button(id: &'static str, glyph: Glyph, label: &'static str, cx: &App) -> ui::Control {
-    ui::icon_button(id, glyph, label, cx).tone(ui::Tone::OnMedia, cx).round()
+pub(super) fn banner_button(id: &'static str, glyph: Glyph, label: &'static str, _cx: &App) -> ui::Button {
+    ui::Button::new(id).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).scope(ui::ButtonScope::Media).icon(glyph).tooltip_text(label).round()
 }
 
 pub(super) fn menu_surface(in_guild: bool) -> Surface {
@@ -93,7 +93,7 @@ pub(crate) fn name_block(user: &User, profile: &Profile, ink: Ink, open: Option<
     let runs = user.name_style.as_ref().map(|style| crate::chat::name_runs(&user.name, style, ui::mix(ink.top, ink.bottom, 0.5))).unwrap_or_default();
     let handle = [Some(profile.username.clone()).filter(|u| !u.is_empty()), profile.pronouns.clone()].into_iter().flatten().collect::<Vec<_>>().join(" • ");
     let tag = user.tag.as_ref().map(|tag| {
-        // lint-allow(custom-badge): ui::badge is a 20px solid label in 11px type; the guild tag is 22px in the card's 14px type and ink.
+        // lint-allow(custom-badge): ui::Badge is a 20px solid label in 11px type; the guild tag is 22px in the card's 14px type and ink.
         ui::row()
             .h(px(TAG_HEIGHT))
             .px_1p5()
@@ -118,7 +118,7 @@ pub(crate) fn name_block(user: &User, profile: &Profile, ink: Ink, open: Option<
         .child(StyledText::new(user.name.clone()).with_highlights(runs))
         .when_some(open.clone(), |n, open| n.cursor_pointer().on_click(move |e, w, cx| open(e, w, cx)));
     let handle = (!handle.is_empty()).then(|| {
-        // lint-allow(custom-button): the username is a link, as Discord's; ui::button would give it a fill and padding.
+        // lint-allow(custom-button): the username is a link, as Discord's; ui::Button would give it a fill and padding.
         div().id("profile-username").min_w_0().child(ui::line(handle)).when_some(open, |h, open| h.cursor_pointer().on_click(move |e, w, cx| open(e, w, cx)))
     });
     let badges = badges(&profile.badges, ink);
@@ -141,14 +141,14 @@ fn badges(badges: &[Badge], ink: Ink) -> Option<Div> {
             .size(px(BADGE_SIZE))
             .flex_none()
             .child(img(badge.icon.clone()).size_full())
-            .tooltip(move |window, cx| ui::tip(label.clone(), window, cx))
+            .tooltip(move |window, cx| ui::Tooltip::new(label.clone()).build(window, cx))
             .when_some(link, |b, url| b.cursor_pointer().on_click(move |_, _, cx| cx.open_url(&url)))
     });
     let more = badges.len().saturating_sub(MAX_BADGES);
     // Discord holds them in a pill of the card's tint, "+N" at its end.
     let row = ui::row().id("profile-badges").flex_none().h(px(BADGE_PILL)).px_1().gap_0p5().squircle(RADIUS_XS).bg(ink.tile).children(shown).when(more > 0, |p| p.child(div().px_0p5().text_size(ui::TEXT_XS).text_color(ink.text).child(format!("+{more}"))));
     let row = match more > 0 {
-        true => ui::overflow_list(row, "Badges", badges.iter().map(|b| ui::Entry::item(b.icon.clone(), b.description.clone())).collect()),
+        true => ui::HoverCard::new(row, "Badges", badges.iter().map(|b| ui::Entry::item(b.icon.clone(), b.description.clone())).collect()),
         false => row,
     };
     Some(ui::row().flex_none().child(row))
@@ -208,11 +208,11 @@ pub(crate) fn profile_key(user_id: &str, guild_id: Option<&str>) -> String {
     format!("{user_id}-{}", guild_id.unwrap_or("dm"))
 }
 
-pub(super) fn profile_skeleton(cx: &App) -> Div {
-    let line = |id: &'static str, width: f32| ui::skeleton(id, 4., cx).h_3().w(relative(width));
+pub(super) fn profile_skeleton(_cx: &App) -> Div {
+    let line = |id: &'static str, width: f32| ui::Skeleton::new(id).radius(4.).h_3().w(relative(width));
     ui::col()
         .gap_2p5()
-        .child(ui::skeleton("profile-skel-badges", 8., cx).h_5().w(px(SKELETON_BADGES)))
+        .child(ui::Skeleton::new("profile-skel-badges").radius(8.).h_5().w(px(SKELETON_BADGES)))
         .child(line("profile-skel-bio-1", 0.9))
         .child(line("profile-skel-bio-2", 0.55))
 }
@@ -254,7 +254,7 @@ pub(super) fn since_date(id: &'static str, mark: impl IntoElement, tip: SharedSt
         .text_color(ink.text)
         .child(mark)
         .child(short_date(at))
-        .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
+        .tooltip(move |window, cx| ui::Tooltip::new(tip.clone()).build(window, cx))
 }
 
 // When a snowflake was minted: its top 42 bits are milliseconds since Discord's epoch (2015).

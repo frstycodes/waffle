@@ -25,7 +25,7 @@ pub(super) fn reply_preview(reply: &Message, target: Option<String>, ctx: &Rc<Ro
     });
     let quote: Vec<AnyElement> = match hidden {
         Some(label) => vec![ui::line(label).into_any_element()],
-        None => vec![ui::avatar(reply.author.avatar.clone(), 16.).into_any_element(), div().flex_none().font_weight(FontWeight::MEDIUM).text_color(muted).child(ctx.name_of(&reply.author)).into_any_element(), reply_snippet(reply, ctx)],
+        None => vec![ui::Avatar::new(reply.author.avatar.clone(), 16.).into_any_element(), div().flex_none().font_weight(FontWeight::MEDIUM).text_color(muted).child(ctx.name_of(&reply.author)).into_any_element(), reply_snippet(reply, ctx)],
     };
     let this = ctx.this.clone();
     let preview = ui::row()
@@ -223,7 +223,7 @@ pub(crate) fn starter_message(parent: &Message, ctx: &Rc<RowContext>, cx: &mut A
             ui::row().items_stretch()
                 .gap(px(GUTTER))
                 // lint-allow(raw-margin): optical, lines the avatar's top with the name's cap height
-                .child(profile_trigger(format!("starter-avatar-{}", parent.id), &parent.author, ctx).flex_none().mt_0p5().child(ui::avatar(parent.author.avatar.clone(), AVATAR)))
+                .child(profile_trigger(format!("starter-avatar-{}", parent.id), &parent.author, ctx).flex_none().mt_0p5().child(ui::Avatar::new(parent.author.avatar.clone(), AVATAR)))
                 .child(body),
         )
 }
@@ -281,7 +281,7 @@ pub(crate) fn content(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> Opti
 pub(super) fn send_failure(message: &Message, ctx: &Rc<RowContext>, cx: &App) -> AnyElement {
     let (retry_this, retry) = (ctx.this.clone(), message.clone());
     let (delete_this, delete) = (ctx.this.clone(), message.clone());
-    let action = |id: String, label: &'static str| ui::button(SharedString::from(id), ui::Tone::Ghost, cx).small().h_7().child(label);
+    let action = |id: String, label: &'static str| ui::Button::new(SharedString::from(id)).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Sm).h_7().child(label);
     let line = ui::row()
         .flex_wrap()
         .gap_x_2()

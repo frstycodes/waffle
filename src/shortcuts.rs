@@ -17,7 +17,7 @@ use crate::{
     part::Column,
     palette,
     settings::key_caps,
-    ui::{self, Tone},
+    ui::{self},
 };
 
 actions!(
@@ -201,12 +201,12 @@ pub(crate) fn caps(keys: &[&str], cx: &App) -> Div {
     let muted = palette::muted(cx);
     ui::row().gap_1().flex_none().children(keys.iter().enumerate().flat_map(|(i, combo)| {
         let or = (i > 0).then(|| div().px_0p5().text_size(ui::TEXT_XS).text_color(muted).child("or").into_any_element());
-        or.into_iter().chain([key_caps(&platform_combo(combo), cx).into_any_element()])
+        or.into_iter().chain([key_caps(&platform_combo(combo)).into_any_element()])
     }))
 }
 
 pub(crate) fn row(id: impl Into<SharedString>, row: &Row, line: bool, cx: &App) -> Stateful<Div> {
-    ui::settings_row(id, line, cx).min_h_10().py_1p5().child(div().flex_1().min_w_0().text_color(palette::strong(cx)).child(row.label)).child(caps(&row.keys, cx))
+    ui::Item::setting(id, line, cx).min_h_10().py_1p5().child(div().flex_1().min_w_0().text_color(palette::strong(cx)).child(row.label)).child(caps(&row.keys, cx))
 }
 
 // A group's heading inside a card (the settings list, where every group shares one card).
@@ -424,9 +424,9 @@ impl Waffle {
         let head = ui::row()
             .gap_3()
             .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Keyboard combos"))
-            .child(key_caps(&platform_combo(COMBOS_KEY), cx))
+            .child(key_caps(&platform_combo(COMBOS_KEY)))
             .child(div().flex_1())
-            .child(ui::icon_button("combos-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.set_keyboard_combos(false, cx))));
+            .child(ui::Button::new("combos-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.set_keyboard_combos(false, cx))));
         let blurb = div().text_color(palette::muted(cx)).child("Master these to be the greatest Waffle Waffle Revolution player");
         let app: &App = cx;
         let column = |groups: &[Group]| ui::col().min_h_0().flex_1().gap_5().children(groups.iter().map(|&g| dialog_group(g, app)));
@@ -436,24 +436,24 @@ impl Waffle {
         };
         // Room under the cap for the head and blurb; the groups scroll in the rest.
         let list = div().id("combos-list").max_h(px(f32::from(viewport.height) * 0.92 - 140.)).overflow_y_scroll().child(columns);
-        let body = ui::dialog_body().child(head).child(blurb).child(list);
+        let body = ui::DialogContent::new().child(head).child(blurb).child(list);
         let width = if wide { WIDE_DIALOG } else { NARROW_DIALOG };
         let backdrop = div().id("combos-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.set_keyboard_combos(false, cx)));
-        Some(ui::modal(backdrop, ui::dialog("keyboard-combos", width, body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("keyboard-combos", width, body, window, cx), cx))
     }
 
     // Settings › Keybinds: the same list, one card, and the way to the dialog.
     pub(crate) fn default_keybinds(&self, cx: &mut Context<Self>) -> Div {
-        let mut card = ui::settings_card(cx);
+        let mut card = ui::Card::new(cx);
         for group in Group::ALL {
             card = card.child(group_heading(group, cx));
             card = card.children(rows(group).iter().enumerate().map(|(i, r)| row(format!("default-{}-{i}", group.title()), r, i > 0, cx)));
         }
-        let open = ui::button("open-combos", Tone::Secondary, cx)
-            .small()
+        let open = ui::Button::new("open-combos").variant(ui::ButtonVariant::Secondary)
+            .size(ui::ButtonSize::Sm)
             .child(Icon::new(Glyph::Keyboard).size(ui::ICON_MD))
             .child("Keyboard combos")
-            .child(key_caps(&platform_combo(COMBOS_KEY), cx))
+            .child(key_caps(&platform_combo(COMBOS_KEY)))
             .on_click(cx.listener(|this, _, _, cx| this.set_keyboard_combos(true, cx)));
         ui::settings_group("Default keybinds", cx).child(card).child(ui::row().items_stretch().child(open))
     }
@@ -466,7 +466,7 @@ fn dialog_group(group: Group, cx: &App) -> Div {
         .gap_1p5()
         .child(div().px_1().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(group.title()))
         .children(note)
-        .child(ui::settings_card(cx).children(rows.iter().enumerate().map(|(i, r)| row(format!("combo-{}-{i}", group.title()), r, i > 0, cx))))
+        .child(ui::Card::new(cx).children(rows.iter().enumerate().map(|(i, r)| row(format!("combo-{}-{i}", group.title()), r, i > 0, cx))))
 }
 
 fn wrap(index: usize, delta: isize, len: usize) -> usize {

@@ -355,14 +355,14 @@ fn ghost(held: &Held, origin: Point<Pixels>, settle: f32, cx: &App) -> Div {
 }
 
 // .vd-ghost: the overlay surface under --lift, with the row's own layout inside.
-// lint-allow(custom-component): ui::card is a clickable raised card; the ghost is a lifted overlay surface that fades into its row's look as it lands.
+// lint-allow(custom-component): ui::Card::interactive is a clickable raised card; the ghost is a lifted overlay surface that fades into its row's look as it lands.
 fn row_card(radius: f32, lifted: f32, cx: &App) -> Div {
-    // lint-allow(custom-surface): ui::surface has a fixed fill and shadow; this one's fill and shadow fade with the lift.
+    // lint-allow(custom-surface): ui::PopoverContent::new has a fixed fill and shadow; this one's fill and shadow fade with the lift.
     ui::row().items_stretch().w_full().squircle(radius).bg(palette::surface(palette::Level::Overlay, cx).opacity(lifted)).shadow(lift_shadow(lifted, cx)).text_color(palette::strong(cx))
 }
 
 fn person(avatar: &str, name: &SharedString) -> Div {
-    ui::row().h(px(GHOST_ROW)).w_full().pl_8().pr_2().gap_2().child(ui::avatar(avatar.to_owned(), GHOST_AVATAR)).child(ui::line(name.clone()).flex_1())
+    ui::row().h(px(GHOST_ROW)).w_full().pl_8().pr_2().gap_2().child(ui::Avatar::new(avatar.to_owned(), GHOST_AVATAR)).child(ui::line(name.clone()).flex_1())
 }
 
 // --lift: 0 10px 28px black at 32% over a 1px line_strong ring, both fading as it lands.
@@ -374,9 +374,9 @@ fn lift_shadow(lifted: f32, cx: &App) -> Vec<BoxShadow> {
 }
 
 // .vd-tag: a dark chip 10px off the ghost's right edge, easing in from the left each time it changes.
-// lint-allow(custom-component): ui::badge is a static label; this chip hangs off the ghost's edge, led by a glyph, and eases in each time it changes.
+// lint-allow(custom-component): ui::Badge is a static label; this chip hangs off the ghost's edge, led by a glyph, and eases in each time it changes.
 fn tag_chip(tag: SharedString, cx: &App) -> AnyElement {
-    // lint-allow(custom-badge, custom-mark): ui::badge is a static label and ui::badged marks a face's corner; this chip hangs off the ghost's right edge.
+    // lint-allow(custom-badge, custom-mark): ui::Badge is a static label and ui::badged marks a face's corner; this chip hangs off the ghost's right edge.
     ui::row()
         .absolute()
         .left(relative(1.))

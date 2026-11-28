@@ -183,7 +183,7 @@ impl Waffle {
             .shadow(ui::shadow_pop(cx))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation());
         // The card keeps the 8px of room above it that inline cards have.
-        Some(ui::modal(crate::overlays::backdrop("text-viewer-backdrop", cx), div().pt_2().child(card), cx))
+        Some(ui::Dialog::modal(crate::overlays::backdrop("text-viewer-backdrop", cx), div().pt_2().child(card), cx))
     }
 }
 
@@ -251,7 +251,7 @@ fn card(card: Card, cx: &App) -> Stateful<Div> {
     };
     let (open, menu_file, copy_url, viewer_file) = (file.url.clone(), file.clone(), file.url.clone(), file.clone());
     let (expand_this, copy_this, open_this, menu_this, close_this) = (this.clone(), this.clone(), this.clone(), this.clone(), this);
-    let button = |name: &str, glyph: Glyph, tip: &'static str| ui::icon_button(SharedString::from(format!("{id}-{name}")), glyph, tip, cx).small();
+    let button = |name: &str, glyph: Glyph, tip: &'static str| ui::Button::new(SharedString::from(format!("{id}-{name}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(glyph).tooltip_text(tip);
     ui::col()
         .id(id.clone())
         .w_full()

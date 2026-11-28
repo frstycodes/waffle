@@ -333,7 +333,7 @@ pub fn check_options(
         .map(|(value, name, on)| {
             let (value, on_toggle) = (value.clone(), on_toggle.clone());
             super::menu_row(SharedString::from(format!("{id}-{value}")), cx)
-                .child(super::check(if *on { super::Check::On } else { super::Check::Off }, cx))
+                .child(super::Checkbox::mark(if *on { super::Check::On } else { super::Check::Off }))
                 .child(div().flex_1().min_w_0().truncate().child(name.clone()))
                 .on_click(move |_, window, cx| on_toggle(value.clone(), window, cx))
                 .into_any_element()
@@ -390,4 +390,44 @@ pub fn dropdown_at(id: impl Into<SharedString>, panel: impl IntoElement, top: f3
         });
     let origin = gpui_kit::point(gpui_kit::relative(if align == Align::End { 1. } else { 0.5 }), gpui_kit::relative(0.));
     gpui_kit::deferred(super::rise(list.transform_origin(origin), SharedString::from(format!("{id}-in")), std::time::Duration::ZERO)).with_priority(2).into_any_element()
+}
+
+// shadcn's names for the above.
+
+// A labelled field: the label, then whatever the caller adds (a frame, a hint, an error).
+// Keywords: field, shadcn
+pub struct Field;
+
+impl Field {
+    // A labelled field: the label, then whatever the caller adds (a frame, a hint, an error).
+    pub fn new(label: impl Into<SharedString>, cx: &App) -> Div {
+        super::field(label, cx)
+    }
+
+    // The same, with the danger-ink mark after a label the form can't go without.
+    pub fn marked(label: impl Into<SharedString>, required: bool, cx: &App) -> Div {
+        super::field_marked(label, required, cx)
+    }
+}
+
+// Help under a field, with an optional count or note at the far end.
+// Keywords: fielddescription, shadcn
+pub struct FieldDescription;
+
+impl FieldDescription {
+    // Help under a field, with an optional count or note at the far end.
+    pub fn new(text: impl Into<SharedString>, end: Option<SharedString>, cx: &App) -> Div {
+        super::field_hint(text, end, cx)
+    }
+}
+
+// What went wrong and how to fix it, under the field, led by the filled warning mark.
+// Keywords: fielderror, shadcn
+pub struct FieldError;
+
+impl FieldError {
+    // What went wrong and how to fix it, under the field, led by the filled warning mark.
+    pub fn new(text: impl Into<SharedString>, cx: &App) -> Div {
+        super::field_error(text, cx)
+    }
 }

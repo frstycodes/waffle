@@ -10,25 +10,12 @@ use gpui_kit::{
     canvas, div, fill, point, prelude::FluentBuilder, px, relative, size,
 };
 
-use super::{DUR_PANEL, DUR_PRESS, SQUIRCLE, Squircle, control::part, stretch};
+use super::{DUR_PRESS, SQUIRCLE, Squircle, control::part, stretch};
 use crate::{motion, palette};
-
-// Progress: the done part, a 4px gap, then what's left.
-// Keywords: progress bar, loading, upload, meter, track
-pub fn progress(fraction: f32, cx: &App) -> Div {
-    let f = fraction.clamp(0., 1.);
-    split_track(f, 6., 3., 2., cx).gap(px(4.))
-}
-
-// Progress whose done part grows to a new value over the panel timing rather than jumping.
-pub fn progress_live(id: impl Into<ElementId>, fraction: f32, window: &mut Window, cx: &mut App) -> Div {
-    let f = transition(id.into(), fraction.clamp(0., 1.), Transition::new(DUR_PANEL).easing(motion::ease_out()), window, cx);
-    progress(f, cx)
-}
 
 // Work that can't be counted: a done-coloured stretch travels the track, gapped from the rest on both
 // sides, on the design's 1.6s move curve.
-pub fn progress_indeterminate(id: impl Into<ElementId>, cx: &App) -> AnyElement {
+pub(super) fn progress_indeterminate(id: impl Into<ElementId>, cx: &App) -> AnyElement {
     let (accent, rest) = (palette::accent(), palette::line_strong(cx));
     let frame = move |t: f32| {
         let (from, to) = travel(t);
@@ -57,12 +44,7 @@ fn travel(t: f32) -> (f32, f32) {
     (0.45 + 0.55 * e, 1.)
 }
 
-// Done and remaining as two flex pieces, ends facing the gap at `inner` radius.
-fn split_track(f: f32, height: f32, outer: f32, inner: f32, cx: &App) -> Div {
-    track_in(f, height, outer, inner, palette::accent(), palette::line_strong(cx))
-}
-
-fn track_in(f: f32, height: f32, outer: f32, inner: f32, fill: Hsla, track: Hsla) -> Div {
+pub(super) fn track_in(f: f32, height: f32, outer: f32, inner: f32, fill: Hsla, track: Hsla) -> Div {
     let piece = |grow: f32, color: Hsla| div().h(px(height)).flex_basis(px(0.)).flex_grow(grow).corner_shape(SQUIRCLE).bg(color);
     div()
         .w_full()
@@ -70,56 +52,6 @@ fn track_in(f: f32, height: f32, outer: f32, inner: f32, fill: Hsla, track: Hsla
         .items_center()
         .when(f > 0., |d| d.child(piece(f, fill).rounded_l(px(outer)).rounded_r(px(if f < 1. { inner } else { outer }))))
         .when(f < 1., |d| d.child(piece(1. - f, track).rounded_r(px(outer)).rounded_l(px(if f > 0. { inner } else { outer }))))
-}
-
-// Progress in other colours or a lighter weight (an upload's positive fill, a poll's share, a splash's thin
-// bar): `ui::progress_bar(f, cx).fill(palette::positive_ink(cx)).thin()`. `.joined()` drops the gap.
-// Keywords: progress bar, meter, upload, share, percentage, track, loading bar
-#[derive(gpui_kit::IntoElement)]
-pub struct ProgressBar {
-    fraction: f32,
-    fill: Hsla,
-    track: Hsla,
-    height: f32,
-    gap: bool,
-}
-
-// Progress with options for its colours and weight; see `ProgressBar`.
-// Keywords: progress bar, meter, upload, share, percentage, track, loading bar
-pub fn progress_bar(fraction: f32, cx: &App) -> ProgressBar {
-    ProgressBar { fraction: fraction.clamp(0., 1.), fill: palette::accent(), track: palette::line_strong(cx), height: 6., gap: true }
-}
-
-impl ProgressBar {
-    pub fn fill(mut self, fill: Hsla) -> Self {
-        self.fill = fill;
-        self
-    }
-
-    pub fn track(mut self, track: Hsla) -> Self {
-        self.track = track;
-        self
-    }
-
-    // 4px instead of 6.
-    pub fn thin(mut self) -> Self {
-        self.height = 4.;
-        self
-    }
-
-    // The done part runs straight into what's left, with no gap.
-    pub fn joined(mut self) -> Self {
-        self.gap = false;
-        self
-    }
-}
-
-impl gpui_kit::RenderOnce for ProgressBar {
-    fn render(self, _: &mut gpui_kit::Window, _: &mut App) -> impl gpui_kit::IntoElement {
-        let outer = self.height / 2.;
-        let bar = track_in(self.fraction, self.height, outer, if self.gap { 2. } else { 0. }, self.fill, self.track);
-        if self.gap { bar.gap(px(4.)) } else { bar }
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -132,7 +64,7 @@ struct Thumb {
 }
 
 /// The slider's resting look, for screens that run their own drag.
-pub fn slider_track(value: f32, cx: &App) -> Div {
+pub(super) fn slider_track(value: f32, cx: &App) -> Div {
     thumb_track(value.clamp(0., 1.), Thumb { hover: 0., press: 0., ring: None }, cx)
 }
 
@@ -173,7 +105,7 @@ pub fn media_track(fraction: f32, knob: f32, vertical: bool) -> Div {
 
 // A draggable slider for a 0..1 value: press anywhere on the track to jump there, drag to follow,
 // arrows step 1% (shift 10%) once it has focus. `on_change` gets the new value; the caller stores it.
-pub fn slider_live(id: impl Into<ElementId>, value: f32, on_change: impl Fn(f32, &mut Window, &mut App) + 'static, window: &mut Window, cx: &mut App) -> Stateful<Div> {
+pub(super) fn slider_live(id: impl Into<ElementId>, value: f32, on_change: impl Fn(f32, &mut Window, &mut App) + 'static, window: &mut Window, cx: &mut App) -> Stateful<Div> {
     let id: ElementId = id.into();
     let state = window.use_keyed_state(part(&id, "slider"), cx, |_, cx| SliderState { focus: cx.focus_handle(), hovered: false, held: false, keyed: false, bounds: None });
     let (focus, hovered, held, keyed) = {
@@ -366,21 +298,10 @@ fn paint_arc(window: &mut Window, centre: gpui_kit::Point<Pixels>, radius: f32, 
     }
 }
 
-// A loading placeholder: the selected fill with a calm shimmer that sweeps across, then rests. Callers
-// size it; `radius` is its squircle corner. The sweep is painted in thin columns inset along a circular
-// arc of the same radius, which sits inside the squircle, since gpui clips children to rectangles only.
-pub fn skeleton(id: impl Into<ElementId>, radius: f32, cx: &App) -> Div {
-    sweeping(id.into(), radius, cx).corner_shape(SQUIRCLE)
-}
-
-// A round placeholder for an avatar of `size`.
-pub fn skeleton_circle(id: impl Into<ElementId>, size: f32, cx: &App) -> Div {
-    sweeping(id.into(), size / 2., cx).size(px(size)).flex_none()
-}
-
-fn sweeping(id: ElementId, radius: f32, cx: &App) -> Div {
+pub(super) fn sweeping(base: Div, id: ElementId, radius: f32, round: bool, cx: &App) -> Div {
     let shimmer = palette::shimmer(cx);
-    div().relative().rounded(px(radius)).bg(palette::selected(cx)).child(
+    let base = if round { base } else { base.corner_shape(SQUIRCLE) };
+    base.relative().rounded(px(radius)).bg(palette::selected(cx)).child(
         div()
             .absolute()
             .top_0()
