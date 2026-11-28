@@ -82,13 +82,13 @@ impl Waffle {
                 )
                 .children(line(key, cx).map(|l| l.flex().items_center().gap_1().min_w_0().text_size(ui::TEXT_XS).text_color(faint)))
         };
-        // Only while hovered, so the list stays quiet at rest.
-        let plate = channel.recipient.as_ref().and_then(|u| u.nameplate.as_ref()).filter(|_| hovered).map(|plate| {
+        // The open conversation keeps its nameplate, still; it moves only under the pointer.
+        let plate = channel.recipient.as_ref().and_then(|u| u.nameplate.as_ref()).filter(|_| selected || hovered).map(|plate| {
             // The row's fills laid solid on the sidebar's own surface, as the user panel's nameplate is.
             let surface = palette::surface(palette::Level::Sidebar, cx);
             let fill = |wash: gpui_kit::Hsla| ui::mix(surface, wash.opacity(1.), wash.a);
             let fills = if selected { (fill(palette::selected(cx)), None) } else { (surface, Some(fill(palette::hover(cx)))) };
-            let row = PlateRow { group: format!("dm-{}", channel.id).into(), height: DM_ROW_HEIGHT, width: self.channels_width - 16., fills, selected, animate, dark: cx.theme().is_dark() };
+            let row = PlateRow { group: format!("dm-{}", channel.id).into(), height: DM_ROW_HEIGHT, width: self.channels_width - 16., fills, selected, animate: hovered && animate, dark: cx.theme().is_dark() };
             row_nameplate(plate, names("-mask", cx).flex_initial(), row)
         });
         let state = RowState { selected, unread, muted: false, strong: false };
