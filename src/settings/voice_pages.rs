@@ -94,6 +94,11 @@ impl Waffle {
         if self.deafened {
             self.soundboard.stop_playing();
             self.soundboard.close_picker();
+            // No one is heard while deafened, so no one shows as speaking.
+            let me = self.me.as_ref().map(|m| m.id.clone());
+            if let Some(call) = &mut self.call {
+                call.speaking.retain(|id| Some(id) == me.as_ref());
+            }
         }
         // lint-allow(global-notify): deafen shows on the nav's voice bar, the call stage and the settings window at once
         cx.notify();

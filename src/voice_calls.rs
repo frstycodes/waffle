@@ -189,6 +189,11 @@ impl Waffle {
         }
         // A stream picked from the hover card before we'd joined: watch it once connected.
         let mut start_watch: Option<String> = None;
+        // Deafened, Discord hears no one and so shows no one speaking; our own ring stays.
+        let event = match event {
+            voice::VoiceEvent::Speaking { user_id, speaking: true } if self.deafened && self.me.as_ref().is_none_or(|m| m.id != user_id) => voice::VoiceEvent::Speaking { user_id, speaking: false },
+            other => other,
+        };
         if let voice::VoiceEvent::Speaking { user_id, speaking } = &event {
             self.activity_speaking(user_id, *speaking, cx);
         }
