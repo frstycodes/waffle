@@ -749,42 +749,6 @@ pub trait Styled: Sized {
         self
     }
 
-    /// Blurs what is painted behind this element, inside its rounded bounds. The radius is the
-    /// gaussian's standard deviation, like CSS `backdrop-filter: blur()`.
-    /// [Docs](https://tailwindcss.com/docs/backdrop-filter-blur)
-    fn backdrop_blur(mut self, radius: impl Into<Pixels>) -> Self {
-        self.style().backdrop_filter.blur_radius = Some(radius.into());
-        self
-    }
-
-    /// Saturates what is painted behind this element, after any [`Self::backdrop_blur`]: 0 is
-    /// grayscale and 1 leaves colors unchanged, like CSS `backdrop-filter: saturate()`.
-    /// [Docs](https://tailwindcss.com/docs/backdrop-filter-saturate)
-    fn backdrop_saturate(mut self, saturation: f32) -> Self {
-        self.style().backdrop_filter.saturation = Some(saturation);
-        self
-    }
-
-    /// Fades the backdrop filter in from each edge (top, right, bottom, left) over the given
-    /// lengths, so the blur eases into the unfiltered content, like iOS's scroll edge effect.
-    fn backdrop_fade(mut self, top: impl Into<Pixels>, right: impl Into<Pixels>, bottom: impl Into<Pixels>, left: impl Into<Pixels>) -> Self {
-        self.style().backdrop_filter.fade = Some([top.into(), right.into(), bottom.into(), left.into()]);
-        self
-    }
-
-    /// Clears the content under the backdrop filter to transparent toward the top edge, over the given
-    /// length: see [`crate::BackdropFilter::clear_top`].
-    fn backdrop_clear_top(mut self, length: impl Into<Pixels>) -> Self {
-        self.style().backdrop_filter.clear_top = Some(length.into());
-        self
-    }
-
-    /// Clears everything painted under this element's shape to transparent: a cutout through to what's
-    /// behind the window's content, for a transparent window.
-    fn backdrop_erase(self) -> Self {
-        self.backdrop_clear_top(crate::px(1e9))
-    }
-
     /// Sets the grid columns of this element.
     fn grid_cols(mut self, cols: u16) -> Self {
         self.style().grid_cols = Some(GridTemplate {

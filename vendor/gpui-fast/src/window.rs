@@ -9,7 +9,7 @@ use crate::subscription::SingleSubscriberSet;
 use crate::taffy::TaffyLayoutEngine;
 use crate::{
     Action, AnyDrag, AnyElement, AnyImageCache, AnyTooltip, AnyView, App, AppContext, Arena, Asset,
-    AsyncWindowContext, AtlasTile, AvailableSpace, BackdropBlur, BackdropFilter, Background,
+    AsyncWindowContext, AtlasTile, AvailableSpace, Background,
     BorderStyle, Bounds, BoxShadow, Capslock, Context, CornerShape, Corners, CursorHideMode,
     CursorStyle, Decorations, DevicePixels, DispatchActionListener, DispatchNodeId, DispatchTree,
     DisplayId, Edges, Effect, Entity, EntityId, EventEmitter, FileDropEvent, FontId, Global,
@@ -5197,42 +5197,6 @@ impl Window {
         }
 
         result
-    }
-
-    /// Paint a backdrop filter into the scene at the current z-index: what was painted under
-    /// `bounds` before this call is blurred and saturated inside the rounded `bounds`, and
-    /// anything painted after it draws on top. Paint it before the element's shadows and
-    /// background, like CSS `backdrop-filter`.
-    ///
-    /// This method should only be called as part of the paint phase of element drawing.
-    pub fn paint_backdrop_filter(
-        &mut self,
-        bounds: Bounds<Pixels>,
-        corner_radii: Corners<Pixels>,
-        filter: BackdropFilter,
-    ) {
-        self.invalidator.debug_assert_paint();
-
-        let opacity = self.element_opacity();
-        if filter.is_identity() || opacity <= 0. {
-            return;
-        }
-        let scale_factor = self.scale_factor();
-        // A blur reads what's drawn behind it, which a scroll layer's tiles don't hold: keep its
-        // container off its layer while it shows one.
-        crate::fast::layers::invalidate::note_uncarried(self);
-        self.next_frame.scene.insert_primitive(BackdropBlur {
-            order: 0,
-            blur_radius: filter.blur_radius.max(Pixels::ZERO).scale(scale_factor),
-            bounds: self.snap_bounds(bounds),
-            content_mask: self.snapped_content_mask(),
-            corner_radii: corner_radii.scale(scale_factor),
-            saturation: filter.saturation.max(0.),
-            opacity,
-            fade: filter.fade.map(|length| length.max(Pixels::ZERO).scale(scale_factor)),
-            clear_top: filter.clear_top.max(Pixels::ZERO).scale(scale_factor),
-            corner_exponent: self.element_corner_shape.exponent(),
-        });
     }
 
     /// Paint the drop (non-inset) shadows from `shadows` into the scene at the current

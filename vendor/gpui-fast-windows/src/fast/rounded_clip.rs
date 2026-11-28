@@ -261,7 +261,6 @@ pub(crate) fn draw_group(
                 render_target_view: &parent_view,
                 ..paths
             }),
-            blur: target.blur,
         };
         upload(&content_target, pipelines, child)?;
         draw_scene_masked(&content_target, pipelines, frame, child, view.as_ref())

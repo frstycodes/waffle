@@ -69,13 +69,11 @@ pub fn name_hue(name: &str) -> f32 {
     name.chars().fold(7_u32, |h, c| (h * 31 + c as u32) % 360) as f32
 }
 
-// Paints `el` in the surface colour it stands in for; over the native sidebar, where that colour is
-// clear, it cuts its shape out of whatever was painted under it instead, so the material shows through.
+// Paints `el` in the surface colour it stands in for.
+// GAP: over the native sidebar that colour is clear, so the ring is clear too and the mark sits
+// straight on what's under it; the renderer has no backdrop effects to cut through to the material.
 pub fn cut_out(el: Div, surface: Hsla) -> Div {
-    match surface.a > 0. {
-        true => el.bg(surface),
-        false => el.backdrop_erase(),
-    }
+    el.bg(surface)
 }
 
 // The gap `spread` wide around a round mark or an overlapping avatar, separating it from what's under

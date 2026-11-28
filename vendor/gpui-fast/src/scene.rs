@@ -6,8 +6,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AtlasTextureId, AtlasTile, Background, Bounds, ContentMask, Corners, DevicePixels, Edges, Hsla,
-    Pixels, Point, Radians, ScaledPixels, Size, bounds_tree::BoundsTree, point, size,
+    AtlasTextureId, AtlasTile, Background, Bounds, ContentMask, Corners, Edges, Hsla,
+    Pixels, Point, Radians, ScaledPixels, Size, bounds_tree::BoundsTree, point,
 };
 use std::{
     fmt::Debug,
@@ -51,7 +51,6 @@ pub struct Scene {
     pub subpixel_sprites: Vec<SubpixelSprite>,
     pub polychrome_sprites: Vec<PolychromeSprite>,
     pub surfaces: Vec<PaintSurface>,
-    pub backdrop_blurs: Vec<BackdropBlur>,
     pub(crate) sort_scratch: crate::fast::scene::SortScratch,
     pub(crate) fast_rounded_clip: crate::fast::rounded_clip::SceneClips,
     pub layers: crate::fast::layers::scene::SceneLayers,
@@ -72,7 +71,6 @@ impl Scene {
         self.subpixel_sprites.clear();
         self.polychrome_sprites.clear();
         self.surfaces.clear();
-        self.backdrop_blurs.clear();
         crate::fast::layers::scene::SceneLayers::clear(&mut self.layers);
     }
 
@@ -141,10 +139,6 @@ impl Scene {
                 surface.order = order;
                 self.surfaces.push(surface.clone());
             }
-            Primitive::BackdropBlur(blur) => {
-                blur.order = order;
-                self.backdrop_blurs.push(*blur);
-            }
         }
         self.paint_operations
             .push(PaintOperation::Primitive(primitive));
@@ -166,7 +160,6 @@ impl Scene {
 
     pub fn finish(&mut self) {
         crate::fast::scene::sort_in_drawing_order(self);
-        self.backdrop_blurs.sort_by_key(|blur| blur.order);
     }
 
     #[cfg_attr(
@@ -194,8 +187,6 @@ impl Scene {
             polychrome_sprites_iter: self.polychrome_sprites.iter().peekable(),
             surfaces_start: 0,
             surfaces_iter: self.surfaces.iter().peekable(),
-            backdrop_blurs_start: 0,
-            backdrop_blurs_iter: self.backdrop_blurs.iter().peekable(),
         }
     }
 }
@@ -209,9 +200,6 @@ impl Scene {
     allow(dead_code)
 )]
 pub(crate) enum PrimitiveKind {
-    // First, so a blur sharing a draw order with other primitives samples the backdrop before
-    // they are drawn over it.
-    BackdropBlur,
     Shadow,
     #[default]
     Quad,
@@ -241,7 +229,6 @@ pub enum Primitive {
     SubpixelSprite(SubpixelSprite),
     PolychromeSprite(PolychromeSprite),
     Surface(PaintSurface),
-    BackdropBlur(BackdropBlur),
 }
 
 #[expect(missing_docs)]
@@ -256,7 +243,6 @@ impl Primitive {
             Primitive::SubpixelSprite(sprite) => &sprite.bounds,
             Primitive::PolychromeSprite(sprite) => &sprite.bounds,
             Primitive::Surface(surface) => &surface.bounds,
-            Primitive::BackdropBlur(blur) => &blur.bounds,
         }
     }
 
@@ -270,7 +256,6 @@ impl Primitive {
             Primitive::SubpixelSprite(sprite) => &sprite.content_mask,
             Primitive::PolychromeSprite(sprite) => &sprite.content_mask,
             Primitive::Surface(surface) => &surface.content_mask,
-            Primitive::BackdropBlur(blur) => &blur.content_mask,
         }
     }
 
@@ -283,10 +268,9 @@ impl Primitive {
             Primitive::MonochromeSprite(sprite) => sprite.transformation,
             Primitive::SubpixelSprite(sprite) => sprite.transformation,
             Primitive::PolychromeSprite(sprite) => sprite.transformation,
-            // Paths are transformed on the CPU and backdrop blurs before they're painted (see
-            // `BackdropFilter::transformed`), so their bounds are already in window space.
+            // Paths are transformed on the CPU, so their bounds are already in window space.
             // GAP: video surfaces are not transformed.
-            Primitive::Path(_) | Primitive::Surface(_) | Primitive::BackdropBlur(_) => TransformationMatrix::unit(),
+            Primitive::Path(_) | Primitive::Surface(_) => TransformationMatrix::unit(),
         };
         transformation.transform_bounds(*self.bounds())
     }
@@ -316,8 +300,6 @@ struct BatchIterator<'a> {
     polychrome_sprites_iter: Peekable<slice::Iter<'a, PolychromeSprite>>,
     surfaces_start: usize,
     surfaces_iter: Peekable<slice::Iter<'a, PaintSurface>>,
-    backdrop_blurs_start: usize,
-    backdrop_blurs_iter: Peekable<slice::Iter<'a, BackdropBlur>>,
 }
 
 impl<'a> Iterator for BatchIterator<'a> {
@@ -350,10 +332,6 @@ impl<'a> Iterator for BatchIterator<'a> {
             (
                 self.surfaces_iter.peek().map(|s| s.order),
                 PrimitiveKind::Surface,
-            ),
-            (
-                self.backdrop_blurs_iter.peek().map(|b| b.order),
-                PrimitiveKind::BackdropBlur,
             ),
         ];
         orders_and_kinds.sort_by_key(|(order, kind)| (order.unwrap_or(u32::MAX), *kind));
@@ -500,20 +478,6 @@ impl<'a> Iterator for BatchIterator<'a> {
                 self.surfaces_start = surfaces_end;
                 Some(PrimitiveBatch::Surfaces(surfaces_start..surfaces_end))
             }
-            PrimitiveKind::BackdropBlur => {
-                let blurs_start = self.backdrop_blurs_start;
-                let mut blurs_end = blurs_start + 1;
-                self.backdrop_blurs_iter.next();
-                while self
-                    .backdrop_blurs_iter
-                    .next_if(|blur| (blur.order, batch_kind) < max_order_and_kind)
-                    .is_some()
-                {
-                    blurs_end += 1;
-                }
-                self.backdrop_blurs_start = blurs_end;
-                Some(PrimitiveBatch::BackdropBlurs(blurs_start..blurs_end))
-            }
         }
     }
 }
@@ -546,7 +510,6 @@ pub enum PrimitiveBatch {
         range: Range<usize>,
     },
     Surfaces(Range<usize>),
-    BackdropBlurs(Range<usize>),
 }
 
 impl PrimitiveBatch {
@@ -579,7 +542,6 @@ impl PrimitiveBatch {
                 )
             }
             Self::Surfaces(range) => format!("surfaces ({})", range.len()),
-            Self::BackdropBlurs(range) => format!("backdrop blurs ({})", range.len()),
         }
     }
 }
@@ -841,13 +803,6 @@ impl TransformationMatrix {
         *self == Self::unit()
     }
 
-    /// Each axis's scale when this transformation only scales (possibly mirroring) and
-    /// translates, keeping rectangles axis-aligned; `None` when it rotates or skews.
-    pub fn axis_aligned_scale(&self) -> Option<Size<f32>> {
-        let [[a, b], [c, d]] = self.rotation_scale;
-        (b == 0. && c == 0.).then(|| size(a.abs(), d.abs()))
-    }
-
     /// The transformation that undoes this one. Its entries are not finite when this
     /// transformation collapses the plane (a zero scale), so nothing maps back into bounds.
     pub(crate) fn inverse(&self) -> Self {
@@ -970,349 +925,6 @@ impl From<PaintSurface> for Primitive {
     fn from(surface: PaintSurface) -> Self {
         Primitive::Surface(surface)
     }
-}
-
-/// Blurs and saturates what was drawn under `bounds` before it, like CSS `backdrop-filter`, and
-/// composites the result back inside the rounded `bounds`.
-#[derive(Debug, Copy, Clone)]
-#[expect(missing_docs)]
-pub struct BackdropBlur {
-    pub order: DrawOrder,
-    /// Standard deviation of the gaussian, like CSS `blur()`.
-    pub blur_radius: ScaledPixels,
-    pub bounds: Bounds<ScaledPixels>,
-    pub content_mask: ContentMask<ScaledPixels>,
-    pub corner_radii: Corners<ScaledPixels>,
-    /// Like CSS `saturate()`: 0 is grayscale and 1 leaves colors unchanged.
-    pub saturation: f32,
-    pub opacity: f32,
-    /// See [`crate::BackdropFilter::fade`].
-    pub fade: [ScaledPixels; 4],
-    /// See [`crate::BackdropFilter::clear_top`].
-    pub clear_top: ScaledPixels,
-    /// The element's corner shape, as [`CornerShape::exponent`], so the blur fills a squircle exactly.
-    pub corner_exponent: f32,
-}
-
-impl From<BackdropBlur> for Primitive {
-    fn from(blur: BackdropBlur) -> Self {
-        Primitive::BackdropBlur(blur)
-    }
-}
-
-/// The most downsample passes a backdrop blur takes. Past a blur radius of about 400 device
-/// pixels, blurs stop widening.
-const MAX_BACKDROP_BLUR_LEVELS: usize = 8;
-
-/// Wider tap offsets reach further per pass but leave gaps that show as banding.
-const MAX_BACKDROP_BLUR_TAP_OFFSET: f32 = 2.0;
-
-/// The variance one downsample and its upsample add, in squared texels of the finer level, is
-/// `TAP_VARIANCE * offset² + FILTER_VARIANCE`: the taps' spread plus bilinear filtering and
-/// decimation. Measured by running the shaders' kernels over an impulse.
-const BACKDROP_BLUR_TAP_VARIANCE: f32 = 11. / 6.;
-const BACKDROP_BLUR_FILTER_VARIANCE: f32 = 0.85;
-
-impl BackdropBlur {
-    /// Plans the dual Kawase passes approximating this blur on a target of `viewport_size`,
-    /// or `None` when nothing of it is visible.
-    pub fn plan(&self, viewport_size: Size<DevicePixels>) -> Option<BackdropBlurPlan> {
-        let visible = self.bounds.intersect(&self.content_mask.bounds);
-        let region = Bounds::from_corners(
-            point(
-                DevicePixels(visible.left().0.floor() as i32),
-                DevicePixels(visible.top().0.floor() as i32),
-            ),
-            point(
-                DevicePixels(visible.right().0.ceil() as i32),
-                DevicePixels(visible.bottom().0.ceil() as i32),
-            ),
-        )
-        .intersect(&Bounds::new(
-            point(DevicePixels(0), DevicePixels(0)),
-            viewport_size,
-        ));
-        if region.is_empty() {
-            return None;
-        }
-
-        let (level_count, tap_offset) = backdrop_blur_levels(self.blur_radius.0);
-        Some(BackdropBlurPlan {
-            region,
-            level_count,
-            tap_offset,
-        })
-    }
-}
-
-/// The fewest levels whose tap offset stays within [`MAX_BACKDROP_BLUR_TAP_OFFSET`]: each further
-/// level is coarser, so the result shifts more with where content sits on its grid. Level `k`
-/// adds `4^(k - 1)` times the variance of level 1, so `level_count` levels add
-/// `(4^level_count - 1) / 3` times it.
-fn backdrop_blur_levels(blur_radius: f32) -> (usize, f32) {
-    if blur_radius <= 0. {
-        return (0, 0.);
-    }
-    let variance = blur_radius * blur_radius;
-    (1..=MAX_BACKDROP_BLUR_LEVELS)
-        .find_map(|level_count| {
-            let level_variance = 3. * variance / ((1u32 << (2 * level_count)) - 1) as f32;
-            let offset_squared =
-                (level_variance - BACKDROP_BLUR_FILTER_VARIANCE) / BACKDROP_BLUR_TAP_VARIANCE;
-            (offset_squared <= MAX_BACKDROP_BLUR_TAP_OFFSET.powi(2))
-                .then(|| (level_count, offset_squared.max(0.).sqrt()))
-        })
-        .unwrap_or((MAX_BACKDROP_BLUR_LEVELS, MAX_BACKDROP_BLUR_TAP_OFFSET))
-}
-
-/// How a renderer draws one [`BackdropBlur`]. It copies `region` out of the target as level 0,
-/// downsamples it `level_count` times, upsamples back to level 1, and composites level 1 into
-/// the target with a final upsample. With no levels it composites level 0, only saturating.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct BackdropBlurPlan {
-    /// The device pixels of the target that the blur reads.
-    pub region: Bounds<DevicePixels>,
-    /// How many times the region is halved.
-    pub level_count: usize,
-    /// Distance of the diagonal downsample taps, in texels of the level they read. Upsample
-    /// taps sit at half this distance.
-    pub tap_offset: f32,
-}
-
-impl BackdropBlurPlan {
-    /// The size of `level`, where level 0 is the region itself.
-    pub fn level_size(&self, level: usize) -> Size<DevicePixels> {
-        let divisor = 1 << level;
-        let halve = |length: DevicePixels| DevicePixels((length.0 + divisor - 1) / divisor);
-        size(
-            halve(self.region.size.width),
-            halve(self.region.size.height),
-        )
-    }
-
-    /// The level the composite pass samples.
-    pub fn composite_source_level(&self) -> usize {
-        self.level_count.min(1)
-    }
-
-    /// Renders `target_level` from the level next to it: a downsample from the level above, or
-    /// an upsample from the level below. Each level sits at the origin of its texture.
-    pub fn level_pass(
-        &self,
-        source_level: usize,
-        target_level: usize,
-        source_texture_size: Size<DevicePixels>,
-        target_texture_size: Size<DevicePixels>,
-    ) -> BackdropBlurPass {
-        let target_region = self.level_size(target_level);
-        let is_downsample = target_level > source_level;
-        BackdropBlurPass {
-            bounds: Bounds::default(),
-            clip_bounds: Bounds::new(
-                point(ScaledPixels(0.), ScaledPixels(0.)),
-                size(
-                    ScaledPixels(target_region.width.0 as f32),
-                    ScaledPixels(target_region.height.0 as f32),
-                ),
-            ),
-            corner_radii: Corners::default(),
-            target_size: extent(target_texture_size),
-            region_origin: [0., 0.],
-            source_size: extent(self.level_size(source_level)),
-            source_texture_size: extent(source_texture_size),
-            coordinate_scale: if is_downsample { 2. } else { 0.5 },
-            tap_offset: if is_downsample {
-                self.tap_offset
-            } else {
-                self.tap_offset / 2.
-            },
-            saturation: 1.,
-            opacity: 1.,
-            fade: [0.; 4],
-            corner_exponent: 2.,
-            clear_top: 0.,
-            corner_padding: [0.; 2],
-        }
-    }
-
-    /// Composites the blurred backdrop into the target inside `blur`'s rounded bounds, by
-    /// upsampling level 1, or by copying level 0 back when the plan has no levels.
-    pub fn composite_pass(
-        &self,
-        blur: &BackdropBlur,
-        source_texture_size: Size<DevicePixels>,
-        target_size: Size<DevicePixels>,
-    ) -> BackdropBlurPass {
-        let source_level = self.composite_source_level();
-        let is_upsample = source_level == 1;
-        BackdropBlurPass {
-            bounds: blur.bounds,
-            clip_bounds: blur.bounds.intersect(&blur.content_mask.bounds),
-            corner_radii: blur.corner_radii,
-            target_size: extent(target_size),
-            region_origin: [self.region.origin.x.0 as f32, self.region.origin.y.0 as f32],
-            source_size: extent(self.level_size(source_level)),
-            source_texture_size: extent(source_texture_size),
-            coordinate_scale: if is_upsample { 0.5 } else { 1. },
-            tap_offset: if is_upsample {
-                self.tap_offset / 2.
-            } else {
-                0.
-            },
-            saturation: blur.saturation,
-            opacity: blur.opacity,
-            fade: blur.fade.map(|length| length.0),
-            corner_exponent: blur.corner_exponent,
-            clear_top: blur.clear_top.0,
-            corner_padding: [0.; 2],
-        }
-    }
-}
-
-/// Rounding level textures up lets an element that grows over a few frames reallocate rarely.
-const BACKDROP_BLUR_TEXTURE_GRANULARITY: u32 = 64;
-
-/// Drawn frames without a blur after which a renderer frees its blur level textures. Frames, not
-/// time, so it runs the same on every platform; an idle window that draws nothing keeps them until
-/// its next few frames.
-const BACKDROP_BLUR_RELEASE_AFTER_FRAMES: u32 = 30;
-
-/// Frames with blurs over which the largest size each level needed is measured, before a level
-/// allocated well above it is shrunk.
-const BACKDROP_BLUR_SHRINK_WINDOW_FRAMES: u32 = 120;
-
-/// Decides how big a renderer's backdrop blur level textures are, and when to shrink or free them,
-/// so a full-window blur doesn't hold tens of megabytes for the window's life. Each renderer keeps
-/// one with its level textures (`textures[level]`, level 0 first), asks it for each level's size
-/// as it draws a blur, then calls [`Self::end_frame`] once the frame is drawn.
-#[derive(Debug, Default)]
-pub struct BackdropBlurTextureBudget {
-    /// Whether a blur asked for textures this frame.
-    used_this_frame: bool,
-    frames_without_blurs: u32,
-    frames_in_window: u32,
-    /// Per level, the largest size needed this window.
-    window_peak: Vec<Size<DevicePixels>>,
-}
-
-impl BackdropBlurTextureBudget {
-    /// The size to (re)allocate `level` at so it holds `needed`, or `None` when `current`, its
-    /// allocated size, already does. Grows, never shrinks: [`Self::end_frame`] shrinks.
-    pub fn allocation_size(
-        &mut self,
-        level: usize,
-        needed: Size<DevicePixels>,
-        current: Option<Size<DevicePixels>>,
-    ) -> Option<Size<DevicePixels>> {
-        self.used_this_frame = true;
-        if self.window_peak.len() <= level {
-            self.window_peak.resize(level + 1, Size::default());
-        }
-        let peak = &mut self.window_peak[level];
-        *peak = size(peak.width.max(needed.width), peak.height.max(needed.height));
-
-        if current
-            .is_some_and(|current| current.width >= needed.width && current.height >= needed.height)
-        {
-            return None;
-        }
-        let current = current.unwrap_or_default();
-        let needed = backdrop_blur_allocation(needed);
-        Some(size(
-            needed.width.max(current.width),
-            needed.height.max(current.height),
-        ))
-    }
-
-    /// Call once a frame is drawn, with the sizes of the level textures allocated, level 0 first.
-    /// Returns how many of them to keep: the renderer frees the rest, and the next blur that needs
-    /// them allocates them again at the size it needs. Everything goes after a stretch of frames
-    /// without blurs; a level, and those after it, goes when the blurs of a whole window of
-    /// frames needed under a quarter of its area.
-    pub fn end_frame(&mut self, allocated: &[Size<DevicePixels>]) -> usize {
-        let used = std::mem::take(&mut self.used_this_frame);
-        if !used {
-            self.frames_without_blurs += 1;
-            if self.frames_without_blurs >= BACKDROP_BLUR_RELEASE_AFTER_FRAMES {
-                *self = Self::default();
-                return 0;
-            }
-            return allocated.len();
-        }
-
-        self.frames_without_blurs = 0;
-        self.frames_in_window += 1;
-        if self.frames_in_window < BACKDROP_BLUR_SHRINK_WINDOW_FRAMES {
-            return allocated.len();
-        }
-        let area = |size: Size<DevicePixels>| size.width.0 as i64 * size.height.0 as i64;
-        let keep = allocated
-            .iter()
-            .enumerate()
-            .position(|(level, &allocated)| {
-                let peak = self.window_peak.get(level).copied().unwrap_or_default();
-                // A level no blur needed this window has a zero peak.
-                area(peak) == 0 || area(allocated) > 4 * area(backdrop_blur_allocation(peak))
-            })
-            .unwrap_or(allocated.len());
-        self.frames_in_window = 0;
-        self.window_peak.clear();
-        keep
-    }
-}
-
-/// `needed` rounded up to whole granules, at least one.
-fn backdrop_blur_allocation(needed: Size<DevicePixels>) -> Size<DevicePixels> {
-    let round_up = |length: DevicePixels| {
-        DevicePixels(
-            (length.0.max(1) as u32).next_multiple_of(BACKDROP_BLUR_TEXTURE_GRANULARITY) as i32,
-        )
-    };
-    size(round_up(needed.width), round_up(needed.height))
-}
-
-fn extent(size: Size<DevicePixels>) -> [f32; 2] {
-    [size.width.0 as f32, size.height.0 as f32]
-}
-
-/// The shader inputs of one backdrop blur pass, which samples a source texture around each
-/// target pixel. A level pass covers its whole target level; the composite covers the visible
-/// part of the element.
-#[derive(Clone, Debug, PartialEq)]
-#[repr(C)]
-pub struct BackdropBlurPass {
-    /// The element's bounds, for the composite's rounded-corner mask.
-    pub bounds: Bounds<ScaledPixels>,
-    /// The target pixels drawn.
-    pub clip_bounds: Bounds<ScaledPixels>,
-    /// The element's corner radii, for the composite's rounded-corner mask.
-    pub corner_radii: Corners<ScaledPixels>,
-    /// The size of the target texture.
-    pub target_size: [f32; 2],
-    /// Where the source's texel (0, 0) sits on the target, in target pixels.
-    pub region_origin: [f32; 2],
-    /// The source texels holding the region; samples mirror at its edges.
-    pub source_size: [f32; 2],
-    /// The size of the source texture.
-    pub source_texture_size: [f32; 2],
-    /// Source texels per target pixel.
-    pub coordinate_scale: f32,
-    /// The distance of the kernel's taps, in source texels.
-    pub tap_offset: f32,
-    /// See [`BackdropBlur::saturation`].
-    pub saturation: f32,
-    /// The composite's opacity.
-    pub opacity: f32,
-    /// How far in from each edge (top, right, bottom, left) the composite fades in, in target
-    /// pixels. On a 16-byte boundary for the shaders' vec4.
-    pub fade: [f32; 4],
-    /// The composite's corner shape, as [`CornerShape::exponent`]; 2 is circular.
-    pub corner_exponent: f32,
-    /// How far down from the top the content clears to transparent, in target pixels; 0 for none.
-    /// Takes a slot that was padding, so the pass keeps its size.
-    pub clear_top: f32,
-    /// Pads the pass to a multiple of 16 bytes, which uniform and structured buffers need.
-    pub corner_padding: [f32; 2],
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -1481,168 +1093,5 @@ impl PathVertex<Pixels> {
             st_position: self.st_position,
             content_mask: self.content_mask.scale(factor),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn scaled_bounds(x: f32, y: f32, width: f32, height: f32) -> Bounds<ScaledPixels> {
-        Bounds::new(
-            point(ScaledPixels(x), ScaledPixels(y)),
-            size(ScaledPixels(width), ScaledPixels(height)),
-        )
-    }
-
-    fn backdrop_blur(
-        blur_radius: f32,
-        bounds: Bounds<ScaledPixels>,
-        content_mask: Bounds<ScaledPixels>,
-    ) -> BackdropBlur {
-        BackdropBlur {
-            order: 0,
-            blur_radius: ScaledPixels(blur_radius),
-            bounds,
-            content_mask: ContentMask {
-                bounds: content_mask,
-            },
-            corner_radii: Corners::default(),
-            saturation: 1.,
-            opacity: 1.,
-            fade: [ScaledPixels(0.); 4],
-            clear_top: ScaledPixels(0.),
-            corner_exponent: 2.,
-        }
-    }
-
-    /// Bilinear sampling with the shaders' mirroring and clamping, along one axis. The kernels'
-    /// spread along x is independent of y, so one axis measures the blur's standard deviation.
-    fn sample(level: &[f32], position: f32) -> f32 {
-        let size = level.len() as f32;
-        let mirrored = size - (size - position.abs()).abs();
-        let texel = mirrored.clamp(0.5, (size - 0.5).max(0.5)) - 0.5;
-        let index = texel.floor() as usize;
-        let fraction = texel - index as f32;
-        let next = (index + 1).min(level.len() - 1);
-        level[index] * (1. - fraction) + level[next] * fraction
-    }
-
-    fn downsample(level: &[f32], offset: f32) -> Vec<f32> {
-        (0..level.len().div_ceil(2))
-            .map(|texel| {
-                let center = 2. * (texel as f32 + 0.5);
-                (2. * sample(level, center)
-                    + sample(level, center - offset)
-                    + sample(level, center + offset))
-                    / 4.
-            })
-            .collect()
-    }
-
-    fn upsample(level: &[f32], offset: f32, len: usize) -> Vec<f32> {
-        (0..len)
-            .map(|texel| {
-                let center = (texel as f32 + 0.5) / 2.;
-                (sample(level, center - 2. * offset)
-                    + sample(level, center + 2. * offset)
-                    + 2. * sample(level, center)
-                    + 4. * sample(level, center - offset)
-                    + 4. * sample(level, center + offset))
-                    / 12.
-            })
-            .collect()
-    }
-
-    fn blurred_standard_deviation(level_count: usize, tap_offset: f32, impulse: usize) -> f32 {
-        let mut region = vec![0.; 4096];
-        region[impulse] = 1.;
-        let mut levels = vec![region];
-        for _ in 0..level_count {
-            levels.push(downsample(levels.last().unwrap(), tap_offset));
-        }
-        let mut blurred = levels.pop().unwrap();
-        while let Some(finer) = levels.pop() {
-            blurred = upsample(&blurred, tap_offset / 2., finer.len());
-        }
-
-        let total: f32 = blurred.iter().sum();
-        let position = |texel: usize| texel as f32 + 0.5;
-        let mean = blurred
-            .iter()
-            .enumerate()
-            .map(|(i, v)| position(i) * v)
-            .sum::<f32>()
-            / total;
-        let variance = blurred
-            .iter()
-            .enumerate()
-            .map(|(i, v)| (position(i) - mean).powi(2) * v)
-            .sum::<f32>()
-            / total;
-        variance.sqrt()
-    }
-
-    #[test]
-    fn backdrop_blur_kernels_match_the_requested_radius() {
-        for blur_radius in [1.5, 2., 4., 6., 10., 16., 20., 32., 56., 90.] {
-            let (level_count, tap_offset) = backdrop_blur_levels(blur_radius);
-            assert!(tap_offset <= MAX_BACKDROP_BLUR_TAP_OFFSET);
-            // Downsampling makes the result depend on where the content sits within a texel of
-            // the coarsest level, so average over every position.
-            let phases = 1 << level_count;
-            let standard_deviation = (0..phases)
-                .map(|phase| blurred_standard_deviation(level_count, tap_offset, 2048 + phase))
-                .sum::<f32>()
-                / phases as f32;
-            assert!(
-                (standard_deviation - blur_radius).abs() < 0.05 * blur_radius,
-                "blur radius {blur_radius} blurred by {standard_deviation} with {level_count} levels"
-            );
-        }
-    }
-
-    #[test]
-    fn backdrop_blur_plan_reads_only_the_visible_pixels() {
-        let viewport = size(DevicePixels(800), DevicePixels(600));
-        let blur = backdrop_blur(
-            10.,
-            scaled_bounds(-20.5, 100.25, 300., 200.),
-            scaled_bounds(0., 0., 800., 250.),
-        );
-        let plan = blur.plan(viewport).unwrap();
-        assert_eq!(
-            plan.region,
-            Bounds::new(
-                point(DevicePixels(0), DevicePixels(100)),
-                size(DevicePixels(280), DevicePixels(150)),
-            )
-        );
-        assert_eq!(
-            plan.level_size(1),
-            size(DevicePixels(140), DevicePixels(75))
-        );
-        assert_eq!(plan.level_size(2), size(DevicePixels(70), DevicePixels(38)));
-
-        let clipped_out = backdrop_blur(
-            10.,
-            scaled_bounds(900., 0., 100., 100.),
-            scaled_bounds(0., 0., 2000., 2000.),
-        );
-        assert_eq!(clipped_out.plan(viewport), None);
-    }
-
-    #[test]
-    fn backdrop_saturation_alone_takes_no_blur_levels() {
-        let blur = backdrop_blur(
-            0.,
-            scaled_bounds(0., 0., 100., 100.),
-            scaled_bounds(0., 0., 100., 100.),
-        );
-        let plan = blur
-            .plan(size(DevicePixels(100), DevicePixels(100)))
-            .unwrap();
-        assert_eq!(plan.level_count, 0);
-        assert_eq!(plan.composite_source_level(), 0);
     }
 }

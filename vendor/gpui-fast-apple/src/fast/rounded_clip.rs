@@ -283,10 +283,6 @@ fn encode(
                 &encoder,
                 surface_textures,
             )?,
-            PrimitiveBatch::BackdropBlurs(range) => {
-                encoder = renderer.draw_backdrop_blurs(scene, range, texture, viewport, commands, encoder)?;
-                bind(&encoder, clips, &renderer.device);
-            }
             PrimitiveBatch::SubpixelSprites { .. } => unreachable!("Metal uses grayscale glyphs"),
         }
     }

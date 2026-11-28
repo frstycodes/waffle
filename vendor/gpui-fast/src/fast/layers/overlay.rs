@@ -58,7 +58,6 @@ fn rank(primitive: &Primitive) -> u8 {
         Primitive::SubpixelSprite(_) => 5,
         Primitive::PolychromeSprite(_) => 6,
         Primitive::Surface(_) => 7,
-        Primitive::BackdropBlur(_) => 8,
     }
 }
 

@@ -309,13 +309,6 @@ fn hash_primitive(primitive: &Primitive, tile: &Bounds<ScaledPixels>, hasher: &m
             hash_bounds(&surface.bounds, hasher);
             hash_mask(&surface.content_mask, tile, hasher);
         }
-        // Like a surface, a blur's pixels come from outside the scene, and a layer never holds one
-        // (`Window::paint_backdrop_filter`).
-        Primitive::BackdropBlur(blur) => {
-            hasher.write_u8(8);
-            hash_bounds(&blur.bounds, hasher);
-            hash_mask(&blur.content_mask, tile, hasher);
-        }
     }
 }
 

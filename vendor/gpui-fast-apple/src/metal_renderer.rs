@@ -3,9 +3,8 @@ use crate::metal_atlas::MetalAtlas;
 use anyhow::{Context as _, Result};
 use block2::RcBlock;
 use gpui::{
-    AtlasTextureId, BackdropBlur, BackdropBlurPass, BackdropBlurPlan, BackdropBlurTextureBudget,
-    Background, Bounds, ContentMask, DevicePixels, PaintSurface, Path, Point, PrimitiveBatch,
-    ScaledPixels, Scene, Size, point, size,
+    AtlasTextureId, Background, Bounds, ContentMask, DevicePixels, PaintSurface, Path, Point,
+    PrimitiveBatch, ScaledPixels, Scene, Size, point, size,
 };
 #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
 use image::RgbaImage;
@@ -28,9 +27,8 @@ use objc2_metal::{
     MTLRenderPipelineState, MTLResourceOptions, MTLStorageMode, MTLStoreAction, MTLTexture,
     MTLTextureDescriptor, MTLTextureType, MTLTextureUsage, MTLViewport,
 };
-use objc2_metal::{MTLBlitCommandEncoder, MTLOrigin, MTLSize};
 #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
-use objc2_metal::MTLRegion;
+use objc2_metal::{MTLBlitCommandEncoder, MTLOrigin, MTLRegion, MTLSize};
 use objc2_quartz_core::{CAMetalDrawable, CAMetalLayer};
 use parking_lot::Mutex;
 
@@ -150,9 +148,6 @@ pub struct MetalRenderer {
     monochrome_sprites_pipeline_state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     pub(crate) polychrome_sprites_pipeline_state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     surfaces_pipeline_state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
-    backdrop_blur_down_pipeline_state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
-    backdrop_blur_up_pipeline_state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
-    backdrop_blur_composite_pipeline_state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     pub(crate) unit_vertices: Retained<ProtocolObject<dyn MTLBuffer>>,
     pub(crate) instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>,
     pub(crate) sprite_atlas: Arc<MetalAtlas>,
@@ -160,13 +155,6 @@ pub struct MetalRenderer {
     pub(crate) path_intermediate_texture: Option<Retained<ProtocolObject<dyn MTLTexture>>>,
     pub(crate) path_intermediate_msaa_texture: Option<Retained<ProtocolObject<dyn MTLTexture>>>,
     path_sample_count: u32,
-    /// Level 0 holds the region a backdrop blur reads; each later level is half the size of the
-    /// one before. Allocated on first use; `backdrop_blur_budget` shrinks and frees them.
-    backdrop_blur_textures: Vec<Retained<ProtocolObject<dyn MTLTexture>>>,
-    backdrop_blur_budget: BackdropBlurTextureBudget,
-    /// Set when a frame skipped its blurs because its drawable couldn't be read, so the window
-    /// draws again with a readable one rather than idling without them.
-    skipped_backdrop_blurs: bool,
     /// Offscreen render target reused across `render_scene` calls when
     /// rendering headlessly without reading pixels back.
     #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
@@ -412,28 +400,6 @@ impl MetalRenderer {
             MTLPixelFormat::BGRA8Unorm,
         )?;
 
-        let backdrop_blur_down_pipeline_state = build_backdrop_blur_pipeline_state(
-            &device,
-            &library,
-            "backdrop_blur_down",
-            "backdrop_blur_down_fragment",
-            BackdropBlend::Replace,
-        )?;
-        let backdrop_blur_up_pipeline_state = build_backdrop_blur_pipeline_state(
-            &device,
-            &library,
-            "backdrop_blur_up",
-            "backdrop_blur_up_fragment",
-            BackdropBlend::Replace,
-        )?;
-        let backdrop_blur_composite_pipeline_state = build_backdrop_blur_pipeline_state(
-            &device,
-            &library,
-            "backdrop_blur_composite",
-            "backdrop_blur_composite_fragment",
-            BackdropBlend::Composite,
-        )?;
-
         let command_queue = crate::fast::dynamic_textures::command_queue(&device)?;
         let supports_shared_storage = cfg!(target_os = "ios") || is_apple_gpu;
         #[expect(
@@ -472,9 +438,6 @@ impl MetalRenderer {
             monochrome_sprites_pipeline_state,
             polychrome_sprites_pipeline_state,
             surfaces_pipeline_state,
-            backdrop_blur_down_pipeline_state,
-            backdrop_blur_up_pipeline_state,
-            backdrop_blur_composite_pipeline_state,
             unit_vertices,
             instance_buffer_pool,
             sprite_atlas,
@@ -482,9 +445,6 @@ impl MetalRenderer {
             path_intermediate_texture: None,
             path_intermediate_msaa_texture: None,
             path_sample_count: PATH_SAMPLE_COUNT,
-            backdrop_blur_textures: Vec::new(),
-            backdrop_blur_budget: BackdropBlurTextureBudget::default(),
-            skipped_backdrop_blurs: false,
             #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
             headless_render_target: None,
             fast_layers: crate::fast::layers::TileCache::default(),
@@ -658,7 +618,6 @@ impl MetalRenderer {
                 return;
             }
         };
-        allow_reading_drawables_for(scene, &layer);
         let drawable = match &mut self.display_link_mode {
             DisplayLinkMode::Attached { drawable } => {
                 let Some(drawable) = drawable.take() else {
@@ -918,7 +877,6 @@ impl MetalRenderer {
             viewport_size,
             surface_textures,
         )? {
-            self.trim_backdrop_blur_textures();
             return Ok(command_buffer);
         }
         let command_queue = self.command_queue.clone();
@@ -939,6 +897,7 @@ impl MetalRenderer {
                 alpha,
             }),
         )?;
+
         for batch in scene.batches() {
             match batch {
                 PrimitiveBatch::Shadows(range) => {
@@ -1009,222 +968,13 @@ impl MetalRenderer {
                         return Err(error);
                     }
                 }
-                PrimitiveBatch::BackdropBlurs(range) => {
-                    command_encoder = self.draw_backdrop_blurs(
-                        scene,
-                        range,
-                        texture,
-                        viewport_size,
-                        &command_buffer,
-                        command_encoder,
-                    )?;
-                }
                 PrimitiveBatch::SubpixelSprites { .. } => unreachable!(),
             }
         }
 
         command_encoder.endEncoding();
-        // The command buffer retains the textures it uses, so freeing them here is safe.
-        self.trim_backdrop_blur_textures();
 
         Ok(command_buffer)
-    }
-
-    /// Draws `range` of the scene's backdrop blurs over what `encoder` has drawn into `texture` so
-    /// far: each ends the pass to blur a copy of the target, then composites in a new pass, which
-    /// it returns.
-    pub(crate) fn draw_backdrop_blurs(
-        &mut self,
-        scene: &Scene,
-        range: std::ops::Range<usize>,
-        texture: &ProtocolObject<dyn MTLTexture>,
-        viewport_size: Size<DevicePixels>,
-        command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
-        mut encoder: Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>,
-    ) -> Result<Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>> {
-        // A drawable acquired before the layer stopped being framebuffer-only can't be copied;
-        // the next one can.
-        if texture.isFramebufferOnly() {
-            self.skipped_backdrop_blurs = true;
-            return Ok(encoder);
-        }
-        for blur in &scene.backdrop_blurs[range] {
-            let Some(plan) = blur.plan(viewport_size) else {
-                continue;
-            };
-            encoder.endEncoding();
-            self.draw_backdrop_blur_levels(&plan, texture, command_buffer)?;
-            encoder = new_command_encoder_for_texture(command_buffer, texture, viewport_size, None)?;
-            self.draw_backdrop_blur_composite(blur, &plan, viewport_size, &encoder);
-        }
-        Ok(encoder)
-    }
-
-    /// Whether the last frame skipped backdrop blurs it can draw next frame, so the window should
-    /// draw again even if nothing changed. Clears the flag.
-    pub fn take_needs_redraw(&mut self) -> bool {
-        std::mem::take(&mut self.skipped_backdrop_blurs)
-    }
-
-    fn draw_backdrop_blur_levels(
-        &mut self,
-        plan: &BackdropBlurPlan,
-        target: &ProtocolObject<dyn MTLTexture>,
-        command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
-    ) -> Result<()> {
-        self.ensure_backdrop_blur_textures(plan)?;
-
-        let region = plan.region;
-        let blit = command_buffer
-            .blitCommandEncoder()
-            .context("creating blit command encoder")?;
-        // SAFETY: the region lies inside the drawable (the plan clamps it to the viewport) and
-        // level 0 is at least the region's size (the budget allocates it so).
-        unsafe {
-            blit.copyFromTexture_sourceSlice_sourceLevel_sourceOrigin_sourceSize_toTexture_destinationSlice_destinationLevel_destinationOrigin(
-                target,
-                0,
-                0,
-                MTLOrigin {
-                    x: region.origin.x.0 as usize,
-                    y: region.origin.y.0 as usize,
-                    z: 0,
-                },
-                MTLSize {
-                    width: region.size.width.0 as usize,
-                    height: region.size.height.0 as usize,
-                    depth: 1,
-                },
-                &self.backdrop_blur_textures[0],
-                0,
-                0,
-                MTLOrigin { x: 0, y: 0, z: 0 },
-            );
-        }
-        blit.endEncoding();
-
-        for level in 1..=plan.level_count {
-            self.draw_backdrop_blur_level(
-                &self.backdrop_blur_down_pipeline_state,
-                plan,
-                level - 1,
-                level,
-                command_buffer,
-            )?;
-        }
-        for level in (1..plan.level_count).rev() {
-            self.draw_backdrop_blur_level(
-                &self.backdrop_blur_up_pipeline_state,
-                plan,
-                level + 1,
-                level,
-                command_buffer,
-            )?;
-        }
-        Ok(())
-    }
-
-    fn draw_backdrop_blur_level(
-        &self,
-        pipeline_state: &ProtocolObject<dyn MTLRenderPipelineState>,
-        plan: &BackdropBlurPlan,
-        source_level: usize,
-        target_level: usize,
-        command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
-    ) -> Result<()> {
-        let source = &self.backdrop_blur_textures[source_level];
-        let target = &self.backdrop_blur_textures[target_level];
-        let pass = plan.level_pass(
-            source_level,
-            target_level,
-            texture_size(source),
-            texture_size(target),
-        );
-
-        let render_pass_descriptor = MTLRenderPassDescriptor::new();
-        // SAFETY: Index zero is within the render pass's color attachment array.
-        let color_attachment = unsafe {
-            render_pass_descriptor
-                .colorAttachments()
-                .objectAtIndexedSubscript(0)
-        };
-        color_attachment.setTexture(Some(target));
-        // Texels outside the level's region are never sampled.
-        color_attachment.setLoadAction(MTLLoadAction::DontCare);
-        color_attachment.setStoreAction(MTLStoreAction::Store);
-        let command_encoder = command_buffer
-            .renderCommandEncoderWithDescriptor(&render_pass_descriptor)
-            .context("creating backdrop blur encoder")?;
-        encode_backdrop_blur_draw(
-            &command_encoder,
-            pipeline_state,
-            &self.unit_vertices,
-            &pass,
-            source,
-        );
-        command_encoder.endEncoding();
-        Ok(())
-    }
-
-    fn draw_backdrop_blur_composite(
-        &self,
-        blur: &BackdropBlur,
-        plan: &BackdropBlurPlan,
-        viewport_size: Size<DevicePixels>,
-        command_encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
-    ) {
-        let source = &self.backdrop_blur_textures[plan.composite_source_level()];
-        let pass = plan.composite_pass(blur, texture_size(source), viewport_size);
-        encode_backdrop_blur_draw(
-            command_encoder,
-            &self.backdrop_blur_composite_pipeline_state,
-            &self.unit_vertices,
-            &pass,
-            source,
-        );
-    }
-
-    fn ensure_backdrop_blur_textures(&mut self, plan: &BackdropBlurPlan) -> Result<()> {
-        for level in 0..=plan.level_count {
-            let current = self.backdrop_blur_textures.get(level).map(|t| texture_size(t));
-            let Some(allocation) =
-                self.backdrop_blur_budget
-                    .allocation_size(level, plan.level_size(level), current)
-            else {
-                continue;
-            };
-            let texture_descriptor = MTLTextureDescriptor::new();
-            // SAFETY: the budget hands out positive sizes for a 2D texture.
-            unsafe {
-                texture_descriptor.setWidth(allocation.width.0 as usize);
-                texture_descriptor.setHeight(allocation.height.0 as usize);
-            }
-            texture_descriptor.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
-            texture_descriptor.setStorageMode(MTLStorageMode::Private);
-            texture_descriptor
-                .setUsage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
-            let texture = self
-                .device
-                .newTextureWithDescriptor(&texture_descriptor)
-                .context("allocating backdrop blur level")?;
-            if level < self.backdrop_blur_textures.len() {
-                self.backdrop_blur_textures[level] = texture;
-            } else {
-                self.backdrop_blur_textures.push(texture);
-            }
-        }
-        Ok(())
-    }
-
-    /// Frees the level textures the budget no longer wants, once a frame is encoded.
-    pub(crate) fn trim_backdrop_blur_textures(&mut self) {
-        let allocated = self
-            .backdrop_blur_textures
-            .iter()
-            .map(|texture| texture_size(texture))
-            .collect::<Vec<_>>();
-        let keep = self.backdrop_blur_budget.end_frame(&allocated);
-        self.backdrop_blur_textures.truncate(keep);
     }
 
     pub(crate) fn draw_paths_to_intermediate(
@@ -1776,104 +1526,6 @@ impl MetalRenderer {
     }
 }
 
-/// Backdrop blurs copy out of the drawable, which a framebuffer-only layer forbids. Readable
-/// drawables present less efficiently, so a layer opts in only once a scene has a blur, and
-/// then stays opted in rather than rebuilding its drawables each time a blur comes and goes.
-fn allow_reading_drawables_for(scene: &Scene, layer: &CAMetalLayer) {
-    if !scene.backdrop_blurs.is_empty() && layer.framebufferOnly() {
-        layer.setFramebufferOnly(false);
-    }
-}
-
-fn texture_size(texture: &ProtocolObject<dyn MTLTexture>) -> Size<DevicePixels> {
-    size(
-        DevicePixels(texture.width() as i32),
-        DevicePixels(texture.height() as i32),
-    )
-}
-
-fn encode_backdrop_blur_draw(
-    command_encoder: &ProtocolObject<dyn MTLRenderCommandEncoder>,
-    pipeline_state: &ProtocolObject<dyn MTLRenderPipelineState>,
-    unit_vertices: &ProtocolObject<dyn MTLBuffer>,
-    pass: &BackdropBlurPass,
-    source: &ProtocolObject<dyn MTLTexture>,
-) {
-    command_encoder.setRenderPipelineState(pipeline_state);
-    // SAFETY: the pass is copied from a live value and matches the shader's struct; the vertex
-    // buffer holds the six unit vertices the draw reads.
-    unsafe {
-        command_encoder.setVertexBuffer_offset_atIndex(
-            Some(unit_vertices),
-            0,
-            BackdropBlurInputIndex::Vertices as usize,
-        );
-        command_encoder.setVertexBytes_length_atIndex(
-            ptr::NonNull::from(pass).cast(),
-            mem::size_of_val(pass),
-            BackdropBlurInputIndex::Pass as usize,
-        );
-        command_encoder.setFragmentBytes_length_atIndex(
-            ptr::NonNull::from(pass).cast(),
-            mem::size_of_val(pass),
-            BackdropBlurInputIndex::Pass as usize,
-        );
-        command_encoder
-            .setFragmentTexture_atIndex(Some(source), BackdropBlurInputIndex::Source as usize);
-        command_encoder.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::Triangle, 0, 6);
-    }
-}
-
-enum BackdropBlend {
-    /// The level passes write every texel they cover.
-    Replace,
-    /// The pixel becomes the premultiplied blur weighted by the mask, colour and alpha alike
-    /// (dual-source, the mask as the second output). Plain source-over left sharp content showing
-    /// under its own blur in a transparent window, and adding coverage to alpha turned clear
-    /// pixels black.
-    Composite,
-}
-
-fn build_backdrop_blur_pipeline_state(
-    device: &ProtocolObject<dyn MTLDevice>,
-    library: &ProtocolObject<dyn MTLLibrary>,
-    label: &str,
-    fragment_fn_name: &str,
-    blend: BackdropBlend,
-) -> Result<Retained<ProtocolObject<dyn MTLRenderPipelineState>>> {
-    let vertex_fn = library
-        .newFunctionWithName(&NSString::from_str("backdrop_blur_vertex"))
-        .context("locating vertex function backdrop_blur_vertex")?;
-    let fragment_fn = library
-        .newFunctionWithName(&NSString::from_str(fragment_fn_name))
-        .with_context(|| format!("locating fragment function {fragment_fn_name}"))?;
-
-    let descriptor = MTLRenderPipelineDescriptor::new();
-    descriptor.setLabel(Some(&NSString::from_str(label)));
-    descriptor.setVertexFunction(Some(vertex_fn.as_ref()));
-    descriptor.setFragmentFunction(Some(fragment_fn.as_ref()));
-    // SAFETY: Index zero is within the pipeline's color attachment array.
-    let color_attachment = unsafe { descriptor.colorAttachments().objectAtIndexedSubscript(0) };
-    color_attachment.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
-    match blend {
-        BackdropBlend::Replace => color_attachment.setBlendingEnabled(false),
-        BackdropBlend::Composite => {
-            color_attachment.setBlendingEnabled(true);
-            color_attachment.setRgbBlendOperation(MTLBlendOperation::Add);
-            color_attachment.setAlphaBlendOperation(MTLBlendOperation::Add);
-            color_attachment.setSourceRGBBlendFactor(MTLBlendFactor::One);
-            color_attachment.setDestinationRGBBlendFactor(MTLBlendFactor::OneMinusSource1Alpha);
-            color_attachment.setSourceAlphaBlendFactor(MTLBlendFactor::One);
-            color_attachment
-                .setDestinationAlphaBlendFactor(MTLBlendFactor::OneMinusSource1Alpha);
-        }
-    }
-
-    device
-        .newRenderPipelineStateWithDescriptor_error(&descriptor)
-        .with_context(|| format!("creating {label} render pipeline"))
-}
-
 pub(crate) fn new_command_encoder_for_texture(
     command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
     texture: &ProtocolObject<dyn MTLTexture>,
@@ -2247,13 +1899,6 @@ pub(crate) enum SpriteInputIndex {
     ViewportSize = 2,
     AtlasTextureSize = 3,
     AtlasTexture = 4,
-}
-
-#[repr(C)]
-enum BackdropBlurInputIndex {
-    Vertices = 0,
-    Pass = 1,
-    Source = 2,
 }
 
 #[repr(C)]

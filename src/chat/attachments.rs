@@ -2,7 +2,6 @@ use super::*;
 
 // A spoiler's blur, a reaction's side padding (with the add pill's), the code copy button's side, and how far
 // the hover bar rides above its row.
-const SPOILER_BLUR: f32 = 8.;
 // Discord's reaction: 20px emoji, 2px above and below, 6px each side, inside a 1px border.
 const REACTION_PAD: f32 = 6.;
 const REACTION_HEIGHT: f32 = 26.;
@@ -97,7 +96,7 @@ pub(super) fn file_picture(picture: Option<std::sync::Arc<gpui_kit::RenderImage>
         None => well.bg(palette::surface(Level::Raised, cx)).text_color(palette::muted(cx)).flex().items_center().justify_center().child(Icon::new(kind.glyph()).size(px(side * 0.5))),
     };
     well.when(spoiler, |w| {
-        w.child(ui::row().absolute().inset_0().bg(palette::surface(Level::Sidebar, cx).opacity(0.85)).backdrop_blur(px(SPOILER_BLUR)).justify_center().text_color(palette::strong(cx)).child(Icon::new(Glyph::EyeSlash).size(px(side * 0.4))))
+        w.child(ui::row().absolute().inset_0().bg(palette::surface(Level::Sidebar, cx)).justify_center().text_color(palette::strong(cx)).child(Icon::new(Glyph::EyeSlash).size(px(side * 0.4))))
     })
     .into_any_element()
 }

@@ -271,11 +271,6 @@ fn draw_tile_scene(
             // The core keeps paths out of layers: a path rasterized into a
             // tile and moved by an odd number of pixels antialiases
             // differently. Metal draws no subpixel sprites.
-            // A blur reads the frame behind it, so its container is kept off its layer
-            // (`Window::paint_backdrop_filter`); a tile never holds one.
-            PrimitiveBatch::BackdropBlurs(range) => {
-                debug_assert!(range.is_empty(), "a layer tile holds a backdrop blur");
-            }
             PrimitiveBatch::Paths(range) | PrimitiveBatch::SubpixelSprites { range, .. } => {
                 debug_assert!(
                     range.is_empty(),
