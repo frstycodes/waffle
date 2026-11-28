@@ -121,6 +121,8 @@ mod search_results;
 mod server_settings;
 mod settings;
 mod shortcuts;
+mod autoscroll;
+mod frame_rate;
 mod shell;
 mod user_menu;
 mod video;

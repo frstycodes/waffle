@@ -81,6 +81,8 @@ pub struct Prefs {
     pub high_contrast: bool,
     // Discord's "Show on/off indicators": a tick or cross inside each switch's thumb.
     pub switch_icons: bool,
+    // Advanced › Developer: a framerate counter over the window, for testing.
+    pub show_fps: bool,
     pub role_style: RoleStyle,
     pub underline_links: bool,
     pub display_name_styles: bool,
@@ -217,6 +219,7 @@ impl Default for Prefs {
             desaturate_user_colors: false,
             high_contrast: false,
             switch_icons: false,
+            show_fps: false,
             role_style: RoleStyle::InNames,
             underline_links: false,
             display_name_styles: true,
