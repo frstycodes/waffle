@@ -178,6 +178,11 @@ impl Waffle {
         true
     }
     pub(crate) fn on_voice(&mut self, event: voice::VoiceEvent, cx: &mut Context<Self>) {
+        // The mic level arrives ~25 times a second in a call, so focus and Disable Video reach the SFU
+        // within a frame or two without hooking every place that changes them.
+        if matches!(event, voice::VoiceEvent::InputLevel { .. }) {
+            self.sync_video_wants();
+        }
         // A stream picked from the hover card before we'd joined: watch it once connected.
         let mut start_watch: Option<String> = None;
         if let voice::VoiceEvent::Speaking { user_id, speaking } = &event {
@@ -378,6 +383,16 @@ impl Waffle {
         cx.notify();
     }
     // Adds `streamer_id`'s Go Live to the streams we watch and focuses it; Discord lets you watch several.
+    // Discord's media sink wants: other people's cameras that are on and not disabled set the quality,
+    // the focused one gets full quality, a disabled one none.
+    fn sync_video_wants(&self) {
+        let Some(call) = &self.call else { return };
+        let me = self.me.as_ref().map(|m| m.id.as_str());
+        let disabled = &self.prefs.hidden_video;
+        let cameras = self.participants().iter().filter(|p| p.camera && Some(p.user_id.as_str()) != me && !disabled.contains(&p.user_id)).count();
+        let focused = self.call_focus.as_deref().and_then(|key| key.strip_prefix("user:")).map(str::to_owned);
+        call.session.set_video_wants(voice::VideoWants { cameras, focused, disabled: disabled.clone() });
+    }
     pub(crate) fn watch_stream(&mut self, streamer_id: String, cx: &mut Context<Self>) {
         let mine = self.me.as_ref().is_some_and(|m| m.id == streamer_id);
         let Some(call) = &mut self.call else { return };

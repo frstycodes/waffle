@@ -31,6 +31,8 @@ mod chain_check;
 mod fixtures;
 mod jitter;
 mod reconnect;
+mod wants;
+pub use wants::VideoWants;
 use reconnect::{Backoff, Reconnect, close_label, reconnect};
 mod media;
 mod rtp;
@@ -403,6 +405,9 @@ struct Shared {
     deafened: AtomicBool,
     // Server-muted, or a stage listener (suppressed): Discord's engine stops sending as for a self-mute.
     server_muted: AtomicBool,
+    // What video we ask the SFU for (op 15), and a wake-up for the connection to send it again.
+    video_wants: Mutex<VideoWants>,
+    wants_changed: tokio::sync::Notify,
     // A voice-state update is waiting to go out, and when the last one did (see `send_flags_soon`).
     flags_pending: AtomicBool,
     flags_sent: Mutex<Option<Instant>>,
@@ -576,6 +581,8 @@ pub fn join(
         muted: AtomicBool::new(false),
         deafened: AtomicBool::new(false),
         server_muted: AtomicBool::new(false),
+        video_wants: Mutex::default(),
+        wants_changed: tokio::sync::Notify::new(),
         flags_pending: AtomicBool::new(false),
         flags_sent: Mutex::new(None),
         talk_key_held: AtomicBool::new(false),
@@ -609,6 +616,15 @@ impl VoiceSession {
         self.shared.muted.store(muted, Ordering::Relaxed);
         self.shared.deafened.store(deafened, Ordering::Relaxed);
         send_flags_soon(&self.shared);
+    }
+
+    // Asks the SFU for this video from now on; only a change goes out.
+    pub fn set_video_wants(&self, wants: VideoWants) {
+        let Ok(mut current) = self.shared.video_wants.lock() else { return };
+        if *current != wants {
+            *current = wants;
+            self.shared.wants_changed.notify_one();
+        }
     }
 
     // Device ids from `input_devices` / `output_devices`; None = system default. Switches live.
@@ -900,6 +916,8 @@ mod tests {
             muted: AtomicBool::new(false),
             deafened: AtomicBool::new(false),
             server_muted: AtomicBool::new(false),
+            video_wants: Mutex::default(),
+            wants_changed: tokio::sync::Notify::new(),
             flags_pending: AtomicBool::new(false),
             flags_sent: Mutex::new(None),
             talk_key_held: AtomicBool::new(false),

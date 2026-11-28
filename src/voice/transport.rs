@@ -516,6 +516,7 @@ async fn connection(
     let mut loss = LossWindow::default();
     let mut stats = Stats { endpoint: host.clone(), ..Stats::default() };
     let mut resumes = 0;
+    let mut senders = wants::VideoSsrcs::new();
     let mut socket_backoff = Backoff::socket();
     let mut acked = false;
     let mut last_ack = Instant::now();
@@ -563,6 +564,9 @@ async fn connection(
                 Ok(None)
             }
             Some(msg) = out_rx.next() => sink.send(msg).await.map(|()| None).map_err(|e| (e.to_string(), None)),
+            () = shared.wants_changed.notified(), if is_voice && media.is_some() => {
+                sink.send(sink_wants(shared, &target, &senders)).await.map(|()| None).map_err(|e| (e.to_string(), None))
+            }
             Some((kind, d)) = next_dispatch(dispatches) => match on_dispatch(&kind, &d) {
                 Some(reason) => return Err(Ended::Dispatch(reason)),
                 None => Ok(None),
@@ -714,8 +718,7 @@ async fn connection(
                     },
                     users.clone(),
                 )?);
-                // Not verified: op 15 (media sink wants) asks the SFU to forward video at full quality.
-                sink.send(WsMessage::Text(json!({ "op": 15, "d": { "any": 100 } }).to_string())).await.map_err(|e| e.to_string())?;
+                sink.send(sink_wants(shared, &target, &senders)).await.map_err(|e| e.to_string())?;
                 backoff.succeed();
                 if is_voice {
                     stage(Stage::Connected);
@@ -732,11 +735,17 @@ async fn connection(
             Some(12) => {
                 if let Some(user) = d["user_id"].as_str() {
                     video_ssrcs(d).for_each(|ssrc| media::map_ssrc(&users, ssrc, user));
+                    senders.insert(user.to_owned(), wants::video_ssrcs(d));
+                    // A camera that just came on gets its overrides (focused, disabled) too.
+                    if is_voice && media.is_some() {
+                        sink.send(sink_wants(shared, &target, &senders)).await.map_err(|e| e.to_string())?;
+                    }
                 }
             }
             Some(11) => dave.users_joined(d["user_ids"].as_array().into_iter().flatten().filter_map(Value::as_str)),
             Some(13) => {
                 if let Some(user) = d["user_id"].as_str() {
+                    senders.remove(user);
                     dave.user_left(user);
                     if let Some(media) = &media {
                         media.user_left(user);
@@ -747,6 +756,15 @@ async fn connection(
             _ => {}
         }
     }
+}
+
+// Op 15: the video this connection asks for. A Go Live connection carries one picture, wanted whole.
+fn sink_wants(shared: &Shared, target: &Target, senders: &wants::VideoSsrcs) -> WsMessage {
+    let d = match target.role {
+        Role::Voice => shared.video_wants.lock().map(|w| wants::payload(&w, senders)).unwrap_or_else(|_| json!({ "any": 100 })),
+        _ => json!({ "any": 100 }),
+    };
+    WsMessage::Text(json!({ "op": 15, "d": d }).to_string())
 }
 
 fn beat(seq_ack: i64) -> WsMessage {

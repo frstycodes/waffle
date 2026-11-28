@@ -154,7 +154,7 @@ impl Waffle {
         }
         let talking = !is_stream && self.speaking(&state.user_id);
         let sounding = !is_stream && self.soundboard_playing(&state.user_id);
-        // Disable Video hides their camera here; GAP: the voice engine still receives it.
+        // Disable Video hides their camera here, and the SFU stops sending it (`sync_video_wants`).
         let camera = (!is_stream && !self.prefs.hidden_video.contains(&state.user_id)).then(|| call.cameras.get(&state.user_id)).flatten();
         // A stream card plays the stream once it's watched (our own from the local capture), and shows
         // Discord's preview still until then. A watched stream that stopped delivering goes back to the loader
