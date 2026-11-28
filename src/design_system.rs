@@ -17,6 +17,7 @@ mod identity;
 mod inputs;
 mod overlays;
 mod pages;
+mod players;
 mod selection;
 mod timings;
 use colour::colour;
@@ -265,6 +266,7 @@ impl DesignSystem {
             Page::DropdownMenu => overlays::menu_frames(cx),
             Page::Popover => overlays::popover_frames(cx),
             Page::HoverCard => overlays::hover_card_frames(window, cx),
+            Page::Pip => players::pip_frames(window, cx),
             Page::Dialog => vec![variants(self.dialogs(window, cx).into_any_element())],
             Page::Sonner => overlays::toast_frames(cx),
             Page::Alert => overlays::callout_frames(cx),

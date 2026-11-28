@@ -76,7 +76,6 @@ pub(crate) const FOCUS_HEAD: f32 = 48.;
 // Discord's idle timeout: the header, the bar and the name chips fade after the pointer rests this long.
 const CONTROLS_IDLE: Duration = Duration::from_secs(2);
 // The voice channel's chat beside the call: at least 450 wide, leaving the stage 550 (Discord's numbers).
-const CHAT_SLIDE: Duration = Duration::from_millis(260);
 pub(crate) const CHAT_MIN_WIDTH: f32 = 450.;
 const CHAT_STAGE_ROOM: f32 = 550.;
 // The connection popover's colour bands (its legend): under 80 ms, 80 to 120, over 120.
