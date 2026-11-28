@@ -567,12 +567,12 @@ async fn connection(
                 Ok(None)
             }
             Some(msg) = out_rx.next() => sink.send(msg).await.map(|()| None).map_err(|e| (e.to_string(), None)),
-            // Back from sleep, Discord beats at once and gives the socket 5 s to answer.
-            _ = wake.tick() => match (wake.woke(), expedited) {
-                (_, Some(deadline)) if Instant::now() >= deadline && !acked => Err(("Heartbeat timeout after wake".to_owned(), None)),
-                (true, _) => {
+            // Back from sleep, or the network changed: Discord beats at once and gives the socket a few seconds.
+            _ = wake.tick() => match (wake.nudge(), expedited) {
+                (_, Some(deadline)) if Instant::now() >= deadline && !acked => Err(("Heartbeat timeout after a wake or network change".to_owned(), None)),
+                (Some(wait), _) => {
                     acked = false;
-                    expedited = Some(Instant::now() + reconnect::EXPEDITED_ACK);
+                    expedited = Some(Instant::now() + wait);
                     sink.send(beat(seq_ack)).await.map(|()| None).map_err(|e| (e.to_string(), None))
                 }
                 _ => Ok(None),
