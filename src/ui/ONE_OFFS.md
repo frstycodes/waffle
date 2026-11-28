@@ -18,7 +18,7 @@ _Spacing: gpui's scale (gap_2, p_1p5, mt_3 … see ui/tokens.rs). Sizes: a ui to
 
 ## raw-floating
 
-_Floating surface: ui::floating / ui::floating_at. They occlude, so nothing under them takes the pointer._
+_Floating surface: ui::Popover::floating / ui::Popover::floating_at. They occlude, so nothing under them takes the pointer._
 
 - `src/activities.rs` — drawn in its own place; its elements take the pointer themselves
 - `src/announcements.rs` — placed inside the overlay backdrop, which already occludes; the card occludes itself.
@@ -29,7 +29,7 @@ _Floating surface: ui::floating / ui::floating_at. They occlude, so nothing unde
 - `src/profile.rs` — placed inside the overlay backdrop, with a measured top margin floating_at can't take.
 - `src/role_popout.rs` — placed inside the overlay backdrop, with a measured top margin floating_at can't take.
 - `src/search_results.rs` — hangs at absolute offsets under the header, not anchored; the card occludes itself.
-- `src/user_panel.rs` — ui::floating hangs its content below the parent's top-left; this callout sits above the mic
+- `src/user_panel.rs` — ui::Popover::floating hangs its content below the parent's top-left; this callout sits above the mic
 
 ## global-notify
 
@@ -152,6 +152,8 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/create_server.rs` — the create-server dialog is drawn by the app's own render, outside the columns
 - `src/create_server.rs` — the create-server dialog is drawn by the app's own render, outside the columns
 - `src/create_server.rs` — the create-server dialog is drawn by the app's own render, outside the columns
+- `src/design_system.rs` — leaving the design system brings every column back
+- `src/design_system.rs` — the design system replaces every column
 - `src/dm_call.rs` — call_view swaps the main column and the nav selection
 - `src/dm_call.rs` — call_view swaps the main column and the nav selection
 - `src/dm_call.rs` — the call-ended toast is an overlay, which only follows the app
@@ -511,97 +513,97 @@ _Split it: move a self-contained part (a view, a section, a group of helpers) in
 
 ## custom-button
 
-_Clickable: ui::button, ui::icon_button, ui::round_button, ui::chip, ui::menu_row, ui::settings_choice or ui::pressable. Missing a look? Give the component a Tone, size or slot (src/ui/control.rs) and use it._
+_Clickable: ui::Button (an icon button is size Icon), ui::round_button, ui::Toggle, ui::DropdownMenuItem, ui::settings_choice or ui::pressable. Missing a look? Give ui::Button a variant, size or scope (src/ui/button.rs), as shadcn's cva does, and use it._
 
-- `src/audio_player/view.rs` — ui::icon_button lacks a hover that also holds the volume card open
+- `src/audio_player/view.rs` — ui::Button lacks a hover that also holds the volume card open
 - `src/audio_player/view.rs` — ui::pressable lacks a bordered pill with a playing tint; this is the voice message's whole pill
 - `src/audio_player/view.rs` — ui::round_button lacks an accent-filled play button that swaps its glyph
-- `src/call/dock.rs` — ui::button and ui::menu_row fill on hover; Discord's status is a bare link with no fill
+- `src/call/dock.rs` — ui::Button and ui::DropdownMenuItem::new fill on hover; Discord's status is a bare link with no fill
 - `src/call/dock.rs` — ui::round_button lacks a labelled stage control with a split chevron
 - `src/call/header.rs` — ui::round_button lacks a stage toggle with a corner badge
-- `src/chat.rs` — ui::button has no tone that washes the accent over a tinted bar
-- `src/chat/composer.rs` — ui::button's Ghost tone is 30px at its smallest, this one sits in a 28px bar and takes the accent ink when on
-- `src/chat/composer.rs` — ui::menu_row fills on hover but has no persistent selected state driven by the arrow keys
-- `src/chat/embeds.rs` — ui::button's smallest Ghost is 30px with the muted ink; this is a 26px toggle in the accent ink that hangs 6px left under the text
-- `src/chat/format.rs` — ui::button has no breadcrumb look, muted ink that strengthens on hover and takes the surrounding type
-- `src/command_picker/render.rs` — ui::icon_button takes a glyph, and a rail tile's face is an app icon or a section mark
-- `src/joining/browse.rs` — ui::list_row has no held state (dimmed check, no hover or click) or end-of-row note
-- `src/overlays/emoji.rs` — ui::icon_button is a square taking a Glyph; an emoji cell is a ninth of the grid's width.
-- `src/panel.rs` — ui::list_row is a flat 48px row; a member row also carries a nameplate, its fade and a per-row hover plate.
-- `src/profile/connections.rs` — ui::chip is a palette-toned filter that toggles; this one wears the card's themed ink and opens the account.
-- `src/profile/full.rs` — ui::text_area is the editor itself; this is the note at rest, plain text a click from becoming one, as Discord's.
-- `src/profile/parts.rs` — the username is a link, as Discord's; ui::button would give it a fill and padding.
+- `src/chat.rs` — ui::Button has no scope that washes the accent over a tinted bar
+- `src/chat/composer.rs` — ui::Button's Ghost variant is 30px at its smallest, this one sits in a 28px bar and takes the accent ink when on
+- `src/chat/composer.rs` — ui::DropdownMenuItem::new fills on hover but has no persistent selected state driven by the arrow keys
+- `src/chat/embeds.rs` — ui::Button's smallest Ghost is 30px with the muted ink; this is a 26px toggle in the accent ink that hangs 6px left under the text
+- `src/chat/format.rs` — ui::Button has no breadcrumb look (ui::Breadcrumb, once it exists, is the home), muted ink that strengthens on hover and takes the surrounding type
+- `src/command_picker/render.rs` — ui::Button takes a glyph, and a rail tile's face is an app icon or a section mark
+- `src/joining/browse.rs` — ui::Item::new has no held state (dimmed check, no hover or click) or end-of-row note
+- `src/overlays/emoji.rs` — ui::Button is a square taking a Glyph; an emoji cell is a ninth of the grid's width.
+- `src/panel.rs` — ui::Item::new is a flat 48px row; a member row also carries a nameplate, its fade and a per-row hover plate.
+- `src/profile/connections.rs` — ui::Toggle is a palette-toned filter that toggles; this one wears the card's themed ink and opens the account.
+- `src/profile/full.rs` — ui::Textarea::new is the editor itself; this is the note at rest, plain text a click from becoming one, as Discord's.
+- `src/profile/parts.rs` — the username is a link, as Discord's; ui::Button would give it a fill and padding.
 - `src/settings.rs` — ui::settings_nav_item has no icon-less, indented sub-entry
-- `src/settings/voice_pages.rs` — ui::icon_button has no hover to the danger ink without the danger fill, which this quiet remove must not take
-- `src/sidebar/channels.rs` — ui::button(Tone::Ghost) is 36px with a 14px label; this one is the header's full-width name button, 16px semibold.
-- `src/sidebar/channels.rs` — ui::icon_button fills on hover and takes a Glyph; a row's action only strengthens its ink.
-- `src/sidebar/channels.rs` — ui::icon_button fills on hover and takes a Glyph; this action only strengthens its ink and sits at the head's end.
-- `src/sidebar/channels.rs` — ui::list_row has fixed heights (36/48/60) and no unread pill; a channel row follows UI density.
+- `src/settings/voice_pages.rs` — ui::Button has no hover to the danger ink without the danger fill, which this quiet remove must not take
+- `src/sidebar/channels.rs` — ui::Button (Ghost) is 36px with a 14px label; this one is the header's full-width name button, 16px semibold.
+- `src/sidebar/channels.rs` — ui::Button fills on hover and takes a Glyph; a row's action only strengthens its ink.
+- `src/sidebar/channels.rs` — ui::Button fills on hover and takes a Glyph; this action only strengthens its ink and sits at the head's end.
+- `src/sidebar/channels.rs` — ui::Item::new has fixed heights (36/48/60) and no unread pill; a channel row follows UI density.
 - `src/sidebar/tiles.rs` — ui::icon_button(...).sized(44) takes a Glyph and fills on hover; the rail's actions use Nav icons on the lifted raised tone.
-- `src/soundboard/picker.rs` — ui::menu_row lacks a favourite toggle at a tile's corner
-- `src/user_panel.rs` — ui::icon_button is square, and this chevron is a 16px sliver joined to its control
-- `src/viewer.rs` — ui::icon_button takes a glyph and fills on hover; a thumbnail is a picture that dims and brightens
+- `src/soundboard/picker.rs` — ui::DropdownMenuItem::new lacks a favourite toggle at a tile's corner
+- `src/user_panel.rs` — ui::Button is square, and this chevron is a 16px sliver joined to its control
+- `src/viewer.rs` — ui::Button takes a glyph and fills on hover; a thumbnail is a picture that dims and brightens
 
 ## custom-surface
 
-_Floating or raised surface: ui::surface, ui::floating, ui::floating_bar, ui::toast, ui::dialog or ui::settings_card. Missing a level, radius or inset? Add it as an option there._
+_Floating or raised surface: ui::PopoverContent, ui::Popover, ui::Sonner, ui::Dialog or ui::Card. Missing a level, radius or inset? Add it as an option there._
 
-- `src/audio_player/view.rs` — ui::surface lacks an in-flow card that holds itself open on hover
-- `src/call/dock.rs` — ui::surface lacks the stage-scoped quality card (stage colours, not palette)
-- `src/call/fit.rs` — ui::surface insets its content and rings it, and this card's own panel fills it and slides in by a computed offset
-- `src/call_previews.rs` — ui::surface rings and shadows in the app's overlay colours, and this card is the call stage's own dark overlay
+- `src/audio_player/view.rs` — ui::PopoverContent::new lacks an in-flow card that holds itself open on hover
+- `src/call/dock.rs` — ui::PopoverContent::new lacks the stage-scoped quality card (stage colours, not palette)
+- `src/call/fit.rs` — ui::PopoverContent::new insets its content and rings it, and this card's own panel fills it and slides in by a computed offset
+- `src/call_previews.rs` — ui::PopoverContent::new rings and shadows in the app's overlay colours, and this card is the call stage's own dark overlay
 - `src/chat/attachments.rs` — ui::toolbar occludes the wheel too, and this bar must let the feed scroll under it; it also rides above its row's edge
-- `src/chat/composer.rs` — ui::surface has no glass fill (translucent, blurred, saturated) over a scrolling feed
-- `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
-- `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
-- `src/chat/media.rs` — ui::surface sits in the flow; this popout hangs absolutely over a gallery tile and sizes itself
-- `src/command_picker/render.rs` — ui::surface lacks an anchored composer popup that rises from the field
-- `src/drag.rs` — ui::surface has a fixed fill and shadow; this one's fill and shadow fade with the lift.
-- `src/joining/rules.rs` — ui::surface has no frosted translucent level matching the composer card
+- `src/chat/composer.rs` — ui::PopoverContent::new has no glass fill (translucent, blurred, saturated) over a scrolling feed
+- `src/chat/composer.rs` — ui::PopoverContent::new isn't positioned off its parent's top edge; ui::Popover::floating_at anchors to a window point, not to the composer card
+- `src/chat/composer.rs` — ui::PopoverContent::new isn't positioned off its parent's top edge; ui::Popover::floating_at anchors to a window point, not to the composer card
+- `src/chat/media.rs` — ui::PopoverContent::new sits in the flow; this popout hangs absolutely over a gallery tile and sizes itself
+- `src/command_picker/render.rs` — ui::PopoverContent::new lacks an anchored composer popup that rises from the field
+- `src/drag.rs` — ui::PopoverContent::new has a fixed fill and shadow; this one's fill and shadow fade with the lift.
+- `src/joining/rules.rs` — ui::PopoverContent::new has no frosted translucent level matching the composer card
+- `src/login.rs` — ui::PopoverContent::new is the theme's overlay fill; the code sits on white in both themes so phones can read it.
 - `src/login.rs` — ui::badged marks a corner with a count or a status; this is the 32px phone chip, ringed by a hairline.
-- `src/login.rs` — ui::surface is the theme's overlay fill; the code sits on white in both themes so phones can read it.
-- `src/profile/parts.rs` — ui::surface is a flat overlay fill; this card is the user's gradient inside a gradient border.
-- `src/settings/profiles.rs` — ui::badged places marks on a face's corner but can't reveal one on hover, and ui::icon_button has no corner placement
-- `src/soundboard/picker.rs` — ui::surface lacks an in-picker popover card anchored under the speaker
-- `src/splash.rs` — ui::surface is the overlay fill with a drop shadow; the splash is a raised fill with an inset hairline in a borderless window.
+- `src/profile/parts.rs` — ui::PopoverContent::new is a flat overlay fill; this card is the user's gradient inside a gradient border.
+- `src/settings/profiles.rs` — ui::badged places marks on a face's corner but can't reveal one on hover, and ui::Button has no corner placement
+- `src/soundboard/picker.rs` — ui::PopoverContent::new lacks an in-picker popover card anchored under the speaker
+- `src/splash.rs` — ui::PopoverContent::new is the overlay fill with a drop shadow; the splash is a raised fill with an inset hairline in a borderless window.
 
 ## custom-divider
 
-_Divider: ui::divider or ui::inset_rule._
+_Divider: ui::Separator (`.orientation`, `.label`, `.inset`)._
 
-- `src/call/dock.rs` — ui::progress_bar lacks a ping graph; these are data-sized bars, not dividers
-- `src/command_picker/render.rs` — ui::divider lacks a short centred rule in a rail; the margin is its optical gap
-- `src/components/parts.rs` — ui::divider lacks a bare hairline with its own padding that follows a component's size
-- `src/soundboard/picker.rs` — ui::divider lacks a short rule between the unlocked and locked tabs
+- `src/call/dock.rs` — ui::Progress lacks a ping graph; these are data-sized bars, not dividers
+- `src/command_picker/render.rs` — ui::Separator lacks a short centred rule in a rail; the margin is its optical gap
+- `src/components/parts.rs` — ui::Separator lacks a bare hairline with its own padding that follows a component's size
+- `src/soundboard/picker.rs` — ui::Separator lacks a short rule between the unlocked and locked tabs
 
 ## custom-badge
 
-_Label: ui::badge, ui::tag, ui::count_badge, ui::pill or ui::role_chip; add a variant there if none fits._
+_Label: ui::Badge (`.variant`, `Badge::count`, `Badge::dot`), ui::pill or ui::role_chip; add a variant there if none fits._
 
-- `src/activities/bridge.rs` — ui::callout leads with an icon and a title, and this is a plain well for a URL
-- `src/call/dock.rs` — ui::surface lacks the stage-scoped quality card (stage colours, not palette)
-- `src/chat.rs` — ui::callout is inline, not floating over a list; ui::floating_bar docks at the foot, this one hangs from the feed's top
+- `src/activities/bridge.rs` — ui::Alert::new leads with an icon and a title, and this is a plain well for a URL
+- `src/call/dock.rs` — ui::PopoverContent::new lacks the stage-scoped quality card (stage colours, not palette)
+- `src/chat.rs` — ui::Alert::new is inline, not floating over a list; ui::Popover::bar docks at the foot, this one hangs from the feed's top
+- `src/chat/composer.rs` — ui::PopoverContent::new isn't positioned off its parent's top edge; ui::Popover::floating_at anchors to a window point, not to the composer card
+- `src/chat/composer.rs` — ui::PopoverContent::new isn't positioned off its parent's top edge; ui::Popover::floating_at anchors to a window point, not to the composer card
 - `src/chat/composer.rs` — ui::pill is in the flow and solid; this one floats out of it over the feed with a blurred glass fill
-- `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
-- `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
-- `src/chat/embeds.rs` — ui::badge is a small solid label; this is a result row with its share drawn as a fill behind the text
-- `src/command_picker/render.rs` — ui::surface lacks an anchored composer popup that rises from the field
-- `src/create_channel.rs` — ui::chip's removable look is an outlined chip, not this filled selected-tone pill
+- `src/chat/embeds.rs` — ui::Badge is a small solid label; this is a result row with its share drawn as a fill behind the text
+- `src/command_picker/render.rs` — ui::PopoverContent::new lacks an anchored composer popup that rises from the field
+- `src/create_channel.rs` — ui::Toggle's removable look is an outlined chip, not this filled selected-tone pill
 - `src/dm_call.rs` — ui::pill is a label, and this holds a face stack and the Join button
-- `src/drag.rs` — ui::badge is a static label and ui::badged marks a face's corner; this chip hangs off the ghost's right edge.
-- `src/forum/helpers.rs` — ui::badge is a 20px solid label; this is a 32px file row with an icon and its size
-- `src/joining/rules.rs` — ui::surface has no frosted translucent level matching the composer card
-- `src/panel.rs` — ui::tip is one line of text; this tip lists each thing someone is doing, with its icon.
-- `src/profile/activity.rs` — ui::badge is a small label; this is the art slot itself, Discord's unknown-app square.
-- `src/profile/activity_voice.rs` — ui::capped_stack puts its "+n" at a row's end; Discord's tile puts it at one of the seats.
-- `src/profile/parts.rs` — ui::badge is a 20px solid label in 11px type; the guild tag is 22px in the card's 14px type and ink.
-- `src/profile/social.rs` — ui::strip takes a palette fill; this notice wears the profile theme's tint (Ink), as the card's other tiles do.
-- `src/settings/accessibility.rs` — ui::settings_card has no body-font-size option; this card sets the preview's message size
-- `src/sidebar/channels.rs` — ui::callout leads with an icon and a title; this banner is a dot and one line, slid in by its motion frame.
-- `src/sidebar/tiles.rs` — ui::badge is a label; this is a server's letter tile, scaled with the rail tile.
+- `src/drag.rs` — ui::Badge is a static label and ui::badged marks a face's corner; this chip hangs off the ghost's right edge.
+- `src/forum/helpers.rs` — ui::Badge is a 20px solid label; this is a 32px file row with an icon and its size
+- `src/joining/rules.rs` — ui::PopoverContent::new has no frosted translucent level matching the composer card
+- `src/panel.rs` — ui::Tooltip is one line of text; this tip lists each thing someone is doing, with its icon.
+- `src/profile/activity.rs` — ui::Badge is a small label; this is the art slot itself, Discord's unknown-app square.
+- `src/profile/activity_voice.rs` — ui::AvatarGroup::capped puts its "+n" at a row's end; Discord's tile puts it at one of the seats.
+- `src/profile/parts.rs` — ui::Badge is a 20px solid label in 11px type; the guild tag is 22px in the card's 14px type and ink.
+- `src/profile/social.rs` — ui::Alert::strip takes a palette fill; this notice wears the profile theme's tint (Ink), as the card's other tiles do.
+- `src/settings/accessibility.rs` — ui::Card::new has no body-font-size option; this card sets the preview's message size
+- `src/sidebar/channels.rs` — ui::Alert::new leads with an icon and a title; this banner is a dot and one line, slid in by its motion frame.
+- `src/sidebar/tiles.rs` — ui::Badge is a label; this is a server's letter tile, scaled with the rail tile.
 - `src/soundboard/picker.rs` — ui::badged lacks a sound tile with a lock mark and a name
-- `src/user_panel.rs` — ui::surface adds a ring and shadow this docked card doesn't draw
-- `src/user_panel.rs` — ui::tip is a tooltip view only gpui's hover opens; this one is forced open, in Discord's green
+- `src/user_panel.rs` — ui::PopoverContent::new adds a ring and shadow this docked card doesn't draw
+- `src/user_panel.rs` — ui::Tooltip is a tooltip view only gpui's hover opens; this one is forced open, in Discord's green
 
 ## custom-mark
 
@@ -609,40 +611,40 @@ _A mark on a face's or control's corner: ui::badged with a Spot (it places the m
 
 - `src/call.rs` — ui::badged marks a face's corner, and this chip pins over a stream tile's corner
 - `src/call.rs` — ui::media places an image against a container's edge, and this is a gradient laid over a tile's ground
-- `src/call/dock.rs` — ui::surface lacks the stage-scoped quality card (stage colours, not palette)
-- `src/call/fit.rs` — ui::surface insets its content and rings it, and this card's own panel fills it and slides in by a computed offset
+- `src/call/dock.rs` — ui::PopoverContent::new lacks the stage-scoped quality card (stage colours, not palette)
+- `src/call/fit.rs` — ui::PopoverContent::new insets its content and rings it, and this card's own panel fills it and slides in by a computed offset
 - `src/call/header.rs` — ui::badged lacks a stage-ringed corner badge on a control
 - `src/call/layouts.rs` — ui::media_label lacks a full-tile scrim over the focused tile's strip copy
 - `src/call/tiles.rs` — ui::speaking_ring lacks a double ring sized by the tile's computed radius
 - `src/call/tiles.rs` — ui::speaking_ring lacks a double ring sized by the tile's computed radius
-- `src/chat.rs` — ui::callout is inline, not floating over a list; ui::floating_bar docks at the foot, this one hangs from the feed's top
+- `src/chat.rs` — ui::Alert::new is inline, not floating over a list; ui::Popover::bar docks at the foot, this one hangs from the feed's top
 - `src/chat/attachments.rs` — ui::toolbar occludes the wheel too, and this bar must let the feed scroll under it; it also rides above its row's edge
+- `src/chat/composer.rs` — ui::PopoverContent::new isn't positioned off its parent's top edge; ui::Popover::floating_at anchors to a window point, not to the composer card
+- `src/chat/composer.rs` — ui::PopoverContent::new isn't positioned off its parent's top edge; ui::Popover::floating_at anchors to a window point, not to the composer card
 - `src/chat/composer.rs` — ui::pill is in the flow and solid; this one floats out of it over the feed with a blurred glass fill
-- `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
-- `src/chat/composer.rs` — ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
-- `src/chat/embeds.rs` — ui::progress_bar draws a thin track; this fill runs behind the row's text, as wide as the share
+- `src/chat/embeds.rs` — ui::Progress draws a thin track; this fill runs behind the row's text, as wide as the share
 - `src/chat/parts.rs` — ui::badged marks a face's corner; this is a connector line drawn from the preview to the avatar
-- `src/command_picker/render.rs` — ui::surface lacks an anchored composer popup that rises from the field
-- `src/design_system.rs` — ui::badged places marks on faces; this is a motion demo's track and moving block
+- `src/command_picker/render.rs` — ui::PopoverContent::new lacks an anchored composer popup that rises from the field
+- `src/design_system/timings.rs` — ui::badged places marks on faces; this is a motion demo's track and moving block
 - `src/dm_call.rs` — ui::badged marks a face's corner, and this is a picture inset in a video's corner
 - `src/dm_call.rs` — ui::speaking_ring is the accent shadow ring, and this one is the stage's presence green
-- `src/drag.rs` — ui::badge is a static label and ui::badged marks a face's corner; this chip hangs off the ghost's right edge.
+- `src/drag.rs` — ui::Badge is a static label and ui::badged marks a face's corner; this chip hangs off the ghost's right edge.
 - `src/go_live.rs` — ui::speaking_ring is a shadow ring that would paint over the still from above, and this one springs out from its edge
 - `src/group_dm.rs` — ui::badged marks a face's corner with a count or a status; this is the Edit pen, a 28px button ringed in the dialog's surface.
 - `src/login.rs` — ui::badged marks a corner with a count or a status; this is the 32px phone chip, ringed by a hairline.
 - `src/settings/meter.rs` — ui::badged marks a face's corner, this is a ring around a whole control, which it can't wrap
-- `src/settings/profiles.rs` — ui::badged places marks on a face's corner but can't reveal one on hover, and ui::icon_button has no corner placement
-- `src/sidebar/channels.rs` — ui::divider draws straight rules; this is an elbow that joins the thread to its channel.
-- `src/sidebar/channels.rs` — ui::icon_button fills on hover and takes a Glyph; this action only strengthens its ink and sits at the head's end.
+- `src/settings/profiles.rs` — ui::badged places marks on a face's corner but can't reveal one on hover, and ui::Button has no corner placement
+- `src/sidebar/channels.rs` — ui::Button fills on hover and takes a Glyph; this action only strengthens its ink and sits at the head's end.
+- `src/sidebar/channels.rs` — ui::Separator draws straight rules; this is an elbow that joins the thread to its channel.
 - `src/sidebar/rail.rs` — ui::badged marks a face's corner; this is the folder's tinted backdrop behind its servers.
 - `src/sidebar/tiles.rs` — ui::badged marks a face's corner; this ring surrounds the whole tile.
 - `src/sidebar/voice.rs` — ui::media_label is a label over media; this is a hover scrim over the thumbnail holding the watch button.
 - `src/sidebar/voice.rs` — ui::speaking_ring cuts its gap in the surface colour; this one leaves the gap clear over the sidebar's material.
-- `src/soundboard/picker.rs` — ui::surface lacks an in-picker popover card anchored under the speaker
+- `src/soundboard/picker.rs` — ui::PopoverContent::new lacks an in-picker popover card anchored under the speaker
 - `src/stickers.rs` — ui::badged hangs a mark past a tile's corner; this play mark sits 4px inside the cell's
 - `src/text_file.rs` — ui::more_below follows a scroll handle, and this preview never scrolls while clipped; its fade is always on
+- `src/user_panel.rs` — ui::PopoverContent::new adds a ring and shadow this docked card doesn't draw
 - `src/user_panel.rs` — ui::status_mark's ring is presence grey; this is push to talk's red or green ring
-- `src/user_panel.rs` — ui::surface adds a ring and shadow this docked card doesn't draw
 - `src/viewer.rs` — ui::badged marks a face's corner; this is the selection ring sliding along the strip
 
 ## raw-truncate
@@ -684,7 +686,7 @@ _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::r
 - `src/chat/row.rs` — the gap between groups is the reader's setting, and rows are list items with no parent gap to carry it
 - `src/chat/row.rs` — the gap between groups is the reader's setting, and rows are list items with no parent gap to carry it
 - `src/command_picker/render.rs` — lifts the popup clear of the composer by a computed amount, POPUP_RAISE
-- `src/command_picker/render.rs` — ui::divider lacks a short centred rule in a rail; the margin is its optical gap
+- `src/command_picker/render.rs` — ui::Separator lacks a short centred rule in a rail; the margin is its optical gap
 - `src/components.rs` — the gap under the message body, whose row is stacked in chat.rs outside this component
 - `src/components/status.rs` — Discord's gap under the command line, as under a reply; the row's children have no parent gap
 - `src/components/status.rs` — optical gap under the component's body; the parent is a message row in another file
@@ -718,8 +720,8 @@ _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::r
 - `src/settings/meter.rs` — the handle's centre sits on the threshold, so it shifts back half its width, which no gap or padding can do
 - `src/settings/profile_preview.rs` — the avatar overlaps the banner by half its size plus its ring, offsets computed from those consts
 - `src/sidebar/rail.rs` — cancels the rail's own gap above the first slot, as each slot carries the gap above it; padding can't be negative.
-- `src/soundboard/picker.rs` — optical gap above the locked section's rule; ui::divider lacks a labelled break
-- `src/soundboard/picker.rs` — ui::callout has no spacing option; the margin separates it from the list under it
+- `src/soundboard/picker.rs` — optical gap above the locked section's rule; ui::Separator lacks a labelled break
+- `src/soundboard/picker.rs` — ui::Alert::new has no spacing option; the margin separates it from the list under it
 - `src/status_menu.rs` — sits past its row's right edge by the card's inset and a gap, which left_full can't add to.
 - `src/status_menu.rs` — the avatar row pulls up over the banner's foot, which padding can't do.
 - `src/system_message.rs` — optical, sets the time 2px clear of the sentence beyond the row's word gap
@@ -729,34 +731,34 @@ _Space between siblings is the parent's gap (gap_*, gap_x_*, gap_y_*) on a ui::r
 
 ## custom-component
 
-_A function named like a component builds it from the design system: wrap the ui:: component (a domain wrapper is fine), or add the component to src/ui/ first (tools/ui_find.py searches what exists)._
+_A function named like a component (a split, a joined pair of controls is ui::ButtonGroup) builds it from the design system: wrap the ui:: component (a domain wrapper is fine), or add the component to src/ui/ first (tools/ui_find.py searches what exists)._
 
 - `src/audio_player.rs` — ui::pill is a label, not a player; this wraps a cached AudioPlayer entity and builds no design-system piece itself
-- `src/call.rs` — ui::button with Tone::Overlay needs an id and a cx, and its callers in sidebar.rs and call/tiles.rs add their own
-- `src/call/header.rs` — ui::icon_button lacks a stage tone with a corner badge; this wraps it for the call header
-- `src/call/tiles.rs` — ui::empty_state lacks a compact stage tile with a close action
-- `src/call/tiles.rs` — ui::empty_state lacks a compact stage tile with a close action
-- `src/chat/markdown.rs` — ui::badge is a 20px block, and a mention must run inside a line of text at its size
+- `src/call.rs` — ui::Button with ButtonScope::Art needs an id, and its callers in sidebar.rs and call/tiles.rs add their own
+- `src/call/header.rs` — ui::Button lacks a stage tone with a corner badge; this wraps it for the call header
+- `src/call/tiles.rs` — ui::Empty::new lacks a compact stage tile with a close action
+- `src/call/tiles.rs` — ui::Empty::new lacks a compact stage tile with a close action
+- `src/chat/markdown.rs` — ui::Badge is a 20px block, and a mention must run inside a line of text at its size
 - `src/command_picker/render.rs` — ui::server_tile lacks a section rail tile with a selected bar
-- `src/components.rs` — ui::select_options is the open list; this builds a modal's select field from app data and wraps the kit's select
-- `src/components/parts.rs` — ui::dropdown lacks an anchor wrapper keyed by a control key
-- `src/components/parts.rs` — ui::select lacks a message component's select bound to a message path
-- `src/create_server.rs` — ui::chip is a pressable filter; this is a static glyph and channel name in a template's list
+- `src/components.rs` — ui::Select::options is the open list; this builds a modal's select field from app data and wraps the kit's select
+- `src/components/parts.rs` — ui::DropdownMenu::panel lacks an anchor wrapper keyed by a control key
+- `src/components/parts.rs` — ui::Select::new lacks a message component's select bound to a message path
+- `src/create_server.rs` — ui::Toggle is a pressable filter; this is a static glyph and channel name in a template's list
 - `src/create_server.rs` — ui::drop_zone is a wide field for dropped files; this is a small tile that opens the picker or shows the icon
-- `src/drag.rs` — ui::badge is a static label; this chip hangs off the ghost's edge, led by a glyph, and eases in each time it changes.
-- `src/drag.rs` — ui::card is a clickable raised card; the ghost is a lifted overlay surface that fades into its row's look as it lands.
-- `src/events/views.rs` — ui::tabs switches between views; this is a numbered progress of steps done, current and next
-- `src/forum/helpers.rs` — ui::chip is a pressable filter; this is a static file label with its size
+- `src/drag.rs` — ui::Badge is a static label; this chip hangs off the ghost's edge, led by a glyph, and eases in each time it changes.
+- `src/drag.rs` — ui::Card::interactive is a clickable raised card; the ghost is a lifted overlay surface that fades into its row's look as it lands.
+- `src/events/views.rs` — ui::Tabs switches between views; this is a numbered progress of steps done, current and next
+- `src/forum/helpers.rs` — ui::Toggle is a pressable filter; this is a static file label with its size
 - `src/gif.rs` — ui::media rounds an image, but a GIF's slot is a placeholder the layer paints into; there is nothing to wrap
 - `src/gif.rs` — ui::media rounds an image, but a GIF's slot is a placeholder the layer paints into; there is nothing to wrap
-- `src/joining/guide.rs` — ui::icon_tile only holds a glyph, not an emoji's image or text
-- `src/login.rs` — ui::card is a clickable raised card; this is the sign-in QR code painted on white in both themes.
-- `src/profile/actions.rs` — ui::text_field is the settings field frame; this one wears the card's themed fill.
-- `src/profile/connections.rs` — ui::chip is a palette-toned filter that toggles; this chip wears the card's themed ink and opens the account.
+- `src/joining/guide.rs` — ui::ItemMedia::icon only holds a glyph, not an emoji's image or text
+- `src/login.rs` — ui::Card::interactive is a clickable raised card; this is the sign-in QR code painted on white in both themes.
+- `src/profile/actions.rs` — ui::Input::new is the settings field frame; this one wears the card's themed fill.
+- `src/profile/connections.rs` — ui::Toggle is a palette-toned filter that toggles; this chip wears the card's themed ink and opens the account.
 - `src/sidebar/tiles.rs` — ui::server_tile sets initials on the selected fill; the rail's letters sit on the lifted raised tone.
-- `src/soundboard/picker.rs` — ui::card lacks a sound tile with a lock and a favourite toggle
+- `src/soundboard/picker.rs` — ui::Card::interactive lacks a sound tile with a lock and a favourite toggle
 - `src/video.rs` — ui::media is an image, not a player; this wraps a cached VideoPlayer entity and builds no design-system piece itself
-- `src/video/chrome.rs` — ui::icon_button lacks the OnMedia tone with a toggled state
+- `src/video/chrome.rs` — ui::Button lacks the OnMedia tone with a toggled state
 - `src/video/chrome.rs` — ui::round_button lacks a video-tone centre play button that fades with the chrome
 
 ## unvirtualized-list
@@ -766,6 +768,7 @@ _A scrolling list that builds every row: list/uniform_list with a ListState draw
 - `src/call/layouts.rs` — at most 25 rows of tiles; Discord's grid draws every tile too
 - `src/chat/history.rs` — a fixed twelve placeholder rows inside one list item
 - `src/create_channel.rs` — at most 100 members plus the server's roles, a few hundred rows
+- `src/design_system.rs` — the page tree, about fifty rows at most
 - `src/events/views.rs` — one server's scheduled events, at most 100
 - `src/overlays/emoji.rs` — the Unicode groups hold under 2,000 emoji and a server adds a few hundred at most.
 - `src/profile/popovers.rs` — a server's assignable roles, a few dozen at most (Discord caps a server at 250).
@@ -777,6 +780,7 @@ _A scrolling list that builds every row: list/uniform_list with a ListState draw
 _Work on the render path runs on every redraw: sort, parse, read files or build entities and subscriptions when their inputs change and keep the result in state (CLAUDE.md, Rendering). cx.new / cx.subscribe in render make a new entity or subscription every frame. A small bounded case carries lint-allow(render-work) saying how small._
 
 - `src/audio_player.rs` — built once per attachment, then every later render takes it from the map above
+- `src/design_system.rs` — sorts the current page's handful of frames (a dozen at most)
 - `src/joining/browse.rs` — sorts one server's onboarding questions, a dozen at most
 - `src/part.rs` — made once, on the column's first draw (get_or_insert_with), then kept.
 - `src/part.rs` — made once, on the first draw (get_or_insert_with), then kept.
@@ -812,7 +816,8 @@ _A notify in a pointer-move or scroll handler, or a timer loop, runs dozens of t
 
 _A repeating animation redraws every frame while it's on screen: run it only while its state holds (speaking, loading) and say when it stops in lint-allow(endless-animation)._
 
-- `src/design_system/faces.rs` — drawn only on the design-system page, which exists to show it moving.
+- `src/design_system/display.rs` — drawn only on the design-system page, which exists to show it moving.
+- `src/design_system/identity.rs` — drawn only on the design-system page, which exists to show it moving.
 - `src/dm_call.rs` — pulses only on a face still being rung (pending); it stops when they answer
 - `src/dm_call.rs` — pulses only while the ringing card is up; answering or declining removes it
 - `src/mascot.rs` — plays only while a loader is drawn, and reduce-motion gets the still mark above.
@@ -911,7 +916,7 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/demo/scenes_media.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
 - `src/demo/scenes_panels.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
 - `src/demo/scenes_people.rs` — one-shot fixture step; ends after one timer and update, or when the view is gone
-- `src/design_system.rs` — ends itself after the 1.4s timer, and holds only a weak handle
+- `src/design_system/flows.rs` — ends itself after its timer and holds only a weak handle
 - `src/dm_call.rs` — ends after its one timer fires, holding a WeakEntity
 - `src/events/manage.rs` — ends itself once its request resolves, and holds only a weak handle
 - `src/events/manage.rs` — ends itself once the file is written, and holds only a weak handle

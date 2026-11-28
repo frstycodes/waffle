@@ -444,7 +444,7 @@ def fixes(rules):
         NO_REASON: "Say why after the colon: `lint-allow(rule): <reason>`.",
         WEAK_REASON: "Say what about this case the rule doesn't fit, in a few words someone could act on later.",
         NO_BOUND: "Say how big the list can get (\"a few dozen at most\", \"one per open call\"), so whoever grows it knows to virtualize it.",
-        NO_REFERENCE: "Name the design-system item you tried and what it lacks: `lint-allow(custom-button): ui::chip has no cycling value`. Better still, give that item the option and use it.",
+        NO_REFERENCE: "Name the design-system item you tried and what it lacks: `lint-allow(custom-button): ui::Toggle has no cycling value`. Better still, give that item the option and use it.",
     }
 
 

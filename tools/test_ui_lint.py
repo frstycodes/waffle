@@ -83,8 +83,11 @@ fn f() -> Div {
     assert counts("// lint-allow(unvirtualized-list): rows are cheap to draw here" + rows) == {ui_lint.NO_BOUND: 1}
     # A function named like a component builds it from one; a domain wrapper over a ui:: component is fine.
     assert counts("fn stage_button(cx: &App) -> Stateful<Div> { div().id(\"b\") }") == {"custom-component": 1}
-    assert counts("fn stage_button(cx: &App) -> Stateful<Div> { ui::button(\"b\", Tone::Ghost, cx) }") == {}
+    assert counts("fn stage_button(cx: &App) -> Stateful<Div> { ui::Button::new(\"b\").variant(ui::ButtonVariant::Ghost) }") == {}
     assert counts("fn show_toast(&mut self, cx: &mut App) { self.toast = 1; }") == {}
+    # A hand-built split (a control and its chevron side by side) is a ButtonGroup.
+    assert counts("fn split_control(a: Div, b: Div) -> Div { ui::row().gap_px().child(a).child(b) }") == {"custom-component": 1}
+    assert counts("fn split_control(a: Div, b: Div) -> ui::ButtonGroup { ui::ButtonGroup::new().item(a).item(b) }") == {}
 
 
 def performance():
