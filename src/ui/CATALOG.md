@@ -356,6 +356,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `palette::faint`
 - `palette::accent_ink`
 - `palette::positive_ink`
+- `palette::streaming_ink` — Twitch purple deepened (light) or lifted (dark) to read as text and glyphs: the Live row on a rail tile's card.
 - `palette::boost_ink` — Discord's server-boost pink, for the gem beside a booster's name.
 - `palette::positive_ink_inverted` — Green on a tooltip, whose surface is the other theme's (`ui::tip` inverts the page).
 - `palette::danger_ink`

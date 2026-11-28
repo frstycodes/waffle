@@ -393,7 +393,10 @@ impl Waffle {
             RowDrag::Hidden => div().size(px(TILE)).into_any_element(),
         };
         let hover_key = key.clone();
-        let preview = guild_id.as_deref().map(|id| self.server_preview(id, name.clone()));
+        let preview = match guild_id.as_deref() {
+            Some(id) => self.server_preview(id, name.clone()),
+            None => ServerPreview { name: name.clone(), voice: Vec::new(), live: Vec::new(), muted: false },
+        };
         let item = ui::pressable(div().id(item_id.clone()), 0.97)
             .children(self.drag_motion.spot(&item_id))
             .relative()
@@ -413,13 +416,7 @@ impl Waffle {
                     .when(muted, |f| f.opacity(0.55))
                     .child(face)
                     // Hoverable, so the pointer can reach a row's "+n" and its full list.
-                    .hoverable_tooltip({
-                        let name = name.clone();
-                        move |window, cx| match preview.clone().filter(ServerPreview::has_activity) {
-                            Some(preview) => cx.new(|_| preview).into(),
-                            None => ui::Tooltip::new(name.clone()).build(window, cx),
-                        }
-                    })
+                    .hoverable_tooltip(move |_, cx| cx.new(|_| preview.clone()).into())
                     .tooltip_placement(TooltipPlacement::Side),
             )
             .when(combine_ring, |item| item.child(combine_ring_mark()))
