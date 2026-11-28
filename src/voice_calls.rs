@@ -2,6 +2,17 @@
 
 use crate::*;
 
+// Discord's video cut-offs: a camera off screen this long (longer on a stage; the three seen last kept), and
+// every camera once the window has been hidden this long.
+const OFFSCREEN_CUT: Duration = Duration::from_secs(30);
+const STAGE_OFFSCREEN_CUT: Duration = Duration::from_secs(120);
+const KEEP_OFFSCREEN: usize = 3;
+const HIDDEN_CUT: Duration = Duration::from_secs(30);
+
+// Discord's go-live notify goes out only in servers of this many members (StreamNotificationsGuildMaxSize).
+const GO_LIVE_NOTIFY_FROM: u32 = 31;
+const GO_LIVE_NOTIFY_UP_TO: u32 = 50;
+
 impl Waffle {
     pub(crate) fn set_talk_key(&mut self, down: bool) {
         if self.talk_key_down == down {
@@ -10,7 +21,10 @@ impl Waffle {
         self.talk_key_down = down;
         if let Some(call) = &self.call {
             call.session.set_talk_key(down);
-            crate::sounds::play(if down { crate::sounds::Cue::PttStart } else { crate::sounds::Cue::PttStop });
+            // Discord's push-to-talk cues stay quiet while you're muted.
+            if !self.muted {
+                crate::sounds::play(if down { crate::sounds::Cue::PttStart } else { crate::sounds::Cue::PttStop });
+            }
         }
     }
     // The call Waffle's own restart left (restart.rs), offered back under the notice bar. Once only: a
@@ -175,8 +189,18 @@ impl Waffle {
         true
     }
     pub(crate) fn on_voice(&mut self, event: voice::VoiceEvent, cx: &mut Context<Self>) {
+        // The mic level arrives ~25 times a second in a call, so focus and Disable Video reach the SFU
+        // within a frame or two without hooking every place that changes them.
+        if matches!(event, voice::VoiceEvent::InputLevel { .. }) {
+            self.sync_video_wants();
+        }
         // A stream picked from the hover card before we'd joined: watch it once connected.
         let mut start_watch: Option<String> = None;
+        // Deafened, Discord hears no one and so shows no one speaking; our own ring stays.
+        let event = match event {
+            voice::VoiceEvent::Speaking { user_id, speaking: true } if self.deafened && self.me.as_ref().is_none_or(|m| m.id != user_id) => voice::VoiceEvent::Speaking { user_id, speaking: false },
+            other => other,
+        };
         if let voice::VoiceEvent::Speaking { user_id, speaking } = &event {
             self.activity_speaking(user_id, *speaking, cx);
         }
@@ -190,6 +214,10 @@ impl Waffle {
                     self.ring_dm(channel, cx);
                 }
                 start_watch = self.watch_on_connect.take();
+                let me = self.me.as_ref().map(|m| m.id.clone());
+                for live in self.participants().into_iter().filter(|p| p.streaming && Some(&p.user_id) != me.as_ref()) {
+                    self.auto_watch(live.user_id, cx);
+                }
                 self.activity_on_connect(cx);
                 let Some(call) = &mut self.call else { return };
                 call.connected = true;
@@ -203,7 +231,16 @@ impl Waffle {
                     self.toggle_camera(cx);
                 }
             }
-            voice::VoiceEvent::Stage(stage) => call.stage = stage,
+            voice::VoiceEvent::Stage(stage) => {
+                // A connected call dropping plays Discord's disconnect cue; reconnecting plays the join cue.
+                if call.connected && matches!(stage, voice::Stage::Disconnected | voice::Stage::NoRoute) {
+                    call.connected = false;
+                    if call.channel.raw_type != STAGE_CHANNEL {
+                        sounds::play(sounds::Cue::Disconnect);
+                    }
+                }
+                call.stage = stage;
+            }
             voice::VoiceEvent::Stats(stats) => call.stats = Some(stats),
             // ~25 a second: only the gate is drawn in the call, the level only on the settings meter.
             voice::VoiceEvent::InputLevel { db, gate_open } => {
@@ -302,6 +339,12 @@ impl Waffle {
                     false => call.issues.remove(&(user_id, code)),
                 };
             }
+            voice::VoiceEvent::StreamCreated { user_id } if self.me.as_ref().is_some_and(|m| m.id == user_id) => return self.notify_go_live(cx),
+            voice::VoiceEvent::StreamCreated { user_id } => {
+                if let Some(watching) = call.watching.iter_mut().find(|w| w.streamer_id == user_id && matches!(w.state, WatchState::Connecting(_))) {
+                    watching.state = WatchState::Connecting(None);
+                }
+            }
             voice::VoiceEvent::StreamConnected { user_id } => {
                 if let Some(watching) = call.watching.iter_mut().find(|w| w.streamer_id == user_id)
                     && matches!(watching.state, WatchState::Connecting(_) | WatchState::Reconnecting)
@@ -366,6 +409,91 @@ impl Waffle {
         cx.notify();
     }
     // Adds `streamer_id`'s Go Live to the streams we watch and focuses it; Discord lets you watch several.
+    // The call's voice channel as the server now has it, for its region.
+    fn call_channel_region(&self) -> Option<String> {
+        let call = self.call.as_ref()?;
+        let guild = self.guilds.iter().find(|g| Some(&g.id) == call.guild_id.as_ref())?;
+        guild.channels.iter().find(|c| c.id == call.channel.id)?.props.rtc_region.clone()
+    }
+    // Our Go Live's key, as Discord builds it.
+    pub(crate) fn own_stream_key(&self) -> Option<String> {
+        let (call, me) = (self.call.as_ref()?, self.me.as_ref()?);
+        Some(match &call.guild_id {
+            Some(guild) => format!("guild:{guild}:{}:{}", call.channel.id, me.id),
+            None => format!("call:{}:{}", call.channel.id, me.id),
+        })
+    }
+    // Discord tells friends we went live in a server of 31 to 50 members, when the setting is on.
+    fn notify_go_live(&mut self, cx: &mut Context<Self>) {
+        let guild = self.call.as_ref().and_then(|c| c.guild_id.as_ref()).and_then(|id| self.guilds.iter().find(|g| &g.id == id));
+        let mid_size = guild.is_some_and(|g| (GO_LIVE_NOTIFY_FROM..=GO_LIVE_NOTIFY_UP_TO).contains(&g.member_count));
+        let (Some(client), Some(key)) = (self.client.clone(), self.own_stream_key()) else { return };
+        if !mid_size || !self.account_settings.notify_friends_on_go_live {
+            return;
+        }
+        cx.background_spawn(async move {
+            if let Err(e) = client.call(crate::discord::Method::POST, format!("/streams/{key}/notify"), None).await {
+                eprintln!("go live notify {key}: {e}");
+            }
+        })
+        // lint-allow(detached-task): a one-shot request that ends when it returns
+        .detach();
+    }
+    // The voice channel's region changed while we're live: Discord moves the stream there too.
+    pub(crate) fn follow_stream_region(&mut self, cx: &mut Context<Self>) {
+        let region = self.call_channel_region();
+        let live = self.call.as_ref().is_some_and(|c| c.sharing.is_some());
+        let (Some(client), Some(key), true) = (self.client.clone(), self.own_stream_key(), live) else { return };
+        if let Some(call) = &self.call {
+            call.session.set_stream_region(region.clone());
+        }
+        cx.background_spawn(async move {
+            if let Err(e) = client.call(crate::discord::Method::PATCH, format!("/streams/{key}"), Some(serde_json::json!({ "region": region }))).await {
+                eprintln!("stream region {key}: {e}");
+            }
+        })
+        // lint-allow(detached-task): a one-shot request that ends when it returns
+        .detach();
+    }
+    // In a DM call or on a stage Discord watches every stream as it starts, without taking the focus.
+    pub(crate) fn auto_watch(&mut self, streamer_id: String, cx: &mut Context<Self>) {
+        let Some(call) = &self.call else { return };
+        if call.guild_id.is_some() && call.channel.raw_type != STAGE_CHANNEL || call.watched(&streamer_id).is_some() {
+            return;
+        }
+        let focus = call.focus.clone();
+        self.watch_stream(streamer_id, cx);
+        if let Some(call) = &mut self.call {
+            call.focus = focus;
+        }
+    }
+    // Discord's media sink wants: other people's cameras that are on and not disabled set the quality,
+    // the focused one gets full quality, a disabled one none.
+    // Discord also stops a camera that has been off screen a while (the three seen last excepted), and every
+    // camera once the window has been hidden a while.
+    fn sync_video_wants(&mut self) {
+        let Some(call) = &self.call else { return };
+        let me = self.me.as_ref().map(|m| m.id.clone());
+        let on: Vec<String> = self.participants().into_iter().filter(|p| p.camera && Some(&p.user_id) != me.as_ref() && !self.prefs.hidden_video.contains(&p.user_id)).map(|p| p.user_id).collect();
+        let focused = self.call_focus.as_deref().and_then(|key| key.strip_prefix("user:")).map(str::to_owned);
+        // The call view shows every camera; elsewhere only the PiP's, which is the focused one or the first.
+        let on_screen = |id: &String| self.call_view || focused.as_ref().or(on.first()) == Some(id);
+        let now = Instant::now();
+        self.camera_seen.retain(|id, _| on.contains(id));
+        for id in on.iter().filter(|id| on_screen(id)) {
+            self.camera_seen.insert(id.clone(), now);
+        }
+        let cut_off = if call.channel.raw_type == STAGE_CHANNEL { STAGE_OFFSCREEN_CUT } else { OFFSCREEN_CUT };
+        let mut off: Vec<(&String, Instant)> = on.iter().filter(|id| !on_screen(id)).map(|id| (id, *self.camera_seen.entry(id.clone()).or_insert(now))).collect();
+        off.sort_by_key(|(_, seen)| std::cmp::Reverse(*seen));
+        let hidden = self.window_hidden_since.is_some_and(|since| since.elapsed() >= HIDDEN_CUT);
+        let mut disabled = self.prefs.hidden_video.clone();
+        disabled.extend(off.into_iter().skip(KEEP_OFFSCREEN).filter(|(_, seen)| seen.elapsed() >= cut_off).map(|(id, _)| id.clone()));
+        if hidden {
+            disabled.extend(on.iter().cloned());
+        }
+        call.session.set_video_wants(voice::VideoWants { cameras: on.len(), focused, disabled });
+    }
     pub(crate) fn watch_stream(&mut self, streamer_id: String, cx: &mut Context<Self>) {
         let mine = self.me.as_ref().is_some_and(|m| m.id == streamer_id);
         let Some(call) = &mut self.call else { return };
@@ -401,7 +529,7 @@ impl Waffle {
     }
     pub(crate) fn watch_timed_out(&mut self, streamer_id: &str, timeout: Duration, cx: &mut Context<Self>) {
         let Some(watching) = self.call.as_mut().and_then(|c| c.watching.iter_mut().find(|w| w.streamer_id == streamer_id)) else { return };
-        if matches!(watching.state, WatchState::Connecting(since) if since.elapsed() >= timeout) {
+        if matches!(watching.state, WatchState::Connecting(Some(since)) if since.elapsed() >= timeout) {
             watching.state = WatchState::Failed(STREAM_FAILED_TO_START);
             // lint-allow(global-notify): a failed watch shows on the call tile and in the PiP outside the columns
             cx.notify();
@@ -410,12 +538,18 @@ impl Waffle {
     // A watched stream's connection ended, handled as Discord handles STREAM_DELETE: unavailable or a
     // dropped connection reconnects, unauthorized fails, full closes with a notice, anything else ends.
     pub(crate) fn on_watch_ended(&mut self, streamer_id: String, reason: String, cx: &mut Context<Self>) {
-        let name = self.user_name(&streamer_id);
         let Some(watching) = self.call.as_mut().and_then(|c| c.watching.iter_mut().find(|w| w.streamer_id == streamer_id)) else { return };
         match reason.as_str() {
             voice::STREAM_DELETE_FULL => {
                 self.unwatch_stream(&streamer_id, cx);
-                self.voice_error = Some(format!("{name}'s stream is full").into());
+                self.alert("Stream is Full", "Sorry, this stream has the max number of viewers.", cx);
+            }
+            voice::STREAM_DELETE_RATE_LIMITED => {
+                let guild_id = self.call.as_ref().and_then(|c| c.guild_id.clone());
+                let server = self.guilds.iter().find(|g| Some(&g.id) == guild_id.as_ref()).map_or_else(|| "This server".to_owned(), |g| g.name.clone());
+                self.end_watch(streamer_id, cx);
+                let body = format!("{server} has temporarily lost access to some Discord features because it broke Discord's rules for servers. Please see the Help Center for more information.");
+                self.alert("This server's features are limited", body, cx);
             }
             voice::STREAM_DELETE_UNAUTHORIZED => fail_watch(watching, cx),
             // Already failed: the delete that follows a failure keeps it failed, as Discord's.
@@ -582,7 +716,9 @@ impl Waffle {
     }
     // Starts (or restarts) our Go Live of `source` with the current quality prefs.
     pub(crate) fn go_live(&mut self, source: voice::ShareSource, cx: &mut Context<Self>) -> bool {
+        let region = self.call_channel_region();
         let Some(call) = &mut self.call else { return false };
+        call.session.set_stream_region(region);
         let options = voice::GoLiveOptions { resolution: self.prefs.stream_resolution, fps: self.prefs.stream_fps, audio: self.prefs.stream_audio };
         match call.session.go_live_with_options(source, options, call.sharing.take()) {
             Ok(live) => {

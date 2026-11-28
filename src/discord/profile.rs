@@ -292,6 +292,8 @@ pub struct AccountSettings {
     pub dm_spam_filter: u8,
     // Message Requests on: `default_message_request_restricted` off.
     pub message_requests: bool,
+    // Discord's NotificationSettings.notify_friends_on_go_live; unset reads as off, as its client does.
+    pub notify_friends_on_go_live: bool,
     // Servers whose members can't DM you, and servers that don't see your activity.
     pub restricted_guilds: Vec<String>,
     pub activity_restricted_guilds: Vec<String>,
@@ -322,6 +324,7 @@ impl Default for AccountSettings {
             convert_emoticons: true,
             dm_spam_filter: 0,
             message_requests: true,
+            notify_friends_on_go_live: false,
             restricted_guilds: Vec::new(),
             activity_restricted_guilds: Vec::new(),
             default_guilds_activity_restricted: 0,

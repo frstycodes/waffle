@@ -880,6 +880,7 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/boot.rs` — the subscription ends with the status input it watches
 - `src/boot.rs` — the subscription ends with the sticker search it watches
 - `src/boot.rs` — the subscription ends with the switcher input it watches
+- `src/boot.rs` — the visibility observer ends with the window
 - `src/boot.rs` — two SPLASH_BEAT timers, then it ends
 - `src/call/previews.rs` — a one-shot colour fetch holding a WeakEntity; it ends when the response lands
 - `src/call/previews.rs` — a one-shot fetch holding a WeakEntity; it ends when the response lands or the update fails
@@ -1089,6 +1090,8 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/user_menu.rs` — ends when the invite request returns, and holds only a WeakEntity.
 - `src/video.rs` — one open: ends when it returns, or when the player is dropped
 - `src/video.rs` — the tick loop ends when tick says stop or the player is dropped
+- `src/voice_calls.rs` — a one-shot request that ends when it returns
+- `src/voice_calls.rs` — a one-shot request that ends when it returns
 - `src/voice_calls.rs` — one 1.5 second timer, then it ends
 - `src/voice_calls.rs` — one 60 second timer, then it ends
 - `src/voice_calls.rs` — one LIVE_LAPSE timer, then it ends
@@ -1143,6 +1146,7 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/main.rs` — one pair per (server, channel) member range asked for, bounded by the user's channel count
 - `src/main.rs` — one thumbnail url per streamer seen, a handful of live streams at a time
 - `src/main.rs` — one u64 per channel the gateway reported, bounded by the user's channel count
+- `src/main.rs` — pruned to the call's cameras on every sync (`sync_video_wants`)
 - `src/profile.rs` — one entry per profile effect sku seen, a catalogue of a few hundred at most
 - `src/query.rs` — a key leaves once its cooldown is over and it's asked for again, or once it's stored
 - `src/reactions.rs` — the name spans of one card sentence, three at most, rebuilt for each card
@@ -1159,6 +1163,7 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/settings/prefs.rs` — one entry per distinct emoji you have sent, a few hundred in practice
 - `src/settings/prefs.rs` — one entry per distinct emoji you have sent, a few hundred in practice, each keeping only its last FRECENCY_SAMPLES times
 - `src/settings/prefs.rs` — one entry per distinct sticker you have sent, a few dozen in practice
+- `src/settings/prefs.rs` — one entry per voice channel you turned it off in, a few dozen at most
 - `src/settings/prefs.rs` — one volume per person whose volume you moved, a few dozen at most
 - `src/settings/prefs.rs` — the posts whose bump notice you hid, a few dozen at most
 - `src/soundboard.rs` — one entry per joined server, a few dozen at most

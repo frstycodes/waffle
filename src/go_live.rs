@@ -392,10 +392,10 @@ impl Waffle {
 
     // .quality: resolution and frame rate side by side, each a segmented control.
     fn share_quality(&self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        const RESOLUTIONS: [(u32, &str); 4] = [(720, "720p"), (1080, "1080p"), (1440, "1440p"), (0, "Source")];
-        const RATES: [(u32, &str); 3] = [(15, "15 fps"), (30, "30 fps"), (60, "60 fps")];
-        let resolution = RESOLUTIONS.iter().position(|(v, _)| *v == self.prefs.stream_resolution).unwrap_or(1);
-        let rate = RATES.iter().position(|(v, _)| *v == self.prefs.stream_fps).unwrap_or(1);
+        const RESOLUTIONS: [(u32, &str); 5] = [(480, "480p"), (720, "720p"), (1080, "1080p"), (1440, "1440p"), (0, "Source")];
+        const RATES: [(u32, &str); 4] = [(5, "5 fps"), (15, "15 fps"), (30, "30 fps"), (60, "60 fps")];
+        let resolution = RESOLUTIONS.iter().position(|(v, _)| *v == self.prefs.stream_resolution).unwrap_or(2);
+        let rate = RATES.iter().position(|(v, _)| *v == self.prefs.stream_fps).unwrap_or(2);
         let (this, that) = (cx.entity().downgrade(), cx.entity().downgrade());
         let resolutions = ui::Tabs::new("share-resolution").labels(&RESOLUTIONS.map(|(_, l)| l)).value(resolution).on_value_change(move |i, _, cx| {
                 this.update(cx, |this, cx| this.update_prefs(cx, |p| p.stream_resolution = RESOLUTIONS[i].0)).ok();

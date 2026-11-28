@@ -94,6 +94,11 @@ impl Waffle {
         if self.deafened {
             self.soundboard.stop_playing();
             self.soundboard.close_picker();
+            // No one is heard while deafened, so no one shows as speaking.
+            let me = self.me.as_ref().map(|m| m.id.clone());
+            if let Some(call) = &mut self.call {
+                call.speaking.retain(|id| Some(id) == me.as_ref());
+            }
         }
         // lint-allow(global-notify): deafen shows on the nav's voice bar, the call stage and the settings window at once
         cx.notify();
@@ -220,9 +225,10 @@ impl Waffle {
             .gap_1p5()
             .child(field_label("Camera", cx))
             .child(self.device_picker(Select::Camera, Glyph::Video, &cameras, prefs.camera.as_deref(), 40., cx));
-        // GAP: the design's camera preview tile (Test video, mirrored self view) needs a local camera
-        // preview the settings page doesn't have yet.
-        out.push(Section::with_anchor("Camera", ui::settings_group("Camera", cx).child(card_pad(cx).child(camera))));
+        // GAP: the design's camera preview tile (Test video, mirrored self view) isn't on this page; the
+        // call's camera preview dialog (camera_preview.rs) shows one.
+        let always_preview = self.switch_row(SwitchRow { id: "set-always-preview-video", title: "Always preview video", detail: Some("Shows your camera before it turns on in a call"), on: prefs.always_preview_video, enabled: true, field: |p| &mut p.always_preview_video }, false, window, cx);
+        out.push(Section::with_anchor("Camera", ui::settings_group("Camera", cx).child(card_pad(cx).child(camera)).child(ui::Card::new(cx).child(always_preview))));
         out.push(Section::with_anchor("Sounds", self.sounds_group(window, cx)));
         out.push(Section::with_anchor("Advanced", ui::settings_group("Advanced", cx).child(ui::Card::new(cx).child(self.reset_row(cx)))));
         out

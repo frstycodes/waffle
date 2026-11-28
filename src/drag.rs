@@ -488,9 +488,16 @@ impl Waffle {
         self.guilds.iter().find(|g| g.id == guild_id)?.voice_states.iter().find(|v| v.user_id == user_id)?.channel_id.clone()
     }
 
+    // The move shows at once, so Discord's later voice state changes nothing: its join or leave cue plays here.
     fn set_voice_channel(&mut self, guild_id: &str, user_id: &str, channel: Option<String>) {
-        if let Some(state) = self.guilds.iter_mut().find(|g| g.id == guild_id).and_then(|g| g.voice_states.iter_mut().find(|v| v.user_id == user_id)) {
-            state.channel_id = channel;
+        let ours = self.call.as_ref().filter(|c| c.channel.raw_type != crate::discord::STAGE_TYPE).map(|c| c.channel.id.clone());
+        let Some(guild) = self.guilds.iter_mut().find(|g| g.id == guild_id) else { return };
+        let here = guild.voice_states.iter().filter(|v| ours.is_some() && v.channel_id == ours).count();
+        let Some(state) = guild.voice_states.iter_mut().find(|v| v.user_id == user_id) else { return };
+        let (was_here, is_here) = (ours.is_some() && state.channel_id == ours, ours.is_some() && channel == ours);
+        state.channel_id = channel;
+        if let Some(cue) = crate::sounds::member_cue(false, was_here, is_here).filter(|_| here <= crate::sounds::CUES_UP_TO) {
+            crate::sounds::play(cue);
         }
     }
 

@@ -30,6 +30,19 @@ pub struct VideoFrame {
     pub bgra: Vec<u8>,
 }
 
+impl VideoFrame {
+    // Shrunk to fit `width` x `height` by nearest sample, keeping even sides for H.264; one that already fits is copied.
+    pub fn fit(&self, width: u32, height: u32) -> VideoFrame {
+        let scale = (f64::from(width) / f64::from(self.width)).min(f64::from(height) / f64::from(self.height)).min(1.0);
+        let (w, h) = (((f64::from(self.width) * scale) as u32 & !1).max(2), ((f64::from(self.height) * scale) as u32 & !1).max(2));
+        let bgra = (0..h)
+            .flat_map(|y| (0..w).map(move |x| ((y * self.height / h) * self.width + x * self.width / w) as usize * 4))
+            .flat_map(|at| self.bgra.get(at..at + 4).unwrap_or(&[0; 4]).to_owned())
+            .collect();
+        VideoFrame { width: w, height: h, bgra }
+    }
+}
+
 // How long a frame with a missing packet waits for its retransmission (RTX, after a NACK) before it
 // counts as lost and decoding waits for the next keyframe.
 const MAX_WAIT: Duration = Duration::from_millis(250);
@@ -456,6 +469,17 @@ mod tests {
         assert!(first.contains(&7) && first.contains(&8) && first.contains(&5), "first unit is SPS+PPS+IDR: {first:?}");
         assert!(units.iter().skip(1).any(|t| t.contains(&5)), "a requested keyframe arrives");
         assert!(decoded + 2 >= units.len(), "nearly every unit decodes ({decoded}/{})", units.len());
+    }
+
+    #[test]
+    fn fit_shrinks_to_the_rung_and_keeps_even_sides() {
+        let frame = VideoFrame { width: 1280, height: 720, bgra: vec![7; 1280 * 720 * 4] };
+        let small = frame.fit(640, 360);
+        assert_eq!((small.width, small.height, small.bgra.len()), (640, 360, 640 * 360 * 4));
+        assert_eq!(small.bgra[0], 7);
+        let odd = frame.fit(301, 301);
+        assert_eq!((odd.width % 2, odd.height % 2), (0, 0));
+        assert_eq!((frame.fit(4000, 4000).width, frame.fit(4000, 4000).height), (1280, 720), "never enlarged");
     }
 
     #[test]

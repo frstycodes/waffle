@@ -31,8 +31,13 @@ mod chain_check;
 mod fixtures;
 mod jitter;
 mod reconnect;
+mod wants;
+mod ladder;
+pub use wants::VideoWants;
 use reconnect::{Backoff, Reconnect, close_label, reconnect};
 mod media;
+mod pacer;
+mod held_camera;
 mod rtp;
 mod vad;
 mod video;
@@ -43,7 +48,7 @@ use std::{
     collections::{HashMap, VecDeque},
     sync::{
         Arc, Mutex, Weak,
-        atomic::{AtomicBool, AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
     },
     thread,
     time::{Duration, Instant},
@@ -61,6 +66,10 @@ pub use dsp::NoiseSuppression;
 pub use video::VideoFrame;
 
 const SERVER_TIMEOUT: Duration = Duration::from_secs(10);
+const HELLO_TIMEOUT: Duration = Duration::from_secs(20);
+// While a priority speaker talks, Discord plays everyone else at this share of their volume.
+const PRIORITY_DUCK: f32 = 0.1;
+const PRIORITY_SPEAKING: u64 = 4;
 // Every voice state in every guild passes through: a receiver more than this far behind misses
 // dispatches, and a missed STREAM_DELETE leaves a stream we watch frozen on its last frame.
 const DISPATCH_BACKLOG: usize = 1024;
@@ -90,6 +99,9 @@ pub enum VoiceEvent {
     // One of Discord's AV error conditions (`issues`) started or cleared for `user_id` (ours for what
     // we send).
     Issue { user_id: String, code: u16, active: bool },
+    // Discord created a stream we asked for (STREAM_CREATE and its server): a watch no longer times out, and
+    // our own Go Live may notify friends.
+    StreamCreated { user_id: String },
     // A watched Go Live's media connection is up (Discord's RTC_CONNECTED for the stream).
     StreamConnected { user_id: String },
     // `reason` is STREAM_DELETE's (`STREAM_DELETE_*` below), "Stopped" when we ended it, or the
@@ -400,6 +412,15 @@ struct Shared {
     moved_server: Mutex<Option<Server>>,
     muted: AtomicBool,
     deafened: AtomicBool,
+    // Server-muted, or a stage listener (suppressed): Discord's engine stops sending as for a self-mute.
+    server_muted: AtomicBool,
+    // Who is talking as a priority speaker (op 5's speaking flag 4): everyone else plays at a tenth meanwhile.
+    priority: Mutex<std::collections::HashSet<String>>,
+    // The voice channel's region, which our Go Live is created in (op 18); None lets Discord pick.
+    stream_region: Mutex<Option<String>>,
+    // What video we ask the SFU for (op 15), and a wake-up for the connection to send it again.
+    video_wants: Mutex<VideoWants>,
+    wants_changed: tokio::sync::Notify,
     // A voice-state update is waiting to go out, and when the last one did (see `send_flags_soon`).
     flags_pending: AtomicBool,
     flags_sent: Mutex<Option<Instant>>,
@@ -412,6 +433,8 @@ struct Shared {
     listening: Mutex<HashMap<String, (f32, bool)>>,
     // Per-streamer Go Live volume (0..=2), on top of their listening volume.
     stream_volume: Mutex<HashMap<String, f32>>,
+    // The open camera device, which outlives any one connection.
+    camera_feed: Mutex<Option<held_camera::HeldCamera>>,
     // The camera the user wants on (None = off); the voice connection follows it.
     camera: Mutex<Option<String>>,
     attenuation: Mutex<Attenuation>,
@@ -477,7 +500,7 @@ impl Shared {
     }
 
     fn may_transmit(&self) -> bool {
-        !self.muted.load(Ordering::Relaxed) && !self.deafened.load(Ordering::Relaxed)
+        ![&self.muted, &self.deafened, &self.server_muted].iter().any(|flag| flag.load(Ordering::Relaxed))
     }
 
     fn input_mode(&self) -> InputMode {
@@ -495,7 +518,8 @@ impl Shared {
         if self.deafened.load(Ordering::Relaxed) {
             return 0.0;
         }
-        self.local_gain(user_id)
+        let ducked = self.priority.lock().is_ok_and(|p| !p.is_empty() && !p.contains(user_id));
+        self.local_gain(user_id) * if ducked { PRIORITY_DUCK } else { 1.0 }
     }
 
     // `user_id`'s local volume, 0 when locally muted; deafen isn't applied here.
@@ -572,6 +596,11 @@ pub fn join(
         moved_server: Mutex::new(None),
         muted: AtomicBool::new(false),
         deafened: AtomicBool::new(false),
+        server_muted: AtomicBool::new(false),
+        priority: Mutex::default(),
+        stream_region: Mutex::default(),
+        video_wants: Mutex::default(),
+        wants_changed: tokio::sync::Notify::new(),
         flags_pending: AtomicBool::new(false),
         flags_sent: Mutex::new(None),
         talk_key_held: AtomicBool::new(false),
@@ -580,6 +609,7 @@ pub fn join(
         mixer: Arc::default(),
         listening: Mutex::new(HashMap::new()),
         stream_volume: Mutex::new(HashMap::new()),
+        camera_feed: Mutex::default(),
         camera: Mutex::new(None),
         attenuation: Mutex::new(settings.attenuation),
         qos: settings.qos,
@@ -605,6 +635,21 @@ impl VoiceSession {
         self.shared.muted.store(muted, Ordering::Relaxed);
         self.shared.deafened.store(deafened, Ordering::Relaxed);
         send_flags_soon(&self.shared);
+    }
+
+    pub fn set_stream_region(&self, region: Option<String>) {
+        if let Ok(mut current) = self.shared.stream_region.lock() {
+            *current = region;
+        }
+    }
+
+    // Asks the SFU for this video from now on; only a change goes out.
+    pub fn set_video_wants(&self, wants: VideoWants) {
+        let Ok(mut current) = self.shared.video_wants.lock() else { return };
+        if *current != wants {
+            *current = wants;
+            self.shared.wants_changed.notify_one();
+        }
     }
 
     // Device ids from `input_devices` / `output_devices`; None = system default. Switches live.
@@ -756,6 +801,13 @@ impl VoiceSession {
     }
 }
 
+// A camera's picture with no call: Discord's preview before the camera turns on. Dropping it closes the device.
+pub struct PreviewCamera(#[allow(dead_code, reason = "held only to keep the device open")] camera::CameraCapture);
+
+pub fn preview_camera(id: &str, on_frame: impl Fn(VideoFrame) + Send + 'static) -> Result<PreviewCamera, String> {
+    camera::start(id, media::CAMERA_SIZE, on_frame).map(PreviewCamera)
+}
+
 // Lowers other applications while someone speaks, until the session is gone.
 fn duck_other_apps(shared: &Weak<Shared>) {
     let mut ducking = attenuation::Ducking::new();
@@ -895,6 +947,11 @@ mod tests {
             moved_server: Mutex::new(None),
             muted: AtomicBool::new(false),
             deafened: AtomicBool::new(false),
+            server_muted: AtomicBool::new(false),
+            priority: Mutex::default(),
+            stream_region: Mutex::default(),
+            video_wants: Mutex::default(),
+            wants_changed: tokio::sync::Notify::new(),
             flags_pending: AtomicBool::new(false),
             flags_sent: Mutex::new(None),
             talk_key_held: AtomicBool::new(false),
@@ -903,7 +960,8 @@ mod tests {
             mixer: Arc::default(),
             listening: Mutex::new(HashMap::new()),
             stream_volume: Mutex::new(HashMap::new()),
-            camera: Mutex::new(None),
+            camera_feed: Mutex::default(),
+        camera: Mutex::new(None),
             attenuation: Mutex::new(Attenuation { strength: 40, ..Attenuation::default() }),
             qos: false,
             self_speaking: AtomicBool::new(false),
@@ -1011,6 +1069,10 @@ mod tests {
         assert_eq!(shared.listening_gain("u"), 0.0, "locally muted");
         shared.deafened.store(true, Ordering::Relaxed);
         assert_eq!(shared.listening_gain("v"), 0.0, "deafened hears no one");
+        shared.deafened.store(false, Ordering::Relaxed);
+        shared.priority.lock().unwrap().insert("p".into());
+        assert_eq!(shared.listening_gain("p"), 1.0, "the priority speaker plays as set");
+        assert!((shared.listening_gain("v") - 0.1).abs() < 1e-6, "everyone else is ducked to a tenth");
         assert_eq!(shared.stream_gain("v"), 1.0, "a watched stream keeps playing while deafened");
         assert_eq!(shared.stream_gain("u"), 0.0, "a locally muted streamer's stream stays muted");
     }

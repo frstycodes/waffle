@@ -55,9 +55,70 @@ impl Backoff {
         self.current
     }
 
+    // Nothing has failed since the last success.
+    pub(super) fn is_fresh(&self) -> bool {
+        self.current == self.min
+    }
+
     pub(super) fn succeed(&mut self) {
         self.current = self.min;
     }
+}
+
+// How long an expedited heartbeat waits for its ack before the socket counts as dead: after waking or coming
+// back online, and (longer) after the network went away, as Discord's.
+const EXPEDITED_ACK: Duration = Duration::from_secs(5);
+const OFFLINE_ACK: Duration = Duration::from_secs(15);
+const WAKE_TICK: Duration = Duration::from_secs(2);
+// The wall clock running this far ahead of the monotonic one between ticks means the machine slept.
+const SLEPT_PAST: Duration = Duration::from_secs(5);
+
+// Notices waking from sleep and network changes without an OS hook. Sleep: the monotonic clock stops while
+// asleep (macOS), the wall clock doesn't; not verified on Windows, where it may run through sleep. Network: the
+// local address the OS would route to the internet changes, or there is none.
+pub(super) struct WakeWatch {
+    tick: tokio::time::Interval,
+    mono: std::time::Instant,
+    wall: std::time::SystemTime,
+    route: Option<std::net::IpAddr>,
+}
+
+impl WakeWatch {
+    pub(super) fn new() -> Self {
+        Self { tick: tokio::time::interval(WAKE_TICK), mono: std::time::Instant::now(), wall: std::time::SystemTime::now(), route: route() }
+    }
+
+    pub(super) async fn tick(&mut self) {
+        self.tick.tick().await;
+    }
+
+    // How long an immediate heartbeat should wait for its ack, when something since the last call calls for one.
+    pub(super) fn nudge(&mut self) -> Option<Duration> {
+        let (mono, wall, route) = (std::time::Instant::now(), std::time::SystemTime::now(), route());
+        let slept = slept(mono - self.mono, wall.duration_since(self.wall).unwrap_or_default());
+        let nudge = nudge_for(slept, self.route, route);
+        (self.mono, self.wall, self.route) = (mono, wall, route);
+        nudge
+    }
+}
+
+fn nudge_for(slept: bool, before: Option<std::net::IpAddr>, now: Option<std::net::IpAddr>) -> Option<Duration> {
+    match () {
+        _ if before != now && now.is_none() => Some(OFFLINE_ACK),
+        _ if before != now || slept => Some(EXPEDITED_ACK),
+        _ => None,
+    }
+}
+
+// The local address the OS picks to reach the internet. Connecting a UDP socket sends nothing; it only looks
+// the route up.
+fn route() -> Option<std::net::IpAddr> {
+    let via = |bind: &str, to: &str| std::net::UdpSocket::bind(bind).and_then(|s| s.connect(to).and_then(|()| s.local_addr())).ok().map(|a| a.ip());
+    via("0.0.0.0:0", "1.1.1.1:53").or_else(|| via("[::]:0", "[2606:4700:4700::1111]:53"))
+}
+
+fn slept(mono: Duration, wall: Duration) -> bool {
+    wall > mono + SLEPT_PAST
 }
 
 // Voice close codes (docs.discord.com, Opcodes and Status Codes; 4013 from docs.discord.food), as the
@@ -107,6 +168,24 @@ mod tests {
         assert_eq!(reconnect(None, 4, true, FRESH), Reconnect::Identify, "four failed resumes");
         assert_eq!(reconnect(None, 0, false, FRESH), Reconnect::Identify, "no session described yet");
         assert_eq!(reconnect(None, 0, true, Duration::from_secs(61)), Reconnect::Identify, "no ack for a minute");
+    }
+
+    #[test]
+    fn a_network_change_or_wake_beats_at_once() {
+        let (home, cafe) = (Some(std::net::Ipv4Addr::new(192, 168, 1, 4).into()), Some(std::net::Ipv4Addr::new(10, 0, 0, 9).into()));
+        assert_eq!(nudge_for(false, home, home), None);
+        assert_eq!(nudge_for(true, home, home), Some(EXPEDITED_ACK), "woke from sleep");
+        assert_eq!(nudge_for(false, home, cafe), Some(EXPEDITED_ACK), "another network");
+        assert_eq!(nudge_for(false, None, home), Some(EXPEDITED_ACK), "back online");
+        assert_eq!(nudge_for(false, home, None), Some(OFFLINE_ACK), "went offline");
+        assert_eq!(route(), route(), "reading the route twice agrees");
+    }
+
+    #[test]
+    fn a_wall_clock_jump_means_the_machine_slept() {
+        assert!(!slept(Duration::from_secs(2), Duration::from_secs(2)));
+        assert!(!slept(Duration::from_secs(2), Duration::from_secs(6)), "a little drift isn't sleep");
+        assert!(slept(Duration::from_secs(2), Duration::from_secs(600)));
     }
 
     #[test]

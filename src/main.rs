@@ -4,6 +4,7 @@
 mod accounts;
 mod startup;
 mod boot;
+mod camera_preview;
 mod composer;
 mod gateway;
 mod lookups;
@@ -404,8 +405,8 @@ pub(crate) struct Watching {
 // Discord's active-stream states (its web client, 2026-11-21), less ENDED, which is `Call::ended`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum WatchState {
-    // Since when: Discord fails a watch that hasn't connected in 5 s (12 s on a Stage).
-    Connecting(Instant),
+    // Since when: Discord fails a watch with no STREAM_CREATE in 5 s (12 s on a Stage); None once it came.
+    Connecting(Option<Instant>),
     Active,
     Reconnecting,
     // With Discord's error code, shown on the tile.
@@ -428,7 +429,7 @@ const LIVE_LAPSE: Duration = Duration::from_secs(180);
 
 impl Watching {
     pub(crate) fn new(streamer_id: String, frame: Option<Arc<RenderImage>>, watch: Option<voice::StreamWatch>) -> Self {
-        let state = if watch.is_some() { WatchState::Connecting(Instant::now()) } else { WatchState::Active };
+        let state = if watch.is_some() { WatchState::Connecting(Some(Instant::now())) } else { WatchState::Active };
         Self { streamer_id, frame, arrivals: Default::default(), watch, state, rejoins: 0 }
     }
 
@@ -643,6 +644,11 @@ pub struct Waffle {
     watch_on_connect: Option<String>,
     // The window is in front; notifications for the open channel are skipped then.
     window_active: bool,
+    // Since when the window has been hidden (minimized, to the tray), for Discord's video cut-off.
+    window_hidden_since: Option<Instant>,
+    // When each camera in the call was last on screen, for Discord's off-screen cut-off.
+    // lint-allow(unbounded-growth): pruned to the call's cameras on every sync (`sync_video_wants`)
+    camera_seen: HashMap<String, Instant>,
     // The open channel should land on its first unread once its messages are in.
     unread_scroll_pending: bool,
     // The channel last marked unread by hand: auto-read leaves it alone until it's opened again or we send there.

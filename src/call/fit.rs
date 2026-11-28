@@ -171,6 +171,9 @@ impl Waffle {
                     let id = call.channel.id.clone();
                     let on = this.call_previews_enabled(&id);
                     entries.push(item("Show New Message Previews", move |this, _, cx| this.toggle_call_previews(&id, cx)).checked(on).entry());
+                    let shown = !this.prefs.video_only_channels.contains(&call.channel.id);
+                    let channel = call.channel.id.clone();
+                    entries.push(item("Show Non-Video Participants", move |this, _, cx| this.update_prefs(cx, |p| crate::user_menu::toggle(&mut p.video_only_channels, &channel))).checked(shown).entry());
                     let channel = call.channel.id.clone();
                     entries.push(item("Invite to Voice", move |this, window, cx| this.show_invite(guild.clone(), channel.clone(), window, cx)).icon(Glyph::GroupPlus).entry());
                     entries.push(Entry::Separator);

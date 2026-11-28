@@ -82,8 +82,10 @@ const CHAT_STAGE_ROOM: f32 = 550.;
 // The connection popover's colour bands (its legend): under 80 ms, 80 to 120, over 120.
 const PING_FAIR: u32 = 80;
 const PING_BAD: u32 = 120;
-// When the panel says "Poor connection": a bad average ping, or this much packet loss.
-const LOSS_POOR_PCT: f32 = 5.;
+// When the panel says "Poor connection", as Discord rates a call bad: the last ping over this, or this much
+// of what we send lost.
+const PING_POOR: u32 = 500;
+const LOSS_POOR_PCT: f32 = 10.;
 const METER_BARS: usize = 28;
 
 // The chat's width for a window this wide: what was asked for, within Discord's bounds and no wider than
@@ -175,7 +177,7 @@ enum Link {
 impl Link {
     fn of(stage: Stage, stats: Option<&voice::Stats>) -> Self {
         match stage {
-            Stage::Connected if stats.is_some_and(|s| s.median_ping_ms > PING_BAD || loss(s) >= LOSS_POOR_PCT) => Link::Poor,
+            Stage::Connected if stats.is_some_and(|s| s.ping_ms > PING_POOR || loss(s) > LOSS_POOR_PCT) => Link::Poor,
             Stage::Connected => Link::Connected,
             Stage::NoRoute | Stage::Disconnected => Link::Lost,
             _ => Link::Connecting,
@@ -232,13 +234,10 @@ impl Waffle {
         let focused = self.focused_stream();
         let me = self.me.as_ref().map(|m| m.id.as_str());
         let activities = self.activity_tiles().into_iter().map(Tile::Activity);
-        let people = order_tiles(
-            self.participants(),
-            &call.ended,
-            |id| call.watched(id).is_some() || focused.as_deref() == Some(id),
-            |s| s.camera || call.cameras.contains_key(&s.user_id) || (me == Some(s.user_id.as_str()) && call.camera_on),
-        );
-        activities.chain(people).collect()
+        let camera = |s: &VoiceState| s.camera || call.cameras.contains_key(&s.user_id) || (me == Some(s.user_id.as_str()) && call.camera_on);
+        let people = order_tiles(self.participants(), &call.ended, |id| call.watched(id).is_some() || focused.as_deref() == Some(id), camera);
+        let video_only = self.prefs.video_only_channels.contains(&call.channel.id);
+        activities.chain(people.into_iter().filter(|tile| !video_only || !matches!(tile, Tile::User(s) if !camera(s)))).collect()
     }
 
     // .call: the stage, dark in both themes. The grid or the focused tile fill it; the header and the control bar
@@ -564,7 +563,7 @@ pub(crate) fn control(id: &'static str, glyph: Glyph, tip: &'static str, state: 
         .tooltip(move |window, cx| ui::Tooltip::new(tip).build(window, cx))
 }
 
-fn mirrored<E: Styled>(mut el: E) -> E {
+pub(crate) fn mirrored<E: Styled>(mut el: E) -> E {
     el.style().scale.width = Some(-1.);
     el
 }

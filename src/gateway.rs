@@ -175,7 +175,9 @@ impl Waffle {
                 }
             }
             Event::ChannelUpsert { guild_id, channel } => {
+                let ours = self.call.as_ref().is_some_and(|c| c.channel.id == channel.id);
                 let Some(guild) = self.guilds.iter_mut().find(|g| g.id == guild_id) else { return };
+                let region_moved = ours && guild.channels.iter().find(|c| c.id == channel.id).is_some_and(|old| old.props.rtc_region != channel.props.rtc_region);
                 let list = if channel.kind == ChannelKind::Thread { &mut guild.threads } else { &mut guild.channels };
                 match list.iter_mut().find(|c| c.id == channel.id) {
                     Some(existing) => {
@@ -189,6 +191,9 @@ impl Waffle {
                     None => list.push(channel),
                 }
                 guild.channels.sort_by_key(|c| c.position);
+                if region_moved {
+                    self.follow_stream_region(cx);
+                }
             }
             Event::ScheduledEvent(event) => {
                 let Some(guild) = self.guilds.iter_mut().find(|g| g.id == event.guild_id) else { return };
@@ -419,7 +424,9 @@ impl Waffle {
                 let is_here = ours.is_some() && state.channel_id == ours;
                 let was_live = states.iter().any(|v| v.user_id == state.user_id && v.channel_id == ours && v.streaming);
                 let is_live = is_here && state.streaming;
-                let silent = self.call.as_ref().is_some_and(|c| c.channel.raw_type == 13);
+                // Stages make no join or leave sounds, and Discord's stop past 25 people in the channel.
+                let crowded = states.iter().filter(|v| v.channel_id == ours).count() > sounds::CUES_UP_TO;
+                let silent = crowded || self.call.as_ref().is_some_and(|c| c.channel.raw_type == 13);
                 if let Some(cue) = sounds::member_cue(mine, was_here, is_here).filter(|_| !silent) {
                     sounds::play(cue);
                 } else if !mine && !was_live && is_live {
@@ -437,7 +444,11 @@ impl Waffle {
                 if let Some(key) = live_key {
                     self.stream_live_since.entry(key).or_insert_with(Instant::now);
                 }
+                let started = (!mine && !was_live && is_live).then(|| state.user_id.clone());
                 upsert_voice_state(states, state);
+                if let Some(streamer) = started {
+                    self.auto_watch(streamer, cx);
+                }
             }
             Event::Call { channel_id, ringing } => self.on_dm_call(channel_id, ringing, cx),
             Event::CallEnded { channel_id } => self.on_dm_call_ended(&channel_id),

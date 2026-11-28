@@ -274,6 +274,11 @@ pub struct Guild {
     pub my_roles: Vec<String>,
     // Server boost level 0-3: sets the highest voice bitrate.
     pub premium_tier: u8,
+    // How many people a voice channel (and a stage) may hold for cameras to stay available.
+    pub max_video_users: u32,
+    pub max_stage_video_users: u32,
+    // From READY / GUILD_CREATE; 0 when Discord sent none.
+    pub member_count: u32,
     // People idling here don't count as voice activity (Discord's server icon badge skips it).
     pub afk_channel_id: Option<String>,
     // Our own timeout here (communication_disabled_until); it may already have passed.

@@ -120,8 +120,14 @@ impl Waffle {
         let wait = if state == ConnState::Error { "Available once you're reconnected" } else { "Available once you're connected" };
         let ready = |label: &'static str| if connected { label } else { wait };
         let sharing = call.sharing.is_some();
-        let camera = panel_action("panel-camera", Glyph::Video, ready(if call.camera_on { "Turn Off Camera" } else { "Turn On Camera" }), connected, call.camera_on, cx)
-            .when(connected, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_camera(cx))));
+        let limit = self.camera_limit().filter(|_| !call.camera_on);
+        let camera_tip: SharedString = match limit {
+            Some(limit) => format!("Video chat isn't available for more than {limit} users").into(),
+            None => ready(if call.camera_on { "Turn Off Camera" } else { "Turn On Camera" }).into(),
+        };
+        let camera_on = connected && limit.is_none();
+        let camera = panel_action("panel-camera", Glyph::Video, camera_tip, camera_on, call.camera_on, cx)
+            .when(camera_on, |b| b.on_click(cx.listener(|this, _, _, cx| this.toggle_camera(cx))));
         let share = match sharing {
             true => panel_action("panel-share", Glyph::ShareScreen, "Stream options", true, true, cx)
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, _, cx| this.open_stream_menu(e.position, cx))),
@@ -361,7 +367,8 @@ pub(super) fn why_line(text: impl Into<SharedString>, tone: Hsla) -> Div {
 
 // .voicebar .acts .btn: equal-width 32px buttons; disabled until connected, saying why. `on` (camera on, live,
 // in an activity) takes Discord's green: a 12% tint, 24% under the pointer, green ink.
-pub(super) fn panel_action(id: &'static str, glyph: Glyph, tip: &'static str, enabled: bool, on: bool, cx: &App) -> Stateful<Div> {
+pub(super) fn panel_action(id: &'static str, glyph: Glyph, tip: impl Into<SharedString>, enabled: bool, on: bool, cx: &App) -> Stateful<Div> {
+    let tip = tip.into();
     let green = palette::success();
     let (fill, press, ink) = match on {
         true => (green.opacity(0.12), green.opacity(0.24), palette::positive_ink(cx)),
@@ -378,7 +385,7 @@ pub(super) fn panel_action(id: &'static str, glyph: Glyph, tip: &'static str, en
         .child(Icon::new(glyph).size(ui::ICON_LG))
         .when(enabled, |b| b.cursor_pointer().hover(move |s| s.bg(press)))
         .when(!enabled, |b| b.opacity(0.45).cursor(gpui_kit::CursorStyle::OperationNotAllowed))
-        .tooltip(move |window, cx| ui::Tooltip::new(tip).build(window, cx))
+        .tooltip(move |window, cx| ui::Tooltip::new(tip.clone()).build(window, cx))
 }
 
 // A connection state's kind, which sets its word's ink: Discord's positive, warning and critical.

@@ -2,18 +2,20 @@ use super::*;
 
 impl Waffle {
     // Discord's stream thumbnails (GET /streams/{key}/preview) for everyone live in the open server
-    // and our call. Each entry holds the picture, when it may be fetched again, and the failures in a row.
+    // and our call, a DM call's too. Each entry holds the picture, when it may be fetched again, and the
+    // failures in a row.
     pub(crate) fn refresh_stream_previews(&mut self, cx: &mut Context<Self>) {
         let Some(client) = self.client.clone() else { return };
         let wanted: Vec<String> = [self.guild_id.clone(), self.call.as_ref().and_then(|c| c.guild_id.clone())].into_iter().flatten().collect();
+        let in_dm_call = self.call.as_ref().is_some_and(|c| c.guild_id.is_none());
+        let guilds = self.guilds.iter().filter(|g| wanted.contains(&g.id)).flat_map(|g| g.voice_states.iter().map(move |v| (format!("guild:{}", g.id), v)));
+        let dm_call = self.dm_voice.iter().filter(|_| in_dm_call).map(|v| ("call".to_owned(), v));
         let mut keys: Vec<(String, String)> = Vec::new();
-        for guild in self.guilds.iter().filter(|g| wanted.contains(&g.id)) {
-            for state in guild.voice_states.iter().filter(|v| v.streaming) {
-                let Some(channel) = &state.channel_id else { continue };
-                let fresh = self.stream_previews.get(&state.user_id).is_some_and(|(_, due, _)| std::time::Instant::now() < *due);
-                if !fresh {
-                    keys.push((state.user_id.clone(), format!("guild:{}:{channel}:{}", guild.id, state.user_id)));
-                }
+        for (kind, state) in guilds.chain(dm_call).filter(|(_, v)| v.streaming) {
+            let Some(channel) = &state.channel_id else { continue };
+            let fresh = self.stream_previews.get(&state.user_id).is_some_and(|(_, due, _)| std::time::Instant::now() < *due);
+            if !fresh {
+                keys.push((state.user_id.clone(), format!("{kind}:{channel}:{}", state.user_id)));
             }
         }
         for (user_id, key) in keys {
@@ -80,22 +82,23 @@ impl Waffle {
         }
     }
 
-    // What everyone sees of our Go Live before watching, uploaded as Discord's own client does:
-    // a 512px-wide JPEG shortly after going live, then every five minutes (a minute after a failure).
+    // What everyone sees of our Go Live before watching, uploaded as Discord's own client does: a
+    // 512px-wide JPEG half a second after going live, then every five minutes. A failure, or a paused
+    // stream, tries again a minute later.
     pub(crate) fn upload_stream_previews(&mut self, source: voice::ShareSource, cx: &mut Context<Self>) {
-        let (Some(client), Some(call), Some(me)) = (self.client.clone(), self.call.as_ref(), self.me.as_ref()) else { return };
-        let key = match &call.guild_id {
-            Some(guild) => format!("guild:{guild}:{}:{}", call.channel.id, me.id),
-            None => format!("call:{}:{}", call.channel.id, me.id),
-        };
+        let (Some(client), Some(key)) = (self.client.clone(), self.own_stream_key()) else { return };
         self.preview_generation += 1;
         let generation = self.preview_generation;
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_secs(3)).await;
+            cx.background_executor().timer(Duration::from_millis(500)).await;
             loop {
                 let live = this.update(cx, |this, _| this.preview_generation == generation && this.call.as_ref().is_some_and(|c| c.sharing.is_some()));
                 if !live.unwrap_or(false) {
                     return;
+                }
+                if this.update(cx, |this, _| this.stream_paused.contains(&key)).unwrap_or(false) {
+                    cx.background_executor().timer(Duration::from_secs(60)).await;
+                    continue;
                 }
                 let thumbnail = cx.background_spawn(async move { voice::thumbnail(source, 512).ok().and_then(|frame| jpeg_data_url(&frame)) }).await;
                 let sent = match thumbnail {

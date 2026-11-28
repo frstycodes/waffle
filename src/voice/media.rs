@@ -8,7 +8,7 @@ use std::{
     net::UdpSocket,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicU32, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering},
         mpsc::{self as std_mpsc, Receiver, RecvTimeoutError, SyncSender},
     },
     thread,
@@ -38,7 +38,6 @@ use tokio_tungstenite::tungstenite::Message as WsMessage;
 use super::{
     GoLiveOptions, InputMode, MicLevel, QOS_TOS, Role, ShareSource, Shared, Ssrcs, VideoKind, VideoSource, VoiceEvent,
     audio::{AudioSettings, FRAME_LEN, FRAME_SAMPLES, Mixer, SAMPLE_RATE},
-    camera::{self, CameraCapture},
     feedback::{self, Feedback, RemoteVideo},
     issues,
     rtp::{self, Cipher},
@@ -56,9 +55,6 @@ const CAMERA_POLL: Duration = Duration::from_millis(200);
 const KEYFRAME_REQUEST_GAP: Duration = Duration::from_secs(1);
 // The fewest keyframes we send while streaming, however many viewers ask.
 const KEYFRAME_MIN_GAP: Duration = Duration::from_millis(500);
-// libwebrtc's pacing factor (Not verified that it's still 2.5); bursts under PACING_SLACK go out unpaced.
-const PACING_FACTOR: f64 = 2.5;
-const PACING_SLACK: Duration = Duration::from_millis(5);
 const RECV_BUFFER: usize = 4 << 20;
 // Frames waiting for a picture's decoder, about 70 ms at 60 fps.
 const DECODE_QUEUE: usize = 4;
@@ -71,6 +67,7 @@ const KEEPALIVE: Duration = Duration::from_secs(5);
 const LEVEL_EVERY: u32 = 2;
 pub const CAMERA_SIZE: (u32, u32) = (1280, 720);
 pub const CAMERA_FPS: u32 = 30;
+const CAMERA_QUIET_AFTER: Duration = Duration::from_secs(15);
 // `GoLiveOptions::resolution == 0` (source size) is still capped here.
 const SOURCE_SIZE_CAP: (u32, u32) = (3840, 2160);
 const VIDEO_MTU: usize = 1200;
@@ -108,6 +105,10 @@ pub struct Link {
     pub nonce: AtomicU32,
     // Set when a viewer asks for a keyframe (or when sending starts).
     pub keyframe: AtomicBool,
+    // The server's keyframe interval in ms (op 4 / op 14), 0 for none: a keyframe at least this often.
+    pub keyframe_every: AtomicU64,
+    // What the server last asked of our camera (op 15's want, 100 = full), which sets its size and bitrate.
+    pub sink_want: AtomicU8,
     pub counters: Arc<Counters>,
     // From `connection_id`: tags this connection's tracks in the shared mixer.
     pub connection: u32,
@@ -251,6 +252,16 @@ impl Media {
         Ok(Self { stop, link, users, _devices: devices })
     }
 
+    // Op 15 from the server: the want for our video SSRC, else for anyone.
+    pub fn set_sink_wants(&self, d: &serde_json::Value) {
+        let want = d[self.link.video_ssrc.to_string()].as_u64().or(d["any"].as_u64()).unwrap_or(100);
+        self.link.sink_want.store(want.min(100) as u8, Ordering::Relaxed);
+    }
+
+    pub fn set_keyframe_interval(&self, ms: u64) {
+        self.link.keyframe_every.store(ms, Ordering::Relaxed);
+    }
+
     pub fn user_left(&self, user_id: &str) {
         let Ok(mut users) = self.users.lock() else { return };
         users.retain(|&ssrc, user| {
@@ -313,7 +324,9 @@ fn send_loop(link: &Link, pcm: Receiver<Vec<f32>>, stop: &AtomicBool) {
                 speaking = wants;
                 link.shared.self_speaking.store(speaking, Ordering::Relaxed);
                 silence_left = if speaking { 0 } else { SILENCE_FRAMES };
-                let op = json!({ "op": 5, "d": { "speaking": u8::from(speaking), "delay": 0, "ssrc": link.ssrc } });
+                // Discord's voice activity says its lead-in (5 frames); push to talk has none.
+                let delay = if matches!(link.shared.input_mode(), InputMode::VoiceActivity { .. }) { 5 } else { 0 };
+                let op = json!({ "op": 5, "d": { "speaking": u8::from(speaking), "delay": delay, "ssrc": link.ssrc } });
                 let _ = link.ws.unbounded_send(WsMessage::Text(op.to_string()));
                 let _ = link.events.unbounded_send(VoiceEvent::Speaking { user_id: link.my_id.clone(), speaking });
                 if speaking {
@@ -426,13 +439,16 @@ fn seal(link: &Link, out: &mut RtpOut, opus: &[u8]) -> Option<Vec<u8>> {
 }
 
 // Follows `Shared::camera`: starts and stops the camera, its encoder and the op 12 announcement.
-fn camera_loop(link: &Arc<Link>, feedback: &Arc<Feedback>, stop: &AtomicBool) {
-    let mut current: Option<(String, CameraCapture)> = None;
+fn camera_loop(link: &Arc<Link>, feedback: &Arc<Feedback>, stop: &Arc<AtomicBool>) {
+    let mut current: Option<String> = None;
     while !stop.load(Ordering::Relaxed) {
         let want = link.shared.camera.lock().ok().and_then(|c| c.clone());
-        if current.as_ref().map(|(id, _)| id) != want.as_ref() {
+        if current.as_ref() != want.as_ref() {
             let was_on = current.take().is_some();
-            match want.map(|id| start_camera(link, feedback, &id).map(|capture| (id, capture))) {
+            if want.is_none() {
+                super::held_camera::release(&link.shared);
+            }
+            match want.map(|id| start_camera(link, feedback, &id, stop).map(|()| id)) {
                 Some(Ok(started)) => current = Some(started),
                 Some(Err(e)) => {
                     eprintln!("voice: camera: {e}");
@@ -454,20 +470,15 @@ fn camera_loop(link: &Arc<Link>, feedback: &Arc<Feedback>, stop: &AtomicBool) {
 }
 
 // Frames go to the encoder (dropped if it lags) and back to the UI as our self-preview.
-fn start_camera(link: &Arc<Link>, feedback: &Arc<Feedback>, id: &str) -> Result<CameraCapture, String> {
+fn start_camera(link: &Arc<Link>, feedback: &Arc<Feedback>, id: &str, stop: &Arc<AtomicBool>) -> Result<(), String> {
     let (tx, frames) = std_mpsc::sync_channel::<Arc<VideoFrame>>(1);
-    let (shared, me) = (link.shared.clone(), link.my_id.clone());
-    let capture = camera::start(id, CAMERA_SIZE, move |frame| {
-        let frame = Arc::new(frame);
-        let _ = tx.try_send(frame.clone());
-        shared.publish_frame(&me, VideoSource::Camera, frame);
-    })?;
+    super::held_camera::attach(&link.shared, id, CAMERA_SIZE, tx)?;
     link.keyframe.store(true, Ordering::Relaxed);
-    let (l, f) = (link.clone(), feedback.clone());
+    let (l, f, s) = (link.clone(), feedback.clone(), stop.clone());
     let bitrate = video_bitrate(CAMERA_SIZE.0, CAMERA_SIZE.1, CAMERA_FPS);
-    // The loop ends when the capture is dropped (its frame sender goes with it).
-    spawn("waffle-camera-send", move || video_send_loop(&l, &f, Feed { frames, covered: Arc::default() }, CAMERA_FPS, bitrate, &AtomicBool::new(false)))?;
-    Ok(capture)
+    // The loop ends with the connection, or when the held camera's sender moves on (another camera, or off).
+    spawn("waffle-camera-send", move || video_send_loop(&l, &f, Feed { frames, covered: Arc::default() }, CAMERA_FPS, bitrate, &s))?;
+    Ok(())
 }
 
 // Audio goes into the speaker's jitter buffer in the mixer, which decodes it as the device plays.
@@ -752,7 +763,9 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, feed: Feed, fps: u32, 
     // Discord's viewers flag a stream under half its frame rate (error 2002, "stream-view-low-fps"),
     // so a still screen repeats its last frame at the full rate, as Discord's own capturer does; an
     // unchanged frame encodes to a few bytes.
-    let interval = Duration::from_secs_f64(1.0 / f64::from(fps.max(1)));
+    let mut interval = Duration::from_secs_f64(1.0 / f64::from(fps.max(1)));
+    let mut spoke = Instant::now();
+    let mut rung = super::ladder::rung(100);
     let mut last: Option<Arc<VideoFrame>> = None;
     let mut due = Instant::now() + interval;
     // Discord's checks on what we send: frames encoded per second against its line (2005 for a stream,
@@ -775,10 +788,14 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, feed: Feed, fps: u32, 
         }
     };
     let mut last_keyframe: Option<Instant> = None;
-    let mut pacer = Pacer::new(bitrate);
+    let mut pacer = super::pacer::Pacer::new(bitrate);
     while !stop.load(Ordering::Relaxed) {
         // Every viewer's request forces one, and each is the largest frame there is: answering them
         // all would flood the link and lose more packets, which brings more requests.
+        let every = link.keyframe_every.load(Ordering::Relaxed);
+        if every > 0 && last_keyframe.is_some_and(|at| at.elapsed() >= Duration::from_millis(every)) {
+            link.keyframe.store(true, Ordering::Relaxed);
+        }
         let keyframe_due = link.keyframe.load(Ordering::Relaxed) && last_keyframe.is_none_or(|at| at.elapsed() >= KEYFRAME_MIN_GAP);
         // ScreenCaptureKit only delivers frames when the screen changes; repeating the last one
         // keeps the stream alive and lets keyframe requests be answered on a still screen.
@@ -826,6 +843,28 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, feed: Feed, fps: u32, 
             last_keyframe = Some(Instant::now());
             encoder.force_keyframe();
         }
+        // A camera sends what the server asks (its ladder rung's size and bitrate; nothing at want 0), and
+        // drops to the rung's quiet rate after 15 s without speaking, or at once when muted, as Discord's.
+        let frame = match streaming {
+            true => frame,
+            false => {
+                let want = link.sink_want.load(Ordering::Relaxed);
+                if want != rung.want && let Ok(rebuilt) = VideoEncoder::new(fps, super::ladder::rung(want).bitrate()) {
+                    (rung, encoder) = (super::ladder::rung(want), rebuilt);
+                    pacer = super::pacer::Pacer::new(rung.bitrate());
+                }
+                if link.shared.self_speaking.load(Ordering::Relaxed) {
+                    spoke = Instant::now();
+                }
+                let quiet = link.shared.muted.load(Ordering::Relaxed) || spoke.elapsed() >= CAMERA_QUIET_AFTER;
+                interval = Duration::from_secs_f64(1.0 / f64::from(if quiet { rung.quiet_fps.min(fps) } else { fps }.max(1)));
+                if want == 0 {
+                    due = Instant::now() + interval;
+                    continue;
+                }
+                if frame.width > rung.width { Arc::new(frame.fit(rung.width, rung.height)) } else { frame }
+            }
+        };
         // Behind (a slow encode): the next frame is due now rather than in a burst catching up.
         due = (due + interval).max(Instant::now());
         let unit = encoder.encode(&frame);
@@ -853,27 +892,6 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, feed: Feed, fps: u32, 
 fn clear_send_issues(link: &Link, who: &str, low_code: u16) {
     for code in [low_code, issues::SENDER_READY_TIMEOUT] {
         link.shared.issue(who, code, false);
-    }
-}
-
-// Spreads a frame's packets at PACING_FACTOR times the target bitrate instead of sending them in
-// one burst, which overflows send buffers and router queues on every keyframe.
-struct Pacer {
-    bits_per_second: f64,
-    next: Instant,
-}
-
-impl Pacer {
-    fn new(bitrate: u32) -> Self {
-        Self { bits_per_second: f64::from(bitrate) * PACING_FACTOR, next: Instant::now() }
-    }
-
-    fn wait(&mut self, bytes: usize) {
-        let now = Instant::now();
-        if self.next > now + PACING_SLACK {
-            thread::sleep(self.next - now);
-        }
-        self.next = self.next.max(now) + Duration::from_secs_f64(bytes as f64 * 8.0 / self.bits_per_second);
     }
 }
 

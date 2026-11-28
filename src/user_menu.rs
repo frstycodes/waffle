@@ -676,7 +676,7 @@ pub(crate) fn role_choices(guild: &crate::discord::Guild) -> Vec<&crate::discord
     roles
 }
 
-fn toggle(list: &mut Vec<String>, id: &str) {
+pub(crate) fn toggle(list: &mut Vec<String>, id: &str) {
     match list.iter().position(|x| x == id) {
         Some(i) => {
             list.remove(i);

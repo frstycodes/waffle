@@ -35,7 +35,9 @@ pub(super) async fn join_voice(shared: &Arc<Shared>, dispatches: &mut broadcast:
                 debug_lost(&target, &lost);
                 // Discord asks the main gateway to check its voice server whenever the connection drops.
                 shared.gateway.send(5, Value::Null);
-                shared.emit(VoiceEvent::Stage(Stage::Disconnected));
+                if !lost.starts_with(NO_ROUTE) {
+                    shared.emit(VoiceEvent::Stage(Stage::Disconnected));
+                }
                 match wait_out(backoff.fail(), dispatches, on_dispatch).await {
                     None => continue,
                     Some(reason) => reason,
@@ -135,6 +137,9 @@ pub(super) fn voice_dispatch(shared: &Shared, kind: &str, d: &Value) -> Option<S
             }
         }
     }
+    if user_id == shared.user_id && in_channel {
+        note_server_mute(shared, d);
+    }
     let streaming = in_channel && d["self_stream"].as_bool().unwrap_or(false);
     let camera = in_channel && d["self_video"].as_bool().unwrap_or(false);
     shared.emit(VoiceEvent::VideoState { user_id: user_id.to_owned(), streaming, camera });
@@ -143,6 +148,8 @@ pub(super) fn voice_dispatch(shared: &Shared, kind: &str, d: &Value) -> Option<S
 
 // A fresh main-gateway session (READY): voice rejoins under it, and Go Live streams end, as Discord's do.
 pub const NEW_SESSION: &str = "New gateway session";
+// A lost connection whose UDP discovery got no answer: the call keeps showing No Route meanwhile.
+const NO_ROUTE: &str = "No route";
 
 // Why a call ended when another client of ours joined voice in the same server and took it from this one.
 pub const ANOTHER_LOCATION: &str = "Connected at another location";
@@ -218,6 +225,7 @@ pub(super) async fn await_voice_server(shared: &Shared, dispatches: &mut broadca
                 return Err("Removed from the voice channel".into());
             }
             "VOICE_STATE_UPDATE" if ours && for_us && !other_channel => {
+                note_server_mute(shared, &d);
                 session_id = d["session_id"].as_str().map(str::to_owned);
             }
             "VOICE_SERVER_UPDATE" if for_us && !other_channel => server = parse_server(&d).or(server),
@@ -227,6 +235,11 @@ pub(super) async fn await_voice_server(shared: &Shared, dispatches: &mut broadca
             return Ok((id.clone(), server.clone()));
         }
     }
+}
+
+fn note_server_mute(shared: &Shared, d: &Value) {
+    let silenced = d["mute"].as_bool().unwrap_or(false) || d["suppress"].as_bool().unwrap_or(false);
+    shared.server_muted.store(silenced, Ordering::Relaxed);
 }
 
 // A null endpoint means the server is being reallocated; another update follows.
@@ -253,7 +266,7 @@ pub(super) async fn stream(shared: Arc<Shared>, role: Role, streamer: String, ke
     let mut dispatches = shared.gateway.dispatches.subscribe();
     if role.broadcasts() {
         let kind = if shared.guild_id.is_some() { "guild" } else { "call" };
-        let create = json!({ "type": kind, "guild_id": shared.guild_id, "channel_id": shared.channel_id, "preferred_region": null });
+        let create = json!({ "type": kind, "guild_id": shared.guild_id, "channel_id": shared.channel_id, "preferred_region": shared.stream_region.lock().ok().and_then(|r| r.clone()) });
         shared.gateway.send(18, create);
     } else {
         shared.gateway.send(20, json!({ "stream_key": key }));
@@ -310,6 +323,7 @@ pub(super) async fn connect_stream(
     if role.broadcasts() {
         shared.gateway.send(22, json!({ "stream_key": key, "paused": false }));
     }
+    shared.emit(VoiceEvent::StreamCreated { user_id: streamer.to_owned() });
     let mut target = Target { server_id: rtc.server_id, dave_channel: rtc.channel_id, session_id, server, role, streamer: streamer.to_owned() };
     let moved = Mutex::new(None);
     let on_dispatch = |kind: &str, d: &Value| stream_dispatch(key, kind, d, &moved);
@@ -495,24 +509,30 @@ async fn connection(
     let counters = Arc::new(media::Counters::default());
     let mut ready: Option<(Ssrcs, std::net::UdpSocket)> = None;
     let mut seq_ack: i64 = -1;
-    let mut heartbeat = tokio::time::interval(Duration::from_secs(3600));
+    // Until HELLO (op 8) sets the real beat, this is how long the server gets to send it (Discord's 20 s).
+    let mut heartbeat = tokio::time::interval(HELLO_TIMEOUT);
     heartbeat.tick().await;
     let mut stats_tick = tokio::time::interval(STATS_EVERY);
     let mut pings = Pings::default();
     let mut loss = LossWindow::default();
     let mut stats = Stats { endpoint: host.clone(), ..Stats::default() };
     let mut resumes = 0;
+    let mut senders = wants::VideoSsrcs::new();
+    let mut wake = reconnect::WakeWatch::new();
+    let mut expedited: Option<Instant> = None;
     let mut socket_backoff = Backoff::socket();
-    let mut acked = true;
+    let mut acked = false;
     let mut last_ack = Instant::now();
 
     let identify = json!({ "op": 0, "d": {
         "server_id": target.server_id,
+        "channel_id": target.dave_channel,
         "user_id": shared.user_id,
         "session_id": target.session_id,
         "token": target.server.token,
         "video": true,
-        "streams": [{ "type": if target.role.broadcasts() { "screen" } else { "video" }, "rid": "100", "quality": 100 }],
+        // Every Go Live connection, a viewer's too, describes a screen stream.
+        "streams": [{ "type": if is_voice { "video" } else { "screen" }, "rid": "100", "quality": 100 }],
         "max_dave_protocol_version": davey::DAVE_PROTOCOL_VERSION,
     }});
     sink.send(WsMessage::Text(identify.to_string())).await.map_err(|e| e.to_string())?;
@@ -526,9 +546,7 @@ async fn connection(
                 false => Err(("Heartbeat timeout".to_owned(), None)),
                 true => {
                     acked = false;
-                    let nonce = chrono::Utc::now().timestamp_millis();
-                    let beat = json!({ "op": 3, "d": { "t": nonce, "seq_ack": seq_ack } });
-                    sink.send(WsMessage::Text(beat.to_string())).await.map(|()| None).map_err(|e| (e.to_string(), None))
+                    sink.send(beat(seq_ack)).await.map(|()| None).map_err(|e| (e.to_string(), None))
                 }
             },
             _ = stats_tick.tick(), if is_voice && media.is_some() => {
@@ -549,6 +567,19 @@ async fn connection(
                 Ok(None)
             }
             Some(msg) = out_rx.next() => sink.send(msg).await.map(|()| None).map_err(|e| (e.to_string(), None)),
+            // Back from sleep, or the network changed: Discord beats at once and gives the socket a few seconds.
+            _ = wake.tick() => match (wake.nudge(), expedited) {
+                (_, Some(deadline)) if Instant::now() >= deadline && !acked => Err(("Heartbeat timeout after a wake or network change".to_owned(), None)),
+                (Some(wait), _) => {
+                    acked = false;
+                    expedited = Some(Instant::now() + wait);
+                    sink.send(beat(seq_ack)).await.map(|()| None).map_err(|e| (e.to_string(), None))
+                }
+                _ => Ok(None),
+            },
+            () = shared.wants_changed.notified(), if is_voice && media.is_some() => {
+                sink.send(sink_wants(shared, &target, &senders)).await.map(|()| None).map_err(|e| (e.to_string(), None))
+            }
             Some((kind, d)) = next_dispatch(dispatches) => match on_dispatch(&kind, &d) {
                 Some(reason) => return Err(Ended::Dispatch(reason)),
                 None => Ok(None),
@@ -607,6 +638,12 @@ async fn connection(
                 let ms = d["heartbeat_interval"].as_f64().unwrap_or(13_750.0) as u64;
                 heartbeat = tokio::time::interval(Duration::from_millis(ms));
                 heartbeat.tick().await;
+                acked = true;
+            }
+            // The server asking for a beat now.
+            Some(3) => {
+                acked = false;
+                sink.send(beat(seq_ack)).await.map_err(|e| e.to_string())?;
             }
             Some(9) => {
                 resumes = 0;
@@ -617,6 +654,7 @@ async fn connection(
             }
             Some(6) => {
                 acked = true;
+                expedited = None;
                 last_ack = Instant::now();
                 if let Some(sent) = d["t"].as_i64() {
                     pings.record(sent);
@@ -642,7 +680,17 @@ async fn connection(
                 let mode = rtp::MODES.into_iter().find(|m| modes.contains(m)).ok_or("No supported encryption mode")?;
                 stage(Stage::IceChecking);
                 let discovered = tokio::task::spawn_blocking(move || media::discover(&ip, port, ssrc)).await.map_err(|e| e.to_string())?;
-                let (socket, (my_ip, my_port)) = discovered.inspect_err(|_| stage(Stage::NoRoute))?;
+                let (socket, (my_ip, my_port)) = match discovered {
+                    Ok(found) => found,
+                    // Discord tells the server once (op 32) and keeps showing No Route while it retries.
+                    Err(lost) => {
+                        stage(Stage::NoRoute);
+                        if backoff.is_fresh() {
+                            let _ = sink.send(WsMessage::Text(json!({ "op": 32, "d": {} }).to_string())).await;
+                        }
+                        return Err(Ended::Lost(format!("{NO_ROUTE}: {lost}")));
+                    }
+                };
                 let video = &d["streams"][0];
                 let ssrcs = Ssrcs {
                     audio: ssrc,
@@ -679,13 +727,14 @@ async fn connection(
                         ws: out.clone(),
                         nonce: Default::default(),
                         keyframe: AtomicBool::new(true),
+                        sink_want: AtomicU8::new(100),
+                        keyframe_every: AtomicU64::new(d["keyframe_interval"].as_u64().unwrap_or(0)),
                         counters: counters.clone(),
                         connection: media::connection_id(),
                     },
                     users.clone(),
                 )?);
-                // Not verified: op 15 (media sink wants) asks the SFU to forward video at full quality.
-                sink.send(WsMessage::Text(json!({ "op": 15, "d": { "any": 100 } }).to_string())).await.map_err(|e| e.to_string())?;
+                sink.send(sink_wants(shared, &target, &senders)).await.map_err(|e| e.to_string())?;
                 backoff.succeed();
                 if is_voice {
                     stage(Stage::Connected);
@@ -698,19 +747,46 @@ async fn connection(
                 if let (Some(user), Some(ssrc)) = (d["user_id"].as_str(), d["ssrc"].as_u64()) {
                     media::map_ssrc(&users, ssrc as u32, user);
                 }
+                if let (Some(user), Some(flags), Ok(mut priority)) = (d["user_id"].as_str(), d["speaking"].as_u64(), shared.priority.lock()) {
+                    match flags & PRIORITY_SPEAKING != 0 {
+                        true => priority.insert(user.to_owned()),
+                        false => priority.remove(user),
+                    };
+                }
             }
             Some(12) => {
                 if let Some(user) = d["user_id"].as_str() {
                     video_ssrcs(d).for_each(|ssrc| media::map_ssrc(&users, ssrc, user));
+                    senders.insert(user.to_owned(), wants::video_ssrcs(d));
+                    // A camera that just came on gets its overrides (focused, disabled) too.
+                    if is_voice && media.is_some() {
+                        sink.send(sink_wants(shared, &target, &senders)).await.map_err(|e| e.to_string())?;
+                    }
                 }
             }
             Some(11) => dave.users_joined(d["user_ids"].as_array().into_iter().flatten().filter_map(Value::as_str)),
             Some(13) => {
                 if let Some(user) = d["user_id"].as_str() {
+                    senders.remove(user);
+                    if let Ok(mut priority) = shared.priority.lock() {
+                        priority.remove(user);
+                    }
                     dave.user_left(user);
                     if let Some(media) = &media {
                         media.user_left(user);
                     }
+                }
+            }
+            // What the SFU wants of our camera.
+            Some(15) if is_voice => {
+                if let Some(media) = &media {
+                    media.set_sink_wants(d);
+                }
+            }
+            // A session update may change the keyframe interval mid-call.
+            Some(14) => {
+                if let (Some(media), Some(ms)) = (&media, d["keyframe_interval"].as_u64()) {
+                    media.set_keyframe_interval(ms);
                 }
             }
             Some(op @ (21 | 22 | 24)) => dave.handle_json(op, d),
@@ -719,9 +795,23 @@ async fn connection(
     }
 }
 
+// Op 15: the video this connection asks for. A Go Live connection carries one picture, wanted whole.
+fn sink_wants(shared: &Shared, target: &Target, senders: &wants::VideoSsrcs) -> WsMessage {
+    let d = match target.role {
+        Role::Voice => shared.video_wants.lock().map(|w| wants::payload(&w, senders)).unwrap_or_else(|_| json!({ "any": 100 })),
+        _ => json!({ "any": 100 }),
+    };
+    WsMessage::Text(json!({ "op": 15, "d": d }).to_string())
+}
+
+fn beat(seq_ack: i64) -> WsMessage {
+    WsMessage::Text(json!({ "op": 3, "d": { "t": chrono::Utc::now().timestamp_millis(), "seq_ack": seq_ack } }).to_string())
+}
+
 pub(super) fn resume_payload(target: &Target, seq_ack: i64) -> Value {
     json!({ "op": 7, "d": {
         "server_id": target.server_id,
+        "channel_id": target.dave_channel,
         "session_id": target.session_id,
         "token": target.server.token,
         "seq_ack": seq_ack,
