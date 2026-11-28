@@ -165,6 +165,17 @@ impl Waffle {
             DeviceKind::Camera => group(&mut body, "Camera", DeviceKind::Camera, &menu.cameras, self.prefs.camera.clone(), cx),
         }
         body.push(menu_rule(&ink).into_any_element());
+        if kind == DeviceKind::Camera && self.call.as_ref().is_some_and(|c| !c.camera_on) {
+            body.push(
+                choice_row("device-preview-camera", &ink, cx)
+                    .child(div().flex_1().min_w_0().font_weight(FontWeight::NORMAL).text_color(ink.strong).child("Preview Camera"))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.device_menu = None;
+                        this.preview_camera(cx);
+                    }))
+                    .into_any_element(),
+            );
+        }
         if kind != DeviceKind::Camera {
             let (label, value, key) = match kind {
                 DeviceKind::Output => ("Output volume", self.prefs.output_volume, "menu-output-volume"),
@@ -417,10 +428,18 @@ impl Waffle {
     }
 
     pub(crate) fn toggle_camera(&mut self, cx: &mut Context<Self>) {
+        let Some(call) = &self.call else { return };
+        let on = !call.camera_on;
+        if on && self.prefs.always_preview_video {
+            return self.preview_camera(cx);
+        }
+        self.set_camera_on(on, cx);
+    }
+
+    pub(crate) fn set_camera_on(&mut self, on: bool, cx: &mut Context<Self>) {
         let limited = self.camera_limit().is_some();
         let Some(call) = &mut self.call else { return };
-        let on = !call.camera_on;
-        if on && limited {
+        if on == call.camera_on || on && limited {
             return;
         }
         let camera = on.then(|| self.prefs.camera.clone().or_else(|| voice::cameras().into_iter().next().map(|c| c.id))).flatten();

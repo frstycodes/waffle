@@ -138,6 +138,8 @@ pub struct Prefs {
     // Voice channels where the call shows only cameras and streams (Discord's "Show Non-Video Participants" off).
     // lint-allow(unbounded-growth): one entry per voice channel you turned it off in, a few dozen at most
     pub video_only_channels: Vec<String>,
+    // Discord's "Always preview video": the camera opens in a preview before it goes out.
+    pub always_preview_video: bool,
     // Discord's Soundboard Volume as it stores it: amplitude, 100 = as uploaded, 0 = soundboard muted.
     // Shown on its perceptual scale (soundboard::perceptual).
     pub soundboard_volume: f32,
@@ -261,6 +263,7 @@ impl Default for Prefs {
             soundboard_mutes: Vec::new(),
             hidden_video: Vec::new(),
             video_only_channels: Vec::new(),
+            always_preview_video: false,
             soundboard_volume: 100.,
             soundboard_favorites: Vec::new(),
             soundboard_uses: Vec::new(),

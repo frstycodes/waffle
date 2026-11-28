@@ -563,7 +563,7 @@ pub(crate) fn control(id: &'static str, glyph: Glyph, tip: &'static str, state: 
         .tooltip(move |window, cx| ui::Tooltip::new(tip).build(window, cx))
 }
 
-fn mirrored<E: Styled>(mut el: E) -> E {
+pub(crate) fn mirrored<E: Styled>(mut el: E) -> E {
     el.style().scale.width = Some(-1.);
     el
 }

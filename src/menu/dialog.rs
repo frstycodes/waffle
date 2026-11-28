@@ -17,6 +17,8 @@ pub struct Dialog {
     key: Option<&'static str>,
     // The message it acts on, drawn as search draws a hit (Discord's unpin confirm).
     preview: Option<Box<crate::discord::Message>>,
+    // A live part of the dialog (the camera preview), drawn under the body.
+    view: Option<gpui_kit::AnyView>,
     // Discord's "Protip:" under the preview.
     tip: Option<SharedString>,
     // A muted line under the body.
@@ -58,7 +60,7 @@ impl Waffle {
             state.set_value(value.to_owned(), window, cx);
             state.focus(window, cx);
         });
-        self.dialog = Some(Dialog { title: title.into(), body: body.into(), confirm: confirm.into(), danger: false, warn: false, input: true, key: None, preview: None, tip: None, note: None, other: Other::Cancel, on_confirm: Rc::new(on_confirm) });
+        self.dialog = Some(Dialog { title: title.into(), body: body.into(), confirm: confirm.into(), danger: false, warn: false, input: true, key: None, preview: None, view: None, tip: None, note: None, other: Other::Cancel, on_confirm: Rc::new(on_confirm) });
         cx.notify(); // lint-allow(global-notify): the menu and its dialogs are drawn by the root, over the columns
     }
 
@@ -81,6 +83,7 @@ impl Waffle {
             input: false,
             key: None,
             preview: None,
+            view: None,
             tip: None,
             note: None,
             other: Other::Cancel,
@@ -138,6 +141,12 @@ impl Waffle {
     pub(crate) fn set_dialog_key(&mut self, key: &'static str) {
         if let Some(dialog) = &mut self.dialog {
             dialog.key = Some(key);
+        }
+    }
+
+    pub(crate) fn set_dialog_view(&mut self, view: gpui_kit::AnyView) {
+        if let Some(dialog) = &mut self.dialog {
+            dialog.view = Some(view);
         }
     }
 
@@ -204,7 +213,8 @@ impl Waffle {
                     .when(dialog.warn, |d| d.child(div().text_color(palette::danger_ink(cx)).child(Icon::new(Glyph::Warning).size(px(WARN_MARK)))))
                     .child(dialog.title.clone()),
             )
-            .child(div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(palette::muted(cx)).child(dialog.body.clone()))
+            .when(!dialog.body.is_empty(), |d| d.child(div().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(palette::muted(cx)).child(dialog.body.clone())))
+            .children(dialog.view.clone())
             .children(dialog.note.clone().map(|note| div().text_size(ui::TEXT_XS).line_height(ui::LINE_XS).text_color(palette::faint(cx)).child(note)))
             .children(preview)
             .children(dialog.tip.clone().map(|tip| {

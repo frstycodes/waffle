@@ -302,6 +302,11 @@ pub(super) fn call_scenes(waffle: &mut Waffle, scene: &str, window: &mut Window,
                 waffle.set_call_fullscreen(true, window, cx);
             }
         }
+        // Discord's camera preview before the camera turns on.
+        "camera-preview" => {
+            demo_call(waffle);
+            waffle.preview_camera(cx);
+        }
         // A game on the call's stage, for checking what draws over it and how it resizes: a WebGL scene that
         // answers every pointer move, as a game does.
         "call-activity" => {

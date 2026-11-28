@@ -4,6 +4,7 @@
 mod accounts;
 mod startup;
 mod boot;
+mod camera_preview;
 mod composer;
 mod gateway;
 mod lookups;

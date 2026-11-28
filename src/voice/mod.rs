@@ -801,6 +801,13 @@ impl VoiceSession {
     }
 }
 
+// A camera's picture with no call: Discord's preview before the camera turns on. Dropping it closes the device.
+pub struct PreviewCamera(#[allow(dead_code, reason = "held only to keep the device open")] camera::CameraCapture);
+
+pub fn preview_camera(id: &str, on_frame: impl Fn(VideoFrame) + Send + 'static) -> Result<PreviewCamera, String> {
+    camera::start(id, media::CAMERA_SIZE, on_frame).map(PreviewCamera)
+}
+
 // Lowers other applications while someone speaks, until the session is gone.
 fn duck_other_apps(shared: &Weak<Shared>) {
     let mut ducking = attenuation::Ducking::new();
