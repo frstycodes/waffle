@@ -74,6 +74,11 @@ impl Waffle {
     }
     // Whether the message pings one of our roles in its server.
     pub(crate) fn mentions_role(&self, message: &Message) -> bool {
+        // Most messages mention no role; finding the server of one without a guild id (a DM's) searches every channel,
+        // and this runs for every message on every frame of the feed.
+        if message.mention_roles.is_empty() {
+            return false;
+        }
         let Some(me) = &self.me else { return false };
         let mine = self.guild_id_of(message).and_then(|g| self.member_roles.get(&g)).and_then(|r| r.get(&me.id));
         mine.is_some_and(|roles| message.mention_roles.iter().any(|r| roles.contains(r)))

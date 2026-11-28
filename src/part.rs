@@ -34,6 +34,7 @@ impl Render for Part {
 #[derive(Default)]
 pub struct Parts {
     nav: Option<Entity<Part>>,
+    rail: Option<Entity<Part>>,
     main: Option<Entity<Part>>,
     panel: Option<Entity<Part>>,
     overlays: Option<Entity<Overlays>>,
@@ -42,6 +43,9 @@ pub struct Parts {
 #[derive(Clone, Copy)]
 pub enum Column {
     Nav,
+    // The server rail, inside the Nav column: its own cached view, so scrolling the channel list beside it
+    // doesn't rebuild every server tile.
+    Rail,
     Main,
     Panel,
 }
@@ -51,6 +55,7 @@ impl Waffle {
     pub fn part(&mut self, column: Column, style: StyleRefinement, cx: &mut Context<Self>) -> AnyElement {
         let (slot, render, name): (&mut Option<Entity<Part>>, RenderFn, &'static str) = match column {
             Column::Nav => (&mut self.parts.nav, |w, window, cx| w.render_nav(window, cx).into_any_element(), "Nav column"),
+            Column::Rail => (&mut self.parts.rail, |w, window, cx| w.render_rail_column(window, cx).into_any_element(), "Rail column"),
             Column::Main => (&mut self.parts.main, Waffle::render_main, "Main column"),
             Column::Panel => (&mut self.parts.panel, |w, window, cx| w.render_panel(window, cx).unwrap_or_else(|| div().into_any_element()), "Panel column"),
         };
@@ -72,8 +77,16 @@ impl Waffle {
     // Re-renders `column` alone, for state only it draws (a hover): notifying the app re-renders every
     // column, since each part observes it.
     pub fn redraw(&mut self, column: Column, cx: &mut Context<Self>) {
+        // The Nav column holds the rail, so its redraws reach the rail too; only the rail's own state and the framework's
+        // scroll notifications (which name the view being drawn) stay apart.
+        if matches!(column, Column::Nav)
+            && let Some(rail) = self.parts.rail.clone()
+        {
+            rail.update(cx, |_, cx| cx.notify()); // lint-allow(global-notify): notifies the rail part alone
+        }
         let part = match column {
             Column::Nav => &self.parts.nav,
+            Column::Rail => &self.parts.rail,
             Column::Main => &self.parts.main,
             Column::Panel => &self.parts.panel,
         };

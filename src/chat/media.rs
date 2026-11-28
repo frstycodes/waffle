@@ -396,7 +396,8 @@ pub(super) fn set_hovered_tile(this: &WeakEntity<Waffle>, key: Option<String>, c
     this.update(cx, |this, cx| {
         if this.hovered_tile != key {
             this.hovered_tile = key;
-            cx.notify();
+            // Tiles draw in the feed and the composer's tray, both in the main column.
+            this.redraw(crate::part::Column::Main, cx);
         }
     })
     .ok();

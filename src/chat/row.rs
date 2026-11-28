@@ -367,8 +367,13 @@ pub(super) fn track_message_hover(message: &Message, ctx: &RowContext) -> impl F
 
 pub(super) fn set_hovered_message(this: &WeakEntity<Waffle>, id: Option<String>, cx: &mut App) {
     this.update(cx, |this, cx| {
+        if this.hovered_message == id {
+            return;
+        }
         this.hovered_message = id;
-        cx.notify();
+        // Message rows draw in the feed (main, which carries the overlays' popovers) and in search results (panel).
+        this.redraw(crate::part::Column::Main, cx);
+        this.redraw(crate::part::Column::Panel, cx);
     })
     .ok();
 }

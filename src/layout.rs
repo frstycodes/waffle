@@ -28,6 +28,8 @@ pub const PANEL_WIDTH: f32 = 264.;
 // all round.
 pub const PANEL_HEIGHT: f32 = 54.;
 const UPDATE_HEIGHT: f32 = 42.;
+// Whether the channel list was scrolled under its header at the last Nav render.
+static CHANNELS_SCROLLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 const CHANNELS_RANGE: (f32, f32) = (200., 440.);
 const PANEL_RANGE: (f32, f32) = (200., 380.);
 const SETTINGS_RANGE: (f32, f32) = (200., 360.);
@@ -368,13 +370,19 @@ impl Waffle {
 
     // The rail and the channel list, with the user area floating across the foot of both.
     pub(crate) fn render_nav(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The hairline under the headers runs across the rail and the channel list; the rail replays from its cache while
+        // the list scrolls, so it is told when the list's side of it changes.
+        let scrolled = ui::scrolled(&self.channels_scroll);
+        if CHANNELS_SCROLLED.swap(scrolled, std::sync::atomic::Ordering::Relaxed) != scrolled {
+            self.redraw(Column::Rail, cx);
+        }
         let user_panel = self.me.clone().map(|me| self.user_panel(me, window, cx));
         ui::col()
             .relative()
             .h_full()
             .flex_none()
             .bg(crate::material::sidebar_fill(cx))
-            .child(ui::row().items_stretch().flex_1().min_h_0().child(self.render_rail_column(window, cx)).child(self.render_channels(window, cx)))
+            .child(ui::row().items_stretch().flex_1().min_h_0().child(self.part(Column::Rail, StyleRefinement::default().w(px(RAIL_WIDTH)).h_full().flex_none(), cx)).child(self.render_channels(window, cx)))
             .children(user_panel)
     }
 
