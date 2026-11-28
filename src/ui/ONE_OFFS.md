@@ -880,6 +880,7 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/boot.rs` — the subscription ends with the status input it watches
 - `src/boot.rs` — the subscription ends with the sticker search it watches
 - `src/boot.rs` — the subscription ends with the switcher input it watches
+- `src/boot.rs` — the visibility observer ends with the window
 - `src/boot.rs` — two SPLASH_BEAT timers, then it ends
 - `src/call/previews.rs` — a one-shot colour fetch holding a WeakEntity; it ends when the response lands
 - `src/call/previews.rs` — a one-shot fetch holding a WeakEntity; it ends when the response lands or the update fails
@@ -1143,6 +1144,7 @@ _A collection field that the app grows and never shrinks holds memory for the wh
 - `src/main.rs` — one pair per (server, channel) member range asked for, bounded by the user's channel count
 - `src/main.rs` — one thumbnail url per streamer seen, a handful of live streams at a time
 - `src/main.rs` — one u64 per channel the gateway reported, bounded by the user's channel count
+- `src/main.rs` — pruned to the call's cameras on every sync (`sync_video_wants`)
 - `src/profile.rs` — one entry per profile effect sku seen, a catalogue of a few hundred at most
 - `src/query.rs` — a key leaves once its cooldown is over and it's asked for again, or once it's stored
 - `src/reactions.rs` — the name spans of one card sentence, three at most, rebuilt for each card

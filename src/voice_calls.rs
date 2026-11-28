@@ -2,6 +2,13 @@
 
 use crate::*;
 
+// Discord's video cut-offs: a camera off screen this long (longer on a stage; the three seen last kept), and
+// every camera once the window has been hidden this long.
+const OFFSCREEN_CUT: Duration = Duration::from_secs(30);
+const STAGE_OFFSCREEN_CUT: Duration = Duration::from_secs(120);
+const KEEP_OFFSCREEN: usize = 3;
+const HIDDEN_CUT: Duration = Duration::from_secs(30);
+
 // Discord's go-live notify goes out only in servers of this many members (StreamNotificationsGuildMaxSize).
 const GO_LIVE_NOTIFY_FROM: u32 = 31;
 const GO_LIVE_NOTIFY_UP_TO: u32 = 50;
@@ -462,13 +469,30 @@ impl Waffle {
     }
     // Discord's media sink wants: other people's cameras that are on and not disabled set the quality,
     // the focused one gets full quality, a disabled one none.
-    fn sync_video_wants(&self) {
+    // Discord also stops a camera that has been off screen a while (the three seen last excepted), and every
+    // camera once the window has been hidden a while.
+    fn sync_video_wants(&mut self) {
         let Some(call) = &self.call else { return };
-        let me = self.me.as_ref().map(|m| m.id.as_str());
-        let disabled = &self.prefs.hidden_video;
-        let cameras = self.participants().iter().filter(|p| p.camera && Some(p.user_id.as_str()) != me && !disabled.contains(&p.user_id)).count();
+        let me = self.me.as_ref().map(|m| m.id.clone());
+        let on: Vec<String> = self.participants().into_iter().filter(|p| p.camera && Some(&p.user_id) != me.as_ref() && !self.prefs.hidden_video.contains(&p.user_id)).map(|p| p.user_id).collect();
         let focused = self.call_focus.as_deref().and_then(|key| key.strip_prefix("user:")).map(str::to_owned);
-        call.session.set_video_wants(voice::VideoWants { cameras, focused, disabled: disabled.clone() });
+        // The call view shows every camera; elsewhere only the PiP's, which is the focused one or the first.
+        let on_screen = |id: &String| self.call_view || focused.as_ref().or(on.first()) == Some(id);
+        let now = Instant::now();
+        self.camera_seen.retain(|id, _| on.contains(id));
+        for id in on.iter().filter(|id| on_screen(id)) {
+            self.camera_seen.insert(id.clone(), now);
+        }
+        let cut_off = if call.channel.raw_type == STAGE_CHANNEL { STAGE_OFFSCREEN_CUT } else { OFFSCREEN_CUT };
+        let mut off: Vec<(&String, Instant)> = on.iter().filter(|id| !on_screen(id)).map(|id| (id, *self.camera_seen.entry(id.clone()).or_insert(now))).collect();
+        off.sort_by_key(|(_, seen)| std::cmp::Reverse(*seen));
+        let hidden = self.window_hidden_since.is_some_and(|since| since.elapsed() >= HIDDEN_CUT);
+        let mut disabled = self.prefs.hidden_video.clone();
+        disabled.extend(off.into_iter().skip(KEEP_OFFSCREEN).filter(|(_, seen)| seen.elapsed() >= cut_off).map(|(id, _)| id.clone()));
+        if hidden {
+            disabled.extend(on.iter().cloned());
+        }
+        call.session.set_video_wants(voice::VideoWants { cameras: on.len(), focused, disabled });
     }
     pub(crate) fn watch_stream(&mut self, streamer_id: String, cx: &mut Context<Self>) {
         let mine = self.me.as_ref().is_some_and(|m| m.id == streamer_id);

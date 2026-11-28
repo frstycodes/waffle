@@ -643,6 +643,11 @@ pub struct Waffle {
     watch_on_connect: Option<String>,
     // The window is in front; notifications for the open channel are skipped then.
     window_active: bool,
+    // Since when the window has been hidden (minimized, to the tray), for Discord's video cut-off.
+    window_hidden_since: Option<Instant>,
+    // When each camera in the call was last on screen, for Discord's off-screen cut-off.
+    // lint-allow(unbounded-growth): pruned to the call's cameras on every sync (`sync_video_wants`)
+    camera_seen: HashMap<String, Instant>,
     // The open channel should land on its first unread once its messages are in.
     unread_scroll_pending: bool,
     // The channel last marked unread by hand: auto-read leaves it alone until it's opened again or we send there.

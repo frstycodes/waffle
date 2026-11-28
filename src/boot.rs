@@ -10,6 +10,14 @@ impl Waffle {
     pub(crate) fn new(window: &mut Window, splash: Option<gpui_kit::WindowHandle<splash::Splash>>, cx: &mut Context<Self>) -> Self {
         // lint-allow(detached-task): the appearance observer ends with the window
         cx.observe_window_appearance(window, |_, window, cx| palette::sync(window, cx)).detach();
+        cx.observe_window_visibility(window, |this: &mut Self, visibility, _, _| {
+            this.window_hidden_since = match visibility.is_visible() {
+                true => None,
+                false => this.window_hidden_since.or(Some(Instant::now())),
+            };
+        })
+        // lint-allow(detached-task): the visibility observer ends with the window
+        .detach();
         cx.observe_window_activation(window, |this: &mut Self, window, cx| {
             this.window_active = window.is_window_active();
             // Coming back to the newest message of the open channel reads it.
@@ -245,6 +253,8 @@ impl Waffle {
             activity_feed: Vec::new(),
             watch_on_connect: None,
             window_active: true,
+            window_hidden_since: None,
+            camera_seen: HashMap::new(),
             unread_scroll_pending: false,
             held_unread: None,
             dialog: None,
