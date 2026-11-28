@@ -32,6 +32,7 @@ mod fixtures;
 mod jitter;
 mod reconnect;
 mod wants;
+mod ladder;
 pub use wants::VideoWants;
 use reconnect::{Backoff, Reconnect, close_label, reconnect};
 mod media;
@@ -942,8 +943,7 @@ mod tests {
             server_muted: AtomicBool::new(false),
             priority: Mutex::default(),
             stream_region: Mutex::default(),
-        stream_region: Mutex::default(),
-        video_wants: Mutex::default(),
+            video_wants: Mutex::default(),
             wants_changed: tokio::sync::Notify::new(),
             flags_pending: AtomicBool::new(false),
             flags_sent: Mutex::new(None),

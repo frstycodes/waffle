@@ -727,6 +727,7 @@ async fn connection(
                         ws: out.clone(),
                         nonce: Default::default(),
                         keyframe: AtomicBool::new(true),
+                        sink_want: AtomicU8::new(100),
                         keyframe_every: AtomicU64::new(d["keyframe_interval"].as_u64().unwrap_or(0)),
                         counters: counters.clone(),
                         connection: media::connection_id(),
@@ -774,6 +775,12 @@ async fn connection(
                     if let Some(media) = &media {
                         media.user_left(user);
                     }
+                }
+            }
+            // What the SFU wants of our camera.
+            Some(15) if is_voice => {
+                if let Some(media) = &media {
+                    media.set_sink_wants(d);
                 }
             }
             // A session update may change the keyframe interval mid-call.

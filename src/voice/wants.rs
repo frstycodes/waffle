@@ -19,26 +19,10 @@ pub struct VideoWants {
 
 const FULL: u8 = 100;
 
-// Discord's ladder over a 720p budget: one camera at full quality, then smaller steps as the grid fills
-// (2 → 90, 4 → 70, 10 → 40, 17 or more → 20).
-pub(super) fn level(cameras: usize) -> u8 {
-    match cameras {
-        0 | 1 => FULL,
-        2 => 90,
-        3 => 80,
-        4 => 70,
-        5 | 6 => 60,
-        7..=9 => 50,
-        10 | 11 => 40,
-        12..=16 => 30,
-        _ => 20,
-    }
-}
-
 // The op 15 payload: `any` for everyone, then per-SSRC overrides for the focused and disabled users.
 pub(super) fn payload(wants: &VideoWants, senders: &VideoSsrcs) -> Value {
     let mut d = Map::new();
-    d.insert("any".into(), json!(level(wants.cameras)));
+    d.insert("any".into(), json!(super::ladder::level(wants.cameras)));
     for (user, ssrcs) in senders {
         let want = match () {
             _ if wants.disabled.contains(user) => 0,
@@ -64,12 +48,6 @@ pub(super) fn video_ssrcs(d: &Value) -> Vec<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn quality_falls_as_cameras_come_on() {
-        let levels: Vec<u8> = [1, 2, 4, 5, 7, 10, 12, 17, 40].into_iter().map(level).collect();
-        assert_eq!(levels, [100, 90, 70, 60, 50, 40, 30, 20, 20]);
-    }
 
     #[test]
     fn focused_gets_full_and_disabled_gets_none() {

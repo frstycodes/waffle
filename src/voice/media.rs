@@ -8,7 +8,7 @@ use std::{
     net::UdpSocket,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering},
         mpsc::{self as std_mpsc, Receiver, RecvTimeoutError, SyncSender},
     },
     thread,
@@ -67,7 +67,6 @@ const KEEPALIVE: Duration = Duration::from_secs(5);
 const LEVEL_EVERY: u32 = 2;
 pub const CAMERA_SIZE: (u32, u32) = (1280, 720);
 pub const CAMERA_FPS: u32 = 30;
-const QUIET_FPS: u32 = 20;
 const CAMERA_QUIET_AFTER: Duration = Duration::from_secs(15);
 // `GoLiveOptions::resolution == 0` (source size) is still capped here.
 const SOURCE_SIZE_CAP: (u32, u32) = (3840, 2160);
@@ -108,6 +107,8 @@ pub struct Link {
     pub keyframe: AtomicBool,
     // The server's keyframe interval in ms (op 4 / op 14), 0 for none: a keyframe at least this often.
     pub keyframe_every: AtomicU64,
+    // What the server last asked of our camera (op 15's want, 100 = full), which sets its size and bitrate.
+    pub sink_want: AtomicU8,
     pub counters: Arc<Counters>,
     // From `connection_id`: tags this connection's tracks in the shared mixer.
     pub connection: u32,
@@ -249,6 +250,12 @@ impl Media {
             }
         };
         Ok(Self { stop, link, users, _devices: devices })
+    }
+
+    // Op 15 from the server: the want for our video SSRC, else for anyone.
+    pub fn set_sink_wants(&self, d: &serde_json::Value) {
+        let want = d[self.link.video_ssrc.to_string()].as_u64().or(d["any"].as_u64()).unwrap_or(100);
+        self.link.sink_want.store(want.min(100) as u8, Ordering::Relaxed);
     }
 
     pub fn set_keyframe_interval(&self, ms: u64) {
@@ -758,6 +765,7 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, feed: Feed, fps: u32, 
     // unchanged frame encodes to a few bytes.
     let mut interval = Duration::from_secs_f64(1.0 / f64::from(fps.max(1)));
     let mut spoke = Instant::now();
+    let mut rung = super::ladder::rung(100);
     let mut last: Option<Arc<VideoFrame>> = None;
     let mut due = Instant::now() + interval;
     // Discord's checks on what we send: frames encoded per second against its line (2005 for a stream,
@@ -835,14 +843,28 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, feed: Feed, fps: u32, 
             last_keyframe = Some(Instant::now());
             encoder.force_keyframe();
         }
-        // Discord sends a camera at 20 fps after 15 s without speaking, and at once when muted.
-        if !streaming {
-            if link.shared.self_speaking.load(Ordering::Relaxed) {
-                spoke = Instant::now();
+        // A camera sends what the server asks (its ladder rung's size and bitrate; nothing at want 0), and
+        // drops to the rung's quiet rate after 15 s without speaking, or at once when muted, as Discord's.
+        let frame = match streaming {
+            true => frame,
+            false => {
+                let want = link.sink_want.load(Ordering::Relaxed);
+                if want != rung.want && let Ok(rebuilt) = VideoEncoder::new(fps, super::ladder::rung(want).bitrate()) {
+                    (rung, encoder) = (super::ladder::rung(want), rebuilt);
+                    pacer = super::pacer::Pacer::new(rung.bitrate());
+                }
+                if link.shared.self_speaking.load(Ordering::Relaxed) {
+                    spoke = Instant::now();
+                }
+                let quiet = link.shared.muted.load(Ordering::Relaxed) || spoke.elapsed() >= CAMERA_QUIET_AFTER;
+                interval = Duration::from_secs_f64(1.0 / f64::from(if quiet { rung.quiet_fps.min(fps) } else { fps }.max(1)));
+                if want == 0 {
+                    due = Instant::now() + interval;
+                    continue;
+                }
+                if frame.width > rung.width { Arc::new(frame.fit(rung.width, rung.height)) } else { frame }
             }
-            let quiet = link.shared.muted.load(Ordering::Relaxed) || spoke.elapsed() >= CAMERA_QUIET_AFTER;
-            interval = Duration::from_secs_f64(1.0 / f64::from(if quiet { QUIET_FPS.min(fps) } else { fps }.max(1)));
-        }
+        };
         // Behind (a slow encode): the next frame is due now rather than in a burst catching up.
         due = (due + interval).max(Instant::now());
         let unit = encoder.encode(&frame);
