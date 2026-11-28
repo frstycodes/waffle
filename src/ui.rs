@@ -81,6 +81,7 @@ mod tunnel;
 mod tokens;
 mod layout;
 mod face;
+pub mod feel;
 mod status_mark;
 mod kit;
 mod notice;

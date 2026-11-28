@@ -196,6 +196,7 @@ fn main() {
     #[cfg(feature = "dhat-heap")]
     memory::start_heap_profile();
     memory::start_reporting();
+    ui::feel::install();
     gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
         app_keys::init(cx);

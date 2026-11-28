@@ -37,6 +37,7 @@ mod color;
 mod element;
 mod elements;
 mod executor;
+mod feel;
 mod fast;
 mod geometry;
 mod gestures;
@@ -124,6 +125,7 @@ pub use assets::*;
 pub use color::*;
 pub use element::*;
 pub use elements::*;
+pub use feel::{ScrollFeel, TooltipEnter, TooltipFeel, scroll_feel, set_scroll_feel, set_tooltip_feel, tooltip_feel};
 pub use executor::*;
 pub use fast::composition::{
     ComposedScene, ComposedSceneLayer, CompositionSurfaceId, CompositionSurfaceKind,
