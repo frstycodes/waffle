@@ -397,7 +397,8 @@ pub(super) fn dispatch(kind: &str, d: &Value) -> Option<Event> {
         }
         "VOICE_CHANNEL_STATUS_UPDATE" => Some(Event::VoiceStatuses { guild_id: s(&d["guild_id"]), statuses: vec![(s(&d["id"]), s(&d["status"]))], all: false }),
         "VOICE_CHANNEL_START_TIME_UPDATE" => Some(Event::VoiceStartTimes { guild_id: s(&d["guild_id"]), times: vec![(s(&d["id"]), d["voice_start_time"].as_u64())], all: false }),
-        "STREAM_UPDATE" => Some(Event::StreamUpdate { key: s(&d["stream_key"]), viewers: strings(&d["viewer_ids"]), paused: d["paused"].as_bool().unwrap_or(false) }),
+        "STREAM_CREATE" | "STREAM_UPDATE" => Some(Event::StreamUpdate { key: s(&d["stream_key"]), viewers: strings(&d["viewer_ids"]), paused: d["paused"].as_bool().unwrap_or(false) }),
+        "STREAM_DELETE" => Some(Event::StreamDelete { key: s(&d["stream_key"]) }),
         "VOICE_SERVER_UPDATE" => Some(Event::VoiceServer(d.clone())),
         "CALL_CREATE" | "CALL_UPDATE" => Some(Event::Call { channel_id: s(&d["channel_id"]), ringing: strings(&d["ringing"]) }),
         "CALL_DELETE" => Some(Event::CallEnded { channel_id: s(&d["channel_id"]) }),

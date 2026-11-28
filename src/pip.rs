@@ -3,18 +3,14 @@
 // corner of the window; dragged, it follows the pointer and on release springs to the nearest corner.
 use std::{cell::Cell, time::Duration};
 
-use gpui_kit::{Animation, AnimationExt, AnyElement, Context, FontWeight, MouseButton, Pixels, Point, SharedString, Window, div, prelude::*, px};
-
-use gpui_kit::component::Icon;
+use gpui_kit::{Animation, AnimationExt, AnyElement, Context, MouseButton, Pixels, Point, SharedString, Window, div, prelude::*, px};
 
 use crate::{
     Waffle,
     icons::Glyph,
-    ui::{self, RADIUS_MD, Squircle},
+    ui,
 };
 
-const WIDTH: f32 = 320.;
-const HEIGHT: f32 = WIDTH * 9. / 16.;
 
 type Size = (f32, f32);
 const MARGIN: f32 = 16.;
@@ -97,8 +93,10 @@ fn pin_to<E: Styled>(d: E, corner: Corner, insets: Insets) -> E {
 
 impl Waffle {
     // The call PiP, while looking away from the call: the focused stream or camera (else the first stream we
-    // watch, else our own Go Live, else someone's camera), 16:9. Our own stream shows its local preview. Hovered, the call's name leads back to it and Disconnect sits in the foot.
-    pub(crate) fn stream_pip(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    // watch, else our own Go Live, else someone's camera), 16:9. Hovered, the call's name leads back to it and
+    // Disconnect sits in the foot; our own stream shows its local preview, who's watching, our name, and Stream
+    // Settings and Stop Streaming in place of Disconnect, as Discord's.
+    pub(crate) fn stream_pip(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let call = self.call.as_ref()?;
         let me = self.me.as_ref().map(|m| m.id.as_str());
         let focus = self.call_focus.as_deref().and_then(|k| k.split_once(':'));
@@ -117,54 +115,52 @@ impl Waffle {
         let mine = me == Some(who.as_str());
         let channel = call.channel.clone();
         let name = self.user_name(&who);
-        let white = gpui_kit::white();
         // Inset absolutely, so a 4:3 picture letterboxes inside the frame instead of growing past it; square,
         // only the frame is rounded.
         let picture: AnyElement = match frame {
             Some(frame) => ui::media(gpui_kit::ImageSource::Render(frame), ui::all(0.)).absolute().inset_0().size_full().object_fit(gpui_kit::ObjectFit::Contain).into_any_element(),
-            None => crate::call::stream_fill(0.).absolute().inset_0().flex().items_center().justify_center().text_size(ui::TEXT_XS).text_color(white.opacity(0.7)).child(if mine { "You're live".to_owned() } else { format!("Joining {name}'s stream…") }).into_any_element(),
+            None => crate::call::stream_fill(0.).absolute().inset_0().flex().items_center().justify_center().text_size(ui::TEXT_XS).text_color(gpui_kit::white().opacity(0.7)).child(if mine { "You're live".to_owned() } else { format!("Joining {name}'s stream…") }).into_any_element(),
         };
-        let shade = |angle: f32| gpui_kit::linear_gradient(angle, gpui_kit::linear_color_stop(gpui_kit::black().opacity(0.7), 0.), gpui_kit::linear_color_stop(gpui_kit::transparent_black(), 0.4));
-        let back = channel.clone();
-        let controls = ui::col()
+        let chrome = match mine {
+            true => ui::PipChrome {
+                top_left: Some(ui::pip_title(channel.name.clone()).into_any_element()),
+                top_right: spectators(self.viewers(&who)).map(IntoElement::into_any_element),
+                bottom_left: Some(ui::pip_label(name.clone()).into_any_element()),
+                bottom_right: Some(self.own_stream_controls(cx).into_any_element()),
+            },
+            false => ui::PipChrome {
+                top_left: Some(ui::pip_title(channel.name.clone()).into_any_element()),
+                bottom_right: Some(
+                    ui::round_button("pip-disconnect", Glyph::CallEnd, "Disconnect", ui::AVATAR_LG)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            cx.stop_propagation();
+                            this.leave_voice(cx);
+                        }))
+                        .into_any_element(),
+                ),
+                ..Default::default()
+            },
+        };
+        let player = self
+            .floating_drag(ui::pip("stream-pip", picture, chrome, window, cx), cx)
             .absolute()
-            .inset_0()
-            .p_2()
-            .justify_between()
-            .bg(shade(180.))
-            .opacity(0.)
-            .group_hover("stream-pip", |s| s.opacity(1.))
-            .child(
-                ui::row().gap_1p5().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(white).child(Icon::new(Glyph::ChevronLeft).size(ui::ICON_LG)).child(ui::line(back.name.clone())),
-            )
-            .child(ui::row().justify_end().child(ui::round_button("pip-disconnect", Glyph::CallEnd, "Disconnect", ui::AVATAR_LG).on_click(cx.listener(|this, _, _, cx| {
-                cx.stop_propagation();
-                this.leave_voice(cx);
-            }))));
-        let foot = div().absolute().left_0().right_0().bottom_0().h_1_2().bg(shade(0.)).opacity(0.).group_hover("stream-pip", |s| s.opacity(1.));
-        let player = self.floating_drag(div().id("stream-pip"), cx);
-        let player = player
-            .group("stream-pip")
-            // Floats over the app: what's under it must not take the hover or the click.
-            .occlude()
-            .absolute()
-            .w(px(WIDTH))
-            .h(px(HEIGHT))
-            .squircle(RADIUS_MD)
-            .overflow_hidden()
-            .bg(gpui_kit::black())
-            .shadow(ui::shadow_pop(cx))
-            .cursor_pointer()
-            .child(picture)
-            .child(foot)
-            .child(controls)
-            .tooltip(move |window, cx| ui::Tooltip::new(match (is_stream, mine) {
-                (true, true) => "Your screen".to_owned(),
-                (true, false) => format!("{name}'s screen"),
-                (false, _) => name.clone(),
-            }).build(window, cx))
+            // Not on ours: a tooltip on the whole window fights the viewers list and the buttons over the same
+            // hover, and the two take turns showing. Ours names itself in the foot.
+            .when(!mine, |d| d.tooltip(move |window, cx| ui::Tooltip::new(if is_stream { format!("{name}'s screen") } else { name.clone() }).build(window, cx)))
             .on_click(cx.listener(move |this, _, window, cx| this.show_call(channel.clone(), window, cx)));
-        Some(self.place_floating(player, (WIDTH, HEIGHT)))
+        Some(self.place_floating(player, ui::PIP_SIZE))
+    }
+
+    // Our own stream's foot: its settings menu and the way to end it, bare icons as Discord's.
+    fn own_stream_controls(&self, cx: &mut Context<Self>) -> gpui_kit::Div {
+        let settings = ui::pip_button("pip-stream-settings", Glyph::StreamSettings, "Stream Settings")
+            .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_stream_menu(e.position, cx)))
+            .on_click(|_, _, cx| cx.stop_propagation());
+        let stop = ui::pip_button("pip-stop-stream", Glyph::ScreenOff, "Stop Streaming").on_click(cx.listener(|this, _, _, cx| {
+            cx.stop_propagation();
+            this.toggle_screen_share(cx);
+        }));
+        ui::row().flex_none().gap_1().child(settings).child(stop)
     }
 
     // Puts a floating window where it rests, follows the pointer while carried, or springs into its corner.
@@ -226,9 +222,24 @@ impl Waffle {
     }
 }
 
+// Who's watching our stream, top right: the stage's stack of faces, the list on hover under "Spectators" (the
+// list adds its own count).
+pub(crate) fn spectators(viewers: Vec<crate::call::Viewer>) -> Option<gpui_kit::Stateful<gpui_kit::Div>> {
+    if viewers.is_empty() {
+        return None;
+    }
+    let people: Vec<ui::Entry> = viewers.into_iter().map(|v| ui::Entry::person(v.avatar, v.name)).collect();
+    let stage = crate::palette::stage::dock();
+    let faces = ui::AvatarGroup::capped(&people, crate::call::VIEWER_FACES, ui::AVATAR_SM - 4., stage, crate::palette::stage::overlay(), crate::palette::stage::strong());
+    Some(ui::HoverCard::new(faces.id("pip-spectators").flex_none(), "Spectators", people))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const WIDTH: f32 = ui::PIP_SIZE.0;
+    const HEIGHT: f32 = ui::PIP_SIZE.1;
 
     #[test]
     fn lands_in_the_nearest_corner() {

@@ -33,6 +33,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::left`
 - `ui::edge` — A strip (header, footer, scroll area) that runs edge to edge of a rounded container, rounded to match on the corners it touches, in the cont
 - `ui::mix` — CSS `color-mix` in sRGB: `t` of `to` over `from`, for fills that follow a transition.
+- `ui::over` — `wash` (a translucent hover, selected or card fill) laid solid over `surface`: the colour a row shows in that state, which an avatar's prese
 
 ## src/ui/alert.rs
 
@@ -208,6 +209,19 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 
 - `ui::Entry` — One thing in the list: a person (round) or an item (a badge, a server; square), with its name.
 
+## src/ui/pip.rs
+
+- `ui::PIP_SIZE` — The player's size: 320 wide at 16:9.
+- `ui::CHROME_DRIFT` — How far the header and the foot slide in from their edges as the chrome fades in, as the call stage's.
+- `ui::PipChrome` — What sits over the picture: each corner is optional, and the header and foot each get a shade behind them.
+- `ui::pip` — A floating 16:9 player whose header and foot fade in and slide 8px from their edges while it's hovered, and back out when the pointer leaves
+- `ui::pip_reveal` — How far over a player's picture its controls are shown (0 hidden, 1 shown), easing toward `shown` over 200ms.
+- `ui::pip_shade` — The dark fade behind a player's controls: 70% black at the edge, clear by 40% of the way in.
+- `ui::pip_at` — The player with its chrome held at `shown` (0 hidden, 1 shown), for a still of any point in the hover.
+- `ui::pip_title` — The header's way back: a chevron and where it leads, in white.
+- `ui::pip_label` — A name over the picture, in white, cut short before it reaches the foot's controls.
+- `ui::pip_button` — A control over the picture with no fill of its own: white ink that brightens under the pointer.
+
 ## src/ui/popover.rs
 
 - `ui::Popover` — A bar that floats over a page's foot (unsaved changes, bulk actions): the overlay card at the settings column's width.
@@ -356,6 +370,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `palette::faint`
 - `palette::accent_ink`
 - `palette::positive_ink`
+- `palette::streaming_ink` — Twitch purple deepened (light) or lifted (dark) to read as text and glyphs: the Live row on a rail tile's card.
 - `palette::boost_ink` — Discord's server-boost pink, for the gem beside a booster's name.
 - `palette::positive_ink_inverted` — Green on a tooltip, whose surface is the other theme's (`ui::tip` inverts the page).
 - `palette::danger_ink`

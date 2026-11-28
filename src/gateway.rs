@@ -438,9 +438,10 @@ impl Waffle {
                     Some(guild) => format!("guild:{guild}:{c}:{}", state.user_id),
                     None => format!("call:{c}:{}", state.user_id),
                 });
-                let suffix = format!(":{}", state.user_id);
-                self.stream_live_since.retain(|key, _| !key.ends_with(&suffix) || Some(key) == live_key.as_ref());
-                self.stream_paused.retain(|key| !key.ends_with(&suffix) || Some(key) == live_key.as_ref());
+                let ended = |key: &String| stream_ended(key, &state.user_id, live_key.as_deref());
+                self.stream_live_since.retain(|key, _| !ended(key));
+                self.stream_paused.retain(|key| !ended(key));
+                self.stream_viewers.retain(|key, _| !ended(key));
                 if let Some(key) = live_key {
                     self.stream_live_since.entry(key).or_insert_with(Instant::now);
                 }
@@ -491,6 +492,10 @@ impl Waffle {
                     sounds::play(cue);
                 }
                 self.stream_viewers.insert(key, viewers);
+            }
+            Event::StreamDelete { key } => {
+                self.stream_viewers.remove(&key);
+                self.stream_paused.remove(&key);
             }
             Event::Disconnected(reason) => {
                 self.splash_stage(0, "Reconnecting…", cx);
@@ -623,5 +628,33 @@ impl Waffle {
         })
         // lint-allow(detached-task): one TYPING_TTL timer, then it ends
         .detach();
+    }
+}
+
+// Whether `key` is one of `user_id`'s streams other than `live`, the one they're still streaming (if any).
+fn stream_ended(key: &str, user_id: &str, live: Option<&str>) -> bool {
+    key.rsplit(':').next() == Some(user_id) && Some(key) != live
+}
+
+#[cfg(test)]
+mod stream_tests {
+    use std::collections::HashMap;
+
+    use super::stream_ended;
+
+    #[test]
+    fn ended_streams_forget_their_viewers() {
+        let mut viewers = HashMap::from([
+            ("guild:g:yesterday:me".to_owned(), vec!["old".to_owned()]),
+            ("guild:g:lobby:me".to_owned(), vec!["new".to_owned()]),
+            ("guild:g:lobby:someone".to_owned(), vec!["them".to_owned()]),
+        ]);
+        viewers.retain(|key, _| !stream_ended(key, "me", Some("guild:g:lobby:me")));
+        assert_eq!(viewers.get("guild:g:yesterday:me"), None, "a stream that ended keeps no viewers");
+        assert!(viewers.contains_key("guild:g:lobby:me") && viewers.contains_key("guild:g:lobby:someone"));
+        viewers.retain(|key, _| !stream_ended(key, "me", None));
+        assert_eq!(viewers.len(), 1);
+        // A user id that's only the tail of another doesn't match.
+        assert!(!stream_ended("guild:g:lobby:12me", "me", None));
     }
 }

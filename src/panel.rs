@@ -44,18 +44,37 @@ impl Waffle {
         }
     }
 
+    // 0 hidden to 1 shown: the panel's width rides one critically damped spring, the call chat's, so a toggle
+    // mid-slide reverses from where it is and reduced motion lands at once.
+    fn panel_reveal(&self, window: &mut Window, cx: &mut App) -> f32 {
+        let target = if self.panel_shown() { 1. } else { 0. };
+        gpui_kit::base::spring("panel-reveal", target, gpui_kit::base::Spring::new(ui::DUR_PANEL), window, cx)
+    }
+
+    // The panel column inside a clip at the window's right edge: it sits against the clip's right side, so it slides in with the edge, and keeps its full width while the
+    // clip grows, so its rows never reflow. Closing keeps drawing the members it was showing until it's gone.
+    pub(crate) fn slid_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let reveal = self.panel_reveal(window, cx);
+        if reveal <= 0.001 {
+            return None;
+        }
+        let width = self.panel_column_width().unwrap_or(self.panel_width);
+        let part = self.part(crate::part::Column::Panel, gpui_kit::StyleRefinement::default().w(px(width)).h_full().flex_none(), cx);
+        Some(ui::row().relative().w(px(width * reveal)).h_full().flex_none().overflow_hidden().child(div().absolute().top_0().right_0().h_full().w(px(width)).child(part)).into_any_element())
+    }
+
     pub fn render_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         self.close_mod_view_if_barred();
-        let width = self.panel_column_width()?;
-        if matches!(self.right_panel, RightPanel::Members) && self.dm_recipient().is_some() {
+        // Hidden only follows the members, so a closing panel keeps drawing them while it slides out.
+        let width = self.panel_column_width().unwrap_or(self.panel_width);
+        if matches!(self.right_panel, RightPanel::Members | RightPanel::Hidden) && self.dm_recipient().is_some() {
             return self.dm_profile(window, cx);
         }
         // Its header sits on the window's top line beside the channel header's: "Members", or the search's
         // query with a way back to the members.
         let (head, body, foot): (Div, AnyElement, Option<AnyElement>) = match &self.right_panel {
-            RightPanel::Hidden => return None,
-            RightPanel::Members if self.guild_id.is_none() => (self.panel_head("Members".into(), None, Vec::new(), false, cx), self.group_member_list(cx), self.group_invite_foot(cx)),
-            RightPanel::Members => (self.panel_head("Members".into(), None, Vec::new(), false, cx), self.member_list(window, cx), None),
+            RightPanel::Members | RightPanel::Hidden if self.guild_id.is_none() => (self.panel_head("Members".into(), None, Vec::new(), false, cx), self.group_member_list(cx), self.group_invite_foot(cx)),
+            RightPanel::Members | RightPanel::Hidden => (self.panel_head("Members".into(), None, Vec::new(), false, cx), self.member_list(window, cx), None),
             RightPanel::Activity => (self.panel_head("Activity".into(), None, Vec::new(), true, cx), self.activity_cards(usize::MAX, cx), None),
             RightPanel::Search(results) => {
                 let head = self.panel_frame(cx).child(self.search_head(results, self.back_button(cx), cx));
@@ -355,13 +374,19 @@ impl Waffle {
         let status = self.member_status(member);
         let names = |key: String| ui::col().child(name_line(key)).children(status.clone().map(|s| s.line(cx)));
         // The row's fill in each state, laid solid over the panel, for the nameplate's mask to wash in.
-        let fill = |wash: gpui_kit::Hsla| ui::mix(surface, wash.opacity(1.), wash.a);
+        let fill = |wash: gpui_kit::Hsla| ui::over(surface, wash);
         let fills = match selected {
             true => (fill(palette::selected(cx)), None),
             false => (surface, Some(fill(hover))),
         };
         // Discord animates the avatar, decoration and nameplate while the row is hovered or its profile is open.
-        let animate = (selected || self.member_hover.as_deref() == Some(member.user.id.as_str())) && crate::presence::may_animate();
+        let hovered = self.member_hover.as_deref() == Some(member.user.id.as_str());
+        let animate = (selected || hovered) && crate::presence::may_animate();
+        let face_surface = match (selected, hovered) {
+            (true, _) => fills.0,
+            (false, true) => fills.1.unwrap_or(surface),
+            (false, false) => surface,
+        };
         let row = PlateRow { group: MEMBER_ROW_GROUP.into(), height: member_row_height(), width: spot.width, fills, selected, animate, dark };
         let plate = member.user.nameplate.as_ref().map(|plate| row_nameplate(plate, names(format!("member-name-mask-{}", member.user.id)), row));
         let plated = plate.is_some();
@@ -391,7 +416,7 @@ impl Waffle {
             .when(selected, |r| r.bg(palette::selected(cx)))
             .when(!selected, |r| r.hover(move |s| if offline { s.bg(hover).opacity(1.) } else { s.bg(hover) }))
             .children(plate)
-            .child(member_face(member, animate, surface))
+            .child(member_face(member, animate, face_surface))
             .child(names(format!("member-name-{}", member.user.id)).relative().flex_1())
             .on_click({
                 let user = member.user.clone();
@@ -521,13 +546,15 @@ impl MemberStatus {
             .gap_1()
             .text_size(ui::TEXT_XS)
             .text_color(palette::faint(cx))
-            .children(self.icon.and_then(|icon| icon.icon(green)))
-            .children(self.text.filter(|_| !beside_custom).map(|text| ui::truncating(format!("member-status-{text}"), text)))
+            .children(self.icon.and_then(|icon| icon.icon(green)).map(|icon| {
+                let tip = div().id(SharedString::from(format!("member-status-icon-{}", self.id))).flex_none().child(icon);
+                tip.when(!items.is_empty(), |d| d.tooltip(move |_, cx| cx.new(|_| ActivityTip(items.clone())).into()))
+            }))
+            .children(self.text.filter(|_| !beside_custom).map(ui::line))
             // Beside a custom status the count takes the green, as Discord's does.
             .when(self.more > 0, |d| d.child(div().flex_none().when(beside_custom, |c| c.text_color(green)).child(format!("+{}", self.more))))
             .when(primary && beside_custom, |d| d.child(div().flex_none().child("•")))
-            .children(self.custom.map(|custom| ui::truncating(format!("member-custom-{custom}"), custom)))
-            .when(!items.is_empty(), |d| d.tooltip(move |_, cx| cx.new(|_| ActivityTip(items.clone())).into()))
+            .children(self.custom.map(ui::line))
     }
 }
 

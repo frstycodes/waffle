@@ -181,34 +181,46 @@ impl VideoPlayer {
         busy || (self.hovered && (!self.fullscreen || self.pointer_at.elapsed() < IDLE))
     }
 
-    // Full screen in the top-left corner and volume in the top-right, each on a dark pill so they
-    // read over any picture.
-    pub(super) fn corners(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let full = self.icon_button(
-            Control::Fullscreen,
-            if self.fullscreen { Glyph::FullscreenExit } else { Glyph::Fullscreen },
-            if self.fullscreen { "Exit Full Screen" } else { "Full Screen" },
-            |this, window, cx| this.set_fullscreen(!this.fullscreen, window, cx),
-            window,
-            cx,
-        );
+    // Full screen in the top-left corner and volume in the top-right, bare icons on the PiP's shade, faded
+    // in and out together with it (`shown`, 0..1).
+    pub(super) fn corners(&mut self, shown: f32, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let full = self
+            .corner_button(Control::Fullscreen, if self.fullscreen { Glyph::FullscreenExit } else { Glyph::Fullscreen }, if self.fullscreen { "Exit Full Screen" } else { "Full Screen" }, cx)
+            .on_click(cx.listener(|this, _, window, cx| {
+                cx.stop_propagation();
+                this.set_fullscreen(!this.fullscreen, window, cx);
+            }));
         let volume = self.volume(window, cx);
-        // A click on a pill's edge stays off the video under it.
-        let pill = || {
-            div().absolute().top_2().p_1().rounded(px(RADIUS)).bg(gpui_kit::black().opacity(0.56)).on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        };
+        let drift = ui::CHROME_DRIFT * (1. - shown);
         div()
             .absolute()
             .inset_0()
-            .child(pill().left_2().child(full))
-            .child(pill().right_2().child(volume))
+            .child(div().absolute().inset_0().bg(ui::pip_shade(180.)).opacity(shown))
+            .child(ui::row().absolute().top(px(-drift)).left_0().right_0().p_2().justify_between().opacity(shown).child(full).child(volume))
             .into_any_element()
+    }
+
+    // A pip-style control: no fill, white ink, wired to `hot` and kept off the video under it.
+    fn corner_button(&mut self, control: Control, glyph: Glyph, label: &'static str, cx: &mut Context<Self>) -> ui::Button {
+        ui::pip_button(SharedString::from(format!("video-{control:?}")), glyph, label)
+            .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                match *hovered {
+                    true => this.hot = Some(control),
+                    false if this.hot == Some(control) => this.hot = None,
+                    false => {}
+                }
+                cx.notify();
+            }))
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
     }
 
     pub(super) fn volume(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let glyph = if self.level.heard() == 0. { Glyph::VolumeOff } else { Glyph::VolumeHigh };
         let label = if self.level.muted { "Unmute" } else { "Mute" };
-        let button = self.icon_button(Control::Volume, glyph, label, |this, _, cx| this.set_level(Level { muted: !this.level.muted, ..this.level }, cx), window, cx);
+        let button = self.corner_button(Control::Volume, glyph, label, cx).on_click(cx.listener(|this, _, _, cx| {
+            cx.stop_propagation();
+            this.set_level(Level { muted: !this.level.muted, ..this.level }, cx);
+        }));
         let open = matches!(self.hot, Some(Control::Volume | Control::VolumePanel)) || self.adjusting_volume;
         let hidden = Target::default().opacity(0.).y(-6.);
         let panel = self.motions.frame_one(Control::VolumePanel, Motion::new(Target::default()).initial(hidden).exit(hidden).present(open).transition(pop()), window, cx);
@@ -247,11 +259,13 @@ impl VideoPlayer {
             .on_click(|_, _, cx| cx.stop_propagation());
         // The speaker is in the top corner, so the panel opens below it. The gap between them belongs to
         // the panel, so moving down to it never closes it.
-        let reach = div()
+        let reach = ui::row()
             .id("video-volume-reach")
             .absolute()
-            .top(px(SLOT))
-            .left(px((SLOT - 32.) / 2.))
+            .top_full()
+            .left_0()
+            .right_0()
+            .justify_center()
             .pt_2()
             .child(panel.render(|f| f.apply(slider)))
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {

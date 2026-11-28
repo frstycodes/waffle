@@ -38,8 +38,8 @@ impl Waffle {
         // avatar, decoration and nameplate, as Discord's does.
         let (hovered, on_hover) = ui::hover_state("me-hover", window, cx);
         let animate = hovered && crate::presence::may_animate();
-        let rail = palette::surface(palette::Level::Rail, cx);
-        let (card, ring) = (crate::material::card(cx), crate::material::behind_sidebar(rail));
+        let card = crate::material::card(cx);
+        let ring = ui::over(palette::surface(palette::Level::Sidebar, cx), card);
         let voice = self.my_voice_state();
         let (server_muted, server_deafened, suppressed) = voice.map_or((false, false, false), |v| (v.server_muted, v.server_deafened, v.suppress));
         let mic_denied = server_muted || suppressed;

@@ -43,8 +43,14 @@ impl Waffle {
         let selected = self.channel.as_ref().is_some_and(|c| c.id == channel.id);
         let unread = self.unread(&channel.id);
         let presence = channel.recipient.as_ref().and_then(|u| self.presence_of(&u.id));
-        let ring = crate::material::sidebar_fill(cx);
         let hovered = self.hovered_row.as_deref() == Some(channel.id.as_str());
+        // The presence ring is the row's own fill, solid even over the native sidebar, so the mark keeps its contrast.
+        let sidebar = palette::surface(palette::Level::Sidebar, cx);
+        let ring = match (selected, hovered) {
+            (true, _) => ui::over(sidebar, palette::selected(cx)),
+            (false, true) => ui::over(sidebar, palette::hover(cx)),
+            (false, false) => sidebar,
+        };
         // Discord plays the avatar, decoration and nameplate while the row is hovered or open.
         let animate = (selected || hovered) && crate::presence::may_animate();
         let typing = self.typing.get(&channel.id).is_some_and(|t| t.iter().any(|t| t.until > std::time::Instant::now()));
@@ -82,13 +88,13 @@ impl Waffle {
                 )
                 .children(line(key, cx).map(|l| l.flex().items_center().gap_1().min_w_0().text_size(ui::TEXT_XS).text_color(faint)))
         };
-        // Only while hovered, so the list stays quiet at rest.
-        let plate = channel.recipient.as_ref().and_then(|u| u.nameplate.as_ref()).filter(|_| hovered).map(|plate| {
+        // The open conversation keeps its nameplate, still; it moves only under the pointer.
+        let plate = channel.recipient.as_ref().and_then(|u| u.nameplate.as_ref()).filter(|_| selected || hovered).map(|plate| {
             // The row's fills laid solid on the sidebar's own surface, as the user panel's nameplate is.
             let surface = palette::surface(palette::Level::Sidebar, cx);
             let fill = |wash: gpui_kit::Hsla| ui::mix(surface, wash.opacity(1.), wash.a);
             let fills = if selected { (fill(palette::selected(cx)), None) } else { (surface, Some(fill(palette::hover(cx)))) };
-            let row = PlateRow { group: format!("dm-{}", channel.id).into(), height: DM_ROW_HEIGHT, width: self.channels_width - 16., fills, selected, animate, dark: cx.theme().is_dark() };
+            let row = PlateRow { group: format!("dm-{}", channel.id).into(), height: DM_ROW_HEIGHT, width: self.channels_width - 16., fills, selected, animate: hovered && animate, dark: cx.theme().is_dark() };
             row_nameplate(plate, names("-mask", cx).flex_initial(), row)
         });
         let state = RowState { selected, unread, muted: false, strong: false };

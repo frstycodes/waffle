@@ -59,6 +59,7 @@ mod input;
 mod input_group;
 mod input_otp;
 mod item;
+mod pip;
 mod popover;
 mod scroll_area;
 mod select;
@@ -101,6 +102,7 @@ pub use input::{Input};
 pub use input_group::{InputGroup};
 pub use input_otp::{InputOTP};
 pub use item::{Item, ItemMedia};
+pub use pip::{PIP_SIZE, CHROME_DRIFT, PipChrome, pip, pip_at, pip_button, pip_label, pip_reveal, pip_shade, pip_title};
 pub use popover::{Popover, PopoverContent};
 pub use scroll_area::{ScrollArea};
 pub use select::{Select};
@@ -396,7 +398,11 @@ fn stacked(avatars: impl IntoIterator<Item = AnyElement>, size: f32, ring: Hsla)
 fn capped_stack(people: &[Entry], cap: usize, size: f32, ring: Hsla, more_fill: Hsla, more_ink: Hsla) -> Div {
     let shown = if people.len() > cap { cap - 1 } else { people.len() };
     let more = people.len() - shown;
-    let faces = people[..shown].iter().map(|p| avatar(p.icon.clone(), size).into_any_element());
+    // No photo: the name's monogram, never an empty ring.
+    let faces = people[..shown].iter().map(|p| match p.icon.is_empty() {
+        true => monogram(&p.name, size).into_any_element(),
+        false => avatar(p.icon.clone(), size).into_any_element(),
+    });
     let more_chip = (more > 0).then(|| {
         div()
             .size(px(size))
@@ -679,6 +685,13 @@ pub fn mix(from: Hsla, to: Hsla, t: f32) -> Hsla {
     let (a, b) = (gpui_kit::Rgba::from(from), gpui_kit::Rgba::from(to));
     let lerp = |x: f32, y: f32| x + (y - x) * t;
     gpui_kit::Rgba { r: lerp(a.r, b.r), g: lerp(a.g, b.g), b: lerp(a.b, b.b), a: lerp(a.a, b.a) }.into()
+}
+
+// `wash` (a translucent hover, selected or card fill) laid solid over `surface`: the colour a row shows in that
+// state, which an avatar's presence ring takes to read cut out of the face.
+// Keywords: composite, blend, flatten, solid hover colour, cutout ring, status ring background
+pub fn over(surface: Hsla, wash: Hsla) -> Hsla {
+    mix(surface, wash.opacity(1.), wash.a)
 }
 
 // Scales an element by `x` and `y` about its transform origin: gpui's `scale` builder is uniform only.

@@ -386,6 +386,8 @@ pub enum Event {
     // A Go Live stream by its key: who is watching, and whether the streamer paused it (Not verified
     // that `paused` is sent here; a stalled stream reads as Stalled without it).
     StreamUpdate { key: String, viewers: Vec<String>, paused: bool },
+    // A Go Live stream ended: its viewers and pause go with it.
+    StreamDelete { key: String },
     // When each voice channel's current session began (Unix seconds); `all` replaces the server's list.
     VoiceStartTimes { guild_id: String, times: Vec<(String, Option<u64>)>, all: bool },
     // Each voice channel's status ("" for none); `all` replaces the server's list, as CHANNEL_INFO does.

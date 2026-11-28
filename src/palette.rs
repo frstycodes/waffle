@@ -54,6 +54,7 @@ struct Tokens {
     danger_ink: u32,
     online: u32,
     online_ink: u32,
+    streaming_ink: u32,
     idle: u32,
     info_ink: u32,
     warning_ink: u32,
@@ -89,6 +90,7 @@ const DARK: Tokens = Tokens {
     danger_ink: 0xFF7A8C,
     online: 0x3EC87D,
     online_ink: 0x59D38C,
+    streaming_ink: 0xA98BFF,
     idle: 0xF2B036,
     info_ink: 0x65B4E9,
     warning_ink: 0xF3B94C,
@@ -122,6 +124,7 @@ const LIGHT: Tokens = Tokens {
     danger_ink: 0xB0182F,
     online: 0x00A159,
     online_ink: 0x00723B,
+    streaming_ink: 0x7C3AED,
     idle: 0xDA950B,
     info_ink: 0x0068A7,
     warning_ink: 0x975800,
@@ -666,6 +669,11 @@ pub fn positive_ink(cx: &App) -> Hsla {
     hex(tokens(cx).online_ink)
 }
 
+// Twitch purple deepened (light) or lifted (dark) to read as text and glyphs: the Live row on a rail tile's card.
+pub fn streaming_ink(cx: &App) -> Hsla {
+    hex(tokens(cx).streaming_ink)
+}
+
 // Discord's server-boost pink, for the gem beside a booster's name.
 pub fn boost_ink(cx: &App) -> Hsla {
     hex(if cx.theme().is_dark() { 0xF07CF5 } else { 0xB21FC4 })
@@ -802,7 +810,7 @@ mod tests {
                     assert!(ratio >= 4.5, "{ink:06X} on {surface:06X} is {ratio:.2}:1");
                 }
             }
-            for ink in [t.accent_ink, t.online_ink, t.danger_ink, t.info_ink, t.warning_ink] {
+            for ink in [t.accent_ink, t.online_ink, t.streaming_ink, t.danger_ink, t.info_ink, t.warning_ink] {
                 for surface in [t.sidebar, t.page, t.raised] {
                     let ratio = contrast(ink, surface);
                     assert!(ratio >= 4.5, "{ink:06X} on {surface:06X} is {ratio:.2}:1");

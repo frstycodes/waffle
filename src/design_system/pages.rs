@@ -82,6 +82,7 @@ pages! {
     Meter, WaffleOwn, "Mic meter", "Bars that light up to a level, amber then red near the top.", [("Level", "0 to 1")];
     Swatch, WaffleOwn, "Swatch", "A colour choice, ringed and ticked when chosen.", [("State", "Off · Chosen")];
     DropZone, WaffleOwn, "Drop zone", "Where files land.", [("State", "Rest · Dragging over")];
+    Pip, WaffleOwn, "Picture-in-picture", "The call's floating player: a 16:9 picture whose header and foot ease in on hover.", [("Owner", "Your stream · Someone's stream or camera"), ("Chrome", "Hidden · Easing · Shown"), ("Viewers", "None · Few · Capped +n"), ("Picture", "Frame · Waiting")];
 
     DoDont, Guidance, "Do and Don't", "Rendered pairs for the rules that are easiest to break.", [("Rule","One primary per group · Icon buttons carry a tooltip · Destructive only for the destructive step · One accent per surface")];
     Recipes, Guidance, "Recipes", "Waffle's own compositions, built only from tokens and components, then one realistic screen.", [("Recipe","Settings row · Member row · Example screen")];
