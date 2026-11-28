@@ -333,6 +333,8 @@ impl Waffle {
             profile_card: None,
             role_popout: Default::default(),
             status_menu: false,
+            #[cfg(debug_assertions)]
+            design_system: None,
             updates: updater::Updates::default(),
             hovered_row: None,
             hovered_message: None,
