@@ -186,7 +186,7 @@ impl Render for Setup {
                         .items_center()
                         .child(ui::line(title).text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
                         .child(div().w_full().text_center().text_size(ui::TEXT_SM).line_height(ui::LINE_SM).text_color(palette::muted(cx)).child(detail))
-                        .children((!failed).then(|| div().pt_3().w(px(TRACK)).child(ui::Progress::new(self.fraction()).joined().track(palette::track(cx)))))
+                        .children((!failed).then(|| div().pt_3().w(px(TRACK)).child(ui::Progress::new(self.fraction()).track(palette::track(cx)))))
                         .children(failed.then(|| {
                             ui::row()
                                 .pt_3()

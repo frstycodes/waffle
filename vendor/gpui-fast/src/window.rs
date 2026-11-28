@@ -5230,12 +5230,16 @@ impl Window {
                 continue;
             }
             let shadow_bounds = (bounds + shadow.offset).dilate(shadow.spread_radius);
+            // Waffle patch: as CSS does, a spread grows each rounded corner by the spread too, so a ring around a round or rounded
+            // element stays concentric with it instead of tightening at the corners.
+            let spread = shadow.spread_radius;
+            let grown = corner_radii.map(|&r| if r > px(0.) { (r + spread).max(px(0.)) } else { px(0.) });
             self.next_frame.scene.insert_primitive(Shadow {
                 order: 0,
                 blur_radius: shadow.blur_radius.scale(scale_factor),
                 bounds: self.cover_bounds(shadow_bounds),
                 content_mask,
-                corner_radii: corner_radii.scale(scale_factor),
+                corner_radii: grown.scale(scale_factor),
                 color: shadow.color.opacity(opacity),
                 element_bounds,
                 element_corner_radii,

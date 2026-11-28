@@ -75,7 +75,7 @@ impl Render for Splash {
                 .child(mascot::loader("splash-loader", MARK, palette::logo_ink(cx), cx))
                 .child(div().pt_1().text_size(ui::TEXT_LG).line_height(ui::LINE_SM).font_weight(FontWeight::BOLD).text_color(palette::strong(cx)).child("Waffle"))
                 .child(ui::line(self.stage.clone()).max_w_full().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)))
-                .child(div().w(px(TRACK)).child(ui::Progress::new(self.progress).joined().track(palette::track(cx)))),
+                .child(div().w(px(TRACK)).child(ui::Progress::new(self.progress).track(palette::track(cx)))),
         )
     }
 }

@@ -6,7 +6,7 @@ use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, Div, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString, Styled, div, px,
 };
 
-use super::{LINE_SM, RADIUS_LG, RADIUS_MD, RADIUS_SM, Squircle, TEXT_SM, TEXT_XS, mix, row, shadow_pop};
+use super::{LINE_SM, RADIUS_LG, RADIUS_MD, Squircle, TEXT_SM, TEXT_XS, mix, row, shadow_pop};
 use crate::{motion, palette};
 
 // What an inline strip is filled with: the raised card with a hairline edge, the selected wash, or a tint of
@@ -22,11 +22,12 @@ pub enum StripFill {
 // (`flex_1` on the message). Callers add the children and may set their own padding or `.squircle(..)`.
 // Keywords: notice bar, banner, compact callout, action bar, follow bar, inline action, strip
 pub fn strip(fill: StripFill, cx: &App) -> Div {
-    let base = row().min_h_11().py_1p5().pl_3().pr_2p5().gap_2().squircle(RADIUS_MD).text_size(TEXT_SM).text_color(palette::strong(cx));
+    // One radius and one hairline slot for every fill, so strips stacked together line up (the fills that show no edge keep it clear).
+    let base = row().min_h_11().py_1p5().pl_3().pr_2p5().gap_2().squircle(RADIUS_MD).border_1().border_color(gpui_kit::transparent_black()).text_size(TEXT_SM).text_color(palette::strong(cx));
     match fill {
-        StripFill::Raised => base.squircle(RADIUS_LG).bg(palette::surface(palette::Level::Raised, cx)).border_1().border_color(palette::line(cx)),
+        StripFill::Raised => base.bg(palette::surface(palette::Level::Raised, cx)).border_color(palette::line(cx)),
         StripFill::Selected => base.bg(palette::selected(cx)).text_color(palette::text(cx)),
-        StripFill::Accent => base.squircle(RADIUS_SM).bg(mix(palette::surface(palette::Level::Page, cx), palette::accent(), 0.16)),
+        StripFill::Accent => base.bg(mix(palette::surface(palette::Level::Page, cx), palette::accent(), 0.16)),
     }
 }
 

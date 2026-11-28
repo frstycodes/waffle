@@ -21,9 +21,9 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::toggle_row` — A setting that applies at once: its title and a line of detail, the switch at the end.
 - `ui::pick_row` — One of a set to pick from: the check or radio first, then its title and detail.
 - `ui::pick_row_icon` — A choice whose kind has an icon (a channel type, a place): the icon leads the title, as in Create Channel.
-- `ui::speaking_ring` — Speaking: a gap in the surface's colour, then the accent ring.
+- `ui::speaking_ring` — Speaking: a gap in the surface's colour, then the ring in presence green (never the accent).
 - `ui::foot_dock` — Docks a floating bar 16px above the foot of the nearest relative parent, centred, rising in.
-- `ui::rise` — A floating surface's entrance (menus, popovers, pickers, dialogs): it fades in and grows from 0.95 over the pop timing, after `delay` (a sub
+- `ui::rise` — The one entrance of every floating surface (selects, menus, popovers, pickers, hover cards, tooltips): a fade with a slight grow from 0.97 o
 - `ui::corner` — A transform origin at one of an element's corners: where a floating surface rises from, toward its trigger.
 - `ui::Notice`
 - `ui::Art`
@@ -118,7 +118,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 ## src/ui/feedback.rs
 
 - `ui::media_track` — The track of a scrubber or volume slider over video: a 4px wash of white, the accent filled to `fraction` and a white knob `knob` wide centr
-- `ui::meter` — The mic meter: `bars` equal bars that light up to `level` (0..1), turning amber then red near the top.
+- `ui::meter` — The mic meter: one bar cut into `bars` pieces that light up to `level` (0..1), turning amber then red near the top.
 - `ui::meter_with` — The meter in a scope with its own colours (the call stage): `lit` is on, hot and clipping.
 - `ui::ring` — A ring of two round-capped arcs, done and left, with a gap at each meeting point: 40px, 4px stroke.
 - `ui::squiggle` — A marker squiggle under where a jump landed.
@@ -290,7 +290,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 
 ## src/ui/tooltip.rs
 
-- `ui::Tooltip` — The design's tooltip: inverted ink, 12px semibold, popping in from 0.95 with its fade over the hover timing.
+- `ui::Tooltip` — The design's tooltip: inverted ink, 12px semibold, entering with the window's plain fade (the same as every floating surface).
 
 ## src/ui/tri.rs
 

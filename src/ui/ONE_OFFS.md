@@ -8,7 +8,9 @@ thing: a second copy of a one-off is a missing design-system component or varian
 
 _Spacing: gpui's scale (gap_2, p_1p5, mt_3 … see ui/tokens.rs). Sizes: a ui token (TEXT_*, ICON_*, AVATAR_*, RADIUS_*, HAIRLINE) or a named const._
 
+- `src/autoscroll.rs` — the step is computed from the time since the last tick.
 - `src/chat/composer.rs` — the entrance slides 8px as it fades, a margin computed from the animation's progress
+- `src/chat/feed_edge.rs` — the composer's measured height
 - `src/demo.rs` — fixture coordinates for where a demo menu opens, not layout
 - `src/drag.rs` — the slide's distance is computed from the animation's progress.
 - `src/login.rs` — the rise's distance is computed from the animation's progress.
@@ -307,6 +309,7 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/panel.rs` — the panel's width and header follow which panel is open
 - `src/part.rs` — notifies the overlay layer alone
 - `src/part.rs` — notifies the part alone
+- `src/part.rs` — notifies the rail part alone
 - `src/part.rs` — subscribed once with the part, which notifies itself, following the app.
 - `src/part.rs` — the overlay layer doesn't exist yet
 - `src/part.rs` — the part doesn't exist yet
@@ -553,13 +556,13 @@ _Floating or raised surface: ui::PopoverContent, ui::Popover, ui::Sonner, ui::Di
 - `src/call/fit.rs` — ui::PopoverContent::new insets its content and rings it, and this card's own panel fills it and slides in by a computed offset
 - `src/call_previews.rs` — ui::PopoverContent::new rings and shadows in the app's overlay colours, and this card is the call stage's own dark overlay
 - `src/chat/attachments.rs` — ui::toolbar occludes the wheel too, and this bar must let the feed scroll under it; it also rides above its row's edge
-- `src/chat/composer.rs` — ui::PopoverContent::new has no glass fill (translucent, blurred, saturated) over a scrolling feed
+- `src/chat/composer.rs` — ui::PopoverContent::new is a floating menu surface; the composer is a raised card in the flow of the chat
 - `src/chat/composer.rs` — ui::PopoverContent::new isn't positioned off its parent's top edge; ui::Popover::floating_at anchors to a window point, not to the composer card
 - `src/chat/composer.rs` — ui::PopoverContent::new isn't positioned off its parent's top edge; ui::Popover::floating_at anchors to a window point, not to the composer card
 - `src/chat/media.rs` — ui::PopoverContent::new sits in the flow; this popout hangs absolutely over a gallery tile and sizes itself
 - `src/command_picker/render.rs` — ui::PopoverContent::new lacks an anchored composer popup that rises from the field
 - `src/drag.rs` — ui::PopoverContent::new has a fixed fill and shadow; this one's fill and shadow fade with the lift.
-- `src/joining/rules.rs` — ui::PopoverContent::new has no frosted translucent level matching the composer card
+- `src/joining/rules.rs` — ui::PopoverContent::new is a floating menu surface; this bar is a raised card matching the composer
 - `src/login.rs` — ui::PopoverContent::new is the theme's overlay fill; the code sits on white in both themes so phones can read it.
 - `src/login.rs` — ui::badged marks a corner with a count or a status; this is the 32px phone chip, ringed by a hairline.
 - `src/profile/parts.rs` — ui::PopoverContent::new is a flat overlay fill; this card is the user's gradient inside a gradient border.
@@ -585,14 +588,13 @@ _Label: ui::Badge (`.variant`, `Badge::count`, `Badge::dot`), ui::pill or ui::ro
 - `src/chat.rs` — ui::Alert::new is inline, not floating over a list; ui::Popover::bar docks at the foot, this one hangs from the feed's top
 - `src/chat/composer.rs` — ui::PopoverContent::new isn't positioned off its parent's top edge; ui::Popover::floating_at anchors to a window point, not to the composer card
 - `src/chat/composer.rs` — ui::PopoverContent::new isn't positioned off its parent's top edge; ui::Popover::floating_at anchors to a window point, not to the composer card
-- `src/chat/composer.rs` — ui::pill is in the flow and solid; this one floats out of it over the feed with a blurred glass fill
 - `src/chat/embeds.rs` — ui::Badge is a small solid label; this is a result row with its share drawn as a fill behind the text
 - `src/command_picker/render.rs` — ui::PopoverContent::new lacks an anchored composer popup that rises from the field
 - `src/create_channel.rs` — ui::Toggle's removable look is an outlined chip, not this filled selected-tone pill
 - `src/dm_call.rs` — ui::pill is a label, and this holds a face stack and the Join button
 - `src/drag.rs` — ui::Badge is a static label and ui::badged marks a face's corner; this chip hangs off the ghost's right edge.
 - `src/forum/helpers.rs` — ui::Badge is a 20px solid label; this is a 32px file row with an icon and its size
-- `src/joining/rules.rs` — ui::PopoverContent::new has no frosted translucent level matching the composer card
+- `src/joining/rules.rs` — ui::PopoverContent::new is a floating menu surface; this bar is a raised card matching the composer
 - `src/panel.rs` — ui::Tooltip is one line of text; this tip lists each thing someone is doing, with its icon.
 - `src/profile/activity.rs` — ui::Badge is a small label; this is the art slot itself, Discord's unknown-app square.
 - `src/profile/activity_voice.rs` — ui::AvatarGroup::capped puts its "+n" at a row's end; Discord's tile puts it at one of the seats.
@@ -621,7 +623,6 @@ _A mark on a face's or control's corner: ui::badged with a Spot (it places the m
 - `src/chat/attachments.rs` — ui::toolbar occludes the wheel too, and this bar must let the feed scroll under it; it also rides above its row's edge
 - `src/chat/composer.rs` — ui::PopoverContent::new isn't positioned off its parent's top edge; ui::Popover::floating_at anchors to a window point, not to the composer card
 - `src/chat/composer.rs` — ui::PopoverContent::new isn't positioned off its parent's top edge; ui::Popover::floating_at anchors to a window point, not to the composer card
-- `src/chat/composer.rs` — ui::pill is in the flow and solid; this one floats out of it over the feed with a blurred glass fill
 - `src/chat/embeds.rs` — ui::Progress draws a thin track; this fill runs behind the row's text, as wide as the share
 - `src/chat/parts.rs` — ui::badged marks a face's corner; this is a connector line drawn from the preview to the avatar
 - `src/command_picker/render.rs` — ui::PopoverContent::new lacks an anchored composer popup that rises from the field
@@ -820,9 +821,11 @@ _A repeating animation redraws every frame while it's on screen: run it only whi
 - `src/design_system/identity.rs` — drawn only on the design-system page, which exists to show it moving.
 - `src/dm_call.rs` — pulses only on a face still being rung (pending); it stops when they answer
 - `src/dm_call.rs` — pulses only while the ringing card is up; answering or declining removes it
+- `src/frame_rate.rs` — only while the setting is on; turning it off draws nothing and asks for nothing.
 - `src/mascot.rs` — plays only while a loader is drawn, and reduce-motion gets the still mark above.
 - `src/mascot.rs` — plays only while the mascot is drawn, and reduce-motion gets the still mark above.
 - `src/settings/meter.rs` — shown only while a keybind is recording; the ring is dropped when recording ends
+- `src/ui/feedback.rs` — drawn only while a skeleton is on screen; it ends when the placeholders are replaced.
 - `src/ui/status_mark.rs` — the typing mark shows only while someone is typing, which Discord ends after 10 seconds.
 - `src/video.rs` — drawn only while the clip loads; the view swaps it out when it is ready or has failed
 
@@ -858,6 +861,7 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/audio_player.rs` — a one-shot timer: ends after SETTLE, or when the player is dropped
 - `src/audio_player.rs` — one download: ends when it returns, or when the player is dropped
 - `src/audio_player.rs` — the tick loop ends when tick says stop or the player is dropped
+- `src/autoscroll.rs` — ends itself after RUN, or as soon as the app is gone.
 - `src/boot.rs` — one SPLASH_LIMIT timer, then it ends
 - `src/boot.rs` — the activation observer ends with the window
 - `src/boot.rs` — the add-friend dialog is drawn by the root's overlays, outside the columns; the observer ends with the note it watches

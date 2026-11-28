@@ -64,7 +64,7 @@ pages! {
 
     Alert, Feedback, "Alert", "An inline notice inside the view it is about; the strip is its compact form.", [("Notice", "Info · Warning · Danger · Success · Accent"), ("Actions", "None · Under the text")];
     Sonner, Feedback, "Sonner", "What just happened, rising in and leaving by itself.", [("Kind", "Text · Detail · With action")];
-    Progress, Feedback, "Progress", "Done, a gap, then what's left; or a calm indeterminate sweep.", [("Kind", "Split · Joined · Indeterminate · Ring"), ("Weight", "Regular · Thin")];
+    Progress, Feedback, "Progress", "Done, a gap, then what's left; or a calm indeterminate sweep.", [("Kind", "Split · Indeterminate · Ring"), ("Weight", "Regular · Thin")];
     Skeleton, Feedback, "Skeleton", "A calm shimmer in the shape of what's loading.", [("Shape", "Line · Block · Circle")];
     Empty, Feedback, "Empty", "Spot art, what's missing, and one action.", [("Art", "Mascot mood · Illustration")];
 

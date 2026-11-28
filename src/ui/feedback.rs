@@ -220,7 +220,7 @@ impl Render for Nothing {
     }
 }
 
-// The mic meter: `bars` equal bars that light up to `level` (0..1), turning amber then red near the top.
+// The mic meter: one bar cut into `bars` pieces that light up to `level` (0..1), turning amber then red near the top.
 pub fn meter(level: f32, bars: usize, cx: &App) -> Div {
     let lit = [crate::discord::Status::Online, crate::discord::Status::Idle, crate::discord::Status::Dnd].map(|s| palette::status_in(s, cx));
     meter_with(level, bars, lit, palette::line_strong(cx))
@@ -236,7 +236,15 @@ pub fn meter_with(level: f32, bars: usize, [online, idle, dnd]: [Hsla; 3], rest:
             true if i * 4 >= bars * 3 => idle,
             true => online,
         };
-        div().flex_1().min_w(px(3.)).h_full().rounded_full().bg(color)
+        // One bar cut into pieces: the two outer ends are round, every cut edge is nearly square.
+        let (outer, cut) = (px(10.), px(2.));
+        let piece = div().flex_1().min_w(px(3.)).h_full().bg(color);
+        match (i == 0, i + 1 == bars) {
+            (true, true) => piece.rounded(outer),
+            (true, false) => piece.rounded_l(outer).rounded_r(cut),
+            (false, true) => piece.rounded_r(outer).rounded_l(cut),
+            (false, false) => piece.rounded(cut),
+        }
     }))
 }
 
@@ -307,27 +315,46 @@ pub(super) fn sweeping(base: Div, id: ElementId, radius: f32, round: bool, cx: &
             .top_0()
             .left_0()
             .size_full()
-            .with_animation(id, Animation::new(Duration::from_millis(2300)).repeat(), move |layer, t| {
-                layer.child(canvas(|_, _, _| {}, move |bounds, _, window, _| paint_sweep(window, bounds, radius, shimmer, sweep(t))).size_full())
+            // The animation only asks for a frame; the band's place comes from one app-wide clock, so every skeleton
+            // sweeps in step whatever its position or when it mounted.
+            // lint-allow(endless-animation): drawn only while a skeleton is on screen; it ends when the placeholders are replaced.
+            .with_animation(id, Animation::new(SWEEP_PERIOD).repeat(), move |layer, _| {
+                layer.child(canvas(|_, _, _| {}, move |bounds, _, window, _| paint_sweep(window, bounds, radius, shimmer, sweep_phase())).size_full())
             }),
     )
 }
 
-// Where the band's left edge sits, as a fraction of the width: -1 to 1 over the first 48%, then still.
+const SWEEP_PERIOD: Duration = Duration::from_millis(2300);
+// The band's width, and how far past either edge of the window it starts and ends.
+const BAND: f32 = 280.;
+
+// Where in the sweep the whole app is: 0 to 1 over one period, from one clock shared by every skeleton.
+fn sweep_phase() -> f32 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    let start = START.get_or_init(std::time::Instant::now);
+    (start.elapsed().as_secs_f32() % SWEEP_PERIOD.as_secs_f32()) / SWEEP_PERIOD.as_secs_f32()
+}
+
+// How far the band has travelled, 0 to 1, over the first 48% of the period, then still.
 fn sweep(t: f32) -> f32 {
     thread_local! {
         static EASE: Easing = Easing::cubic_bezier(0.42, 0., 0.58, 1.).expect("ease-in-out");
     }
-    -1. + 2. * EASE.with(|e| e.sample((t / 0.48).min(1.)))
+    EASE.with(|e| e.sample((t / 0.48).min(1.)))
 }
 
-fn paint_sweep(window: &mut Window, bounds: Bounds<Pixels>, radius: f32, shimmer: Hsla, offset: f32) {
+// One band fixed to the window: each skeleton paints the slice of it that crosses its own bounds, in thin columns
+// inset along a circular arc of its radius (gpui clips children to rectangles only).
+fn paint_sweep(window: &mut Window, bounds: Bounds<Pixels>, radius: f32, shimmer: Hsla, phase: f32) {
     let (w, h) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
     let r = radius.min(w / 2.).min(h / 2.);
+    let left = f32::from(bounds.origin.x);
+    let viewport = f32::from(window.viewport_size().width);
+    let band_start = -BAND + (viewport + BAND) * sweep(phase);
     const COLUMN: f32 = 2.;
     let mut x = 0.;
     while x < w {
-        let u = (x + COLUMN / 2.) / w - offset;
+        let u = (left + x + COLUMN / 2. - band_start) / BAND;
         if (0. ..1.).contains(&u) {
             let strength = 1. - (2. * u - 1.).abs();
             let edge = (x + COLUMN / 2.).min(w - x - COLUMN / 2.);
@@ -453,7 +480,7 @@ mod tests {
 
     #[test]
     fn sweep_crosses_then_rests() {
-        assert!((super::sweep(0.) + 1.).abs() < 1e-4);
+        assert!(super::sweep(0.).abs() < 1e-4);
         assert!((super::sweep(0.48) - 1.).abs() < 1e-4);
         assert!((super::sweep(0.9) - 1.).abs() < 1e-4);
     }

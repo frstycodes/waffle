@@ -367,9 +367,9 @@ fn choice_text(title: impl IntoElement, detail: Option<SharedString>, cx: &App) 
         .when_some(detail, |d, detail| d.child(div().text_size(px(12.)).text_color(palette::muted(cx)).child(detail)))
 }
 
-// Speaking: a gap in the surface's colour, then the accent ring.
+// Speaking: a gap in the surface's colour, then the ring in presence green (never the accent).
 pub fn speaking_ring(ring: Hsla) -> Vec<BoxShadow> {
-    vec![shadow(palette::accent(), 0., 0., 0., 4., false), shadow(ring, 0., 0., 0., 2., false)]
+    vec![shadow(palette::status(crate::discord::Status::Online), 0., 0., 0., 4., false), shadow(ring, 0., 0., 0., 2., false)]
 }
 
 // Overlapping avatars, each ringed in `ring` (the surface colour) so they read apart.
@@ -455,17 +455,21 @@ pub fn foot_dock(bar: impl IntoElement, id: impl Into<ElementId>) -> AnimationEl
     rise(div().absolute().bottom(px(16.)).left(px(40.)).right(px(40.)).flex().justify_center().child(bar), id, Duration::ZERO)
 }
 
-// A floating surface's entrance (menus, popovers, pickers, dialogs): it fades in and grows from 0.95 over
-// the pop timing, after `delay` (a submenu's intent delay). It grows from the top-left corner unless the
-// caller set a `transform_origin` toward its trigger.
-pub fn rise<E:IntoElement + Styled + 'static>(mut el: E, id: impl Into<ElementId>, delay: Duration) -> AnimationElement<E> {
+// The one entrance of every floating surface (selects, menus, popovers, pickers, hover cards, tooltips): a fade with
+// a slight grow from 0.97 over the hover timing, after `delay` (a submenu's intent delay). It grows from the top-left
+// corner unless the caller set a `transform_origin` toward its trigger. No overshoot, no tilt.
+pub fn rise<E: IntoElement + Styled + 'static>(mut el: E, id: impl Into<ElementId>, delay: Duration) -> AnimationElement<E> {
     if el.style().transform_origin.x.is_none() {
         el = el.transform_origin(point(relative(0.), relative(0.)));
     }
-    let lead = delay.as_secs_f32() / (delay + DUR_POP).as_secs_f32();
-    el.with_animation(id, Animation::new(delay + DUR_POP), move |el, t| {
+    let lead = delay.as_secs_f32() / (delay + DUR_HOVER).as_secs_f32();
+    el.with_animation(id, Animation::new(delay + DUR_HOVER), move |el, t| {
         let t = motion::ease_out().sample(((t - lead) / (1. - lead)).clamp(0., 1.));
-        el.opacity(t).scale(0.95 + 0.05 * t)
+        // Untransformed once settled, so a resting surface's text stays pixel-snapped and crisp.
+        match t < 1. {
+            true => el.opacity(t).scale(0.97 + 0.03 * t),
+            false => el,
+        }
     })
 }
 

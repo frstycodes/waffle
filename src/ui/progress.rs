@@ -1,11 +1,11 @@
 // shadcn/ui's Progress: the done part, a 4px gap, then what's left; or a calm sweep for work that can't be counted.
-use gpui_kit::{App, ElementId, Hsla, IntoElement, RenderOnce, Styled, Window, base::{Transition, transition}, prelude::FluentBuilder, px};
+use gpui_kit::{App, ElementId, Hsla, IntoElement, RenderOnce, Styled, Window, base::{Transition, transition}, px};
 
 use super::{DUR_PANEL, feedback};
 use crate::{motion, palette};
 
 // Progress in the accent, 6px tall. `.fill` and `.track` take another scope's colours (an upload's positive fill,
-// a poll's share, a splash's track), `.thin()` is 4px, `.joined()` drops the gap, `.animated(id)` grows the done part
+// a poll's share, a splash's track), `.thin()` is 4px, `.animated(id)` grows the done part
 // to each new value over the panel timing rather than jumping, and `Progress::indeterminate(id)` travels the track.
 // Keywords: progress, progress bar, loading bar, upload, meter, share, percentage, track, indeterminate, shadcn
 #[derive(IntoElement)]
@@ -14,7 +14,6 @@ pub struct Progress {
     fill: Option<Hsla>,
     track: Option<Hsla>,
     thin: bool,
-    joined: bool,
     animated: Option<ElementId>,
     indeterminate: Option<ElementId>,
 }
@@ -22,7 +21,7 @@ pub struct Progress {
 impl Progress {
     // `value` is 0 to 1.
     pub fn new(value: f32) -> Self {
-        Self { value, fill: None, track: None, thin: false, joined: false, animated: None, indeterminate: None }
+        Self { value, fill: None, track: None, thin: false, animated: None, indeterminate: None }
     }
 
     pub fn indeterminate(id: impl Into<ElementId>) -> Self {
@@ -41,11 +40,6 @@ impl Progress {
 
     pub fn thin(mut self) -> Self {
         self.thin = true;
-        self
-    }
-
-    pub fn joined(mut self) -> Self {
-        self.joined = true;
         self
     }
 
@@ -68,6 +62,6 @@ impl RenderOnce for Progress {
         let height = if self.thin { 4. } else { 6. };
         let fill = self.fill.unwrap_or_else(palette::accent);
         let track = self.track.unwrap_or_else(|| palette::line_strong(cx));
-        feedback::track_in(value, height, height / 2., if self.joined { 0. } else { 2. }, fill, track).when(!self.joined, |bar| bar.gap(px(4.))).into_any_element()
+        feedback::track_in(value, height, height / 2., 2., fill, track).gap(px(4.)).into_any_element()
     }
 }
