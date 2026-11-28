@@ -21,7 +21,7 @@ mod taps;
 mod transport;
 use transport::*;
 #[allow(unused_imports)] // the app reads these; the voice example that includes this module does not
-pub use transport::{ANOTHER_LOCATION, STREAM_DELETE_ENDED, STREAM_DELETE_FULL, STREAM_DELETE_RATE_LIMITED, STREAM_DELETE_UNAUTHORIZED, STREAM_DELETE_UNAVAILABLE};
+pub use transport::{ANOTHER_LOCATION, NEW_SESSION, STREAM_DELETE_ENDED, STREAM_DELETE_FULL, STREAM_DELETE_RATE_LIMITED, STREAM_DELETE_UNAUTHORIZED, STREAM_DELETE_UNAVAILABLE};
 pub(crate) use transport::debug;
 #[cfg(test)]
 mod echo_check;
@@ -30,6 +30,8 @@ mod chain_check;
 #[cfg(test)]
 mod fixtures;
 mod jitter;
+mod reconnect;
+use reconnect::{Backoff, Reconnect, close_label, reconnect};
 mod media;
 mod rtp;
 mod vad;
@@ -59,8 +61,6 @@ pub use dsp::NoiseSuppression;
 pub use video::VideoFrame;
 
 const SERVER_TIMEOUT: Duration = Duration::from_secs(10);
-// How long a call closed with 4022 waits for a VOICE_SERVER_UPDATE that moves it elsewhere.
-const MOVE_TIMEOUT: Duration = Duration::from_secs(5);
 // Every voice state in every guild passes through: a receiver more than this far behind misses
 // dispatches, and a missed STREAM_DELETE leaves a stream we watch frozen on its last frame.
 const DISPATCH_BACKLOG: usize = 1024;
@@ -71,10 +71,6 @@ const PINGS_KEPT: usize = 20;
 // Stats ticks of outbound loss averaged: 15 × 2 s = 30 s.
 const LOSS_WINDOW: usize = 15;
 const DUCK_TICK: Duration = Duration::from_millis(20);
-// A dropped voice gateway (a reset, a server restart) is resumed this many times in a row before the
-// call ends, waiting RESUME_BACKOFF longer each time. The UDP media keeps flowing meanwhile.
-const RESUME_TRIES: u32 = 5;
-const RESUME_BACKOFF: Duration = Duration::from_secs(1);
 // DSCP Expedited Forwarding in the IPv4 TOS byte: the "high packet priority" Quality of Service asks for.
 const QOS_TOS: u32 = 0xb8;
 
@@ -329,6 +325,11 @@ impl GatewayHandle {
     }
 
     pub fn dispatch(&self, kind: &str, d: &Value) {
+        // READY carries every guild; voice needs only that a fresh session began.
+        if kind == "READY" {
+            let _ = self.dispatches.send((kind.to_owned(), json!({ "session_id": d["session_id"] })));
+            return;
+        }
         if kind.starts_with("VOICE_") || kind.starts_with("STREAM_") {
             if debug() {
                 let brief = json!({ "user": d["user_id"], "session": d["session_id"], "channel": d["channel_id"], "stream": d["self_stream"], "key": d["stream_key"] });
@@ -907,21 +908,11 @@ mod tests {
     }
 
     #[test]
-    fn only_final_close_codes_skip_resume() {
+    fn close_reason_names_the_code() {
         use tungstenite::protocol::{CloseFrame, frame::coding::CloseCode};
-        let close = |code: u16| CloseFrame { code: CloseCode::from(code), reason: "".into() };
-        assert!(resumable(None), "a reset without a close frame resumes");
-        for code in [1000, 1001, 1006, 4013, 4015] {
-            assert!(resumable(Some(&close(code))), "{code} resumes");
-        }
-        for code in [4001, 4002, 4003, 4004, 4005, 4006, 4009, 4011, 4012, 4014, 4016, 4017, 4020, 4021, 4022] {
-            assert!(!resumable(Some(&close(code))), "{code} ends the call");
-        }
-        assert_eq!(close_reason(Some(&close(4014))), "Disconnected by Discord (4014)");
-        assert_eq!(close_reason(Some(&close(4022))), "The call ended (4022)");
-        assert!(call_terminated(&close_reason(Some(&close(4022)))));
-        assert!(!call_terminated(&close_reason(Some(&close(4014)))));
-        assert_eq!(close_reason(Some(&CloseFrame { code: CloseCode::from(4999), reason: "Odd".into() })), "Odd (4999)");
+        let close = |code: u16, reason: &str| CloseFrame { code: CloseCode::from(code), reason: reason.to_owned().into() };
+        assert_eq!(close_reason(Some(&close(4014, ""))), "Disconnected by Discord (4014)");
+        assert_eq!(close_reason(Some(&close(4999, "Odd"))), "Odd (4999)");
         assert_eq!(close_reason(None), "Voice connection lost");
     }
 
@@ -952,13 +943,28 @@ mod tests {
     }
 
     #[test]
-    fn closed_call_waits_for_the_move_in_the_backlog() {
+    fn a_lost_call_follows_the_move_while_it_waits() {
         let (shared, _rx) = shared();
         let mut dispatches = shared.gateway.dispatches.subscribe();
-        shared.gateway.dispatch("VOICE_SERVER_UPDATE", &json!({ "guild_id": "g", "token": "t", "endpoint": "b.discord.media" }));
         let runtime = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
-        let moved = runtime.block_on(await_move(&shared, &mut dispatches));
-        assert_eq!(moved.map(|s| s.endpoint).as_deref(), Some("b.discord.media"));
+        let wait = |dispatches: &mut broadcast::Receiver<(String, Value)>| runtime.block_on(wait_out(Duration::from_millis(20), dispatches, |kind, d| voice_dispatch(&shared, kind, d)));
+        assert_eq!(wait(&mut dispatches), None, "nothing happened: try again");
+        shared.gateway.dispatch("VOICE_SERVER_UPDATE", &json!({ "guild_id": "g", "token": "t", "endpoint": "b.discord.media" }));
+        assert!(wait(&mut dispatches).is_some());
+        assert_eq!(take_moved(&shared).map(|s| s.endpoint).as_deref(), Some("b.discord.media"));
+    }
+
+    #[test]
+    fn a_fresh_gateway_session_rejoins_voice_and_ends_streams() {
+        let (shared, _rx) = shared();
+        *shared.session_id.lock().unwrap() = Some("s".into());
+        assert_eq!(voice_dispatch(&shared, "READY", &json!({ "session_id": "s2" })).as_deref(), Some(NEW_SESSION));
+        assert!(shared.session_id.lock().unwrap().is_none(), "the voice state goes out again under the new session");
+        let moved = Mutex::new(None);
+        assert_eq!(stream_dispatch("k", "READY", &json!({}), &moved).as_deref(), Some(NEW_SESSION));
+        assert_eq!(stream_dispatch("k", "STREAM_SERVER_UPDATE", &json!({ "stream_key": "other", "token": "t", "endpoint": "e" }), &moved), None);
+        assert!(stream_dispatch("k", "STREAM_SERVER_UPDATE", &json!({ "stream_key": "k", "token": "t", "endpoint": "e" }), &moved).is_some());
+        assert_eq!(moved.lock().unwrap().take().map(|s| s.endpoint).as_deref(), Some("e"), "a new stream server reconnects there");
     }
 
     #[test]
