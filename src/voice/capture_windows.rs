@@ -58,6 +58,8 @@ pub struct Captured {
     pub capture: Capture,
     pub frames: Receiver<Arc<VideoFrame>>,
     pub audio: Receiver<Vec<f32>>,
+    // GAP: Windows.Graphics.Capture says nothing of a minimized window, so this stays false there.
+    pub covered: Arc<AtomicBool>,
 }
 
 pub fn start(source: ShareSource, fps: u32, max_width: u32, max_height: u32, with_audio: bool) -> Result<Captured, String> {
@@ -94,7 +96,7 @@ pub fn start(source: ShareSource, fps: u32, max_width: u32, max_height: u32, wit
             }
         })
     });
-    Ok(Captured { capture: Capture { control: Some(control), audio_stop, audio_thread }, frames, audio })
+    Ok(Captured { capture: Capture { control: Some(control), audio_stop, audio_thread }, frames, audio, covered: Arc::default() })
 }
 
 // `ShareableScreen::id` is the display number Windows gives the monitor (`\\.\DISPLAYn`); 0 or a

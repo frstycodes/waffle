@@ -518,6 +518,18 @@ impl Shared {
         self.guild_id.as_deref().unwrap_or(&self.channel_id)
     }
 
+    fn stream_key(&self, streamer_id: &str) -> String {
+        match &self.guild_id {
+            Some(guild) => format!("guild:{guild}:{}:{streamer_id}", self.channel_id),
+            None => format!("call:{}:{streamer_id}", self.channel_id),
+        }
+    }
+
+    // Our Go Live paused (its app out of sight) or resumed: viewers see "Stream Paused" meanwhile.
+    fn set_stream_paused(&self, paused: bool) {
+        self.gateway.send(22, json!({ "stream_key": self.stream_key(&self.user_id), "paused": paused }));
+    }
+
     fn emit(&self, event: VoiceEvent) {
         let _ = self.events.unbounded_send(event);
     }
@@ -727,10 +739,7 @@ impl VoiceSession {
 
     fn start_stream(&self, streamer_id: &str, role: Role, after: Option<oneshot::Receiver<()>>) -> Result<(oneshot::Sender<()>, oneshot::Receiver<()>), String> {
         let session_id = self.shared.session_id.lock().ok().and_then(|id| id.clone()).ok_or("Not connected to voice yet")?;
-        let key = match &self.shared.guild_id {
-            Some(guild) => format!("guild:{guild}:{}:{streamer_id}", self.shared.channel_id),
-            None => format!("call:{}:{streamer_id}", self.shared.channel_id),
-        };
+        let key = self.shared.stream_key(streamer_id);
         let (stop_tx, stop_rx) = oneshot::channel();
         let (gone_tx, gone_rx) = oneshot::channel();
         let ends = StreamEnds { stop: stop_rx, after, gone: gone_tx };
