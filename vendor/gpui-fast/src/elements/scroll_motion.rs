@@ -1,4 +1,4 @@
-//! Waffle: scroll motion timed to the display rather than to input events, on every platform.
+//! Scroll motion timed to the display rather than to input events, on every platform.
 //!
 //! macOS delivers momentum ("coasting") scroll events out of phase with the display: every so often a
 //! tick is skipped and the next event carries twice the distance, so applying events as they arrive
@@ -14,27 +14,13 @@
 use crate::{Pixels, Point, TouchPhase, point, px};
 use std::{collections::VecDeque, time::Instant};
 
-/// How long momentum takes to slow to 1/e of its speed. Fitted to macOS's own momentum events
-/// (an 8.3 ms-tick log of a fling halved its per-tick distance over 0.23 s), and the same as
-/// WebKit's 0.975-per-8 ms decay.
-const MOMENTUM_TIME_CONSTANT: f32 = 0.325;
-/// Below this release speed (px/s) a lift is a stop, not a fling.
-const MIN_FLING_SPEED: f32 = 60.;
-/// The finger's speed at release is measured over its last moves within this window...
-const VELOCITY_WINDOW: f32 = 0.1;
-/// ...and is zero if it rested this long before lifting.
-const REST_BEFORE_LIFT: f32 = 0.05;
-/// After a lift, the system's own momentum events keep coming for a while; one gap longer than
-/// this ends them, so a later precise scroll from a device without phases still applies.
-const SYSTEM_MOMENTUM_GAP: f32 = 0.15;
-/// A notch's ease: the remaining distance shrinks to 1/e every this long (~150 ms to settle).
-const WHEEL_TIME_CONSTANT: f32 = 0.035;
 /// Motion ends once less than this is left to travel.
 const REST_DISTANCE: f32 = 0.5;
 const SAMPLE_LIMIT: usize = 9;
-/// Waffle: how far one wheel line scrolls, for lists and scroll containers alike. Windows reports a notch as
-/// its lines-per-notch setting (3 by default), so a notch travels 100 px, as Chromium (and Discord) scroll.
-pub(crate) const WHEEL_LINE: crate::Pixels = crate::Pixels(100. / 3.);
+/// How far one wheel line scrolls, from the scroll feel.
+pub(crate) fn wheel_line() -> crate::Pixels {
+    crate::Pixels(crate::scroll_feel().wheel_line)
+}
 
 #[derive(Clone, Copy, Debug)]
 struct Momentum {
@@ -47,12 +33,12 @@ impl Momentum {
     /// Distance travelled `t` seconds in: `v·τ·(1 − e^(−t/τ))`.
     fn travelled_at(&self, now: Instant) -> Point<f32> {
         let t = now.saturating_duration_since(self.start).as_secs_f32();
-        let covered = MOMENTUM_TIME_CONSTANT * (1. - (-t / MOMENTUM_TIME_CONSTANT).exp());
+        let covered = crate::scroll_feel().momentum_time_constant * (1. - (-t / crate::scroll_feel().momentum_time_constant).exp());
         point(self.velocity.x * covered, self.velocity.y * covered)
     }
 
     fn remaining(&self) -> f32 {
-        let total = point(self.velocity.x * MOMENTUM_TIME_CONSTANT, self.velocity.y * MOMENTUM_TIME_CONSTANT);
+        let total = point(self.velocity.x * crate::scroll_feel().momentum_time_constant, self.velocity.y * crate::scroll_feel().momentum_time_constant);
         (total.x - self.travelled.x).abs().max((total.y - self.travelled.y).abs())
     }
 }
@@ -104,7 +90,7 @@ impl ScrollMotion {
                 self.system_momentum = Some(now);
                 let velocity = self.release_velocity(now);
                 self.samples.clear();
-                if velocity.x.abs().max(velocity.y.abs()) >= MIN_FLING_SPEED && phase == TouchPhase::Ended {
+                if velocity.x.abs().max(velocity.y.abs()) >= crate::scroll_feel().min_fling_speed && phase == TouchPhase::Ended {
                     self.momentum = Some(Momentum { velocity, start: now, travelled: Point::default() });
                     self.last_step = None;
                 }
@@ -112,7 +98,7 @@ impl ScrollMotion {
             }
             TouchPhase::Moved if !self.touching => {
                 // The system's momentum, swallowed while it keeps coming after a lift.
-                if self.system_momentum.is_some_and(|seen| now.saturating_duration_since(seen).as_secs_f32() < SYSTEM_MOMENTUM_GAP) {
+                if self.system_momentum.is_some_and(|seen| now.saturating_duration_since(seen).as_secs_f32() < crate::scroll_feel().system_momentum_gap) {
                     self.system_momentum = Some(now);
                     return Point::default();
                 }
@@ -132,9 +118,9 @@ impl ScrollMotion {
 
     /// The finger's speed (px/s) over its last moves, zero if it rested before lifting.
     fn release_velocity(&self, now: Instant) -> Point<f32> {
-        let recent: Vec<_> = self.samples.iter().filter(|(at, _)| now.saturating_duration_since(*at).as_secs_f32() <= VELOCITY_WINDOW).collect();
+        let recent: Vec<_> = self.samples.iter().filter(|(at, _)| now.saturating_duration_since(*at).as_secs_f32() <= crate::scroll_feel().velocity_window).collect();
         let (Some(first), Some(last)) = (recent.first(), recent.last()) else { return Point::default() };
-        if now.saturating_duration_since(last.0).as_secs_f32() > REST_BEFORE_LIFT || recent.len() < 2 {
+        if now.saturating_duration_since(last.0).as_secs_f32() > crate::scroll_feel().rest_before_lift || recent.len() < 2 {
             return Point::default();
         }
         // The distance after the first sample over the time it took: the first only marks the start.
@@ -158,7 +144,7 @@ impl ScrollMotion {
             }
         }
         if self.wheel_remaining != Point::default() {
-            let taken = 1. - (-dt / WHEEL_TIME_CONSTANT).exp();
+            let taken = 1. - (-dt / crate::scroll_feel().wheel_time_constant).exp();
             let mut part = point(self.wheel_remaining.x * taken, self.wheel_remaining.y * taken);
             let left = point(self.wheel_remaining.x - part.x, self.wheel_remaining.y - part.y);
             if left.x.abs().max(left.y.abs()) < REST_DISTANCE {

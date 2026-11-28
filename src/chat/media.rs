@@ -1,8 +1,8 @@
 use super::*;
 
 // The blur over a spoiler picture, over a veiled one, and the alt popout's width.
-const SPOILER_BLUR: f32 = 24.;
-const VEIL_BLUR: f32 = 28.;
+// How much a spoiler or sensitive-media cover hides: without a blur, the dim alone has to keep the picture from reading.
+const VEIL: f32 = 0.92;
 const ALT_POPOUT_WIDTH: f32 = 260.;
 
 // gpui only advances an animated image's frames when the img has an id to keep its frame state under,
@@ -312,7 +312,7 @@ pub(super) fn is_gif(url: &str) -> bool {
     url.split(['?', '#']).next().is_some_and(|path| path.to_ascii_lowercase().ends_with(".gif"))
 }
 
-// A blur over media until it's clicked (a spoiler, sensitive content); the click adds `key` to the
+// A cover over media until it's clicked (a spoiler, sensitive content); the click adds `key` to the
 // revealed set.
 pub(super) fn media_veil(key: String, label: &'static str, corners: Corners<Pixels>, ctx: &RowContext) -> Stateful<Div> {
     let (reveal, refresh) = (ctx.revealed.clone(), ctx.this.clone());
@@ -321,8 +321,7 @@ pub(super) fn media_veil(key: String, label: &'static str, corners: Corners<Pixe
         .occlude()
         .absolute()
         .inset_0()
-        .bg(on_media(0.35))
-        .backdrop_blur(px(VEIL_BLUR))
+        .bg(on_media(VEIL))
         .flex()
         .items_center()
         .justify_center()
@@ -357,9 +356,9 @@ pub(super) fn reveal_veil(message: &Message, i: usize, corners: Corners<Pixels>,
         .into_any_element()
 }
 
-// What covers a spoiler picture: a blur and a dim over it.
+// What covers a spoiler picture: a near-opaque dim.
 pub(super) fn spoiler_veil() -> Div {
-    ui::row().absolute().inset_0().justify_center().bg(on_media(0.3)).backdrop_blur(px(SPOILER_BLUR))
+    ui::row().absolute().inset_0().justify_center().bg(on_media(VEIL))
 }
 
 // A label over media (GIF, a duration): fixed dark values, since it sits on pictures in both themes.
@@ -397,7 +396,8 @@ pub(super) fn set_hovered_tile(this: &WeakEntity<Waffle>, key: Option<String>, c
     this.update(cx, |this, cx| {
         if this.hovered_tile != key {
             this.hovered_tile = key;
-            cx.notify();
+            // Tiles draw in the feed and the composer's tray, both in the main column.
+            this.redraw(crate::part::Column::Main, cx);
         }
     })
     .ok();

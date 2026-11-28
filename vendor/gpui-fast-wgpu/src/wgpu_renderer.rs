@@ -5,9 +5,8 @@ use anyhow::{Context as _, Result};
 use bytemuck::{Pod, Zeroable};
 use collections::FxHashMap;
 use gpui::{
-    AtlasTextureId, BackdropBlurPass, BackdropBlurPlan, BackdropBlurTextureBudget, Background,
-    Bounds, DevicePixels, GpuSpecs, Path, Point, PrimitiveBatch, ScaledPixels, Scene, Size,
-    get_gamma_correction_ratios,
+    AtlasTextureId, Background, Bounds, DevicePixels, GpuSpecs, Path, Point, PrimitiveBatch,
+    ScaledPixels, Scene, Size, get_gamma_correction_ratios,
 };
 use log::warn;
 #[cfg(not(target_family = "wasm"))]
@@ -137,10 +136,6 @@ pub(crate) struct WgpuPipelines {
     pub(crate) poly_sprites: wgpu::RenderPipeline,
     #[allow(dead_code)]
     surfaces: wgpu::RenderPipeline,
-    backdrop_blur_down: wgpu::RenderPipeline,
-    backdrop_blur_up: wgpu::RenderPipeline,
-    backdrop_blur_erase: wgpu::RenderPipeline,
-    backdrop_blur_composite: wgpu::RenderPipeline,
 }
 
 /// One frame allocation of instance data, ready to bind.
@@ -169,7 +164,6 @@ pub(crate) struct WgpuBindGroupLayouts {
     pub(crate) instances: wgpu::BindGroupLayout,
     pub(crate) texture: wgpu::BindGroupLayout,
     surfaces: wgpu::BindGroupLayout,
-    backdrop_blur: wgpu::BindGroupLayout,
 }
 
 /// Shared GPU context reference, used to coordinate device recovery across multiple windows.
@@ -203,7 +197,6 @@ pub(crate) struct WgpuResources {
     pub(crate) path_intermediate_view: Option<wgpu::TextureView>,
     path_msaa_texture: Option<wgpu::Texture>,
     pub(crate) path_msaa_view: Option<wgpu::TextureView>,
-    backdrop_blur: BackdropBlurResources,
 }
 
 struct CachedTextureBindGroup {
@@ -267,8 +260,6 @@ pub struct WgpuRenderer {
     pub(crate) atlas: Arc<WgpuAtlas>,
     transparent_alpha_mode: wgpu::CompositeAlphaMode,
     opaque_alpha_mode: wgpu::CompositeAlphaMode,
-    /// Whether frames can be configured as copy sources, which backdrop blurs need.
-    surface_supports_copy_src: bool,
     max_texture_size: u32,
     pub(crate) is_bgr: bool,
     failed_frame_count: u32,
@@ -522,7 +513,6 @@ impl WgpuRenderer {
             atlas,
             transparent_alpha_mode,
             opaque_alpha_mode,
-            surface_supports_copy_src: surface_caps.usages.contains(wgpu::TextureUsages::COPY_SRC),
             max_texture_size,
             is_bgr: false,
             failed_frame_count: 0,
@@ -660,47 +650,12 @@ impl WgpuRendererCore {
             ],
         });
 
-        let backdrop_blur = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("backdrop_blur_layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: true,
-                        min_binding_size: NonZeroU64::new(
-                            std::mem::size_of::<BackdropBlurPass>() as u64
-                        ),
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
-
         WgpuBindGroupLayouts {
             fast_rounded_clip: crate::fast::rounded_clip::Bindings::new(device),
             globals,
             instances,
             texture,
             surfaces,
-            backdrop_blur,
         }
     }
 
@@ -1001,92 +956,7 @@ impl WgpuRendererCore {
             &layouts.surfaces,
             None,
             wgpu::PrimitiveTopology::TriangleStrip,
-            &[Some(color_target.clone())],
-            1,
-            &shader_module,
-        );
-
-        let backdrop_blur_level_target = wgpu::ColorTargetState {
-            format: surface_format,
-            blend: None,
-            write_mask: wgpu::ColorWrites::ALL,
-        };
-        let backdrop_blur_down = create_pipeline(
-            "backdrop_blur_down",
-            "vs_backdrop_blur",
-            "fs_backdrop_blur_down",
-            &layouts.globals,
-            &layouts.backdrop_blur,
-            None,
-            wgpu::PrimitiveTopology::TriangleStrip,
-            &[Some(backdrop_blur_level_target.clone())],
-            1,
-            &shader_module,
-        );
-        let backdrop_blur_up = create_pipeline(
-            "backdrop_blur_up",
-            "vs_backdrop_blur",
-            "fs_backdrop_blur_up",
-            &layouts.globals,
-            &layouts.backdrop_blur,
-            None,
-            wgpu::PrimitiveTopology::TriangleStrip,
-            &[Some(backdrop_blur_level_target)],
-            1,
-            &shader_module,
-        );
-        // The composite replaces the frame under its mask rather than blending over it: the erase
-        // pass scales the frame by one minus the mask, then the composite adds the premultiplied
-        // blur. Both blend color and alpha alike, whatever the surface's alpha mode, so the blur of
-        // a transparent frame stays transparent instead of turning black.
-        let backdrop_blur_erase = create_pipeline(
-            "backdrop_blur_erase",
-            "vs_backdrop_blur",
-            "fs_backdrop_blur_erase",
-            &layouts.globals,
-            &layouts.backdrop_blur,
-            None,
-            wgpu::PrimitiveTopology::TriangleStrip,
-            &[Some(wgpu::ColorTargetState {
-                format: surface_format,
-                blend: Some(wgpu::BlendState {
-                    color: wgpu::BlendComponent {
-                        src_factor: wgpu::BlendFactor::Zero,
-                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                        operation: wgpu::BlendOperation::Add,
-                    },
-                    alpha: wgpu::BlendComponent {
-                        src_factor: wgpu::BlendFactor::Zero,
-                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                        operation: wgpu::BlendOperation::Add,
-                    },
-                }),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            1,
-            &shader_module,
-        );
-        let additive = wgpu::BlendComponent {
-            src_factor: wgpu::BlendFactor::One,
-            dst_factor: wgpu::BlendFactor::One,
-            operation: wgpu::BlendOperation::Add,
-        };
-        let backdrop_blur_composite = create_pipeline(
-            "backdrop_blur_composite",
-            "vs_backdrop_blur",
-            "fs_backdrop_blur_composite",
-            &layouts.globals,
-            &layouts.backdrop_blur,
-            None,
-            wgpu::PrimitiveTopology::TriangleStrip,
-            &[Some(wgpu::ColorTargetState {
-                format: surface_format,
-                blend: Some(wgpu::BlendState {
-                    color: additive,
-                    alpha: additive,
-                }),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
+            &[Some(color_target)],
             1,
             &shader_module,
         );
@@ -1101,10 +971,6 @@ impl WgpuRendererCore {
             subpixel_sprites,
             poly_sprites,
             surfaces,
-            backdrop_blur_down,
-            backdrop_blur_up,
-            backdrop_blur_erase,
-            backdrop_blur_composite,
         }
     }
 
@@ -1299,10 +1165,6 @@ impl WgpuRenderer {
             return false;
         }
 
-        if !scene.backdrop_blurs.is_empty() {
-            self.allow_copying_frames();
-        }
-
         // Bail out early if the surface has been unconfigured (e.g. during
         // Android background/rotation transitions).  Attempting to acquire
         // a texture from an unconfigured surface can block indefinitely on
@@ -1370,7 +1232,6 @@ impl WgpuRenderer {
             self.surface_config.alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied;
         if let Err(error) = core.render_frame(
             scene,
-            &frame.texture,
             &frame_view,
             size,
             premultiplied_alpha,
@@ -1382,24 +1243,6 @@ impl WgpuRenderer {
 
         core.resources.queue.present(frame);
         true
-    }
-
-    /// Backdrop blurs copy out of the frame, which the surface must be configured for.
-    /// Copyable frames can cost the compositor some efficiency, so a surface opts in only once
-    /// a scene has a blur, and stays opted in rather than reconfiguring as blurs come and go.
-    fn allow_copying_frames(&mut self) {
-        if !self.surface_supports_copy_src
-            || self
-                .surface_config
-                .usage
-                .contains(wgpu::TextureUsages::COPY_SRC)
-        {
-            return;
-        }
-        self.surface_config.usage |= wgpu::TextureUsages::COPY_SRC;
-        if let RendererState::Ready { surface, core } = &self.state {
-            surface.configure(&core.resources.device, &self.surface_config);
-        }
     }
 }
 
@@ -1544,7 +1387,6 @@ impl WgpuRendererCore {
                 path_intermediate_view: None,
                 path_msaa_texture: None,
                 path_msaa_view: None,
-                backdrop_blur: BackdropBlurResources::default(),
             },
             atlas,
             path_globals_offset,
@@ -1613,7 +1455,6 @@ impl WgpuRendererCore {
     pub(crate) fn render_frame(
         &mut self,
         scene: &Scene,
-        target: &wgpu::Texture,
         target_view: &wgpu::TextureView,
         size: Size<DevicePixels>,
         premultiplied_alpha: bool,
@@ -1651,7 +1492,7 @@ impl WgpuRendererCore {
         };
         crate::fast::globals::write_globals(self, &globals, &path_globals, &gamma_params);
 
-        self.record_frame(scene, target, target_view, size, clear_color)
+        self.record_frame(scene, target_view, clear_color)
             .inspect_err(|_| {
                 // Queue writes are staged before encoding; flush them even if the frame fails.
                 self.resources.queue.submit(std::iter::empty());
@@ -1661,9 +1502,7 @@ impl WgpuRendererCore {
     fn record_frame(
         &mut self,
         scene: &Scene,
-        frame: &wgpu::Texture,
         frame_view: &wgpu::TextureView,
-        frame_size: Size<DevicePixels>,
         clear_color: wgpu::Color,
     ) -> Result<wgpu::SubmissionIndex> {
         if let Some(submission) =
@@ -1687,7 +1526,6 @@ impl WgpuRendererCore {
                 )
             })?;
         self.prepare_texture_bind_groups(scene);
-        self.prepare_backdrop_blurs(scene, frame, frame_size);
 
         let mut encoder =
             self.resources()
@@ -1739,7 +1577,20 @@ impl WgpuRendererCore {
                             &mut instance_offset,
                         )?;
 
-                        pass = continue_main_pass(&mut encoder, frame_view);
+                        pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("main_pass_continued"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: frame_view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Load,
+                                    store: wgpu::StoreOp::Store,
+                                },
+                                depth_slice: None,
+                            })],
+                            depth_stencil_attachment: None,
+                            ..Default::default()
+                        });
 
                         if rasterized {
                             self.draw_paths_from_intermediate(
@@ -1790,32 +1641,6 @@ impl WgpuRendererCore {
                     // Surfaces are macOS-only for video playback and are not
                     // implemented by the WGPU renderer.
                     PrimitiveBatch::Surfaces(_surfaces) => {}
-                    PrimitiveBatch::BackdropBlurs(range) => {
-                        for blur_index in range {
-                            let Some(blur) = self.resources().backdrop_blur.blurs[blur_index]
-                            else {
-                                continue;
-                            };
-
-                            drop(pass);
-                            self.draw_backdrop_blur_levels(&mut encoder, frame, &blur);
-
-                            pass = continue_main_pass(&mut encoder, frame_view);
-
-                            let pipelines = &self.resources().pipelines;
-                            for pipeline in [
-                                &pipelines.backdrop_blur_erase,
-                                &pipelines.backdrop_blur_composite,
-                            ] {
-                                self.draw_backdrop_blur_pass(
-                                    pipeline,
-                                    blur.plan.composite_source_level(),
-                                    blur.composite_pass(),
-                                    &mut pass,
-                                );
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -1824,7 +1649,6 @@ impl WgpuRendererCore {
             .resources()
             .queue
             .submit(std::iter::once(encoder.finish()));
-        self.resources.backdrop_blur.trim_textures();
         Ok(submission)
     }
 
@@ -2112,211 +1936,6 @@ impl WgpuRendererCore {
         Ok(true)
     }
 
-    /// Plans the frame's backdrop blurs, grows their level textures, and uploads every pass
-    /// before recording, since queued buffer writes all land before the frame runs.
-    fn prepare_backdrop_blurs(
-        &mut self,
-        scene: &Scene,
-        frame: &wgpu::Texture,
-        frame_size: Size<DevicePixels>,
-    ) {
-        let target_format = self.target_format;
-        let resources = &mut self.resources;
-        let state = &mut resources.backdrop_blur;
-        state.blurs.clear();
-        state.pass_bytes.clear();
-        if scene.backdrop_blurs.is_empty() {
-            return;
-        }
-
-        let can_copy_frame = frame.usage().contains(wgpu::TextureUsages::COPY_SRC);
-        for blur in &scene.backdrop_blurs {
-            let plan = blur.plan(frame_size).filter(|_| can_copy_frame);
-            if let Some(plan) = &plan {
-                state.ensure_textures(&resources.device, target_format, plan);
-            }
-            state.blurs.push(plan.map(|plan| PreparedBackdropBlur {
-                plan,
-                first_pass: 0,
-            }));
-        }
-
-        state.pass_stride = (std::mem::size_of::<BackdropBlurPass>() as u32).next_multiple_of(
-            resources
-                .device
-                .limits()
-                .min_uniform_buffer_offset_alignment,
-        );
-        for (prepared, blur) in state.blurs.iter_mut().zip(&scene.backdrop_blurs) {
-            let Some(prepared) = prepared else {
-                continue;
-            };
-            let plan = prepared.plan;
-            prepared.first_pass = (state.pass_bytes.len() / state.pass_stride as usize) as u32;
-            let texture_size = |level: usize| state.textures[level].size;
-            for level in 1..=plan.level_count {
-                let pass = plan.level_pass(
-                    level - 1,
-                    level,
-                    texture_size(level - 1),
-                    texture_size(level),
-                );
-                push_backdrop_blur_pass(&mut state.pass_bytes, &pass, state.pass_stride);
-            }
-            for level in (1..plan.level_count).rev() {
-                let pass = plan.level_pass(
-                    level + 1,
-                    level,
-                    texture_size(level + 1),
-                    texture_size(level),
-                );
-                push_backdrop_blur_pass(&mut state.pass_bytes, &pass, state.pass_stride);
-            }
-            let pass = plan.composite_pass(
-                blur,
-                texture_size(plan.composite_source_level()),
-                frame_size,
-            );
-            push_backdrop_blur_pass(&mut state.pass_bytes, &pass, state.pass_stride);
-        }
-        if state.pass_bytes.is_empty() {
-            return;
-        }
-
-        let required = state.pass_bytes.len() as u64;
-        if state
-            .passes
-            .as_ref()
-            .is_none_or(|passes| passes.size() < required)
-        {
-            state.passes = Some(resources.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("backdrop_blur_passes"),
-                size: required.next_power_of_two(),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }));
-            for texture in &mut state.textures {
-                texture.bind_group = None;
-            }
-        }
-        let Some(passes) = &state.passes else {
-            return;
-        };
-        resources.queue.write_buffer(passes, 0, &state.pass_bytes);
-
-        for texture in &mut state.textures {
-            if texture.bind_group.is_some() {
-                continue;
-            }
-            texture.bind_group = Some(resources.device.create_bind_group(
-                &wgpu::BindGroupDescriptor {
-                    label: Some("backdrop_blur_bind_group"),
-                    layout: &resources.bind_group_layouts.backdrop_blur,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                                buffer: passes,
-                                offset: 0,
-                                size: NonZeroU64::new(
-                                    std::mem::size_of::<BackdropBlurPass>() as u64
-                                ),
-                            }),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::TextureView(&texture.view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: wgpu::BindingResource::Sampler(&resources.atlas_sampler),
-                        },
-                    ],
-                },
-            ));
-        }
-    }
-
-    /// Copies the blur's region out of the frame, then downsamples and upsamples it back to the
-    /// level the composite reads.
-    fn draw_backdrop_blur_levels(
-        &self,
-        encoder: &mut wgpu::CommandEncoder,
-        frame: &wgpu::Texture,
-        blur: &PreparedBackdropBlur,
-    ) {
-        let resources = self.resources();
-        let textures = &resources.backdrop_blur.textures;
-        let region = blur.plan.region;
-        encoder.copy_texture_to_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: frame,
-                mip_level: 0,
-                origin: wgpu::Origin3d {
-                    x: region.origin.x.0 as u32,
-                    y: region.origin.y.0 as u32,
-                    z: 0,
-                },
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::TexelCopyTextureInfo {
-                texture: &textures[0].texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::Extent3d {
-                width: region.size.width.0 as u32,
-                height: region.size.height.0 as u32,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        let level_count = blur.plan.level_count;
-        let downsamples = (1..=level_count)
-            .map(|level| (&resources.pipelines.backdrop_blur_down, level - 1, level));
-        let upsamples = (1..level_count)
-            .rev()
-            .map(|level| (&resources.pipelines.backdrop_blur_up, level + 1, level));
-        for (pass_index, (pipeline, source_level, target_level)) in
-            (blur.first_pass..).zip(downsamples.chain(upsamples))
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("backdrop_blur_level_pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &textures[target_level].view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                ..Default::default()
-            });
-            self.draw_backdrop_blur_pass(pipeline, source_level, pass_index, &mut pass);
-        }
-    }
-
-    fn draw_backdrop_blur_pass(
-        &self,
-        pipeline: &wgpu::RenderPipeline,
-        source_level: usize,
-        pass_index: u32,
-        pass: &mut wgpu::RenderPass<'_>,
-    ) {
-        let resources = self.resources();
-        let state = &resources.backdrop_blur;
-        let Some(bind_group) = &state.textures[source_level].bind_group else {
-            return;
-        };
-        pass.set_pipeline(pipeline);
-        pass.set_bind_group(0, &resources.globals_bind_group, &[]);
-        pass.set_bind_group(1, bind_group, &[pass_index * state.pass_stride]);
-        pass.draw(0..4, 0..1);
-    }
-
     fn write_instance_binding<T>(
         &mut self,
         label: &str,
@@ -2590,19 +2209,6 @@ impl WgpuRenderer {
                 anyhow::bail!("Cannot replace the surface: GPU resources have been released")
             }
         };
-        self.surface_supports_copy_src = self.context.as_ref().is_some_and(|context| {
-            context.borrow().as_ref().is_some_and(|context| {
-                surface
-                    .get_capabilities(&context.adapter)
-                    .usages
-                    .contains(wgpu::TextureUsages::COPY_SRC)
-            })
-        });
-        if !self.surface_supports_copy_src {
-            self.surface_config
-                .usage
-                .remove(wgpu::TextureUsages::COPY_SRC);
-        }
         surface.configure(&core.resources.device, &self.surface_config);
         core.resources.invalidate_intermediate_textures();
         self.state = RendererState::Ready { surface, core };
@@ -2832,13 +2438,14 @@ impl WgpuHeadlessRenderer {
     fn render(&mut self, scene: &Scene, size: Size<DevicePixels>) -> anyhow::Result<()> {
         self.check_gpu_errors()?;
         self.ensure_render_target(size)?;
-        let target = self
+        let view = self
             .render_target
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Headless render target was not created"))?;
-        let (texture, view) = (target.texture.clone(), target.view.clone());
+            .ok_or_else(|| anyhow::anyhow!("Headless render target was not created"))?
+            .view
+            .clone();
         self.core
-            .render_frame(scene, &texture, &view, size, false, wgpu::Color::BLACK)?;
+            .render_frame(scene, &view, size, false, wgpu::Color::BLACK)?;
         Ok(())
     }
 
@@ -2975,142 +2582,6 @@ impl gpui::PlatformHeadlessRenderer for WgpuHeadlessRenderer {
     fn sprite_atlas(&self) -> Arc<dyn gpui::PlatformAtlas> {
         self.core.atlas.clone()
     }
-}
-
-/// Backdrop blur state kept across frames, so frames with blurs reuse their allocations.
-#[derive(Default)]
-struct BackdropBlurResources {
-    /// Level 0 holds the region a blur reads; each later level is half the size of the one
-    /// before. Allocated on first use; `budget` shrinks and frees them.
-    textures: Vec<BackdropBlurTexture>,
-    budget: BackdropBlurTextureBudget,
-    /// Every pass of the frame, `pass_stride` bytes apart, bound with a dynamic offset.
-    passes: Option<wgpu::Buffer>,
-    pass_stride: u32,
-    pass_bytes: Vec<u8>,
-    /// The frame's blurs, by index into `Scene::backdrop_blurs`. `None` when a blur is not
-    /// visible or the frame can't be copied.
-    blurs: Vec<Option<PreparedBackdropBlur>>,
-}
-
-impl BackdropBlurResources {
-    fn ensure_textures(
-        &mut self,
-        device: &wgpu::Device,
-        format: wgpu::TextureFormat,
-        plan: &BackdropBlurPlan,
-    ) {
-        for level in 0..=plan.level_count {
-            let current = self.textures.get(level).map(|texture| texture.size);
-            let Some(texture_size) =
-                self.budget
-                    .allocation_size(level, plan.level_size(level), current)
-            else {
-                continue;
-            };
-            let texture = BackdropBlurTexture::new(device, format, texture_size);
-            if level < self.textures.len() {
-                self.textures[level] = texture;
-            } else {
-                self.textures.push(texture);
-            }
-        }
-    }
-
-    /// Frees the level textures the budget no longer wants, once a frame is recorded. wgpu keeps
-    /// a dropped texture alive until the work using it is done.
-    fn trim_textures(&mut self) {
-        let allocated = self
-            .textures
-            .iter()
-            .map(|texture| texture.size)
-            .collect::<Vec<_>>();
-        let keep = self.budget.end_frame(&allocated);
-        self.textures.truncate(keep);
-    }
-}
-
-struct BackdropBlurTexture {
-    texture: wgpu::Texture,
-    view: wgpu::TextureView,
-    size: Size<DevicePixels>,
-    /// Binds the pass buffer with this level as the source. Rebuilt when either is replaced.
-    bind_group: Option<wgpu::BindGroup>,
-}
-
-impl BackdropBlurTexture {
-    fn new(device: &wgpu::Device, format: wgpu::TextureFormat, size: Size<DevicePixels>) -> Self {
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("backdrop_blur_level"),
-            size: wgpu::Extent3d {
-                width: size.width.0 as u32,
-                height: size.height.0 as u32,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        Self {
-            texture,
-            view,
-            size,
-            bind_group: None,
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-struct PreparedBackdropBlur {
-    plan: BackdropBlurPlan,
-    /// The index of the blur's first level pass; the other level passes follow in draw order,
-    /// then the composite.
-    first_pass: u32,
-}
-
-impl PreparedBackdropBlur {
-    fn composite_pass(&self) -> u32 {
-        self.first_pass + (2 * self.plan.level_count).saturating_sub(1) as u32
-    }
-}
-
-fn push_backdrop_blur_pass(bytes: &mut Vec<u8>, pass: &BackdropBlurPass, stride: u32) {
-    let start = bytes.len();
-    // SAFETY: `BackdropBlurPass` is `repr(C)` and made only of `f32`s, so it has no padding.
-    bytes.extend_from_slice(unsafe {
-        std::slice::from_raw_parts(
-            (pass as *const BackdropBlurPass).cast::<u8>(),
-            std::mem::size_of::<BackdropBlurPass>(),
-        )
-    });
-    bytes.resize(start + stride as usize, 0);
-}
-
-/// Resumes drawing into the frame after a batch that needed its own passes.
-fn continue_main_pass<'encoder>(
-    encoder: &'encoder mut wgpu::CommandEncoder,
-    frame_view: &wgpu::TextureView,
-) -> wgpu::RenderPass<'encoder> {
-    encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("main_pass_continued"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: frame_view,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Load,
-                store: wgpu::StoreOp::Store,
-            },
-            depth_slice: None,
-        })],
-        depth_stencil_attachment: None,
-        ..Default::default()
-    })
 }
 
 fn instance_range(range: Range<usize>) -> Range<u32> {

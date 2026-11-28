@@ -89,10 +89,11 @@ fn a_tooltip_shows_after_a_short_delay_by_default(cx: &mut TestAppContext) {
         move |_, _| Plain { drawn }
     });
     move_to(cx, point(px(25.), px(25.)));
-    wait(cx, 40);
+    wait(cx, 490);
     assert_eq!(drawn.borrow().last().copied(), None, "not yet: a pointer passing over shows nothing");
     wait(cx, 10);
-    assert_eq!(drawn.borrow().last().copied(), Some("plain"), "shown 50ms after the hover");
+    // The framework's default; the app sets its own (ui/feel.rs).
+    assert_eq!(drawn.borrow().last().copied(), Some("plain"), "shown 500ms after the hover");
 }
 
 // The hoverable delay holds a tooltip only while the pointer is on its way into it.

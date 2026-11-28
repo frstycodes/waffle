@@ -64,8 +64,7 @@ impl Waffle {
                     })))
                     .child(self.caption_clearance(true)),
             )
-            .child(div().relative().flex_1().min_h_0().child(messages))
-            .child(composer)
+            .child(self.feed_above_composer(messages, cx).child(composer))
             .child(self.resize_handle(crate::Edge::CallChat, cx))
             .into_any_element()
     }

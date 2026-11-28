@@ -10,13 +10,6 @@
 use crate::{App, Pixels, Point, ScrollEvent, Size, TouchPhase, point, px};
 use std::time::Instant;
 
-/// AppKit's `NSScrollingBehaviorHyperbolicCoefficientTrackpad`.
-const TRACKPAD_COEFFICIENT: f32 = 0.075;
-const REBOUND_STIFFNESS: f32 = 20.;
-const REBOUND_AMPLITUDE: f32 = 0.31;
-const REBOUND_PERIOD: f32 = 1.6;
-/// A gap this long between scroll events means the content had stopped: no carried velocity.
-const VELOCITY_ZEROING_TIMEOUT: f32 = 0.1;
 /// WebKit coalesces wheel events per frame before measuring velocity; gpui delivers them one by
 /// one, and two landing microseconds apart would read as a near-infinite speed.
 const MIN_EVENT_INTERVAL: f32 = 1. / 240.;
@@ -31,7 +24,7 @@ pub fn rubber_band(force: f32, d: f32) -> f32 {
     if d <= 0. {
         return 0.;
     }
-    (1. - 1. / (force.abs() * TRACKPAD_COEFFICIENT / d + 1.)) * d * force.signum()
+    (1. - 1. / (force.abs() * crate::scroll_feel().trackpad_coefficient / d + 1.)) * d * force.signum()
 }
 
 /// The force that [`rubber_band`] maps to `shown`, so a gesture can resume a stretch that is
@@ -41,14 +34,14 @@ pub fn rubber_band_inverse(shown: f32, d: f32) -> f32 {
         return 0.;
     }
     let f = shown.abs().min(d * 0.999);
-    f * d / ((d - f) * TRACKPAD_COEFFICIENT) * shown.signum()
+    f * d / ((d - f) * crate::scroll_feel().trackpad_coefficient) * shown.signum()
 }
 
 /// AppKit's rebound: the stretch `t` seconds after letting go of `initial` while moving at
 /// `velocity` px/s, positive away from the edge. It carries on outward for a moment before
 /// decaying to the edge.
 pub fn rebound_offset(initial: f32, velocity: f32, t: f32) -> f32 {
-    (initial + velocity * t * REBOUND_AMPLITUDE) * (-t * REBOUND_STIFFNESS / REBOUND_PERIOD).exp()
+    (initial + velocity * t * crate::scroll_feel().rebound_amplitude) * (-t * crate::scroll_feel().rebound_stiffness / crate::scroll_feel().rebound_period).exp()
 }
 
 /// Whether this scroll event may stretch past an edge. Wheel notches clamp. Trackpads stretch on
@@ -248,7 +241,7 @@ impl Overscroll {
             .last_event
             .map(|last| now.saturating_duration_since(last).as_secs_f32());
         self.velocity = match interval {
-            Some(dt) if dt < VELOCITY_ZEROING_TIMEOUT => {
+            Some(dt) if dt < crate::scroll_feel().velocity_zeroing_timeout => {
                 let dt = dt.max(MIN_EVENT_INTERVAL);
                 point(delta.x.0 / dt, delta.y.0 / dt)
             }
@@ -259,7 +252,7 @@ impl Overscroll {
 
     fn carried_velocity(&self, now: Instant) -> Point<f32> {
         let stale = self.last_event.is_none_or(|last| {
-            now.saturating_duration_since(last).as_secs_f32() >= VELOCITY_ZEROING_TIMEOUT
+            now.saturating_duration_since(last).as_secs_f32() >= crate::scroll_feel().velocity_zeroing_timeout
         });
         if stale {
             Point::default()

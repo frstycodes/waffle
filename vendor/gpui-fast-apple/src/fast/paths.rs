@@ -199,16 +199,6 @@ pub(crate) fn draw_primitives_to_texture(
                     return Err(error);
                 }
             }
-            PrimitiveBatch::BackdropBlurs(range) => {
-                command_encoder = renderer.draw_backdrop_blurs(
-                    scene,
-                    range,
-                    texture,
-                    viewport_size,
-                    &command_buffer,
-                    command_encoder,
-                )?;
-            }
             PrimitiveBatch::SubpixelSprites { .. } => unreachable!(),
         }
     }

@@ -41,6 +41,18 @@ pub struct TextViewStyle {
     is_dark: bool,
 }
 
+static LINK_UNDERLINE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Whether links in rich text are underlined (a hairline in a translucent link colour). On by default; an
+/// app that tells links apart by colour alone turns it off once at startup.
+pub fn set_link_underline(underlined: bool) {
+    LINK_UNDERLINE.store(underlined, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub(crate) fn link_underlined() -> bool {
+    LINK_UNDERLINE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 impl PartialEq for TextViewStyle {
     fn eq(&self, other: &Self) -> bool {
         self.paragraph_gap == other.paragraph_gap

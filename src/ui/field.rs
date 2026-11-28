@@ -1,10 +1,10 @@
-// Fields: the labelled column, text and textarea frames with the focus ring, the dropdown, the stepper,
+// Fields: the labelled column, text and textarea frames with the focus edge, the dropdown, the stepper,
 // one-time-code cells and the drop zone. Labels sit above, help and errors below. Focus is the accent
-// border plus a soft 3px ring, fading in over the hover timing.
+// border, fading in over the hover timing; a click anywhere in the frame focuses it.
 use std::f32::consts::PI;
 
 use gpui_kit::{
-    AnyElement, App, BoxShadow, Div, ElementId, Entity, FocusHandle, Focusable, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString, Stateful, StatefulInteractiveElement, Styled, Window,
+    AnyElement, App, Div, ElementId, Entity, FocusHandle, Focusable, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString, Stateful, StatefulInteractiveElement, Styled, Window,
     base::{Transition, transition},
     component::{ActiveTheme, Icon, input::{Input, InputState}},
     div, point, prelude::FluentBuilder, px, radians,
@@ -68,8 +68,8 @@ pub fn text_field(id: impl Into<ElementId>, input: impl IntoElement, focus: &Foc
     TextField { id: id.into(), input: input.into_any_element(), focus: focus.clone(), leading: Vec::new(), trailing: Vec::new(), error: false, disabled: false, multiline: false, quiet: false, search: false, sidebar: false }
 }
 
-// The one search box: the regular input's size, edge-free on a translucent fill over a light blur (content
-// scrolling under a header stays faintly visible), the magnifier first, the accent edge and ring on focus.
+// The one search box: the regular input's size, edge-free on a translucent fill, the magnifier first, the accent
+// edge on focus.
 pub fn search_field(id: impl Into<ElementId>, state: &Entity<InputState>, cx: &App) -> TextField {
     let focus = state.read(cx).focus_handle(cx);
     search_frame(id, Input::new(state), &focus)
@@ -94,7 +94,6 @@ pub fn search_button(id: impl Into<ElementId>, label: impl Into<SharedString>, c
         .id(id.into())
         .w_full()
         .bg(fill)
-        .backdrop_blur(px(12.))
         .border_color(gpui_kit::transparent_black())
         .cursor_pointer()
         .text_color(palette::faint(cx))
@@ -176,6 +175,7 @@ impl RenderOnce for TextField {
         // only when the press began outside too, so a selection dragged past the field's edge keeps it.
         let pressed_out = window.use_keyed_state(part(&self.id, "pressed-out"), cx, |_, _| false);
         let (down, up, focus) = (pressed_out.clone(), pressed_out, self.focus.clone());
+        let take_focus = self.focus.clone();
         field_frame(cx)
             .when(focused, |d| {
                 d.on_mouse_down_out(move |_, _, cx| down.update(cx, |pressed, _| *pressed = true)).on_mouse_up_out(gpui_kit::MouseButton::Left, move |_, window, cx| {
@@ -186,24 +186,17 @@ impl RenderOnce for TextField {
             })
             .id(self.id)
             .w_full()
+            .cursor_text()
+            .on_mouse_down(gpui_kit::MouseButton::Left, move |_, window, cx| window.focus(&take_focus, cx))
             .border_color(edge)
             .when(self.disabled, |d| d.bg(palette::selected(cx)).text_color(palette::faint(cx)))
-            .shadow(focus_ring(palette::accent_soft(cx), t))
-            .when(self.search, |d| d.bg(if self.sidebar { crate::material::card(cx) } else { search_fill(cx) }).backdrop_blur(px(12.)))
+            .when(self.search, |d| d.bg(if self.sidebar { crate::material::card(cx) } else { search_fill(cx) }))
             .when(self.quiet && t <= 0., |d| d.bg(gpui_kit::transparent_black()).border_color(gpui_kit::transparent_black()))
             .when(self.multiline, |d| d.h_auto().min_h(px(88.)).py(px(10.)).items_start())
             .children(self.leading.into_iter().map(|el| div().flex_none().text_color(palette::faint(cx)).child(el)))
             .child(div().flex_1().min_w_0().child(self.input))
             .children(self.trailing.into_iter().map(|el| div().flex_none().flex().items_center().gap(px(4.)).text_color(palette::faint(cx)).child(el)))
     }
-}
-
-// The soft ring outside a focused field, grown in by `t`.
-pub(super) fn focus_ring(soft: Hsla, t: f32) -> Vec<BoxShadow> {
-    if t <= 0. {
-        return Vec::new();
-    }
-    vec![BoxShadow { color: soft.opacity(t), offset: point(px(0.), px(0.)), blur_radius: px(0.), spread_radius: px(3. * t), inset: false }]
 }
 
 // A dropdown's trigger: the chosen value, a caret that turns over while its list is open, the accent edge.
@@ -237,6 +230,7 @@ pub fn stepper(id: impl Into<ElementId>, value: impl Into<SharedString>, less: i
     let side = |name, cx: &App| icon_control(part(&id, name), cx).w(px(36.)).h_full().rounded(px(0.));
     div()
         .h(px(40.))
+        .self_start()
         .flex()
         .items_center()
         .squircle(RADIUS_MD)
@@ -248,7 +242,7 @@ pub fn stepper(id: impl Into<ElementId>, value: impl Into<SharedString>, less: i
         .child(side("more", cx).rounded_r(px(RADIUS_MD - 1.)).child(Icon::new(Glyph::Plus).size(px(18.))).on_click(more))
 }
 
-// One cell of a one-time code: 44x52, the digit in mono bold 20, the focus edge and ring on the cell typed next.
+// One cell of a one-time code: 44x52, the digit in mono bold 20, the focus edge on the cell typed next.
 pub fn code_cell(digit: Option<char>, focused: bool, cx: &App) -> Div {
     div()
         .w(px(44.))
@@ -260,7 +254,6 @@ pub fn code_cell(digit: Option<char>, focused: bool, cx: &App) -> Div {
         .squircle(RADIUS_MD)
         .border_1()
         .border_color(if focused { palette::accent() } else { palette::line_strong(cx) })
-        .shadow(focus_ring(palette::accent_soft(cx), if focused { 1. } else { 0. }))
         .bg(palette::surface(palette::Level::Page, cx))
         .font_family(cx.theme().mono_font_family.clone())
         .text_size(px(20.))

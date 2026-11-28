@@ -65,7 +65,7 @@ impl DesignSystem {
             .child(stack().child(ui::row().items_stretch().justify_between().child(strong("clip.mp4", cx)).child(div().text_color(palette::faint(cx)).child("12.4 / 31 MB"))).child(ui::Progress::new(0.4).animated("p-clip")))
             .child(stack().child(strong("Connecting to Lounge…", cx)).child(ui::Progress::indeterminate("p-connect").into_any_element()))
             .child(row().child(ui::ring(0.72, cx)).child(div().text_color(palette::muted(cx)).child("18 of 25 uploaded")))
-            .child(stack().child(strong("Joined, thin", cx)).child(div().w_40().child(ui::Progress::new(0.62).fill(palette::positive_ink(cx)).track(palette::line(cx)).thin().joined())));
+            .child(stack().child(strong("Thin", cx)).child(div().w_40().child(ui::Progress::new(0.62).fill(palette::positive_ink(cx)).track(palette::line(cx)).thin())));
         vec![variant("Progress / Kind", "Progress shows a count when the work is countable. Waits look alive: the wave, or a calm shimmer that sweeps then rests.", content, cx)]
     }
 

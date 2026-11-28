@@ -9,7 +9,7 @@ use crate::subscription::SingleSubscriberSet;
 use crate::taffy::TaffyLayoutEngine;
 use crate::{
     Action, AnyDrag, AnyElement, AnyImageCache, AnyTooltip, AnyView, App, AppContext, Arena, Asset,
-    AsyncWindowContext, AtlasTile, AvailableSpace, BackdropBlur, BackdropFilter, Background,
+    AsyncWindowContext, AtlasTile, AvailableSpace, Background,
     BorderStyle, Bounds, BoxShadow, Capslock, Context, CornerShape, Corners, CursorHideMode,
     CursorStyle, Decorations, DevicePixels, DispatchActionListener, DispatchNodeId, DispatchTree,
     DisplayId, Edges, Effect, Entity, EntityId, EventEmitter, FileDropEvent, FontId, Global,
@@ -4343,18 +4343,19 @@ impl Window {
         self.leaving_tooltip(cx)
     }
 
-    /// Waffle patch: the last tooltip stays for `TOOLTIP_LINGER` after it closes, so crossing the gap between
+    /// The last tooltip stays for the feel's `linger` after it closes, so crossing the gap between
     /// two elements doesn't blank it for a frame before the next one shows.
     fn leaving_tooltip(&mut self, cx: &mut App) -> Option<AnyElement> {
         let now = cx.background_executor().now();
         let entrance = self.tooltip_entrance.as_mut()?;
+        let feel = crate::tooltip_feel();
         let ended = *entrance.ended.get_or_insert(now);
-        if now - ended >= TOOLTIP_WARM {
+        if now - ended >= feel.warm {
             // Gone cold: let go of the last tooltip's view.
             self.tooltip_entrance = None;
             return None;
         }
-        if now - ended >= TOOLTIP_LINGER {
+        if now - ended >= feel.linger {
             return None;
         }
         let (tooltip, bounds) = entrance.last.clone()?;
@@ -4365,19 +4366,20 @@ impl Window {
         Some(element)
     }
 
-    /// Waffle patch: wraps a tooltip in its entrance, a pop with a tilt that grows out of its element. The
-    /// entrance belongs to the run of tooltips, not to one: one shown within `TOOLTIP_WARM` of the last
+    /// Waffle patch: wraps a tooltip in its entrance, a plain fade. The
+    /// entrance belongs to the run of tooltips, not to one: one shown within the feel's `warm` of the last
     /// closing carries on from it, so moving between elements swaps the content without replaying.
     /// `ended` is when it closed, for one drawn while it lingers.
     fn entering_tooltip(&mut self, tooltip: &AnyTooltip, bounds: Bounds<Pixels>, ended: Option<Instant>, cx: &App) -> AnyElement {
+        let feel = crate::tooltip_feel();
         let now = cx.background_executor().now();
         let started = match &self.tooltip_entrance {
-            Some(entrance) if entrance.ended.is_none_or(|ended| now - ended < TOOLTIP_WARM) => entrance.started,
+            Some(entrance) if entrance.ended.is_none_or(|ended| now - ended < feel.warm) => entrance.started,
             _ => now,
         };
-        let t = match cx.reduce_motion() {
+        let t = match cx.reduce_motion() || feel.entrance.is_zero() {
             true => 1.,
-            false => ((now - started).as_secs_f32() / TOOLTIP_ENTRANCE.as_secs_f32()).min(1.),
+            false => ((now - started).as_secs_f32() / feel.entrance.as_secs_f32()).min(1.),
         };
         if t < 1. {
             self.on_next_frame(|window, _| window.redraw());
@@ -4390,22 +4392,28 @@ impl Window {
             None => point(relative(0.), relative(0.)),
         };
         self.tooltip_entrance = Some(TooltipEntrance { started, ended, last: Some((tooltip.clone(), bounds)) });
-        let pop = back_out(t);
-        crate::div()
-            .child(tooltip.view.clone())
-            .transform_origin(origin)
-            // Opaque within three frames, so it reads as instant; the pop carries the motion.
-            .opacity((t / 0.15).min(1.))
-            .scale(0.8 + 0.2 * pop)
-            .rotate(radians(-0.08 * (1. - pop)))
+        let enter = (feel.enter)(t);
+        // Transforms only while there is something to transform: a settled tooltip is drawn untransformed, so its text
+        // is pixel-snapped and crisp rather than resampled.
+        let mut el = crate::div().child(tooltip.view.clone()).opacity(enter.opacity);
+        if enter.scale != 1. || enter.rotation != 0. {
+            el = el.transform_origin(origin);
+        }
+        if enter.scale != 1. {
+            el = el.scale(enter.scale);
+        }
+        if enter.rotation != 0. {
+            el = el.rotate(radians(enter.rotation));
+        }
+        el
             .into_any_element()
     }
 
-    /// Whether a tooltip is showing or closed within `TOOLTIP_WARM`: the next one then shows at once.
+    /// Whether a tooltip is showing or closed within the feel's `warm`: the next one then shows at once.
     pub(crate) fn tooltip_is_warm(&self, now: Instant) -> bool {
         self.tooltip_entrance
             .as_ref()
-            .is_some_and(|entrance| entrance.ended.is_none_or(|ended| now - ended < TOOLTIP_WARM))
+            .is_some_and(|entrance| entrance.ended.is_none_or(|ended| now - ended < crate::tooltip_feel().warm))
     }
 
     fn prepaint_deferred_draws(&mut self, cx: &mut App) {
@@ -5199,42 +5207,6 @@ impl Window {
         result
     }
 
-    /// Paint a backdrop filter into the scene at the current z-index: what was painted under
-    /// `bounds` before this call is blurred and saturated inside the rounded `bounds`, and
-    /// anything painted after it draws on top. Paint it before the element's shadows and
-    /// background, like CSS `backdrop-filter`.
-    ///
-    /// This method should only be called as part of the paint phase of element drawing.
-    pub fn paint_backdrop_filter(
-        &mut self,
-        bounds: Bounds<Pixels>,
-        corner_radii: Corners<Pixels>,
-        filter: BackdropFilter,
-    ) {
-        self.invalidator.debug_assert_paint();
-
-        let opacity = self.element_opacity();
-        if filter.is_identity() || opacity <= 0. {
-            return;
-        }
-        let scale_factor = self.scale_factor();
-        // A blur reads what's drawn behind it, which a scroll layer's tiles don't hold: keep its
-        // container off its layer while it shows one.
-        crate::fast::layers::invalidate::note_uncarried(self);
-        self.next_frame.scene.insert_primitive(BackdropBlur {
-            order: 0,
-            blur_radius: filter.blur_radius.max(Pixels::ZERO).scale(scale_factor),
-            bounds: self.snap_bounds(bounds),
-            content_mask: self.snapped_content_mask(),
-            corner_radii: corner_radii.scale(scale_factor),
-            saturation: filter.saturation.max(0.),
-            opacity,
-            fade: filter.fade.map(|length| length.max(Pixels::ZERO).scale(scale_factor)),
-            clear_top: filter.clear_top.max(Pixels::ZERO).scale(scale_factor),
-            corner_exponent: self.element_corner_shape.exponent(),
-        });
-    }
-
     /// Paint the drop (non-inset) shadows from `shadows` into the scene at the current
     /// z-index. Inset shadows are skipped; paint those with [`Self::paint_inset_shadows`]
     /// after the element's background so they layer on top of the fill.
@@ -5258,12 +5230,16 @@ impl Window {
                 continue;
             }
             let shadow_bounds = (bounds + shadow.offset).dilate(shadow.spread_radius);
+            // Waffle patch: as CSS does, a spread grows each rounded corner by the spread too, so a ring around a round or rounded
+            // element stays concentric with it instead of tightening at the corners.
+            let spread = shadow.spread_radius;
+            let grown = corner_radii.map(|&r| if r > px(0.) { (r + spread).max(px(0.)) } else { px(0.) });
             self.next_frame.scene.insert_primitive(Shadow {
                 order: 0,
                 blur_radius: shadow.blur_radius.scale(scale_factor),
                 bounds: self.cover_bounds(shadow_bounds),
                 content_mask,
-                corner_radii: corner_radii.scale(scale_factor),
+                corner_radii: grown.scale(scale_factor),
                 color: shadow.color.opacity(opacity),
                 element_bounds,
                 element_corner_radii,
@@ -11373,24 +11349,25 @@ pub fn anchored_tooltip_bounds(
     placement: TooltipPlacement,
     window_bounds: Bounds<Pixels>,
 ) -> Bounds<Pixels> {
+    let gap = crate::tooltip_feel().gap;
     let slide = |start: Pixels, length: Pixels, limit: Pixels| {
         start.min(limit - length).max(Pixels::ZERO)
     };
     let origin = match placement {
         TooltipPlacement::Side => {
-            let fits_right = anchor.right() + size.width <= window_bounds.right();
+            let fits_right = anchor.right() + gap + size.width <= window_bounds.right();
             let x = match fits_right || anchor.left() < size.width {
-                true => anchor.right(),
-                false => anchor.left() - size.width,
+                true => anchor.right() + gap,
+                false => anchor.left() - size.width - gap,
             };
             let y = anchor.center().y - size.height / 2.;
             point(x, slide(y, size.height, window_bounds.bottom()))
         }
         TooltipPlacement::Auto => {
-            let fits_below = anchor.bottom() + size.height <= window_bounds.bottom();
+            let fits_below = anchor.bottom() + gap + size.height <= window_bounds.bottom();
             let y = match fits_below || anchor.top() < size.height {
-                true => anchor.bottom(),
-                false => anchor.top() - size.height,
+                true => anchor.bottom() + gap,
+                false => anchor.top() - size.height - gap,
             };
             let x = anchor.center().x - size.width / 2.;
             point(slide(x, size.width, window_bounds.right()), y)
@@ -11399,21 +11376,9 @@ pub fn anchored_tooltip_bounds(
     Bounds::new(origin, size)
 }
 
-const TOOLTIP_ENTRANCE: Duration = Duration::from_millis(320);
-const TOOLTIP_WARM: Duration = Duration::from_millis(300);
-// A closed tooltip holds this long; under `TOOLTIP_WARM`, so the next one still skips the entrance.
-const TOOLTIP_LINGER: Duration = Duration::from_millis(120);
-
 struct TooltipEntrance {
     started: Instant,
     ended: Option<Instant>,
     // The last tooltip shown and where it settles, drawn again while it lingers.
     last: Option<(AnyTooltip, Bounds<Pixels>)>,
-}
-
-// Overshoots past 1 by about 10% before settling, the pop's springiness.
-fn back_out(t: f32) -> f32 {
-    const C: f32 = 1.7;
-    let u = t - 1.;
-    1. + (C + 1.) * u * u * u + C * u * u
 }

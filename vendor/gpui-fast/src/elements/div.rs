@@ -53,11 +53,6 @@ type StackSafe<T> = stacksafe::StackSafe<T>;
 type StackSafe<T> = T;
 
 const DRAG_THRESHOLD: f64 = 2.;
-// Waffle patch: tooltips show 50ms after their element is hovered (upstream waits 500ms): long enough that
-// a pointer passing over doesn't flash one, short enough to read as instant. A neighbour of one already up
-// shows at once (`Window::tooltip_is_warm`), and an element can set its own with `tooltip_show_delay`.
-const DEFAULT_TOOLTIP_SHOW_DELAY: Duration = Duration::from_millis(50);
-const HOVERABLE_TOOLTIP_HIDE_DELAY: Duration = Duration::from_millis(500);
 
 /// The styling information for a given group.
 pub struct GroupStyle {
@@ -3594,7 +3589,7 @@ impl Interactivity {
                     let old_scroll_offset = *scroll_offset;
                     // Waffle: a wheel line is a fixed distance, not the text's line height (see WHEEL_LINE).
                     let _ = line_height;
-                    let mut delta = event.delta.pixel_delta(super::scroll_motion::WHEEL_LINE);
+                    let mut delta = event.delta.pixel_delta(super::scroll_motion::wheel_line());
 
                     if restrict_scroll_to_axis
                         && event.delta.precise()
@@ -4017,7 +4012,7 @@ pub(crate) fn register_tooltip_mouse_handlers(
     window: &mut Window,
 ) {
     let current_view = window.current_view();
-    let show_delay = show_delay.unwrap_or(DEFAULT_TOOLTIP_SHOW_DELAY);
+    let show_delay = show_delay.unwrap_or(crate::tooltip_feel().show_delay);
 
     window.on_mouse_event({
         let active_tooltip = active_tooltip.clone();
@@ -4341,7 +4336,7 @@ fn handle_tooltip_check_visible_and_update(
                 let weak_active_tooltip = Rc::downgrade(active_tooltip);
                 async move |cx| {
                     cx.background_executor()
-                        .timer(HOVERABLE_TOOLTIP_HIDE_DELAY)
+                        .timer(crate::tooltip_feel().hide_delay)
                         .await;
                     let Some(active_tooltip) = weak_active_tooltip.upgrade() else {
                         return;
@@ -5435,7 +5430,7 @@ mod tests {
     #[test]
     fn tooltip_respects_custom_show_delay() {
         let extra_delay = Duration::from_secs(1);
-        let show_delay_override = DEFAULT_TOOLTIP_SHOW_DELAY + extra_delay;
+        let show_delay_override = crate::tooltip_feel().show_delay + extra_delay;
         let (test_app, _any_window, captured_active_tooltip) =
             setup_tooltip_owner_test(Some(show_delay_override));
 
@@ -5444,7 +5439,7 @@ mod tests {
 
         test_app
             .dispatcher
-            .advance_clock(DEFAULT_TOOLTIP_SHOW_DELAY);
+            .advance_clock(crate::tooltip_feel().show_delay);
         test_app.run_until_parked();
 
         assert!(matches!(
@@ -5470,7 +5465,7 @@ mod tests {
 
         test_app
             .dispatcher
-            .advance_clock(DEFAULT_TOOLTIP_SHOW_DELAY);
+            .advance_clock(crate::tooltip_feel().show_delay);
         test_app.run_until_parked();
 
         assert!(matches!(
@@ -5498,7 +5493,7 @@ mod tests {
 
         test_app
             .dispatcher
-            .advance_clock(DEFAULT_TOOLTIP_SHOW_DELAY);
+            .advance_clock(crate::tooltip_feel().show_delay);
         test_app.run_until_parked();
 
         assert!(matches!(

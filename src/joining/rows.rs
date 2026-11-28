@@ -78,7 +78,7 @@ fn get_started(done: usize, total: usize, cx: &mut Context<Waffle>) -> AnyElemen
                 .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Get Started"))
                 .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(format!("{done} of {total}"))),
         )
-        .child(ui::Progress::new(fraction).fill(palette::positive_ink(cx)).joined())
+        .child(ui::Progress::new(fraction).fill(palette::positive_ink(cx)))
         .on_click(cx.listener(|this, _, _, cx| this.open_guild_page(GuildPage::Guide, cx)))
         .into_any_element()
 }

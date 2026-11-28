@@ -83,11 +83,6 @@ pub(crate) struct DirectXResources {
     pub(crate) path_intermediate_msaa_texture: ID3D11Texture2D,
     pub(crate) path_intermediate_msaa_view: Option<ID3D11RenderTargetView>,
 
-    // Level 0 holds the region a backdrop blur reads; each later level is half the size of the
-    // one before. Allocated on first use; `backdrop_blur_budget` shrinks and frees them.
-    backdrop_blur_textures: Vec<BackdropBlurTexture>,
-    backdrop_blur_budget: BackdropBlurTextureBudget,
-
     // Cached viewport
     viewport: D3D11_VIEWPORT,
 }
@@ -101,9 +96,6 @@ pub(crate) struct DirectXRenderPipelines {
     pub(crate) mono_sprites: PipelineState<MonochromeSprite>,
     pub(crate) subpixel_sprites: PipelineState<SubpixelSprite>,
     pub(crate) poly_sprites: PipelineState<PolychromeSprite>,
-    pub(crate) backdrop_blur_down: PipelineState<BackdropBlurPass>,
-    pub(crate) backdrop_blur_up: PipelineState<BackdropBlurPass>,
-    pub(crate) backdrop_blur_composite: PipelineState<BackdropBlurPass>,
 }
 
 pub(crate) struct DirectXGlobalElements {
@@ -380,9 +372,6 @@ impl DirectXRenderer {
         })?;
         self.upload_scene_buffers(scene)?;
         if crate::fast::frame::draw_batches(self, scene)? {
-            if let Some(resources) = self.resources.as_mut() {
-                resources.trim_backdrop_blur_textures();
-            }
             return Ok(());
         }
 
@@ -414,9 +403,6 @@ impl DirectXRenderer {
                     self.draw_polychrome_sprites(texture_id, range.start, range.len())
                 }
                 PrimitiveBatch::Surfaces(range) => self.draw_surfaces(&scene.surfaces[range]),
-                PrimitiveBatch::BackdropBlurs(range) => {
-                    self.draw_backdrop_blurs(&scene.backdrop_blurs[range])
-                }
             }
             .with_context(|| {
                 format!(
@@ -432,10 +418,6 @@ impl DirectXRenderer {
                     scene.surfaces.len(),
                 )
             })?;
-        }
-        // D3D11 keeps a released texture alive until the GPU is done with it.
-        if let Some(resources) = self.resources.as_mut() {
-            resources.trim_backdrop_blur_textures();
         }
         Ok(())
     }
@@ -858,15 +840,6 @@ impl DirectXRenderer {
         Ok(())
     }
 
-    fn draw_backdrop_blurs(&mut self, blurs: &[BackdropBlur]) -> Result<()> {
-        let viewport = size(DevicePixels(self.width as i32), DevicePixels(self.height as i32));
-        let devices = self.devices.as_ref().context("devices missing")?;
-        let resources = self.resources.as_mut().context("resources missing")?;
-        resources.prepare_backdrop_blurs(&devices.device, blurs, viewport)?;
-        let blur = BlurTarget { devices, resources, viewport };
-        draw_backdrop_blurs(blur, &mut self.pipelines, &self.globals, blurs)
-    }
-
     pub(crate) fn gpu_specs(&self) -> Result<GpuSpecs> {
         let devices = self.devices.as_ref().context("devices missing")?;
         let desc = unsafe { devices.adapter.GetDesc1() }?;
@@ -955,67 +928,8 @@ impl DirectXResources {
             path_intermediate_msaa_texture,
             path_intermediate_msaa_view,
             path_intermediate_srv,
-            backdrop_blur_textures: Vec::new(),
-            backdrop_blur_budget: BackdropBlurTextureBudget::default(),
             viewport,
         })
-    }
-
-    fn ensure_backdrop_blur_textures(
-        &mut self,
-        device: &ID3D11Device,
-        plan: &BackdropBlurPlan,
-    ) -> Result<()> {
-        for level in 0..=plan.level_count {
-            let current = self
-                .backdrop_blur_textures
-                .get(level)
-                .map(|texture| texture.size);
-            let Some(texture_size) =
-                self.backdrop_blur_budget
-                    .allocation_size(level, plan.level_size(level), current)
-            else {
-                continue;
-            };
-            let texture = BackdropBlurTexture::new(device, texture_size)?;
-            if level < self.backdrop_blur_textures.len() {
-                self.backdrop_blur_textures[level] = texture;
-            } else {
-                self.backdrop_blur_textures.push(texture);
-            }
-        }
-        Ok(())
-    }
-
-    /// Allocates the level textures `blurs` need, before a frame that draws them borrows these resources.
-    pub(crate) fn prepare_backdrop_blurs(&mut self, device: &ID3D11Device, blurs: &[BackdropBlur], viewport: Size<DevicePixels>) -> Result<()> {
-        for blur in blurs {
-            if let Some(plan) = blur.plan(viewport) {
-                self.ensure_backdrop_blur_textures(device, &plan)?;
-            }
-        }
-        Ok(())
-    }
-
-    /// Whether every level texture `plan` draws through is allocated and big enough.
-    fn backdrop_blur_ready(&self, plan: &BackdropBlurPlan) -> bool {
-        (0..=plan.level_count).all(|level| {
-            let wanted = plan.level_size(level);
-            self.backdrop_blur_textures
-                .get(level)
-                .is_some_and(|texture| texture.size.width >= wanted.width && texture.size.height >= wanted.height)
-        })
-    }
-
-    /// Frees the blur level textures the budget no longer wants, once a frame is drawn.
-    pub(crate) fn trim_backdrop_blur_textures(&mut self) {
-        let allocated = self
-            .backdrop_blur_textures
-            .iter()
-            .map(|texture| texture.size)
-            .collect::<Vec<_>>();
-        let keep = self.backdrop_blur_budget.end_frame(&allocated);
-        self.backdrop_blur_textures.truncate(keep);
     }
 
     #[inline]
@@ -1103,27 +1017,6 @@ impl DirectXRenderPipelines {
             16,
             create_blend_state(device)?,
         )?;
-        let backdrop_blur_down = PipelineState::new(
-            device,
-            "backdrop_blur_down_pipeline",
-            ShaderModule::BackdropBlurDown,
-            1,
-            create_blend_state_for_backdrop_blur_level(device)?,
-        )?;
-        let backdrop_blur_up = PipelineState::new(
-            device,
-            "backdrop_blur_up_pipeline",
-            ShaderModule::BackdropBlurUp,
-            1,
-            create_blend_state_for_backdrop_blur_level(device)?,
-        )?;
-        let backdrop_blur_composite = PipelineState::new(
-            device,
-            "backdrop_blur_composite_pipeline",
-            ShaderModule::BackdropBlurComposite,
-            1,
-            create_blend_state_for_backdrop_blur_composite(device)?,
-        )?;
 
         Ok(Self {
             shadow_pipeline,
@@ -1134,9 +1027,6 @@ impl DirectXRenderPipelines {
             mono_sprites,
             subpixel_sprites,
             poly_sprites,
-            backdrop_blur_down,
-            backdrop_blur_up,
-            backdrop_blur_composite,
         })
     }
 }
@@ -1411,208 +1301,6 @@ pub(crate) struct PathSprite {
     pub(crate) bounds: Bounds<ScaledPixels>,
 }
 
-struct BackdropBlurTexture {
-    texture: ID3D11Texture2D,
-    size: Size<DevicePixels>,
-    shader_resource_view: Option<ID3D11ShaderResourceView>,
-    render_target_view: Option<ID3D11RenderTargetView>,
-    viewport: D3D11_VIEWPORT,
-}
-
-impl BackdropBlurTexture {
-    fn new(device: &ID3D11Device, size: Size<DevicePixels>) -> Result<Self> {
-        let texture = unsafe {
-            let mut output = None;
-            let desc = D3D11_TEXTURE2D_DESC {
-                Width: size.width.0 as u32,
-                Height: size.height.0 as u32,
-                MipLevels: 1,
-                ArraySize: 1,
-                Format: RENDER_TARGET_FORMAT,
-                SampleDesc: DXGI_SAMPLE_DESC {
-                    Count: 1,
-                    Quality: 0,
-                },
-                Usage: D3D11_USAGE_DEFAULT,
-                BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
-                CPUAccessFlags: 0,
-                MiscFlags: 0,
-            };
-            device.CreateTexture2D(&desc, None, Some(&mut output))?;
-            output.context("creating backdrop blur texture")?
-        };
-        let mut shader_resource_view = None;
-        let mut render_target_view = None;
-        unsafe {
-            device.CreateShaderResourceView(&texture, None, Some(&mut shader_resource_view))?;
-            device.CreateRenderTargetView(&texture, None, Some(&mut render_target_view))?;
-        }
-        Ok(Self {
-            texture,
-            size,
-            shader_resource_view,
-            render_target_view,
-            viewport: D3D11_VIEWPORT {
-                TopLeftX: 0.0,
-                TopLeftY: 0.0,
-                Width: size.width.0 as f32,
-                Height: size.height.0 as f32,
-                MinDepth: 0.0,
-                MaxDepth: 1.0,
-            },
-        })
-    }
-}
-
-/// Renders `target_level` of a backdrop blur from the level next to it.
-/// What a frame's backdrop blurs draw with: the window's render target, which they copy from, and its
-/// level textures, allocated ahead (`DirectXResources::prepare_backdrop_blurs`).
-#[derive(Clone, Copy)]
-pub(crate) struct BlurTarget<'a> {
-    pub(crate) devices: &'a DirectXRendererDevices,
-    pub(crate) resources: &'a DirectXResources,
-    pub(crate) viewport: Size<DevicePixels>,
-}
-
-/// Draws `blurs` over what the window's target holds so far, leaving it bound again. A blur whose
-/// textures weren't allocated ahead is skipped rather than drawn through missing levels.
-pub(crate) fn draw_backdrop_blurs(
-    blur: BlurTarget<'_>,
-    pipelines: &mut DirectXRenderPipelines,
-    globals: &DirectXGlobalElements,
-    blurs: &[BackdropBlur],
-) -> Result<()> {
-    for backdrop in blurs {
-        let Some(plan) = backdrop.plan(blur.viewport) else {
-            continue;
-        };
-        if !blur.resources.backdrop_blur_ready(&plan) {
-            continue;
-        }
-        draw_backdrop_blur_levels(blur, pipelines, globals, &plan)?;
-        draw_backdrop_blur_composite(blur, pipelines, globals, backdrop, &plan)?;
-    }
-    Ok(())
-}
-
-fn draw_backdrop_blur_levels(
-    blur: BlurTarget<'_>,
-    pipelines: &mut DirectXRenderPipelines,
-    globals: &DirectXGlobalElements,
-    plan: &BackdropBlurPlan,
-) -> Result<()> {
-    let (devices, resources) = (blur.devices, blur.resources);
-    let render_target = resources
-        .render_target
-        .as_ref()
-        .context("render target missing")?;
-    let region = plan.region;
-    unsafe {
-        devices.device_context.CopySubresourceRegion(
-            &resources.backdrop_blur_textures[0].texture,
-            0,
-            0,
-            0,
-            0,
-            render_target,
-            0,
-            Some(&D3D11_BOX {
-                left: region.origin.x.0 as u32,
-                top: region.origin.y.0 as u32,
-                front: 0,
-                right: (region.origin.x.0 + region.size.width.0) as u32,
-                bottom: (region.origin.y.0 + region.size.height.0) as u32,
-                back: 1,
-            }),
-        );
-    }
-    for level in 1..=plan.level_count {
-        draw_backdrop_blur_level(devices, resources, &mut pipelines.backdrop_blur_down, globals, plan, level - 1, level)?;
-    }
-    for level in (1..plan.level_count).rev() {
-        draw_backdrop_blur_level(devices, resources, &mut pipelines.backdrop_blur_up, globals, plan, level + 1, level)?;
-    }
-    unsafe {
-        unbind_source_texture(&devices.device_context);
-        devices
-            .device_context
-            .OMSetRenderTargets(Some(slice::from_ref(&resources.render_target_view)), None);
-        devices
-            .device_context
-            .RSSetViewports(Some(slice::from_ref(&resources.viewport)));
-    }
-    Ok(())
-}
-
-fn draw_backdrop_blur_composite(
-    blur: BlurTarget<'_>,
-    pipelines: &mut DirectXRenderPipelines,
-    globals: &DirectXGlobalElements,
-    backdrop: &BackdropBlur,
-    plan: &BackdropBlurPlan,
-) -> Result<()> {
-    let devices = blur.devices;
-    let source = &blur.resources.backdrop_blur_textures[plan.composite_source_level()];
-    let pass = plan.composite_pass(backdrop, source.size, blur.viewport);
-    let pipeline = &mut pipelines.backdrop_blur_composite;
-    pipeline.update_buffer(&devices.device, &devices.device_context, slice::from_ref(&pass))?;
-    pipeline.draw_range_with_texture(
-        &devices.device_context,
-        slice::from_ref(&source.shader_resource_view),
-        globals.batch_params_buffer.as_ref().context("batch params buffer missing")?,
-        slice::from_ref(&globals.sampler),
-        0,
-        1,
-    )
-}
-
-fn draw_backdrop_blur_level(
-    devices: &DirectXRendererDevices,
-    resources: &DirectXResources,
-    pipeline: &mut PipelineState<BackdropBlurPass>,
-    globals: &DirectXGlobalElements,
-    plan: &BackdropBlurPlan,
-    source_level: usize,
-    target_level: usize,
-) -> Result<()> {
-    let source = &resources.backdrop_blur_textures[source_level];
-    let target = &resources.backdrop_blur_textures[target_level];
-    let pass = plan.level_pass(source_level, target_level, source.size, target.size);
-    unsafe {
-        // The target may still be bound as the previous pass's source.
-        unbind_source_texture(&devices.device_context);
-        devices
-            .device_context
-            .OMSetRenderTargets(Some(slice::from_ref(&target.render_target_view)), None);
-        devices
-            .device_context
-            .RSSetViewports(Some(slice::from_ref(&target.viewport)));
-    }
-    pipeline.update_buffer(
-        &devices.device,
-        &devices.device_context,
-        slice::from_ref(&pass),
-    )?;
-    pipeline.draw_range_with_texture(
-        &devices.device_context,
-        slice::from_ref(&source.shader_resource_view),
-        globals
-            .batch_params_buffer
-            .as_ref()
-            .context("batch params buffer missing")?,
-        slice::from_ref(&globals.sampler),
-        0,
-        1,
-    )
-}
-
-unsafe fn unbind_source_texture(device_context: &ID3D11DeviceContext) {
-    unsafe {
-        device_context.VSSetShaderResources(0, Some(&[None]));
-        device_context.PSSetShaderResources(0, Some(&[None]));
-    }
-}
-
 impl Drop for DirectXRenderer {
     fn drop(&mut self) {
         #[cfg(debug_assertions)]
@@ -1883,41 +1571,6 @@ fn create_blend_state_for_path_rasterization(device: &ID3D11Device) -> Result<ID
 }
 
 #[inline]
-fn create_blend_state_for_backdrop_blur_level(device: &ID3D11Device) -> Result<ID3D11BlendState> {
-    let mut desc = D3D11_BLEND_DESC::default();
-    desc.RenderTarget[0].BlendEnable = false.into();
-    desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL.0 as u8;
-    unsafe {
-        let mut state = None;
-        device.CreateBlendState(&desc, Some(&mut state))?;
-        Ok(state.unwrap())
-    }
-}
-
-/// Premultiplied dual-source blending: the composite outputs the masked blur (premultiplied), and
-/// the mask as the share of the pixel underneath it replaces, for color and alpha alike. The shared
-/// blend state's straight alpha and additive alpha would turn the blur of a transparent backdrop black.
-#[inline]
-fn create_blend_state_for_backdrop_blur_composite(
-    device: &ID3D11Device,
-) -> Result<ID3D11BlendState> {
-    let mut desc = D3D11_BLEND_DESC::default();
-    desc.RenderTarget[0].BlendEnable = true.into();
-    desc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
-    desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
-    desc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
-    desc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC1_COLOR;
-    desc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
-    desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC1_ALPHA;
-    desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL.0 as u8;
-    unsafe {
-        let mut state = None;
-        device.CreateBlendState(&desc, Some(&mut state))?;
-        Ok(state.unwrap())
-    }
-}
-
-#[inline]
 fn create_blend_state_for_path_sprite(device: &ID3D11Device) -> Result<ID3D11BlendState> {
     // If the feature level is set to greater than D3D_FEATURE_LEVEL_9_3, the display
     // device performs the blend in linear space, which is ideal.
@@ -2083,9 +1736,6 @@ pub(crate) mod shader_resources {
         MonochromeSprite,
         SubpixelSprite,
         PolychromeSprite,
-        BackdropBlurDown,
-        BackdropBlurUp,
-        BackdropBlurComposite,
     }
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -2158,18 +1808,6 @@ pub(crate) mod shader_resources {
                 ShaderModule::PolychromeSprite => match target {
                     ShaderTarget::Vertex => POLYCHROME_SPRITE_VERTEX_BYTES,
                     ShaderTarget::Fragment => POLYCHROME_SPRITE_FRAGMENT_BYTES,
-                },
-                ShaderModule::BackdropBlurDown => match target {
-                    ShaderTarget::Vertex => BACKDROP_BLUR_DOWN_VERTEX_BYTES,
-                    ShaderTarget::Fragment => BACKDROP_BLUR_DOWN_FRAGMENT_BYTES,
-                },
-                ShaderModule::BackdropBlurUp => match target {
-                    ShaderTarget::Vertex => BACKDROP_BLUR_UP_VERTEX_BYTES,
-                    ShaderTarget::Fragment => BACKDROP_BLUR_UP_FRAGMENT_BYTES,
-                },
-                ShaderModule::BackdropBlurComposite => match target {
-                    ShaderTarget::Vertex => BACKDROP_BLUR_COMPOSITE_VERTEX_BYTES,
-                    ShaderTarget::Fragment => BACKDROP_BLUR_COMPOSITE_FRAGMENT_BYTES,
                 },
             };
             Self { inner: bytes }
@@ -2252,9 +1890,6 @@ pub(crate) mod shader_resources {
                 ShaderModule::MonochromeSprite => "monochrome_sprite",
                 ShaderModule::SubpixelSprite => "subpixel_sprite",
                 ShaderModule::PolychromeSprite => "polychrome_sprite",
-                ShaderModule::BackdropBlurDown => "backdrop_blur_down",
-                ShaderModule::BackdropBlurUp => "backdrop_blur_up",
-                ShaderModule::BackdropBlurComposite => "backdrop_blur_composite",
             }
         }
     }

@@ -3435,8 +3435,7 @@ fn block_element_id(kind: &'static str, span: Option<Span>, ix: usize) -> Elemen
 /// links reads as text first and as links second.
 fn link_underline(style: &TextViewStyle) -> gpui::UnderlineStyle {
     gpui::UnderlineStyle {
-        // Waffle patch: links are told apart by their colour alone, never underlined.
-        thickness: px(0.),
+        thickness: if super::style::link_underlined() { px(1.) } else { px(0.) },
         color: Some(style.link().opacity(0.4)),
         ..Default::default()
     }

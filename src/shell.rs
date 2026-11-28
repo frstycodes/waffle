@@ -5,18 +5,21 @@
 // again only when it changes itself.
 use gpui_kit::{Context, Entity, Render, StyleRefinement, Window, div, prelude::*};
 
-use crate::{Waffle, gif::GifLayer};
+use crate::{Waffle, frame_rate::FrameRate, gif::GifLayer};
 
 pub struct Shell {
     app: Entity<Waffle>,
     gifs: Entity<GifLayer>,
+    fps: Entity<FrameRate>,
 }
 
 impl Shell {
     pub fn new(window: &mut Window, splash: Option<gpui_kit::WindowHandle<crate::splash::Splash>>, cx: &mut Context<Self>) -> Self {
         let app = cx.new(|cx| Waffle::new(window, splash, cx));
         let gifs = cx.new(GifLayer::new);
-        Self { app, gifs }
+        let fps = cx.new(|cx| FrameRate::new(&app, cx));
+        crate::autoscroll::start(&app, cx);
+        Self { app, gifs, fps }
     }
 }
 
@@ -34,6 +37,7 @@ impl Render for Shell {
             .size_full()
             .child(self.app.clone().cached(StyleRefinement::default().size_full()))
             .child(self.gifs.clone())
+            .child(self.fps.clone())
             .into_any_element()
     }
 }

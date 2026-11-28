@@ -36,6 +36,7 @@ use crate::{
 mod attachments;
 mod composer;
 mod embeds;
+mod feed_edge;
 mod format;
 mod history;
 mod markdown;
@@ -94,7 +95,7 @@ impl Waffle {
         let body = match self.feeds.get(&channel.id) {
             Some(Feed { loaded: true, messages, .. }) if messages.is_empty() => match self.history_start(&channel, false) {
                 // Nothing said yet: the header rests at the foot of the feed, where the first message will land.
-                Some(start) => ui::col().size_full().justify_end().pt(px(top)).pb(px(self.composer_height.get() + 32.)).child(crate::dm_start::channel_start::history_start_header(&start, cx.weak_entity(), cx)).into_any_element(),
+                Some(start) => ui::col().size_full().justify_end().pt(px(top)).pb(px(feed_edge::FEED_FOOT)).child(crate::dm_start::channel_start::history_start_header(&start, cx.weak_entity(), cx)).into_any_element(),
                 None => empty_state("empty", Mood::Happy, "No messages yet", "Be the first to say something.", cx),
             },
             Some(Feed { loaded: true, .. }) => self.render_messages(top, cx).into_any_element(),
@@ -115,8 +116,8 @@ impl Waffle {
             .on_action(cx.listener(Self::focus_search))
             // The feed stops under the header, a hard edge. A DM's profile sits under the header instead of beside it.
             .children(inline)
-            // The composer floats over the feed, which scrolls on under its glass.
-            .child(div().relative().flex_1().min_h_0().child(body).children(unread_bar).child(composer));
+            // The feed stops above the composer and fades into the page there (feed_edge.rs).
+            .child(self.feed_above_composer(body, cx).children(unread_bar).child(composer));
         // The members column beside the feed runs to the window's top with a header of its own on the same line.
         let panel = self.panel_column_width().map(|w| self.part(crate::part::Column::Panel, gpui_kit::StyleRefinement::default().w(px(w)).h_full().flex_none(), cx));
         let drop_zone = self.drop_zone(&channel, cx);
@@ -418,13 +419,12 @@ impl Waffle {
         })
         .size_full()
         .pt(px(top + 12.))
-        // Clear of the composer and the typing pill above it, so the last message rests in view.
-        .pb(px(self.composer_height.get() + 32.))
+        // Clear of the typing line and the fade at the feed's foot, so the last message rests above both.
+        .pb(px(feed_edge::FEED_FOOT))
         ;
-        // The visible message area, which inline GIFs are clipped to (see gif.rs): the list between the header and
-        // the floating composer, which GIFs must not paint over. Pinned to the top left: an absolute
-        // element without offsets sits where it would flow, after the list.
-        let composer = self.composer_height.clone();
+        // The visible message area, which inline GIFs are clipped to (see gif.rs): the list between the header and the
+        // fade above the composer, which GIFs must not paint over. Pinned to the top left: an absolute element without
+        // offsets sits where it would flow, after the list.
         // The Jump to Present capsule floats 44px above the composer; GIFs stop short of it too.
         let jump = if self.shows_jump_to_present() { 44. } else { 0. };
         div()
@@ -438,7 +438,7 @@ impl Waffle {
             .child(
                 gpui_kit::canvas(|_, _, _| {}, move |bounds, _, _, _| {
                     let top = px(top).min(bounds.size.height);
-                    let covered = (px(composer.get() + 16. + jump) + top).min(bounds.size.height);
+                    let covered = (px(feed_edge::FEED_FOOT + jump) + top).min(bounds.size.height);
                     crate::gif::set_chat_clip(gpui_kit::Bounds { origin: gpui_kit::point(bounds.origin.x, bounds.origin.y + top), size: gpui_kit::size(bounds.size.width, bounds.size.height - covered) });
                 })
                 .absolute()

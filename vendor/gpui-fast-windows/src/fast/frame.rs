@@ -54,9 +54,6 @@ pub(crate) struct Target<'a> {
     /// What the frame's paths are drawn through; `None` for targets that
     /// never draw paths.
     pub(crate) paths: Option<PathTargets<'a>>,
-    /// Waffle: what the frame's backdrop blurs copy from and draw through; `None` for targets that
-    /// never draw one (layer tiles, which keep blurred content off their layer).
-    pub(crate) blur: Option<crate::directx_renderer::BlurTarget<'a>>,
 }
 
 /// The render target a frame's paths are drawn into and upstream's path
@@ -97,17 +94,13 @@ pub(crate) fn draw_batches(renderer: &mut DirectXRenderer, scene: &Scene) -> Res
     if capturing && scene.layers.frames.is_empty() {
         return Ok(false);
     }
-    let viewport = gpui::size(gpui::DevicePixels(renderer.width as i32), gpui::DevicePixels(renderer.height as i32));
-    let resources = renderer.resources.as_mut().context("resources missing")?;
-    each_scene(scene, &mut |scene| resources.prepare_backdrop_blurs(&devices.device, &scene.backdrop_blurs, viewport))?;
-    let resources = &*resources;
+    let resources = renderer.resources.as_ref().context("resources missing")?;
     let target = Target {
         device: &devices.device,
         device_context: &devices.device_context,
         atlas: &renderer.atlas,
         globals: &renderer.globals,
         paths: Some(PathTargets::of(resources)),
-        blur: Some(crate::directx_renderer::BlurTarget { devices, resources, viewport }),
     };
     draw_scene(
         &target,
@@ -116,17 +109,6 @@ pub(crate) fn draw_batches(renderer: &mut DirectXRenderer, scene: &Scene) -> Res
         scene,
     )?;
     Ok(true)
-}
-
-/// `scene` and every scene nested in its layer frames (a rounded clip's content), each once.
-fn each_scene(scene: &Scene, f: &mut dyn FnMut(&Scene) -> Result<()>) -> Result<()> {
-    f(scene)?;
-    for frame in &scene.layers.frames {
-        if let Some(child) = frame.content.scene() {
-            each_scene(child, f)?;
-        }
-    }
-    Ok(())
 }
 
 /// Uploads `scene`'s instances to the pipelines' buffers, as
@@ -316,16 +298,6 @@ pub(crate) fn draw_scene_masked(
             }
             // Upstream draws nothing for surfaces on Windows either.
             PrimitiveBatch::Surfaces(_) => Ok(()),
-            PrimitiveBatch::BackdropBlurs(range) => match target.blur {
-                Some(blur) => {
-                    let drawn = crate::directx_renderer::draw_backdrop_blurs(blur, pipelines, target.globals, &scene.backdrop_blurs[range]);
-                    // The blur bound its own shaders and targets.
-                    draw.state.forget();
-                    drawn
-                }
-                // A layer tile never holds a blur: its container is kept off its layer while it shows one.
-                None => Ok(()),
-            },
         }
         .with_context(|| scene_too_large(scene))?;
     }

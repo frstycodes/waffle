@@ -363,10 +363,6 @@ pub(crate) fn move_primitive(primitive: &mut Primitive, delta: Point<ScaledPixel
             mv(&mut surface.bounds);
             mv(&mut surface.content_mask.bounds);
         }
-        Primitive::BackdropBlur(blur) => {
-            mv(&mut blur.bounds);
-            mv(&mut blur.content_mask.bounds);
-        }
     }
 }
 

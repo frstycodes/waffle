@@ -16,7 +16,6 @@ use crate::{
 const DIALOG_WIDTH: f32 = 520.;
 const RULES_HEIGHT: f32 = 260.;
 // The composer-like bar's frosted blur and hairline edge.
-const BAR_BLUR: f32 = 24.;
 const BAR_EDGE: f32 = 0.5;
 // The agree card's skeleton height.
 const AGREE_HEIGHT: f32 = 52.;
@@ -52,7 +51,7 @@ impl Waffle {
         let guild_id = guild.id.clone();
         let complete = ui::Button::new("rules-complete").child("Complete").on_click(cx.listener(move |this, _, _, cx| this.open_rules(&guild_id, cx)));
         // The composer card's shape and glass (chat.rs render_composer), so swapping one for the other doesn't jump.
-        // lint-allow(custom-badge, custom-surface): ui::PopoverContent::new has no frosted translucent level matching the composer card
+        // lint-allow(custom-badge, custom-surface): ui::PopoverContent::new is a floating menu surface; this bar is a raised card matching the composer
         let bar = ui::row()
             .id("rules-gate")
             .occlude()
@@ -62,9 +61,7 @@ impl Waffle {
             .pr_1p5()
             .gap_3()
             .squircle(RADIUS_LG)
-            .bg(palette::surface(Level::Raised, cx).opacity(0.72))
-            .backdrop_blur(px(BAR_BLUR))
-            .backdrop_saturate(1.6)
+            .bg(palette::surface(Level::Raised, cx))
             .shadow(ui::shadow_pop_on(gpui_kit::transparent_black(), cx))
             .border(px(BAR_EDGE))
             .border_color(palette::line(cx))

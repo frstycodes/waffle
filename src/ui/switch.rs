@@ -94,8 +94,6 @@ pub(super) fn track<E: Styled + ParentElement>(base: E, id: &ElementId, on: bool
         .rounded_full()
         .bg(mix(gpui_kit::white(), gpui_kit::white().opacity(0.42), glass))
         .shadow(knob_glass(glass))
-        // The backdrop blur keeps to the knob's unscaled box: gpui's blur doesn't follow transforms.
-        .when(glass > 0., |k| k.backdrop_blur(px(2. * glass)).backdrop_saturate(1. + 0.8 * glass))
         .when(SWITCH_ICONS.load(Ordering::Relaxed), |k| k.flex().items_center().justify_center().child(switch_indicator(fill > 0.5)));
     base.w(px(40.)).h(px(24.)).flex_none().relative().rounded_full().bg(mix(palette::track(cx), palette::accent(), fill.clamp(0., 1.))).child(knob)
 }

@@ -71,13 +71,26 @@ impl Waffle {
         cx.notify(); // lint-allow(global-notify): the forward dialog is drawn by the root's overlays, over every column
     }
 
-    /// Names for the channels forwarded messages came from, for their source lines.
+    /// Names for the channels forwarded messages came from, for their source lines. Runs on every render of the feed,
+    /// so it walks the known channels once rather than searching every server per forwarded message (a DM carries no
+    /// server id, which made each search a scan of every channel and a clone of the one it found).
+    // The result is kept until the feed or the channel list changes, so scrolling, which re-renders the feed every frame,
+    // asks nothing of it.
+    // GAP: a channel renamed without channels being added or removed keeps its old name here until the feed changes.
     pub(crate) fn forward_sources(&self, messages: &[Message]) -> Vec<(String, String)> {
-        messages
-            .iter()
-            .filter_map(|m| m.forward.as_deref())
-            .filter_map(|original| Some((original.channel_id.clone(), self.place_of(original.guild_id.as_deref(), &original.channel_id)?.1.name)))
-            .collect()
+        thread_local! {
+            static LAST: std::cell::RefCell<Option<(SourcesKey, Sources)>> = const { std::cell::RefCell::new(None) };
+        }
+        let channels = self.guilds.iter().map(|g| g.channels.len() + g.threads.len()).sum::<usize>() + self.dms.len();
+        let key = SourcesKey { feed: messages.as_ptr() as usize, len: messages.len(), channels };
+        if let Some(names) = LAST.with(|last| last.borrow().as_ref().filter(|(k, _)| *k == key).map(|(_, names)| names.clone())) {
+            return names;
+        }
+        let wanted: std::collections::HashSet<&str> = messages.iter().filter_map(|m| m.forward.as_deref()).map(|original| original.channel_id.as_str()).collect();
+        let known = self.guilds.iter().flat_map(|g| g.channels.iter().chain(&g.threads)).chain(&self.dms);
+        let names = names_of(&wanted, known);
+        LAST.with(|last| *last.borrow_mut() = Some((key, names.clone())));
+        names
     }
 
     // DMs and server text and voice channels you can see (a voice channel's text chat takes messages), the
@@ -298,6 +311,26 @@ fn forward_outcome(sent_to: &[String], failed: &[String]) -> String {
     }
 }
 
+// Channel ids and their names.
+type Sources = Vec<(String, String)>;
+
+// What `forward_sources` was last asked about: the feed (its messages, which change only by being replaced) and how
+// many channels the client knows.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct SourcesKey {
+    feed: usize,
+    len: usize,
+    channels: usize,
+}
+
+// The names of the `wanted` channels among `known`, each once.
+fn names_of<'a>(wanted: &std::collections::HashSet<&str>, known: impl Iterator<Item = &'a Channel>) -> Vec<(String, String)> {
+    if wanted.is_empty() {
+        return Vec::new();
+    }
+    known.filter(|c| wanted.contains(c.id.as_str())).map(|c| (c.id.clone(), c.name.clone())).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -311,6 +344,15 @@ mod tests {
         assert_eq!(forward_outcome(&places(&["#clips", "Mira"]), &places(&["Mira"])), "Couldn't forward to Mira");
         assert_eq!(picked_count(0), "Pick up to 5 places");
         assert_eq!(picked_count(2), "2 of 5 picked");
+    }
+
+    #[test]
+    fn forward_sources_name_only_the_wanted_channels() {
+        let channel = |id: &str, name: &str| crate::discord::parse_channel(&serde_json::json!({ "id": id, "type": 0, "name": name }), "g").expect("a text channel parses");
+        let known = [channel("1", "general"), channel("2", "clips"), channel("3", "memes")];
+        let wanted: std::collections::HashSet<&str> = ["2", "9"].into_iter().collect();
+        assert_eq!(names_of(&wanted, known.iter()), vec![("2".to_owned(), "clips".to_owned())]);
+        assert!(names_of(&std::collections::HashSet::new(), known.iter()).is_empty());
     }
 
     #[test]

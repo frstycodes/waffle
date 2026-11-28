@@ -100,7 +100,6 @@ pub(super) const TILE_MEDIUM: f32 = 300.;
 pub(super) const FACE_WIDE: f32 = 56.;
 // How dark, and how soft, the game's art sits behind the tile's words.
 pub(super) const ART_DIM: f32 = 0.6;
-pub(super) const ART_BLUR: f32 = 12.;
 
 // "MERIBASSAI is playing", or "MERIBASSAI and 2 others are playing", as Discord's tile says it.
 pub(super) fn playing_line(others: &[User]) -> String {
@@ -407,8 +406,8 @@ impl Waffle {
         base.bg(gpui_kit::black())
             .text_color(palette::stage::strong())
             .children(art)
-            // Discord dims the art to 60% black; a blur keeps it a backdrop, not a picture to read.
-            .child(div().absolute().inset_0().bg(gpui_kit::black().opacity(ART_DIM)).backdrop_blur(px(ART_BLUR)))
+            // Discord dims the art to 60% black, which keeps it a backdrop.
+            .child(div().absolute().inset_0().bg(gpui_kit::black().opacity(ART_DIM)))
             .child(
                 ui::col()
                     .relative()

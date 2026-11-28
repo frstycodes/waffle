@@ -121,6 +121,8 @@ mod search_results;
 mod server_settings;
 mod settings;
 mod shortcuts;
+mod autoscroll;
+mod frame_rate;
 mod shell;
 mod user_menu;
 mod video;
@@ -196,6 +198,7 @@ fn main() {
     #[cfg(feature = "dhat-heap")]
     memory::start_heap_profile();
     memory::start_reporting();
+    ui::feel::install();
     gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
         app_keys::init(cx);

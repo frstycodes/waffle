@@ -4,8 +4,8 @@ use gpui_kit::{AnyView, App, AppContext, FontWeight, IntoElement, ParentElement,
 use super::{RADIUS_SM, SQUIRCLE};
 use crate::palette;
 
-// The design's tooltip: inverted ink, 12px semibold, popping in from 0.95 with its fade over the hover
-// timing. gpui places it just below and right of the pointer, so it grows from its top-left corner.
+// The design's tooltip: inverted ink, 12px semibold, entering with the window's plain fade (the same as every floating
+// surface). gpui places it just below and right of the pointer.
 // Keywords: tooltip, hint, label on hover, title, shadcn
 pub struct Tooltip {
     text: SharedString,

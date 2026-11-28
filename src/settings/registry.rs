@@ -67,6 +67,7 @@ pub enum Toggle {
     DesaturateUserColors,
     HighContrast,
     SwitchIcons,
+    ShowFps,
     ReduceMotion,
     ReduceMotionSync,
     GifAutoPlay,
@@ -219,6 +220,7 @@ pub static SETTINGS: &[Setting] = &[
     s("default-keybinds", Keybinds, "Default keybinds", "Default keybinds", None, &["shortcut", "hotkey", "keyboard"], Custom),
     // Advanced
     s("developer-mode", Advanced, "Developer", "Developer mode", Some("Adds Copy ID to the menus of servers, channels, people and messages"), &["copy id", "developer", "debug", "ids"], Switch(Toggle::DeveloperMode)),
+    s("show-fps", Advanced, "Developer", "Show framerate counter", Some("A readout of how many frames the app draws each second; it keeps the window drawing while it is on."), &["fps", "frame rate", "framerate", "performance", "debug", "counter"], Switch(Toggle::ShowFps)),
     // Listed while Developer mode is on.
     s("crash-logs", Advanced, "Crash logs", "Crash logs", Some("Save a crash report to attach to a bug"), &["crash", "log", "report", "bug", "debug", "panic"], Custom),
     // Updates

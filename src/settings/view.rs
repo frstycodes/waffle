@@ -104,6 +104,7 @@ impl Waffle {
             Toggle::DesaturateUserColors => self.prefs.desaturate_user_colors,
             Toggle::HighContrast => self.prefs.high_contrast,
             Toggle::SwitchIcons => self.prefs.switch_icons,
+            Toggle::ShowFps => self.prefs.show_fps,
             Toggle::ReduceMotion => self.prefs.reduces_motion(),
             Toggle::ReduceMotionSync => self.prefs.reduce_motion_sync,
             // Reduced motion turns these off without touching what's stored, as Discord does.
@@ -147,6 +148,7 @@ impl Waffle {
             Toggle::DesaturateUserColors => return self.update_prefs(cx, |p| p.desaturate_user_colors = on),
             Toggle::HighContrast => return self.update_prefs(cx, |p| p.high_contrast = on),
             Toggle::SwitchIcons => return self.update_prefs(cx, |p| p.switch_icons = on),
+            Toggle::ShowFps => return self.update_prefs(cx, |p| p.show_fps = on),
             Toggle::ReduceMotion => return self.update_prefs(cx, |p| p.reduce_motion = on),
             // Turning sync off keeps what the computer had, as Discord copies the OS value.
             Toggle::ReduceMotionSync => {

@@ -67,8 +67,8 @@ impl Render for OverflowList {
                 }))
         });
         let list = div().id("overflow-rows").flex().flex_col().gap(px(2.)).max_h(px(MAX_HEIGHT)).overflow_y_scroll().children(rows);
-        // The top padding is the gap to the trigger, inside the card's bounds so the pointer can cross it.
-        div().pt(px(8.)).child(
+        // The gap to the trigger is the tooltip feel's, kept by the framework (the pointer may cross it).
+        div().child(
             surface(cx)
                 .id("overflow-list")
                 .occlude()

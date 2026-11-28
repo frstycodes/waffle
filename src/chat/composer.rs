@@ -1,11 +1,8 @@
 use super::*;
 
-// The composer row's vertical padding, and the glass card's blur and hairline edge.
+// The composer row's vertical padding, and the card's hairline edge.
 const ROW_PAD_Y: f32 = 8.;
-const GLASS_BLUR: f32 = 24.;
 const GLASS_EDGE: f32 = 0.5;
-// The typing pill's blur.
-const PILL_BLUR: f32 = 16.;
 // A tray tile's tag gap, picture height and card width.
 const TAG_GAP: f32 = 4.;
 const WELL_HEIGHT: f32 = 140.;
@@ -40,14 +37,11 @@ impl Waffle {
             // Not verified: the tooltip; Discord's chat box shows its button only when this setting is on.
             .when(self.prefs.send_button, |r| r.child(ui::Button::new("composer-send").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::PaperPlane).tooltip_text("Send Message").disabled(!self.has_draft).on_click(cx.listener(|this, _, window, cx| this.submit(false, window, cx)))))
             .child(self.composer_activities_button(cx));
-        // lint-allow(custom-surface): ui::PopoverContent::new has no glass fill (translucent, blurred, saturated) over a scrolling feed
+        // lint-allow(custom-surface): ui::PopoverContent::new is a floating menu surface; the composer is a raised card in the flow of the chat
         let card = ui::col()
             .relative()
             .squircle(RADIUS_LG)
-            // Glass: the feed shows through, blurred, as it scrolls under.
-            .bg(palette::surface(Level::Raised, cx).opacity(0.72))
-            .backdrop_blur(px(GLASS_BLUR))
-            .backdrop_saturate(1.6)
+            .bg(palette::surface(Level::Raised, cx))
             // The ring-less elevation: the hairline below is the edge, and the pop shadow's own 1px ring
             // on top of it drew a line three times as heavy as the design's.
             .shadow(ui::shadow_pop_on(gpui_kit::transparent_black(), cx))
@@ -75,13 +69,11 @@ impl Waffle {
         let guide_bar = self.channel.clone().and_then(|channel| self.guide_action_bar(&channel, cx));
         let typers = self.typers();
         let names: Vec<&str> = typers.iter().map(|t| t.name.as_str()).collect();
-        // A glass pill just above the composer, out of the flow, so the box never moves when someone types.
+        // A line just above the composer, out of the flow, so the box never moves when someone types. It has no fill of
+        // its own: it sits on the feed's fade (feed_edge.rs), which keeps it readable over the messages.
         // Out of the way while suggestions, Hold Up! or the command picker are open, which rise over the same spot.
         let typing = (!names.is_empty() && self.autocomplete.is_none() && self.hold_up.is_none() && !self.command_picker.is_open() && !self.command_typed(cx)).then(|| {
-            // lint-allow(custom-badge, custom-mark): ui::pill is in the flow and solid; this one floats out of it over the feed with a blurred glass fill
-            ui::row().absolute().left_7().top_neg_7().max_w(gpui_kit::relative(0.6)).h_6().px_2p5().gap_2().rounded_full()
-                .bg(palette::surface(Level::Raised, cx).opacity(0.72))
-                .backdrop_blur(px(PILL_BLUR))
+            ui::row().absolute().left_7().top_neg_7().max_w(gpui_kit::relative(0.6)).h_6().px_2p5().gap_2()
                 .text_size(ui::TEXT_XS)
                 .text_color(muted)
                 .child(ui::Spinner::new("typing", palette::accent_ink(cx), 12.))
@@ -142,7 +134,7 @@ impl Waffle {
             }))
             .child(measure)
             .children(self.jump_to_present(cx))
-            // Occludes: the composer floats over the feed, which must not take the hover or the click under it.
+            // Occludes: the composer sits over the foot of the chat column, which must not take the hover or the click under it.
             // A Server Guide to-do bar rides on top, inside the measured stack so the feed leaves room for it.
             .child(ui::col().relative().occlude().gap_2().children(guide_bar).child(card).children(typing))
             .children(note)
