@@ -2,10 +2,30 @@
 // for the channel you're looking at; DMs notify unless muted; in servers the channel's level wins
 // over the server's, muted channels and servers notify only on mentions, and suppressed
 // @everyone / role mentions don't count.
+use std::sync::{Mutex, OnceLock};
+
+use futures::{StreamExt, channel::mpsc};
+use gpui_kit::{Context, Window};
+
 use crate::{
     Waffle,
     discord::{Message, Relation, Status},
 };
+
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+use macos as platform;
+#[cfg(not(target_os = "macos"))]
+mod toast;
+#[cfg(not(target_os = "macos"))]
+use toast as platform;
+
+// Waffle's AppUserModelID on Windows; the macOS bundle carries the same id in its Info.plist.
+#[cfg(target_os = "windows")]
+pub const APP_ID: &str = "com.frstycodes.waffle";
+
+static CLICKS: OnceLock<Mutex<Option<mpsc::UnboundedSender<String>>>> = OnceLock::new();
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Notify {
@@ -91,26 +111,60 @@ impl Waffle {
         if !self.prefs.desktop_notifications {
             return;
         }
-        let place = match &message.guild_id {
+        let guild_id = self.guild_id_of(message);
+        let title = match &guild_id {
             None => message.author.name.clone(),
             Some(guild_id) => {
                 let guild = self.guilds.iter().find(|g| &g.id == guild_id);
-                let channel = guild.and_then(|g| g.channels.iter().find(|c| c.id == message.channel_id)).map(|c| c.name.clone()).unwrap_or_default();
+                let channel = guild.and_then(|g| g.channels.iter().chain(&g.threads).find(|c| c.id == message.channel_id)).map(|c| c.name.clone()).unwrap_or_default();
                 format!("{} (#{channel}, {})", message.author.name, guild.map(|g| g.name.as_str()).unwrap_or_default())
             }
         };
         let body = if message.content.is_empty() { "Sent an attachment".to_owned() } else { message.content.clone() };
-        // Not verified: how macOS attributes notifications from an unbundled binary (a .app bundle
-        // shows its own name and icon).
-        std::thread::spawn(move || {
-            let _ = notify_rust::Notification::new().summary(&place).body(&body).show();
-        });
+        let link = format!("https://discord.com/channels/{}/{}/{}", guild_id.as_deref().unwrap_or("@me"), message.channel_id, message.id);
+        post(&title, &body, link);
+    }
+
+    // A clicked notification brings Waffle forward on the message it was about.
+    pub(crate) fn open_clicked_notifications(window: &mut Window, cx: &mut Context<Self>) {
+        let (sender, mut clicks) = mpsc::unbounded();
+        let Ok(mut slot) = CLICKS.get_or_init(Default::default).lock() else { return };
+        *slot = Some(sender);
+        drop(slot);
+        platform::install();
+        cx.spawn_in(window, async move |this, cx| {
+            while let Some(link) = clicks.next().await {
+                let opened = this.update_in(cx, |this, window, cx| {
+                    cx.activate(true);
+                    window.activate_window();
+                    this.open_link(&link, window, cx);
+                });
+                if opened.is_err() {
+                    return;
+                }
+            }
+        })
+        // lint-allow(detached-task): ends when Waffle is dropped (the update fails) or the click channel closes.
+        .detach();
     }
 
     // Discord's Dock badge: the number of unread mentions and DMs, or nothing.
     pub(crate) fn update_badge(&self) {
         let total: u32 = if self.prefs.dock_badge { self.read_states.values().map(|r| r.mentions).sum() } else { 0 };
         set_badge(if total == 0 { None } else { Some(total) });
+    }
+}
+
+// `link` is the discord.com link a click opens.
+pub(crate) fn post(title: &str, body: &str, link: String) {
+    platform::post(title, body, link);
+}
+
+// Called from whichever thread the platform reports the click on.
+fn clicked(link: String) {
+    let Some(Ok(slot)) = CLICKS.get().map(Mutex::lock) else { return };
+    if let Some(sender) = slot.as_ref() {
+        let _ = sender.unbounded_send(link);
     }
 }
 

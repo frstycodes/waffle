@@ -50,7 +50,6 @@ aes-gcm = "0.10"
 chacha20poly1305 = "0.10"
 openh264 = "0.9"
 mp4 = "0.14"
-notify-rust = "4"
 sonora = "0.3"
 # Already in the tree through sonora; the offline echo check measures in the frequency domain.
 rustfft = "6.4"
@@ -96,7 +95,10 @@ embed-resource = "3"
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSRunningApplication", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphicsContext", "NSGraphics", "NSWorkspace", "objc2-core-foundation"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "NSString", "NSProcessInfo"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "NSString", "NSProcessInfo", "NSBundle", "NSError"] }
+# Desktop notifications posted as Waffle's own bundle, with clicks routed back to the app.
+objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "bitflags", "UNUserNotificationCenter", "UNNotification", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationTrigger"] }
+block2 = "0.6"
 screencapturekit = { version = "11", features = ["macos_14_0"] }
 # Process footprint for the memory report (proc_pid_rusage) and game detection (libproc, sysctl).
 libc = "0.2"
@@ -131,6 +133,10 @@ debug = "line-tables-only"
 debug = "line-tables-only"
 [profile.release.package.openh264]
 debug = "line-tables-only"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+# Toasts on Windows (under Waffle's own AppUserModelID) and the freedesktop service on Linux.
+notify-rust = "4"
 
 # Go Live on Windows: Windows.Graphics.Capture for video, WASAPI (process) loopback for audio, and the
 # Media Foundation H.264 encoder (hardware MFTs: NVENC, Quick Sync, AMF) with OpenH264 as fallback.
