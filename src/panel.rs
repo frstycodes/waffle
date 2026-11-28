@@ -521,13 +521,15 @@ impl MemberStatus {
             .gap_1()
             .text_size(ui::TEXT_XS)
             .text_color(palette::faint(cx))
-            .children(self.icon.and_then(|icon| icon.icon(green)))
-            .children(self.text.filter(|_| !beside_custom).map(|text| ui::truncating(format!("member-status-{text}"), text)))
+            .children(self.icon.and_then(|icon| icon.icon(green)).map(|icon| {
+                let tip = div().id(SharedString::from(format!("member-status-icon-{}", self.id))).flex_none().child(icon);
+                tip.when(!items.is_empty(), |d| d.tooltip(move |_, cx| cx.new(|_| ActivityTip(items.clone())).into()))
+            }))
+            .children(self.text.filter(|_| !beside_custom).map(ui::line))
             // Beside a custom status the count takes the green, as Discord's does.
             .when(self.more > 0, |d| d.child(div().flex_none().when(beside_custom, |c| c.text_color(green)).child(format!("+{}", self.more))))
             .when(primary && beside_custom, |d| d.child(div().flex_none().child("•")))
-            .children(self.custom.map(|custom| ui::truncating(format!("member-custom-{custom}"), custom)))
-            .when(!items.is_empty(), |d| d.tooltip(move |_, cx| cx.new(|_| ActivityTip(items.clone())).into()))
+            .children(self.custom.map(ui::line))
     }
 }
 
