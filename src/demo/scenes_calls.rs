@@ -243,7 +243,7 @@ pub(super) fn call_scenes(waffle: &mut Waffle, scene: &str, window: &mut Window,
         // Three streams (one watched at 4:3, so focus letterboxes it; one unopened; our own) and two
         // cameras: the grid's order, chips and Watch, focus and full screen. Ended adds two ended
         // streams' cards: one streamer still in the call, one who left.
-        "call-streams" | "call-streams-ended" | "call-streams-focus" | "call-streams-strip" | "call-streams-full" | "call-streams-failed" | "call-streams-reconnecting" | "call-streams-issues" | "call-streams-hidden" => {
+        "call-streams" | "call-streams-ended" | "call-streams-focus" | "call-streams-strip" | "call-streams-full" | "call-streams-failed" | "call-streams-reconnecting" | "call-streams-issues" | "call-streams-hidden" | "call-streams-paused" => {
             demo_call(waffle);
             waffle.call_pointer_inside = true;
             if let Some(guild) = waffle.guilds.iter_mut().find(|g| g.id == "1") {
@@ -285,10 +285,14 @@ pub(super) fn call_scenes(waffle: &mut Waffle, scene: &str, window: &mut Window,
                     _ => {}
                 }
             }
+            // Both sides of a paused Go Live: the stream we watch and our own.
+            if scene == "call-streams-paused" {
+                waffle.stream_paused.extend(["guild:1:lounge:12582912".to_owned(), "guild:1:lounge:4194304".to_owned()]);
+            }
             if scene == "call-streams-hidden" {
                 waffle.prefs.hidden_self_streams.push("lounge".into());
             }
-            if !matches!(scene, "call-streams" | "call-streams-ended" | "call-streams-failed" | "call-streams-reconnecting" | "call-streams-issues" | "call-streams-hidden") {
+            if !matches!(scene, "call-streams" | "call-streams-ended" | "call-streams-failed" | "call-streams-reconnecting" | "call-streams-issues" | "call-streams-hidden" | "call-streams-paused") {
                 waffle.call_focus = Some("stream:12582912".into());
                 // Holds the chrome up for the first half minute, as if the pointer had just moved.
                 waffle.call_pointer_at = std::time::Instant::now() + std::time::Duration::from_secs(30);
