@@ -369,12 +369,12 @@ impl Waffle {
 
     pub(super) fn stream_menu(&self) -> Vec<Entry> {
         let (res, fps, audio) = (self.prefs.stream_resolution, self.prefs.stream_fps, self.prefs.stream_audio);
-        let mut quality: Vec<Entry> = [(720, "720p"), (1080, "1080p"), (1440, "1440p"), (0, "Source")]
+        let mut quality: Vec<Entry> = [(480, "480p"), (720, "720p"), (1080, "1080p"), (1440, "1440p"), (0, "Source")]
             .into_iter()
             .map(|(value, label)| item(label, move |this, _, cx| this.set_stream_quality(Some(value), None, cx)).checked(res == value).entry())
             .collect();
         quality.push(Entry::Separator);
-        quality.extend([15, 30, 60].into_iter().map(|value| item(format!("{value} FPS"), move |this, _, cx| this.set_stream_quality(None, Some(value), cx)).checked(fps == value).entry()));
+        quality.extend([5, 15, 30, 60].into_iter().map(|value| item(format!("{value} FPS"), move |this, _, cx| this.set_stream_quality(None, Some(value), cx)).checked(fps == value).entry()));
         vec![
             item("Change Stream", |this, _, cx| this.open_share_picker(cx)).hint("Pick another window or screen").icon(Glyph::ShareScreen).entry(),
             submenu("Stream Quality", quality).hint(quality_label(res, fps)).entry(),

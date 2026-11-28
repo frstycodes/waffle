@@ -310,10 +310,6 @@ impl Prefs {
             prefs.reduce_motion_sync = false;
         }
         prefs.add_new_keybinds();
-        // 480p left the picker; the nearest offered quality takes its place.
-        if prefs.stream_resolution == 480 {
-            prefs.stream_resolution = 720;
-        }
         prefs
     }
 
