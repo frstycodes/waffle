@@ -138,7 +138,7 @@ fn main() -> Result<(), String> {
                         "stats ping {} ms (median {}), loss out {:?}%, {} {} {} dave={}",
                         s.ping_ms, s.median_ping_ms, s.outbound_loss_pct, s.endpoint, s.server_ip, s.encryption, s.dave
                     ),
-                    Some(voice::VoiceEvent::InputLevel { .. } | voice::VoiceEvent::Issue { .. } | voice::VoiceEvent::StreamConnected { .. }) => {}
+                    Some(voice::VoiceEvent::InputLevel { .. } | voice::VoiceEvent::Issue { .. } | voice::VoiceEvent::StreamConnected { .. } | voice::VoiceEvent::StreamCreated { .. }) => {}
                     Some(voice::VoiceEvent::Connected) => {
                         println!("connected");
                         if auto_go_live {
