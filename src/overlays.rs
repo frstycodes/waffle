@@ -468,6 +468,19 @@ pub(crate) fn backdrop(id: &'static str, cx: &mut Context<Waffle>) -> gpui_kit::
     )
 }
 
+// A backdrop for popouts: the server rail stays clickable, so a click on a rail item closes the popout and still
+// lands on the item, as Discord's. Modal backdrops (`backdrop`) cover the rail.
+pub(crate) fn popout_backdrop(id: &'static str, cx: &mut Context<Waffle>) -> gpui_kit::Div {
+    let beside_rail = backdrop(id, cx).left(px(crate::layout::RAIL_WIDTH));
+    let over_rail = div().id("popout-rail-dismiss").absolute().top_0().left_0().bottom_0().w(px(crate::layout::RAIL_WIDTH)).on_mouse_down(
+        MouseButton::Left,
+        cx.listener(|this, _, _, cx| {
+            this.dismiss_overlay(cx);
+        }),
+    );
+    div().absolute().inset_0().child(beside_rail).child(over_rail)
+}
+
 // Search's hit column less the pin card's Jump and Unpin slot.
 const PIN_COLUMN: f32 = crate::search_results::HIT_COLUMN - 100.;
 

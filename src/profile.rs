@@ -262,7 +262,7 @@ impl Waffle {
         }
         if card.panel {
             let pop = self.card_popover(card, window, cx)?;
-            return Some(crate::overlays::backdrop("profile-backdrop", cx).child(crate::layout::title_drag_band()).child(pop).into_any_element());
+            return Some(crate::overlays::popout_backdrop("profile-backdrop", cx).child(crate::layout::title_drag_band()).child(pop).into_any_element());
         }
         // Animated pictures move only under the pointer, as Discord's.
         let (hovered, on_hover) = ui::hover_state(SharedString::from(format!("profile-hover-{}", card.user.id)), window, cx);
@@ -300,7 +300,7 @@ impl Waffle {
         // lint-allow(raw-floating): placed inside the overlay backdrop, with a measured top margin floating_at can't take.
         let placed = gpui_kit::anchored().position(card.at).snap_to_window_with_margin(ui::FLOAT_EDGES).child(rise);
         let pop = self.card_popover(card, window, cx);
-        Some(crate::overlays::backdrop("profile-backdrop", cx).child(crate::layout::title_drag_band()).child(placed).children(pop).into_any_element())
+        Some(crate::overlays::popout_backdrop("profile-backdrop", cx).child(crate::layout::title_drag_band()).child(placed).children(pop).into_any_element())
     }
 
     // What a card wears around it on `surface`, `width` wide: its profile effect over it, and its frame behind and
