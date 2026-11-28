@@ -337,23 +337,6 @@ impl Waffle {
                     .tooltip(move |window, cx| ui::Tooltip::new(game.label()).build(window, cx))
             });
             let key = SharedString::from(format!("voice-{}", state.user_id));
-            let row_group = SharedString::from(format!("voice-row-{}", state.user_id));
-            // Discord's options button, there only while the row is hovered.
-            // It lays over the row's end on the hover fill rather than holding room, so names don't truncate at rest.
-            let options = row_action(SharedString::from(format!("voice-options-{}", state.user_id)), Icon::new(Glyph::More), "More Options", cx)
-                .absolute()
-                .right_1()
-                .squircle(ui::RADIUS_XS)
-                .bg(hover)
-                .opacity(0.)
-                .group_hover(row_group.clone(), |s| s.opacity(1.))
-                .on_click({
-                    let user_id = state.user_id.clone();
-                    cx.listener(move |this, e: &gpui_kit::ClickEvent, _, cx| {
-                        cx.stop_propagation();
-                        this.voice_user_menu(&user_id, e.position(), cx);
-                    })
-                });
             let tag = state.user.as_ref().and_then(|u| u.tag.as_ref()).map(|tag| crate::chat::guild_tag(tag).flex_none());
             let carried = self.drag_motion.row(&key);
             let row = div().id(key.clone()).h(px(VOICE_ROW)).flex_none().squircle(ui::RADIUS_SM).children(self.drag_motion.spot(&key));
@@ -378,7 +361,6 @@ impl Waffle {
                     .items_center()
                     .gap_2()
                     .relative()
-                    .group(row_group)
                     .font_weight(FontWeight::NORMAL)
                     .text_color(if talking { palette::strong(cx) } else { palette::muted(cx) })
                     .hover(move |s| s.bg(hover).text_color(text))
@@ -387,7 +369,6 @@ impl Waffle {
                     .child(ui::row().flex_1().gap_1().child(ui::line(name.clone())).children(tag).when(elsewhere(&state.user_id), |n| n.opacity(0.45)))
                     .children(game.map(|g| g.when(elsewhere(&state.user_id), |g| g.opacity(0.45))))
                     .children(end)
-                    .child(options)
                     .on_mouse_down(gpui_kit::MouseButton::Right, {
                         let user_id = state.user_id.clone();
                         cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.voice_user_menu(&user_id, e.position, cx))
