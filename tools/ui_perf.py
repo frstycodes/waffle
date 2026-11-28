@@ -11,7 +11,8 @@ UI_THREAD = re.compile(r"\b(cx|window)\s*:|Context<|&mut\s+App\b|&mut\s+Window\b
 LATER = re.compile(r"\.(on_[a-z_]+|listener|tooltip|hoverable_tooltip|spawn|spawn_in|background_spawn|defer|defer_in|on_next_frame|observe|subscribe|subscribe_in|observe_in|update|update_in)\s*\(|cx\.listener\s*\(")
 # Off the UI thread: closures handed to these run elsewhere.
 OFF_THREAD = re.compile(r"(background_spawn|thread::spawn|spawn_blocking|background_executor\(\)\.spawn)\s*\(")
-HIGH_RATE = re.compile(r"\.(on_mouse_move|on_scroll_wheel|on_drag_move|on_pinch)\s*\(")
+# A hover handler counts: while a list scrolls, every row passes under a still pointer and fires its hover.
+HIGH_RATE = re.compile(r"\.(on_hover|on_mouse_move|on_scroll_wheel|on_drag_move|on_pinch)\s*\(")
 TIMER_LOOP = re.compile(r"\bloop\s*\{")
 TIMER = re.compile(r"Timer::after|\.timer\(|\btimer\(|Instant::now")
 NOTIFY = re.compile(r"\bcx\.notify\(\)")
@@ -98,6 +99,20 @@ def hot_notifies(code, test_lines):
         for start, end in spans:
             if start <= m.start() < end and not GUARD.search(code, start, m.start()):
                 hits.add(line_of(code, m.start()))
+    return sorted(n for n in hits if n not in test_lines)
+
+
+# A free function handed Waffle (an Entity, a WeakEntity or its Context) whose notify redraws every column, which
+# global-notify can't see from outside `impl Waffle`.
+WAFFLE_HANDLE = re.compile(r"\b(Weak)?Entity<\s*(crate::)?Waffle\s*>|Context<\s*(crate::)?Waffle\s*>")
+
+
+def waffle_notifies(code, test_lines):
+    """`cx.notify()` in a function, not a method, that is handed Waffle."""
+    hits = set()
+    for sig, start, end in functions(code):
+        if WAFFLE_HANDLE.search(sig) and not re.search(r"\bself\b", sig):
+            hits |= {line_of(code, start + m.start()) for m in NOTIFY.finditer(code, start, end)}
     return sorted(n for n in hits if n not in test_lines)
 
 
