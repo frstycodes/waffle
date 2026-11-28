@@ -6,14 +6,14 @@
 use std::sync::Arc;
 
 use gpui_kit::{
-    AnyElement, AnyView, App, AppContext, BoxShadow, Div, ElementId, FontWeight, Hsla, InteractiveElement, Interactivity, IntoElement, MouseButton, ParentElement, Render, RenderOnce, SharedString,
+    AnyElement, App, BoxShadow, Div, ElementId, FontWeight, Hsla, InteractiveElement, Interactivity, IntoElement, MouseButton, ParentElement, RenderOnce, SharedString,
     Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window,
     base::{Easing, Transition, transition},
     component::Icon,
-    div, point, prelude::FluentBuilder, px, relative,
+    div, point, prelude::FluentBuilder, px,
 };
 
-use super::{DUR_HOVER, DUR_PRESS, RADIUS_MD, RADIUS_SM, RADIUS_XS, SQUIRCLE, Tone, mix};
+use super::{ButtonScope, ButtonSize, ButtonVariant, DUR_HOVER, DUR_PRESS, RADIUS_MD, RADIUS_SM, RADIUS_XS, SQUIRCLE, mix};
 use crate::{icons::Glyph, motion, palette};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -49,13 +49,13 @@ enum Size {
 
 // A control's colours at rest, hovered and pressed; each change fades over the hover timing.
 #[derive(Clone, Copy)]
-struct Look {
-    rest: Hsla,
-    hover: Hsla,
-    press: Hsla,
-    ink: Hsla,
-    ink_hover: Hsla,
-    edge: Option<(Hsla, Hsla)>,
+pub(super) struct Look {
+    pub(super) rest: Hsla,
+    pub(super) hover: Hsla,
+    pub(super) press: Hsla,
+    pub(super) ink: Hsla,
+    pub(super) ink_hover: Hsla,
+    pub(super) edge: Option<(Hsla, Hsla)>,
 }
 
 #[derive(IntoElement)]
@@ -77,31 +77,40 @@ pub struct Control {
     shrink: Option<f32>,
 }
 
-// A text button, 36px tall (`.large()` 44, `.small()` 30). Callers add the label and `.on_click`.
-pub fn button(id: impl Into<ElementId>, tone: Tone, cx: &App) -> Control {
-    let control = Control::new(id, Kind::Button, tone_look(tone, cx));
-    // A link is just its ink: no box, no padding, underlined on hover.
-    if tone != Tone::Link {
-        return control;
-    }
-    control.base_style(|b| b.h_auto().px_0().rounded(px(RADIUS_XS)).hover(|s| s.underline()))
-}
-
-// A square icon-only button that fills on hover, with its tooltip: 32px (`.small()` 24, `.large()` 40).
-// Keywords: glyph button, toolbar, square, close, x
-pub fn icon_button(id: impl Into<ElementId>, glyph: Glyph, tooltip: impl Into<SharedString>, cx: &App) -> Control {
-    let look = Look {
-        rest: gpui_kit::transparent_black(),
-        hover: palette::hover(cx),
-        press: palette::press(cx),
-        ink: palette::muted(cx),
-        ink_hover: palette::strong(cx),
-        edge: None,
+// `Button`'s control: its variant's look at its size, on the caller's builder chain.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn button_control(id: ElementId, base: Stateful<Div>, variant: ButtonVariant, scope: ButtonScope, size: ButtonSize, disabled: bool, glyph: Option<Glyph>, tooltip: Option<SharedString>, cx: &App) -> Control {
+    let (kind, size) = match size {
+        ButtonSize::Default => (Kind::Button, Size::Medium),
+        ButtonSize::Sm => (Kind::Button, Size::Small),
+        ButtonSize::Lg => (Kind::Button, Size::Large),
+        ButtonSize::IconXs => (Kind::Icon, Size::Small),
+        ButtonSize::IconSm => (Kind::Icon, Size::Medium),
+        ButtonSize::Icon => (Kind::Icon, Size::Exact(36)),
+        ButtonSize::IconLg => (Kind::Icon, Size::Large),
+        ButtonSize::Square(n) => (Kind::Icon, Size::Exact(n as u8)),
     };
-    let tooltip: SharedString = tooltip.into();
-    let mut control = Control::new(id, Kind::Icon, look);
-    control.glyph = Some(glyph);
-    control.tooltip(move |window: &mut Window, cx: &mut App| super::tip(tooltip.clone(), window, cx))
+    // A ghost icon button rests in the muted ink and strengthens on hover.
+    let ghost_icon = kind == Kind::Icon && variant == ButtonVariant::Ghost && scope == ButtonScope::Page;
+    let look = match (scope.look(), ghost_icon) {
+        (Some(look), _) => look,
+        (None, true) => Look { ink: palette::muted(cx), ink_hover: palette::strong(cx), ..variant.look(cx) },
+        (None, false) => variant.look(cx),
+    };
+    let mut control = Control::new(id, kind, look);
+    control.base = base;
+    control.glyph = glyph;
+    control.size = size;
+    control.disabled = disabled;
+    let control = match tooltip {
+        Some(text) => control.tooltip(move |window: &mut Window, cx: &mut App| super::Tooltip::new(text.clone()).build(window, cx)),
+        None => control,
+    };
+    // A link is just its ink: no box, no padding, underlined on hover.
+    match variant {
+        ButtonVariant::Link => control.base_style(|b| b.h_auto().px_0().rounded(px(RADIUS_XS)).hover(|s| s.underline())),
+        _ => control,
+    }
 }
 
 // The × that takes a chip away (a picked member, a role on a profile), in the chip's own `ink`, `strong` under
@@ -127,12 +136,12 @@ const REMOVE_GLYPH: f32 = 14.;
 pub const REMOVE_GLYPH_SM: f32 = 12.;
 
 // An icon button whose face is any element instead of a glyph (a server's tile in a picker's category rail, an
-// svg nav icon): the same size, fills, hover and `.toggled` look as `icon_button`. Add the face with `.child`.
+// svg nav icon): the same size, fills, hover and `.toggled` look as an icon `Button`. Add the face with `.child`.
 // Keywords: icon slot, category tab, rail tab, tile button, custom icon button, picker tab
 pub fn icon_slot(id: impl Into<ElementId>, tooltip: impl Into<SharedString>, cx: &App) -> Control {
     let look = Look { rest: gpui_kit::transparent_black(), hover: palette::hover(cx), press: palette::press(cx), ink: palette::muted(cx), ink_hover: palette::strong(cx), edge: None };
     let tooltip: SharedString = tooltip.into();
-    Control::new(id, Kind::Icon, look).tooltip(move |window: &mut Window, cx: &mut App| super::tip(tooltip.clone(), window, cx))
+    Control::new(id, Kind::Icon, look).tooltip(move |window: &mut Window, cx: &mut App| super::Tooltip::new(tooltip.clone()).build(window, cx))
 }
 
 // A round icon button over video or the call stage (`size` 28 or 40).
@@ -142,7 +151,7 @@ pub fn round_button(id: impl Into<ElementId>, glyph: Glyph, tooltip: impl Into<S
     let tooltip: SharedString = tooltip.into();
     let mut control = Control::new(id, Kind::Round(size as u8), look);
     control.glyph = Some(glyph);
-    control.tooltip(move |window: &mut Window, cx: &mut App| super::tip(tooltip.clone(), window, cx))
+    control.tooltip(move |window: &mut Window, cx: &mut App| super::Tooltip::new(tooltip.clone()).build(window, cx))
 }
 
 // A clickable card (a template, a post, a launcher entry, a theme): a quiet fill on the page that deepens on
@@ -222,18 +231,14 @@ impl Control {
     }
 }
 
-// A filter or toggle chip; pressed takes the accent tint and a half-accent edge.
-// Keywords: pill, tag, filter, toggle, token
-pub fn chip(id: impl Into<ElementId>, glyph: Option<Glyph>, label: impl Into<SharedString>, on: bool, cx: &App) -> Control {
-    chip_look(id, on, cx).when_some(glyph, |c, glyph| c.child(Icon::new(glyph).size(px(16.)))).child(label.into())
+// `Toggle`'s control: off is a hairline pill, on the accent tint with a half-accent edge.
+pub(super) fn toggle_control(id: ElementId, base: Stateful<Div>, on: bool, cx: &App) -> Control {
+    let mut control = chip_look(id, on, cx);
+    control.base = base;
+    control
 }
 
-// A chip led by something other than a glyph (a forum tag's emoji).
-pub fn chip_lead(id: impl Into<ElementId>, lead: Option<AnyElement>, label: impl Into<SharedString>, on: bool, cx: &App) -> Control {
-    chip_look(id, on, cx).children(lead).child(label.into())
-}
-
-fn chip_look(id: impl Into<ElementId>, on: bool, cx: &App) -> Control {
+fn chip_look(id: ElementId, on: bool, cx: &App) -> Control {
     let look = if on {
         let soft = palette::accent_soft(cx);
         let edge = palette::accent().opacity(0.5);
@@ -304,23 +309,6 @@ impl Control {
 
     fn base_style(mut self, f: impl FnOnce(Stateful<Div>) -> Stateful<Div>) -> Self {
         self.base = f(self.base);
-        self
-    }
-
-    pub fn small(mut self) -> Self {
-        self.size = Size::Small;
-        self
-    }
-
-    pub fn large(mut self) -> Self {
-        self.size = Size::Large;
-        self
-    }
-
-    // The same control in another tone: an icon button over media (`Tone::OnMedia`) or on the call stage
-    // (`Tone::Stage`), a filled icon button (`Tone::Secondary`).
-    pub fn tone(mut self, tone: Tone, cx: &App) -> Self {
-        self.look = tone_look(tone, cx);
         self
     }
 
@@ -674,27 +662,6 @@ pub(super) fn part(id: &ElementId, name: &'static str) -> ElementId {
     ElementId::NamedChild(Arc::new(id.clone()), name.into())
 }
 
-fn tone_look(tone: Tone, cx: &App) -> Look {
-    let white = gpui_kit::white();
-    let clear = gpui_kit::transparent_black();
-    let (rest, hover, press, ink) = match tone {
-        Tone::Primary => (palette::accent(), palette::accent_hover(), palette::accent_press(), palette::on_accent()),
-        Tone::Secondary => (palette::selected(cx), palette::press(cx), palette::press(cx), palette::strong(cx)),
-        Tone::Ghost => (clear, palette::hover(cx), palette::press(cx), palette::text(cx)),
-        Tone::Danger => (palette::danger(), palette::danger_hover(), palette::danger_hover(), white),
-        Tone::Positive => (palette::success(), palette::success_hover(), palette::success_hover(), white),
-        Tone::OnMedia => (gpui_kit::black().opacity(0.6), gpui_kit::black().opacity(0.75), gpui_kit::black().opacity(0.85), white),
-        // Dark ink on white whatever the theme: the art behind it is what sets the tone.
-        Tone::Overlay => (white, super::mix(white, palette::stage::bg(), 0.12), super::mix(white, palette::stage::bg(), 0.2), palette::stage::bg()),
-        Tone::Link => (clear, clear, clear, palette::accent_ink(cx)),
-        Tone::Stage => {
-            let ink = palette::stage::strong();
-            (ink.opacity(0.1), ink.opacity(0.16), ink.opacity(0.22), ink)
-        }
-    };
-    Look { rest, hover, press, ink, ink_hover: ink, edge: None }
-}
-
 impl Styled for Control {
     fn style(&mut self) -> &mut StyleRefinement {
         self.base.style()
@@ -712,36 +679,5 @@ impl StatefulInteractiveElement for Control {}
 impl ParentElement for Control {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.children.extend(elements);
-    }
-}
-
-// The design's tooltip: inverted ink, 12px semibold, popping in from 0.95 with its fade over the hover
-// timing. gpui places it just below and right of the pointer, so it grows from its top-left corner.
-pub struct Tip {
-    text: SharedString,
-}
-
-// A tooltip in the design's look, for `.tooltip(move |window, cx| ui::tip(text.clone(), window, cx))`.
-pub fn tip(text: impl Into<SharedString>, _: &mut Window, cx: &mut App) -> AnyView {
-    let text = text.into();
-    cx.new(|_| Tip { text }).into()
-}
-
-impl Render for Tip {
-    fn render(&mut self, _: &mut Window, cx: &mut gpui_kit::Context<Self>) -> impl IntoElement {
-        crate::perf::probe("Tip");
-        div()
-            .max_w(px(240.))
-            .px(px(10.))
-            .py(px(6.))
-            .rounded(px(RADIUS_SM))
-            .corner_shape(SQUIRCLE)
-            .transform_origin(point(relative(0.), relative(0.)))
-            .bg(palette::strong(cx))
-            .text_color(palette::surface(palette::Level::Page, cx))
-            .text_size(px(12.))
-            .font_weight(FontWeight::MEDIUM)
-            .line_height(relative(1.35))
-            .child(self.text.clone())
     }
 }

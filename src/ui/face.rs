@@ -4,7 +4,7 @@
 use gpui_kit::{AnyElement, ElementId, component::Icon, App, Div, FontWeight, Hsla, Img, IntoElement, ParentElement, RenderOnce, Styled, Window, div, img, linear_color_stop, linear_gradient, prelude::FluentBuilder as _, px};
 
 use super::{
-    RADIUS_LG, Squircle, count_badge,
+    RADIUS_LG, Squircle, Badge,
     status_mark::{ringed_status, status_mark, status_metrics},
 };
 use crate::{
@@ -168,7 +168,7 @@ impl Shape {
 // One mark for a face's corner: any element, ringed by the face in its surface colour. `scale` grows it in
 // (a count arriving with a folder's trip); while it's scaling it goes without its cut-out, which would
 // otherwise leave a hole the size of the full mark.
-pub struct Badge {
+pub struct AvatarBadge {
     el: Content,
     radius: Option<f32>,
     scale: f32,
@@ -178,8 +178,8 @@ pub struct Badge {
 
 // A corner mark from any element (a count, an icon mark, a status), round unless given a `radius`.
 // Keywords: custom mark, corner element, any badge
-pub fn badge_of(el: impl IntoElement) -> Badge {
-    Badge { el: Content::El(el.into_any_element()), radius: None, scale: 1., bare: false }
+pub fn avatar_badge(el: impl IntoElement) -> AvatarBadge {
+    AvatarBadge { el: Content::El(el.into_any_element()), radius: None, scale: 1., bare: false }
 }
 
 // What a mark draws: an element, or presence, which needs the theme and the face's surface and so is
@@ -197,12 +197,12 @@ const PHONE_ROUNDING: f32 = 0.1875;
 // An icon mark's share of its face (20px on the rail's 44px tile).
 const ICON_MARK_SCALE: f32 = 0.45;
 
-impl Badge {
+impl AvatarBadge {
     // Presence `dot` wide; `Badged::status` picks the dot for the face's size.
     pub fn status(status: impl Into<Mark>, dot: f32) -> Self {
         let status = status.into();
         let radius = (status == Mark::Mobile).then_some(dot * PHONE_ROUNDING);
-        Badge { el: Content::Status(status, dot), radius, scale: 1., bare: false }
+        AvatarBadge { el: Content::Status(status, dot), radius, scale: 1., bare: false }
     }
 
     // No cut ring: the mark sits straight on the face.
@@ -220,7 +220,7 @@ impl Badge {
 // A face with marks on its corners (presence, a count, a voice or stream badge, a channel's kind): each
 // placed for the face's `Shape` and ringed in `surface`, the colour the face sits on, so it reads cut out of
 // the face, and two marks never touch. `ui::badged(ui::avatar(url, 40.), 40., Shape::Round, page)
-// .status(mark).mark(Spot::TopRight, badge_of(...))`.
+// .status(mark).mark(Spot::TopRight, avatar_badge(...))`.
 // Keywords: avatar, tile, server icon, corner, badge, dot, count, notification, status, presence, voice, stream, overlay, cut-out, ring
 #[derive(IntoElement)]
 pub struct Badged {
@@ -228,7 +228,7 @@ pub struct Badged {
     size: f32,
     shape: Shape,
     surface: Hsla,
-    marks: Vec<(Spot, Badge)>,
+    marks: Vec<(Spot, AvatarBadge)>,
     // Keys the presence mark's morph from one status to the next; without it a change of status is a swap.
     morph: Option<ElementId>,
 }
@@ -241,7 +241,7 @@ pub fn badged(face: impl IntoElement, size: f32, shape: Shape, surface: Hsla) ->
 
 impl Badged {
     // A mark at `spot`; a later mark at the same spot replaces the earlier one.
-    pub fn mark(mut self, spot: Spot, badge: Badge) -> Self {
+    pub fn mark(mut self, spot: Spot, badge: AvatarBadge) -> Self {
         self.marks.retain(|(s, _)| *s != spot);
         self.marks.push((spot, badge));
         self
@@ -252,8 +252,8 @@ impl Badged {
     pub fn status(self, status: Option<impl Into<Mark>>) -> Self {
         let Some(status) = status.map(Into::into) else { return self };
         let badge = match self.shape {
-            Shape::Round => Badge { el: Content::RoundStatus(status), radius: None, scale: 1., bare: false },
-            Shape::Tile | Shape::Control => Badge::status(status, (self.size * 0.3).clamp(9., 16.).round()),
+            Shape::Round => AvatarBadge { el: Content::RoundStatus(status), radius: None, scale: 1., bare: false },
+            Shape::Tile | Shape::Control => AvatarBadge::status(status, (self.size * 0.3).clamp(9., 16.).round()),
         };
         self.mark(Spot::BottomRight, badge)
     }
@@ -266,7 +266,7 @@ impl Badged {
 
     // An icon mark at `spot`, sized for the face.
     pub fn icon(self, spot: Spot, icon: Icon, fill: MarkFill) -> Self {
-        self.mark(spot, Badge { el: Content::Icon(Box::new(icon), fill), radius: None, scale: 1., bare: false })
+        self.mark(spot, AvatarBadge { el: Content::Icon(Box::new(icon), fill), radius: None, scale: 1., bare: false })
     }
 
     // A count at the bottom-right, red as counts are; nothing for zero.
@@ -277,7 +277,7 @@ impl Badged {
     // The same, grown in to `scale`.
     pub fn count_scaled(self, count: u32, scale: f32) -> Self {
         match count > 0 && scale > 0.01 {
-            true => self.mark(Spot::BottomRight, badge_of(count_badge(count)).scale(scale)),
+            true => self.mark(Spot::BottomRight, avatar_badge(Badge::count(count)).scale(scale)),
             false => self,
         }
     }

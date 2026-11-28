@@ -135,3 +135,52 @@ pub fn modal(backdrop: Stateful<Div>, dialog: impl IntoElement, cx: &App) -> Any
         .with_animation("scrim-in", gpui_kit::Animation::new(DUR_POP), move |backdrop, t| backdrop.bg(scrim.opacity(scrim.a * t)))
         .into_any_element()
 }
+
+// shadcn's names for the above.
+
+/// A dialog's card around `body`, `width` wide. The card owns the height: it measures `body` each
+/// layout and springs to it, clipping while it travels. Reduced motion lands on the new height at once.
+/// `body` is laid out at its natural height (capped to the window), so a scroller inside it must carry
+/// its own `max_h` or `flex_1().min_h_0()`.
+// Keywords: unclipped dialog, fixed size dialog, overflowing dialog, frame dialog, modal without clipping, shadcn
+pub struct Dialog;
+
+impl Dialog {
+    /// A dialog's card around `body`, `width` wide. The card owns the height: it measures `body` each
+    /// layout and springs to it, clipping while it travels. Reduced motion lands on the new height at once.
+    /// `body` is laid out at its natural height (capped to the window), so a scroller inside it must carry
+    /// its own `max_h` or `flex_1().min_h_0()`.
+    pub fn new(id: impl Into<ElementId>, width: f32, body: Div, window: &mut Window, cx: &mut App) -> AnimationElement<Stateful<Div>> {
+        super::dialog(id, width, body, window, cx)
+    }
+
+    /// A dialog of a fixed size whose content may draw past its edge (a profile's frame over the full profile): the
+    /// same card, shadow and pop as `dialog`, without the height spring, which needs the card to clip.
+    // Keywords: unclipped dialog, fixed size dialog, overflowing dialog, frame dialog, modal without clipping
+    pub fn fixed(id: impl Into<ElementId>, width: f32, height: f32, body: impl IntoElement, cx: &App) -> AnimationElement<Stateful<Div>> {
+        super::dialog_fixed(id, width, height, body, cx)
+    }
+
+    /// Dims the window behind `dialog` and centres it. `backdrop` is the caller's full-window catcher,
+    /// which decides what a click outside does.
+    pub fn modal(backdrop: Stateful<Div>, dialog: impl IntoElement, cx: &App) -> AnyElement {
+        super::modal(backdrop, dialog, cx)
+    }
+}
+
+/// A dialog's usual body: 24px in, sections 16px apart.
+// Keywords: dialogcontent, shadcn
+pub struct DialogContent;
+
+impl DialogContent {
+    /// A dialog's usual body: 24px in, sections 16px apart.
+    pub fn new() -> Div {
+        super::dialog_body()
+    }
+
+    /// The part of a dialog between its fixed header and footer that scrolls when the window is too short,
+    /// fading out at whichever edge has more beyond it. Children stack 16px apart, as in `dialog_body`.
+    pub fn scroll(id: impl Into<ElementId>, children: impl IntoIterator<Item = AnyElement>, window: &mut Window, cx: &mut App) -> Div {
+        super::dialog_scroll(id, children, window, cx)
+    }
+}

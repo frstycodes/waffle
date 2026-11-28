@@ -2,7 +2,7 @@
 // chosen one tinted by meaning and keeping its icon, so the state never rests on colour alone.
 use gpui_kit::{App, Div, ElementId, Hsla, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled, Window, component::Icon, div, prelude::FluentBuilder, px};
 
-use super::{RADIUS_SM, Squircle, control::part, pressable, tip};
+use super::{RADIUS_SM, Squircle, control::part, pressable, Tooltip};
 use crate::{icons::Glyph, palette};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -35,7 +35,7 @@ pub fn tri_state(id: impl Into<ElementId>, value: Tri, on_pick: impl Fn(Tri, &mu
             .text_color(ink)
             .when(!on, |d| d.hover(move |s| s.bg(hover).text_color(strong)))
             .cursor_pointer()
-            .tooltip(move |window, cx| tip(label, window, cx))
+            .tooltip(move |window, cx| Tooltip::new(label).build(window, cx))
             .child(Icon::new(glyph).size(px(16.)))
             .on_click(move |_, window, cx| on_pick(tri, window, cx))
     };

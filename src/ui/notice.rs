@@ -6,7 +6,7 @@ use gpui_kit::{
     Animation, AnimationExt, AnyElement, App, Div, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString, Styled, div, px,
 };
 
-use super::{HAIRLINE, LINE_SM, RADIUS_LG, RADIUS_MD, RADIUS_SM, Squircle, TEXT_SM, TEXT_XS, mix, row, shadow_pop};
+use super::{LINE_SM, RADIUS_LG, RADIUS_MD, RADIUS_SM, Squircle, TEXT_SM, TEXT_XS, mix, row, shadow_pop};
 use crate::{motion, palette};
 
 // What an inline strip is filled with: the raised card with a hairline edge, the selected wash, or a tint of
@@ -55,20 +55,6 @@ pub fn toast_text(id: impl Into<ElementId>, text: impl Into<SharedString>, cx: &
 // Keywords: step number, numbered mark, round badge, ordinal, counter disc
 pub fn number_mark(n: usize, cx: &App) -> Div {
     row().size_6().flex_none().rounded_full().bg(palette::accent_soft(cx)).text_color(palette::accent_ink(cx)).text_size(TEXT_XS).font_weight(FontWeight::BOLD).justify_center().child(n.to_string())
-}
-
-// A hairline in `color`: give it a length (`flex_1`, `w_5`) or `absolute` placement. A vertical rule is
-// `ui::seam`.
-// Keywords: rule, hairline, line, separator, connector, stub
-pub fn rule(color: Hsla) -> Div {
-    div().h(HAIRLINE).bg(color)
-}
-
-// A divider whose label and line colour come from data (a day's date, a state's ink): rules either side of
-// the label, inside the parent's gutters.
-// Keywords: day divider, date separator, labelled rule, section line
-pub fn divider_with(label: impl Into<SharedString>, ink: Hsla, line: Hsla) -> Div {
-    row().w_full().gap_2p5().whitespace_nowrap().text_size(TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(ink).child(rule(line).flex_1()).child(label.into()).child(rule(line).flex_1())
 }
 
 // A floating surface in a scope's own colours (the call stage's dark overlay and ring, a menu in its ink): the
