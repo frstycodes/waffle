@@ -397,8 +397,7 @@ pub(crate) struct Watching {
     // end it on stop, since leaving a stream and ending one are the same gateway op.
     watch: Option<voice::StreamWatch>,
     pub(crate) state: WatchState,
-    // Reconnects in a row without a frame in between, so a stream that keeps dropping fails instead
-    // of retrying forever.
+    // Reconnects in a row without a frame in between, which stretch the wait before the next.
     rejoins: u8,
 }
 
@@ -421,9 +420,8 @@ pub(crate) const STREAM_RECONNECTING: u16 = 2007;
 const WATCH_TIMEOUT: Duration = Duration::from_secs(5);
 const STAGE_WATCH_TIMEOUT: Duration = Duration::from_secs(12);
 const STAGE_CHANNEL: u8 = 13;
-// A dropped connection is rejoined after this long, this many times in a row.
+// A dropped stream is rejoined after this long, more each time in a row.
 const REJOIN_AFTER: Duration = Duration::from_secs(2);
-const MAX_REJOINS: u8 = 3;
 // The streamer's voice state stops saying they're live while we still watch: Discord closes the
 // stream this long after, unless they're live again.
 const LIVE_LAPSE: Duration = Duration::from_secs(180);

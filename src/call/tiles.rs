@@ -228,6 +228,7 @@ impl Waffle {
         });
         let issues = self.tile_issues(&state.user_id, is_stream, me);
         let issue_chip = (!issues.is_empty() && !compact).then(|| issue_chip(SharedString::from(format!("issues-{}-{is_stream}", state.user_id)), issues).absolute().top_2().left_2());
+        let paused = (is_stream && (me || watching) && !compact && self.stream_paused(&state.user_id)).then(|| paused_notice(me, &user.name));
         let viewers = if is_stream && !compact { self.viewers(&state.user_id) } else { Vec::new() };
         let live = is_stream.then(|| ui::row().absolute().top_2().right_2().gap_1().when(!viewers.is_empty(), |d| d.child(viewer_chip(viewers, &state.user_id))).child(ui::Badge::live()));
         let (card, double, menu_user) = (tile.clone(), tile.clone(), state.user_id.clone());
@@ -235,6 +236,7 @@ impl Waffle {
             .group(group.clone())
             .relative()
             .child(face)
+            .children(paused)
             .children(issue_chip)
             .children(live)
             .when(watchable, |d| d.child(ui::row().absolute().inset_0().justify_center().child(self.watch_cta(tile, w, cx))))
@@ -336,3 +338,25 @@ pub(super) fn tile_ring(sounding: bool, local_muted: bool, radius: f32) -> Div {
     let ring = div().absolute().inset_0().squircle(radius); // lint-allow(custom-mark): ui::speaking_ring lacks a double ring sized by the tile's computed radius
     ring.border(px(RING)).border_color(color).child(div().absolute().inset_0().squircle((radius - RING).max(0.)).border_1().border_color(gpui_kit::black())) // lint-allow(custom-mark): ui::speaking_ring lacks a double ring sized by the tile's computed radius
 }
+
+// Discord's paused stream: the streamer's app is out of sight, so its last picture stays under this.
+fn paused_notice(mine: bool, name: &str) -> gpui_kit::Div {
+    let line = match mine {
+        true => "Swap to your application to resume.".to_owned(),
+        false => format!("{name} has minimized their application... sit tight!"),
+    };
+    ui::col()
+        .absolute()
+        .inset_0()
+        .items_center()
+        .justify_center()
+        .gap_1()
+        .p_3()
+        .text_center()
+        .bg(stage::ended().opacity(PAUSED_SCRIM))
+        .child(div().text_size(ui::TEXT_MD).font_weight(FontWeight::MEDIUM).text_color(stage::strong()).child("Stream Paused"))
+        .child(div().text_size(ui::TEXT_XS).text_color(stage::muted()).child(line))
+}
+
+// How much of the paused picture the notice covers.
+const PAUSED_SCRIM: f32 = 0.85;

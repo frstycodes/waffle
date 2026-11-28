@@ -25,35 +25,71 @@ pub(super) async fn run(shared: Arc<Shared>, leave: oneshot::Receiver<()>) {
 }
 
 pub(super) async fn join_voice(shared: &Arc<Shared>, dispatches: &mut broadcast::Receiver<(String, Value)>) -> Result<(), String> {
-    let (session_id, server) = tokio::time::timeout(SERVER_TIMEOUT, await_voice_server(shared, dispatches))
-        .await
-        .map_err(|_| "Voice server did not respond".to_owned())??;
+    let mut target = await_target(shared, dispatches).await?;
+    let mut backoff = Backoff::connection();
+    let on_dispatch = |kind: &str, d: &Value| voice_dispatch(shared, kind, d);
+    loop {
+        let reason = match serve(shared, target.clone(), dispatches, on_dispatch, &mut backoff).await {
+            Ended::Dispatch(reason) => reason,
+            Ended::Lost(lost) => {
+                debug_lost(&target, &lost);
+                // Discord asks the main gateway to check its voice server whenever the connection drops.
+                shared.gateway.send(5, Value::Null);
+                shared.emit(VoiceEvent::Stage(Stage::Disconnected));
+                match wait_out(backoff.fail(), dispatches, on_dispatch).await {
+                    None => continue,
+                    Some(reason) => reason,
+                }
+            }
+        };
+        // A fresh main-gateway session: our voice state went with the old one, so it goes out again.
+        if shared.session_id.lock().is_ok_and(|id| id.is_none()) {
+            shared.send_voice_state(true);
+            target = await_target(shared, dispatches).await?;
+            continue;
+        }
+        // Discord reallocates a call's voice server with a fresh VOICE_SERVER_UPDATE (docs: Voice, "Voice
+        // Server Update"): the same session identifies on the new endpoint.
+        let Some(server) = take_moved(shared) else { return Err(reason) };
+        shared.emit(VoiceEvent::Stage(Stage::AwaitingEndpoint));
+        target.server = server;
+    }
+}
+
+// Waits for our voice server, as long as it takes, and the session to identify with on it.
+pub(super) async fn await_target(shared: &Shared, dispatches: &mut broadcast::Receiver<(String, Value)>) -> Result<Target, String> {
+    shared.emit(VoiceEvent::Stage(Stage::AwaitingEndpoint));
+    let (session_id, server) = await_voice_server(shared, dispatches).await?;
     if let Ok(mut id) = shared.session_id.lock() {
         *id = Some(session_id.clone());
     }
-    let mut target = Target {
+    Ok(Target {
         server_id: shared.server_id().to_owned(),
         dave_channel: shared.channel_id.clone(),
         session_id,
         server,
         role: Role::Voice,
         streamer: String::new(),
-    };
-    // Discord reallocates a call's voice server with a fresh VOICE_SERVER_UPDATE (docs: Voice, "Voice
-    // Server Update"): the old connection is dropped and the same session identifies on the new endpoint.
-    loop {
-        let result = serve(shared, target.clone(), dispatches, |kind, d| voice_dispatch(shared, kind, d)).await;
-        let mut moved = take_moved(shared);
-        // The old server closes with 4022 when the call moves, possibly before the update naming the new
-        // one arrives (Discord sends a null-endpoint update first). A 4006 after a quick channel switch
-        // means we identified with a token Discord had already replaced; its replacement follows, as
-        // Discord's own client reconnects on every server update. Not verified live: the order isn't documented.
-        if moved.is_none() && result.as_ref().is_err_and(|reason| call_terminated(reason) || reason.ends_with("(4006)")) {
-            moved = tokio::time::timeout(MOVE_TIMEOUT, await_move(shared, dispatches)).await.ok().flatten();
+    })
+}
+
+// Sits out a lost connection's backoff while following dispatches: None to try again, or why one
+// ended it ("Gateway closed" once the gateway handle is gone).
+pub(super) async fn wait_out(delay: Duration, dispatches: &mut broadcast::Receiver<(String, Value)>, on_dispatch: impl Fn(&str, &Value) -> Option<String>) -> Option<String> {
+    let ended = async {
+        loop {
+            let Some((kind, d)) = next_dispatch(dispatches).await else { return "Gateway closed".to_owned() };
+            if let Some(reason) = on_dispatch(&kind, &d) {
+                return reason;
+            }
         }
-        let Some(server) = moved else { return result };
-        shared.emit(VoiceEvent::Stage(Stage::AwaitingEndpoint));
-        target.server = server;
+    };
+    tokio::time::timeout(delay, ended).await.ok()
+}
+
+fn debug_lost(target: &Target, lost: &str) {
+    if debug() {
+        eprintln!("[{:?}] connection lost, identifying again: {lost}", target.role);
     }
 }
 
@@ -61,18 +97,14 @@ pub(super) fn take_moved(shared: &Shared) -> Option<Server> {
     shared.moved_server.lock().ok().and_then(|mut s| s.take())
 }
 
-// Follows dispatches as `serve` does until one ends the call; Some when that was a server move.
-pub(super) async fn await_move(shared: &Shared, dispatches: &mut broadcast::Receiver<(String, Value)>) -> Option<Server> {
-    loop {
-        let (kind, d) = next_dispatch(dispatches).await?;
-        if voice_dispatch(shared, &kind, &d).is_some() {
-            return take_moved(shared);
-        }
-    }
-}
-
 // Follows our channel's voice states while connected; ends the connection if we were moved out.
 pub(super) fn voice_dispatch(shared: &Shared, kind: &str, d: &Value) -> Option<String> {
+    if kind == "READY" {
+        if let Ok(mut id) = shared.session_id.lock() {
+            *id = None;
+        }
+        return Some(NEW_SESSION.into());
+    }
     if kind == "VOICE_SERVER_UPDATE" {
         let for_us = d["guild_id"].as_str().or(d["channel_id"].as_str()) == Some(shared.server_id()) && d["channel_id"].as_str().is_none_or(|c| c == shared.channel_id);
         // A null endpoint means another update follows with the new server; wait for that one.
@@ -108,6 +140,9 @@ pub(super) fn voice_dispatch(shared: &Shared, kind: &str, d: &Value) -> Option<S
     shared.emit(VoiceEvent::VideoState { user_id: user_id.to_owned(), streaming, camera });
     None
 }
+
+// A fresh main-gateway session (READY): voice rejoins under it, and Go Live streams end, as Discord's do.
+pub const NEW_SESSION: &str = "New gateway session";
 
 // Why a call ended when another client of ours joined voice in the same server and took it from this one.
 pub const ANOTHER_LOCATION: &str = "Connected at another location";
@@ -172,8 +207,17 @@ pub(super) async fn await_voice_server(shared: &Shared, dispatches: &mut broadca
         // A quick drag through several channels leaves the skipped channels' updates in flight: their
         // token identifies a session Discord has already moved on from (4006).
         let other_channel = d["channel_id"].as_str().is_some_and(|c| c != shared.channel_id);
+        let ours = d["user_id"].as_str() == Some(&shared.user_id);
         match kind.as_str() {
-            "VOICE_STATE_UPDATE" if d["user_id"].as_str() == Some(&shared.user_id) && for_us && !other_channel => {
+            // Our voice state went with the old session: send it again from this one.
+            "READY" => {
+                (session_id, server) = (None, None);
+                shared.send_voice_state(true);
+            }
+            "VOICE_STATE_UPDATE" if ours && for_us && d["channel_id"].is_null() && session_id.is_some() && d["session_id"].as_str() == session_id.as_deref() => {
+                return Err("Removed from the voice channel".into());
+            }
+            "VOICE_STATE_UPDATE" if ours && for_us && !other_channel => {
                 session_id = d["session_id"].as_str().map(str::to_owned);
             }
             "VOICE_SERVER_UPDATE" if for_us && !other_channel => server = parse_server(&d).or(server),
@@ -266,9 +310,45 @@ pub(super) async fn connect_stream(
     if role.broadcasts() {
         shared.gateway.send(22, json!({ "stream_key": key, "paused": false }));
     }
-    let target = Target { server_id: rtc.server_id, dave_channel: rtc.channel_id, session_id, server, role, streamer: streamer.to_owned() };
-    serve(shared, target, dispatches, |kind, d| (kind == "STREAM_DELETE" && d["stream_key"].as_str() == Some(key)).then(|| delete_reason(d)))
-    .await
+    let mut target = Target { server_id: rtc.server_id, dave_channel: rtc.channel_id, session_id, server, role, streamer: streamer.to_owned() };
+    let moved = Mutex::new(None);
+    let on_dispatch = |kind: &str, d: &Value| stream_dispatch(key, kind, d, &moved);
+    let mut backoff = Backoff::connection();
+    // As the voice connection: a lost stream connection identifies again, forever, until STREAM_DELETE.
+    loop {
+        let reason = match serve(shared, target.clone(), dispatches, on_dispatch, &mut backoff).await {
+            Ended::Dispatch(reason) => reason,
+            Ended::Lost(lost) => {
+                debug_lost(&target, &lost);
+                shared.gateway.send(21, json!({ "stream_key": key }));
+                match wait_out(backoff.fail(), dispatches, on_dispatch).await {
+                    None => continue,
+                    Some(reason) => reason,
+                }
+            }
+        };
+        let Some(server) = moved.lock().ok().and_then(|mut m| m.take()) else { return Err(reason) };
+        target.server = server;
+    }
+}
+
+// What ends a stream's connection: its delete, a new server for it (`moved`), or a fresh main session.
+pub(super) fn stream_dispatch(key: &str, kind: &str, d: &Value, moved: &Mutex<Option<Server>>) -> Option<String> {
+    if kind == "READY" {
+        return Some(NEW_SESSION.into());
+    }
+    if d["stream_key"].as_str() != Some(key) {
+        return None;
+    }
+    match kind {
+        "STREAM_DELETE" => Some(delete_reason(d)),
+        "STREAM_SERVER_UPDATE" => {
+            let server = parse_server(d)?;
+            *moved.lock().ok()? = Some(server);
+            Some("Stream server moved".into())
+        }
+        _ => None,
+    }
 }
 
 pub(super) fn delete_reason(d: &Value) -> String {
@@ -288,6 +368,9 @@ pub(super) async fn await_stream_server(key: &str, dispatches: &mut broadcast::R
     let (mut rtc, mut server) = (None, None);
     loop {
         let (kind, d) = next_dispatch(dispatches).await.ok_or("Gateway closed")?;
+        if kind == "READY" {
+            return Err(NEW_SESSION.into());
+        }
         if d["stream_key"].as_str() != Some(key) {
             continue;
         }
@@ -352,13 +435,46 @@ impl LossWindow {
     }
 }
 
-// One voice-gateway connection: the channel's own (audio + cameras) or a Go Live stream's.
+// Why a connection ended: a dispatch `on_dispatch` ended it on, or the connection was lost past resuming.
+pub(super) enum Ended {
+    Dispatch(String),
+    Lost(String),
+}
+
+impl From<String> for Ended {
+    fn from(lost: String) -> Self {
+        Ended::Lost(lost)
+    }
+}
+
+impl From<&str> for Ended {
+    fn from(lost: &str) -> Self {
+        Ended::Lost(lost.to_owned())
+    }
+}
+
+// One voice-gateway connection: the channel's own (audio + cameras) or a Go Live stream's. It resumes
+// what it can; `backoff` restarts once media is up.
 pub(super) async fn serve(
     shared: &Arc<Shared>,
     target: Target,
     dispatches: &mut broadcast::Receiver<(String, Value)>,
     on_dispatch: impl Fn(&str, &Value) -> Option<String>,
-) -> Result<(), String> {
+    backoff: &mut Backoff,
+) -> Ended {
+    match connection(shared, target, dispatches, on_dispatch, backoff).await {
+        Ok(never) => match never {},
+        Err(ended) => ended,
+    }
+}
+
+async fn connection(
+    shared: &Arc<Shared>,
+    target: Target,
+    dispatches: &mut broadcast::Receiver<(String, Value)>,
+    on_dispatch: impl Fn(&str, &Value) -> Option<String>,
+    backoff: &mut Backoff,
+) -> Result<std::convert::Infallible, Ended> {
     let is_voice = target.role == Role::Voice;
     let stage = |stage| {
         if is_voice {
@@ -386,6 +502,9 @@ pub(super) async fn serve(
     let mut loss = LossWindow::default();
     let mut stats = Stats { endpoint: host.clone(), ..Stats::default() };
     let mut resumes = 0;
+    let mut socket_backoff = Backoff::socket();
+    let mut acked = true;
+    let mut last_ack = Instant::now();
 
     let identify = json!({ "op": 0, "d": {
         "server_id": target.server_id,
@@ -400,12 +519,18 @@ pub(super) async fn serve(
     stage(Stage::Authenticating);
 
     loop {
-        let polled: Result<Option<WsMessage>, String> = tokio::select! {
-            _ = heartbeat.tick() => {
-                let nonce = chrono::Utc::now().timestamp_millis();
-                let beat = json!({ "op": 3, "d": { "t": nonce, "seq_ack": seq_ack } });
-                sink.send(WsMessage::Text(beat.to_string())).await.map(|()| None).map_err(|e| e.to_string())
-            }
+        // An error and the close code it came with, if any.
+        let polled: Result<Option<WsMessage>, (String, Option<u16>)> = tokio::select! {
+            _ = heartbeat.tick() => match acked {
+                // A beat still unacked when the next is due: the socket is dead (Discord's 4800).
+                false => Err(("Heartbeat timeout".to_owned(), None)),
+                true => {
+                    acked = false;
+                    let nonce = chrono::Utc::now().timestamp_millis();
+                    let beat = json!({ "op": 3, "d": { "t": nonce, "seq_ack": seq_ack } });
+                    sink.send(WsMessage::Text(beat.to_string())).await.map(|()| None).map_err(|e| (e.to_string(), None))
+                }
+            },
             _ = stats_tick.tick(), if is_voice && media.is_some() => {
                 (stats.ping_ms, stats.median_ping_ms, stats.last_pings) = pings.stats();
                 stats.outbound_loss_pct = loss.push(counters.outbound_loss());
@@ -423,38 +548,36 @@ pub(super) async fn serve(
                 shared.emit(VoiceEvent::Stats(stats.clone()));
                 Ok(None)
             }
-            Some(msg) = out_rx.next() => sink.send(msg).await.map(|()| None).map_err(|e| e.to_string()),
+            Some(msg) = out_rx.next() => sink.send(msg).await.map(|()| None).map_err(|e| (e.to_string(), None)),
             Some((kind, d)) = next_dispatch(dispatches) => match on_dispatch(&kind, &d) {
-                Some(reason) => return Err(reason),
+                Some(reason) => return Err(Ended::Dispatch(reason)),
                 None => Ok(None),
             },
             frame = stream.next() => match frame {
-                None => Err("Voice connection lost".to_owned()),
-                Some(Err(e)) => Err(e.to_string()),
-                Some(Ok(WsMessage::Close(close))) if !resumable(close.as_ref()) => return Err(close_reason(close.as_ref())),
-                Some(Ok(WsMessage::Close(close))) => Err(close_reason(close.as_ref())),
+                None => Err(("Voice connection lost".to_owned(), None)),
+                Some(Err(e)) => Err((e.to_string(), None)),
+                Some(Ok(WsMessage::Close(close))) => Err((close_reason(close.as_ref()), close.map(|c| u16::from(c.code)))),
                 Some(Ok(frame)) => Ok(Some(frame)),
             },
         };
         let frame = match polled {
             Ok(Some(frame)) => frame,
             Ok(None) => continue,
-            // Before media is up there is no session worth resuming: the join fails as it always did.
-            Err(lost) if media.is_none() => return Err(lost),
-            Err(lost) => {
+            Err((lost, code)) => {
                 stage(Stage::Authenticating);
                 let resume = WsMessage::Text(resume_payload(&target, seq_ack).to_string());
                 (sink, stream) = loop {
-                    if resumes >= RESUME_TRIES {
-                        return Err(lost);
+                    if reconnect(code, resumes, media.is_some(), last_ack.elapsed()) == Reconnect::Identify {
+                        return Err(Ended::Lost(lost));
                     }
                     resumes += 1;
-                    tokio::time::sleep(RESUME_BACKOFF * resumes).await;
+                    tokio::time::sleep(socket_backoff.fail()).await;
                     let Ok(mut ws) = crate::discord::transport::websocket(&url).await else { continue };
                     if ws.send(resume.clone()).await.is_ok() {
                         break ws.split();
                     }
                 };
+                acked = true;
                 continue;
             }
         };
@@ -487,11 +610,14 @@ pub(super) async fn serve(
             }
             Some(9) => {
                 resumes = 0;
+                socket_backoff.succeed();
                 if media.is_some() {
                     stage(Stage::Connected);
                 }
             }
             Some(6) => {
+                acked = true;
+                last_ack = Instant::now();
                 if let Some(sent) = d["t"].as_i64() {
                     pings.record(sent);
                     // Discord rates a connection bad past 500 ms or 10% loss of what it sends (2006).
@@ -506,6 +632,7 @@ pub(super) async fn serve(
                 }
             }
             Some(2) => {
+                socket_backoff.succeed();
                 stage(Stage::RtcConnecting);
                 let ssrc = d["ssrc"].as_u64().ok_or("Voice ready without ssrc")? as u32;
                 let ip = d["ip"].as_str().ok_or("Voice ready without ip")?.to_owned();
@@ -559,6 +686,7 @@ pub(super) async fn serve(
                 )?);
                 // Not verified: op 15 (media sink wants) asks the SFU to forward video at full quality.
                 sink.send(WsMessage::Text(json!({ "op": 15, "d": { "any": 100 } }).to_string())).await.map_err(|e| e.to_string())?;
+                backoff.succeed();
                 if is_voice {
                     stage(Stage::Connected);
                     shared.emit(VoiceEvent::Connected);
@@ -600,48 +728,12 @@ pub(super) fn resume_payload(target: &Target, seq_ack: i64) -> Value {
     }})
 }
 
-// Discord's voice close codes (docs.discord.com, Opcodes and Status Codes; 4013 from docs.discord.food):
-// whether a resume is worth trying, and the reason the voice panel shows. Docs: don't reconnect after
-// 4014, 4021, 4022; try resuming after 4013 and 4015. The rest describe a session or request a resume
-// can't repair, so they end the call too (the user can rejoin). Unlisted codes and a reset without a
-// close frame resume.
-pub(super) fn voice_close(code: u16) -> (bool, Option<&'static str>) {
-    match code {
-        4001 => (false, Some("Unknown opcode")),
-        4002 => (false, Some("Failed to decode payload")),
-        4003 => (false, Some("Not authenticated")),
-        4004 => (false, Some("Authentication failed")),
-        4005 => (false, Some("Already authenticated")),
-        4006 => (false, Some("Session no longer valid")),
-        4009 => (false, Some("Session timed out")),
-        4011 => (false, Some("Voice server not found")),
-        4012 => (false, Some("Unknown protocol")),
-        4013 => (true, Some("WebRTC crashed")),
-        4014 => (false, Some("Disconnected by Discord")),
-        4015 => (true, Some("Voice server crashed")),
-        4016 => (false, Some("Unknown encryption mode")),
-        4017 => (false, Some("End-to-end encryption required")),
-        4020 => (false, Some("Bad request")),
-        4021 => (false, Some("Rate limited by Discord")),
-        4022 => (false, Some("The call ended")),
-        _ => (true, None),
-    }
-}
-
-pub(super) fn call_terminated(reason: &str) -> bool {
-    reason.ends_with("(4022)")
-}
-
-pub(super) fn resumable(close: Option<&tungstenite::protocol::CloseFrame>) -> bool {
-    close.is_none_or(|c| voice_close(u16::from(c.code)).0)
-}
-
 pub(super) fn close_reason(close: Option<&tungstenite::protocol::CloseFrame>) -> String {
     match close {
         None => "Voice connection lost".to_owned(),
         Some(c) => {
             let code = u16::from(c.code);
-            let reason = voice_close(code).1.map(str::to_owned).unwrap_or_else(|| if c.reason.is_empty() { "Voice connection lost".to_owned() } else { c.reason.to_string() });
+            let reason = close_label(code).map(str::to_owned).unwrap_or_else(|| if c.reason.is_empty() { "Voice connection lost".to_owned() } else { c.reason.to_string() });
             format!("{reason} ({code})")
         }
     }

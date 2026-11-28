@@ -212,11 +212,11 @@ impl Media {
 
         let devices: Devices = match link.role {
             Role::Broadcast(source, options) => {
-                let ScreenFeed { capture, frames, sound } = start_capture(source, options).inspect_err(|_| link.shared.issue(&link.my_id, issues::SCREENSHARE_OS_ERROR, true))?;
+                let ScreenFeed { capture, frames, sound, covered } = start_capture(source, options).inspect_err(|_| link.shared.issue(&link.my_id, issues::SCREENSHARE_OS_ERROR, true))?;
                 let (width, height) = go_live_size(options.resolution);
                 let bitrate = video_bitrate(width, height, options.fps);
                 let (l, f, s, fps) = (link.clone(), feedback.clone(), stop.clone(), options.fps);
-                spawn("waffle-golive-send", move || video_send_loop(&l, &f, frames, fps, bitrate, &s))?;
+                spawn("waffle-golive-send", move || video_send_loop(&l, &f, Feed { frames, covered }, fps, bitrate, &s))?;
                 if let Some(sound) = sound {
                     let (l, s) = (link.clone(), stop.clone());
                     spawn("waffle-golive-audio", move || stream_audio_loop(&l, sound, &s))?;
@@ -466,7 +466,7 @@ fn start_camera(link: &Arc<Link>, feedback: &Arc<Feedback>, id: &str) -> Result<
     let (l, f) = (link.clone(), feedback.clone());
     let bitrate = video_bitrate(CAMERA_SIZE.0, CAMERA_SIZE.1, CAMERA_FPS);
     // The loop ends when the capture is dropped (its frame sender goes with it).
-    spawn("waffle-camera-send", move || video_send_loop(&l, &f, frames, CAMERA_FPS, bitrate, &AtomicBool::new(false)))?;
+    spawn("waffle-camera-send", move || video_send_loop(&l, &f, Feed { frames, covered: Arc::default() }, CAMERA_FPS, bitrate, &AtomicBool::new(false)))?;
     Ok(capture)
 }
 
@@ -677,6 +677,7 @@ struct ScreenFeed {
     capture: Devices,
     frames: Receiver<Arc<VideoFrame>>,
     sound: Option<Receiver<Vec<f32>>>,
+    covered: Arc<AtomicBool>,
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -684,7 +685,7 @@ fn start_capture(source: ShareSource, options: GoLiveOptions) -> Result<ScreenFe
     let (width, height) = go_live_size(options.resolution);
     let captured = super::capture::start(source, options.fps, width, height, options.audio)?;
     let sound = options.audio.then_some(captured.audio);
-    Ok(ScreenFeed { capture: Box::new(captured.capture), frames: captured.frames, sound })
+    Ok(ScreenFeed { capture: Box::new(captured.capture), frames: captured.frames, sound, covered: captured.covered })
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -732,7 +733,14 @@ fn stream_audio_loop(link: &Link, sound: Receiver<Vec<f32>>, stop: &AtomicBool) 
 
 // Encodes frames as they come (camera or screen) and sends them on our video SSRC, through the
 // responder so viewers' NACKs can be answered. Ends when `stop` is set or the frame source is dropped.
-fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, frames: Receiver<Arc<VideoFrame>>, fps: u32, bitrate: u32, stop: &AtomicBool) {
+// A video source's frames, and whether what it shows is out of sight (the stream pauses meanwhile).
+struct Feed {
+    frames: Receiver<Arc<VideoFrame>>,
+    covered: Arc<AtomicBool>,
+}
+
+fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, feed: Feed, fps: u32, bitrate: u32, stop: &AtomicBool) {
+    let Feed { frames, covered } = feed;
     let mut encoder = match VideoEncoder::new(fps, bitrate) {
         Ok(encoder) => encoder,
         Err(e) => return eprintln!("voice: h264 encoder: {e}"),
@@ -755,6 +763,17 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, frames: Receiver<Arc<V
     // A camera's issues are told under "camera:{id}", apart from the stream's.
     let who = if streaming { link.my_id.clone() } else { format!("camera:{}", link.my_id) };
     let raise = |code, on| link.shared.issue(&who, code, on);
+    // Sharing an app or a window, Discord pauses the stream while it can't be seen, and when its
+    // capture ends; a whole screen's capture ending ends the stream.
+    let shares_app = matches!(link.role, Role::Broadcast(ShareSource::App(_) | ShareSource::Window(_), _));
+    let paused = std::cell::Cell::new(false);
+    let pause = |on: bool| {
+        if paused.replace(on) != on {
+            link.shared.set_stream_paused(on);
+            // Viewers need a keyframe to pick the picture back up.
+            link.keyframe.store(!on, Ordering::Relaxed);
+        }
+    };
     let mut last_keyframe: Option<Instant> = None;
     let mut pacer = Pacer::new(bitrate);
     while !stop.load(Ordering::Relaxed) {
@@ -766,10 +785,16 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, frames: Receiver<Arc<V
         let frame = match frames.recv_timeout(due.saturating_duration_since(Instant::now())) {
             // Our own Go Live comes back to the UI as its self-view, as the camera's does.
             Ok(frame) if matches!(link.role, Role::Broadcast(..)) => {
+                pause(false);
                 link.shared.publish_frame(&link.my_id, VideoSource::GoLive, frame.clone());
                 frame
             }
             Ok(frame) => frame,
+            Err(RecvTimeoutError::Timeout) if shares_app && covered.load(Ordering::Relaxed) => {
+                pause(true);
+                due = Instant::now() + interval;
+                continue;
+            }
             Err(RecvTimeoutError::Timeout) => match &last {
                 Some(frame) => frame.clone(),
                 None => {
@@ -778,6 +803,13 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, frames: Receiver<Arc<V
                     continue;
                 }
             },
+            Err(RecvTimeoutError::Disconnected) if shares_app => {
+                pause(true);
+                while !stop.load(Ordering::Relaxed) {
+                    thread::sleep(POLL);
+                }
+                return clear_send_issues(link, &who, low_code);
+            }
             // The capture ended under a stream that goes on: the OS stopped it (Discord's 3004).
             Err(RecvTimeoutError::Disconnected) => {
                 if streaming && !stop.load(Ordering::Relaxed) {

@@ -1091,7 +1091,7 @@ _A detached task outlives its view: keep the Task in the view so dropping the vi
 - `src/voice_calls.rs` — one 60 second timer, then it ends
 - `src/voice_calls.rs` — one LIVE_LAPSE timer, then it ends
 - `src/voice_calls.rs` — one READY_TIMEOUT timer, then it ends
-- `src/voice_calls.rs` — one REJOIN_AFTER timer, then it ends
+- `src/voice_calls.rs` — one rejoin timer, then it ends
 - `src/voice_calls.rs` — one watch-timeout timer, then it ends
 - `src/voice_calls.rs` — the clock loop stops itself once the call is gone
 - `src/voice_status.rs` — a one-shot request that ends when it returns, holding a WeakEntity

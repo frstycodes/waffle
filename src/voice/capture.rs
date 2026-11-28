@@ -4,10 +4,11 @@
 
 use std::sync::{
     Arc,
+    atomic::{AtomicBool, Ordering},
     mpsc::{Receiver, Sender, SyncSender, channel, sync_channel},
 };
 
-use screencapturekit::{cv::CVPixelBufferLockFlags, prelude::*, screenshot_manager::SCScreenshotManager};
+use screencapturekit::{SCFrameStatus, cv::CVPixelBufferLockFlags, prelude::*, screenshot_manager::SCScreenshotManager};
 
 use objc2::AllocAnyThread;
 use objc2_app_kit::{NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSRunningApplication};
@@ -32,6 +33,8 @@ pub struct Captured {
     pub capture: Capture,
     pub frames: Receiver<Arc<VideoFrame>>,
     pub audio: Receiver<Vec<f32>>,
+    // The shared window or app can't be seen (minimized, on another Space): Discord pauses the stream.
+    pub covered: Arc<AtomicBool>,
 }
 
 pub fn start(source: ShareSource, fps: u32, max_width: u32, max_height: u32, with_audio: bool) -> Result<Captured, String> {
@@ -53,16 +56,18 @@ pub fn start(source: ShareSource, fps: u32, max_width: u32, max_height: u32, wit
         .with_excludes_current_process_audio(true);
 
     let (tx, rx) = sync_channel(1);
+    let covered = Arc::new(AtomicBool::new(false));
     let mut stream = SCStream::new(&filter, &config).map_err(|e| e.to_string())?;
+    let seen = covered.clone();
     stream
-        .add_output_handler(move |sample: CMSampleBuffer, kind: SCStreamOutputType| forward(&sample, kind, &tx), SCStreamOutputType::Screen)
+        .add_output_handler(move |sample: CMSampleBuffer, kind: SCStreamOutputType| forward(&sample, kind, &tx, &seen), SCStreamOutputType::Screen)
         .map_err(|e| e.to_string())?;
     let (audio_tx, audio) = channel();
     stream
         .add_output_handler(move |sample: CMSampleBuffer, kind: SCStreamOutputType| forward_audio(&sample, kind, &audio_tx), SCStreamOutputType::Audio)
         .map_err(|e| e.to_string())?;
     stream.start_capture().map_err(|e| e.to_string())?;
-    Ok(Captured { capture: Capture { stream }, frames: rx, audio })
+    Ok(Captured { capture: Capture { stream }, frames: rx, audio, covered })
 }
 
 fn shareable_content() -> Result<SCShareableContent, String> {
@@ -177,11 +182,16 @@ fn floats(bytes: &[u8]) -> Vec<f32> {
     bytes.as_chunks::<4>().0.iter().map(|b| f32::from_ne_bytes(*b)).collect()
 }
 
-fn forward(sample: &CMSampleBuffer, kind: SCStreamOutputType, tx: &SyncSender<Arc<VideoFrame>>) {
+// Not verified on every macOS: a minimized or off-Space window comes as blank or suspended frames.
+fn forward(sample: &CMSampleBuffer, kind: SCStreamOutputType, tx: &SyncSender<Arc<VideoFrame>>, covered: &AtomicBool) {
     if kind != SCStreamOutputType::Screen {
         return;
     }
+    if matches!(sample.frame_status(), Some(SCFrameStatus::Blank | SCFrameStatus::Suspended)) {
+        return covered.store(true, Ordering::Relaxed);
+    }
     let Some(frame) = sample.pixel_buffer().and_then(|buffer| copy_bgra(&buffer)) else { return };
+    covered.store(false, Ordering::Relaxed);
     let _ = tx.try_send(Arc::new(frame));
 }
 
