@@ -71,6 +71,8 @@ const KEEPALIVE: Duration = Duration::from_secs(5);
 const LEVEL_EVERY: u32 = 2;
 pub const CAMERA_SIZE: (u32, u32) = (1280, 720);
 pub const CAMERA_FPS: u32 = 30;
+const QUIET_FPS: u32 = 20;
+const CAMERA_QUIET_AFTER: Duration = Duration::from_secs(15);
 // `GoLiveOptions::resolution == 0` (source size) is still capped here.
 const SOURCE_SIZE_CAP: (u32, u32) = (3840, 2160);
 const VIDEO_MTU: usize = 1200;
@@ -754,7 +756,8 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, feed: Feed, fps: u32, 
     // Discord's viewers flag a stream under half its frame rate (error 2002, "stream-view-low-fps"),
     // so a still screen repeats its last frame at the full rate, as Discord's own capturer does; an
     // unchanged frame encodes to a few bytes.
-    let interval = Duration::from_secs_f64(1.0 / f64::from(fps.max(1)));
+    let mut interval = Duration::from_secs_f64(1.0 / f64::from(fps.max(1)));
+    let mut spoke = Instant::now();
     let mut last: Option<Arc<VideoFrame>> = None;
     let mut due = Instant::now() + interval;
     // Discord's checks on what we send: frames encoded per second against its line (2005 for a stream,
@@ -827,6 +830,14 @@ fn video_send_loop(link: &Arc<Link>, feedback: &Feedback, feed: Feed, fps: u32, 
             link.keyframe.store(false, Ordering::Relaxed);
             last_keyframe = Some(Instant::now());
             encoder.force_keyframe();
+        }
+        // Discord sends a camera at 20 fps after 15 s without speaking, and at once when muted.
+        if !streaming {
+            if link.shared.self_speaking.load(Ordering::Relaxed) {
+                spoke = Instant::now();
+            }
+            let quiet = link.shared.muted.load(Ordering::Relaxed) || spoke.elapsed() >= CAMERA_QUIET_AFTER;
+            interval = Duration::from_secs_f64(1.0 / f64::from(if quiet { QUIET_FPS.min(fps) } else { fps }.max(1)));
         }
         // Behind (a slow encode): the next frame is due now rather than in a burst catching up.
         due = (due + interval).max(Instant::now());

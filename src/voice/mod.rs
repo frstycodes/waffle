@@ -64,6 +64,9 @@ pub use video::VideoFrame;
 
 const SERVER_TIMEOUT: Duration = Duration::from_secs(10);
 const HELLO_TIMEOUT: Duration = Duration::from_secs(20);
+// While a priority speaker talks, Discord plays everyone else at this share of their volume.
+const PRIORITY_DUCK: f32 = 0.1;
+const PRIORITY_SPEAKING: u64 = 4;
 // Every voice state in every guild passes through: a receiver more than this far behind misses
 // dispatches, and a missed STREAM_DELETE leaves a stream we watch frozen on its last frame.
 const DISPATCH_BACKLOG: usize = 1024;
@@ -407,6 +410,8 @@ struct Shared {
     deafened: AtomicBool,
     // Server-muted, or a stage listener (suppressed): Discord's engine stops sending as for a self-mute.
     server_muted: AtomicBool,
+    // Who is talking as a priority speaker (op 5's speaking flag 4): everyone else plays at a tenth meanwhile.
+    priority: Mutex<std::collections::HashSet<String>>,
     // What video we ask the SFU for (op 15), and a wake-up for the connection to send it again.
     video_wants: Mutex<VideoWants>,
     wants_changed: tokio::sync::Notify,
@@ -505,7 +510,8 @@ impl Shared {
         if self.deafened.load(Ordering::Relaxed) {
             return 0.0;
         }
-        self.local_gain(user_id)
+        let ducked = self.priority.lock().is_ok_and(|p| !p.is_empty() && !p.contains(user_id));
+        self.local_gain(user_id) * if ducked { PRIORITY_DUCK } else { 1.0 }
     }
 
     // `user_id`'s local volume, 0 when locally muted; deafen isn't applied here.
@@ -583,6 +589,7 @@ pub fn join(
         muted: AtomicBool::new(false),
         deafened: AtomicBool::new(false),
         server_muted: AtomicBool::new(false),
+        priority: Mutex::default(),
         video_wants: Mutex::default(),
         wants_changed: tokio::sync::Notify::new(),
         flags_pending: AtomicBool::new(false),
@@ -918,7 +925,8 @@ mod tests {
             muted: AtomicBool::new(false),
             deafened: AtomicBool::new(false),
             server_muted: AtomicBool::new(false),
-            video_wants: Mutex::default(),
+            priority: Mutex::default(),
+        video_wants: Mutex::default(),
             wants_changed: tokio::sync::Notify::new(),
             flags_pending: AtomicBool::new(false),
             flags_sent: Mutex::new(None),
@@ -1036,6 +1044,10 @@ mod tests {
         assert_eq!(shared.listening_gain("u"), 0.0, "locally muted");
         shared.deafened.store(true, Ordering::Relaxed);
         assert_eq!(shared.listening_gain("v"), 0.0, "deafened hears no one");
+        shared.deafened.store(false, Ordering::Relaxed);
+        shared.priority.lock().unwrap().insert("p".into());
+        assert_eq!(shared.listening_gain("p"), 1.0, "the priority speaker plays as set");
+        assert!((shared.listening_gain("v") - 0.1).abs() < 1e-6, "everyone else is ducked to a tenth");
         assert_eq!(shared.stream_gain("v"), 1.0, "a watched stream keeps playing while deafened");
         assert_eq!(shared.stream_gain("u"), 0.0, "a locally muted streamer's stream stays muted");
     }

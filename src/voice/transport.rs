@@ -732,6 +732,12 @@ async fn connection(
                 if let (Some(user), Some(ssrc)) = (d["user_id"].as_str(), d["ssrc"].as_u64()) {
                     media::map_ssrc(&users, ssrc as u32, user);
                 }
+                if let (Some(user), Some(flags), Ok(mut priority)) = (d["user_id"].as_str(), d["speaking"].as_u64(), shared.priority.lock()) {
+                    match flags & PRIORITY_SPEAKING != 0 {
+                        true => priority.insert(user.to_owned()),
+                        false => priority.remove(user),
+                    };
+                }
             }
             Some(12) => {
                 if let Some(user) = d["user_id"].as_str() {
@@ -747,6 +753,9 @@ async fn connection(
             Some(13) => {
                 if let Some(user) = d["user_id"].as_str() {
                     senders.remove(user);
+                    if let Ok(mut priority) = shared.priority.lock() {
+                        priority.remove(user);
+                    }
                     dave.user_left(user);
                     if let Some(media) = &media {
                         media.user_left(user);
