@@ -82,8 +82,10 @@ const CHAT_STAGE_ROOM: f32 = 550.;
 // The connection popover's colour bands (its legend): under 80 ms, 80 to 120, over 120.
 const PING_FAIR: u32 = 80;
 const PING_BAD: u32 = 120;
-// When the panel says "Poor connection": a bad average ping, or this much packet loss.
-const LOSS_POOR_PCT: f32 = 5.;
+// When the panel says "Poor connection", as Discord rates a call bad: the last ping over this, or this much
+// of what we send lost.
+const PING_POOR: u32 = 500;
+const LOSS_POOR_PCT: f32 = 10.;
 const METER_BARS: usize = 28;
 
 // The chat's width for a window this wide: what was asked for, within Discord's bounds and no wider than
@@ -175,7 +177,7 @@ enum Link {
 impl Link {
     fn of(stage: Stage, stats: Option<&voice::Stats>) -> Self {
         match stage {
-            Stage::Connected if stats.is_some_and(|s| s.median_ping_ms > PING_BAD || loss(s) >= LOSS_POOR_PCT) => Link::Poor,
+            Stage::Connected if stats.is_some_and(|s| s.ping_ms > PING_POOR || loss(s) > LOSS_POOR_PCT) => Link::Poor,
             Stage::Connected => Link::Connected,
             Stage::NoRoute | Stage::Disconnected => Link::Lost,
             _ => Link::Connecting,

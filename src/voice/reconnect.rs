@@ -55,6 +55,11 @@ impl Backoff {
         self.current
     }
 
+    // Nothing has failed since the last success.
+    pub(super) fn is_fresh(&self) -> bool {
+        self.current == self.min
+    }
+
     pub(super) fn succeed(&mut self) {
         self.current = self.min;
     }

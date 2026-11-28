@@ -419,7 +419,9 @@ impl Waffle {
                 let is_here = ours.is_some() && state.channel_id == ours;
                 let was_live = states.iter().any(|v| v.user_id == state.user_id && v.channel_id == ours && v.streaming);
                 let is_live = is_here && state.streaming;
-                let silent = self.call.as_ref().is_some_and(|c| c.channel.raw_type == 13);
+                // Stages make no join or leave sounds, and Discord's stop past 25 people in the channel.
+                let crowded = states.iter().filter(|v| v.channel_id == ours).count() > sounds::CUES_UP_TO;
+                let silent = crowded || self.call.as_ref().is_some_and(|c| c.channel.raw_type == 13);
                 if let Some(cue) = sounds::member_cue(mine, was_here, is_here).filter(|_| !silent) {
                     sounds::play(cue);
                 } else if !mine && !was_live && is_live {

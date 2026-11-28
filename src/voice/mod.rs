@@ -61,6 +61,7 @@ pub use dsp::NoiseSuppression;
 pub use video::VideoFrame;
 
 const SERVER_TIMEOUT: Duration = Duration::from_secs(10);
+const HELLO_TIMEOUT: Duration = Duration::from_secs(20);
 // Every voice state in every guild passes through: a receiver more than this far behind misses
 // dispatches, and a missed STREAM_DELETE leaves a stream we watch frozen on its last frame.
 const DISPATCH_BACKLOG: usize = 1024;
@@ -400,6 +401,8 @@ struct Shared {
     moved_server: Mutex<Option<Server>>,
     muted: AtomicBool,
     deafened: AtomicBool,
+    // Server-muted, or a stage listener (suppressed): Discord's engine stops sending as for a self-mute.
+    server_muted: AtomicBool,
     // A voice-state update is waiting to go out, and when the last one did (see `send_flags_soon`).
     flags_pending: AtomicBool,
     flags_sent: Mutex<Option<Instant>>,
@@ -477,7 +480,7 @@ impl Shared {
     }
 
     fn may_transmit(&self) -> bool {
-        !self.muted.load(Ordering::Relaxed) && !self.deafened.load(Ordering::Relaxed)
+        ![&self.muted, &self.deafened, &self.server_muted].iter().any(|flag| flag.load(Ordering::Relaxed))
     }
 
     fn input_mode(&self) -> InputMode {
@@ -572,6 +575,7 @@ pub fn join(
         moved_server: Mutex::new(None),
         muted: AtomicBool::new(false),
         deafened: AtomicBool::new(false),
+        server_muted: AtomicBool::new(false),
         flags_pending: AtomicBool::new(false),
         flags_sent: Mutex::new(None),
         talk_key_held: AtomicBool::new(false),
@@ -895,6 +899,7 @@ mod tests {
             moved_server: Mutex::new(None),
             muted: AtomicBool::new(false),
             deafened: AtomicBool::new(false),
+            server_muted: AtomicBool::new(false),
             flags_pending: AtomicBool::new(false),
             flags_sent: Mutex::new(None),
             talk_key_held: AtomicBool::new(false),

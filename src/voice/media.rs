@@ -313,7 +313,9 @@ fn send_loop(link: &Link, pcm: Receiver<Vec<f32>>, stop: &AtomicBool) {
                 speaking = wants;
                 link.shared.self_speaking.store(speaking, Ordering::Relaxed);
                 silence_left = if speaking { 0 } else { SILENCE_FRAMES };
-                let op = json!({ "op": 5, "d": { "speaking": u8::from(speaking), "delay": 0, "ssrc": link.ssrc } });
+                // Discord's voice activity says its lead-in (5 frames); push to talk has none.
+                let delay = if matches!(link.shared.input_mode(), InputMode::VoiceActivity { .. }) { 5 } else { 0 };
+                let op = json!({ "op": 5, "d": { "speaking": u8::from(speaking), "delay": delay, "ssrc": link.ssrc } });
                 let _ = link.ws.unbounded_send(WsMessage::Text(op.to_string()));
                 let _ = link.events.unbounded_send(VoiceEvent::Speaking { user_id: link.my_id.clone(), speaking });
                 if speaking {

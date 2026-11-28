@@ -279,10 +279,13 @@ pub(crate) fn connected_cue(switched: bool) -> Cue {
     if switched { Cue::UserMoved } else { Cue::UserJoin }
 }
 
-// Discord's cue when the viewer count of the stream we're in changes (it stays quiet past 25).
+// Discord's join, leave and viewer cues stay quiet once this many were already there.
+pub(crate) const CUES_UP_TO: usize = 25;
+
+// Discord's cue when the viewer count of the stream we're in changes.
 pub(crate) fn viewer_cue(before: usize, after: usize) -> Option<Cue> {
     match () {
-        _ if before > 25 => None,
+        _ if before > CUES_UP_TO => None,
         _ if after > before => Some(Cue::StreamUserJoined),
         _ if after < before => Some(Cue::StreamUserLeft),
         _ => None,

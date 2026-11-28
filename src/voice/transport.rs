@@ -35,7 +35,9 @@ pub(super) async fn join_voice(shared: &Arc<Shared>, dispatches: &mut broadcast:
                 debug_lost(&target, &lost);
                 // Discord asks the main gateway to check its voice server whenever the connection drops.
                 shared.gateway.send(5, Value::Null);
-                shared.emit(VoiceEvent::Stage(Stage::Disconnected));
+                if !lost.starts_with(NO_ROUTE) {
+                    shared.emit(VoiceEvent::Stage(Stage::Disconnected));
+                }
                 match wait_out(backoff.fail(), dispatches, on_dispatch).await {
                     None => continue,
                     Some(reason) => reason,
@@ -135,6 +137,9 @@ pub(super) fn voice_dispatch(shared: &Shared, kind: &str, d: &Value) -> Option<S
             }
         }
     }
+    if user_id == shared.user_id && in_channel {
+        note_server_mute(shared, d);
+    }
     let streaming = in_channel && d["self_stream"].as_bool().unwrap_or(false);
     let camera = in_channel && d["self_video"].as_bool().unwrap_or(false);
     shared.emit(VoiceEvent::VideoState { user_id: user_id.to_owned(), streaming, camera });
@@ -143,6 +148,8 @@ pub(super) fn voice_dispatch(shared: &Shared, kind: &str, d: &Value) -> Option<S
 
 // A fresh main-gateway session (READY): voice rejoins under it, and Go Live streams end, as Discord's do.
 pub const NEW_SESSION: &str = "New gateway session";
+// A lost connection whose UDP discovery got no answer: the call keeps showing No Route meanwhile.
+const NO_ROUTE: &str = "No route";
 
 // Why a call ended when another client of ours joined voice in the same server and took it from this one.
 pub const ANOTHER_LOCATION: &str = "Connected at another location";
@@ -218,6 +225,7 @@ pub(super) async fn await_voice_server(shared: &Shared, dispatches: &mut broadca
                 return Err("Removed from the voice channel".into());
             }
             "VOICE_STATE_UPDATE" if ours && for_us && !other_channel => {
+                note_server_mute(shared, &d);
                 session_id = d["session_id"].as_str().map(str::to_owned);
             }
             "VOICE_SERVER_UPDATE" if for_us && !other_channel => server = parse_server(&d).or(server),
@@ -227,6 +235,11 @@ pub(super) async fn await_voice_server(shared: &Shared, dispatches: &mut broadca
             return Ok((id.clone(), server.clone()));
         }
     }
+}
+
+fn note_server_mute(shared: &Shared, d: &Value) {
+    let silenced = d["mute"].as_bool().unwrap_or(false) || d["suppress"].as_bool().unwrap_or(false);
+    shared.server_muted.store(silenced, Ordering::Relaxed);
 }
 
 // A null endpoint means the server is being reallocated; another update follows.
@@ -495,7 +508,8 @@ async fn connection(
     let counters = Arc::new(media::Counters::default());
     let mut ready: Option<(Ssrcs, std::net::UdpSocket)> = None;
     let mut seq_ack: i64 = -1;
-    let mut heartbeat = tokio::time::interval(Duration::from_secs(3600));
+    // Until HELLO (op 8) sets the real beat, this is how long the server gets to send it (Discord's 20 s).
+    let mut heartbeat = tokio::time::interval(HELLO_TIMEOUT);
     heartbeat.tick().await;
     let mut stats_tick = tokio::time::interval(STATS_EVERY);
     let mut pings = Pings::default();
@@ -503,16 +517,18 @@ async fn connection(
     let mut stats = Stats { endpoint: host.clone(), ..Stats::default() };
     let mut resumes = 0;
     let mut socket_backoff = Backoff::socket();
-    let mut acked = true;
+    let mut acked = false;
     let mut last_ack = Instant::now();
 
     let identify = json!({ "op": 0, "d": {
         "server_id": target.server_id,
+        "channel_id": target.dave_channel,
         "user_id": shared.user_id,
         "session_id": target.session_id,
         "token": target.server.token,
         "video": true,
-        "streams": [{ "type": if target.role.broadcasts() { "screen" } else { "video" }, "rid": "100", "quality": 100 }],
+        // Every Go Live connection, a viewer's too, describes a screen stream.
+        "streams": [{ "type": if is_voice { "video" } else { "screen" }, "rid": "100", "quality": 100 }],
         "max_dave_protocol_version": davey::DAVE_PROTOCOL_VERSION,
     }});
     sink.send(WsMessage::Text(identify.to_string())).await.map_err(|e| e.to_string())?;
@@ -526,9 +542,7 @@ async fn connection(
                 false => Err(("Heartbeat timeout".to_owned(), None)),
                 true => {
                     acked = false;
-                    let nonce = chrono::Utc::now().timestamp_millis();
-                    let beat = json!({ "op": 3, "d": { "t": nonce, "seq_ack": seq_ack } });
-                    sink.send(WsMessage::Text(beat.to_string())).await.map(|()| None).map_err(|e| (e.to_string(), None))
+                    sink.send(beat(seq_ack)).await.map(|()| None).map_err(|e| (e.to_string(), None))
                 }
             },
             _ = stats_tick.tick(), if is_voice && media.is_some() => {
@@ -607,6 +621,12 @@ async fn connection(
                 let ms = d["heartbeat_interval"].as_f64().unwrap_or(13_750.0) as u64;
                 heartbeat = tokio::time::interval(Duration::from_millis(ms));
                 heartbeat.tick().await;
+                acked = true;
+            }
+            // The server asking for a beat now.
+            Some(3) => {
+                acked = false;
+                sink.send(beat(seq_ack)).await.map_err(|e| e.to_string())?;
             }
             Some(9) => {
                 resumes = 0;
@@ -642,7 +662,17 @@ async fn connection(
                 let mode = rtp::MODES.into_iter().find(|m| modes.contains(m)).ok_or("No supported encryption mode")?;
                 stage(Stage::IceChecking);
                 let discovered = tokio::task::spawn_blocking(move || media::discover(&ip, port, ssrc)).await.map_err(|e| e.to_string())?;
-                let (socket, (my_ip, my_port)) = discovered.inspect_err(|_| stage(Stage::NoRoute))?;
+                let (socket, (my_ip, my_port)) = match discovered {
+                    Ok(found) => found,
+                    // Discord tells the server once (op 32) and keeps showing No Route while it retries.
+                    Err(lost) => {
+                        stage(Stage::NoRoute);
+                        if backoff.is_fresh() {
+                            let _ = sink.send(WsMessage::Text(json!({ "op": 32, "d": {} }).to_string())).await;
+                        }
+                        return Err(Ended::Lost(format!("{NO_ROUTE}: {lost}")));
+                    }
+                };
                 let video = &d["streams"][0];
                 let ssrcs = Ssrcs {
                     audio: ssrc,
@@ -719,9 +749,14 @@ async fn connection(
     }
 }
 
+fn beat(seq_ack: i64) -> WsMessage {
+    WsMessage::Text(json!({ "op": 3, "d": { "t": chrono::Utc::now().timestamp_millis(), "seq_ack": seq_ack } }).to_string())
+}
+
 pub(super) fn resume_payload(target: &Target, seq_ack: i64) -> Value {
     json!({ "op": 7, "d": {
         "server_id": target.server_id,
+        "channel_id": target.dave_channel,
         "session_id": target.session_id,
         "token": target.server.token,
         "seq_ack": seq_ack,

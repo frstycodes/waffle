@@ -10,7 +10,10 @@ impl Waffle {
         self.talk_key_down = down;
         if let Some(call) = &self.call {
             call.session.set_talk_key(down);
-            crate::sounds::play(if down { crate::sounds::Cue::PttStart } else { crate::sounds::Cue::PttStop });
+            // Discord's push-to-talk cues stay quiet while you're muted.
+            if !self.muted {
+                crate::sounds::play(if down { crate::sounds::Cue::PttStart } else { crate::sounds::Cue::PttStop });
+            }
         }
     }
     // The call Waffle's own restart left (restart.rs), offered back under the notice bar. Once only: a
@@ -203,7 +206,16 @@ impl Waffle {
                     self.toggle_camera(cx);
                 }
             }
-            voice::VoiceEvent::Stage(stage) => call.stage = stage,
+            voice::VoiceEvent::Stage(stage) => {
+                // A connected call dropping plays Discord's disconnect cue; reconnecting plays the join cue.
+                if call.connected && matches!(stage, voice::Stage::Disconnected | voice::Stage::NoRoute) {
+                    call.connected = false;
+                    if call.channel.raw_type != STAGE_CHANNEL {
+                        sounds::play(sounds::Cue::Disconnect);
+                    }
+                }
+                call.stage = stage;
+            }
             voice::VoiceEvent::Stats(stats) => call.stats = Some(stats),
             // ~25 a second: only the gate is drawn in the call, the level only on the settings meter.
             voice::VoiceEvent::InputLevel { db, gate_open } => {
