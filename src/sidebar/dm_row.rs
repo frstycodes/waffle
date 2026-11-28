@@ -43,8 +43,14 @@ impl Waffle {
         let selected = self.channel.as_ref().is_some_and(|c| c.id == channel.id);
         let unread = self.unread(&channel.id);
         let presence = channel.recipient.as_ref().and_then(|u| self.presence_of(&u.id));
-        let ring = crate::material::sidebar_fill(cx);
         let hovered = self.hovered_row.as_deref() == Some(channel.id.as_str());
+        // The presence ring is the row's own fill, solid even over the native sidebar, so the mark keeps its contrast.
+        let sidebar = palette::surface(palette::Level::Sidebar, cx);
+        let ring = match (selected, hovered) {
+            (true, _) => ui::over(sidebar, palette::selected(cx)),
+            (false, true) => ui::over(sidebar, palette::hover(cx)),
+            (false, false) => sidebar,
+        };
         // Discord plays the avatar, decoration and nameplate while the row is hovered or open.
         let animate = (selected || hovered) && crate::presence::may_animate();
         let typing = self.typing.get(&channel.id).is_some_and(|t| t.iter().any(|t| t.until > std::time::Instant::now()));

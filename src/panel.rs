@@ -374,13 +374,19 @@ impl Waffle {
         let status = self.member_status(member);
         let names = |key: String| ui::col().child(name_line(key)).children(status.clone().map(|s| s.line(cx)));
         // The row's fill in each state, laid solid over the panel, for the nameplate's mask to wash in.
-        let fill = |wash: gpui_kit::Hsla| ui::mix(surface, wash.opacity(1.), wash.a);
+        let fill = |wash: gpui_kit::Hsla| ui::over(surface, wash);
         let fills = match selected {
             true => (fill(palette::selected(cx)), None),
             false => (surface, Some(fill(hover))),
         };
         // Discord animates the avatar, decoration and nameplate while the row is hovered or its profile is open.
-        let animate = (selected || self.member_hover.as_deref() == Some(member.user.id.as_str())) && crate::presence::may_animate();
+        let hovered = self.member_hover.as_deref() == Some(member.user.id.as_str());
+        let animate = (selected || hovered) && crate::presence::may_animate();
+        let face_surface = match (selected, hovered) {
+            (true, _) => fills.0,
+            (false, true) => fills.1.unwrap_or(surface),
+            (false, false) => surface,
+        };
         let row = PlateRow { group: MEMBER_ROW_GROUP.into(), height: member_row_height(), width: spot.width, fills, selected, animate, dark };
         let plate = member.user.nameplate.as_ref().map(|plate| row_nameplate(plate, names(format!("member-name-mask-{}", member.user.id)), row));
         let plated = plate.is_some();
@@ -410,7 +416,7 @@ impl Waffle {
             .when(selected, |r| r.bg(palette::selected(cx)))
             .when(!selected, |r| r.hover(move |s| if offline { s.bg(hover).opacity(1.) } else { s.bg(hover) }))
             .children(plate)
-            .child(member_face(member, animate, surface))
+            .child(member_face(member, animate, face_surface))
             .child(names(format!("member-name-{}", member.user.id)).relative().flex_1())
             .on_click({
                 let user = member.user.clone();

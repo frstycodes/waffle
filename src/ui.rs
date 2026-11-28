@@ -687,6 +687,13 @@ pub fn mix(from: Hsla, to: Hsla, t: f32) -> Hsla {
     gpui_kit::Rgba { r: lerp(a.r, b.r), g: lerp(a.g, b.g), b: lerp(a.b, b.b), a: lerp(a.a, b.a) }.into()
 }
 
+// `wash` (a translucent hover, selected or card fill) laid solid over `surface`: the colour a row shows in that
+// state, which an avatar's presence ring takes to read cut out of the face.
+// Keywords: composite, blend, flatten, solid hover colour, cutout ring, status ring background
+pub fn over(surface: Hsla, wash: Hsla) -> Hsla {
+    mix(surface, wash.opacity(1.), wash.a)
+}
+
 // Scales an element by `x` and `y` about its transform origin: gpui's `scale` builder is uniform only.
 fn stretch<E: Styled>(mut el: E, x: f32, y: f32) -> E {
     el.style().scale = SizeRefinement { width: Some(x), height: Some(y) };

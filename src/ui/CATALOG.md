@@ -33,6 +33,7 @@ Everything here exists. Use it before writing UI by hand; extend it (in src/ui) 
 - `ui::left`
 - `ui::edge` — A strip (header, footer, scroll area) that runs edge to edge of a rounded container, rounded to match on the corners it touches, in the cont
 - `ui::mix` — CSS `color-mix` in sRGB: `t` of `to` over `from`, for fills that follow a transition.
+- `ui::over` — `wash` (a translucent hover, selected or card fill) laid solid over `surface`: the colour a row shows in that state, which an avatar's prese
 
 ## src/ui/alert.rs
 
