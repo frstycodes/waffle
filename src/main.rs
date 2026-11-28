@@ -912,20 +912,51 @@ fn adjust_reaction(message: &mut Message, emoji: &Emoji, added: bool, mine: bool
 }
 
 fn apply_list_op(list: &mut Vec<ListItem>, op: ListOp) {
-    match op {
+    let written = match op {
         ListOp::Sync { start, items } => {
             if list.len() < start {
                 list.resize(start, ListItem::Group { id: String::new(), count: 0 });
             }
             let end = (start + items.len()).min(list.len());
+            let count = items.len();
             list.splice(start..end, items);
+            start..start + count
         }
-        ListOp::Insert { index, item } if index <= list.len() => list.insert(index, item),
-        ListOp::Update { index, item } if index < list.len() => list[index] = item,
+        ListOp::Insert { index, item } if index <= list.len() => {
+            list.insert(index, item);
+            index..index + 1
+        }
+        ListOp::Update { index, item } if index < list.len() => {
+            list[index] = item;
+            index..index + 1
+        }
         ListOp::Delete { index } if index < list.len() => {
             list.remove(index);
+            return;
         }
-        _ => {}
+        _ => return,
+    };
+    evict_stale_copies(list, written);
+}
+
+// A user is listed once: the copy an op just wrote wins over any older one elsewhere (a presence change moves a user between groups, and a dropped INVALIDATE leaves the old range behind).
+fn evict_stale_copies(list: &mut Vec<ListItem>, written: std::ops::Range<usize>) {
+    let fresh: HashSet<String> = list[written.clone()].iter().filter_map(member_id).map(str::to_owned).collect();
+    if fresh.is_empty() {
+        return;
+    }
+    let mut at = 0;
+    list.retain(|item| {
+        let keep = written.contains(&at) || member_id(item).is_none_or(|id| !fresh.contains(id));
+        at += 1;
+        keep
+    });
+}
+
+fn member_id(item: &ListItem) -> Option<&str> {
+    match item {
+        ListItem::Member(m) => Some(&m.user.id),
+        ListItem::Group { .. } => None,
     }
 }
 
@@ -1083,6 +1114,18 @@ mod tests {
         assert_eq!(ids(&list), ["g:online", "c", "d"]);
         apply_list_op(&mut list, ListOp::Sync { start: 0, items: vec![member("x")] });
         assert_eq!(ids(&list), ["x", "c", "d"]);
+    }
+
+    #[test]
+    fn member_list_never_holds_a_user_twice() {
+        let mut list = Vec::new();
+        apply_list_op(&mut list, ListOp::Sync { start: 0, items: vec![ListItem::Group { id: "online".into(), count: 1 }, member("a"), ListItem::Group { id: "offline".into(), count: 1 }, member("b")] });
+        // Presence change: INSERT into the other group arrives before the DELETE of the old row.
+        apply_list_op(&mut list, ListOp::Insert { index: 4, item: member("a") });
+        assert_eq!(ids(&list), ["g:online", "g:offline", "b", "a"]);
+        // A re-sent range that overlaps rows held elsewhere.
+        apply_list_op(&mut list, ListOp::Sync { start: 4, items: vec![member("b")] });
+        assert_eq!(ids(&list).iter().filter(|i| *i == "b").count(), 1);
     }
 
     #[test]
