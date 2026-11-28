@@ -19,7 +19,7 @@ use crate::{
     icons::Glyph,
     menu::{self, emoji_face},
     palette,
-    ui::{self, Tone},
+    ui::{self},
 };
 
 // Discord's limits for a poll.
@@ -409,18 +409,18 @@ impl Waffle {
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Create a poll"))
                     .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(subtitle)),
             )
-            .child(ui::icon_button("poll-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_poll_creator(cx))));
+            .child(ui::Button::new("poll-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_poll_creator(cx))));
         let length = creator.question.read(cx).value().chars().count();
         let question_focus = creator.question.read(cx).focus_handle(cx);
-        let question = ui::field("Question", cx)
-            .child(ui::text_field("poll-question", Input::new(&creator.question).appearance(false), &question_focus).error(creator.problems.question.is_some()))
+        let question = ui::Field::new("Question", cx)
+            .child(ui::Input::new("poll-question", Input::new(&creator.question).appearance(false), &question_focus).error(creator.problems.question.is_some()))
             .child(under_field(creator.problems.question, Some(format!("{length} / {QUESTION_MAX}")), length > QUESTION_MAX, cx));
         let full = creator.answers.len() >= ANSWERS_MAX;
         let add = ui::row()
             .gap_2()
             .child(
-                ui::button("poll-add", Tone::Ghost, cx)
-                    .small()
+                ui::Button::new("poll-add").variant(ui::ButtonVariant::Ghost)
+                    .size(ui::ButtonSize::Sm)
                     .disabled(full)
                     .child(Icon::new(Glyph::Plus).size(ui::ICON_MD))
                     .child("Add answer")
@@ -431,9 +431,9 @@ impl Waffle {
             )
             .child(div().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(answer_count(creator.answers.len())));
         let rows: Vec<AnyElement> = creator.answers.iter().enumerate().map(|(i, row)| answer_row(i, row, creator.answers.len() > ANSWERS_MIN, cx).into_any_element()).collect();
-        let answers = ui::field("Answers", cx).children(rows).children(creator.problems.answers.map(|p| ui::field_error(p, cx))).child(add);
-        let duration = ui::field("Runs for", cx).child(
-            ui::select("poll-duration", Some(Glyph::Timer), DURATIONS[creator.duration].1, false, cx)
+        let answers = ui::Field::new("Answers", cx).children(rows).children(creator.problems.answers.map(|p| ui::FieldError::new(p, cx))).child(add);
+        let duration = ui::Field::new("Runs for", cx).child(
+            ui::Select::new("poll-duration", Some(Glyph::Timer), DURATIONS[creator.duration].1, false, cx)
                 .on_click(cx.listener(|this, _, window, cx| this.open_menu(window.mouse_position(), this.poll_duration_entries(), cx))),
         );
         let multiple = ui::toggle_row("poll-multiselect", "Allow multiple answers", None, creator.multiselect, window, cx).on_click(cx.listener(|this, _, _, cx| {
@@ -445,11 +445,11 @@ impl Waffle {
         let footer = ui::row().items_stretch()
             .justify_end()
             .gap_2()
-            .child(ui::button("poll-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_poll_creator(cx))))
-            .child(ui::button("poll-post", Tone::Primary, cx).child("Post poll").on_click(cx.listener(|this, _, _, cx| this.post_poll(cx))));
-        let body = ui::dialog_body().child(head).child(question).child(answers).child(duration).child(multiple).child(footer);
+            .child(ui::Button::new("poll-cancel").variant(ui::ButtonVariant::Secondary).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_poll_creator(cx))))
+            .child(ui::Button::new("poll-post").child("Post poll").on_click(cx.listener(|this, _, _, cx| this.post_poll(cx))));
+        let body = ui::DialogContent::new().child(head).child(question).child(answers).child(duration).child(multiple).child(footer);
         let backdrop = div().id("poll-creator-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_poll_creator(cx)));
-        Some(ui::modal(backdrop, ui::dialog("poll-creator", DIALOG_WIDTH, body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("poll-creator", DIALOG_WIDTH, body, window, cx), cx))
     }
 }
 
@@ -468,12 +468,12 @@ fn answer_row(i: usize, row: &AnswerRow, removable: bool, cx: &mut Context<Waffl
         })
         .on_click(cx.listener(move |this, _, window, cx| this.open_emoji_picker(EmojiTarget::PollAnswer(i), window, cx)));
     let focus = row.input.read(cx).focus_handle(cx);
-    let field = ui::text_field(SharedString::from(format!("poll-answer-{i}")), Input::new(&row.input).appearance(false), &focus).leading(emoji);
+    let field = ui::Input::new(SharedString::from(format!("poll-answer-{i}")), Input::new(&row.input).appearance(false), &focus).leading(emoji);
     let length = row.input.read(cx).value().chars().count();
     ui::row()
         .gap_1()
         .child(div().flex_1().min_w_0().child(field.error(length > ANSWER_MAX)))
-        .child(ui::icon_button(SharedString::from(format!("poll-remove-{i}")), Glyph::Trash, "Remove answer", cx).disabled(!removable).on_click(cx.listener(move |this, _, _, cx| this.remove_poll_answer(i, cx))))
+        .child(ui::Button::new(SharedString::from(format!("poll-remove-{i}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Trash).tooltip_text("Remove answer").disabled(!removable).on_click(cx.listener(move |this, _, _, cx| this.remove_poll_answer(i, cx))))
 }
 
 // The line under a field: what's wrong (if anything) at the start, the running count at the end.
@@ -481,7 +481,7 @@ fn under_field(problem: Option<&'static str>, count: Option<String>, over: bool,
     ui::row()
         .gap_2()
         .text_size(ui::TEXT_XS)
-        .child(div().flex_1().min_w_0().children(problem.map(|p| ui::field_error(p, cx))))
+        .child(div().flex_1().min_w_0().children(problem.map(|p| ui::FieldError::new(p, cx))))
         .children(count.map(|c| div().flex_none().text_color(if over { palette::danger_ink(cx) } else { palette::faint(cx) }).child(c)))
 }
 

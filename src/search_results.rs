@@ -122,8 +122,8 @@ impl Waffle {
             Some(Ok(page)) => format!("{} Results", page.total),
         };
         let filters_label = if results.filters == 0 { "Filters".to_owned() } else { format!("Filters ({})", results.filters) };
-        let filters = ui::button("search-filters", ui::Tone::Secondary, cx)
-            .small()
+        let filters = ui::Button::new("search-filters").variant(ui::ButtonVariant::Secondary)
+            .size(ui::ButtonSize::Sm)
             .when(results.filters_open, |b| b.bg(palette::selected(cx)))
             .child(Icon::new(Glyph::Filter).size(ui::ICON_SM))
             .child(filters_label)
@@ -133,7 +133,7 @@ impl Waffle {
                 }
                 this.redraw(Column::Panel, cx);
             }));
-        let sort = ui::button("search-sort", ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::ArrowDown).size(ui::ICON_SM)).child(results.sort.label()).on_click(cx.listener(|this, event: &gpui_kit::ClickEvent, _, cx| {
+        let sort = ui::Button::new("search-sort").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child(Icon::new(Glyph::ArrowDown).size(ui::ICON_SM)).child(results.sort.label()).on_click(cx.listener(|this, event: &gpui_kit::ClickEvent, _, cx| {
             let current = this.results().map(|r| r.sort).unwrap_or_default();
             let entries = Sort::ALL.into_iter().map(|sort| menu::Entry::Item(menu::item(sort.label(), move |this, _, cx| this.set_search_sort(sort, cx)).radio(sort == current))).collect();
             this.open_menu(event.position(), entries, cx);
@@ -158,9 +158,9 @@ impl Waffle {
     pub(crate) fn search_body(&self, results: &Results, cx: &mut Context<Self>) -> AnyElement {
         let muted = palette::muted(cx);
         let page = match &results.hits {
-            None => return ui::row().min_h_8().px_2().gap_2().text_color(muted).child(ui::bars("search-wait", muted, 12.)).child("Searching…").into_any_element(),
+            None => return ui::row().min_h_8().px_2().gap_2().text_color(muted).child(ui::Spinner::new("search-wait", muted, 12.)).child("Searching…").into_any_element(),
             Some(Err(error)) => return div().px_2().text_color(palette::danger_ink(cx)).child(error.clone()).into_any_element(),
-            Some(Ok(page)) if page.messages.is_empty() => return ui::empty_state("search-empty", crate::illustration::Illustration::SearchEmpty, "We searched far and wide.", "Unfortunately, no results were found.", cx).into_any_element(),
+            Some(Ok(page)) if page.messages.is_empty() => return ui::Empty::new("search-empty", crate::illustration::Illustration::SearchEmpty, "We searched far and wide.", "Unfortunately, no results were found.", cx).into_any_element(),
             Some(Ok(page)) => page,
         };
         let ctx = self.row_context(&page.messages, None, false, HIT_COLUMN, cx);
@@ -200,7 +200,7 @@ impl Waffle {
             None => self.channel.clone().filter(|c| c.id == hit.channel_id),
         };
         let message_id = hit.id.clone();
-        ui::card(SharedString::from(format!("hit-{}", hit.id)), cx)
+        ui::Card::interactive(SharedString::from(format!("hit-{}", hit.id)), cx)
             .bordered(cx)
             .flex_col()
             .items_stretch()
@@ -226,7 +226,7 @@ impl Waffle {
         let current = results.page;
         let step = |id: &'static str, label: &'static str, back: bool, to: usize, enabled: bool, cx: &mut Context<Self>| {
             let chevron = Icon::new(if back { Glyph::ChevronLeft } else { Glyph::ChevronRight }).size(ui::ICON_SM);
-            let button = ui::button(id, ui::Tone::Ghost, cx).small().disabled(!enabled);
+            let button = ui::Button::new(id).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Sm).disabled(!enabled);
             let button = if back { button.child(chevron).child(label) } else { button.child(label).child(chevron) };
             button.on_click(cx.listener(move |this, _, _, cx| {
                 if enabled {
@@ -277,7 +277,7 @@ impl Waffle {
                     .map(|value| {
                         let picked = on.iter().any(|(v, _)| v == value);
                         let token = format!("{word}:{value}");
-                        ui::chip(SharedString::from(format!("filter-{token}")), None, *value, picked, cx).small().on_click(cx.listener(move |this, _, window, cx| this.toggle_search_filter(&token, picked, window, cx))).into_any_element()
+                        ui::Toggle::new(SharedString::from(format!("filter-{token}"))).pressed(picked).child(*value).on_click(cx.listener(move |this, _, window, cx| this.toggle_search_filter(&token, picked, window, cx))).into_any_element()
                     })
                     .collect(),
                 None => on
@@ -285,10 +285,10 @@ impl Waffle {
                     .map(|(value, label)| {
                         let avatar = matches!(key, Key::From | Key::Mentions).then(|| avatars.get(value).cloned()).flatten();
                         let token = format!("{word}:{value}");
-                        let remove = ui::icon_button(SharedString::from(format!("filter-x-{token}")), Glyph::X, "Remove", cx).small().on_click(cx.listener(move |this, _, window, cx| this.toggle_search_filter(&token, true, window, cx)));
+                        let remove = ui::Button::new(SharedString::from(format!("filter-x-{token}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::X).tooltip_text("Remove").on_click(cx.listener(move |this, _, window, cx| this.toggle_search_filter(&token, true, window, cx)));
                         token_chip(word, label, avatar, true, cx).pr_0p5().child(remove).into_any_element()
                     })
-                    .chain(std::iter::once(ui::chip(SharedString::from(format!("filter-add-{word}")), Some(Glyph::Plus), "Add", false, cx).small().on_click(cx.listener(move |this, _, window, cx| this.type_search_filter(key, window, cx))).into_any_element()))
+                    .chain(std::iter::once(ui::Toggle::new(SharedString::from(format!("filter-add-{word}"))).pressed(false).icon(Glyph::Plus).child("Add").on_click(cx.listener(move |this, _, window, cx| this.type_search_filter(key, window, cx))).into_any_element()))
                     .collect(),
             };
             ui::col()
@@ -298,7 +298,7 @@ impl Waffle {
                 .child(ui::row().gap_2().text_color(strong).child(div().text_color(muted).child(Icon::new(crate::search_menu::key_glyph(key)).size(ui::ICON_MD))).child(key.title()))
                 .child(ui::row().items_stretch().flex_wrap().gap_1p5().children(values))
         });
-        ui::surface(cx)
+        ui::PopoverContent::new(cx)
             .id("search-filters-card")
             .w(px(FILTER_WIDTH))
             .max_h(px(FILTER_MAX))

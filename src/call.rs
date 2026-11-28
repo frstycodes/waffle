@@ -497,19 +497,19 @@ impl Inks {
 }
 
 // .iconbtn on the stage: muted until hovered; `pressed` holds the selected fill.
-pub(crate) fn stage_icon_button(id: impl Into<ElementId>, glyph: Glyph, tip: &'static str, pressed: bool, cx: &App) -> ui::Control {
+pub(crate) fn stage_icon_button(id: impl Into<ElementId>, glyph: Glyph, tip: &'static str, pressed: bool, _cx: &App) -> ui::Button {
     let clear = gpui_kit::transparent_black();
     let (rest, hover, ink) = if pressed { (stage::wash(0.08), stage::wash(0.09), stage::strong()) } else { (clear, stage::wash(0.05), stage::muted()) };
-    ui::icon_button(id, glyph, tip, cx).scoped(rest, hover, ink, stage::strong())
+    ui::Button::new(id).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).scope(ui::ButtonScope::Themed { rest, hover, ink, ink_hover: stage::strong() }).icon(glyph).tooltip_text(tip)
 }
 
 // .btn.btn--sm on the stage: the quiet fill.
-pub(crate) fn stage_button(id: impl Into<ElementId>, label: &'static str, cx: &App) -> ui::Control {
-    ui::button(id, ui::Tone::Stage, cx).h(px(STAGE_BUTTON_HEIGHT)).child(label)
+pub(crate) fn stage_button(id: impl Into<ElementId>, label: &'static str, _cx: &App) -> ui::Button {
+    ui::Button::new(id).scope(ui::ButtonScope::Stage).h(px(STAGE_BUTTON_HEIGHT)).child(label)
 }
 
 // .preview .watch: the light button over a dimmed stream.
-// lint-allow(custom-component): ui::button with Tone::Overlay needs an id and a cx, and its callers in sidebar.rs and call/tiles.rs add their own
+// lint-allow(custom-component): ui::Button with ButtonScope::Art needs an id, and its callers in sidebar.rs and call/tiles.rs add their own
 pub(crate) fn watch_button(label: &'static str) -> Div {
     watch_button_look().px_2p5().gap_2().child(Icon::new(Glyph::Play).size(ui::ICON_MD)).child(label)
 }
@@ -561,7 +561,7 @@ pub(crate) fn control(id: &'static str, glyph: Glyph, tip: &'static str, state: 
         .child(Icon::new(glyph).size(px(if chevron { 12. } else { 20. })))
         .when(enabled, |b| b.cursor_pointer().hover(move |s| s.bg(hover).text_color(ink)))
         .when(!enabled, |b| b.opacity(0.4).cursor(gpui_kit::CursorStyle::OperationNotAllowed))
-        .tooltip(move |window, cx| ui::tip(tip, window, cx))
+        .tooltip(move |window, cx| ui::Tooltip::new(tip).build(window, cx))
 }
 
 fn mirrored<E: Styled>(mut el: E) -> E {
@@ -571,8 +571,8 @@ fn mirrored<E: Styled>(mut el: E) -> E {
 
 // .csplit: the main button with its caret a hairline beside it; in a narrow window the caret goes (right-click
 // still opens the menu).
-fn split_control(main: impl IntoElement, caret: Option<impl IntoElement>) -> Div {
-    ui::row().items_stretch().gap(ui::HAIRLINE).child(main).children(caret)
+fn split_control(main: impl IntoElement, caret: Option<impl IntoElement>) -> ui::ButtonGroup {
+    ui::ButtonGroup::new().seam(None).child(main).children(caret)
 }
 
 // .cgroup: related controls on one opaque plate with a hairline, so they read over any picture.
@@ -609,8 +609,8 @@ pub(crate) fn viewer_chip(viewers: Vec<Viewer>, streamer_id: &str) -> Stateful<D
         .bg(stage::dock())
         .text_color(stage::muted())
         .child(Icon::new(Glyph::EyeBold).size(ui::ICON_SM))
-        .child(ui::capped_stack(&people, VIEWER_FACES, ui::AVATAR_SM - 4., stage::dock(), stage::overlay(), stage::strong()));
-    ui::overflow_list(chip, "Watching", people)
+        .child(ui::AvatarGroup::capped(&people, VIEWER_FACES, ui::AVATAR_SM - 4., stage::dock(), stage::overlay(), stage::strong()));
+    ui::HoverCard::new(chip, "Watching", people)
 }
 
 // .tile.stream: a stream before its first preview arrives.

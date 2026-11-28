@@ -36,31 +36,31 @@ pub(super) fn quota(used: usize, cx: &App) -> Div {
 }
 
 pub(super) fn alert_dialog(title: &'static str, text: String, cx: &mut Context<Waffle>) -> Div {
-    ui::dialog_body()
+    ui::DialogContent::new()
         .child(dialog_title(title, cx))
         .child(div().text_color(palette::muted(cx)).child(text))
-        .child(footer().child(ui::button("publish-alert-okay", ui::Tone::Primary, cx).child("Okay").on_click(cx.listener(|this, _, _, cx| this.close_announcement_dialog(cx)))))
+        .child(footer().child(ui::Button::new("publish-alert-okay").child("Okay").on_click(cx.listener(|this, _, _, cx| this.close_announcement_dialog(cx)))))
 }
 
 pub(super) fn followed_dialog(adjective: &str, cx: &mut Context<Waffle>) -> Div {
-    ui::dialog_body()
+    ui::DialogContent::new()
         .items_center()
         .text_center()
         .child(crate::mascot::mascot_at("followed-mascot", crate::mascot::Mood::Happy, 0.8, cx))
         .child(dialog_title(format!("What a nice addition to your server. Lookin' real {adjective} in here."), cx))
         .child(div().text_color(palette::muted(cx)).child("The most important updates from this channel will now show up directly in your server. Enjoy!"))
-        .child(ui::button("followed-okay", ui::Tone::Primary, cx).child("Got it!").on_click(cx.listener(|this, _, _, cx| this.close_announcement_dialog(cx))))
+        .child(ui::Button::new("followed-okay").child("Got it!").on_click(cx.listener(|this, _, _, cx| this.close_announcement_dialog(cx))))
 }
 
 // The hover toolbar's Publish; once published it reads "Published" and is disabled.
-pub(crate) fn publish_button(message: &Message, mine: bool, newsroom: &Newsroom, this: WeakEntity<Waffle>, cx: &App) -> Option<AnyElement> {
+pub(crate) fn publish_button(message: &Message, mine: bool, newsroom: &Newsroom, this: WeakEntity<Waffle>, _cx: &App) -> Option<AnyElement> {
     if !newsroom.can_publish(message, mine) {
         return None;
     }
     let done = published(message);
     let msg = message.clone();
     Some(
-        ui::icon_button(SharedString::from(format!("publish-{}", message.id)), Glyph::Megaphone, if done { "Published" } else { "Publish" }, cx)
+        ui::Button::new(SharedString::from(format!("publish-{}", message.id))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Megaphone).tooltip_text(if done { "Published" } else { "Publish" })
             .disabled(done)
             .on_click(move |_, _, cx| {
                 cx.stop_propagation();
@@ -77,18 +77,18 @@ pub(crate) fn publish_bump(message: &Message, mine: bool, newsroom: &Newsroom, t
     }
     let (publish, dismiss, hide) = (this.clone(), this.clone(), this);
     let (msg, id, channel_id) = (message.clone(), message.id.clone(), message.channel_id.clone());
-    let strip = ui::strip(ui::StripFill::Selected, cx)
+    let strip = ui::Alert::strip(ui::StripFill::Selected, cx)
         .max_w(px(STRIP_WIDTH))
         .min_h_0()
         .py_2()
         .child(Icon::new(Glyph::Megaphone).size(ui::ICON_MD).text_color(palette::muted(cx)))
         .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Share with your followers!"))
-        .child(ui::button(SharedString::from(format!("bump-publish-{}", message.id)), ui::Tone::Link, cx).child("Publish").on_click(move |_, _, cx| {
+        .child(ui::Button::new(SharedString::from(format!("bump-publish-{}", message.id))).variant(ui::ButtonVariant::Link).child("Publish").on_click(move |_, _, cx| {
             cx.stop_propagation();
             publish.update(cx, |this, cx| this.open_publish(msg.clone(), cx)).ok();
         }))
         .child(div().flex_1())
-        .child(ui::icon_button(SharedString::from(format!("bump-dismiss-{}", message.id)), Glyph::X, "Dismiss", cx).small().on_click(move |_, _, cx| {
+        .child(ui::Button::new(SharedString::from(format!("bump-dismiss-{}", message.id))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::X).tooltip_text("Dismiss").on_click(move |_, _, cx| {
             cx.stop_propagation();
             dismiss.update(cx, |this, cx| this.dismiss_publish_bump(&id, cx)).ok();
         }));
@@ -110,8 +110,8 @@ pub(crate) fn publish_bump(message: &Message, mine: bool, newsroom: &Newsroom, t
 }
 
 // A crosspost's author tag, where a bot's reads APP; Discord's own community updates read OFFICIAL.
-pub(crate) fn server_tag(message: &Message, cx: &App) -> Div {
-    ui::tag(if is_official(message) { "Official" } else { "Server" }, cx)
+pub(crate) fn server_tag(message: &Message, _cx: &App) -> ui::Badge {
+    ui::Badge::new(if is_official(message) { "Official" } else { "Server" }).variant(ui::BadgeVariant::Accent)
 }
 
 // A crosspost's avatar and name open its source server's card, not the webhook's profile.

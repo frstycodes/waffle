@@ -37,7 +37,7 @@ pub(super) enum Other {
 // The field with its focus ring, which it holds while its dialog is open: the dialog focuses it on open.
 pub(super) fn field(cx: &App) -> Div {
     let ring = ui::shadow(palette::accent_soft(cx), 0., 0., 0., 3., false);
-    ui::field_frame(cx).border_color(palette::accent()).shadow(vec![ring])
+    ui::Input::frame(cx).border_color(palette::accent()).shadow(vec![ring])
 }
 
 impl Waffle {
@@ -165,8 +165,8 @@ impl Waffle {
         self.dialog.as_ref().and_then(|d| d.key)
     }
 
-    pub(super) fn dialog_other(&self, cx: &mut Context<Self>) -> Option<ui::Control> {
-        let button = |label: SharedString| ui::button("dialog-cancel", ui::Tone::Secondary, cx).child(label);
+    pub(super) fn dialog_other(&self, cx: &mut Context<Self>) -> Option<ui::Button> {
+        let button = |label: SharedString| ui::Button::new("dialog-cancel").variant(ui::ButtonVariant::Secondary).child(label);
         let dismiss = |label: SharedString| {
             button(label).on_click(cx.listener(|this, _, _, cx| {
                 this.dialog = None;
@@ -188,12 +188,12 @@ impl Waffle {
     pub(crate) fn render_dialog(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let dialog = self.dialog.as_ref()?;
         let submit = cx.listener(|this, _, window, cx| this.confirm_dialog(window, cx));
-        let tone = if dialog.danger { ui::Tone::Danger } else { ui::Tone::Primary };
+        let variant = if dialog.danger { ui::ButtonVariant::Destructive } else { ui::ButtonVariant::Default };
         let preview = dialog.preview.as_deref().map(|m| {
             let ctx = self.row_context(std::slice::from_ref(m), None, false, PREVIEW_COLUMN, cx);
             div().p_3().squircle(RADIUS_MD).bg(palette::surface(palette::Level::Page, cx)).child(crate::chat::search_hit(m, &ctx, cx))
         });
-        let body = ui::dialog_body()
+        let body = ui::DialogContent::new()
             .child(
                 ui::row()
                     .gap_2p5()
@@ -216,12 +216,12 @@ impl Waffle {
                     .justify_end()
                     .gap_2()
                     .children(self.dialog_other(cx))
-                    .child(ui::button("dialog-confirm", tone, cx).child(dialog.confirm.clone()).when_some(dialog.key, |b, key| b.children(key.split('+').map(|k| ui::kbd_translucent(crate::settings::key_name(k), gpui_kit::white())))).on_click(submit)),
+                    .child(ui::Button::new("dialog-confirm").variant(variant).child(dialog.confirm.clone()).when_some(dialog.key, |b, key| b.children(key.split('+').map(|k| ui::Kbd::new(crate::settings::key_name(k)).translucent(gpui_kit::white())))).on_click(submit)),
             );
         let backdrop = div().id("dialog-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
             this.dialog = None;
             cx.notify(); // lint-allow(global-notify): the menu and its dialogs are drawn by the root, over the columns
         }));
-        Some(ui::modal(backdrop, ui::dialog("dialog", 420., body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("dialog", 420., body, window, cx), cx))
     }
 }

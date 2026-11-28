@@ -23,7 +23,7 @@ pub(crate) fn banner(profile: &Profile, ink: Ink, radius: f32, playing: bool, he
             let picture = ui::media(url.clone(), ui::top(radius)).w_full().h(px(height)).object_fit(gpui_kit::ObjectFit::Cover);
             let picture = if playing { picture.id("profile-banner").into_any_element() } else { picture.into_any_element() };
             // A still animated banner says so, as Discord's GIF tag does.
-            let tag = (!playing && is_animated(url)).then(|| ui::badge(gpui_kit::black().opacity(0.6), gpui_kit::white()).absolute().top_2().left_2().child("GIF"));
+            let tag = (!playing && is_animated(url)).then(|| ui::Badge::empty().colors(gpui_kit::black().opacity(0.6), gpui_kit::white()).absolute().top_2().left_2().child("GIF"));
             div().relative().w_full().h(px(height)).child(picture).children(tag).into_any_element()
         }
         (None, Some((color, _)), _) => fill(color),

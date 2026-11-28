@@ -163,18 +163,18 @@ pub(crate) fn activity_glyph(kind: ActivityKind) -> Option<Icon> {
 }
 
 // A row still loading, names of varying length: a DM's avatar and name, or a channel's icon and name.
-fn list_skeleton(i: usize, channels: bool, cx: &App) -> AnyElement {
+fn list_skeleton(i: usize, channels: bool, _cx: &App) -> AnyElement {
     let width = [0.62, 0.45, 0.7, 0.52, 0.38, 0.58, 0.48, 0.66][i % 8];
     let mark = match channels {
-        true => ui::skeleton(SharedString::from(format!("list-skel-mark-{i}")), 4., cx).size(ui::ICON_LG).flex_none(),
-        false => ui::skeleton_circle(SharedString::from(format!("list-skel-mark-{i}")), 32., cx),
+        true => ui::Skeleton::new(SharedString::from(format!("list-skel-mark-{i}"))).radius(4.).size(ui::ICON_LG).flex_none(),
+        false => ui::Skeleton::circle(SharedString::from(format!("list-skel-mark-{i}")), 32.),
     };
     ui::row()
         .h(px(if channels { row_height() } else { 42. }))
         .px_2()
         .gap(px(if channels { 8. } else { 12. }))
         .child(mark)
-        .child(ui::skeleton(SharedString::from(format!("list-skel-name-{i}")), 4., cx).h_3().w(relative(width)))
+        .child(ui::Skeleton::new(SharedString::from(format!("list-skel-name-{i}"))).radius(4.).h_3().w(relative(width)))
         .into_any_element()
 }
 

@@ -11,9 +11,7 @@ impl Waffle {
     pub(super) fn activity_card(&self, card: &ProfileCard, at: usize, rich: &RichPresence, fit: Fit, ink: Ink, cx: &mut Context<Self>) -> Div {
         let (user, menu_rich) = (card.user.clone(), rich.clone());
         let more = (!card.user.bot && !self.activity_menu(&card.user, rich).is_empty()).then(|| {
-            ui::icon_button(("profile-activity-more", at), Glyph::More, "More", cx)
-                .scoped(gpui_kit::transparent_black(), ink.tile, ink.muted, ink.strong)
-                .small()
+            ui::Button::new(("profile-activity-more", at)).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).scope(ui::ButtonScope::Themed { rest: gpui_kit::transparent_black(), hover: ink.tile, ink: ink.muted, ink_hover: ink.strong }).icon(Glyph::More).tooltip_text("More")
                 .on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.open_activity_menu(user.clone(), menu_rich.clone(), event.position(), cx)))
         });
         let toolbar = self.interaction_toolbar(card, Source::Activity(rich.name.clone()), ACTIVITY_GROUP, ink, cx);
@@ -43,7 +41,7 @@ impl Waffle {
                 .justify_center()
                 .disabled(missing)
                 .child(ui::line(label))
-                .when(missing, |b| b.tooltip(|window, cx| ui::tip("Discord didn't share this link", window, cx)))
+                .when(missing, |b| b.tooltip(ui::Tooltip::text("Discord didn't share this link")))
                 .on_click(move |_, _, cx| {
                     if let Some(url) = &url {
                         cx.open_url(url);
@@ -54,7 +52,7 @@ impl Waffle {
         if text::is_spotify(rich) {
             buttons.extend(rich.sync_id.clone().map(|track| self.spotify_play(at, track, ink, cx)));
             // GAP: listening along needs Spotify's player connection, which Waffle doesn't make yet.
-            buttons.push(card_button(("profile-listen-along", at), ink, cx).disabled(true).child(Icon::new(Glyph::Headphones).size(ui::ICON_MD)).tooltip(|window, cx| ui::tip("Listen Along", window, cx)).into_any_element());
+            buttons.push(card_button(("profile-listen-along", at), ink, cx).disabled(true).child(Icon::new(Glyph::Headphones).size(ui::ICON_MD)).tooltip(ui::Tooltip::text("Listen Along")).into_any_element());
         } else if rich.kind == ActivityKind::Streaming && rich.url.is_some() {
             buttons.push(link(format!("profile-watch-{at}").into(), "Watch".into(), rich.url.clone(), cx));
         } else {
@@ -96,7 +94,7 @@ fn ask_to_join(at: usize, ink: Ink, cx: &App) -> AnyElement {
         .disabled(true)
         .child(Icon::new(Glyph::Game).size(ui::ICON_MD))
         .child("Ask to Join")
-        .tooltip(|window, cx| ui::tip("Joining from Waffle isn't supported yet", window, cx))
+        .tooltip(ui::Tooltip::text("Joining from Waffle isn't supported yet"))
         .into_any_element()
 }
 
@@ -142,6 +140,6 @@ fn progress(rich: &RichPresence, ink: Ink, cx: &App) -> Option<Div> {
     let done = if length == 0 { 0. } else { elapsed as f32 / length as f32 };
     let mono = cx.theme().mono_font_family.clone();
     let time = |secs: u64| div().flex_none().font_family(mono.clone()).text_size(ui::TEXT_XS).text_color(ink.text).child(text::track_time(secs));
-    let bar = div().flex_1().child(ui::progress_bar(done, cx).fill(ink.strong).track(ink.strong.opacity(0.16)).thin());
+    let bar = div().flex_1().child(ui::Progress::new(done).fill(ink.strong).track(ink.strong.opacity(0.16)).thin());
     Some(ui::row().gap_2().child(time(elapsed)).child(bar).child(time(length)))
 }

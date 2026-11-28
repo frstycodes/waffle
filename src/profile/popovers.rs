@@ -55,7 +55,7 @@ impl Waffle {
             CardPop::Note { at } => (self.note_popover(card, cx)?, *at, gpui_kit::Anchor::TopLeft),
             CardPop::Reply { source, input, at } => (reply_field(&card.user, source, input, cx), *at, gpui_kit::Anchor::TopLeft),
         };
-        Some(ui::floating_at("profile-pop", at, corner, ui::surface(cx).on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| cx.stop_propagation()).child(content)).into_any_element())
+        Some(ui::Popover::floating_at("profile-pop", at, corner, ui::PopoverContent::new(cx).on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| cx.stop_propagation()).child(content)).into_any_element())
     }
 
     pub(crate) fn close_card_pop(&mut self, cx: &mut Context<Self>) -> bool {
@@ -97,7 +97,7 @@ impl Waffle {
         let rows = roles.iter().map(|role| {
             let color = if role.color == 0 { palette::status_in(crate::discord::Status::Offline, cx) } else { palette::data_color(role.color) };
             let (gid, uid, rid) = (guild.id.clone(), card.user.id.clone(), role.id.clone());
-            ui::menu_row(SharedString::from(format!("role-pick-{}", role.id)), cx)
+            ui::DropdownMenuItem::new(SharedString::from(format!("role-pick-{}", role.id)), cx)
                 .gap_2()
                 .child(div().size_2p5().flex_none().rounded_full().bg(color))
                 .child(ui::line(role.name.clone()))
@@ -107,7 +107,7 @@ impl Waffle {
         // lint-allow(unvirtualized-list): a server's assignable roles, a few dozen at most (Discord caps a server at 250).
         let list = ui::col().id("role-pick-list").max_h(px(ROLE_LIST_MAX)).overflow_y_scroll().children(rows).children(empty);
         let _ = window;
-        Some(ui::col().w(px(ROLE_PICKER_WIDTH)).gap_1().child(ui::search_field("role-pick-search", search, cx)).child(list).into_any_element())
+        Some(ui::col().w(px(ROLE_PICKER_WIDTH)).gap_1().child(ui::InputGroup::search("role-pick-search", search, cx)).child(list).into_any_element())
     }
 
     fn add_profile_role(&mut self, guild_id: &str, user_id: &str, role_id: &str, cx: &mut Context<Self>) {
@@ -134,7 +134,7 @@ impl Waffle {
         let place = guild.map(|g| ui::row().gap_2().child(ui::server_tile(g.icon.as_deref(), &g.name, ui::AVATAR_SM, cx)).child(ui::line(g.name.clone()).text_color(palette::text(cx))));
         let go = guild.map(|g| {
             let id = g.id.clone();
-            ui::button("tag-card-go", ui::Tone::Primary, cx).w_full().justify_center().child("Go to Server").on_click(cx.listener(move |this, _, window, cx| {
+            ui::Button::new("tag-card-go").w_full().justify_center().child("Go to Server").on_click(cx.listener(move |this, _, window, cx| {
                 this.profile_card = None;
                 this.open_guild(Some(id.clone()), window, cx);
             }))
@@ -151,7 +151,7 @@ impl Waffle {
     fn note_popover(&self, card: &ProfileCard, cx: &mut Context<Self>) -> Option<AnyElement> {
         let input = card.note.as_ref()?;
         let focus = gpui_kit::Focusable::focus_handle(input.read(cx), cx);
-        let field = ui::text_area("note-pop-field", Textarea::new(input).appearance(false).px_0().text_size(ui::TEXT_SM), &focus);
+        let field = ui::Textarea::new("note-pop-field", Textarea::new(input).appearance(false).px_0().text_size(ui::TEXT_SM), &focus);
         let title = div().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::text(cx)).child("Note (only visible to you)");
         Some(ui::col().w(px(NOTE_WIDTH)).p_1().gap_1p5().child(title).child(field).into_any_element())
     }
@@ -225,18 +225,18 @@ impl Waffle {
             return None;
         }
         let (react_source, reply_source, user) = (source.clone(), source.clone(), card.user.clone());
-        let button = |id: &str, glyph, tip: &'static str, cx: &mut Context<Self>| {
-            ui::icon_button(SharedString::from(format!("{id}-{group}")), glyph, tip, cx).scoped(ui::mix(ink.top, ink.strong, 0.06), ink.tile, ink.muted, ink.strong).small()
+        let button = |id: &str, glyph, tip: &'static str, _cx: &mut Context<Self>| {
+            ui::Button::new(SharedString::from(format!("{id}-{group}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).scope(ui::ButtonScope::Themed { rest: ui::mix(ink.top, ink.strong, 0.06), hover: ink.tile, ink: ink.muted, ink_hover: ink.strong }).icon(glyph).tooltip_text(tip)
         };
         let react = button("profile-react", Glyph::Emoji, "Send Reaction", cx).on_click(cx.listener(move |this, _, window, cx| this.open_reaction(react_source.clone(), window, cx)));
         let reply = button("profile-reply", Glyph::Reply, "Reply", cx).on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, window, cx| this.open_reply(&user, reply_source.clone(), event.position(), window, cx)));
-        Some(ui::surface_in(ui::mix(ink.top, ink.strong, 0.06), ink.tile, cx).flex_row().items_center().gap_0p5().opacity(0.).group_hover(group, |s| s.opacity(1.)).child(react).child(reply))
+        Some(ui::PopoverContent::scoped(ui::mix(ink.top, ink.strong, 0.06), ink.tile, cx).flex_row().items_center().gap_0p5().opacity(0.).group_hover(group, |s| s.opacity(1.)).child(react).child(reply))
     }
 }
 
 fn reply_field(user: &User, source: &Source, input: &Entity<InputState>, cx: &App) -> AnyElement {
     let _ = (user, source);
-    let field = ui::search_frame("reply-field", gpui_kit::component::input::Input::new(input), &gpui_kit::Focusable::focus_handle(input.read(cx), cx));
+    let field = ui::InputGroup::search_around("reply-field", gpui_kit::component::input::Input::new(input), &gpui_kit::Focusable::focus_handle(input.read(cx), cx));
     ui::col().w(px(REPLY_WIDTH)).p_1().child(field).into_any_element()
 }
 

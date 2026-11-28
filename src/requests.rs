@@ -19,7 +19,7 @@ use crate::{
     palette,
     profile::profile_key,
     sidebar::{RowState, channel_row},
-    ui::{self, Tone},
+    ui::{self},
 };
 
 const REQUEST_ERROR: &str = "Uh oh! Something went wrong while updating this message request. Please wait a moment and try again.";
@@ -60,7 +60,7 @@ impl Waffle {
                 .gap_3()
                 .child(Icon::new(Glyph::Envelope).size(ui::ICON_XL).flex_none())
                 .child(ui::line("Message Requests").flex_1())
-                .when(pending > 0, |r| r.child(ui::count_badge(pending)))
+                .when(pending > 0, |r| r.child(ui::Badge::count(pending)))
                 .on_click(cx.listener(|this, _, _, cx| this.open_requests(RequestsTab::Requests, cx)))
                 .into_any_element(),
         )
@@ -93,15 +93,15 @@ impl Waffle {
         self.last_message.get(&dm.id).copied().unwrap_or(0).max(listed)
     }
 
-    pub(crate) fn render_requests_page(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn render_requests_page(&self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let tab = self.requests_page.unwrap_or_default();
         let spam = self.dm_requests.iter().filter(|d| RequestsTab::Spam.holds(d)).count();
         let items = [ui::Tab::new("Requests"), ui::Tab::new(if spam > 0 { format!("Spam ({spam})") } else { "Spam".into() })];
         const TABS: [RequestsTab; 2] = [RequestsTab::Requests, RequestsTab::Spam];
         let this = cx.entity().downgrade();
-        let tabs = ui::pill_tabs("requests-tabs", &items, TABS.iter().position(|t| *t == tab).unwrap_or_default(), move |i, _, cx| {
+        let tabs = ui::ToggleGroup::new("requests-tabs").items(&items).value(TABS.iter().position(|t| *t == tab).unwrap_or_default()).on_value_change(move |i, _, cx| {
             this.update(cx, |this, cx| this.open_requests(TABS[i], cx)).ok();
-        }, window, cx);
+        });
         let header = ui::row()
             .occlude()
             .h(px(crate::layout::HEADER_HEIGHT))
@@ -126,14 +126,14 @@ impl Waffle {
             .child(ui::row().flex_1().justify_end().child(self.caption_clearance(true)));
         let dms = self.requests_in(tab);
         let body = match (dms.is_empty(), tab) {
-            (true, RequestsTab::Requests) => ui::empty_state("requests-empty", Mood::Idle, "No pending requests", "There are no pending message requests.", cx).into_any_element(),
-            (true, RequestsTab::Spam) => ui::empty_state("requests-empty", Mood::Idle, "No spam", "There are no spam requests.", cx).into_any_element(),
+            (true, RequestsTab::Requests) => ui::Empty::new("requests-empty", Mood::Idle, "No pending requests", "There are no pending message requests.", cx).into_any_element(),
+            (true, RequestsTab::Spam) => ui::Empty::new("requests-empty", Mood::Idle, "No spam", "There are no spam requests.", cx).into_any_element(),
             (false, _) => {
                 let heading = match tab {
                     RequestsTab::Requests => format!("Pending Requests · {}", dms.len()),
                     RequestsTab::Spam => format!("Spam · {}", dms.len()),
                 };
-                let clear = ui::button("requests-clear", Tone::Link, cx).text_size(ui::TEXT_XS).child("Clear All").on_click(cx.listener(move |this, _, _, cx| this.clear_requests(tab, cx)));
+                let clear = ui::Button::new("requests-clear").variant(ui::ButtonVariant::Link).text_size(ui::TEXT_XS).child("Clear All").on_click(cx.listener(move |this, _, _, cx| this.clear_requests(tab, cx)));
                 let label = ui::row().pt_2().px_2().pb_1().justify_between().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(heading).child(clear);
                 let rows: Vec<AnyElement> = dms.iter().map(|dm| self.message_request_row(dm, tab, cx)).collect();
                 ui::col().gap_0p5().child(label).children(rows).into_any_element()
@@ -162,7 +162,7 @@ impl Waffle {
         let last = self.last_message_of(dm);
         let when = (last > 0).then(|| crate::panel::ago(chrono::Utc::now().timestamp_millis() - snowflake_ms(last) as i64));
         let id = dm.id.clone();
-        ui::list_row(SharedString::from(format!("request-{}", dm.id)), name, cx)
+        ui::Item::new(SharedString::from(format!("request-{}", dm.id)), name, cx)
             .height(ui::RowHeight::Fit)
             .min_h_16()
             .px_2()
@@ -175,16 +175,16 @@ impl Waffle {
             .into_any_element()
     }
 
-    fn request_actions(&self, id: &str, tab: RequestsTab, cx: &mut Context<Self>) -> [ui::Control; 2] {
+    fn request_actions(&self, id: &str, tab: RequestsTab, cx: &mut Context<Self>) -> [ui::Button; 2] {
         let (a, b) = (id.to_owned(), id.to_owned());
         match tab {
             RequestsTab::Requests => [
-                ui::button(SharedString::from(format!("ignore-{id}")), Tone::Secondary, cx).small().child("Ignore").on_click(cx.listener(move |this, _, _, cx| this.ignore_request(&a, cx))),
-                ui::button(SharedString::from(format!("accept-{id}")), Tone::Primary, cx).small().child("Accept DM").on_click(cx.listener(move |this, _, _, cx| this.accept_request(&b, cx))),
+                ui::Button::new(SharedString::from(format!("ignore-{id}"))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Ignore").on_click(cx.listener(move |this, _, _, cx| this.ignore_request(&a, cx))),
+                ui::Button::new(SharedString::from(format!("accept-{id}"))).size(ui::ButtonSize::Sm).child("Accept DM").on_click(cx.listener(move |this, _, _, cx| this.accept_request(&b, cx))),
             ],
             RequestsTab::Spam => [
-                ui::button(SharedString::from(format!("not-spam-{id}")), Tone::Secondary, cx).small().child("Not spam").on_click(cx.listener(move |this, _, _, cx| this.accept_request(&a, cx))),
-                ui::button(SharedString::from(format!("report-spam-{id}")), Tone::Danger, cx).small().child("Report Spam").on_click(cx.listener(move |this, _, _, cx| this.report_spam(&b, cx))),
+                ui::Button::new(SharedString::from(format!("not-spam-{id}"))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Not spam").on_click(cx.listener(move |this, _, _, cx| this.accept_request(&a, cx))),
+                ui::Button::new(SharedString::from(format!("report-spam-{id}"))).variant(ui::ButtonVariant::Destructive).size(ui::ButtonSize::Sm).child("Report Spam").on_click(cx.listener(move |this, _, _, cx| this.report_spam(&b, cx))),
             ],
         }
     }

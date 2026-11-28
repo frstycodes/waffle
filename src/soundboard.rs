@@ -484,7 +484,7 @@ impl Waffle {
             }
             (None, None) => picker.at,
         };
-        let card = ui::surface(cx)
+        let card = ui::PopoverContent::new(cx)
             .p_0()
             .gap_0()
             .id("soundboard")
@@ -495,7 +495,7 @@ impl Waffle {
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .children(self.picker_content(picker, cx));
         let card = ui::rise(card.transform_origin(gpui_kit::point(gpui_kit::relative(0.5), gpui_kit::relative(1.))), "soundboard", Duration::ZERO);
-        Some(backdrop("soundboard-backdrop", cx).child(ui::floating_at("soundboard-float", at, Anchor::BottomCenter, card)).into_any_element())
+        Some(backdrop("soundboard-backdrop", cx).child(ui::Popover::floating_at("soundboard-float", at, Anchor::BottomCenter, card)).into_any_element())
     }
 }
 

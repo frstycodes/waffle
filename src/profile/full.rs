@@ -68,7 +68,7 @@ impl Waffle {
                 .child(ui::media(url, ui::top(ui::RADIUS_XL)).size_full().object_fit(gpui_kit::ObjectFit::Cover).opacity(0.3))
                 .child(div().absolute().inset_0().bg(gpui_kit::linear_gradient(180., gpui_kit::linear_color_stop(fade.opacity(0.4), 0.), gpui_kit::linear_color_stop(fade, 1.))))
         });
-        let close = ui::icon_button("full-profile-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| {
+        let close = ui::Button::new("full-profile-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| {
             this.dismiss_overlay(cx);
         }));
         let inner = div()
@@ -86,8 +86,8 @@ impl Waffle {
         let pop = self.card_popover(card, window, cx);
         let backdrop = crate::overlays::backdrop("full-profile-backdrop", cx).child(crate::layout::title_drag_band());
         // Unclipped, so a frame's top reaches past the dialog's edge, as Discord's does.
-        let dialog = ui::dialog_fixed("full-profile-dialog", width, height, body, cx);
-        Some(div().absolute().inset_0().child(ui::modal(backdrop, dialog, cx)).children(pop).children(avatar).into_any_element())
+        let dialog = ui::Dialog::fixed("full-profile-dialog", width, height, body, cx);
+        Some(div().absolute().inset_0().child(ui::Dialog::modal(backdrop, dialog, cx)).children(pop).children(avatar).into_any_element())
     }
 
     // The left card: header, then a scrolling body in Discord's order.
@@ -123,7 +123,7 @@ impl Waffle {
             .children(game_collection(&profile.games, ink))
             .children((!is_me).then(|| self.note_section(card, profile, ink, cx)));
         // A block around the column: inside the full-height scroller, a flex column would squeeze its rows to fit.
-        let body = ui::scroll_area(div().id("full-profile-body").child(sections), &card.card_scroll);
+        let body = ui::ScrollArea::new(div().id("full-profile-body").child(sections), &card.card_scroll);
         let card_fill = match ink.border {
             Some(_) => ink.wash(),
             None => palette::surface(palette::Level::Raised, cx).into(),
@@ -134,22 +134,22 @@ impl Waffle {
     // Discord's row under the name: Message, the friend state, then More. Yours is Edit Profile.
     fn full_buttons(&self, card: &ProfileCard, is_me: bool, cx: &mut Context<Self>) -> Div {
         if is_me {
-            let edit = ui::button("full-profile-edit", ui::Tone::Primary, cx).child(Icon::new(Glyph::Pen).size(ui::ICON_MD)).child("Edit Profile").on_click(cx.listener(|this, _, window, cx| this.edit_own_profile(ProfileTab::Main, window, cx)));
+            let edit = ui::Button::new("full-profile-edit").child(Icon::new(Glyph::Pen).size(ui::ICON_MD)).child("Edit Profile").on_click(cx.listener(|this, _, window, cx| this.edit_own_profile(ProfileTab::Main, window, cx)));
             return ui::row().gap_2().child(edit);
         }
         let user = card.user.clone();
         let dm = user.id.clone();
-        let message = ui::button("full-profile-message", ui::Tone::Primary, cx).child(Icon::new(Glyph::ChatRound).size(ui::ICON_MD)).child("Message").on_click(cx.listener(move |this, _, window, cx| this.message_user(dm.clone(), window, cx)));
+        let message = ui::Button::new("full-profile-message").child(Icon::new(Glyph::ChatRound).size(ui::ICON_MD)).child("Message").on_click(cx.listener(move |this, _, window, cx| this.message_user(dm.clone(), window, cx)));
         let friend = self.friend_action(&user).map(|(glyph, label, next)| {
             let target = user.clone();
-            let button = match next {
+            let friend_click = cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.friend_click(target.clone(), event.position(), cx));
+            match next {
                 // Add Friend and Accept say so; a settled state is its icon alone, named in its tooltip.
-                Some(_) => ui::button("full-profile-friend", ui::Tone::Secondary, cx).child(Icon::new(glyph).size(ui::ICON_MD)).child(label),
-                None => ui::icon_button("full-profile-friend", glyph, label, cx).tone(ui::Tone::Secondary, cx),
-            };
-            button.on_click(cx.listener(move |this, event: &gpui_kit::ClickEvent, _, cx| this.friend_click(target.clone(), event.position(), cx)))
+                Some(_) => ui::Button::new("full-profile-friend").variant(ui::ButtonVariant::Secondary).child(Icon::new(glyph).size(ui::ICON_MD)).child(label).on_click(friend_click).into_any_element(),
+                None => ui::Button::new("full-profile-friend").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::IconSm).icon(glyph).tooltip_text(label).on_click(friend_click).into_any_element(),
+            }
         });
-        let more = self.more_button(card, false, ui::icon_button("full-profile-more", Glyph::More, "More", cx).tone(ui::Tone::Secondary, cx), cx);
+        let more = self.more_button(card, false, ui::Button::new("full-profile-more").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::IconSm).icon(Glyph::More).tooltip_text("More"), cx);
         ui::row().gap_2().child(message).children(friend).child(more)
     }
 
@@ -158,13 +158,13 @@ impl Waffle {
         let field = match &card.note {
             Some(input) => {
                 let focus = input.read(cx).focus_handle(cx);
-                ui::text_area("full-profile-note", Textarea::new(input).appearance(false).px_0().text_size(ui::TEXT_SM), &focus).into_any_element()
+                ui::Textarea::new("full-profile-note", Textarea::new(input).appearance(false).px_0().text_size(ui::TEXT_SM), &focus).into_any_element()
             }
             None => {
                 let text = profile.note.clone();
                 let shown = text.clone().unwrap_or_else(|| "Click to add a note".into());
                 let ink_for = if text.is_some() { ink.text } else { ink.muted };
-                // lint-allow(custom-button): ui::text_area is the editor itself; this is the note at rest, plain text a click from becoming one, as Discord's.
+                // lint-allow(custom-button): ui::Textarea::new is the editor itself; this is the note at rest, plain text a click from becoming one, as Discord's.
                 ui::row()
                     .id("full-profile-note-rest")
                     .items_start()
@@ -224,7 +224,7 @@ impl Waffle {
     }
 
     // The right column: Discord's tab bar, then the chosen tab's list.
-    fn full_tabs(&self, card: &ProfileCard, profile: &Profile, tab: FullTab, ink: Ink, window: &mut Window, cx: &mut Context<Self>) -> Div {
+    fn full_tabs(&self, card: &ProfileCard, profile: &Profile, tab: FullTab, ink: Ink, _window: &mut Window, cx: &mut Context<Self>) -> Div {
         let is_me = self.me.as_ref().is_some_and(|me| me.id == card.user.id);
         let mut tabs = vec![(FullTab::Activity, ui::Tab::new("Activity"))];
         if !is_me {
@@ -235,11 +235,7 @@ impl Waffle {
         let order: Vec<FullTab> = tabs.iter().map(|(t, _)| *t).collect();
         let items: Vec<ui::Tab> = tabs.into_iter().map(|(_, t)| t).collect();
         let this = cx.weak_entity();
-        let strip = ui::tabs(
-            "full-profile-tabs",
-            &items,
-            selected,
-            move |i, _, cx| {
+        let strip = ui::Tabs::new("full-profile-tabs").variant(ui::TabsVariant::Line).tabs(&items).value(selected).on_value_change(move |i, _, cx| {
                 let Some(&tab) = order.get(i) else { return };
                 this.update(cx, |this, cx| {
                     if let Some(card) = this.profile_card.as_mut() {
@@ -248,10 +244,7 @@ impl Waffle {
                     this.redraw_overlays(cx);
                 })
                 .ok();
-            },
-            window,
-            cx,
-        );
+            });
         let panel = match tab {
             FullTab::Activity => self.activity_tab(card, ink, cx),
             FullTab::MutualFriends => self.mutual_friends_tab(card, profile, cx),
@@ -274,7 +267,7 @@ impl Waffle {
         let intro = is_me.then(|| div().text_size(ui::TEXT_XS).text_color(ink.muted).child("You'll see your activity from the last 30 days here."));
         let past = (!rows.is_empty()).then(|| section("Recent activity", ui::col().gap_2().children(intro).children(rows), ink));
         let list = ui::col().gap_6().children(current).children(past);
-        ui::col().child(ui::scroll_area(div().id("full-profile-activity").child(list), &card.tab_scroll))
+        ui::col().child(ui::ScrollArea::new(div().id("full-profile-activity").child(list), &card.tab_scroll))
     }
 
     // One game, show or track they had going lately: its art, its name, Discord's traits and how long ago.
@@ -330,17 +323,17 @@ impl Waffle {
     fn no_activity(&self, card: &ProfileCard, cx: &mut Context<Self>) -> Div {
         let is_me = self.me.as_ref().is_some_and(|me| me.id == card.user.id);
         if is_me {
-            return ui::col().justify_center().child(ui::empty_state("full-profile-no-activity", Mood::Idle, "You don't have any activity here", "Connect your accounts to share your in-game status and activity. You're in control of what you share.", cx));
+            return ui::col().justify_center().child(ui::Empty::new("full-profile-no-activity", Mood::Idle, "You don't have any activity here", "Connect your accounts to share your in-game status and activity. You're in control of what you share.", cx));
         }
         let dm = card.user.id.clone();
-        let say_hi = ui::button("full-profile-say-hi", ui::Tone::Secondary, cx).child(Icon::new(Glyph::ChatRound).size(ui::ICON_MD)).child("Message").on_click(cx.listener(move |this, _, window, cx| this.message_user(dm.clone(), window, cx)));
+        let say_hi = ui::Button::new("full-profile-say-hi").variant(ui::ButtonVariant::Secondary).child(Icon::new(Glyph::ChatRound).size(ui::ICON_MD)).child("Message").on_click(cx.listener(move |this, _, window, cx| this.message_user(dm.clone(), window, cx)));
         let heading = format!("{} doesn't have any activity to share here", card.user.name);
-        ui::col().items_center().justify_center().child(ui::empty_state("full-profile-no-activity", Mood::Idle, heading, pick(NO_ACTIVITY, &card.user.id), cx).child(say_hi))
+        ui::col().items_center().justify_center().child(ui::Empty::new("full-profile-no-activity", Mood::Idle, heading, pick(NO_ACTIVITY, &card.user.id), cx).child(say_hi))
     }
 
     fn mutual_friends_tab(&self, card: &ProfileCard, profile: &Profile, cx: &mut Context<Self>) -> Div {
         if profile.mutual_friends.is_empty() {
-            return ui::col().justify_center().child(ui::empty_state("full-profile-no-friends", Mood::Idle, "You don't have any friends in common", pick(NO_FRIENDS, &card.user.id), cx));
+            return ui::col().justify_center().child(ui::Empty::new("full-profile-no-friends", Mood::Idle, "You don't have any friends in common", pick(NO_FRIENDS, &card.user.id), cx));
         }
         let people: Vec<(User, Option<crate::discord::Mark>, Option<String>)> = profile.mutual_friends.iter().map(|u| (u.clone(), self.presences.get(&u.id).map(|p| p.mark()), self.presence_line(u))).collect();
         let surface = palette::surface(palette::Level::Page, cx);
@@ -350,8 +343,8 @@ impl Waffle {
                 .iter()
                 .map(|(user, mark, line)| {
                     let (this, target, menu_this, menu_user) = (this.clone(), user.clone(), this.clone(), user.clone());
-                    let title = ui::row().gap_1().child(ui::line(user.name.clone())).children(user.tag.as_ref().map(|tag| crate::chat::guild_tag(tag, cx)));
-                    ui::list_row(SharedString::from(format!("mutual-friend-{}", user.id)), user.name.clone(), cx)
+                    let title = ui::row().gap_1().child(ui::line(user.name.clone())).children(user.tag.as_ref().map(crate::chat::guild_tag));
+                    ui::Item::new(SharedString::from(format!("mutual-friend-{}", user.id)), user.name.clone(), cx)
                         .title_element(title)
                         .lead(decorated_avatar(&user.avatar, user.decoration.as_deref(), MUTUAL_FACE_FULL, *mark, surface))
                         .when_some(line.clone(), |r, line| r.subtitle(ui::line(line)))
@@ -372,7 +365,7 @@ impl Waffle {
         let servers = self.mutual_servers_in_order(card);
         if servers.is_empty() {
             let id = self.profile_card.as_ref().map(|c| c.user.id.clone()).unwrap_or_default();
-            return ui::col().justify_center().child(ui::empty_state("full-profile-no-servers", Mood::Idle, "You don't have any servers in common", pick(NO_SERVERS, &id), cx));
+            return ui::col().justify_center().child(ui::Empty::new("full-profile-no-servers", Mood::Idle, "You don't have any servers in common", pick(NO_SERVERS, &id), cx));
         }
         let this = cx.weak_entity();
         let list = uniform_list("full-profile-mutual-servers", servers.len(), move |range, _, cx| {
@@ -380,7 +373,7 @@ impl Waffle {
                 .iter()
                 .map(|(id, name, icon, nick)| {
                     let (this, target, menu_this, menu_id) = (this.clone(), id.clone(), this.clone(), id.clone());
-                    ui::list_row(SharedString::from(format!("mutual-server-{id}")), name.clone(), cx)
+                    ui::Item::new(SharedString::from(format!("mutual-server-{id}")), name.clone(), cx)
                         .lead(ui::server_tile(icon.as_deref(), name, MUTUAL_FACE_FULL, cx))
                         .when_some(nick.clone(), |r, nick| r.subtitle(ui::line(nick)))
                         .height(RowHeight::Exact(MUTUAL_ROW))

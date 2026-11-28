@@ -58,7 +58,7 @@ impl Waffle {
                     .border_color(theme.sidebar_border)
                     .child(Icon::new(Glyph::VolumeHigh).size(ui::ICON_XL).text_color(theme.muted_foreground))
                     .child(ui::line(channel.name.clone()).flex_1().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
-                    .child(ui::icon_button("call-chat-close", Glyph::X, "Close Chat", cx).occlude().on_click(cx.listener(|this, _, _, cx| {
+                    .child(ui::Button::new("call-chat-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close Chat").occlude().on_click(cx.listener(|this, _, _, cx| {
                         this.call_chat = false;
                         cx.notify(); // lint-allow(global-notify): closing the call chat reshapes the stage (main) and the columns beside it
                     })))
@@ -118,17 +118,17 @@ impl Waffle {
         let connecting = call.stage != Stage::Connected;
         let screen = streamer.as_ref().map(|id| {
             let name = self.user_name(id);
-            ui::row().gap_2().min_w_0().child(ui::seam(cx).bg(stage::wash(0.24))).child(ui::avatar(self.user_avatar(id), ui::AVATAR_MD)).child(ui::line(format!("{name}’s Screen")).font_weight(FontWeight::MEDIUM))
+            ui::row().gap_2().min_w_0().child(ui::Separator::new().orientation(ui::Orientation::Vertical).bg(stage::wash(0.24))).child(ui::Avatar::new(self.user_avatar(id), ui::AVATAR_MD)).child(ui::line(format!("{name}’s Screen")).font_weight(FontWeight::MEDIUM))
         });
         let quality = streamer.as_ref().and_then(|id| match me == Some(id.as_str()) {
             true => Some(quality_label(self.prefs.stream_resolution, self.prefs.stream_fps)),
             // GAP: the voice engine doesn't report a remote stream's frame rate, so only its height shows.
             false => call.watched(id)?.frame.as_ref().map(|f| format!("{}P", f.size(0).height.0)),
         });
-        let live = streamer.is_some().then(|| ui::row().gap_1().children(quality.map(|q| ui::badge(gpui_kit::black().opacity(0.56), gpui_kit::white()).font_features(tabular()).child(q.to_uppercase()))).child(ui::live_badge()));
+        let live = streamer.is_some().then(|| ui::row().gap_1().children(quality.map(|q| ui::Badge::empty().colors(gpui_kit::black().opacity(0.56), gpui_kit::white()).font_features(tabular()).child(q.to_uppercase()))).child(ui::Badge::live()));
         let count = self.participants().len();
         let people = (self.call_focus.is_some() && self.stage_ui.strip_hidden).then(|| {
-            ui::row().id("call-people").flex_none().gap_1().text_color(stage::muted()).child(Icon::new(Glyph::Users).size(ui::ICON_XL)).child(count.to_string()).tooltip(|window, cx| ui::tip("Participants", window, cx))
+            ui::row().id("call-people").flex_none().gap_1().text_color(stage::muted()).child(Icon::new(Glyph::Users).size(ui::ICON_XL)).child(count.to_string()).tooltip(ui::Tooltip::text("Participants"))
         });
         // A DM call's stage is opened from its window; this is the way back to the chat (Esc too).
         let back = call.guild_id.is_none().then(|| keeps_chrome(stage_button("back-to-chat", "Back to chat", cx), cx).occlude().on_click(cx.listener(|this, _, window, cx| this.back_to_chat(window, cx))));
@@ -153,7 +153,7 @@ impl Waffle {
 
     // The voice channel's chat: "Show Chat" / "Hide Chat", highlighted while mentions wait or for a
     // while after new messages, with the count on its corner (mentions, else unread).
-    pub(crate) fn chat_toggle(&self, cx: &mut Context<Self>) -> ui::Control {
+    pub(crate) fn chat_toggle(&self, cx: &mut Context<Self>) -> ui::Button {
         let open = self.call_chat_shown();
         keeps_chrome(stage_icon_button("call-chat", Glyph::ChatRound, if open { "Hide Chat" } else { "Show Chat" }, open || self.call_chat_highlighted(), cx), cx)
             .relative()
@@ -167,14 +167,14 @@ impl Waffle {
         let (mentions, unread) = self.call_chat_counts()?;
         let badge = match (mentions, unread) {
             (0, 0) => return None,
-            (0, unread) => ui::count_badge(unread),
-            (mentions, _) => ui::count_badge(mentions),
+            (0, unread) => ui::Badge::count(unread),
+            (mentions, _) => ui::Badge::count(mentions),
         };
         Some(div().absolute().right_neg_1().bottom_neg_1().rounded_full().border_2().border_color(stage::bg()).child(badge)) // lint-allow(custom-mark): ui::badged lacks a stage-ringed corner badge on a control
     }
 
     // The chevron above the filmstrip that folds it away and back, as Discord's.
-    pub(super) fn strip_toggle(&self, shown: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> { // lint-allow(custom-component): ui::icon_button lacks a stage tone with a corner badge; this wraps it for the call header
+    pub(super) fn strip_toggle(&self, shown: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> { // lint-allow(custom-component): ui::Button lacks a stage tone with a corner badge; this wraps it for the call header
         let (glyph, tip) = if shown { (Glyph::ChevronDown, "Hide Members") } else { (Glyph::ChevronUp, "Show Members") };
         ui::row() // lint-allow(custom-button): ui::round_button lacks a stage toggle with a corner badge
             .id("strip-toggle")
@@ -188,7 +188,7 @@ impl Waffle {
             .hover(|s| s.bg(gpui_kit::black().opacity(0.75)))
             .child(Icon::new(glyph).size(ui::ICON_SM))
             .child(Icon::new(Glyph::Users).size(ui::ICON_MD))
-            .tooltip(move |window, cx| ui::tip(tip, window, cx))
+            .tooltip(move |window, cx| ui::Tooltip::new(tip).build(window, cx))
             .on_click(cx.listener(|this, _, _, cx| {
                 cx.stop_propagation();
                 this.stage_ui.strip_hidden = !this.stage_ui.strip_hidden;

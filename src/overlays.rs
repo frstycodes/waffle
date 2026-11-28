@@ -198,14 +198,14 @@ impl Waffle {
         }
         const PREVIEW: usize = 6;
         let more = self.inbox_tab == crate::inbox::InboxTab::Mentions && matches!(&self.inbox, Some(Some(Ok(list))) if list.len() > PREVIEW);
-        let see_all = ui::button("inbox-see-all", ui::Tone::Secondary, cx)
+        let see_all = ui::Button::new("inbox-see-all").variant(ui::ButtonVariant::Secondary)
             .w_full()
             .child(if more { "See all mentions" } else { "Open Inbox" })
             .on_click(cx.listener(|this, _, _, cx| this.open_inbox_page(cx)));
         Some(
             backdrop("inbox-backdrop", cx)
                 .child(
-                    crate::ui::surface(cx)
+                    crate::ui::PopoverContent::new(cx)
                         .id("inbox")
                         .absolute()
                         .left(px(crate::layout::RAIL_WIDTH + 4.))
@@ -231,7 +231,7 @@ impl Waffle {
             Some(Some(Ok(list))) => {
                 let shown: Vec<Message> = list.iter().filter(|m| self.hidden_author(&m.author.id).is_none()).take(limit.unwrap_or(usize::MAX)).cloned().collect();
                 if shown.is_empty() {
-                    return crate::ui::empty_state("messages-empty", Illustration::InboxEmpty, empty.0, empty.1, cx).into_any_element();
+                    return crate::ui::Empty::new("messages-empty", Illustration::InboxEmpty, empty.0, empty.1, cx).into_any_element();
                 }
                 let ctx = self.row_context_everywhere(&shown, 380., cx);
                 // The demo shows the first card as hovered, its actions up.
@@ -255,20 +255,20 @@ impl Waffle {
             move |this: &mut Self, window: &mut Window, cx: &mut Context<Self>| this.open_message(guild_id.clone(), &channel_id, message_id.clone(), window, cx)
         };
         let jump_open = open.clone();
-        let jump = ui::button(SharedString::from(format!("inbox-jump-{}", m.id)), ui::Tone::Secondary, cx).small().child("Jump").on_click(cx.listener(move |this, _, window, cx| {
+        let jump = ui::Button::new(SharedString::from(format!("inbox-jump-{}", m.id))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Jump").on_click(cx.listener(move |this, _, window, cx| {
             cx.stop_propagation();
             jump_open(this, window, cx);
         }));
         let message_id = m.id.clone();
-        let read = ui::icon_button(SharedString::from(format!("inbox-read-{}", m.id)), Glyph::Checkmark, "Mark As Read", cx).small().on_click(cx.listener(move |this, _, _, cx| {
+        let read = ui::Button::new(SharedString::from(format!("inbox-read-{}", m.id))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::Checkmark).tooltip_text("Mark As Read").on_click(cx.listener(move |this, _, _, cx| {
             cx.stop_propagation();
             this.mark_mention_read(message_id.clone(), cx);
         }));
         // lint-allow(raw-margin): the 30px buttons reach past the 24px author row so they don't stretch it, which padding can't do.
         let actions = ui::row().flex_none().my(px(-ACTION_BLEED)).gap_0p5().child(jump).child(read);
         let actions = if revealed { actions } else { actions.opacity(0.).group_hover(group.clone(), |s| s.opacity(1.)) };
-        let author = ui::row().gap_2().child(ui::avatar(m.author.avatar.clone(), 24.)).child(ui::line(m.author.name.clone()).flex_1().font_weight(FontWeight::NORMAL)).child(actions);
-        ui::card(group.clone(), cx)
+        let author = ui::row().gap_2().child(ui::Avatar::new(m.author.avatar.clone(), 24.)).child(ui::line(m.author.name.clone()).flex_1().font_weight(FontWeight::NORMAL)).child(actions);
+        ui::Card::interactive(group.clone(), cx)
             .group(group)
             .stacked()
             .squircle(RADIUS_XS)
@@ -310,13 +310,13 @@ impl Waffle {
 
     // GIFs, Stickers and Emoji over one frame at the same spot; Emoji is its own picker, so switching to or
     // from it swaps which one is open.
-    fn picker_tabs(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn picker_tabs(&self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let items = [ui::Tab::new("GIFs"), ui::Tab::new("Stickers"), ui::Tab::new("Emoji")];
         let selected = self.composer_picker().map_or(0, |tab| tab as usize);
         let this = cx.entity().downgrade();
-        div().px_3().pt_1().child(ui::tabs("picker-tabs", &items, selected, move |i, window, cx| {
+        div().px_3().pt_1().child(ui::Tabs::new("picker-tabs").variant(ui::TabsVariant::Line).tabs(&items).value(selected).on_value_change(move |i, window, cx| {
             this.update(cx, |this, cx| this.show_composer_picker(ComposerPicker::ALL[i], window, cx)).ok();
-        }, window, cx))
+        }))
     }
 
     /// Which of the composer's pickers is open, if any: what its tabs and buttons show as chosen.
@@ -387,7 +387,7 @@ impl Waffle {
                 .into_any_element(),
         };
         vec![
-            div().p_2p5().child(ui::search_field("gif-search", &self.gif_search, cx)).into_any_element(),
+            div().p_2p5().child(ui::InputGroup::search("gif-search", &self.gif_search, cx)).into_any_element(),
             div().id("gif-scroll").flex_1().min_h_0().overflow_y_scrollbar().px_2().pb_2().child(body).into_any_element(),
         ]
     }
@@ -399,7 +399,7 @@ impl Waffle {
         let body: AnyElement = match pins {
             None => div().p_4().text_color(theme.muted_foreground).child("Loading pins…").into_any_element(),
             Some(Err(error)) => div().p_4().text_color(theme.danger).child(error.clone()).into_any_element(),
-            Some(Ok(list)) if list.is_empty() => crate::ui::empty_state("pins-empty", Illustration::PinsEmpty, "This channel doesn't have any pinned messages… yet.", "Pin a message from its menu to keep it here.", cx).into_any_element(),
+            Some(Ok(list)) if list.is_empty() => crate::ui::Empty::new("pins-empty", Illustration::PinsEmpty, "This channel doesn't have any pinned messages… yet.", "Pin a message from its menu to keep it here.", cx).into_any_element(),
             // A list, as the feed: it lays out only the cards in view, so scrolling doesn't redraw every pin.
             Some(Ok(list)) => {
                 // Pins change from the fetch, an unpin and the demo; the list follows here, where they're drawn.
@@ -415,7 +415,7 @@ impl Waffle {
                 div().relative().child(rows).child(gpui_kit::component::scroll::Scrollbar::vertical(&self.pins_list)).into_any_element()
             }
         };
-        let card = crate::ui::surface(cx)
+        let card = crate::ui::PopoverContent::new(cx)
             .id("pins")
             .w(px(LIST_POPOVER_WIDTH))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
@@ -423,7 +423,7 @@ impl Waffle {
             .child(body);
         // Under the header's pin button: its top-right corner just right of the click, kept in the window.
         let at = point(self.popover_at.x + px(PINS_NUDGE), px(crate::layout::HEADER_HEIGHT - 2.));
-        Some(backdrop("pins-backdrop", cx).child(ui::floating_at("pins-float", at, gpui_kit::Anchor::TopRight, ui::rise(card.transform_origin(ui::corner(true, false)), "pins", Duration::ZERO))).into_any_element())
+        Some(backdrop("pins-backdrop", cx).child(ui::Popover::floating_at("pins-float", at, gpui_kit::Anchor::TopRight, ui::rise(card.transform_origin(ui::corner(true, false)), "pins", Duration::ZERO))).into_any_element())
     }
 
 }
@@ -439,16 +439,16 @@ fn mention_skeletons(cx: &App) -> AnyElement {
             .squircle(RADIUS_XS)
             .bg(palette::surface(palette::Level::Raised, cx))
             .gap_2()
-            .child(ui::skeleton(("mention-skel-place", i), RADIUS_XS, cx).h_2p5().w(px(widths.0)))
-            .child(ui::row().gap_2().child(ui::skeleton_circle(("mention-skel-avatar", i), 24., cx)).child(ui::skeleton(("mention-skel-name", i), RADIUS_XS, cx).h_3().w(px(widths.1))))
-            .child(ui::skeleton(("mention-skel-text", i), RADIUS_XS, cx).h_3().w(gpui_kit::relative(widths.2)))
+            .child(ui::Skeleton::new(("mention-skel-place", i)).radius(RADIUS_XS).h_2p5().w(px(widths.0)))
+            .child(ui::row().gap_2().child(ui::Skeleton::circle(("mention-skel-avatar", i), 24.)).child(ui::Skeleton::new(("mention-skel-name", i)).radius(RADIUS_XS).h_3().w(px(widths.1))))
+            .child(ui::Skeleton::new(("mention-skel-text", i)).radius(RADIUS_XS).h_3().w(gpui_kit::relative(widths.2)))
     };
     ui::col().gap_2().child(card(0, (140., 90., 0.85))).child(card(1, (110., 70., 0.6))).child(card(2, (160., 100., 0.75))).into_any_element()
 }
 
 // A picker's floating card: the overlay surface, rounded and shadowed, its content laid out top to bottom.
 fn picker_frame(id: &'static str, height: f32, cx: &App) -> gpui_kit::Stateful<gpui_kit::Div> {
-    ui::surface(cx)
+    ui::PopoverContent::new(cx)
         .id(id)
         .p_0()
         .gap_0()
@@ -476,7 +476,7 @@ const PIN_COLUMN: f32 = crate::search_results::HIT_COLUMN - 100.;
 fn pin_card(m: &Message, ctx: &std::rc::Rc<crate::chat::RowContext>, cx: &mut App) -> AnyElement {
     let group = SharedString::from(format!("pin-{}", m.id));
     let (this, id) = (ctx.this(), m.id.clone());
-    let jump = ui::button(SharedString::from(format!("pin-jump-{}", m.id)), ui::Tone::Secondary, cx).small().child("Jump").on_click(move |_, _, cx| {
+    let jump = ui::Button::new(SharedString::from(format!("pin-jump-{}", m.id))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Jump").on_click(move |_, _, cx| {
         this.update(cx, |this, cx| {
             this.pins = None;
             this.jump_to(id.clone(), cx);
@@ -484,7 +484,7 @@ fn pin_card(m: &Message, ctx: &std::rc::Rc<crate::chat::RowContext>, cx: &mut Ap
         .ok();
     });
     let (this, pinned) = (ctx.this(), m.clone());
-    let unpin = ui::icon_button(SharedString::from(format!("pin-unpin-{}", m.id)), Glyph::X, "Unpin", cx).small().on_click(move |_, window, cx| {
+    let unpin = ui::Button::new(SharedString::from(format!("pin-unpin-{}", m.id))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::X).tooltip_text("Unpin").on_click(move |_, window, cx| {
         this.update(cx, |this, cx| this.run_message_action(crate::message_menu::MessageAction::Pin, &pinned, false, window, cx)).ok();
     });
     ui::row()

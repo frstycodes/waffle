@@ -329,7 +329,7 @@ impl Waffle {
         }
         let add = menu::item("Add an account", |_, _, _| {}).icon(Glyph::Plus);
         let add = menu::menu_item_row("add-account".into(), &add, false, true, cx).on_hover(self.row_hover(None, cx)).on_click(cx.listener(|this, _, window, cx| this.add_account(window, cx)));
-        let card = ui::surface(cx)
+        let card = ui::PopoverContent::new(cx)
             .w(px(MENU_WIDTH))
             .id("status-menu")
             .occlude()
@@ -340,10 +340,12 @@ impl Waffle {
             .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, _, _| this.status_flyout.tunnel.track(e.position)))
             .child(self.custom_status_row(cx))
             .children(PRESENCES.iter().map(|&(status, label, _)| self.presence_row(status, label, cx)))
-            .child(menu::separator(cx))
+            .child(menu::separator())
             .child(div().pt_1p5().pb_0p5().px_2p5().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(palette::muted(cx)).child("Accounts"))
             .children(self.prefs.accounts.iter().map(|account| self.account_row(account, cx)))
-            .when(self.can_add_account(), |card| card.child(menu::separator(cx)).child(add));
+            .when(self.can_add_account(), |card| card.child(menu::separator()).child(add));
+        #[cfg(debug_assertions)]
+        let card = card.child(menu::separator()).child(self.design_system_row(cx));
         Some(backdrop("status-backdrop", cx).child(ui::rise(card.transform_origin(ui::corner(false, true)), "status-menu", Duration::ZERO)).into_any_element())
     }
 
@@ -362,7 +364,7 @@ impl Waffle {
             None => menu::item("Set a custom status", |_, _, _| {}).icon(Glyph::Emoji),
         };
         let clear = self.custom_status.is_some().then(|| {
-            ui::icon_button("status-custom-clear", Glyph::X, "Clear custom status", cx).small().on_click(cx.listener(|this, _, _, cx| {
+            ui::Button::new("status-custom-clear").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::X).tooltip_text("Clear custom status").on_click(cx.listener(|this, _, _, cx| {
                 cx.stop_propagation();
                 this.set_custom_status(None, cx);
             }))
@@ -384,7 +386,7 @@ impl Waffle {
         let chevron = timed.then(|| div().flex_none().text_color(palette::muted(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)));
         let flyout = open.then(|| {
             // lint-allow(raw-margin): sits past its row's right edge by the card's inset and a gap, which left_full can't add to.
-            div().absolute().top(px(-ui::SURFACE_INSET)).left_full().ml(px(ui::SURFACE_INSET + 4.)).child(ui::floating("status-duration-float", self.duration_flyout(status, cx)).with_priority(1))
+            div().absolute().top(px(-ui::SURFACE_INSET)).left_full().ml(px(ui::SURFACE_INSET + 4.)).child(ui::Popover::floating("status-duration-float", self.duration_flyout(status, cx)).with_priority(1))
         });
         menu::menu_item_row(SharedString::from(format!("status-{label}")), &row, open, true, cx)
             .relative()
@@ -403,7 +405,7 @@ impl Waffle {
                 this.set_status(status, minutes, cx);
             }))
         });
-        let card = ui::surface(cx)
+        let card = ui::PopoverContent::new(cx)
             .id("status-durations")
             .occlude()
             .w(px(FLYOUT_WIDTH))
@@ -432,12 +434,12 @@ impl Waffle {
             .child(ui::line(status.label()).text_size(ui::TEXT_XS).text_color(palette::muted(cx)));
         let (switch_id, out_id) = (account.id.clone(), account.id.clone());
         let log_out = (!current).then(|| {
-            ui::icon_button(SharedString::from(format!("log-out-{}", account.id)), Glyph::DoorExit, format!("Log out of {}", account.name), cx).small().on_click(cx.listener(move |this, _, window, cx| {
+            ui::Button::new(SharedString::from(format!("log-out-{}", account.id))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::DoorExit).tooltip_text(format!("Log out of {}", account.name)).on_click(cx.listener(move |this, _, window, cx| {
                 cx.stop_propagation();
                 this.remove_account(out_id.clone(), window, cx);
             }))
         });
-        ui::menu_row(SharedString::from(format!("account-{}", account.id)), cx)
+        ui::DropdownMenuItem::new(SharedString::from(format!("account-{}", account.id)), cx)
             .toggled(current, cx)
             .min_h_12()
             .pl_2()
@@ -461,26 +463,26 @@ impl Waffle {
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Set your status"))
                     .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child("Shown on your profile and in member lists.")),
             )
-            .child(ui::icon_button("status-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_status_editor(cx))));
-        let clear_after = ui::select("status-clear-after", Some(self.clear_after.glyph()), self.clear_after.name(), false, cx)
+            .child(ui::Button::new("status-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_status_editor(cx))));
+        let clear_after = ui::Select::new("status-clear-after", Some(self.clear_after.glyph()), self.clear_after.name(), false, cx)
             .on_click(cx.listener(|this, _, window, cx| this.open_menu(window.mouse_position(), this.clear_after_entries(), cx)));
         let footer = ui::row()
             .gap_2()
-            .child(ui::row().items_stretch().flex_1().child(ui::button("status-clear-all", ui::Tone::Ghost, cx).child("Clear status").on_click(cx.listener(|this, _, _, cx| {
+            .child(ui::row().items_stretch().flex_1().child(ui::Button::new("status-clear-all").variant(ui::ButtonVariant::Ghost).child("Clear status").on_click(cx.listener(|this, _, _, cx| {
                 this.status_editor = None;
                 this.set_custom_status(None, cx);
             }))))
-            .child(ui::button("status-cancel", ui::Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_status_editor(cx))))
-            .child(ui::button("status-save", ui::Tone::Primary, cx).child("Save status").on_click(cx.listener(|this, _, _, cx| this.save_status(cx))));
-        let body = ui::dialog_body()
+            .child(ui::Button::new("status-cancel").variant(ui::ButtonVariant::Secondary).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_status_editor(cx))))
+            .child(ui::Button::new("status-save").child("Save status").on_click(cx.listener(|this, _, _, cx| this.save_status(cx))));
+        let body = ui::DialogContent::new()
             .child(head)
             .child(self.status_preview(editor, cx))
-            .child(ui::field("Custom status", cx).child(self.status_text_field(editor, cx)))
-            .child(ui::field("Clear after", cx).child(clear_after))
-            .child(ui::field("Status", cx).child(ui::col().children(PRESENCES.iter().map(|&(status, label, detail)| presence_choice(status, label, detail, editor.status == status, cx)))))
+            .child(ui::Field::new("Custom status", cx).child(self.status_text_field(editor, cx)))
+            .child(ui::Field::new("Clear after", cx).child(clear_after))
+            .child(ui::Field::new("Status", cx).child(ui::col().children(PRESENCES.iter().map(|&(status, label, detail)| presence_choice(status, label, detail, editor.status == status, cx)))))
             .child(footer);
         let backdrop = div().id("status-editor-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_status_editor(cx)));
-        Some(ui::modal(backdrop, ui::dialog("status-editor", DIALOG_WIDTH, body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("status-editor", DIALOG_WIDTH, body, window, cx), cx))
     }
 
     // Your card as others will see it, the bubble and presence following the dialog as you edit.
@@ -531,11 +533,11 @@ impl Waffle {
             .on_click(cx.listener(|this, _, window, cx| this.open_emoji_picker(EmojiTarget::CustomStatus, window, cx)));
         let count = div().text_size(ui::TEXT_XS).text_color(if length >= TEXT_WARN { palette::warning_ink(cx) } else { palette::faint(cx) }).child(format!("{length}/{TEXT_MAX}"));
         let focus = self.status_input.read(cx).focus_handle(cx);
-        let field = ui::text_field("status-text", Input::new(&self.status_input).appearance(false), &focus).leading(emoji).trailing(count);
+        let field = ui::Input::new("status-text", Input::new(&self.status_input).appearance(false), &focus).leading(emoji).trailing(count);
         if length == 0 {
             return field.into_any_element();
         }
-        field.trailing(ui::icon_button("status-clear-text", Glyph::XCircle, "Clear text", cx).small().on_click(cx.listener(|this, _, window, cx| {
+        field.trailing(ui::Button::new("status-clear-text").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::XCircle).tooltip_text("Clear text").on_click(cx.listener(|this, _, window, cx| {
             this.status_input.update(cx, |state, cx| state.set_value("", window, cx));
             this.redraw_overlays(cx);
         })))
@@ -560,7 +562,7 @@ fn presence_choice(status: Status, label: &'static str, detail: &'static str, on
                 .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child(label))
                 .when(!detail.is_empty(), |d| d.child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(detail))),
         )
-        .child(ui::radio(on, cx))
+        .child(ui::RadioGroupItem::mark(on))
         .on_click(cx.listener(move |this, _, _, cx| {
             if let Some(editor) = this.status_editor.as_mut() {
                 editor.status = status;

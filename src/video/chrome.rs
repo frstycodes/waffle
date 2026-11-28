@@ -82,7 +82,7 @@ impl VideoPlayer {
         *self.motions.frame_one(control, Motion::new(target).transition(pop()), window, cx)
     }
 
-    pub(super) fn icon_button( // lint-allow(custom-component): ui::icon_button lacks the OnMedia tone with a toggled state
+    pub(super) fn icon_button( // lint-allow(custom-component): ui::Button lacks the OnMedia tone with a toggled state
         &mut self,
         control: Control,
         glyph: Glyph,
@@ -107,7 +107,7 @@ impl VideoPlayer {
     pub(super) fn control(&mut self, control: Control, label: &'static str, body: gpui_kit::Div, action: impl Fn(&mut Self, &mut Window, &mut Context<Self>) + 'static, cx: &mut Context<Self>) -> AnyElement {
         body.id(SharedString::from(format!("video-{control:?}")))
             .cursor_pointer()
-            .tooltip(move |window, cx| ui::tip(label, window, cx))
+            .tooltip(move |window, cx| ui::Tooltip::new(label).build(window, cx))
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 match *hovered {
                     true => this.hot = Some(control),

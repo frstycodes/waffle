@@ -117,7 +117,7 @@ impl Render for ReactorsCard {
         div()
             .pt_2()
             .child(
-                ui::surface(cx)
+                ui::PopoverContent::new(cx)
                     .id("reactors-card")
                     .occlude()
                     .flex_row()
@@ -367,7 +367,7 @@ impl Waffle {
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Reactions"))
                     .child(div().text_size(ui::TEXT_SM).line_height(ui::LINE_XL).text_color(palette::muted(cx)).font_features(tabular()).child(grouped(total))),
             )
-            .child(ui::icon_button("reactions-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_reactions(cx))));
+            .child(ui::Button::new("reactions-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_reactions(cx))));
         let tabs: Vec<AnyElement> = order.iter().map(|r| reaction_tab(r, r.emoji == selected, cx)).collect();
         let rail = ui::col()
             .id("reactions-rail")
@@ -393,7 +393,7 @@ impl Waffle {
         let body = ui::col().h(px(DIALOG_HEIGHT)).child(head).child(ui::row().items_stretch().flex_1().min_h_0().child(rail).child(people));
         let (channel_id, message_id) = (message.channel_id.clone(), message.id.clone());
         self.load_reactors(&channel_id, &message_id, &selected, cx);
-        Some(ui::modal(backdrop("reactions-backdrop", cx), ui::dialog("reactions-dialog", DIALOG_WIDTH, body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop("reactions-backdrop", cx), ui::Dialog::new("reactions-dialog", DIALOG_WIDTH, body, window, cx), cx))
     }
 
     // The people who used `emoji`, then where the list stands: loading, more to come, or failed.
@@ -432,8 +432,8 @@ impl Waffle {
             .child(ui::line(name).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
             .when(!detail.is_empty(), |w| w.child(ui::line(detail).text_size(ui::TEXT_DETAIL).text_color(palette::muted(cx))));
         let remove = removable.then(|| {
-            ui::button(SharedString::from(format!("reactor-remove-{id}")), ui::Tone::Secondary, cx)
-                .small()
+            ui::Button::new(SharedString::from(format!("reactor-remove-{id}"))).variant(ui::ButtonVariant::Secondary)
+                .size(ui::ButtonSize::Sm)
                 .child("Remove")
                 .on_click(cx.listener(move |this, _, _, cx| this.remove_reactor(id.clone(), cx)))
         });
@@ -448,7 +448,7 @@ impl Waffle {
             .squircle(RADIUS_MD)
             .hover(move |s| s.bg(hover))
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| this.hover_reactor(&hover_id, *hovered, cx)))
-            .child(ui::avatar(user.avatar.clone(), AVATAR))
+            .child(ui::Avatar::new(user.avatar.clone(), AVATAR))
             .child(who)
             .children(remove)
             .into_any_element()
@@ -459,26 +459,26 @@ impl Waffle {
 fn reaction_tab(reaction: &Reaction, on: bool, cx: &mut Context<Waffle>) -> AnyElement {
     let emoji = reaction.emoji.clone();
     let code = shortcode(&emoji);
-    ui::menu_row(SharedString::from(format!("reactions-tab-{}", emoji.path())), cx)
+    ui::DropdownMenuItem::new(SharedString::from(format!("reactions-tab-{}", emoji.path())), cx)
         .toggled(on, cx)
         .h_10()
         .text_size(ui::TEXT_LEAD)
         .font_weight(FontWeight::SEMIBOLD)
         .child(ui::row().items_stretch().w(px(TAB_EMOJI)).flex_none().justify_center().child(emoji_face(&emoji, 22.)))
         .child(div().font_features(tabular()).when(reaction.me, |d| d.text_color(palette::accent_ink(cx))).child(grouped(reaction.count.into())))
-        .tooltip(move |window, cx| ui::tip(code.clone(), window, cx))
+        .tooltip(move |window, cx| ui::Tooltip::new(code.clone()).build(window, cx))
         .on_click(cx.listener(move |this, _, _, cx| this.select_reaction(emoji.clone(), cx)))
         .into_any_element()
 }
 
-fn skeleton_row(i: usize, cx: &mut Context<Waffle>) -> AnyElement {
+fn skeleton_row(i: usize, _cx: &mut Context<Waffle>) -> AnyElement {
     ui::row()
         .flex_none()
         .gap_3()
         .min_h(px(REACTOR_ROW))
         .px_2p5()
-        .child(ui::skeleton_circle(("reactor-skeleton-face", i), AVATAR, cx))
-        .child(ui::skeleton(("reactor-skeleton-name", i), 6., cx).w(px(SKELETON_NAME)).h_3())
+        .child(ui::Skeleton::circle(("reactor-skeleton-face", i), AVATAR))
+        .child(ui::Skeleton::new(("reactor-skeleton-name", i)).radius(6.).w(px(SKELETON_NAME)).h_3())
         .into_any_element()
 }
 
@@ -490,7 +490,7 @@ fn failed_row(cx: &mut Context<Waffle>) -> AnyElement {
         .px_2p5()
         .text_color(palette::muted(cx))
         .child("Couldn't load everyone who reacted.")
-        .child(ui::button("reactors-retry", ui::Tone::Link, cx).child("Try again").on_click(cx.listener(|this, _, _, cx| this.retry_reactors(cx))))
+        .child(ui::Button::new("reactors-retry").variant(ui::ButtonVariant::Link).child("Try again").on_click(cx.listener(|this, _, _, cx| this.retry_reactors(cx))))
         .into_any_element()
 }
 

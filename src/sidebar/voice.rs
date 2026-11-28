@@ -21,7 +21,7 @@ pub(super) fn speaking_avatar(avatar: &str, talking: bool, sounding: bool, cx: &
     let ring = if sounding { Some(palette::accent()) } else { talking.then(|| palette::status_in(crate::discord::Status::Online, cx)) };
     // lint-allow(custom-mark): ui::speaking_ring cuts its gap in the surface colour; this one leaves the gap clear over the sidebar's material.
     let mark = ring.map(|color| div().absolute().top(px(-RING_CLEARANCE)).left(px(-RING_CLEARANCE)).size(px(VOICE_RING)).rounded_full().border_2().border_color(color));
-    div().relative().flex_none().size(px(VOICE_AVATAR)).child(ui::avatar(avatar.to_owned(), VOICE_AVATAR)).children(mark)
+    div().relative().flex_none().size(px(VOICE_AVATAR)).child(ui::Avatar::new(avatar.to_owned(), VOICE_AVATAR)).children(mark)
 }
 
 // What a voice occupant's row shows at its end, as Discord's: their mute and deafen (server ones red),
@@ -71,7 +71,7 @@ pub(super) fn voice_mark_for(state: &crate::discord::VoiceState, cx: &App) -> Op
     let elements = marks.into_iter().map(|m| match m {
         VoiceMark::ServerMuted => mark(Nav::MicOffFill.icon(), danger),
         VoiceMark::ServerDeafened => mark(Nav::DeafenedFill.icon(), danger),
-        VoiceMark::Live => ui::live_badge().h(px(LIVE_MARK_HEIGHT)).px_1p5().text_size(ui::TEXT_XXS).into_any_element(),
+        VoiceMark::Live => ui::Badge::live().h(px(LIVE_MARK_HEIGHT)).px_1p5().text_size(ui::TEXT_XXS).into_any_element(),
         VoiceMark::Camera => mark(Nav::CameraFill.icon(), faint),
         VoiceMark::Muted => mark(Nav::MicOffFill.icon(), faint),
         VoiceMark::Deafened => mark(Nav::DeafenedFill.icon(), faint),
@@ -166,7 +166,7 @@ impl Waffle {
                     .object_fit(gpui_kit::ObjectFit::Cover)
                     .with_animation(SharedString::from(format!("stream-preview-{}", streamer.id)), Animation::new(ui::DUR_POP), |el, t| el.opacity(t))
             }))
-            .child(ui::live_badge().absolute().top_2().left_2())
+            .child(ui::Badge::live().absolute().top_2().left_2())
             .child(
                 // lint-allow(custom-mark): ui::media_label is a label over media; this is a hover scrim over the thumbnail holding the watch button.
                 ui::row()
@@ -194,7 +194,7 @@ impl Waffle {
             .pt_0p5()
             .pb_1()
             .gap_2()
-            .child(ui::avatar(streamer.avatar.to_owned(), 24.))
+            .child(ui::Avatar::new(streamer.avatar.to_owned(), 24.))
             .child(
                 div()
                     .flex_1()
@@ -202,9 +202,9 @@ impl Waffle {
                     .child(ui::line(app.unwrap_or(streamer.name).to_owned()).text_size(ui::TEXT_SM).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
                     .child(ui::line(detail.join(" · ")).text_size(ui::TEXT_XS).text_color(palette::faint(cx))),
             )
-            .when_some(who, |d, who| d.tooltip(move |window, cx| ui::tip(who.clone(), window, cx)));
+            .when_some(who, |d, who| d.tooltip(move |window, cx| ui::Tooltip::new(who.clone()).build(window, cx)));
         let record = self.stream_card_bounds.clone();
-        ui::surface(cx)
+        ui::PopoverContent::new(cx)
             .id(SharedString::from(format!("stream-card-{}", streamer.id)))
             // Blocks the rows under it; its own hover keeps it open once the pointer leaves the row.
             .occlude()
@@ -309,7 +309,7 @@ impl Waffle {
         let avatar_of = |v: &crate::discord::VoiceState| v.user.as_ref().map(|u| u.avatar.clone()).unwrap_or_else(|| crate::discord::avatar_url(&v.user_id, None));
         if self.hidden_voice_names.contains(&channel.id) && !present.is_empty() {
             let sidebar = crate::material::sidebar_fill(cx);
-            return vec![ui::row().h(px(VOICE_ROW)).pl_8().child(ui::avatar_stack(present.iter().map(|v| avatar_of(v)), VOICE_AVATAR, sidebar)).into_any_element()];
+            return vec![ui::row().h(px(VOICE_ROW)).pl_8().child(ui::AvatarGroup::new(present.iter().map(|v| avatar_of(v)), VOICE_AVATAR, sidebar)).into_any_element()];
         }
         let (hover, selected, text) = (palette::hover(cx), palette::selected(cx), palette::text(cx));
         let mut rows = self.activity_rows(channel, cx);
@@ -334,7 +334,7 @@ impl Waffle {
                     .id(SharedString::from(format!("voice-game-{}", state.user_id)))
                     .flex_none()
                     .child(img(game.icon.clone()).size_4().squircle(4.))
-                    .tooltip(move |window, cx| ui::tip(game.label(), window, cx))
+                    .tooltip(move |window, cx| ui::Tooltip::new(game.label()).build(window, cx))
             });
             let key = SharedString::from(format!("voice-{}", state.user_id));
             let row_group = SharedString::from(format!("voice-row-{}", state.user_id));
@@ -354,7 +354,7 @@ impl Waffle {
                         this.voice_user_menu(&user_id, e.position(), cx);
                     })
                 });
-            let tag = state.user.as_ref().and_then(|u| u.tag.as_ref()).map(|tag| crate::chat::guild_tag(tag, cx).flex_none());
+            let tag = state.user.as_ref().and_then(|u| u.tag.as_ref()).map(|tag| crate::chat::guild_tag(tag).flex_none());
             let carried = self.drag_motion.row(&key);
             let row = div().id(key.clone()).h(px(VOICE_ROW)).flex_none().squircle(ui::RADIUS_SM).children(self.drag_motion.spot(&key));
             let row = self.voice_drop_zone(row, key.clone(), channel, cx);
@@ -392,7 +392,7 @@ impl Waffle {
                         let user_id = state.user_id.clone();
                         cx.listener(move |this, e: &gpui_kit::MouseDownEvent, _, cx| this.voice_user_menu(&user_id, e.position, cx))
                     })
-                    .when(state.streaming, |r| r.on_hover(stream_hover).on_mouse_move(cx.listener(|this, e: &gpui_kit::MouseMoveEvent, _, _| this.stream_tunnel.track(e.position))).children(stream_card.map(|card| div().absolute().top_0().right_1().child(ui::floating("stream-card-float", card)))))
+                    .when(state.streaming, |r| r.on_hover(stream_hover).on_mouse_move(cx.listener(|this, e: &gpui_kit::MouseMoveEvent, _, _| this.stream_tunnel.track(e.position))).children(stream_card.map(|card| div().absolute().top_0().right_1().child(ui::Popover::floating("stream-card-float", card)))))
                     .when(is_watched, |r| r.bg(selected))
                     // A click opens their profile beside the channel list, as Discord's; a stream is watched from
                     // the preview its row shows on hover.

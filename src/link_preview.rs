@@ -18,7 +18,7 @@ use crate::{
     icons::Glyph,
     palette::{self, Level},
     query::Query,
-    ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, Squircle, Tone},
+    ui::{self, RADIUS_LG, RADIUS_MD, RADIUS_SM, Squircle},
 };
 
 // The mark in a dead invite's tile.
@@ -315,7 +315,7 @@ fn message_card(id: String, guild: &str, channel: &str, message: &Message, ctx: 
         .child(
             ui::row()
                 .gap_2()
-                .child(ui::avatar(message.author.avatar.clone(), 20.).flex_none())
+                .child(ui::Avatar::new(message.author.avatar.clone(), 20.).flex_none())
                 .child(ui::line(message.author.name.clone()).font_weight(FontWeight::MEDIUM).text_color(strong))
                 .child(div().flex_none().text_size(ui::TEXT_XS).text_color(faint).child((ctx.stamp)(&message.timestamp))),
         )
@@ -363,11 +363,11 @@ fn invite_card(id: String, code: &str, invite: &Invite, ctx: &CardContext, cx: &
     let icon = ui::server_tile(invite.icon.as_deref(), &invite.name, INVITE_ICON, cx);
     let (this, guild_id, code) = (ctx.this.clone(), invite.guild_id.clone(), code.to_owned());
     let action = match joined {
-        true => ui::button(SharedString::from(format!("{id}-open")), Tone::Secondary, cx).child("Joined").on_click(move |_, window, cx| { cx.stop_propagation();
+        true => ui::Button::new(SharedString::from(format!("{id}-open"))).variant(ui::ButtonVariant::Secondary).child("Joined").on_click(move |_, window, cx| { cx.stop_propagation();
             let guild_id = guild_id.clone();
             this.update(cx, |this, cx| this.open_guild(Some(guild_id), window, cx)).ok();
         }),
-        false => ui::button(SharedString::from(format!("{id}-join")), Tone::Primary, cx).child("Join").on_click(move |_, _, cx| { cx.stop_propagation();
+        false => ui::Button::new(SharedString::from(format!("{id}-join"))).child("Join").on_click(move |_, _, cx| { cx.stop_propagation();
             let code = code.clone();
             this.update(cx, |this, cx| this.join_invite(code, cx)).ok();
         }),
@@ -401,7 +401,7 @@ fn invite_frame(id: String, row: gpui_kit::Div, cx: &App) -> AnyElement {
 
 // The card's real layout in bars, shimmering like the feed's skeleton.
 fn skeleton(id: String, invite: bool, cx: &App) -> AnyElement {
-    let shimmer = |n: usize, radius: f32| ui::skeleton(SharedString::from(format!("{id}-bar-{n}")), radius, cx);
+    let shimmer = |n: usize, radius: f32| ui::Skeleton::new(SharedString::from(format!("{id}-bar-{n}"))).radius(radius);
     let bar = |n: usize, w: f32, h: f32| shimmer(n, h / 2.).w(px(w)).max_w_full().h(px(h));
     match invite {
         true => card(id.clone(), INVITE_WIDTH, cx).flex_col().gap_2p5().child(bar(0, 140., 10.)).child(
@@ -414,7 +414,7 @@ fn skeleton(id: String, invite: bool, cx: &App) -> AnyElement {
         false => card(id.clone(), MESSAGE_WIDTH, cx)
             .flex_col()
             .gap_2()
-            .child(ui::row().gap_2().child(ui::skeleton_circle(SharedString::from(format!("{id}-bar-0")), 20., cx)).child(bar(1, 96., 12.)).child(bar(2, 72., 10.)))
+            .child(ui::row().gap_2().child(ui::Skeleton::circle(SharedString::from(format!("{id}-bar-0")), 20.)).child(bar(1, 96., 12.)).child(bar(2, 72., 10.)))
             .child(bar(3, 320., 12.))
             .child(bar(4, 220., 12.))
             .child(bar(5, 80., 10.)),

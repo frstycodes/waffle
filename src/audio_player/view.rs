@@ -108,12 +108,12 @@ impl AudioPlayer {
                     .gap_2()
                     .child(self.play_button(32., label, cx))
                     .child(div().flex_none().text_size(ui::TEXT_XS).font_features(tabular()).text_color(palette::muted(cx)).child(format!("{now:0>width$} / {total}", width = total.len())))
-                    .child(div().flex_1().min_w_0().child(ui::slider_live(SharedString::from(format!("audio-seek-{}", self.key)), fraction, {
+                    .child(div().flex_1().min_w_0().child(ui::Slider::new(SharedString::from(format!("audio-seek-{}", self.key))).value(fraction).on_value_change({
                         let this = cx.entity().downgrade();
                         move |f, _, cx| {
                             this.update(cx, |this, cx| this.scrub(f, cx)).ok();
                         }
-                    }, window, cx)))
+                    })))
                     .child(self.volume(window, cx)),
             )
     }
@@ -134,7 +134,7 @@ impl AudioPlayer {
                 .justify_center()
                 .cursor_pointer()
                 .when(loading, |d| d.opacity(0.7))
-                .tooltip(move |window, cx| ui::tip(label, window, cx))
+                .tooltip(move |window, cx| ui::Tooltip::new(label).build(window, cx))
                 .child(Icon::new(glyph).size(px(side * 0.45)))
                 .on_click(cx.listener(|this, _, _, cx| {
                     cx.stop_propagation();
@@ -183,17 +183,17 @@ impl AudioPlayer {
     }
 
     // The speaker mutes; hovering it shows the slider above, which stays while the pointer is on either.
-    pub(super) fn volume(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn volume(&self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (volume, muted) = crate::video::volume(cx);
         let silent = muted || volume == 0.;
         let position = if muted { 0. } else { volume.powf(1. / CURVE) };
-        let slider = ui::slider_live(SharedString::from(format!("audio-volume-{}", self.key)), position, {
+        let slider = ui::Slider::new(SharedString::from(format!("audio-volume-{}", self.key))).value(position).on_value_change({
             let this = cx.entity().downgrade();
             move |f, _, cx| {
                 this.update(cx, |this, cx| this.set_volume(f, cx)).ok();
             }
-        }, window, cx);
-        let card = div() // lint-allow(custom-surface): ui::surface lacks an in-flow card that holds itself open on hover
+        });
+        let card = div() // lint-allow(custom-surface): ui::PopoverContent::new lacks an in-flow card that holds itself open on hover
             .id(SharedString::from(format!("audio-volume-card-{}", self.key)))
             .occlude()
             .w(px(VOLUME_WIDTH))
@@ -213,7 +213,7 @@ impl AudioPlayer {
             .flex_none()
             .child(
                 ui::pressable(
-                    ui::row() // lint-allow(custom-button): ui::icon_button lacks a hover that also holds the volume card open
+                    ui::row() // lint-allow(custom-button): ui::Button lacks a hover that also holds the volume card open
                         .id(SharedString::from(format!("audio-mute-{}", self.key)))
                         .size_7()
                         .squircle(RADIUS_XS)

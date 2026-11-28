@@ -158,10 +158,10 @@ impl Waffle {
             true => vec![self.post_preview(forum, composer, cx)],
             false => self.post_fields(forum, composer, cx),
         };
-        let error = composer.error.clone().map(|e| ui::field_error(e, cx));
+        let error = composer.error.clone().map(|e| ui::FieldError::new(e, cx));
         let cooling = self.cooldown_left(forum_id);
         let slowmode = (forum.props.slowmode > 0 && !self.skips_slowmode(forum_id)).then(|| slowmode_clock(cooling.map_or(forum.props.slowmode.into(), |left| left.as_secs() + 1), cx));
-        let preview = ui::button("new-post-preview", ui::Tone::Ghost, cx)
+        let preview = ui::Button::new("new-post-preview").variant(ui::ButtonVariant::Ghost)
             .child(Icon::new(if composer.previewing { Glyph::EyeSlash } else { Glyph::Eye }).size(ui::ICON_MD))
             .child(if composer.previewing { "Exit Preview" } else { "Preview" })
             .on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.previewing = !c.previewing, cx)));
@@ -170,16 +170,16 @@ impl Waffle {
             .child(preview)
             .children(slowmode)
             .child(div().flex_1())
-            .child(ui::button("new-post-cancel", ui::Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_new_post(cx))))
+            .child(ui::Button::new("new-post-cancel").variant(ui::ButtonVariant::Secondary).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_new_post(cx))))
             .child(
-                ui::button("new-post-submit", ui::Tone::Primary, cx)
+                ui::Button::new("new-post-submit")
                     .loading(composer.sending.then_some("Posting"))
                     .disabled(cooling.is_some())
                     .child("Post")
                     .on_click(cx.listener(|this, _, window, cx| this.submit_new_post(window, cx))),
             );
         let reopen = (!composer.guidelines && guidelines_text(forum).is_some())
-            .then(|| ui::icon_button("new-post-guidelines", Glyph::BookOpen, "Post Guidelines", cx).on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.guidelines = true, cx))));
+            .then(|| ui::Button::new("new-post-guidelines").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::BookOpen).tooltip_text("Post Guidelines").on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.guidelines = true, cx))));
         let head = ui::row()
             .items_start()
             .gap_1()
@@ -191,18 +191,18 @@ impl Waffle {
                     .child(ui::line(format!("in {}", forum.name)).text_size(ui::TEXT_SM).text_color(muted)),
             )
             .children(reopen)
-            .child(ui::icon_button("new-post-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_new_post(cx))));
-        let body = ui::dialog_body()
+            .child(ui::Button::new("new-post-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_new_post(cx))));
+        let body = ui::DialogContent::new()
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
                 if e.keystroke.key == "escape" {
                     this.close_new_post(cx);
                 }
             }))
             .child(head)
-            .child(ui::dialog_scroll("new-post-scroll", guidelines.map(IntoElement::into_any_element).into_iter().chain(fields).chain(error.map(IntoElement::into_any_element)), window, cx))
+            .child(ui::DialogContent::scroll("new-post-scroll", guidelines.map(IntoElement::into_any_element).into_iter().chain(fields).chain(error.map(IntoElement::into_any_element)), window, cx))
             .child(actions);
         let backdrop = div().id("new-post-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_new_post(cx)));
-        Some(ui::modal(backdrop, ui::dialog("new-post", 520., body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("new-post", 520., body, window, cx), cx))
     }
 
     // Title, tags, message and files, as you write them.
@@ -211,22 +211,22 @@ impl Waffle {
         let full = composer.tags.len() >= MAX_TAGS;
         let title_focus = composer.title.read(cx).focus_handle(cx);
         let title_count = composer.title.read(cx).value().chars().count();
-        let title = ui::field("Title", cx)
-            .child(ui::text_field("new-post-title", Input::new(&composer.title).appearance(false), &title_focus))
-            .child(ui::field_hint("", Some(format!("{title_count} / {MAX_TITLE}").into()), cx));
+        let title = ui::Field::new("Title", cx)
+            .child(ui::Input::new("new-post-title", Input::new(&composer.title).appearance(false), &title_focus))
+            .child(ui::FieldDescription::new("", Some(format!("{title_count} / {MAX_TITLE}").into()), cx));
         let body_focus = composer.body.read(cx).focus_handle(cx);
-        let message = ui::field("Message", cx).child(ui::text_area("new-post-body", Textarea::new(&composer.body).appearance(false).px_0().text_size(ui::TEXT_SM), &body_focus));
+        let message = ui::Field::new("Message", cx).child(ui::Textarea::new("new-post-body", Textarea::new(&composer.body).appearance(false).px_0().text_size(ui::TEXT_SM), &body_focus));
         let usable: Vec<&ForumTag> = forum.props.tags.iter().filter(|t| manage || !t.moderated).collect();
         let tags = (!usable.is_empty()).then(|| {
             let chips: Vec<AnyElement> = usable
                 .iter()
                 .map(|tag| {
                     let (on, tag_id) = (composer.tags.contains(&tag.id), tag.id.clone());
-                    let chip = tag_chip(SharedString::from(format!("new-post-tag-{}", tag.id)), tag, on, cx).disabled(full && !on);
+                    let chip = tag_chip(SharedString::from(format!("new-post-tag-{}", tag.id)), tag, on).disabled(full && !on);
                     chip.on_click(cx.listener(move |this, _, _, cx| this.toggle_post_draft_tag(&tag_id, cx))).into_any_element()
                 })
                 .collect();
-            ui::field(format!("Tags \u{b7} pick up to {MAX_TAGS}"), cx).child(ui::row().items_stretch().flex_wrap().gap_1p5().children(chips))
+            ui::Field::new(format!("Tags \u{b7} pick up to {MAX_TAGS}"), cx).child(ui::row().items_stretch().flex_wrap().gap_1p5().children(chips))
         });
         let files: Vec<AnyElement> = composer
             .files
@@ -234,20 +234,20 @@ impl Waffle {
             .enumerate()
             .map(|(i, file)| {
                 let path = file.path.clone();
-                let remove = ui::icon_button(SharedString::from(format!("new-post-file-remove-{i}")), Glyph::X, "Remove", cx)
+                let remove = ui::Button::new(SharedString::from(format!("new-post-file-remove-{i}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Remove")
                     .on_click(cx.listener(move |this, _, _, cx| this.change_composer(|c| c.files.retain(|f| f.path != path), cx)));
                 file_chip(file, cx).child(remove).into_any_element()
             })
             .collect();
-        let add = ui::button("new-post-attach", ui::Tone::Secondary, cx).small().child(Icon::new(Glyph::Upload).size(ui::ICON_SM)).child("Add files").on_click(cx.listener(|this, _, window, cx| this.pick_post_files(window, cx)));
-        let attachments = ui::field("Files", cx).child(ui::row().flex_wrap().gap_1p5().children(files).child(add));
+        let add = ui::Button::new("new-post-attach").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child(Icon::new(Glyph::Upload).size(ui::ICON_SM)).child("Add files").on_click(cx.listener(|this, _, window, cx| this.pick_post_files(window, cx)));
+        let attachments = ui::Field::new("Files", cx).child(ui::row().flex_wrap().gap_1p5().children(files).child(add));
         [Some(title.into_any_element()), tags.map(IntoElement::into_any_element), Some(message.into_any_element()), Some(attachments.into_any_element())].into_iter().flatten().collect()
     }
 
     // The post as its card will read: tags, title, the message rendered, and its files.
     pub(super) fn post_preview(&self, forum: &Channel, composer: &Composer, cx: &mut Context<Self>) -> AnyElement {
         let (title, content) = (composer.title.read(cx).value().trim().to_owned(), composer.body.read(cx).value().to_string());
-        let tags: Vec<Div> = forum.props.tags.iter().filter(|t| composer.tags.contains(&t.id)).map(|t| post_tag_badge(t.emoji.as_ref(), t.name.clone(), false, cx)).collect();
+        let tags: Vec<ui::Badge> = forum.props.tags.iter().filter(|t| composer.tags.contains(&t.id)).map(|t| post_tag_badge(t.emoji.as_ref(), t.name.clone(), false, cx)).collect();
         let (heading, ink) = match title.is_empty() {
             true => ("Untitled post".to_owned(), palette::faint(cx)),
             false => (title, palette::strong(cx)),
@@ -272,12 +272,12 @@ impl Waffle {
         let topic = guidelines_text(forum)?;
         let edit = self.can_in(&forum.id, perm::MANAGE_CHANNELS).then(|| {
             let (channel, guild_id) = (forum.clone(), self.guild_id.clone().unwrap_or_default());
-            ui::icon_button("new-post-guidelines-edit", Glyph::Pen, "Edit Post Guidelines", cx).on_click(cx.listener(move |this, _, window, cx| {
+            ui::Button::new("new-post-guidelines-edit").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Pen).tooltip_text("Edit Post Guidelines").on_click(cx.listener(move |this, _, window, cx| {
                 this.close_new_post(cx);
                 this.open_channel_settings(channel.clone(), guild_id.clone(), window, cx);
             }))
         });
-        let close = ui::icon_button("new-post-guidelines-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.guidelines = false, cx)));
+        let close = ui::Button::new("new-post-guidelines-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.guidelines = false, cx)));
         let measured = window.use_keyed_state(SharedString::from(format!("new-post-guidelines-{}", forum.id)), cx, |_, _| 0f32);
         let overflows = *measured.read(cx) > GUIDELINES_HEIGHT;
         let measure = measured.clone();
@@ -297,7 +297,7 @@ impl Waffle {
             .id("new-post-guidelines-text")
             .overflow_y_scrollbar();
         let expand = overflows.then(|| {
-            ui::button("new-post-guidelines-expand", ui::Tone::Link, cx)
+            ui::Button::new("new-post-guidelines-expand").variant(ui::ButtonVariant::Link)
                 .child(if full { "Collapse" } else { "Expand" })
                 .on_click(cx.listener(|this, _, _, cx| this.change_composer(|c| c.guidelines_full = !c.guidelines_full, cx)))
         });

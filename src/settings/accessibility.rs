@@ -51,7 +51,7 @@ impl Waffle {
 
     // The link under Appearance's Theme group.
     pub(super) fn accessibility_link(&self, cx: &mut Context<Self>) -> Div {
-        let link = ui::button("theme-accessibility", ui::Tone::Link, cx)
+        let link = ui::Button::new("theme-accessibility").variant(ui::ButtonVariant::Link)
             .text_size(ui::TEXT_XS)
             .child("Adjust the visual density of chat messages and UI")
             .on_click(cx.listener(|this, _, window, cx| this.open_page(Page::Accessibility, window, cx)));
@@ -62,39 +62,25 @@ impl Waffle {
         let size = self.prefs.chat_font_size;
         let at = nearest(CHAT_FONT_SIZES.map(f32::from), f32::from(size));
         let slider = self.stepped("chat-font-size", CHAT_FONT_SIZES.len(), at, |this, i, cx| this.update_prefs(cx, |p| p.chat_font_size = CHAT_FONT_SIZES[i]), cx);
-        let card = ui::settings_card(cx)
+        let card = ui::Card::new(cx)
             .child(slider_row(setting("chat-font-size"), None, format!("{size}px"), slider, value_marks(&CHAT_FONT_SIZES, "px", at, cx), false, cx))
             .child(self.registry_row(setting("underline-links"), true, window, cx))
             .child(self.registry_row(setting("display-name-styles"), true, window, cx));
         ui::settings_group("Text readability", cx).child(card)
     }
 
-    fn density_group(&self, window: &mut Window, cx: &mut Context<Self>) -> Div {
+    fn density_group(&self, _window: &mut Window, cx: &mut Context<Self>) -> Div {
         let compact = self.account_settings.message_display_compact;
         let density = self.prefs.ui_density as usize;
         let this = cx.entity().downgrade();
-        let density_control = ui::segmented_live(
-            "ui-density-segments",
-            &["Compact", "Default", "Spacious"],
-            density,
-            move |i, _, cx| {
+        let density_control = ui::Tabs::new("ui-density-segments").labels(&["Compact", "Default", "Spacious"]).value(density).on_value_change(move |i, _, cx| {
                 let density = [Density::Compact, Density::Default, Density::Spacious][i.min(2)];
                 this.update(cx, |this, cx| this.update_prefs(cx, |p| p.ui_density = density)).ok();
-            },
-            window,
-            cx,
-        );
+            });
         let this = cx.entity().downgrade();
-        let display_control = ui::segmented_live(
-            "message-display-segments",
-            &["Default", "Compact"],
-            compact as usize,
-            move |i, _, cx| {
+        let display_control = ui::Tabs::new("message-display-segments").labels(&["Default", "Compact"]).value(compact as usize).on_value_change(move |i, _, cx| {
                 this.update(cx, |this, cx| this.set_message_display(i == 1, cx)).ok();
-            },
-            window,
-            cx,
-        );
+            });
         let spacing = self.prefs.group_spacing(compact);
         let spacing_at = nearest(GROUP_SPACINGS.map(f32::from), f32::from(spacing));
         let spacing_slider = self.stepped("group-spacing", GROUP_SPACINGS.len(), spacing_at, |this, i, cx| this.update_prefs(cx, |p| p.group_spacing = Some(GROUP_SPACINGS[i])), cx);
@@ -102,7 +88,7 @@ impl Waffle {
         let zoom_at = nearest(ZOOM_STEPS, zoom);
         let zoom_slider = self.stepped("zoom", ZOOM_STEPS.len(), zoom_at, |_, i, cx| cx.defer(move |cx| crate::app_keys::set_zoom_to(cx, ZOOM_STEPS[i])), cx);
         let zoom_percents = ZOOM_STEPS.map(|z| (z * 100.).round() as u32);
-        let card = ui::settings_card(cx)
+        let card = ui::Card::new(cx)
             .child(segmented_row(setting("ui-density"), density_control, false, cx))
             .child(segmented_row(setting("message-display"), display_control, true, cx))
             .child(slider_row(setting("group-spacing"), None, format!("{spacing}px"), spacing_slider, value_marks(&GROUP_SPACINGS, "px", spacing_at, cx), true, cx))
@@ -127,7 +113,7 @@ impl Waffle {
         let slider = self.stepped("saturation", SATURATION_STOPS, at, |this, i, cx| this.update_prefs(cx, |p| p.saturation = i as f32 / (SATURATION_STOPS - 1) as f32), cx);
         let caption = "Reduce the saturation of colors within the app, for those with color sensitivities. This does not affect the saturation of images, videos, role colors or other user content.";
         let marks = marks(["0%", "25%", "50%", "75%", "100%"].map(|m| (SharedString::from(m), false)), cx);
-        let card = ui::settings_card(cx)
+        let card = ui::Card::new(cx)
             .child(slider_row(setting("saturation"), Some(caption), format!("{}%", at * 5), slider, marks, false, cx))
             .child(self.registry_row(setting("desaturate-user-colors"), true, window, cx))
             .child(self.registry_row(setting("high-contrast"), true, window, cx))
@@ -141,7 +127,7 @@ impl Waffle {
         let slider = self.stepped("min-toast", stops, usize::from(secs - TOAST_SECS.start()), |this, i, cx| this.update_prefs(cx, |p| p.min_toast_secs = TOAST_SECS.start() + i as u8), cx);
         let caption = "Keep pop-up notifications on screen for at least this long. Notifications that already stay longer are unaffected.";
         let marks = marks(["3s", "20s"].map(|m| (SharedString::from(m), false)), cx);
-        let card = ui::settings_card(cx)
+        let card = ui::Card::new(cx)
             .child(self.toggle_row(setting("reduce-motion"), Toggle::ReduceMotion, false, window, cx))
             .child(self.toggle_row(setting("reduce-motion-sync"), Toggle::ReduceMotionSync, true, window, cx))
             .child(slider_row(setting("min-toast"), Some(caption), format!("{secs}s"), slider, marks, true, cx))
@@ -158,8 +144,8 @@ impl Waffle {
         let caption = "Control the speed at which text is read aloud when using Speak Message or other text-to-speech features.";
         // `say` is macOS's; elsewhere there's no voice to preview, as Speak message is macOS only.
         let preview = cfg!(target_os = "macos").then(|| {
-            ui::button("tts-preview", ui::Tone::Secondary, cx)
-                .small()
+            ui::Button::new("tts-preview").variant(ui::ButtonVariant::Secondary)
+                .size(ui::ButtonSize::Sm)
                 .child(Icon::new(Glyph::Play).size(ui::ICON_SM))
                 .child("Preview")
                 .on_click(cx.listener(|this, _, _, _| crate::message_menu::speak(TTS_SAMPLE, this.prefs.tts_rate)))
@@ -179,7 +165,7 @@ impl Waffle {
             .child("x1.0")
             .child(ui::row().flex_1().justify_end().child("Faster"));
         let rate_row = stack_row(tts.id, false, cx).child(header).child(slider).child(marks);
-        let card = ui::settings_card(cx).child(rate_row).child(self.toggle_row(setting("image-descriptions"), Toggle::ImageDescriptions, true, window, cx));
+        let card = ui::Card::new(cx).child(rate_row).child(self.toggle_row(setting("image-descriptions"), Toggle::ImageDescriptions, true, window, cx));
         ui::settings_group("Audio and screen reader", cx).child(card)
     }
 
@@ -206,7 +192,7 @@ impl Waffle {
     // GAP: drawn here, not by chat.rs's message_row, which needs a live channel's RowContext.
     fn a11y_preview(&self, cx: &mut Context<Self>) -> Div {
         let look = PreviewLook::new(self);
-        // lint-allow(custom-badge): ui::settings_card has no body-font-size option; this card sets the preview's message size
+        // lint-allow(custom-badge): ui::Card::new has no body-font-size option; this card sets the preview's message size
         let card = ui::col()
             .py_3()
             .px_2()
@@ -242,8 +228,8 @@ fn slider_row(setting: &'static Setting, caption: Option<&'static str>, value: S
     stack_row(setting.id, line, cx).child(numbered(setting.title, caption, &value, cx)).child(slider).child(marks)
 }
 
-fn segmented_row(setting: &'static Setting, control: Div, line: bool, cx: &mut Context<Waffle>) -> Stateful<Div> {
-    ui::settings_row(setting.id, line, cx).child(ui::settings_text(setting.title, setting.caption, cx)).child(control.flex_none())
+fn segmented_row(setting: &'static Setting, control: ui::Tabs, line: bool, cx: &mut Context<Waffle>) -> Stateful<Div> {
+    ui::Item::setting(setting.id, line, cx).child(ui::settings_text(setting.title, setting.caption, cx)).child(control.flex_none())
 }
 
 // Every stop labelled with its value; the chosen one in the accent.
@@ -319,12 +305,12 @@ impl PreviewLook {
         let media = self.media(&sample.media, cx);
         if self.compact {
             let time = div().w(px(TIME_WIDTH)).flex_none().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(sample.time);
-            let face = (sample.starts_group && self.compact_avatars).then(|| ui::monogram(sample.author, 18.));
+            let face = (sample.starts_group && self.compact_avatars).then(|| ui::AvatarFallback::new(sample.author, 18.));
             let line = ui::row().items_baseline().gap_2().child(time).children(face).when(sample.starts_group, |d| d.child(self.name(sample, cx))).child(self.text(sample, cx));
             // lint-allow(raw-margin): media aligns under the text, past the time column and avatar; no sibling gap does that
             return row.child(line).children(media.map(|m| m.ml(px(COMPACT_MEDIA_INDENT))));
         }
-        let face = if sample.starts_group { ui::monogram(sample.author, 40.) } else { div().w_10().flex_none() };
+        let face = if sample.starts_group { ui::AvatarFallback::new(sample.author, 40.) } else { div().w_10().flex_none() };
         let who = sample.starts_group.then(|| {
             let time = div().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child(sample.time);
             ui::row().items_baseline().gap_2().child(self.name(sample, cx)).child(time)

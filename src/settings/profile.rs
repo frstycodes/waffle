@@ -169,9 +169,9 @@ impl Waffle {
             .flex_1()
             .gap_1p5()
             .child(super::field_label(label, cx))
-            .child(ui::text_field(id, gpui_kit::component::input::Input::new(&edit.input).appearance(false), &edit.input.read(cx).focus_handle(cx)))
+            .child(ui::Input::new(id, gpui_kit::component::input::Input::new(&edit.input).appearance(false), &edit.input.read(cx).focus_handle(cx)))
             .when_some(edit.password.as_ref(), |d, password| {
-                d.child(ui::text_field("edit-password", gpui_kit::component::input::Input::new(password).appearance(false), &password.read(cx).focus_handle(cx)))
+                d.child(ui::Input::new("edit-password", gpui_kit::component::input::Input::new(password).appearance(false), &password.read(cx).focus_handle(cx)))
                     .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child("Discord asks for your password to change your username."))
             })
             .into_any_element()

@@ -26,7 +26,7 @@ use crate::{
     discord::perm,
     icons::Glyph,
     palette,
-    ui::{self, Notice, Tone},
+    ui::{self, Notice},
 };
 
 // The size a role row has before its first measure, for the drag ghost.
@@ -216,11 +216,11 @@ impl Waffle {
 
         let default = everyone.map(|r| {
             let id = r.id.clone();
-            ui::settings_choice(ui::settings_row("ss-role-everyone", false, cx).child(ui::icon_tile(Glyph::Users, palette::selected(cx), palette::strong(cx)).flex_none()).child(ui::settings_text("Default permissions", Some("@everyone · applies to all server members"), cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)), cx)
+            ui::settings_choice(ui::Item::setting("ss-role-everyone", false, cx).child(ui::ItemMedia::icon(Glyph::Users, palette::selected(cx), palette::strong(cx)).flex_none()).child(ui::settings_text("Default permissions", Some("@everyone · applies to all server members"), cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)), cx)
                 .on_click(cx.listener(move |this, _, window, cx| this.open_role(id.clone(), window, cx)))
         });
-        let create = ui::button("ss-role-create", Tone::Primary, cx).small().child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("Create role").on_click(cx.listener(|this, _, _, cx| this.create_role(cx)));
-        let search = ui::search_field("ss-role-search", &view.roles.search, cx);
+        let create = ui::Button::new("ss-role-create").size(ui::ButtonSize::Sm).child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("Create role").on_click(cx.listener(|this, _, _, cx| this.create_role(cx)));
+        let search = ui::InputGroup::search("ss-role-search", &view.roles.search, cx);
         // Drag to reorder while the whole list shows; a filtered list has gaps a drop can't name.
         let sorting = query.is_empty();
         let order: Vec<String> = ranked.iter().map(|r| r.id.clone()).collect();
@@ -237,7 +237,7 @@ impl Waffle {
                 let id = r.id.clone();
                 // A grip on the rows that drag; the rest keep its slot so every name lines up.
                 let grip = ui::row().items_stretch().w_4().flex_none().justify_center().when(draggable, |g| g.cursor_grab().text_color(palette::faint(cx)).child(Icon::new(Glyph::Grip).size(ui::ICON_MD)));
-                let row = ui::settings_row(SharedString::from(format!("ss-role-{}", r.id)), i > 0 || default_shown(&list, &guild_id), cx)
+                let row = ui::Item::setting(SharedString::from(format!("ss-role-{}", r.id)), i > 0 || default_shown(&list, &guild_id), cx)
                     .child(grip)
                     .child(div().p_0p5().flex_none().child(div().size_3().rounded_full().bg(color)))
                     .child(ui::settings_text(r.role.name.clone(), count.or_else(|| lock.reason().map(str::to_owned)), cx))
@@ -262,9 +262,9 @@ impl Waffle {
             .collect();
         let empty = rows.is_empty().then(|| ui::settings_caption(if query.is_empty() { "No roles yet. Create one to group members and give them permissions." } else { "No roles match." }, cx));
         vec![
-            ui::settings_card(cx).children(default).into_any_element(),
+            ui::Card::new(cx).children(default).into_any_element(),
             ui::row().gap_3().child(div().flex_1().child(search)).child(create).into_any_element(),
-            ui::settings_group("Roles", cx).child(ui::settings_card(cx).id("ss-roles").children(rows)).children(empty).child(ui::settings_caption("Members use the colour of their highest role. You can only move roles below your own highest role.", cx)).into_any_element(),
+            ui::settings_group("Roles", cx).child(ui::Card::new(cx).id("ss-roles").children(rows)).children(empty).child(ui::settings_caption("Members use the colour of their highest role. You can only move roles below your own highest role.", cx)).into_any_element(),
         ]
     }
 
@@ -350,7 +350,7 @@ impl Waffle {
         let Some(row) = row else { return Vec::new() };
         let lock = self.with_access(&guild_id, |me| access::role_lock(me, row.position, row.managed)).unwrap_or(RoleLock::Above);
         let tab = edit.tab;
-        let back = ui::button("ss-role-back", Tone::Ghost, cx).small().child(Icon::new(Glyph::ChevronLeft).size(ui::ICON_MD)).child("Roles").on_click(cx.listener(|this, _, window, cx| {
+        let back = ui::Button::new("ss-role-back").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Sm).child(Icon::new(Glyph::ChevronLeft).size(ui::ICON_MD)).child("Roles").on_click(cx.listener(|this, _, window, cx| {
             this.reset_role_draft(window, cx);
             if let Some(view) = &mut this.server_settings {
                 view.roles.open = None;
@@ -367,7 +367,7 @@ impl Waffle {
         let tab = if all.contains(&tab) { tab } else { all[0] };
         let selected = all.iter().position(|t| *t == tab).unwrap_or(0);
         let this = cx.entity();
-        let strip = ui::tabs("ss-role-tabs", &tabs, selected, move |i, _, cx| {
+        let strip = ui::Tabs::new("ss-role-tabs").variant(ui::TabsVariant::Line).tabs(&tabs).value(selected).on_value_change(move |i, _, cx| {
             let pick = all[i];
             this.update(cx, |this, cx| {
                 if let Some(edit) = this.server_settings.as_mut().and_then(|v| v.roles.open.as_mut()) {
@@ -375,10 +375,10 @@ impl Waffle {
                 }
                 cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
             })
-        }, window, cx);
+        });
         let mut out = vec![ui::col().gap_2().child(ui::row().gap_2().child(back).child(title)).child(strip).into_any_element()];
         if let Some(reason) = lock.reason().filter(|_| lock == RoleLock::Above) {
-            out.push(ui::callout(Notice::Info, Glyph::Shield, "View only", reason, cx).into_any_element());
+            out.push(ui::Alert::new(Notice::Info, Glyph::Shield, "View only", reason, cx).into_any_element());
         }
         let editable = lock != RoleLock::Above;
         out.extend(match tab {
@@ -396,7 +396,7 @@ impl Waffle {
         let guild_id = view.guild_id.clone();
         let gradient = self.with_access(&guild_id, |me| me.feature(access::ENHANCED_ROLE_COLORS.0)).unwrap_or(false);
         let focus = view.roles.name.read(cx).focus_handle(cx);
-        let name = ui::field("Role name", cx).child(ui::text_field("ss-role-name", Input::new(&view.roles.name).appearance(false), &focus).disabled(!editable));
+        let name = ui::Field::new("Role name", cx).child(ui::Input::new("ss-role-name", Input::new(&view.roles.name).appearance(false), &focus).disabled(!editable));
         let ring = palette::surface(palette::Level::Group, cx);
         let swatches = |slot: u8, current: Option<u32>, cx: &mut Context<Self>| {
             let none = ui::swatch(SharedString::from(format!("ss-swatch-{slot}-none")), palette::faint(cx), current.is_none_or(|c| c == 0), ring).on_click(cx.listener(move |this, _, _, cx| this.edit_role_draft(cx, |d| set_color(d, slot, None))));
@@ -405,7 +405,7 @@ impl Waffle {
             ui::row().items_stretch().max_w(px(SWATCH_ROW_WIDTH)).flex_wrap().gap_2().child(none).children(rest)
         };
         let primary = swatches(0, Some(draft.color), cx);
-        let mut colour = ui::settings_card(cx).p_4().gap_3().child(ui::settings_text("Colour", Some("Members show the colour of their highest coloured role"), cx)).child(primary);
+        let mut colour = ui::Card::new(cx).p_4().gap_3().child(ui::settings_text("Colour", Some("Members show the colour of their highest coloured role"), cx)).child(primary);
         if gradient {
             colour = colour.child(ui::settings_text("Gradient", Some("A second colour fades the name from one to the other"), cx)).child(swatches(1, draft.secondary_color, cx));
         } else {
@@ -414,9 +414,9 @@ impl Waffle {
         let hoist = ui::settings_switch("ss-role-hoist", "Show members separately", "They get their own group in the member list", draft.hoist, false, window, cx).on_click(cx.listener(|this, _, _, cx| this.edit_role_draft(cx, |d| d.hoist = !d.hoist)));
         let mention = ui::settings_switch("ss-role-mention", "Let anyone @mention this role", "Members with Mention @everyone can always mention it", draft.mentionable, true, window, cx).on_click(cx.listener(|this, _, _, cx| this.edit_role_draft(cx, |d| d.mentionable = !d.mentionable)));
         let mut out = vec![
-            ui::settings_card(cx).p_4().child(name).into_any_element(),
+            ui::Card::new(cx).p_4().child(name).into_any_element(),
             ui::settings_group("Style", cx).child(colour).into_any_element(),
-            ui::settings_group("Member list", cx).child(ui::settings_card(cx).child(hoist).child(mention)).into_any_element(),
+            ui::settings_group("Member list", cx).child(ui::Card::new(cx).child(hoist).child(mention)).into_any_element(),
         ];
         if editable && !managed {
             out.push(self.ss_role_delete(row, cx));
@@ -433,11 +433,11 @@ impl Waffle {
             cx.notify(); // lint-allow(global-notify): the server settings window is built by the root render over the columns, so every column's draw reads it
         });
         if !asking {
-            return ui::settings_card(cx).child(ui::settings_row("ss-role-delete", false, cx).child(ui::settings_text("Delete role", Some("Everyone who has it loses it"), cx)).child(ui::button("ss-role-delete-ask", Tone::Danger, cx).small().child("Delete role").on_click(ask))).into_any_element();
+            return ui::Card::new(cx).child(ui::Item::setting("ss-role-delete", false, cx).child(ui::settings_text("Delete role", Some("Everyone who has it loses it"), cx)).child(ui::Button::new("ss-role-delete-ask").variant(ui::ButtonVariant::Destructive).size(ui::ButtonSize::Sm).child("Delete role").on_click(ask))).into_any_element();
         }
         let id = row.id.clone();
-        let keep = ui::button("ss-role-keep", Tone::Secondary, cx).small().child("Keep role").on_click(ask);
-        let delete = ui::button("ss-role-delete-yes", Tone::Danger, cx).small().child(format!("Delete {}", row.role.name)).on_click(cx.listener(move |this, _, _, cx| {
+        let keep = ui::Button::new("ss-role-keep").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Keep role").on_click(ask);
+        let delete = ui::Button::new("ss-role-delete-yes").variant(ui::ButtonVariant::Destructive).size(ui::ButtonSize::Sm).child(format!("Delete {}", row.role.name)).on_click(cx.listener(move |this, _, _, cx| {
             let Some(guild_id) = this.server_settings.as_ref().map(|v| v.guild_id.clone()) else { return };
             let id = id.clone();
             this.server_call(api::delete_role(&guild_id, &id), move |this, result, cx| match result {
@@ -456,16 +456,16 @@ impl Waffle {
             }, cx);
         }));
         let count = self.server_settings.as_ref().and_then(|v| v.roles.counts.get(&row.id).copied()).unwrap_or(0);
-        ui::callout_with(Notice::Danger, Glyph::Trash, format!("Delete {}?", row.role.name), format!("{} lose it. This can't be undone.", plural(count, "member", "members")), ui::row().items_stretch().gap_2().child(keep).child(delete), cx).into_any_element()
+        ui::Alert::with_actions(Notice::Danger, Glyph::Trash, format!("Delete {}?", row.role.name), format!("{} lose it. This can't be undone.", plural(count, "member", "members")), ui::row().items_stretch().gap_2().child(keep).child(delete), cx).into_any_element()
     }
 
-    fn ss_role_permissions(&mut self, editable: bool, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    fn ss_role_permissions(&mut self, editable: bool, _window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let Some(view) = self.server_settings.as_ref() else { return Vec::new() };
         let Some(edit) = view.roles.open.as_ref() else { return Vec::new() };
         let (bits, guild_id) = (edit.draft.permissions, view.guild_id.clone());
         let query = view.roles.perm_search.read(cx).value().to_string();
-        let search = ui::search_field("ss-perm-search", &view.roles.perm_search, cx);
-        let clear = ui::button("ss-perm-clear", Tone::Ghost, cx).small().disabled(!editable || bits == 0).child("Clear permissions").on_click(cx.listener(|this, _, _, cx| this.edit_role_draft(cx, |d| d.permissions = 0)));
+        let search = ui::InputGroup::search("ss-perm-search", &view.roles.perm_search, cx);
+        let clear = ui::Button::new("ss-perm-clear").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Sm).disabled(!editable || bits == 0).child("Clear permissions").on_click(cx.listener(|this, _, _, cx| this.edit_role_draft(cx, |d| d.permissions = 0)));
         let mut out = vec![ui::row().gap_3().child(div().flex_1().child(search)).child(clear).into_any_element()];
         let groups = perms::search(&query);
         if groups.is_empty() {
@@ -479,7 +479,7 @@ impl Waffle {
                     let (bit, on) = (p.bit, bits & p.bit != 0);
                     let allowed = editable && self.with_access(&guild_id, |me| access::can_toggle_permission(me, bit)).unwrap_or(false);
                     let detail = if allowed || !editable { p.detail.to_owned() } else { format!("{} You can only grant permissions you have.", p.detail) };
-                    let row = ui::settings_row(SharedString::from(format!("ss-perm-{bit}")), i > 0, cx).child(ui::settings_text(p.name, Some(detail), cx)).child(ui::switch_live(SharedString::from(format!("ss-perm-switch-{bit}")), on, window, cx).opacity(if allowed { 1. } else { 0.5 }));
+                    let row = ui::Item::setting(SharedString::from(format!("ss-perm-{bit}")), i > 0, cx).child(ui::settings_text(p.name, Some(detail), cx)).child(ui::Switch::new(SharedString::from(format!("ss-perm-switch-{bit}"))).checked(on).opacity(if allowed { 1. } else { 0.5 }));
                     if allowed {
                         ui::settings_choice(row, cx).on_click(cx.listener(move |this, _, _, cx| this.edit_role_draft(cx, |d| d.permissions ^= bit))).into_any_element()
                     } else {
@@ -487,10 +487,10 @@ impl Waffle {
                     }
                 })
                 .collect();
-            out.push(ui::settings_group(title, cx).child(ui::settings_card(cx).children(rows)).into_any_element());
+            out.push(ui::settings_group(title, cx).child(ui::Card::new(cx).children(rows)).into_any_element());
         }
         if bits & perm::ADMINISTRATOR != 0 {
-            out.insert(1, ui::callout(Notice::Warning, Glyph::Warning, "Administrator is on", "This role has every permission and ignores channel overrides.", cx).into_any_element());
+            out.insert(1, ui::Alert::new(Notice::Warning, Glyph::Warning, "Administrator is on", "This role has every permission and ignores channel overrides.", cx).into_any_element());
         }
         out
     }
@@ -515,12 +515,12 @@ impl Waffle {
                 let user = known.get(id);
                 let name = user.map(|u| u.name.clone()).unwrap_or_else(|| format!("Member {id}"));
                 let avatar: AnyElement = match user.map(|u| u.avatar.clone()).filter(|a| !a.is_empty()) {
-                    Some(url) => ui::avatar(url, 28.).flex_none().into_any_element(),
-                    None => ui::monogram(&name, 28.).flex_none().into_any_element(),
+                    Some(url) => ui::Avatar::new(url, 28.).flex_none().into_any_element(),
+                    None => ui::AvatarFallback::new(&name, 28.).flex_none().into_any_element(),
                 };
                 let (user_id, role_id, role_name, name_for, guild_id) = (id.clone(), row.id.clone(), row.role.name.clone(), name.clone(), guild_id.clone());
                 let remove = editable.then(|| {
-                    ui::icon_button(SharedString::from(format!("ss-role-member-x-{id}")), Glyph::X, format!("Remove {name} from {}", row.role.name), cx).on_click(cx.listener(move |this, _, _, cx| {
+                    ui::Button::new(SharedString::from(format!("ss-role-member-x-{id}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text(format!("Remove {name} from {}", row.role.name)).on_click(cx.listener(move |this, _, _, cx| {
                         let (gid, uid, rid) = (guild_id.clone(), user_id.clone(), role_id.clone());
                         let label = format!("Removed {name_for} from {role_name}");
                         this.server_call(api::remove_member_role(&gid, &uid, &rid), move |this, result, cx| match result {
@@ -534,10 +534,10 @@ impl Waffle {
                         }, cx);
                     }))
                 });
-                ui::settings_row(SharedString::from(format!("ss-role-member-{id}")), i > 0, cx).child(avatar).child(ui::settings_text(name, None::<&str>, cx)).children(remove).into_any_element()
+                ui::Item::setting(SharedString::from(format!("ss-role-member-{id}")), i > 0, cx).child(avatar).child(ui::settings_text(name, None::<&str>, cx)).children(remove).into_any_element()
             })
             .collect();
-        vec![ui::settings_group(plural(ids.len() as u64, "member", "members"), cx).child(ui::settings_card(cx).children(rows)).into_any_element()]
+        vec![ui::settings_group(plural(ids.len() as u64, "member", "members"), cx).child(ui::Card::new(cx).children(rows)).into_any_element()]
     }
 }
 

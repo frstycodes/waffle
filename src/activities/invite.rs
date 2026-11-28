@@ -103,7 +103,7 @@ pub(crate) fn activity_message_card(message: &discord::Message, activity: &disco
     // Without the icon's colours yet, the stage's own dark stands in; the card is dark in both themes.
     let (from, to) = cards.washes.get(&activity.app_id).copied().unwrap_or((palette::stage::dock(), palette::stage::bg()));
     let (channel_id, guild_id, app_id) = (message.channel_id.clone(), message.guild_id.clone(), activity.app_id.clone());
-    let button = ui::button(SharedString::from(format!("activity-card-{}", message.id)), Tone::Overlay, cx).w_full().disabled(full).child(label).on_click(move |_, window, cx| {
+    let button = ui::Button::new(SharedString::from(format!("activity-card-{}", message.id))).scope(ui::ButtonScope::Art).w_full().disabled(full).child(label).on_click(move |_, window, cx| {
         cx.stop_propagation();
         _ = this.update(cx, |this, cx| this.join_from_chat(&channel_id, guild_id.as_deref(), app_id.clone(), window, cx));
     });

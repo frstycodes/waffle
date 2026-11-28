@@ -292,9 +292,9 @@ impl Waffle {
                 format!("{app} wants to open a link"),
                 ui::col()
                     .gap_3()
-                    // lint-allow(custom-badge): ui::callout leads with an icon and a title, and this is a plain well for a URL
+                    // lint-allow(custom-badge): ui::Alert::new leads with an icon and a title, and this is a plain well for a URL
                     .child(div().p_3().squircle(RADIUS_MD).bg(palette::surface(palette::Level::Page, cx)).text_size(TEXT_SM).text_color(palette::strong(cx)).child(url.clone()))
-                    .child(ui::pick_row("ask-trust", ui::check(if *trust { ui::Check::On } else { ui::Check::Off }, cx), format!("Open {domain} links without asking"), None, cx).on_click(cx.listener(|this, _, _, cx| this.toggle_link_trust(cx))))
+                    .child(ui::pick_row("ask-trust", ui::Checkbox::mark(if *trust { ui::Check::On } else { ui::Check::Off }), format!("Open {domain} links without asking"), None, cx).on_click(cx.listener(|this, _, _, cx| this.toggle_link_trust(cx))))
                     .into_any_element(),
                 "Go back",
                 "Open link",
@@ -311,23 +311,23 @@ impl Waffle {
             ),
             Ask::Purchase => (
                 format!("Buy something in {app}?"),
-                ui::callout(ui::Notice::Info, Glyph::Info, "Waffle can't take payments", "Finish in your browser on discord.com; it shows up here once it's paid.", cx).into_any_element(),
+                ui::Alert::new(ui::Notice::Info, Glyph::Info, "Waffle can't take payments", "Finish in your browser on discord.com; it shows up here once it's paid.", cx).into_any_element(),
                 "Not now",
                 "Continue in browser",
             ),
         };
-        let body = ui::dialog_body()
+        let body = ui::DialogContent::new()
             .child(div().text_size(TEXT_LG).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
             .child(body)
             .child(
                 ui::row()
                     .justify_end()
                     .gap_2()
-                    .child(ui::button("ask-no", Tone::Secondary, cx).child(no).on_click(cx.listener(|this, _, _, cx| this.answer_ask(false, cx))))
-                    .child(ui::button("ask-yes", Tone::Primary, cx).child(yes).on_click(cx.listener(|this, _, _, cx| this.answer_ask(true, cx)))),
+                    .child(ui::Button::new("ask-no").variant(ui::ButtonVariant::Secondary).child(no).on_click(cx.listener(|this, _, _, cx| this.answer_ask(false, cx))))
+                    .child(ui::Button::new("ask-yes").child(yes).on_click(cx.listener(|this, _, _, cx| this.answer_ask(true, cx)))),
             );
         let backdrop = div().id("ask-backdrop").absolute().inset_0().occlude();
-        Some(ui::modal(backdrop, ui::dialog("activity-ask", CONSENT_WIDTH, body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("activity-ask", CONSENT_WIDTH, body, window, cx), cx))
     }
 
     pub(super) fn answer_consent(&mut self, allow: bool, cx: &mut Context<Self>) {
@@ -379,7 +379,7 @@ impl Waffle {
         let scopes = request.scopes.iter().map(|s| {
             ui::row().gap_2().child(Icon::new(Glyph::Checkmark).size(ICON_MD).text_color(palette::positive_ink(cx))).child(div().flex_1().min_w_0().child(scope_text(s)))
         });
-        let body = ui::dialog_body()
+        let body = ui::DialogContent::new()
             .child(div().text_size(TEXT_LG).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(format!("Sign in to {}?", request.app_name)))
             .child(div().text_size(TEXT_SM).text_color(palette::muted(cx)).child("It's asking to use your Discord account. It will be able to:"))
             .child(ui::col().gap_2().text_size(TEXT_SM).text_color(palette::text(cx)).children(scopes))
@@ -387,11 +387,11 @@ impl Waffle {
                 ui::row()
                     .justify_end()
                     .gap_2()
-                    .child(ui::button("consent-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.answer_consent(false, cx))))
-                    .child(ui::button("consent-allow", Tone::Primary, cx).child("Authorize").on_click(cx.listener(|this, _, _, cx| this.answer_consent(true, cx)))),
+                    .child(ui::Button::new("consent-cancel").variant(ui::ButtonVariant::Secondary).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.answer_consent(false, cx))))
+                    .child(ui::Button::new("consent-allow").child("Authorize").on_click(cx.listener(|this, _, _, cx| this.answer_consent(true, cx)))),
             );
         let backdrop = div().id("consent-backdrop").absolute().inset_0().occlude();
-        Some(ui::modal(backdrop, ui::dialog("activity-consent", CONSENT_WIDTH, body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("activity-consent", CONSENT_WIDTH, body, window, cx), cx))
     }
     // The app's own lines (Hole 3 of 9, a party size) join the entry; its name, app and start stay ours.
     pub(super) fn set_activity_presence(&mut self, activity: &Value) {

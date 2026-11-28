@@ -87,7 +87,7 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
             .text_size(ui::TEXT_SM)
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(strong)
-            .children(embed.author_icon.clone().map(|icon| ui::avatar(icon, 24.)))
+            .children(embed.author_icon.clone().map(|icon| ui::Avatar::new(icon, 24.)))
             .child(ui::line(name).when(embed.author_url.is_some(), |d| d.cursor_pointer().hover(|s| s.underline())))
             .when_some(embed.author_url.clone(), |d, url| d.on_click(open(url)))
     });
@@ -120,7 +120,7 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
             )
             .when(long, |d| {
                 d.child(
-                    // lint-allow(custom-button): ui::button's smallest Ghost is 30px with the muted ink; this is a 26px toggle in the accent ink that hangs 6px left under the text
+                    // lint-allow(custom-button): ui::Button's smallest Ghost is 30px with the muted ink; this is a 26px toggle in the accent ink that hangs 6px left under the text
                     ui::row()
                         .id(SharedString::from(more.clone()))
                         // lint-allow(raw-margin): optical, the toggle's wash hangs left so its label lines up with the text above
@@ -185,9 +185,9 @@ pub(super) fn embed_card(embed: &Embed, row: Option<&Message>, poll_message: Opt
             .gap_2()
             .text_size(ui::TEXT_XS)
             .text_color(faint)
-            .children(embed.footer_icon.clone().map(|icon| ui::avatar(icon, 20.)))
+            .children(embed.footer_icon.clone().map(|icon| ui::Avatar::new(icon, 20.)))
             .child(div().min_w_0().child(line))
-            .when_some(stamp.map(|(_, full)| full), |d, full| d.tooltip(move |window, cx| ui::tip(full.clone(), window, cx)))
+            .when_some(stamp.map(|(_, full)| full), |d, full| d.tooltip(move |window, cx| ui::Tooltip::new(full.clone()).build(window, cx)))
     });
     let sections = [top.map(IntoElement::into_any_element), media, footer.map(IntoElement::into_any_element)];
     let full = !embed.images.is_empty() || !embed.fields.is_empty();
@@ -227,10 +227,9 @@ pub(super) fn remove_embeds_shown(message: &Message, ctx: &RowContext) -> bool {
 }
 
 // Occludes so the title or thumbnail under it stays still, and reports hover so the row keeps it.
-pub(super) fn remove_embeds_button(message: &Message, key: &str, ctx: &RowContext, cx: &App) -> AnyElement {
+pub(super) fn remove_embeds_button(message: &Message, key: &str, ctx: &RowContext, _cx: &App) -> AnyElement {
     let (this, m) = (ctx.this.clone(), message.clone());
-    ui::icon_button(SharedString::from(format!("{key}-remove")), Glyph::X, "Remove all embeds", cx)
-        .small()
+    ui::Button::new(SharedString::from(format!("{key}-remove"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::X).tooltip_text("Remove all embeds")
         .absolute()
         .top_2()
         .right_2()
@@ -341,11 +340,9 @@ pub(super) fn embed_media(embed: &Embed, row: Option<&Message>, key: &str, inner
 }
 
 // Discord's Open Link corner on a video still. In a feed row it reports hover, since occluding takes it from the row.
-pub(super) fn open_link_button(url: String, row: Option<&Message>, id: &str, ctx: &RowContext, cx: &App) -> AnyElement {
+pub(super) fn open_link_button(url: String, row: Option<&Message>, id: &str, ctx: &RowContext, _cx: &App) -> AnyElement {
     let this = ctx.this.clone();
-    ui::icon_button(SharedString::from(id.to_owned()), Glyph::Open, "Open Link", cx)
-        .tone(ui::Tone::OnMedia, cx)
-        .sized(OPEN_LINK_SIZE)
+    ui::Button::new(SharedString::from(id.to_owned())).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Square(OPEN_LINK_SIZE)).scope(ui::ButtonScope::Media).icon(Glyph::Open).tooltip_text("Open Link")
         .absolute()
         .top_2()
         .right_2()
@@ -400,7 +397,7 @@ pub(super) fn poll_result(poll: &crate::discord::PollResult, poll_message: Optio
                 ),
         )
         .when_some(target, |d, id| {
-            d.child(ui::button(SharedString::from(format!("{key}-view-poll")), ui::Tone::Secondary, cx).small().child("View Poll").on_click(move |_, _, cx| {
+            d.child(ui::Button::new(SharedString::from(format!("{key}-view-poll"))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("View Poll").on_click(move |_, _, cx| {
                 cx.stop_propagation();
                 this.update(cx, |this, cx| this.jump_to(id.clone(), cx)).ok();
             }))
@@ -434,11 +431,11 @@ pub(super) fn poll_card(message: &Message, poll: &Poll, ctx: &RowContext, cx: &A
     };
     // lint-allow(raw-margin): pushes the buttons to the end of a wrapping footer, where flex_1 would take the footer's text space
     let actions = ui::row().items_stretch().ml_auto().gap_2().when(!pending && !closed, |d| match (voted, results) {
-        (true, _) => d.child(ui::button(key("remove"), ui::Tone::Ghost, cx).small().child("Remove Vote").on_click(act(Vec::new()))),
-        (false, true) => d.child(ui::button(key("back"), ui::Tone::Ghost, cx).small().child("Go back to vote").on_click(peek)),
+        (true, _) => d.child(ui::Button::new(key("remove")).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Sm).child("Remove Vote").on_click(act(Vec::new()))),
+        (false, true) => d.child(ui::Button::new(key("back")).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Sm).child("Go back to vote").on_click(peek)),
         (false, false) => d
-            .child(ui::button(key("peek"), ui::Tone::Ghost, cx).small().child("Show results").on_click(peek))
-            .child(ui::button(key("vote"), ui::Tone::Primary, cx).small().disabled(picks.is_empty()).child("Vote").on_click(act(picks.clone()))),
+            .child(ui::Button::new(key("peek")).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Sm).child("Show results").on_click(peek))
+            .child(ui::Button::new(key("vote")).size(ui::ButtonSize::Sm).disabled(picks.is_empty()).child("Vote").on_click(act(picks.clone()))),
     });
     let card = ui::col()
         .w_full()
@@ -463,7 +460,7 @@ pub(super) fn poll_card(message: &Message, poll: &Poll, ctx: &RowContext, cx: &A
 
 // An answer to pick before voting: its radio (a check where several may be picked), emoji and text.
 pub(super) fn poll_choice(message: &Message, poll: &Poll, answer: &PollAnswer, on: bool, pending: bool, ctx: &RowContext, cx: &App) -> AnyElement {
-    let mark = if poll.multiselect { ui::check(if on { ui::Check::On } else { ui::Check::Off }, cx) } else { ui::radio(on, cx) };
+    let mark = if poll.multiselect { ui::Checkbox::mark(if on { ui::Check::On } else { ui::Check::Off }).into_any_element() } else { ui::RadioGroupItem::mark(on).into_any_element() };
     let lead = ui::row().flex_none().gap_2p5().child(mark).children(answer.emoji.as_ref().map(|e| crate::menu::emoji_face(e, 20.)));
     let (this, message_id, answer_id, multiselect) = (ctx.this.clone(), message.id.clone(), answer.id, poll.multiselect);
     ui::pick_row(SharedString::from(format!("poll-{}-answer-{answer_id}", message.id)), lead, answer.text.clone(), None, cx)
@@ -480,7 +477,7 @@ pub(super) fn poll_choice(message: &Message, poll: &Poll, answer: &PollAnswer, o
 pub(super) fn poll_share(answer: &PollAnswer, share: u32, cx: &App) -> AnyElement {
     let strong = palette::strong(cx);
     let bar = if answer.me { palette::accent_soft(cx) } else { strong.opacity(0.10) };
-    // lint-allow(custom-badge): ui::badge is a small solid label; this is a result row with its share drawn as a fill behind the text
+    // lint-allow(custom-badge): ui::Badge is a small solid label; this is a result row with its share drawn as a fill behind the text
     ui::row()
         .relative()
         .min_h_11()
@@ -492,7 +489,7 @@ pub(super) fn poll_share(answer: &PollAnswer, share: u32, cx: &App) -> AnyElemen
         .text_size(ui::TEXT_SM)
         .font_weight(FontWeight::MEDIUM)
         .text_color(if answer.me { strong } else { palette::text(cx) })
-        // lint-allow(custom-mark): ui::progress_bar draws a thin track; this fill runs behind the row's text, as wide as the share
+        // lint-allow(custom-mark): ui::Progress draws a thin track; this fill runs behind the row's text, as wide as the share
         .when(share > 0, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(gpui_kit::relative(share as f32 / 100.)).squircle(RADIUS_MD).bg(bar)))
         .children(answer.emoji.as_ref().map(|e| div().flex_none().child(crate::menu::emoji_face(e, 20.))))
         .child(div().flex_1().min_w_0().child(answer.text.clone()))

@@ -9,7 +9,7 @@ use crate::{
     Waffle,
     icons::Glyph,
     palette,
-    ui::{self, Tone},
+    ui::{self},
 };
 
 use super::super::{
@@ -36,8 +36,8 @@ impl Waffle {
         let action = a.query.action_type.map(|n| n.to_string()).unwrap_or_default();
         let filters = ui::row().items_stretch()
             .gap_3()
-            .child(div().flex_1().child(ui::field("Filter by member", cx).child(self.ss_select(Select::AuditUser, &users, &user, cx))))
-            .child(div().flex_1().child(ui::field("Filter by action", cx).child(self.ss_select(Select::AuditAction, &actions, &action, cx))));
+            .child(div().flex_1().child(ui::Field::new("Filter by member", cx).child(self.ss_select(Select::AuditUser, &users, &user, cx))))
+            .child(div().flex_1().child(ui::Field::new("Filter by action", cx).child(self.ss_select(Select::AuditAction, &actions, &action, cx))));
         let Some(view) = self.server_settings.as_ref() else { return Vec::new() };
         let a = &view.lists.audit;
         let mut out = vec![filters.into_any_element()];
@@ -53,9 +53,9 @@ impl Waffle {
             return out;
         }
         let rows: Vec<AnyElement> = a.entries.iter().enumerate().map(|(i, e)| self.ss_audit_row(e, &a.names, a.open.contains(&e.id), i > 0, cx)).collect();
-        out.push(ui::settings_card(cx).id("ss-audit").children(rows).into_any_element());
+        out.push(ui::Card::new(cx).id("ss-audit").children(rows).into_any_element());
         if a.next.is_some() {
-            out.push(ui::row().items_stretch().justify_center().child(ui::button("ss-audit-more", Tone::Secondary, cx).loading(a.loading.then_some("Loading")).child("Load more").on_click(cx.listener(|this, _, _, cx| {
+            out.push(ui::row().items_stretch().justify_center().child(ui::Button::new("ss-audit-more").variant(ui::ButtonVariant::Secondary).loading(a.loading.then_some("Loading")).child("Load more").on_click(cx.listener(|this, _, _, cx| {
                 if let Some(l) = this.lists() {
                     l.audit.query.before = l.audit.next.take();
                     l.audit.loading = true;
@@ -93,7 +93,7 @@ impl Waffle {
                 ui::row().items_stretch().gap_2().text_size(ui::TEXT_SM).child(div().w(px(DETAIL_LABEL_WIDTH)).flex_none().text_color(palette::muted(cx)).child(d.label)).child(div().flex_1().min_w_0().child(change))
             }))
         });
-        let row = ui::settings_row(SharedString::from(format!("ss-audit-{}", e.id)), line, cx).flex_col().items_stretch().child(head).children(body);
+        let row = ui::Item::setting(SharedString::from(format!("ss-audit-{}", e.id)), line, cx).flex_col().items_stretch().child(head).children(body);
         ui::settings_choice(row, cx)
             .on_click(cx.listener(move |this, _, _, cx| {
                 if let Some(l) = this.lists()

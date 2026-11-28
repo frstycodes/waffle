@@ -61,7 +61,7 @@ impl Render for Splash {
         // Opened without gpui-kit's root view, so the app font is set here.
         // GAP: the design's 0 18 40 drop shadow falls outside this borderless window's bounds.
         div().size_full().font_family(cx.theme().font_family.clone()).child(
-            // lint-allow(custom-surface): ui::surface is the overlay fill with a drop shadow; the splash is a raised fill with an inset hairline in a borderless window.
+            // lint-allow(custom-surface): ui::PopoverContent::new is the overlay fill with a drop shadow; the splash is a raised fill with an inset hairline in a borderless window.
             ui::col()
                 .size_full()
                 .px_4()
@@ -75,7 +75,7 @@ impl Render for Splash {
                 .child(mascot::loader("splash-loader", MARK, palette::logo_ink(cx), cx))
                 .child(div().pt_1().text_size(ui::TEXT_LG).line_height(ui::LINE_SM).font_weight(FontWeight::BOLD).text_color(palette::strong(cx)).child("Waffle"))
                 .child(ui::line(self.stage.clone()).max_w_full().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)))
-                .child(div().w(px(TRACK)).child(ui::progress_bar(self.progress, cx).joined().track(palette::track(cx)))),
+                .child(div().w(px(TRACK)).child(ui::Progress::new(self.progress).joined().track(palette::track(cx)))),
         )
     }
 }

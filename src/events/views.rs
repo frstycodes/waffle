@@ -59,7 +59,7 @@ impl Waffle {
         let (g, e) = (event.guild_id.clone(), event.id.clone());
         let join = channel.clone().map(|c| {
             let label = if is_stage(&c) { "Join stage" } else { "Join" };
-            ui::button("events-live-join", Tone::Primary, cx).small().h_7().child(label).on_click(cx.listener(move |this, _, _, cx| {
+            ui::Button::new("events-live-join").size(ui::ButtonSize::Sm).h_7().child(label).on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 this.join_voice(c.clone(), cx);
             }))
@@ -77,7 +77,7 @@ impl Waffle {
             .child(
                 ui::row()
                     .gap_2()
-                    .child(ui::live_badge())
+                    .child(ui::Badge::live())
                     .child(ui::line(event.name.clone()).flex_1().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx))),
             )
             .child(ui::row().gap_1().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(lead.size_3p5()).child(ui::line(line)))
@@ -94,8 +94,8 @@ impl Waffle {
         let title = events_title(upcoming_count(guild, me));
         let gid = guild_id.to_owned();
         let create = can_create(guild, me).then(|| {
-            ui::row().gap_3().child(ui::seam(cx)).child(
-                ui::button("events-create", Tone::Primary, cx).small().child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("Create Event").on_click(cx.listener(move |this, _, window, cx| this.open_event_wizard(gid.clone(), None, window, cx))),
+            ui::row().gap_3().child(ui::Separator::new().orientation(ui::Orientation::Vertical)).child(
+                ui::Button::new("events-create").size(ui::ButtonSize::Sm).child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("Create Event").on_click(cx.listener(move |this, _, window, cx| this.open_event_wizard(gid.clone(), None, window, cx))),
             )
         });
         let head = ui::row()
@@ -103,7 +103,7 @@ impl Waffle {
             .child(div().text_color(palette::muted(cx)).child(Icon::new(Glyph::Calendar).size(ui::ICON_XL)))
             .child(ui::line(title).flex_1().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)))
             .children(create)
-            .child(ui::icon_button("events-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))));
+            .child(ui::Button::new("events-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))));
         let now = Local::now();
         let body: AnyElement = match events.is_empty() {
             true => self.events_empty(guild, cx),
@@ -117,7 +117,7 @@ impl Waffle {
                 .into_any_element(),
         };
         let backdrop = div().id("events-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_event_layer(cx)));
-        Some(ui::modal(backdrop, ui::dialog("events", LIST_WIDTH, ui::dialog_body().child(head).child(body), window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("events", LIST_WIDTH, ui::DialogContent::new().child(head).child(body), window, cx), cx))
     }
 
     pub(super) fn events_empty(&self, guild: &Guild, cx: &mut Context<Self>) -> AnyElement {
@@ -133,7 +133,7 @@ impl Waffle {
                 .on_click(cx.listener(move |this, _, window, cx| this.open_roles_settings(gid.clone(), window, cx)));
             ui::row().items_stretch().max_w_80().text_center().flex_wrap().justify_center().gap_x_1().text_size(ui::TEXT_XS).text_color(palette::faint(cx)).child("You can give other people permission to create events in").child(link).child(".")
         });
-        ui::empty_state("events-empty", Mood::Idle, "There are no upcoming events.", "Schedule an event for any planned activity in your server.", cx).children(roles).into_any_element()
+        ui::Empty::new("events-empty", Mood::Idle, "There are no upcoming events.", "Schedule an event for any planned activity in your server.", cx).children(roles).into_any_element()
     }
 
     // One card (`.ev2`): when, who and how many; the name and two lines of description; where, and the actions.
@@ -186,10 +186,10 @@ impl Waffle {
             .gap_1()
             .text_size(ui::TEXT_XS)
             .text_color(palette::muted(cx))
-            .children(creator.map(|u| div().pr_1().child(ui::avatar(u.avatar, 20.))))
+            .children(creator.map(|u| div().pr_1().child(ui::Avatar::new(u.avatar, 20.))))
             .child(Icon::new(Glyph::Users).size(px(COUNT_ICON)))
             .child(event.interested.to_string())
-            .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
+            .tooltip(move |window, cx| ui::Tooltip::new(tip.clone()).build(window, cx))
             .into_any_element()
     }
 
@@ -252,7 +252,7 @@ impl Waffle {
         if more {
             let (g, e) = ids();
             out.push(
-                ui::icon_button(key("more"), Glyph::MoreVertical, "More event options", cx)
+                ui::Button::new(key("more")).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::MoreVertical).tooltip_text("More event options")
                     .on_click(cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();
                         this.open_event_menu(g.clone(), e.clone(), window, cx);
@@ -269,9 +269,9 @@ impl Waffle {
             let next = series.then(|| next_occurrence(event, Utc::now())).flatten();
             let on = next.as_ref().map_or(event.me_interested, |o| self.occurrence_interested(event, &o.recurrence_id));
             out.push(
-                ui::button(key("interested"), Tone::Secondary, cx)
-                    .small()
-                    .toggled(on, cx)
+                ui::Button::new(key("interested")).variant(ui::ButtonVariant::Secondary)
+                    .size(ui::ButtonSize::Sm)
+                    .toggled(on)
                     .child(Icon::new(if on { Glyph::BellRinging } else { Glyph::Bell }).size(ui::ICON_MD))
                     .child("Interested")
                     .on_click(cx.listener(move |this, _, window, cx| {
@@ -287,8 +287,8 @@ impl Waffle {
         if !active && manage && within_start_window(event, Utc::now()) {
             let (g, e) = ids();
             out.push(
-                ui::button(key("start"), Tone::Primary, cx)
-                    .small()
+                ui::Button::new(key("start"))
+                    .size(ui::ButtonSize::Sm)
                     .child("Start")
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
@@ -306,8 +306,8 @@ impl Waffle {
                 (false, false) => "Join",
             };
             out.push(
-                ui::button(key("join"), Tone::Primary, cx)
-                    .small()
+                ui::Button::new(key("join"))
+                    .size(ui::ButtonSize::Sm)
                     .child(label)
                     .on_click(cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();
@@ -323,8 +323,8 @@ impl Waffle {
         if active && external && manage {
             let (g, e) = ids();
             out.push(
-                ui::button(key("end"), Tone::Secondary, cx)
-                    .small()
+                ui::Button::new(key("end")).variant(ui::ButtonVariant::Secondary)
+                    .size(ui::ButtonSize::Sm)
                     .child("End Event")
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
@@ -344,20 +344,20 @@ impl Waffle {
             .items_start()
             .gap_3()
             .child(div().flex_1().min_w_0().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(event.name.clone()))
-            .child(ui::icon_button("event-details-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))));
+            .child(ui::Button::new("event-details-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))));
         let items = [ui::Tab::new("Event Info"), ui::Tab::new(format!("{} Interested", event.interested))];
         let this = cx.entity().downgrade();
-        let tabs = ui::tabs("event-details-tabs", &items, details.tab, move |i, _, cx| {
+        let tabs = ui::Tabs::new("event-details-tabs").variant(ui::TabsVariant::Line).tabs(&items).value(details.tab).on_value_change(move |i, _, cx| {
             this.update(cx, |this, cx| this.set_details_tab(i, cx)).ok();
-        }, window, cx);
+        });
         let body = match details.tab {
             0 => self.event_info(event, cx),
             _ => self.interested_list(event, details.users.as_ref(), cx),
         };
         let foot = ui::row().justify_end().gap_2().children(self.event_actions(event, true, cx));
-        let body = ui::dialog_body().children(cover).child(head).child(tabs).child(body).child(foot);
+        let body = ui::DialogContent::new().children(cover).child(head).child(tabs).child(body).child(foot);
         let backdrop = div().id("event-details-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_event_layer(cx)));
-        Some(ui::modal(backdrop, ui::dialog("event-details", DETAILS_WIDTH, body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("event-details", DETAILS_WIDTH, body, window, cx), cx))
     }
 
     pub(super) fn event_info(&self, event: &ScheduledEvent, cx: &mut Context<Self>) -> AnyElement {
@@ -380,7 +380,7 @@ impl Waffle {
                     .text_color(palette::text(cx))
                     .child(fact(Icon::new(Glyph::Clock).size(ui::ICON_LG).into_any_element(), dates))
                     .child(ui::row().items_stretch().child(location))
-                    .children(creator.map(|u| fact(ui::avatar(u.avatar.clone(), 20.).into_any_element(), format!("Created by {}", u.name))))
+                    .children(creator.map(|u| fact(ui::Avatar::new(u.avatar.clone(), 20.).into_any_element(), format!("Created by {}", u.name))))
                     .child(fact(Icon::new(Glyph::Users).size(ui::ICON_LG).into_any_element(), format!("{} people are interested", event.interested))),
             )
             .children(self.occurrence_rows(event, cx))
@@ -398,7 +398,7 @@ impl Waffle {
             let (g, e, r) = (event.guild_id.clone(), event.id.clone(), o.recurrence_id.clone());
             let start = o.start.with_timezone(&Local);
             let interested = !o.canceled && self.occurrence_interested(event, &o.recurrence_id);
-            let more = ui::icon_button(SharedString::from(format!("event-occurrence-more-{}", o.recurrence_id)), Glyph::MoreVertical, "More event options", cx).on_click(cx.listener(move |this, _, window, cx| {
+            let more = ui::Button::new(SharedString::from(format!("event-occurrence-more-{}", o.recurrence_id))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::MoreVertical).tooltip_text("More event options").on_click(cx.listener(move |this, _, window, cx| {
                 cx.stop_propagation();
                 this.open_occurrence_menu(g.clone(), e.clone(), r.clone(), window, cx);
             }));
@@ -418,7 +418,7 @@ impl Waffle {
     pub(super) fn interested_list(&self, event: &ScheduledEvent, users: Option<&Result<Vec<User>, String>>, cx: &mut Context<Self>) -> AnyElement {
         let note = |text: String| div().py_6().text_center().text_color(palette::muted(cx)).child(text).into_any_element();
         let users = match users {
-            None => return ui::col().gap_2().children((0..3).map(|i| ui::skeleton(SharedString::from(format!("event-user-skeleton-{i}")), ui::RADIUS_SM, cx).h_9())).into_any_element(),
+            None => return ui::col().gap_2().children((0..3).map(|i| ui::Skeleton::new(SharedString::from(format!("event-user-skeleton-{i}"))).radius(ui::RADIUS_SM).h_9())).into_any_element(),
             Some(Err(_)) => return note("We are having problems looking up who is interested in this event. Please try again later.".into()),
             Some(Ok(users)) if users.is_empty() => return note("No one's interested in this event yet.".into()),
             Some(Ok(users)) => users,
@@ -429,7 +429,7 @@ impl Waffle {
                 .gap_2p5()
                 .px_2()
                 .py_1p5()
-                .child(ui::avatar(u.avatar.clone(), 32.))
+                .child(ui::Avatar::new(u.avatar.clone(), 32.))
                 .child(ui::line(u.name.clone()).font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)))
         });
         ui::col()
@@ -446,7 +446,7 @@ impl Waffle {
         let start = self.events.start.as_ref()?;
         let event = self.scheduled_event(&start.guild_id, &start.event_id)?;
         let notify = (event.entity_type == ScheduledEvent::STAGE).then(|| {
-            let mark = ui::check(if start.notify { ui::Check::On } else { ui::Check::Off }, cx);
+            let mark = ui::Checkbox::mark(if start.notify { ui::Check::On } else { ui::Check::Off });
             ui::pick_row("event-start-notify", mark, "Notify @everyone", None, cx).on_click(cx.listener(|this, _, _, cx| {
                 if let Some(start) = this.events.start.as_mut() {
                     start.notify = !start.notify;
@@ -457,15 +457,15 @@ impl Waffle {
         let foot = ui::row().items_stretch()
             .justify_end()
             .gap_2()
-            .child(ui::button("event-start-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))))
-            .child(ui::button("event-start-go", Tone::Primary, cx).child("Start Event").on_click(cx.listener(|this, _, _, cx| this.start_event(cx))));
-        let body = ui::dialog_body()
+            .child(ui::Button::new("event-start-cancel").variant(ui::ButtonVariant::Secondary).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))))
+            .child(ui::Button::new("event-start-go").child("Start Event").on_click(cx.listener(|this, _, _, cx| this.start_event(cx))));
+        let body = ui::DialogContent::new()
             .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(event.name.clone()))
             .child(div().text_color(palette::muted(cx)).child("You are about to start this Private event"))
             .children(notify)
             .child(foot);
         let backdrop = div().id("event-start-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_event_layer(cx)));
-        Some(ui::modal(backdrop, ui::dialog("event-start", 420., body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("event-start", 420., body, window, cx), cx))
     }
 
     pub(super) fn event_wizard_dialog(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -487,7 +487,7 @@ impl Waffle {
                     .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
                     .children(subtitle.map(|s| div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(s))),
             )
-            .child(ui::icon_button("event-wizard-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))));
+            .child(ui::Button::new("event-wizard-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))));
         let problems = self.wizard_problems(cx);
         let step = match (w.step, w.occurrence.is_some()) {
             (_, true) => self.wizard_times_fields(w, &problems, window, cx),
@@ -497,13 +497,13 @@ impl Waffle {
             (Step::Success, false) => wizard_success(w, cx),
         };
         let ok = problems.step_ok(if w.occurrence.is_some() { Step::Review } else { w.step });
-        let body = ui::dialog_body()
+        let body = ui::DialogContent::new()
             .child(head)
             .when(w.step != Step::Success && w.occurrence.is_none(), |d| d.child(stepper(w.step, cx)))
-            .child(ui::dialog_scroll("event-wizard-fields", [step], window, cx))
+            .child(ui::DialogContent::scroll("event-wizard-fields", [step], window, cx))
             .when(w.step != Step::Success, |d| d.child(wizard_foot(w, ok, cx)));
         let backdrop = div().id("event-wizard-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_event_layer(cx)));
-        Some(ui::modal(backdrop, ui::dialog("event-wizard", WIZARD_WIDTH, body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("event-wizard", WIZARD_WIDTH, body, window, cx), cx))
     }
 
     pub(super) fn wizard_location(&self, w: &Wizard, problems: &Problems, cx: &mut Context<Self>) -> AnyElement {
@@ -519,7 +519,7 @@ impl Waffle {
             let empty = kind != ScheduledEvent::EXTERNAL && guild.is_none_or(|g| event_channels(g, me, kind).is_empty());
             let detail = if empty { "There are no available channels." } else { hint };
             let on = w.entity_type == kind;
-            ui::pick_row_icon(SharedString::from(format!("event-kind-{kind}")), ui::radio(on, cx), icon, name, Some(detail.into()), cx)
+            ui::pick_row_icon(SharedString::from(format!("event-kind-{kind}")), ui::RadioGroupItem::mark(on), icon, name, Some(detail.into()), cx)
                 .disabled(empty || w.started)
                 .on_click(cx.listener(move |this, _, _, cx| {
                     let first = this.events.wizard.as_ref().and_then(|w| this.event_guild(&w.guild_id)).and_then(|g| event_channels(g, this.my_id(), kind).first().map(|c| c.0.clone()));
@@ -535,39 +535,39 @@ impl Waffle {
         let place: AnyElement = match w.entity_type {
             ScheduledEvent::EXTERNAL => {
                 let focus = w.location.read(cx).focus_handle(cx);
-                ui::field("Enter a location", cx).child(ui::text_field("event-location", Input::new(&w.location).appearance(false), &focus)).into_any_element()
+                ui::Field::new("Enter a location", cx).child(ui::Input::new("event-location", Input::new(&w.location).appearance(false), &focus)).into_any_element()
             }
             kind => {
                 let name = w.channel_id.as_deref().and_then(|c| guild?.channel(c)).map_or("Select a channel".to_owned(), |c| c.name.clone());
                 let glyph = (kind == ScheduledEvent::VOICE).then_some(Glyph::VolumeHigh);
-                ui::field("Select a channel", cx)
-                    .child(ui::select("event-channel", glyph, name, false, cx).on_click(cx.listener(|this, _, window, cx| this.open_event_channel_menu(window, cx))))
-                    .child(ui::field_hint("Events in private channels will only be visible to people who can access that channel.", None, cx))
+                ui::Field::new("Select a channel", cx)
+                    .child(ui::Select::new("event-channel", glyph, name, false, cx).on_click(cx.listener(|this, _, window, cx| this.open_event_channel_menu(window, cx))))
+                    .child(ui::FieldDescription::new("Events in private channels will only be visible to people who can access that channel.", None, cx))
                     .into_any_element()
             }
         };
         ui::col()
             .gap_3()
-            .when(w.started, |d| d.child(ui::callout(ui::Notice::Info, Glyph::Info, "Location", "You cannot edit the location type of an event after it starts.", cx)))
+            .when(w.started, |d| d.child(ui::Alert::new(ui::Notice::Info, Glyph::Info, "Location", "You cannot edit the location type of an event after it starts.", cx)))
             .child(ui::col().gap_0p5().children(rows))
             .child(place)
-            .when(w.step == Step::Location && w.entity_type == ScheduledEvent::EXTERNAL, |d| d.children(problems.location.filter(|_| !w.location.read(cx).value().is_empty()).map(|p| ui::field_error(p, cx))))
+            .when(w.step == Step::Location && w.entity_type == ScheduledEvent::EXTERNAL, |d| d.children(problems.location.filter(|_| !w.location.read(cx).value().is_empty()).map(|p| ui::FieldError::new(p, cx))))
             .into_any_element()
     }
 
     pub(super) fn wizard_info(&self, w: &Wizard, problems: &Problems, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let typed_topic = !w.topic.read(cx).value().trim().is_empty();
         let focus = w.topic.read(cx).focus_handle(cx);
-        let topic_field = ui::text_field("event-topic", Input::new(&w.topic).appearance(false), &focus).error(problems.topic.is_some() && typed_topic);
-        let topic = ui::field("Event Topic", cx).child(topic_field).children(problems.topic.filter(|_| typed_topic).map(|p| ui::field_error(p, cx)));
+        let topic_field = ui::Input::new("event-topic", Input::new(&w.topic).appearance(false), &focus).error(problems.topic.is_some() && typed_topic);
+        let topic = ui::Field::new("Event Topic", cx).child(topic_field).children(problems.topic.filter(|_| typed_topic).map(|p| ui::FieldError::new(p, cx)));
         let (start_at, _) = self.wizard_times(cx);
         let day = start_at.map_or_else(|| Local::now().date_naive(), |s| s.with_timezone(&Local).date_naive());
-        let frequency = ui::field("Event Frequency", cx).child(ui::select("event-frequency", Some(Glyph::Repeat), w.frequency.label(day), false, cx).on_click(cx.listener(|this, _, window, cx| this.open_frequency_menu(window, cx))));
+        let frequency = ui::Field::new("Event Frequency", cx).child(ui::Select::new("event-frequency", Some(Glyph::Repeat), w.frequency.label(day), false, cx).on_click(cx.listener(|this, _, window, cx| this.open_frequency_menu(window, cx))));
         let focus = w.description.read(cx).focus_handle(cx);
         let length = w.description.read(cx).value().chars().count();
-        let description = ui::field("Description", cx)
-            .child(ui::text_area("event-description", Textarea::new(&w.description).appearance(false).px_0().text_size(ui::TEXT_SM), &focus).error(length > DESCRIPTION_MAX))
-            .child(ui::field_hint("", Some(format!("{length} / {DESCRIPTION_MAX}").into()), cx));
+        let description = ui::Field::new("Description", cx)
+            .child(ui::Textarea::new("event-description", Textarea::new(&w.description).appearance(false).px_0().text_size(ui::TEXT_SM), &focus).error(length > DESCRIPTION_MAX))
+            .child(ui::FieldDescription::new("", Some(format!("{length} / {DESCRIPTION_MAX}").into()), cx));
         ui::col()
             .gap_3p5()
             .child(topic)
@@ -582,21 +582,21 @@ impl Waffle {
     pub(super) fn wizard_times_fields(&self, w: &Wizard, problems: &Problems, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let pair = |a: AnyElement, b: AnyElement| ui::row().items_stretch().gap_3().child(div().flex_1().min_w_0().child(a)).child(div().flex_1().min_w_0().child(b));
         let start = pair(
-            ui::field("Start Date", cx).child(ui::date_field("event-start-date", &w.start_date, problems.start.is_some(), window, cx)).into_any_element(),
-            ui::field("Start Time", cx).child(ui::time_field("event-start-time", &w.start_time, problems.start.is_some(), window, cx)).into_any_element(),
+            ui::Field::new("Start Date", cx).child(ui::DatePicker::date("event-start-date", &w.start_date, problems.start.is_some(), window, cx)).into_any_element(),
+            ui::Field::new("Start Time", cx).child(ui::DatePicker::time("event-start-time", &w.start_time, problems.start.is_some(), window, cx)).into_any_element(),
         );
         let end = (w.entity_type == ScheduledEvent::EXTERNAL).then(|| {
             pair(
-                ui::field("End Date", cx).child(ui::date_field("event-end-date", &w.end_date, problems.end.is_some(), window, cx)).into_any_element(),
-                ui::field("End Time", cx).child(ui::time_field("event-end-time", &w.end_time, problems.end.is_some(), window, cx)).into_any_element(),
+                ui::Field::new("End Date", cx).child(ui::DatePicker::date("event-end-date", &w.end_date, problems.end.is_some(), window, cx)).into_any_element(),
+                ui::Field::new("End Time", cx).child(ui::DatePicker::time("event-end-time", &w.end_time, problems.end.is_some(), window, cx)).into_any_element(),
             )
         });
         ui::col()
             .gap_3p5()
             .child(start)
-            .children(problems.start.map(|p| ui::field_error(p, cx)))
+            .children(problems.start.map(|p| ui::FieldError::new(p, cx)))
             .children(end)
-            .children(problems.end.map(|p| ui::field_error(p, cx)))
+            .children(problems.end.map(|p| ui::FieldError::new(p, cx)))
             .into_any_element()
     }
 
@@ -604,14 +604,14 @@ impl Waffle {
     pub(super) fn wizard_cover(&self, w: &Wizard, cx: &mut Context<Self>) -> AnyElement {
         let kept = w.editing.as_deref().and_then(|id| self.scheduled_event(&w.guild_id, id)).and_then(|e| e.image.clone());
         let preview = ScheduledEvent { id: w.editing.clone().unwrap_or_default(), image: wizard_image(&w.cover, kept), ..Default::default() };
-        let hint = ui::field_hint("We recommend an image that's at least 800px wide and 320px tall.", None, cx);
-        let field = ui::field("Cover Image", cx);
+        let hint = ui::FieldDescription::new("We recommend an image that's at least 800px wide and 320px tall.", None, cx);
+        let field = ui::Field::new("Cover Image", cx);
         let Some(source) = cover_source(&preview) else {
-            let upload = ui::button("event-cover-upload", Tone::Secondary, cx).small().child(Icon::new(Glyph::Upload).size(ui::ICON_MD)).child("Upload Cover Image").on_click(cx.listener(|this, _, _, cx| this.pick_cover(cx)));
+            let upload = ui::Button::new("event-cover-upload").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child(Icon::new(Glyph::Upload).size(ui::ICON_MD)).child("Upload Cover Image").on_click(cx.listener(|this, _, _, cx| this.pick_cover(cx)));
             return field.child(ui::row().items_stretch().child(upload)).child(hint).into_any_element();
         };
-        let change = ui::button("event-cover-change", Tone::Secondary, cx).small().child("Change Image").on_click(cx.listener(|this, _, _, cx| this.pick_cover(cx)));
-        let remove = ui::button("event-cover-remove", Tone::Ghost, cx).small().child("Remove Image").on_click(cx.listener(|this, _, _, cx| this.set_wizard(cx, |w| w.cover = Cover::Removed)));
+        let change = ui::Button::new("event-cover-change").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Change Image").on_click(cx.listener(|this, _, _, cx| this.pick_cover(cx)));
+        let remove = ui::Button::new("event-cover-remove").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Sm).child("Remove Image").on_click(cx.listener(|this, _, _, cx| this.set_wizard(cx, |w| w.cover = Cover::Removed)));
         field
             .child(ui::media(source, ui::all(ui::RADIUS_MD)).w_full().h(px(WIZARD_COVER_HEIGHT)))
             .child(ui::row().items_stretch().gap_2().child(change).child(remove))
@@ -675,7 +675,7 @@ pub(super) fn when_column(when: &When, repeat: Option<String>, ink: Hsla, cx: &g
 }
 
 // `.cm-stepper`: Location, Event Info, Review; done steps take a tick, the current one the accent.
-// lint-allow(custom-component): ui::tabs switches between views; this is a numbered progress of steps done, current and next
+// lint-allow(custom-component): ui::Tabs switches between views; this is a numbered progress of steps done, current and next
 pub(super) fn stepper(step: Step, cx: &gpui_kit::App) -> AnyElement {
     let at = match step {
         Step::Location => 0,
@@ -701,7 +701,7 @@ pub(super) fn stepper(step: Step, cx: &gpui_kit::App) -> AnyElement {
             .text_size(ui::TEXT_XS)
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(ink)
-            .when(i > 0, |d| d.child(ui::rule(palette::line_strong(cx)).w_5()))
+            .when(i > 0, |d| d.child(ui::Separator::new().color(palette::line_strong(cx)).w_5()))
             .child(mark)
             .child(label)
     });
@@ -720,10 +720,10 @@ pub(super) fn wizard_foot(w: &Wizard, ok: bool, cx: &mut Context<Waffle>) -> Any
     let busy = w.busy.then_some(if w.editing.is_some() { "Saving…" } else { "Creating…" });
     ui::row()
         .gap_2()
-        .when(w.step != Step::Location && !occurrence, |d| d.child(ui::button("event-wizard-back", Tone::Secondary, cx).small().child("Back").on_click(cx.listener(|this, _, _, cx| this.wizard_step(false, cx)))))
+        .when(w.step != Step::Location && !occurrence, |d| d.child(ui::Button::new("event-wizard-back").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Back").on_click(cx.listener(|this, _, _, cx| this.wizard_step(false, cx)))))
         .child(div().flex_1())
-        .child(ui::button("event-wizard-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))))
-        .child(ui::button("event-wizard-next", Tone::Primary, cx).disabled(!ok || w.busy).loading(busy).child(primary).on_click(cx.listener(move |this, _, _, cx| match review {
+        .child(ui::Button::new("event-wizard-cancel").variant(ui::ButtonVariant::Secondary).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_event_layer(cx))))
+        .child(ui::Button::new("event-wizard-next").disabled(!ok || w.busy).loading(busy).child(primary).on_click(cx.listener(move |this, _, _, cx| match review {
             true => this.wizard_submit(cx),
             false => this.wizard_step(true, cx),
         })))
@@ -732,10 +732,10 @@ pub(super) fn wizard_foot(w: &Wizard, ok: bool, cx: &mut Context<Waffle>) -> Any
 
 pub(super) fn wizard_success(w: &Wizard, cx: &mut Context<Waffle>) -> AnyElement {
     let link = w.link.clone().unwrap_or_default();
-    let field = ui::field_frame(cx)
+    let field = ui::Input::frame(cx)
         .pr_1()
         .child(ui::line(link.clone()).flex_1().text_size(ui::TEXT_SM))
-        .child(ui::button("event-link-copy", Tone::Primary, cx).small().child("Copy").on_click(cx.listener(move |this, _, _, cx| this.copy_event_link(link.clone(), cx))));
+        .child(ui::Button::new("event-link-copy").size(ui::ButtonSize::Sm).child("Copy").on_click(cx.listener(move |this, _, _, cx| this.copy_event_link(link.clone(), cx))));
     ui::col()
         .gap_3()
         .child(div().text_color(palette::muted(cx)).child("Copy the event link below to invite people to your event. This also acts as a server invite link."))

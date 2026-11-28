@@ -137,11 +137,11 @@ impl Waffle {
 
     /// The Inbox's title row (Mark all read on Unreads) over its tabs, the Unreads tab counting channels. The
     /// page has its own header, so it takes the row without the title.
-    pub(crate) fn inbox_head(&self, titled: bool, window: &mut Window, cx: &mut Context<Self>) -> Div {
+    pub(crate) fn inbox_head(&self, titled: bool, _window: &mut Window, cx: &mut Context<Self>) -> Div {
         let unread = self.unreads().len();
         let mark_all = (self.inbox_tab == InboxTab::Unreads).then(|| {
-            ui::button("inbox-mark-all", ui::Tone::Ghost, cx)
-                .small()
+            ui::Button::new("inbox-mark-all").variant(ui::ButtonVariant::Ghost)
+                .size(ui::ButtonSize::Sm)
                 .disabled(unread == 0)
                 .child(Icon::new(Glyph::Checks).size(ui::ICON_MD))
                 .child("Mark all read")
@@ -157,9 +157,9 @@ impl Waffle {
         let items = [ui::Tab::new("Unreads").count((unread > 0).then_some(unread as u32)), ui::Tab::new("Mentions"), ui::Tab::new("Saved")];
         let selected = TABS.iter().position(|t| *t == self.inbox_tab).unwrap_or(1);
         let this = cx.entity().downgrade();
-        let tabs = ui::tabs("inbox-tabs", &items, selected, move |i, _, cx| {
+        let tabs = ui::Tabs::new("inbox-tabs").variant(ui::TabsVariant::Line).tabs(&items).value(selected).on_value_change(move |i, _, cx| {
             this.update(cx, |this, cx| this.set_inbox_tab(TABS[i], cx)).ok();
-        }, window, cx);
+        });
         ui::col().gap_1().child(title).child(tabs)
     }
 
@@ -175,11 +175,11 @@ impl Waffle {
     // Visible chips, as the design asks, instead of Discord's settings menu.
     fn mention_filters(&self, cx: &mut Context<Self>) -> Div {
         let filters = self.prefs.mention_filters;
-        let everyone = ui::chip("mentions-everyone", Some(Glyph::At), "Include @everyone", filters.everyone, cx).on_click(cx.listener(|this, _, _, cx| this.set_mention_filters(|f| f.everyone = !f.everyone, cx)));
-        let roles = ui::chip("mentions-roles", Some(Glyph::Users), "Include roles", filters.roles, cx).on_click(cx.listener(|this, _, _, cx| this.set_mention_filters(|f| f.roles = !f.roles, cx)));
+        let everyone = ui::Toggle::new("mentions-everyone").pressed(filters.everyone).icon(Glyph::At).child("Include @everyone").on_click(cx.listener(|this, _, _, cx| this.set_mention_filters(|f| f.everyone = !f.everyone, cx)));
+        let roles = ui::Toggle::new("mentions-roles").pressed(filters.roles).icon(Glyph::Users).child("Include roles").on_click(cx.listener(|this, _, _, cx| this.set_mention_filters(|f| f.roles = !f.roles, cx)));
         // Only meaningful with a server open.
         let here = self.guild_id.is_some().then(|| {
-            ui::chip("mentions-here", Some(Glyph::Filter), "This server only", filters.this_server, cx).on_click(cx.listener(|this, _, _, cx| this.set_mention_filters(|f| f.this_server = !f.this_server, cx)))
+            ui::Toggle::new("mentions-here").pressed(filters.this_server).icon(Glyph::Filter).child("This server only").on_click(cx.listener(|this, _, _, cx| this.set_mention_filters(|f| f.this_server = !f.this_server, cx)))
         });
         ui::row().items_stretch().flex_wrap().gap_1p5().child(everyone).child(roles).children(here)
     }
@@ -187,7 +187,7 @@ impl Waffle {
     fn unread_list(&self, cx: &mut Context<Self>) -> AnyElement {
         let unreads = self.unreads();
         if unreads.is_empty() {
-            return ui::empty_state("unreads-empty", Illustration::InboxEmpty, "You're all caught up", "New messages in channels you follow will gather here.", cx).into_any_element();
+            return ui::Empty::new("unreads-empty", Illustration::InboxEmpty, "You're all caught up", "New messages in channels you follow will gather here.", cx).into_any_element();
         }
         let messages: Vec<Message> = unreads.iter().flat_map(|u| u.messages.iter().cloned()).collect();
         let ctx = self.row_context_everywhere(&messages, 380., cx);
@@ -203,10 +203,10 @@ impl Waffle {
         let new = whats_new(unread.messages.len(), unread.mentions);
         let channel_id = unread.channel.id.clone();
         let (open_guild, open_channel) = (unread.guild_id.clone(), unread.channel.clone());
-        let head = ui::list_row(SharedString::from(format!("unread-{}", unread.channel.id)), format!("#{}", unread.channel.name), cx)
+        let head = ui::Item::new(SharedString::from(format!("unread-{}", unread.channel.id)), format!("#{}", unread.channel.name), cx)
             .lead(ui::server_tile(unread.guild_icon.as_deref(), &unread.guild_name, 24., cx))
             .subtitle(format!("{} · {new}", unread.guild_name))
-            .trailing(ui::button(SharedString::from(format!("unread-read-{}", unread.channel.id)), ui::Tone::Ghost, cx).small().child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD)).child("Mark read").on_click(cx.listener(move |this, _, _, cx| {
+            .trailing(ui::Button::new(SharedString::from(format!("unread-read-{}", unread.channel.id))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::Sm).child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD)).child("Mark read").on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 this.mark_channel_read(&channel_id, cx);
             })))
@@ -225,13 +225,13 @@ impl Waffle {
     fn unread_message(&self, m: Message, guild_id: &str, ctx: &std::rc::Rc<crate::chat::RowContext>, cx: &mut Context<Self>) -> AnyElement {
         let (guild_id, channel_id, message_id) = (guild_id.to_owned(), m.channel_id.clone(), m.id.clone());
         let text = crate::chat::content(&m, ctx, cx).unwrap_or_else(|| div().text_color(palette::muted(cx)).child("Attachment").into_any_element());
-        let row = ui::list_row(SharedString::from(format!("unread-msg-{}", m.id)), m.author.name.clone(), cx)
+        let row = ui::Item::new(SharedString::from(format!("unread-msg-{}", m.id)), m.author.name.clone(), cx)
             .height(ui::RowHeight::Fit)
             .top()
             .px_2()
             .py_1()
             .gap_2()
-            .lead(ui::avatar(m.author.avatar.clone(), 24.))
+            .lead(ui::Avatar::new(m.author.avatar.clone(), 24.))
             .stamp(crate::chat::format_stamp(&m.timestamp))
             .body(div().text_size(ui::TEXT_SM).line_clamp(2).text_color(palette::text(cx)).child(text))
             .on_click(cx.listener(move |this, _, window, cx| this.open_message(Some(guild_id.clone()), &channel_id, message_id.clone(), window, cx)));

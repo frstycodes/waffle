@@ -43,6 +43,6 @@ pub(crate) fn issue_chip(id: SharedString, codes: Vec<u16>) -> gpui_kit::Statefu
         .child(Icon::new(Glyph::Warning).size(ui::ICON_SM).text_color(stage::idle()))
         .tooltip(move |window, cx| {
             let tip = codes.iter().map(|code| format!("{} Error code: {code}", issue_line(*code))).collect::<Vec<_>>().join("\n");
-            ui::tip(tip, window, cx)
+            ui::Tooltip::new(tip).build(window, cx)
         })
 }

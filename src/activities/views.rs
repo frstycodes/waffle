@@ -141,7 +141,7 @@ impl Waffle {
                     .flex_1()
                     .gap_2()
                     .child(ui::line(name).flex_none().max_w(relative(0.5)).text_size(TEXT_SM).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(palette::stage::strong()))
-                    .child(ui::capped_stack(&faces, FACES_SHOWN, AVATAR_SM, palette::stage::bg(), palette::stage::wash(0.2), palette::stage::strong()).flex_none())
+                    .child(ui::AvatarGroup::capped(&faces, FACES_SHOWN, AVATAR_SM, palette::stage::bg(), palette::stage::wash(0.2), palette::stage::strong()).flex_none())
                     .child(ui::line(players_line(&players, self.me.as_ref().map(|m| m.id.as_str()))).flex_1().text_size(TEXT_XS).text_color(palette::stage::muted())),
             )
             .when_some(invite, |d, (guild, channel)| {
@@ -162,7 +162,7 @@ impl Waffle {
                     this.pop_out(cx);
                 })))
             })
-            .child(ui::button("activity-bar-leave", Tone::Danger, cx).small().flex_none().child("Leave activity").on_click(cx.listener(|this, _, _, cx| {
+            .child(ui::Button::new("activity-bar-leave").variant(ui::ButtonVariant::Destructive).size(ui::ButtonSize::Sm).flex_none().child("Leave activity").on_click(cx.listener(|this, _, _, cx| {
                 cx.stop_propagation();
                 this.leave_with_rejoin(cx);
             })))
@@ -191,7 +191,7 @@ impl Waffle {
 
     // The slot a popped-out game leaves: where it went, and the way back.
     pub(super) fn popped_out_slot(&self, app_id: &str, cx: &mut Context<Self>) -> AnyElement {
-        let back = ui::button("activity-pop-in", Tone::Primary, cx).small().flex_none().child("Bring it back").on_click(cx.listener(|this, _, _, cx| {
+        let back = ui::Button::new("activity-pop-in").size(ui::ButtonSize::Sm).flex_none().child("Bring it back").on_click(cx.listener(|this, _, _, cx| {
             if let Some(popout) = this.activities.popout {
                 cx.defer(move |cx| _ = popout.update(cx, |_, window, _| window.remove_window()));
             }
@@ -284,14 +284,14 @@ impl Waffle {
             .gap_2()
             .child(ui::server_tile(app.and_then(|a| a.icon.as_deref()), &name, AVATAR_SM, cx))
             .child(ui::line(name).flex_1().text_size(TEXT_SM).font_weight(gpui_kit::FontWeight::MEDIUM).text_color(palette::strong(cx)))
-            .child(ui::icon_button("activity-pip-back", Glyph::Fullscreen, if place.voice { "Back to call" } else { "Back to chat" }, cx).small().on_click(cx.listener(move |this, _, window, cx| {
+            .child(ui::Button::new("activity-pip-back").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::Fullscreen).tooltip_text(if place.voice { "Back to call" } else { "Back to chat" }).on_click(cx.listener(move |this, _, window, cx| {
                 cx.stop_propagation();
                 match place.voice {
                     true => this.show_call(place.channel.clone(), window, cx),
                     false => this.open_channel(place.channel.clone(), window, cx),
                 }
             })))
-            .child(ui::icon_button("activity-pip-leave", Glyph::PhoneDisconnect, "Leave activity", cx).small().on_click(cx.listener(|this, _, _, cx| {
+            .child(ui::Button::new("activity-pip-leave").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::PhoneDisconnect).tooltip_text("Leave activity").on_click(cx.listener(|this, _, _, cx| {
                 cx.stop_propagation();
                 this.leave_with_rejoin(cx);
             })));
@@ -367,7 +367,7 @@ impl Waffle {
         let lead = match &state {
             CardState::Starting { .. } => Some(mascot::loader(SharedString::from(format!("activity-loading-{app_id}")), face.max(AVATAR_XL), palette::logo(), cx)),
             CardState::Failed(_) | CardState::DidntLoad => Some(Icon::new(Glyph::Warning).size(ICON_XL).text_color(palette::stage::strong()).into_any_element()),
-            CardState::Running | CardState::Closed(_) if !faces.is_empty() => Some(ui::capped_stack(&faces, FACES_SHOWN, face, gpui_kit::black(), palette::stage::wash(0.2), palette::stage::strong()).into_any_element()),
+            CardState::Running | CardState::Closed(_) if !faces.is_empty() => Some(ui::AvatarGroup::capped(&faces, FACES_SHOWN, face, gpui_kit::black(), palette::stage::wash(0.2), palette::stage::strong()).into_any_element()),
             CardState::Running | CardState::Closed(_) => Some(ui::server_tile(app.and_then(|a| a.icon.as_deref()), &name, face, cx)),
         };
         let line = match &state {
@@ -380,27 +380,27 @@ impl Waffle {
             CardState::Closed(words) if words.is_empty() => Some("The game closed.".to_owned()),
             CardState::Closed(words) => Some(format!("The game closed: “{words}”")),
         };
-        let button = |label: &'static str, tone: Tone, cx: &mut Context<Self>| {
-            ui::button(SharedString::from(format!("activity-{label}-{app_id}")), tone, cx).when(!big, |b| b.small()).flex_none().child(label)
+        let button = |label: &'static str, scope: ui::ButtonScope, _cx: &mut Context<Self>| {
+            ui::Button::new(SharedString::from(format!("activity-{label}-{app_id}"))).scope(scope).when(!big, |b| b.size(ui::ButtonSize::Sm)).flex_none().child(label)
         };
         let actions = match &state {
-            CardState::Running => vec![button("Join Activity", Tone::Overlay, cx).on_click(cx.listener(move |this, _, _, cx| this.join_activity(id.clone(), cx)))],
+            CardState::Running => vec![button("Join Activity", ui::ButtonScope::Art, cx).on_click(cx.listener(move |this, _, _, cx| this.join_activity(id.clone(), cx)))],
             CardState::Starting { slow: false } => Vec::new(),
-            CardState::Starting { slow: true } => vec![button("Cancel", Tone::OnMedia, cx).on_click(cx.listener(|this, _, _, cx| this.cancel_start(cx)))],
+            CardState::Starting { slow: true } => vec![button("Cancel", ui::ButtonScope::Media, cx).on_click(cx.listener(|this, _, _, cx| this.cancel_start(cx)))],
             CardState::Failed(_) => vec![
-                button("Dismiss", Tone::OnMedia, cx).on_click(cx.listener(|this, _, _, cx| this.cancel_start(cx))),
-                button("Try again", Tone::Overlay, cx).on_click(cx.listener(move |this, _, _, cx| this.join_activity(id.clone(), cx))),
+                button("Dismiss", ui::ButtonScope::Media, cx).on_click(cx.listener(|this, _, _, cx| this.cancel_start(cx))),
+                button("Try again", ui::ButtonScope::Art, cx).on_click(cx.listener(move |this, _, _, cx| this.join_activity(id.clone(), cx))),
             ],
             CardState::DidntLoad => vec![
-                button("Leave", Tone::OnMedia, cx).on_click(cx.listener(|this, _, _, cx| {
+                button("Leave", ui::ButtonScope::Media, cx).on_click(cx.listener(|this, _, _, cx| {
                     this.activities.unloaded = None;
                     this.leave_activity(cx);
                 })),
-                button("Reload", Tone::Overlay, cx).on_click(cx.listener(|this, _, _, cx| this.reload_activity(cx))),
+                button("Reload", ui::ButtonScope::Art, cx).on_click(cx.listener(|this, _, _, cx| this.reload_activity(cx))),
             ],
             CardState::Closed(_) => vec![
-                button("Dismiss", Tone::OnMedia, cx).on_click(cx.listener(|this, _, _, cx| this.cancel_start(cx))),
-                button("Play again", Tone::Overlay, cx).on_click(cx.listener(move |this, _, _, cx| this.join_activity(id.clone(), cx))),
+                button("Dismiss", ui::ButtonScope::Media, cx).on_click(cx.listener(|this, _, _, cx| this.cancel_start(cx))),
+                button("Play again", ui::ButtonScope::Art, cx).on_click(cx.listener(move |this, _, _, cx| this.join_activity(id.clone(), cx))),
             ],
         };
         let art = app.and_then(|a| a.background.clone()).map(|url| gpui_kit::img(url).absolute().inset_0().size_full().object_fit(gpui_kit::ObjectFit::Cover));
@@ -440,7 +440,7 @@ impl Waffle {
                 let faces: Vec<ui::Entry> = instance.participants.iter().map(|p| self.player(&p.user_id)).map(|u| ui::Entry::person(u.avatar, u.name)).collect();
                 let playing = self.in_activity(&app_id, cx);
                 let target = channel.clone();
-                ui::list_row(SharedString::from(format!("list-{}-{}", activity_key(&app_id), channel.id)), name.clone(), cx)
+                ui::Item::new(SharedString::from(format!("list-{}-{}", activity_key(&app_id), channel.id)), name.clone(), cx)
                     .height(ui::RowHeight::Exact(LIST_ROW))
                     .flex_none()
                     .pl(px(LIST_INDENT))
@@ -448,8 +448,8 @@ impl Waffle {
                     .gap_2()
                     .title_ink(if playing { palette::accent_ink(cx) } else { palette::text(cx) })
                     .lead(ui::server_tile(app.and_then(|a| a.icon.as_deref()), &name, AVATAR_SM, cx))
-                    .trailing(ui::capped_stack(&faces, LIST_FACES, AVATAR_XS, sidebar, palette::selected(cx), palette::text(cx)).flex_none())
-                    .tooltip(move |window, cx| ui::tip(if playing { "Open activity" } else if in_call { "Join activity" } else { "Join the call and the activity" }, window, cx))
+                    .trailing(ui::AvatarGroup::capped(&faces, LIST_FACES, AVATAR_XS, sidebar, palette::selected(cx), palette::text(cx)).flex_none())
+                    .tooltip(move |window, cx| ui::Tooltip::new(if playing { "Open activity" } else if in_call { "Join activity" } else { "Join the call and the activity" }).build(window, cx))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();
                         this.join_activity_in(target.clone(), app_id.clone(), window, cx);
@@ -505,7 +505,7 @@ impl Waffle {
         let channel = self.activity_place(user_id, rich.app_id.as_deref()?)?;
         let app_id = rich.app_id.clone()?;
         let label = format!("Join in {}", channel.name);
-        Some(ui::button("profile-activity-join", ui::Tone::Primary, cx).small().w_full().child(label).on_click(cx.listener(move |this, _, window, cx| this.join_activity_in(channel.clone(), app_id.clone(), window, cx))).into_any_element())
+        Some(ui::Button::new("profile-activity-join").size(ui::ButtonSize::Sm).w_full().child(label).on_click(cx.listener(move |this, _, window, cx| this.join_activity_in(channel.clone(), app_id.clone(), window, cx))).into_any_element())
     }
 
     // The call header's title while a game is focused: the room, then the game, as Discord's header.
@@ -519,7 +519,7 @@ impl Waffle {
 
     // The composer's Activities button: the launcher for games that run over this chat.
     pub(crate) fn composer_activities_button(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        ui::icon_button("composer-activities", Glyph::Activities, "Activities", cx).toggled(self.activities.launcher.is_some(), cx).on_click(cx.listener(|this, _, window, cx| {
+        ui::Button::new("composer-activities").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::Activities).tooltip_text("Activities").toggled(self.activities.launcher.is_some()).on_click(cx.listener(|this, _, window, cx| {
             let at = window.mouse_position();
             this.toggle_chat_launcher(at, window, cx);
         }))
@@ -539,7 +539,7 @@ impl Waffle {
                 .gap_2p5()
                 .child(ui::server_tile(app.and_then(|a| a.icon.as_deref()), &name, AVATAR_XL, cx))
                 .child(ui::col().min_h_0().flex_1().child(ui::line(name).font_weight(gpui_kit::FontWeight::SEMIBOLD).text_color(palette::strong(cx))).child(ui::line(elapsed).text_size(TEXT_XS).text_color(palette::muted(cx))))
-                .child(ui::icon_button("panel-leave-activity", Glyph::DoorExit, "Leave Activity", cx).flex_none().on_click(cx.listener(|this, _, _, cx| this.leave_with_rejoin(cx))))
+                .child(ui::Button::new("panel-leave-activity").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::DoorExit).tooltip_text("Leave Activity").flex_none().on_click(cx.listener(|this, _, _, cx| this.leave_with_rejoin(cx))))
                 .into_any_element(),
         )
     }

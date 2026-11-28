@@ -24,7 +24,7 @@ impl Waffle {
             let row = self
                 .entry_row("finish-joining", Glyph::Note, "Finish joining", None, cx)
                 .child(progress_dots(answered, total, cx))
-                .tooltip(move |window, cx| ui::tip(label.clone(), window, cx))
+                .tooltip(move |window, cx| ui::Tooltip::new(label.clone()).build(window, cx))
                 .on_click(cx.listener(move |this, _, _, cx| this.open_onboarding(guild_id.clone(), cx)));
             rows.push(row.into_any_element());
         }
@@ -38,7 +38,7 @@ impl Waffle {
             rows.push(self.page_row("channels-roles", Glyph::Search, page_title(has_prompts), GuildPage::ChannelsRoles, cx));
         }
         if !rows.is_empty() {
-            rows.push(div().px_2p5().py_1p5().child(ui::divider(None, cx)).into_any_element());
+            rows.push(div().px_2p5().py_1p5().child(ui::Separator::new().w_full()).into_any_element());
         }
         rows
     }
@@ -60,7 +60,7 @@ impl Waffle {
 // The new member's to-dos: a raised card with the count and a success-coloured bar; opens the Server Guide.
 fn get_started(done: usize, total: usize, cx: &mut Context<Waffle>) -> AnyElement {
     let fraction = done as f32 / total as f32;
-    ui::card("get-started", cx)
+    ui::Card::interactive("get-started", cx)
         .bordered(cx)
         .flex_col()
         .items_stretch()
@@ -78,7 +78,7 @@ fn get_started(done: usize, total: usize, cx: &mut Context<Waffle>) -> AnyElemen
                 .child(div().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Get Started"))
                 .child(div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(format!("{done} of {total}"))),
         )
-        .child(ui::progress_bar(fraction, cx).fill(palette::positive_ink(cx)).joined())
+        .child(ui::Progress::new(fraction).fill(palette::positive_ink(cx)).joined())
         .on_click(cx.listener(|this, _, _, cx| this.open_guild_page(GuildPage::Guide, cx)))
         .into_any_element()
 }

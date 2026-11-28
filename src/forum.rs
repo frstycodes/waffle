@@ -484,7 +484,7 @@ impl Waffle {
     // The search box, Sort & View and New post; under them the search status and the tag row.
     fn forum_toolbar(&self, forum: &Channel, page: &ForumPage, search: &Entity<InputState>, cx: &mut Context<Self>) -> Div {
         let id = forum.id.clone();
-        let sort = ui::button("forum-sort", ui::Tone::Ghost, cx)
+        let sort = ui::Button::new("forum-sort").variant(ui::ButtonVariant::Ghost)
             .child(Icon::new(Glyph::SortDesc).size(ui::ICON_MD))
             .child(if page.media { "Sort" } else { "Sort & View" })
             .on_click(cx.listener(move |this, _, window, cx| {
@@ -494,7 +494,7 @@ impl Waffle {
         let new_post = page.can_post.then(|| self.new_post_button("forum-new-post", &forum.id, cx));
         let guidelines = (page.can_post && guidelines_text(forum).is_some()).then(|| {
             let id = forum.id.clone();
-            ui::icon_button("forum-guidelines", Glyph::BookOpen, "Post Guidelines", cx).on_click(cx.listener(move |this, _, window, cx| this.open_guidelines(id.clone(), window, cx)))
+            ui::Button::new("forum-guidelines").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::BookOpen).tooltip_text("Post Guidelines").on_click(cx.listener(move |this, _, window, cx| this.open_guidelines(id.clone(), window, cx)))
         });
         ui::col()
             .flex_none()
@@ -504,14 +504,14 @@ impl Waffle {
             .pt_4()
             .pb_1()
             .gap_2p5()
-            .child(ui::row().gap_2().child(div().flex_1().min_w_0().child(ui::search_field("forum-search", search, cx))).child(sort).children(guidelines).children(new_post))
+            .child(ui::row().gap_2().child(div().flex_1().min_w_0().child(ui::InputGroup::search("forum-search", search, cx))).child(sort).children(guidelines).children(new_post))
             .children(self.search_status(forum, page, cx))
             .children((!forum.props.tags.is_empty()).then(|| self.tag_row(forum, &page.filter, cx)))
     }
 
-    fn new_post_button(&self, key: &'static str, forum_id: &str, cx: &mut Context<Self>) -> ui::Control {
+    fn new_post_button(&self, key: &'static str, forum_id: &str, cx: &mut Context<Self>) -> ui::Button {
         let id = forum_id.to_owned();
-        ui::button(key, ui::Tone::Primary, cx).child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("New post").on_click(cx.listener(move |this, _, window, cx| this.open_new_post(id.clone(), window, cx)))
+        ui::Button::new(key).child(Icon::new(Glyph::Plus).size(ui::ICON_MD)).child("New post").on_click(cx.listener(move |this, _, window, cx| this.open_new_post(id.clone(), window, cx)))
     }
 
     // Discord's line under the search: "Searching...", "No matching posts" or the count, then Clear.
@@ -527,7 +527,7 @@ impl Waffle {
             n => format!("{n} posts with \u{201c}{}\u{201d}", page.query),
         };
         let id = forum.id.clone();
-        let clear = ui::button("forum-search-clear", ui::Tone::Link, cx).child("Clear").on_click(cx.listener(move |this, _, window, cx| {
+        let clear = ui::Button::new("forum-search-clear").variant(ui::ButtonVariant::Link).child("Clear").on_click(cx.listener(move |this, _, window, cx| {
             if let Some(search) = this.forums.get(&id).and_then(|s| s.search.clone()) {
                 search.update(cx, |s, cx| s.set_value("", window, cx));
             }
@@ -544,15 +544,15 @@ impl Waffle {
             .iter()
             .map(|tag| {
                 let (forum_id, tag_id) = (forum.id.clone(), tag.id.clone());
-                tag_chip(SharedString::from(format!("forum-tag-{}", tag.id)), tag, filter.contains(&tag.id), cx)
+                tag_chip(SharedString::from(format!("forum-tag-{}", tag.id)), tag, filter.contains(&tag.id))
                     .flex_none()
                     .on_click(cx.listener(move |this, _, _, cx| this.toggle_forum_filter(&forum_id, &tag_id, cx)))
                     .into_any_element()
             })
             .collect();
         let id = forum.id.clone();
-        let all = ui::button("forum-tags-all", ui::Tone::Ghost, cx)
-            .small()
+        let all = ui::Button::new("forum-tags-all").variant(ui::ButtonVariant::Ghost)
+            .size(ui::ButtonSize::Sm)
             .flex_none()
             .child(if filter.is_empty() { "All".to_owned() } else { format!("{} selected", filter.len()) })
             .child(Icon::new(Glyph::ChevronDown).size(ui::ICON_SM))
@@ -563,7 +563,7 @@ impl Waffle {
         ui::row()
             .gap_2()
             .child(ui::row().items_stretch().gap_1p5().overflow_hidden().children(chips))
-            .child(ui::seam(cx).bg(palette::line_strong(cx)))
+            .child(ui::Separator::new().orientation(ui::Orientation::Vertical).bg(palette::line_strong(cx)))
             .child(all)
     }
 
@@ -624,15 +624,15 @@ impl Waffle {
         let error = state.and_then(|s| s.error.clone()).map(|e| div().text_size(ui::TEXT_SM).text_color(palette::danger_ink(cx)).child(e));
         let more = state.filter(|s| s.has_more && !s.loading && page.words.is_empty()).map(|_| {
             let id = forum.id.clone();
-            ui::row().items_stretch().justify_center().child(ui::button("forum-more", ui::Tone::Ghost, cx).child("Load more posts").on_click(cx.listener(move |this, _, _, cx| this.load_forum(id.clone(), cx))))
+            ui::row().items_stretch().justify_center().child(ui::Button::new("forum-more").variant(ui::ButtonVariant::Ghost).child("Load more posts").on_click(cx.listener(move |this, _, _, cx| this.load_forum(id.clone(), cx))))
         });
         let is_empty = page.listing.active.is_empty() && page.listing.older.is_empty() && page.settled && !page.searching;
         let no_history = (!page.history && page.words.is_empty()).then(|| no_history_notice(forum, cx));
-        let older = (!page.listing.older.is_empty()).then(|| ui::divider(Some("Older Posts"), cx));
+        let older = (!page.listing.older.is_empty()).then(|| ui::Separator::new().label("Older Posts"));
         let held = state.map_or(0, |s| s.held_back.len());
         let new_posts = (held > 0).then(|| {
             let id = forum.id.clone();
-            let button = ui::button("forum-new-posts", ui::Tone::Primary, cx).small().child(Icon::new(Glyph::ArrowUp).size(ui::ICON_SM)).child(new_posts_label(held));
+            let button = ui::Button::new("forum-new-posts").size(ui::ButtonSize::Sm).child(Icon::new(Glyph::ArrowUp).size(ui::ICON_SM)).child(new_posts_label(held));
             ui::row().items_stretch().justify_center().child(button.on_click(cx.listener(move |this, _, _, cx| this.show_held_back(&id, cx))))
         });
         let column = ui::col().w_full().max_w(px(CONTENT_WIDTH)).px_4().pt_2().pb_4().gap_3().children(error).children(new_posts);
@@ -652,7 +652,7 @@ impl Waffle {
     // No posts, none with these tags, or none matching the search.
     fn forum_empty(&self, forum: &Channel, page: &ForumPage, cx: &mut Context<Self>) -> Div {
         if !page.query.is_empty() {
-            return ui::empty_state("forum-empty", Illustration::SearchEmpty, "No matching posts", "Search looks at post titles and the opening messages loaded so far.", cx);
+            return ui::Empty::new("forum-empty", Illustration::SearchEmpty, "No matching posts", "Search looks at post titles and the opening messages loaded so far.", cx);
         }
         if !page.filter.is_empty() {
             let (title, body) = match page.filter.len() {
@@ -660,11 +660,11 @@ impl Waffle {
                 _ => ("There are no posts with these tags yet!", "Be the first to start a conversation with these tags"),
             };
             let id = forum.id.clone();
-            let clear = ui::button("forum-empty-clear", ui::Tone::Secondary, cx).child("Clear all").on_click(cx.listener(move |this, _, _, cx| this.clear_forum_filter(&id, cx)));
-            return ui::empty_state("forum-empty", Illustration::ForumEmpty, title, body, cx).child(div().pt_2().child(clear));
+            let clear = ui::Button::new("forum-empty-clear").variant(ui::ButtonVariant::Secondary).child("Clear all").on_click(cx.listener(move |this, _, _, cx| this.clear_forum_filter(&id, cx)));
+            return ui::Empty::new("forum-empty", Illustration::ForumEmpty, title, body, cx).child(div().pt_2().child(clear));
         }
         let new_post = page.can_post.then(|| div().pt_2().child(self.new_post_button("forum-empty-new", &forum.id, cx)));
-        ui::empty_state("forum-empty", Illustration::ForumEmpty, "Make the first post!", "Be the first to start the conversation!", cx).children(new_post)
+        ui::Empty::new("forum-empty", Illustration::ForumEmpty, "Make the first post!", "Be the first to start the conversation!", cx).children(new_post)
     }
 
     fn post_list(&self, forum: &Channel, page: &ForumPage, posts: &[Channel], cx: &mut Context<Self>) -> AnyElement {
@@ -692,7 +692,7 @@ impl Waffle {
             .gap_y_1()
             .text_size(ui::TEXT_XS)
             .text_color(faint)
-            .children(top_reaction(first, forum).map(|(emoji, count)| reaction_chip(emoji, count, cx)))
+            .children(top_reaction(first, forum).map(|(emoji, count)| reaction_chip(emoji, count)))
             .child(ui::row().gap_1().child(Icon::new(Glyph::ChatRound).size(ui::ICON_SM)).child(meta.message_count.to_string()).children(unread))
             .child("\u{2022}")
             .child(post_time(post, page.view.by_creation));
@@ -734,15 +734,15 @@ impl Waffle {
         }
         let (shown, rest) = applied.split_at(applied.len().min(3));
         let rest_names = rest.iter().map(|t| t.name.as_str()).collect::<Vec<_>>().join(", ");
-        let pin = meta.pinned.then(|| div().id(SharedString::from(format!("post-pin-{}", post.id))).text_color(palette::muted(cx)).child(Icon::new(Glyph::Pin).size(ui::ICON_SM)).tooltip(|window, cx| ui::tip("Pinned", window, cx)));
+        let pin = meta.pinned.then(|| div().id(SharedString::from(format!("post-pin-{}", post.id))).text_color(palette::muted(cx)).child(Icon::new(Glyph::Pin).size(ui::ICON_SM)).tooltip(ui::Tooltip::text("Pinned")));
         let overflow = (!rest.is_empty()).then(|| {
-            div().id(SharedString::from(format!("post-tags-more-{}", post.id))).child(post_tag_badge(None, format!("+{}", rest.len()), false, cx)).tooltip(move |window, cx| ui::tip(rest_names.clone(), window, cx))
+            div().id(SharedString::from(format!("post-tags-more-{}", post.id))).child(post_tag_badge(None, format!("+{}", rest.len()), false, cx)).tooltip(move |window, cx| ui::Tooltip::new(rest_names.clone()).build(window, cx))
         });
         Some(
             ui::row()
                 .flex_wrap()
                 .gap_1p5()
-                .children(is_new.then(|| ui::badge(palette::accent(), palette::on_accent()).child("New")))
+                .children(is_new.then(|| ui::Badge::empty().child("New")))
                 .children(pin)
                 .children(shown.iter().map(|t| post_tag_badge(t.emoji.as_ref(), t.name.clone(), page.filter.contains(&t.id), cx)))
                 .children(overflow),
@@ -800,10 +800,10 @@ impl Waffle {
             .gap_1p5()
             .text_size(ui::TEXT_XS)
             .text_color(muted)
-            .children(first.map(|m| ui::avatar(m.author.avatar.clone(), 20.)))
+            .children(first.map(|m| ui::Avatar::new(m.author.avatar.clone(), 20.)))
             .children(first.map(|m| ui::line(m.author.name.clone()).font_weight(FontWeight::SEMIBOLD).text_color(palette::text(cx))))
             .child(div().flex_none().child(if page.media { age } else { format!("posted {age}") }))
-            .when(self.is_new_post(&forum.id, post), |row| row.child(div().flex_1()).child(ui::badge(palette::accent(), palette::on_accent()).child("New")));
+            .when(self.is_new_post(&forum.id, post), |row| row.child(div().flex_1()).child(ui::Badge::empty().child("New")));
         let picture = media.and_then(|(urls, height)| mosaic_view(&urls, height, 4., cx)).map(|m| m.w_full());
         let text = picture.is_none().then(|| first.map(|m| div().line_clamp(5).text_size(ui::TEXT_SM).text_color(muted).child(m.content.clone()))).flatten();
         let footer = (!page.media).then(|| {
@@ -811,7 +811,7 @@ impl Waffle {
                 .gap_2()
                 .text_size(ui::TEXT_XS)
                 .text_color(faint)
-                .children(top_reaction(first, forum).map(|(emoji, count)| reaction_chip(emoji, count, cx)))
+                .children(top_reaction(first, forum).map(|(emoji, count)| reaction_chip(emoji, count)))
                 .child(ui::row().gap_1().child(Icon::new(Glyph::ChatRound).size(ui::ICON_SM)).child(replies.to_string()).children(unread))
         });
         let title = post_title(post, &page.words, self.title_ink(&forum.id, post, cx), if page.media { 14. } else { 16. }, cx);

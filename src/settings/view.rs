@@ -23,7 +23,7 @@ impl Waffle {
             if settings.iter().any(|s| s.control == Control::Custom) {
                 continue;
             }
-            let mut card = ui::settings_card(cx);
+            let mut card = ui::Card::new(cx);
             for (i, setting) in settings.iter().enumerate() {
                 card = match setting.control {
                     Control::Choice(choice) => card.child(self.choice_rows(setting, choice, cx)),
@@ -44,7 +44,7 @@ impl Waffle {
         if let Control::Switch(toggle) = setting.control {
             return self.toggle_row(setting, toggle, line, window, cx);
         }
-        let row = ui::settings_row(setting.id, line, cx).child(ui::settings_text(setting.title, setting.caption, cx));
+        let row = ui::Item::setting(setting.id, line, cx).child(ui::settings_text(setting.title, setting.caption, cx));
         match setting.control {
             Control::Link(url) => ui::settings_choice(row, cx)
                 .child(div().text_color(palette::faint(cx)).child(Icon::new(Glyph::ChevronRight).size(ui::ICON_MD)))
@@ -56,10 +56,10 @@ impl Waffle {
 
     // A switch row bound to `toggle`, for registry switches and the custom rows that hold one. A blocked
     // one dims its switch and says why under its title.
-    pub(super) fn toggle_row(&self, setting: &'static Setting, toggle: Toggle, line: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn toggle_row(&self, setting: &'static Setting, toggle: Toggle, line: bool, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let blocked = self.toggle_blocked(toggle);
-        let row = ui::settings_row(setting.id, line, cx).child(ui::settings_text(setting.title, blocked.or(setting.caption), cx));
-        let switch = ui::switch_live(SharedString::from(format!("{}-switch", setting.id)), self.toggle_value(toggle), window, cx);
+        let row = ui::Item::setting(setting.id, line, cx).child(ui::settings_text(setting.title, blocked.or(setting.caption), cx));
+        let switch = ui::Switch::new(SharedString::from(format!("{}-switch", setting.id))).checked(self.toggle_value(toggle));
         if blocked.is_some() {
             return row.child(switch.opacity(0.45)).into_any_element();
         }
@@ -70,7 +70,7 @@ impl Waffle {
     fn choice_rows(&self, setting: &'static Setting, choice: Choice, cx: &mut Context<Self>) -> impl IntoElement {
         let current = self.choice_value(choice);
         ui::col().id(setting.id).children(choice.options().iter().enumerate().map(|(i, &(value, title, detail))| {
-            let row = ui::settings_row(SharedString::from(format!("{}-{value}", setting.id)), i > 0, cx).child(ui::radio(current == value, cx)).child(ui::settings_text(title, detail, cx));
+            let row = ui::Item::setting(SharedString::from(format!("{}-{value}", setting.id)), i > 0, cx).child(ui::RadioGroupItem::mark(current == value)).child(ui::settings_text(title, detail, cx));
             ui::settings_choice(row, cx).on_click(cx.listener(move |this, _, _, cx| this.choose_setting(choice, value, cx)))
         }))
     }
@@ -313,7 +313,7 @@ impl Waffle {
             .enumerate()
             .map(|(i, setting)| {
                 let place = format!("{} \u{203a} {}", setting.page.label(), setting.group);
-                ui::menu_row(SharedString::from(format!("result-{}", setting.id)), cx)
+                ui::DropdownMenuItem::new(SharedString::from(format!("result-{}", setting.id)), cx)
                     .highlighted(i == selected)
                     .h_auto()
                     .py_1p5()

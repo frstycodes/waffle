@@ -14,7 +14,7 @@ use crate::{
     discord::{Guild, Status},
     icons::Glyph,
     palette,
-    ui::{self, Check, Squircle, Tone},
+    ui::{self, Check, Squircle},
 };
 
 // Discord's cover moves on by itself after 3 s.
@@ -431,8 +431,9 @@ impl Waffle {
             Step::Rules => rules_body(&rules, &view.rules_scroll, rules_note(view, cx), cx),
         };
         let page = palette::surface(palette::Level::Page, cx);
-        let close = if on_splash_cover { ui::round_button("onboarding-close", Glyph::X, "Close", 40.) } else { ui::icon_button("onboarding-close", Glyph::X, "Close", cx).large() };
-        let close = div().absolute().top_4().right_4().child(close.on_click(cx.listener(|this, _, _, cx| this.close_onboarding(cx))));
+        let close_click = cx.listener(|this, _, _, cx| this.close_onboarding(cx));
+        let close = if on_splash_cover { ui::round_button("onboarding-close", Glyph::X, "Close", 40.).on_click(close_click).into_any_element() } else { ui::Button::new("onboarding-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconLg).icon(Glyph::X).tooltip_text("Close").on_click(close_click).into_any_element() };
+        let close = div().absolute().top_4().right_4().child(close);
         let footer = self.onboarding_footer(&prompts, &rules, on_splash_cover, cx);
         // Over a splash the questions are a dialog card that springs to each step's height (as the share
         // picker does), so the server's image shows all around; past its cap the step scrolls, edges fading.
@@ -440,16 +441,16 @@ impl Waffle {
             true => {
                 let room = f32::from(window.viewport_size().height) - 2. * SPLASH_INSET;
                 let list = div().id("onboarding-body").max_h(px((room - FOOTER_ROOM).min(STEP_MAX_HEIGHT))).child(body);
-                let card = ui::col().relative().bg(page).child(ui::scroll_fade(list, &view.body_scroll, page)).child(footer).child(close);
+                let card = ui::col().relative().bg(page).child(ui::ScrollArea::faded(list, &view.body_scroll, page)).child(footer).child(close);
                 let width = SHEET_WIDTH.min(f32::from(window.viewport_size().width) - 2. * SPLASH_INSET);
-                ui::dialog("onboarding-card", width, card, window, cx).into_any_element()
+                ui::Dialog::new("onboarding-card", width, card, window, cx).into_any_element()
             }
             false => ui::col().min_h_0()
                 .relative()
                 .w_full()
                 .flex_1()
                 .when(!on_splash_cover, |d| d.bg(page))
-                .child(ui::scroll_area(div().id("onboarding-body").child(body), &view.body_scroll))
+                .child(ui::ScrollArea::new(div().id("onboarding-body").child(body), &view.body_scroll))
                 .child(footer)
                 .child(close)
                 .into_any_element(),
@@ -509,10 +510,10 @@ impl Waffle {
         let view = self.join.onboard.as_ref().expect("overlay checked the open view");
         let has_rules = *rules != RulesStep::Off;
         let picked_here = matches!(view.step, Step::Prompt(i) if view.has_pick(&prompts[i]));
-        let (label, tone) = match view.step {
-            _ if view.is_last(prompts, has_rules) => ("Finish 🎉", Tone::Primary),
-            Step::Prompt(_) if !picked_here => ("Skip", Tone::Secondary),
-            _ => ("Next", Tone::Primary),
+        let (label, variant) = match view.step {
+            _ if view.is_last(prompts, has_rules) => ("Finish 🎉", ui::ButtonVariant::Default),
+            Step::Prompt(_) if !picked_here => ("Skip", ui::ButtonVariant::Secondary),
+            _ => ("Next", ui::ButtonVariant::Default),
         };
         // The rules step's notes sit under the rules (`rules_note`); the footer keeps question and send errors.
         let hint = match (view.warning, &view.error) {
@@ -521,13 +522,13 @@ impl Waffle {
             _ => None,
         };
         let back = view.can_go_back().then(|| {
-            ui::button("onboarding-back", Tone::Ghost, cx)
-                .large()
+            ui::Button::new("onboarding-back").variant(ui::ButtonVariant::Ghost)
+                .size(ui::ButtonSize::Lg)
                 .child(Icon::new(Glyph::ArrowLeft).size(ui::ICON_LG))
                 .child("Back")
                 .on_click(cx.listener(|this, _, _, cx| this.onboarding_back(cx)))
         });
-        let next = ui::button("onboarding-next", tone, cx).large().loading(view.sending.then_some("Finishing…")).child(label).on_click(cx.listener(|this, _, _, cx| this.onboarding_next(cx)));
+        let next = ui::Button::new("onboarding-next").variant(variant).size(ui::ButtonSize::Lg).loading(view.sending.then_some("Finishing…")).child(label).on_click(cx.listener(|this, _, _, cx| this.onboarding_next(cx)));
         let dots = (view.step != Step::Cover).then(|| progress_dots(view.step, prompts.len() + usize::from(has_rules), cx));
         // The hint gets its own line over the buttons, ending under the button it's about, instead of a
         // third of the row.
@@ -575,7 +576,7 @@ fn rules_note(view: &OnboardingView, cx: &App) -> Option<Div> {
 fn rules_body(rules: &RulesStep, scroll: &ScrollHandle, note: Option<Div>, cx: &App) -> AnyElement {
     let list = match rules {
         RulesStep::Ready(form) => rules_list(&form.rules, scroll, cx).into_any_element(),
-        _ => ui::progress_indeterminate("onboarding-rules-loading", cx),
+        _ => ui::Progress::indeterminate("onboarding-rules-loading").into_any_element(),
     };
     centered(
         column()
@@ -597,11 +598,11 @@ fn rules_list(rules: &[String], scroll: &ScrollHandle, cx: &App) -> Div {
             .p_3()
             .child(crate::ui::number_mark(i + 1, cx))
             .child(div().flex_1().min_w_0().text_size(ui::TEXT_LEAD).line_height(relative(1.45)).text_color(palette::strong(cx)).child(rule.clone()))
-            .when(i < last, |d| d.child(ui::inset_rule(12., cx).left_12()))
+            .when(i < last, |d| d.child(ui::Separator::new().inset(12.).left_12()))
     });
     let group = palette::surface(palette::Level::Group, cx);
     let list = ui::col().id("onboarding-rules").max_h(px(RULES_HEIGHT)).children(rows);
-    div().squircle(ui::RADIUS_LG).bg(group).p_1().child(ui::scroll_fade(list, scroll, group))
+    div().squircle(ui::RADIUS_LG).bg(group).p_1().child(ui::ScrollArea::faded(list, scroll, group))
 }
 
 fn column() -> Div {
@@ -647,7 +648,7 @@ fn option_grid(guild: &Guild, prompt: &Prompt, picked: &HashSet<String>, cx: &mu
                 .child(div().text_size(ui::TEXT_LEAD).line_height(px(TITLE_LINE)).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(option.title.clone()))
                 .when_some(option.description.clone(), |d, desc| d.child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(desc)))
                 .when(!gets.is_empty(), |d| d.child(ui::row().pt_0p5().flex_wrap().gap_1().text_size(ui::TEXT_XS).text_color(ink).children(gets)));
-            let card = ui::card(gpui_kit::SharedString::from(format!("onboarding-option-{}", option.id)), cx)
+            let card = ui::Card::interactive(gpui_kit::SharedString::from(format!("onboarding-option-{}", option.id)), cx)
                 .bordered(cx)
                 .selected(on, cx)
                 .shrinks(PRESS_TO)
@@ -670,14 +671,14 @@ fn option_grid(guild: &Guild, prompt: &Prompt, picked: &HashSet<String>, cx: &mu
     div().grid().grid_cols(2).gap_2().children(cards).into_any_element()
 }
 
-fn dropdown(prompt: &Prompt, picked: &HashSet<String>, window: &mut Window, cx: &mut Context<Waffle>) -> AnyElement {
+fn dropdown(prompt: &Prompt, picked: &HashSet<String>, _window: &mut Window, cx: &mut Context<Waffle>) -> AnyElement {
     let rows: Vec<AnyElement> = prompt
         .options
         .iter()
         .map(|option| {
             let state = if picked.contains(&option.id) { Check::On } else { Check::Off };
             let id = format!("onboarding-option-{}", option.id);
-            let mark = ui::check_live(gpui_kit::SharedString::from(format!("{id}-check")), state, window, cx);
+            let mark = ui::Checkbox::new(gpui_kit::SharedString::from(format!("{id}-check"))).checked(state);
             let title = match option.emoji.as_ref().filter(|e| e.id.is_none()).and_then(|e| e.name.as_deref()) {
                 Some(emoji) => format!("{emoji} {}", option.title),
                 None => option.title.clone(),

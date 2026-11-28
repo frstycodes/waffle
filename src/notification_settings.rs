@@ -21,7 +21,7 @@ use crate::{
     discord::{Channel, ChannelKind, Guild, GuildSettings},
     icons::Glyph,
     palette,
-    ui::{self, Tone},
+    ui::{self},
 };
 
 const WIDTH: f32 = 600.;
@@ -136,12 +136,12 @@ impl Waffle {
             .child(ns_switches(&settings, window, cx))
             .child(ns_push_card(&settings, window, cx))
             .child(self.ns_overrides(view, guild, &settings, window, cx));
-        let done = ui::row().items_stretch().justify_end().px_6().pt_3().pb_5().child(ui::button("ns-done", Tone::Primary, cx).child("Done").on_click(cx.listener(|this, _, _, cx| this.close_notification_settings(cx))));
+        let done = ui::row().items_stretch().justify_end().px_6().pt_3().pb_5().child(ui::Button::new("ns-done").child("Done").on_click(cx.listener(|this, _, _, cx| this.close_notification_settings(cx))));
         let height = (f32::from(window.viewport_size().height) * 0.85).min(MAX_HEIGHT);
         let body = ui::col().h(px(height)).child(ns_head(guild, cx)).child(scroller).child(done);
-        let card = div().id("ns-card").occlude().child(ui::dialog("notification-settings", WIDTH, body, window, cx));
+        let card = div().id("ns-card").occlude().child(ui::Dialog::new("notification-settings", WIDTH, body, window, cx));
         let backdrop = div().id("ns-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_notification_settings(cx)));
-        Some(ui::modal(backdrop, card, cx))
+        Some(ui::Dialog::modal(backdrop, card, cx))
     }
 
     fn ns_mute_card(&self, view: &NotificationSettings, guild: &Guild, settings: &GuildSettings, window: &mut Window, cx: &mut Context<Self>) -> Div {
@@ -152,7 +152,7 @@ impl Waffle {
         });
         let title = format!("Mute {}", guild.name);
         let mute = switch_row("ns-mute", title, Some("Muting a server prevents unread indicators and notifications from appearing unless you are mentioned."), muted, true, false, window, cx).on_click(toggle);
-        let card = ui::settings_card(cx).child(mute);
+        let card = ui::Card::new(cx).child(mute);
         if !muted {
             return card;
         }
@@ -179,9 +179,9 @@ impl Waffle {
             .relative()
             .w(px(SELECT_WIDTH))
             .flex_none()
-            .child(ui::select("ns-mute-for", Some(Glyph::Clock), picked, open, cx).on_click(cx.listener(|this, _, window, cx| this.toggle_popover(Popover::MuteFor, window, cx))))
-            .when(open, |d| d.child(ui::select_options("ns-mute-for-options", &options, &window_seconds.to_string(), SELECT_HEIGHT, on_choose, dismiss, cx)));
-        ui::settings_row("ns-mute-duration", true, cx).child(ui::settings_text("Mute duration", Some(muted_until(settings)), cx)).child(select)
+            .child(ui::Select::new("ns-mute-for", Some(Glyph::Clock), picked, open, cx).on_click(cx.listener(|this, _, window, cx| this.toggle_popover(Popover::MuteFor, window, cx))))
+            .when(open, |d| d.child(ui::Select::options("ns-mute-for-options", &options, &window_seconds.to_string(), SELECT_HEIGHT, on_choose, dismiss, cx)));
+        ui::Item::setting("ns-mute-duration", true, cx).child(ui::settings_text("Mute duration", Some(muted_until(settings)), cx)).child(select)
     }
 
     fn ns_overrides(&self, view: &NotificationSettings, guild: &Guild, settings: &GuildSettings, window: &mut Window, cx: &mut Context<Self>) -> Div {
@@ -190,12 +190,12 @@ impl Waffle {
         let open = view.open == Some(Popover::Channels);
         let picker = div()
             .relative()
-            .child(ui::select("ns-pick", Some(Glyph::Search), "Select a channel or category…", open, cx).text_color(palette::muted(cx)).on_click(cx.listener(|this, _, window, cx| this.toggle_popover(Popover::Channels, window, cx))))
+            .child(ui::Select::new("ns-pick", Some(Glyph::Search), "Select a channel or category…", open, cx).text_color(palette::muted(cx)).on_click(cx.listener(|this, _, window, cx| this.toggle_popover(Popover::Channels, window, cx))))
             .when(open, |d| d.child(self.ns_channel_picker(view, guild, &taken, cx)));
         let guild_muted = settings.is_muted();
-        let card = ui::settings_card(cx);
+        let card = ui::Card::new(cx);
         let card = if rows.is_empty() {
-            card.child(ui::settings_row("ns-override-empty", false, cx).min_h(px(ROW_MIN)).text_color(palette::muted(cx)).child("Add a channel to override its default notification settings"))
+            card.child(ui::Item::setting("ns-override-empty", false, cx).min_h(px(ROW_MIN)).text_color(palette::muted(cx)).child("Add a channel to override its default notification settings"))
         } else {
             card.children(rows.iter().enumerate().map(|(i, row)| ns_override_row(row, i > 0, guild_muted, window, cx)))
         };
@@ -215,15 +215,15 @@ impl Waffle {
             list = list.when_some(header, |l, h| l.child(div().px_2p5().pt_2().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::SEMIBOLD).text_color(muted).child(h)));
             list = list.children(channels.into_iter().map(|c| {
                 let id = c.id.clone();
-                ui::menu_row(SharedString::from(format!("ns-pick-{}", c.id)), cx)
+                ui::DropdownMenuItem::new(SharedString::from(format!("ns-pick-{}", c.id)), cx)
                     .child(div().flex_none().text_color(muted).child(channel_icon(&c).size_4()))
                     .child(ui::line(c.name.clone()).flex_1())
                     .on_click(cx.listener(move |this, _, _, cx| this.add_override(&id, cx)))
             }));
         }
-        let panel = ui::surface(cx).id("ns-pick-panel").occlude().gap_1().child(ui::search_field("ns-pick-search", &view.search, cx)).child(list);
+        let panel = ui::PopoverContent::new(cx).id("ns-pick-panel").occlude().gap_1().child(ui::InputGroup::search("ns-pick-search", &view.search, cx)).child(list);
         let this = cx.entity();
-        ui::dropdown("ns-pick-dropdown", panel, SELECT_HEIGHT, move |_, cx| this.update(cx, |this, cx| this.close_popover(cx)))
+        ui::DropdownMenu::panel("ns-pick-dropdown", panel, SELECT_HEIGHT, move |_, cx| this.update(cx, |this, cx| this.close_popover(cx)))
     }
 
     // Adds a row locally; Discord hears nothing until one of its controls changes.
@@ -259,20 +259,20 @@ fn ns_head(guild: &Guild, cx: &mut Context<Waffle>) -> Div {
                 .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child("Notification Settings"))
                 .child(ui::line(guild.name.clone()).text_size(ui::TEXT_XS).text_color(palette::muted(cx))),
         )
-        .child(ui::icon_button("ns-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_notification_settings(cx))))
+        .child(ui::Button::new("ns-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_notification_settings(cx))))
 }
 
-fn ns_levels(settings: &GuildSettings, window: &mut Window, cx: &mut Context<Waffle>) -> Div {
+fn ns_levels(settings: &GuildSettings, _window: &mut Window, cx: &mut Context<Waffle>) -> Div {
     let locked = settings.is_muted();
     let rows = LEVELS.iter().enumerate().map(|(i, &(title, level))| {
         let on = settings.notifications == level;
-        let row = ui::settings_row(SharedString::from(format!("ns-level-{level}")), i > 0, cx).min_h_12().child(ui::radio_live(SharedString::from(format!("ns-level-radio-{level}")), on, window, cx)).child(ui::settings_text(title, None::<&str>, cx));
+        let row = ui::Item::setting(SharedString::from(format!("ns-level-{level}")), i > 0, cx).min_h_12().child(ui::RadioGroupItem::new(SharedString::from(format!("ns-level-radio-{level}"))).checked(on)).child(ui::settings_text(title, None::<&str>, cx));
         if locked {
             return row.opacity(0.45);
         }
         ui::settings_choice(row, cx).on_click(cx.listener(move |this, _, _, cx| this.patch_open_guild(json!({ "message_notifications": level }), cx)))
     }).collect::<Vec<_>>();
-    ui::settings_group("Server Notification Settings", cx).child(ui::settings_card(cx).children(rows))
+    ui::settings_group("Server Notification Settings", cx).child(ui::Card::new(cx).children(rows))
 }
 
 fn ns_switches(settings: &GuildSettings, window: &mut Window, cx: &mut Context<Waffle>) -> Div {
@@ -291,7 +291,7 @@ fn ns_switches(settings: &GuildSettings, window: &mut Window, cx: &mut Context<W
             this.patch_open_guild(json!({ "notify_highlights": value }), cx);
         }));
     let events = switch_row("ns-mute-events", "Mute New Events", None, settings.mute_scheduled_events, true, true, window, cx).on_click(cx.listener(simple("mute_scheduled_events", settings.mute_scheduled_events)));
-    ui::settings_card(cx).child(everyone).child(roles).child(highlights).child(events)
+    ui::Card::new(cx).child(everyone).child(roles).child(highlights).child(events)
 }
 
 fn ns_push_card(settings: &GuildSettings, window: &mut Window, cx: &mut Context<Waffle>) -> Div {
@@ -302,14 +302,14 @@ fn ns_push_card(settings: &GuildSettings, window: &mut Window, cx: &mut Context<
             this.patch_open_guild(json!({ "mobile_push": !on }), cx);
         }
     }));
-    ui::settings_card(cx).child(push)
+    ui::Card::new(cx).child(push)
 }
 
 // A switch setting; disabled, it dims and stops answering the pointer (the caller's click still checks).
 #[allow(clippy::too_many_arguments)]
-fn switch_row(id: &'static str, title: impl Into<SharedString>, detail: Option<&'static str>, on: bool, enabled: bool, line: bool, window: &mut Window, cx: &mut App) -> Stateful<Div> {
-    let switch = ui::switch_live(SharedString::from(format!("{id}-switch")), on, window, cx);
-    let row = ui::settings_row(id, line, cx).min_h(px(ROW_MIN)).child(ui::settings_text(title, detail, cx));
+fn switch_row(id: &'static str, title: impl Into<SharedString>, detail: Option<&'static str>, on: bool, enabled: bool, line: bool, _window: &mut Window, cx: &mut App) -> Stateful<Div> {
+    let switch = ui::Switch::new(SharedString::from(format!("{id}-switch"))).checked(on);
+    let row = ui::Item::setting(id, line, cx).min_h(px(ROW_MIN)).child(ui::settings_text(title, detail, cx));
     if !enabled {
         return row.opacity(0.45).child(switch);
     }
@@ -317,7 +317,7 @@ fn switch_row(id: &'static str, title: impl Into<SharedString>, detail: Option<&
 }
 
 // A channel's or category's override: where it sits, its level, its mute and a remove button.
-fn ns_override_row(row: &OverrideRow, line: bool, guild_muted: bool, window: &mut Window, cx: &mut Context<Waffle>) -> AnyElement {
+fn ns_override_row(row: &OverrideRow, line: bool, guild_muted: bool, _window: &mut Window, cx: &mut Context<Waffle>) -> AnyElement {
     let id = row.channel.id.clone();
     let name = row.channel.name.clone();
     let (strong, muted) = (palette::strong(cx), palette::muted(cx));
@@ -329,23 +329,23 @@ fn ns_override_row(row: &OverrideRow, line: bool, guild_muted: bool, window: &mu
     let this = cx.entity();
     let level_id = id.clone();
     let selected = if guild_muted { SEGMENTS.len() } else { usize::from(row.level) };
-    let levels = ui::segmented_live(SharedString::from(format!("ns-override-level-{id}")), &SEGMENTS, selected, move |i, _, cx| {
+    let levels = ui::Tabs::new(SharedString::from(format!("ns-override-level-{id}"))).labels(&SEGMENTS).value(selected).on_value_change(move |i, _, cx| {
         this.update(cx, |this, cx| {
             if !this.open_guild_muted() {
                 this.patch_open_override(&level_id, json!({ "message_notifications": i }), cx);
             }
         })
-    }, window, cx);
+    });
     let (mute_id, is_muted) = (id.clone(), row.muted);
     let mute_tip = if is_muted { format!("Unmute {name}") } else { format!("Mute {name}") };
-    let mute = ui::icon_button(SharedString::from(format!("ns-override-mute-{id}")), if is_muted { Glyph::BellSlash } else { Glyph::Bell }, mute_tip.clone(), cx)
-        .toggled(is_muted, cx)
+    let mute = ui::Button::new(SharedString::from(format!("ns-override-mute-{id}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(if is_muted { Glyph::BellSlash } else { Glyph::Bell }).tooltip_text(mute_tip.clone())
+        .toggled(is_muted)
         .aria_label(mute_tip)
         .on_click(cx.listener(move |this, _, _, cx| this.patch_open_override(&mute_id, json!({ "muted": !is_muted }), cx)));
-    let remove = ui::icon_button(SharedString::from(format!("ns-override-remove-{id}")), Glyph::X, "Remove override", cx)
+    let remove = ui::Button::new(SharedString::from(format!("ns-override-remove-{id}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Remove override")
         .aria_label(format!("Remove notification override for {name}"))
         .on_click(cx.listener(move |this, _, _, cx| this.remove_override(&id, cx)));
-    ui::settings_row(SharedString::from(format!("ns-override-{}", row.channel.id)), line, cx)
+    ui::Item::setting(SharedString::from(format!("ns-override-{}", row.channel.id)), line, cx)
         .min_h(px(OVERRIDE_ROW_MIN))
         .gap_3()
         .child(div().flex_none().text_color(muted).child(channel_icon(&row.channel).size(ui::ICON_LG)))

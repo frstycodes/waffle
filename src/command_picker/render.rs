@@ -16,7 +16,7 @@ pub(crate) struct RailTint {
 
 // A picker rail's square tile: its face centred, the chosen one filled, a tooltip naming it.
 pub(crate) fn rail_slot(id: impl Into<gpui_kit::ElementId>, face: AnyElement, tip: SharedString, tint: RailTint, on: bool) -> gpui_kit::Stateful<Div> {
-    ui::row() // lint-allow(custom-button): ui::icon_button takes a glyph, and a rail tile's face is an app icon or a section mark
+    ui::row() // lint-allow(custom-button): ui::Button takes a glyph, and a rail tile's face is an app icon or a section mark
         .id(id)
         .size_9()
         .flex_none()
@@ -27,7 +27,7 @@ pub(crate) fn rail_slot(id: impl Into<gpui_kit::ElementId>, face: AnyElement, ti
         .when(on, |d| d.bg(tint.on_fill))
         .when(!on, |d| d.when_some(tint.off_fill, |d, fill| d.bg(fill)).hover(move |s| s.bg(tint.hover)))
         .child(face)
-        .tooltip(move |window, cx| ui::tip(tip.clone(), window, cx))
+        .tooltip(move |window, cx| ui::Tooltip::new(tip.clone()).build(window, cx))
 }
 
 impl Waffle {
@@ -48,9 +48,9 @@ impl Waffle {
             Some(IndexState::Ready(index)) => self.command_picker_body(index, cx),
         };
         let foot = popup_foot(cx)
-            .child(ui::key_hint(ui::row().items_stretch().gap_1().child(ui::kbd_glyph(Glyph::ArrowUp, cx)).child(ui::kbd_glyph(Glyph::ArrowDown, cx)), "Move", cx))
-            .child(ui::key_hint(ui::kbd("Tab", cx), "Pick", cx))
-            .child(ui::key_hint(ui::kbd("Esc", cx), "Close", cx));
+            .child(ui::key_hint(ui::row().items_stretch().gap_1().child(ui::Kbd::glyph(Glyph::ArrowUp)).child(ui::Kbd::glyph(Glyph::ArrowDown)), "Move", cx))
+            .child(ui::key_hint(ui::Kbd::new("Tab"), "Pick", cx))
+            .child(ui::key_hint(ui::Kbd::new("Esc"), "Close", cx));
         popup("command-picker", [body, foot.into_any_element()], cx)
     }
 
@@ -85,7 +85,7 @@ impl Waffle {
         for section in sections {
             rail.push(self.rail_tile(index, section, current == Some(section), cx));
             if section == Section::Frecency {
-                rail.push(div().w_6().h(ui::HAIRLINE).my_0p5().bg(palette::line(cx)).into_any_element()); // lint-allow(custom-divider, raw-margin): ui::divider lacks a short centred rule in a rail; the margin is its optical gap
+                rail.push(div().w_6().h(ui::HAIRLINE).my_0p5().bg(palette::line(cx)).into_any_element()); // lint-allow(custom-divider, raw-margin): ui::Separator lacks a short centred rule in a rail; the margin is its optical gap
             }
         }
         ui::row().items_stretch()
@@ -139,7 +139,7 @@ impl Waffle {
             .child(title)
             .child(div().min_w_0().truncate().child(StyledText::new(c.description.clone()).with_highlights(mark(description, 0))).text_size(ui::TEXT_SM).text_color(muted)); // lint-allow(raw-truncate): ui::line takes plain text; this one is a highlighted StyledText (the match marks)
         let app = app.cloned().unwrap_or_else(|| app_commands::App { id: c.application_id.clone(), name: String::new(), icon: None });
-        ui::menu_row(SharedString::from(format!("command-{command}")), cx)
+        ui::DropdownMenuItem::new(SharedString::from(format!("command-{command}")), cx)
             .highlighted(on)
             .min_h_11()
             .gap_3()
@@ -162,7 +162,7 @@ impl Waffle {
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(strong).child(StyledText::new(send_options::TTS).with_highlights(name)))
             .child(ui::line("message").text_size(ui::TEXT_SM).text_color(faint));
         let what = ui::col().min_h_0().flex_1().child(title).child(ui::line(send_options::TTS_DESCRIPTION).text_size(ui::TEXT_SM).text_color(muted));
-        ui::menu_row("command-tts", cx)
+        ui::DropdownMenuItem::new("command-tts", cx)
             .highlighted(on)
             .min_h_11()
             .gap_3()
@@ -186,7 +186,7 @@ impl Waffle {
                     .child(div().font_weight(FontWeight::MEDIUM).text_color(palette::strong(cx)).child("Couldn't load this server's commands"))
                     .child(ui::line(error.to_owned()).text_size(ui::TEXT_SM).text_color(palette::muted(cx))),
             )
-            .child(ui::button("command-index-retry", ui::Tone::Secondary, cx).small().child("Try again").on_click(cx.listener(|this, _, _, cx| this.fetch_command_index(cx))))
+            .child(ui::Button::new("command-index-retry").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Try again").on_click(cx.listener(|this, _, _, cx| this.fetch_command_index(cx))))
     }
 
     // The hint bar: the option names outside the boxes, or what the caret's option wants and its choices.
@@ -217,8 +217,8 @@ impl Waffle {
             .children(from)
             .child(div().flex_1())
             .when(self.command_picker.staging, |d| d.child("Uploading…"))
-            .child(ui::key_hint(ui::kbd("Tab", cx), if pick { "Pick" } else { "Next option" }, cx))
-            .child(ui::key_hint(ui::kbd("Enter", cx), if pick { "Pick" } else { "Run" }, cx));
+            .child(ui::key_hint(ui::Kbd::new("Tab"), if pick { "Pick" } else { "Next option" }, cx))
+            .child(ui::key_hint(ui::Kbd::new("Enter"), if pick { "Pick" } else { "Run" }, cx));
         let hint = self.hint_bar(typed, cx).into_any_element();
         popup("command-options", [Some(hint), list, Some(foot.into_any_element())].into_iter().flatten(), cx)
     }
@@ -242,15 +242,15 @@ impl Waffle {
         }
         let body = ui::col().id("command-option-names").max_h(px(CHOICE_LIST_MAX)).p_1p5().gap_0p5().overflow_y_scroll().children(rows);
         let foot = popup_foot(cx)
-            .child(ui::key_hint(ui::row().items_stretch().gap_1().child(ui::kbd_glyph(Glyph::ArrowUp, cx)).child(ui::kbd_glyph(Glyph::ArrowDown, cx)), "Move", cx))
+            .child(ui::key_hint(ui::row().items_stretch().gap_1().child(ui::Kbd::glyph(Glyph::ArrowUp)).child(ui::Kbd::glyph(Glyph::ArrowDown)), "Move", cx))
             .child(div().flex_1())
-            .child(ui::key_hint(ui::kbd("Tab", cx), "Add", cx))
-            .child(ui::key_hint(ui::kbd("Esc", cx), "Close", cx));
+            .child(ui::key_hint(ui::Kbd::new("Tab"), "Add", cx))
+            .child(ui::key_hint(ui::Kbd::new("Esc"), "Close", cx));
         popup("command-option-names-popup", [body.into_any_element(), foot.into_any_element()], cx)
     }
 
     pub(super) fn name_row(&self, option: &CommandOption, i: usize, on: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        ui::menu_row(SharedString::from(format!("command-option-{i}")), cx)
+        ui::DropdownMenuItem::new(SharedString::from(format!("command-option-{i}")), cx)
             .highlighted(on)
             .gap_2p5()
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(option.display_name().to_owned()))
@@ -267,7 +267,7 @@ impl Waffle {
         let add = (!optional.is_empty()).then(|| {
             let count = format!("+{} optional", optional.len());
             ui::row().flex_none().gap_1p5().text_size(ui::TEXT_XS).text_color(faint).child(count).children(optional.into_iter().map(|(i, name)| {
-                ui::chip(SharedString::from(format!("add-option-{i}")), Some(Glyph::Plus), name, false, cx)
+                ui::Toggle::new(SharedString::from(format!("add-option-{i}"))).pressed(false).icon(Glyph::Plus).child(name)
                     .h_6()
                     .px_2()
                     .text_size(ui::TEXT_XS)
@@ -301,7 +301,7 @@ impl Waffle {
             ChoiceLead::Role(color) => Some(ui::row().size_7().flex_none().justify_center().child(div().size_3().rounded_full().bg(role_dot(*color, cx))).into_any_element()),
             ChoiceLead::Glyph(glyph) => Some(ui::row().size_7().flex_none().justify_center().text_color(palette::muted(cx)).child(Icon::new(*glyph).size(ui::ICON_LG)).into_any_element()),
         };
-        ui::menu_row(SharedString::from(format!("command-choice-{i}")), cx)
+        ui::DropdownMenuItem::new(SharedString::from(format!("command-choice-{i}")), cx)
             .highlighted(on)
             .children(lead)
             .child(ui::line(choice.label).flex_1().text_color(palette::strong(cx)))
@@ -327,7 +327,7 @@ pub(super) fn role_dot(color: u32, cx: &App) -> gpui_kit::Hsla {
 
 // The surface both popups share: the composer's width, 8px above it, rising from its foot.
 pub(super) fn popup(id: &'static str, content: impl IntoIterator<Item = AnyElement>, cx: &App) -> AnyElement {
-    ui::col() // lint-allow(custom-badge, custom-mark, custom-surface): ui::surface lacks an anchored composer popup that rises from the field
+    ui::col() // lint-allow(custom-badge, custom-mark, custom-surface): ui::PopoverContent::new lacks an anchored composer popup that rises from the field
         .id(id)
         .occlude()
         .absolute()
@@ -368,7 +368,7 @@ pub(super) fn section_header(index: &CommandIndex, section: Section, query: &str
     }
 }
 
-pub(super) fn loading_rows(count: usize, cx: &App) -> Div {
+pub(super) fn loading_rows(count: usize, _cx: &App) -> Div {
     let widths = [260., 200., 230., 180., 240.];
     let row = |n: usize| {
         let width = widths[n % widths.len()];
@@ -376,12 +376,12 @@ pub(super) fn loading_rows(count: usize, cx: &App) -> Div {
             .min_h_11()
             .px_2p5()
             .gap_3()
-            .child(ui::skeleton(SharedString::from(format!("command-skeleton-tile-{n}")), RADIUS_SM, cx).size_8().flex_none())
+            .child(ui::Skeleton::new(SharedString::from(format!("command-skeleton-tile-{n}"))).radius(RADIUS_SM).size_8().flex_none())
             .child(
                 ui::col()
                     .gap_1p5()
-                    .child(ui::skeleton(SharedString::from(format!("command-skeleton-name-{n}")), 4., cx).w(px(width * 0.4)).h_3())
-                    .child(ui::skeleton(SharedString::from(format!("command-skeleton-desc-{n}")), 4., cx).w(px(width)).h_2p5()),
+                    .child(ui::Skeleton::new(SharedString::from(format!("command-skeleton-name-{n}"))).radius(4.).w(px(width * 0.4)).h_3())
+                    .child(ui::Skeleton::new(SharedString::from(format!("command-skeleton-desc-{n}"))).radius(4.).w(px(width)).h_2p5()),
             )
     };
     ui::col().p_1p5().gap_0p5().children((0..count).map(row))

@@ -99,14 +99,14 @@ pub(super) fn art(large: Option<String>, small: Option<String>, fit: Fit, ink: I
             .right(px(BADGE_HANG))
             .size(px(badge))
             .child(ui::gap(solid_tile(ink), BADGE_GAP))
-            .child(ui::avatar(url, badge))
+            .child(ui::Avatar::new(url, badge))
     });
     div().relative().flex_none().size(px(size)).child(big).children(corner)
 }
 
 // Discord's stand-in for an app with no art: a solid square in the card's strongest ink with a question mark.
 fn unknown_app(radius: f32, ink: Ink) -> Div {
-    // lint-allow(custom-badge): ui::badge is a small label; this is the art slot itself, Discord's unknown-app square.
+    // lint-allow(custom-badge): ui::Badge is a small label; this is the art slot itself, Discord's unknown-app square.
     ui::row().size_full().justify_center().squircle(radius).bg(ink.strong).text_color(solid_tile(ink)).font_weight(FontWeight::BOLD).text_size(ui::TEXT_LG).child("?")
 }
 
@@ -116,8 +116,8 @@ pub(super) fn solid_tile(ink: Ink) -> Hsla {
 }
 
 // A button on a card, in the card's own colours: Discord's small secondary.
-pub(super) fn card_button(id: impl Into<gpui_kit::ElementId>, ink: Ink, cx: &App) -> ui::Control {
-    ui::button(id, ui::Tone::Secondary, cx).small().scoped(ink.strong.opacity(0.1), ink.strong.opacity(0.16), ink.strong, ink.strong)
+pub(super) fn card_button(id: impl Into<gpui_kit::ElementId>, ink: Ink, _cx: &App) -> ui::Button {
+    ui::Button::new(id).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).scope(ui::ButtonScope::Themed { rest: ink.strong.opacity(0.1), hover: ink.strong.opacity(0.16), ink: ink.strong, ink_hover: ink.strong })
 }
 
 impl Waffle {
@@ -152,9 +152,9 @@ impl Waffle {
         let more = cards.len() - 1;
         let all = card.all_activity;
         let label = if all { "Show less".to_owned() } else { format!("Show {more} more") };
-        let toggle = ui::button("profile-activity-more-cards", ui::Tone::Ghost, cx)
-            .scoped(gpui_kit::transparent_black(), ink.strong.opacity(0.1), ink.muted, ink.strong)
-            .small()
+        let toggle = ui::Button::new("profile-activity-more-cards").variant(ui::ButtonVariant::Ghost)
+            .scope(ui::ButtonScope::Themed { rest: gpui_kit::transparent_black(), hover: ink.strong.opacity(0.1), ink: ink.muted, ink_hover: ink.strong })
+            .size(ui::ButtonSize::Sm)
             .child(label)
             .on_click(cx.listener(move |this, _, _, cx| this.show_all_activity(!all, cx)));
         let shown = if all { cards.len() } else { 1 };
@@ -206,7 +206,7 @@ impl Waffle {
                     this.show_call(watch_channel.clone(), window, cx);
                 }))
             });
-        let head = head(heading, None, Some(ui::live_badge().into_any_element()), None, ink);
+        let head = head(heading, None, Some(ui::Badge::live().into_any_element()), None, ink);
         let join = (!is_me).then(|| self.voice_way_in(guild, channel, fit, ink, cx));
         match fit {
             Fit::Compact => shell(fit, ink).child(head).child(preview).child(hairline(ink)).child(self.voice_place_row(guild, channel, ink, cx)).children(join).into_any_element(),

@@ -30,17 +30,17 @@ impl Waffle {
             .px_1p5()
             .items_end()
             .gap_1()
-            .child(ui::icon_button("attach", Glyph::PlusCircle, "Upload a file or create a poll", cx).on_click(cx.listener(|this, _, window, cx| this.open_menu(window.mouse_position(), this.attach_entries(), cx))))
+            .child(ui::Button::new("attach").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::PlusCircle).tooltip_text("Upload a file or create a poll").on_click(cx.listener(|this, _, window, cx| this.open_menu(window.mouse_position(), this.attach_entries(), cx))))
             // XSmall gives the editor 0/4px padding of its own; with these, the design's 4/6.
             .child(self.composer_editor(strong, cx))
             .children(self.slowmode_timer(cx))
             .children([(ComposerPicker::Gifs, "composer-gif", Glyph::Gif, "Open GIF picker"), (ComposerPicker::Stickers, "composer-sticker", Glyph::Sticker, "Open sticker picker"), (ComposerPicker::Emoji, "composer-emoji", Glyph::Emoji, "Select Emoji")].map(|(picker, id, glyph, label)| {
-                ui::icon_button(id, glyph, label, cx).toggled(open_picker == Some(picker), cx).on_click(cx.listener(move |this, _, window, cx| this.show_composer_picker(picker, window, cx)))
+                ui::Button::new(id).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(glyph).tooltip_text(label).toggled(open_picker == Some(picker)).on_click(cx.listener(move |this, _, window, cx| this.show_composer_picker(picker, window, cx)))
             }))
             // Not verified: the tooltip; Discord's chat box shows its button only when this setting is on.
-            .when(self.prefs.send_button, |r| r.child(ui::icon_button("composer-send", Glyph::PaperPlane, "Send Message", cx).disabled(!self.has_draft).on_click(cx.listener(|this, _, window, cx| this.submit(false, window, cx)))))
+            .when(self.prefs.send_button, |r| r.child(ui::Button::new("composer-send").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::PaperPlane).tooltip_text("Send Message").disabled(!self.has_draft).on_click(cx.listener(|this, _, window, cx| this.submit(false, window, cx)))))
             .child(self.composer_activities_button(cx));
-        // lint-allow(custom-surface): ui::surface has no glass fill (translucent, blurred, saturated) over a scrolling feed
+        // lint-allow(custom-surface): ui::PopoverContent::new has no glass fill (translucent, blurred, saturated) over a scrolling feed
         let card = ui::col()
             .relative()
             .squircle(RADIUS_LG)
@@ -84,7 +84,7 @@ impl Waffle {
                 .backdrop_blur(px(PILL_BLUR))
                 .text_size(ui::TEXT_XS)
                 .text_color(muted)
-                .child(ui::bars("typing", palette::accent_ink(cx), 12.))
+                .child(ui::Spinner::new("typing", palette::accent_ink(cx), 12.))
                 .child(ui::rich_line(emphasised(&typing_parts(&names), strong)))
         });
         let (height, this) = (self.composer_height.clone(), cx.weak_entity());
@@ -257,16 +257,16 @@ impl Waffle {
         let bar = bar_row(cx).child(bar_label(label));
         let bar = match self.replying.is_some() {
             true => bar.child(self.ping_mention(cx)),
-            false => bar.child(ui::key_hint(ui::kbd("Esc", cx), "Cancel", cx)).child(ui::key_hint(ui::kbd("Enter", cx), "Save", cx)),
+            false => bar.child(ui::key_hint(ui::Kbd::new("Esc"), "Cancel", cx)).child(ui::key_hint(ui::Kbd::new("Enter"), "Save", cx)),
         };
-        Some(bar.child(ui::icon_button("cancel-compose", Glyph::X, "Cancel", cx).small().on_click(cx.listener(|this, _, window, cx| this.cancel_compose(window, cx)))))
+        Some(bar.child(ui::Button::new("cancel-compose").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::X).tooltip_text("Cancel").on_click(cx.listener(|this, _, window, cx| this.cancel_compose(window, cx)))))
     }
 
     // Whether the reply notifies its author; it remembers your last choice.
     pub(super) fn ping_mention(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let on = self.reply_ping;
         let hover = palette::hover(cx);
-        // lint-allow(custom-button): ui::button's Ghost tone is 30px at its smallest, this one sits in a 28px bar and takes the accent ink when on
+        // lint-allow(custom-button): ui::Button's Ghost variant is 30px at its smallest, this one sits in a 28px bar and takes the accent ink when on
         ui::row()
             .id("reply-ping")
             .h_7()
@@ -280,7 +280,7 @@ impl Waffle {
             .hover(move |s| s.bg(hover))
             .child(Icon::new(Glyph::AtBold).size(ui::ICON_MD))
             .child(if on { "On" } else { "Off" })
-            .tooltip(|window, cx| ui::tip("Mention the author of this message", window, cx))
+            .tooltip(ui::Tooltip::text("Mention the author of this message"))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.reply_ping = !this.reply_ping;
                 this.redraw(crate::part::Column::Main, cx);
@@ -343,9 +343,9 @@ impl Waffle {
                 .top_3()
                 .right_3()
                 .on_hover(track_tile_hover(cx.weak_entity(), format!("tray-{i}")))
-                .child(ui::icon_button(SharedString::from(format!("spoiler-file-{i}")), spoiler_glyph, spoiler_tip, cx).small().on_click(cx.listener(move |this, _, _, cx| this.toggle_spoiler(i, cx))))
-                .child(ui::icon_button(SharedString::from(format!("modify-file-{i}")), Glyph::Pen, "Modify Attachment", cx).small().on_click(cx.listener(move |this, _, window, cx| this.open_modify_pending(i, window, cx))))
-                .child(ui::icon_button(SharedString::from(format!("remove-file-{i}")), Glyph::X, "Remove Attachment", cx).small().on_click(cx.listener(move |this, _, _, cx| this.remove_file(i, cx))))
+                .child(ui::Button::new(SharedString::from(format!("spoiler-file-{i}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(spoiler_glyph).tooltip_text(spoiler_tip).on_click(cx.listener(move |this, _, _, cx| this.toggle_spoiler(i, cx))))
+                .child(ui::Button::new(SharedString::from(format!("modify-file-{i}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::Pen).tooltip_text("Modify Attachment").on_click(cx.listener(move |this, _, window, cx| this.open_modify_pending(i, window, cx))))
+                .child(ui::Button::new(SharedString::from(format!("remove-file-{i}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::X).tooltip_text("Remove Attachment").on_click(cx.listener(move |this, _, _, cx| this.remove_file(i, cx))))
         });
         ui::col()
             .id(SharedString::from(format!("tray-card-{i}")))
@@ -426,14 +426,14 @@ impl Waffle {
         let hold_up = self.hold_up.as_ref()?;
         let (strong, muted) = (palette::strong(cx), palette::muted(cx));
         let body = emphasised(&[("By using ".into(), false), (hold_up.mention.into(), true), (hold_up.after_mention(), false)], strong);
-        let edit = ui::button("hold-up-edit", ui::Tone::Secondary, cx).gap_2().child("Edit Message").child(ui::kbd("Esc", cx)).on_click(cx.listener(|this, _, window, cx| {
+        let edit = ui::Button::new("hold-up-edit").variant(ui::ButtonVariant::Secondary).gap_2().child("Edit Message").child(ui::Kbd::new("Esc")).on_click(cx.listener(|this, _, window, cx| {
             this.hold_up = None;
             this.composer.update(cx, |state, cx| state.focus(window, cx));
             this.redraw(crate::part::Column::Main, cx);
         }));
-        let send = ui::button("hold-up-send", ui::Tone::Primary, cx).gap_2().child("Send Now").child(ui::kbd("Enter", cx)).on_click(cx.listener(|this, _, window, cx| this.submit(true, window, cx)));
+        let send = ui::Button::new("hold-up-send").gap_2().child("Send Now").child(ui::Kbd::new("Enter")).on_click(cx.listener(|this, _, window, cx| this.submit(true, window, cx)));
         Some(
-            // lint-allow(custom-badge, custom-mark, custom-surface): ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
+            // lint-allow(custom-badge, custom-mark, custom-surface): ui::PopoverContent::new isn't positioned off its parent's top edge; ui::Popover::floating_at anchors to a window point, not to the composer card
             ui::col()
                 .id("hold-up")
                 .occlude()
@@ -476,7 +476,7 @@ impl Waffle {
         let rows = auto.items.iter().enumerate().map(|(i, item)| {
             let lead = suggest_lead(&item.lead, cx);
             let detail = item.detail.clone().map(|d| ui::line(d).flex_none().max_w(px(SUGGEST_DETAIL_MAX)).text_size(ui::TEXT_XS).text_color(muted));
-            // lint-allow(custom-button): ui::menu_row fills on hover but has no persistent selected state driven by the arrow keys
+            // lint-allow(custom-button): ui::DropdownMenuItem::new fills on hover but has no persistent selected state driven by the arrow keys
             ui::row()
                 .id(SharedString::from(format!("suggest-{i}")))
                 .min_h_10()
@@ -500,7 +500,7 @@ impl Waffle {
         });
         // msg-pop: it grows from 95% at its bottom centre as it fades in.
         Some(
-            // lint-allow(custom-badge, custom-mark, custom-surface): ui::surface isn't positioned off its parent's top edge; ui::floating_at anchors to a window point, not to the composer card
+            // lint-allow(custom-badge, custom-mark, custom-surface): ui::PopoverContent::new isn't positioned off its parent's top edge; ui::Popover::floating_at anchors to a window point, not to the composer card
             ui::col()
                 .absolute()
                 .left_neg_px()

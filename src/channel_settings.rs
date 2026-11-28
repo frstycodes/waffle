@@ -20,7 +20,7 @@ use crate::{
     palette::{self, Level},
     settings::registry::{self, Control, Scope, Setting},
     overwrites::{overwrite_ops, permission_groups, private, set_private, set_tri, synced, tri},
-    ui::{self, Notice, Squircle, Tone},
+    ui::{self, Notice, Squircle},
 };
 
 mod pages;
@@ -539,7 +539,7 @@ impl Waffle {
             .gap_2p5()
             .px_1p5()
             .pb_3()
-            .child(ui::icon_tile(channel_glyph(channel), palette::selected(cx), palette::strong(cx)).size_10().flex_none())
+            .child(ui::ItemMedia::icon(channel_glyph(channel), palette::selected(cx), palette::strong(cx)).size_10().flex_none())
             .child(
                 ui::col().min_h_0()
                     .flex_1()
@@ -565,7 +565,7 @@ impl Waffle {
         let can_delete = self.channel_perms(guild_id, channel) & perm::MANAGE_CHANNELS != 0;
         let delete = can_delete.then(|| {
             let label = if channel.kind == ChannelKind::Category { "Delete category" } else { "Delete channel" };
-            ui::menu_row("cs-nav-delete", cx)
+            ui::DropdownMenuItem::new("cs-nav-delete", cx)
                 .danger(cx)
                 .child(Icon::new(Glyph::Trash).size(ui::ICON_LG))
                 .child(label)
@@ -577,8 +577,8 @@ impl Waffle {
                 }))
         });
         let ask = if view.asking_delete { Some(self.delete_ask(channel, cx).into_any_element()) } else { None };
-        let rule = div().flex_none().px_2p5().py_2().child(ui::divider(None, cx));
-        let search = div().flex_none().pb_3().child(ui::search_field("channel-settings-search", &view.search, cx));
+        let rule = div().flex_none().px_2p5().py_2().child(ui::Separator::new().w_full());
+        let search = div().flex_none().pb_3().child(ui::InputGroup::search("channel-settings-search", &view.search, cx));
         let query = view.search.read(cx).value().to_string();
         let items = if query.trim().is_empty() { items } else { self.channel_setting_results(channel, guild_id, &query, cx) };
         ui::settings_sidebar("channel-settings-nav", &self.settings_nav_scroll, cx)
@@ -600,7 +600,7 @@ impl Waffle {
         hits.into_iter()
             .map(|setting| {
                 let place = format!("{} \u{203a} {}", setting.page.label(), setting.group);
-                ui::menu_row(SharedString::from(format!("cs-result-{}", setting.id)), cx)
+                ui::DropdownMenuItem::new(SharedString::from(format!("cs-result-{}", setting.id)), cx)
                     .h_auto()
                     .py_1p5()
                     .child(
@@ -650,13 +650,13 @@ impl Waffle {
             .child(
                 ui::row().items_stretch()
                     .gap_2()
-                    .child(ui::button("cs-delete-keep", Tone::Secondary, cx).small().flex_1().child("Keep").on_click(cx.listener(|this, _, _, cx| {
+                    .child(ui::Button::new("cs-delete-keep").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).flex_1().child("Keep").on_click(cx.listener(|this, _, _, cx| {
                         if let Some(view) = &mut this.channel_settings {
                             view.asking_delete = false;
                         }
                         cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
                     })))
-                    .child(ui::button("cs-delete-yes", Tone::Danger, cx).small().flex_1().child("Delete").on_click(cx.listener(move |this, _, _, cx| {
+                    .child(ui::Button::new("cs-delete-yes").variant(ui::ButtonVariant::Destructive).size(ui::ButtonSize::Sm).flex_1().child("Delete").on_click(cx.listener(move |this, _, _, cx| {
                         let id = id.clone();
                         this.rest(Method::DELETE, format!("/channels/{id}"), None, move |this, cx| {
                             this.on_event(Event::ChannelDelete { guild_id: this.channel_settings.as_ref().map(|v| v.guild_id.clone()).unwrap_or_default(), id: id.clone() }, cx);
@@ -669,7 +669,7 @@ impl Waffle {
     // A dropdown on this window: the trigger, and its list rising from it while open.
     fn cs_select(&self, select: Select, options: &[(String, String)], chosen: &str, value: String, cx: &mut Context<Self>) -> AnyElement {
         let open = self.channel_settings.as_ref().and_then(|v| v.select) == Some(select);
-        let trigger = ui::select(SharedString::from(format!("cs-select-{select:?}")), None, value, open, cx).on_click(cx.listener(move |this, _, _, cx| {
+        let trigger = ui::Select::new(SharedString::from(format!("cs-select-{select:?}")), None, value, open, cx).on_click(cx.listener(move |this, _, _, cx| {
             if let Some(v) = &mut this.channel_settings {
                 v.select = if v.select == Some(select) { None } else { Some(select) };
             }
@@ -685,7 +685,7 @@ impl Waffle {
                     cx.notify(); // lint-allow(global-notify): the dialog is built by render_root, not by a column
                 })
             };
-            ui::select_options(SharedString::from(format!("cs-options-{select:?}")), options, chosen, 40., move |id, _, cx| this.update(cx, |this, cx| this.pick(select, &id, cx)), dismiss, cx)
+            ui::Select::options(SharedString::from(format!("cs-options-{select:?}")), options, chosen, 40., move |id, _, cx| this.update(cx, |this, cx| this.pick(select, &id, cx)), dismiss, cx)
         });
         div().relative().w_full().child(trigger).children(list).into_any_element()
     }
@@ -724,7 +724,7 @@ impl Waffle {
             Save::Idle => (Glyph::Pen, palette::muted(cx), "Unsaved changes", None),
         };
         let closing = view.closing;
-        let reset = ui::button("cs-reset", Tone::Ghost, cx)
+        let reset = ui::Button::new("cs-reset").variant(ui::ButtonVariant::Ghost)
             .disabled(saving)
             .child(if closing { "Discard changes" } else { "Reset" })
             .on_click(cx.listener(move |this, _, window, cx| {
@@ -734,8 +734,8 @@ impl Waffle {
                     this.reset_channel_draft(window, cx);
                 }
             }));
-        let save = ui::button("cs-save", Tone::Primary, cx).loading(saving.then_some("Saving")).child("Save changes").on_click(cx.listener(move |this, _, _, cx| this.save_channel_settings(closing, cx)));
-        let bar = ui::floating_bar("cs-savebar", cx)
+        let save = ui::Button::new("cs-save").loading(saving.then_some("Saving")).child("Save changes").on_click(cx.listener(move |this, _, _, cx| this.save_channel_settings(closing, cx)));
+        let bar = ui::Popover::bar("cs-savebar", cx)
             .child(div().text_color(ink).flex_none().child(Icon::new(glyph).size(ui::ICON_XL)))
             .child(
                 ui::col().min_h_0()

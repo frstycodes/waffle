@@ -23,7 +23,7 @@ use crate::{
     layout::avatar_with_status,
     palette,
     profile::profile_key,
-    ui::{self, Notice, RADIUS_LG, RADIUS_MD, Squircle as _, Tone},
+    ui::{self, Notice, RADIUS_LG, RADIUS_MD, Squircle as _},
 };
 
 const WIDTH: f32 = 480.;
@@ -303,7 +303,7 @@ impl Waffle {
             Some(friends) => (ui::row().items_start().gap_8().child(div().flex_1().min_w_0().child(friends)).child(link.flex_1().min_w_0()), WIDE),
             None => (link, WIDTH),
         };
-        let body = ui::dialog_body()
+        let body = ui::DialogContent::new()
             .gap_5()
             .track_focus(&invite.focus)
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
@@ -313,10 +313,10 @@ impl Waffle {
             }))
             .child(invite_head(guild, channel, cx))
             .when(channel.private, |d| d.child(private_warning(cx)))
-            .when(paused, |d| d.child(ui::callout(Notice::Accent, Glyph::Pause, "Invites are paused for this server.", "Nobody can join with a link until they're resumed in Server settings.", cx)))
+            .when(paused, |d| d.child(ui::Alert::new(Notice::Accent, Glyph::Pause, "Invites are paused for this server.", "Nobody can join with a link until they're resumed in Server settings.", cx)))
             .child(columns);
         let backdrop = div().id("invite-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close_invite_dialog(cx)));
-        Some(ui::modal(backdrop, ui::dialog("invite", width, body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("invite", width, body, window, cx), cx))
     }
 
     // The search and the rows; nothing at all when there's nobody to invite.
@@ -335,7 +335,7 @@ impl Waffle {
                 div().relative().child(list).child(ui::more_below(&invite.friends_scroll, palette::surface(palette::Level::Raised, cx))).into_any_element()
             }
         };
-        Some(ui::col().gap_2().child(ui::search_field("invite-search", &invite.search, cx)).child(list).into_any_element())
+        Some(ui::col().gap_2().child(ui::InputGroup::search("invite-search", &invite.search, cx)).child(list).into_any_element())
     }
 
     fn invite_friend_row(&self, row: Row, invite: &Invite, can_send: bool, cx: &mut Context<Self>) -> AnyElement {
@@ -430,7 +430,7 @@ fn invite_head(guild: &Guild, channel: &Channel, cx: &mut Context<Waffle>) -> An
                 .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(format!("Invite friends to {}", guild.name)))
                 .child(land),
         )
-        .child(ui::icon_button("invite-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_invite_dialog(cx))))
+        .child(ui::Button::new("invite-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_invite_dialog(cx))))
         .into_any_element()
 }
 
@@ -447,7 +447,7 @@ fn private_warning(cx: &App) -> AnyElement {
 
 // Invite, a wave while it sends, then Sent with a check; a failed send comes back as Invite.
 fn invite_button(row: Row, send: Option<Delivery>, can_send: bool, cx: &mut Context<Waffle>) -> AnyElement {
-    let button = ui::button(SharedString::from(format!("invite-send-{}", row.key)), Tone::Secondary, cx).small();
+    let button = ui::Button::new(SharedString::from(format!("invite-send-{}", row.key))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm);
     match send {
         Some(Delivery::Sent) => button.disabled(true).child(Icon::new(Glyph::Checkmark).size(ui::ICON_MD)).child("Sent").into_any_element(),
         Some(Delivery::Sending) => button.loading(Some("Invite")).into_any_element(),
@@ -462,15 +462,15 @@ fn link_section(invite: &Invite, paused: bool, editable: bool, cx: &mut Context<
     let (strong, faint) = (palette::strong(cx), palette::faint(cx));
     let value: AnyElement = match &url {
         Some(url) => ui::line(url.clone()).flex_1().text_color(if paused { faint } else { strong }).into_any_element(),
-        None => div().flex_1().min_w_0().child(ui::skeleton("invite-link-loading", ui::RADIUS_XS, cx).h_3p5().w(px(LINK_SKELETON))).into_any_element(),
+        None => div().flex_1().min_w_0().child(ui::Skeleton::new("invite-link-loading").radius(ui::RADIUS_XS).h_3p5().w(px(LINK_SKELETON))).into_any_element(),
     };
     let copy_off = paused || url.is_none();
-    let copy = ui::button("invite-copy", Tone::Primary, cx)
-        .small()
+    let copy = ui::Button::new("invite-copy")
+        .size(ui::ButtonSize::Sm)
         .disabled(copy_off)
         .child(if invite.copied.is_some() { "Copied" } else { "Copy" })
         .when(!copy_off, |b| b.on_click(cx.listener(|this, _, _, cx| this.copy_invite(cx))));
-    let field = ui::field_frame(cx).pr(px(FIELD_END_PAD)).text_size(ui::TEXT_SM).when(paused, |d| d.bg(palette::selected(cx))).child(value).child(copy);
+    let field = ui::Input::frame(cx).pr(px(FIELD_END_PAD)).text_size(ui::TEXT_SM).when(paused, |d| d.bg(palette::selected(cx))).child(value).child(copy);
     let line = match (&invite.code, &invite.vanity) {
         (None, Some(_)) => "Using this server's custom invite link.".to_owned(),
         _ => expiry_line(invite.settings.max_age, invite.settings.max_uses),
@@ -490,7 +490,7 @@ fn link_section(invite: &Invite, paused: bool, editable: bool, cx: &mut Context<
         .child(div().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Or, send a server invite link to a friend"))
         .child(field)
         .when(invite.draft.is_none() || !editable, |d| d.child(hint))
-        .children(invite.error.clone().map(|e| ui::field_error(e, cx)))
+        .children(invite.error.clone().map(|e| ui::FieldError::new(e, cx)))
         .into_any_element()
 }
 
@@ -520,9 +520,9 @@ fn settings_panel(invite: &Invite, draft: LinkSettings, always: bool, window: &m
     let actions = ui::row().items_stretch()
         .justify_end()
         .gap_2()
-        .when(cancellable, |d| d.child(ui::button("invite-settings-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.edit_invite_dialog(|i| (i.draft, i.select) = (None, None), cx)))))
+        .when(cancellable, |d| d.child(ui::Button::new("invite-settings-cancel").variant(ui::ButtonVariant::Secondary).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.edit_invite_dialog(|i| (i.draft, i.select) = (None, None), cx)))))
         .child(
-            ui::button("invite-generate", Tone::Primary, cx)
+            ui::Button::new("invite-generate")
                 .loading(invite.creating.then_some("Generating"))
                 .child("Generate a new link")
                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -536,7 +536,7 @@ fn settings_panel(invite: &Invite, draft: LinkSettings, always: bool, window: &m
         .p_4()
         .squircle(RADIUS_LG)
         .bg(palette::hover(cx))
-        .child(ui::row().items_stretch().gap_3().child(div().flex_1().min_w_0().child(ui::field("Expire after", cx).child(age))).child(div().flex_1().min_w_0().child(ui::field("Max number of uses", cx).child(uses))))
+        .child(ui::row().items_stretch().gap_3().child(div().flex_1().min_w_0().child(ui::Field::new("Expire after", cx).child(age))).child(div().flex_1().min_w_0().child(ui::Field::new("Max number of uses", cx).child(uses))))
         // lint-allow(raw-margin): pulls the toggle row's hover fill out to the card's edge, past the card's padding
         .child(temporary.mx_neg_3())
         .child(actions)
@@ -547,7 +547,7 @@ fn settings_panel(invite: &Invite, draft: LinkSettings, always: bool, window: &m
 fn settings_select(select: Select, options: &[(u32, &str)], chosen: u32, open: Option<Select>, cx: &mut Context<Waffle>) -> AnyElement {
     let open = open == Some(select);
     let label = options.iter().find(|(v, _)| *v == chosen).map_or("", |(_, l)| l);
-    let trigger = ui::select(SharedString::from(format!("invite-select-{select:?}")), None, label.to_owned(), open, cx)
+    let trigger = ui::Select::new(SharedString::from(format!("invite-select-{select:?}")), None, label.to_owned(), open, cx)
         .on_click(cx.listener(move |this, _, _, cx| this.edit_invite_dialog(|i| i.select = if i.select == Some(select) { None } else { Some(select) }, cx)));
     let list = open.then(|| {
         let options: Vec<(String, String)> = options.iter().map(|(v, l)| (v.to_string(), (*l).to_owned())).collect();
@@ -569,7 +569,7 @@ fn settings_select(select: Select, options: &[(u32, &str)], chosen: u32, open: O
                 )
             })
         };
-        ui::select_options(SharedString::from(format!("invite-options-{select:?}")), &options, &chosen.to_string(), 40., on_choose, dismiss, cx)
+        ui::Select::options(SharedString::from(format!("invite-options-{select:?}")), &options, &chosen.to_string(), 40., on_choose, dismiss, cx)
     });
     div().relative().w_full().child(trigger).children(list).into_any_element()
 }

@@ -5,7 +5,7 @@ use gpui_kit::{App, Context, ParentElement, StatefulInteractiveElement, Styled, 
 use super::Section;
 use crate::{
     Waffle, palette,
-    ui::{self, Tone},
+    ui::{self},
 };
 
 // The newest few; the folder holds the rest.
@@ -17,20 +17,20 @@ impl Waffle {
             return Vec::new();
         }
         let logs = crate::crash::saved();
-        let mut card = ui::settings_card(cx);
+        let mut card = ui::Card::new(cx);
         if logs.is_empty() {
-            card = card.child(ui::settings_row("crash-logs", false, cx).child(ui::settings_text("No crashes recorded", None::<&str>, cx)));
+            card = card.child(ui::Item::setting("crash-logs", false, cx).child(ui::settings_text("No crashes recorded", None::<&str>, cx)));
         }
         for (i, log) in logs.iter().take(SHOWN).enumerate() {
             let when = chrono::DateTime::from_timestamp(log.unix, 0).map(|t| t.with_timezone(&chrono::Local).format("%b %-d, %H:%M").to_string()).unwrap_or_default();
             let path = log.path.clone();
-            let save = ui::button(("crash-save", i), Tone::Secondary, cx).small().child("Save…").on_click(cx.listener(move |this, _, _, cx| this.save_crash_log(path.clone(), cx)));
-            let row = ui::settings_row(if i == 0 { "crash-logs".to_owned() } else { format!("crash-log-{i}") }, i > 0, cx);
+            let save = ui::Button::new(("crash-save", i)).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Save…").on_click(cx.listener(move |this, _, _, cx| this.save_crash_log(path.clone(), cx)));
+            let row = ui::Item::setting(if i == 0 { "crash-logs".to_owned() } else { format!("crash-log-{i}") }, i > 0, cx);
             card = card.child(row.child(ui::settings_text(when, Some(log.summary.clone()), cx)).child(save));
         }
         let folder = crate::crash::dir();
         let show = (!logs.is_empty()).then(|| {
-            ui::settings_choice(ui::settings_row("crash-folder", true, cx).child(ui::settings_text("Show in folder", Some(format!("{} saved", logs.len())), cx)), cx)
+            ui::settings_choice(ui::Item::setting("crash-folder", true, cx).child(ui::settings_text("Show in folder", Some(format!("{} saved", logs.len())), cx)), cx)
                 .child(div().text_color(palette::faint(cx)).child(gpui_kit::component::Icon::new(crate::icons::Glyph::ChevronRight).size(ui::ICON_MD)))
                 .when_some(folder, |row, dir| row.on_click(move |_, _, cx: &mut App| cx.reveal_path(&dir)))
         });

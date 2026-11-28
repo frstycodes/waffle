@@ -32,7 +32,7 @@ use crate::{
     mascot::Mood,
     menu::{Entry, item, submenu},
     palette,
-    ui::{self, Squircle as _, Tone},
+    ui::{self, Squircle as _},
 };
 
 mod manage;

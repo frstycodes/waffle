@@ -165,7 +165,7 @@ impl Waffle {
             .children(count.map(|n| div().flex_none().font_weight(FontWeight::NORMAL).text_color(palette::faint(cx)).child(format!("\u{a0}— {}", crate::link_preview::grouped(n.into())))));
         let top = crate::layout::TITLE_HEIGHT + 8.;
         let max_height = f32::from(window.viewport_size().height) - top - 8.;
-        let card = ui::surface(cx)
+        let card = ui::PopoverContent::new(cx)
             .id("role-popout")
             .occlude()
             .w(px(WIDTH))

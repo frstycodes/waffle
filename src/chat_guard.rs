@@ -15,7 +15,7 @@ use crate::{
     icons::Glyph,
     palette,
     part::Column,
-    ui::{self, Tone},
+    ui::{self},
 };
 
 // The locked card's vertical padding and its detail line's height.
@@ -184,7 +184,7 @@ impl Waffle {
         let (strong, muted) = (palette::strong(cx), palette::muted(cx));
         let (glyph, title, detail, action): (Glyph, String, StyledText, Option<AnyElement>) = match guard {
             Guard::Blocked { user_id, name } => {
-                let unblock = ui::button("guard-unblock", Tone::Secondary, cx).small().child("Unblock").on_click(cx.listener(move |this, _, _, cx| this.drop_relation(&user_id, cx)));
+                let unblock = ui::Button::new("guard-unblock").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Unblock").on_click(cx.listener(move |this, _, _, cx| this.drop_relation(&user_id, cx)));
                 (Glyph::Prohibit, format!("You blocked {name}"), StyledText::new("Neither of you can message the other."), Some(unblock.into_any_element()))
             }
             Guard::TimedOut(until) => {
@@ -267,7 +267,7 @@ impl Waffle {
         let bar = crate::chat::bar_row(cx)
             .child(div().flex_none().text_color(accent).child(Icon::new(Glyph::Clock).size(ui::ICON_MD)))
             .child(crate::chat::bar_label(label).font_features(crate::call::tabular()))
-            .child(ui::icon_button("cancel-queued", Glyph::X, "Cancel", cx).small().on_click(cx.listener(|this, _, _, cx| this.cancel_queued(cx))));
+            .child(ui::Button::new("cancel-queued").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::X).tooltip_text("Cancel").on_click(cx.listener(|this, _, _, cx| this.cancel_queued(cx))));
         Some(bar)
     }
 }

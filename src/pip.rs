@@ -158,11 +158,11 @@ impl Waffle {
             .child(picture)
             .child(foot)
             .child(controls)
-            .tooltip(move |window, cx| ui::tip(match (is_stream, mine) {
+            .tooltip(move |window, cx| ui::Tooltip::new(match (is_stream, mine) {
                 (true, true) => "Your screen".to_owned(),
                 (true, false) => format!("{name}'s screen"),
                 (false, _) => name.clone(),
-            }, window, cx))
+            }).build(window, cx))
             .on_click(cx.listener(move |this, _, window, cx| this.show_call(channel.clone(), window, cx)));
         Some(self.place_floating(player, (WIDTH, HEIGHT)))
     }

@@ -55,17 +55,17 @@ impl Waffle {
         let text = self.toast.clone()?;
         if let Some(action) = &self.toast_action {
             let run = action.run.clone();
-            let button = ui::button("toast-action", ui::Tone::Secondary, cx).small().child(action.label.clone()).on_click(cx.listener(move |this, _, _, cx| {
+            let button = ui::Button::new("toast-action").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child(action.label.clone()).on_click(cx.listener(move |this, _, _, cx| {
                 this.toast = None;
                 this.toast_action = None;
                 run(this, cx);
                 cx.notify(); // lint-allow(global-notify): the toast is drawn by the root, over every column
             }));
-            let toast = ui::toast_with(SharedString::from(format!("toast-{text}")), action.glyph, palette::muted(cx), text, action.detail.clone(), Some(button.into_any_element()), cx);
+            let toast = ui::Sonner::toast_with(SharedString::from(format!("toast-{text}")), action.glyph, palette::muted(cx), text, action.detail.clone(), Some(button.into_any_element()), cx);
             return Some(ui::row().items_stretch().absolute().left_0().right_0().bottom_6().justify_center().child(div().occlude().child(toast)).into_any_element());
         }
         // GAP: the design leads a toast with its tone's icon; `show_toast` carries only text.
-        let toast = ui::toast_text(SharedString::from(format!("toast-{text}")), text, cx);
+        let toast = ui::Sonner::text(SharedString::from(format!("toast-{text}")), text, cx);
         Some(ui::row().items_stretch().absolute().left_0().right_0().bottom_6().justify_center().child(toast).into_any_element())
     }
 }

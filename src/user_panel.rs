@@ -100,7 +100,7 @@ impl Waffle {
         let face = div().flex_none().rounded_full().when(speaking, |d| d.shadow(ui::speaking_ring(card))).child(face.morph("me-presence"));
         let username = if me.username.is_empty() { me.name.clone() } else { me.username.clone() };
         let second = ui::hover_roll("me-roll", self.my_status_line(&me, cx), ui::line(username), hovered, ui::LINE_XS, window, cx);
-        let who = ui::list_row("me", me.name.clone(), cx)
+        let who = ui::Item::new("me", me.name.clone(), cx)
             .height(ui::RowHeight::Exact(USER_ROW))
             .flex_1()
             .p_1()
@@ -112,7 +112,7 @@ impl Waffle {
             .title_element(ui::truncating("me-name", me.name.clone()).line_height(ui::LINE_DETAIL))
             .subtitle(div().w_full().text_color(palette::faint(cx)).child(second));
         let voice = self.voice_panel(window, cx);
-        ui::col() // lint-allow(custom-badge, custom-mark): ui::surface adds a ring and shadow this docked card doesn't draw
+        ui::col() // lint-allow(custom-badge, custom-mark): ui::PopoverContent::new adds a ring and shadow this docked card doesn't draw
             .absolute()
             .left_2()
             .right_2()
@@ -190,12 +190,8 @@ impl Waffle {
 
 // A control and its chevron as one split pill: round on the outside, square where they meet, 1px apart.
 // Pointing at either half lifts both, as Discord's pair does.
-fn split_control(group: &'static str, button: ui::Control, chevron: Stateful<Div>) -> Div {
-    ui::row()
-        .group(group)
-        .gap_px()
-        .child(button.rounded_tr_none().rounded_br_none())
-        .child(chevron.rounded_tl_none().rounded_bl_none())
+fn split_control(group: &'static str, button: ui::Control, chevron: Stateful<Div>) -> ui::ButtonGroup {
+    ui::ButtonGroup::new().group(group).outer(ui::RADIUS_SM).seam(0.).item(button).item(chevron)
 }
 
 // The narrow chevron beside a user-area control that opens its device popover: quieter and half as wide, its
@@ -209,7 +205,7 @@ fn me_chevron(id: &'static str, group: &'static str, label: &'static str, open: 
         (false, false) => palette::faint(cx),
     };
     let hover_ink = if glow { ink } else { strong };
-    ui::row() // lint-allow(custom-button): ui::icon_button is square, and this chevron is a 16px sliver joined to its control
+    ui::row() // lint-allow(custom-button): ui::Button is square, and this chevron is a 16px sliver joined to its control
         .id(id)
         .w_4()
         .h(px(ME_CONTROL))
@@ -223,7 +219,7 @@ fn me_chevron(id: &'static str, group: &'static str, label: &'static str, open: 
         .when(open, |b| b.bg(lit))
         .hover(move |s| s.bg(lit).text_color(hover_ink))
         .child(Icon::new(if open { Glyph::ChevronUp } else { Glyph::ChevronDown }).size(ui::ICON_XS))
-        .tooltip(move |window, cx| ui::tip(label, window, cx))
+        .tooltip(move |window, cx| ui::Tooltip::new(label).build(window, cx))
 }
 
 // A user-panel control: Waffle's own mic, headphones and settings icons, popping in when they switch. `on`
@@ -267,7 +263,7 @@ impl MutedCue {
 
 // The green callout over the mic, floating above the panel (the card clips its own children).
 fn muted_cue() -> AnyElement {
-    // lint-allow(custom-badge): ui::tip is a tooltip view only gpui's hover opens; this one is forced open, in Discord's green
+    // lint-allow(custom-badge): ui::Tooltip is a tooltip view only gpui's hover opens; this one is forced open, in Discord's green
     let bubble = div()
         .px_2p5()
         .py_1p5()
@@ -278,7 +274,7 @@ fn muted_cue() -> AnyElement {
         .font_weight(gpui_kit::FontWeight::MEDIUM)
         .child("You are currently muted!");
     let callout = div().id("muted-cue").occlude().pb_2().child(bubble);
-    // lint-allow(raw-floating): ui::floating hangs its content below the parent's top-left; this callout sits above the mic
+    // lint-allow(raw-floating): ui::Popover::floating hangs its content below the parent's top-left; this callout sits above the mic
     gpui_kit::deferred(gpui_kit::anchored().anchor(gpui_kit::Anchor::BottomLeft).snap_to_window_with_margin(ui::FLOAT_EDGES).child(callout)).into_any_element()
 }
 

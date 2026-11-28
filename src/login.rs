@@ -15,7 +15,7 @@ use crate::{
     icons::{self, Glyph},
     mascot::{Mood, mascot_at},
     motion, palette,
-    ui::{self, Squircle, Tone},
+    ui::{self, Squircle},
     updater::{Command, Status},
 };
 
@@ -71,12 +71,12 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, update: &St
         Login::Qr(modules) => Some(arrive("card-qr", qr_card(modules.clone(), cx))),
         Login::Captcha(url) => {
             let url = url.clone();
-            let open = ui::button("open-captcha", Tone::Primary, cx).child(Icon::new(Glyph::Open).size(ui::ICON_MD)).child("Open captcha again").on_click(move |_, _, cx| cx.open_url(&url));
+            let open = ui::Button::new("open-captcha").child(Icon::new(Glyph::Open).size(ui::ICON_MD)).child("Open captcha again").on_click(move |_, _, cx| cx.open_url(&url));
             Some(arrive("card-captcha", ui::col().items_center().gap_3().child(waiting("captcha-wait", "Waiting for the captcha\u{2026}", cx)).child(open)))
         }
         Login::Failed(_) => Some(arrive(
             "card-failed",
-            ui::button("retry", Tone::Primary, cx).child(Icon::new(Glyph::TryAgain).size(ui::ICON_MD)).child("Try again").on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))),
+            ui::Button::new("retry").child(Icon::new(Glyph::TryAgain).size(ui::ICON_MD)).child("Try again").on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))),
         )),
         Login::Scanned(_) => None,
     };
@@ -88,7 +88,7 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, update: &St
                 .items_center()
                 .gap_5()
                 .child(waiting("scanned-wait", "Check your phone", cx))
-                .child(ui::button("new-code", ui::Tone::Link, cx).child("Not you? Get a new code").on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))))
+                .child(ui::Button::new("new-code").variant(ui::ButtonVariant::Link).child("Not you? Get a new code").on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))))
                 .into_any_element(),
         ),
         _ => None,
@@ -125,7 +125,7 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, update: &St
         .children(after)
         .children(back.map(|account| {
             let label = format!("Back to {}", account.name);
-            ui::button("back-to-account", ui::Tone::Link, cx).child(label).on_click(cx.listener(move |this, _, window, cx| this.switch_account(account.id.clone(), window, cx)))
+            ui::Button::new("back-to-account").variant(ui::ButtonVariant::Link).child(label).on_click(cx.listener(move |this, _, window, cx| this.switch_account(account.id.clone(), window, cx)))
         }))
         .child(div().flex_1())
         .children(update_notice(update, matches!(login, Login::Failed(_)), cx))
@@ -145,9 +145,9 @@ pub fn render(login: &Login, back: Option<crate::accounts::Account>, update: &St
 // sign-in screen has already started the download, and the copy says the update may fix it.
 fn update_notice(status: &Status, failed: bool, cx: &mut Context<Waffle>) -> Option<AnyElement> {
     // After a failure, Try again is the screen's one primary action; the update's button stays quiet.
-    let tone = if failed { Tone::Secondary } else { Tone::Primary };
+    let variant = if failed { ui::ButtonVariant::Secondary } else { ui::ButtonVariant::Default };
     let download = move |id: &'static str, label: &'static str, cx: &mut Context<Waffle>| {
-        ui::button(id, tone, cx).small().child(label).on_click(cx.listener(|this, _, _, _| {
+        ui::Button::new(id).variant(variant).size(ui::ButtonSize::Sm).child(label).on_click(cx.listener(|this, _, _, _| {
             if let Some(updater) = &this.updates.updater {
                 updater.send(Command::Download);
             }
@@ -171,8 +171,8 @@ fn update_notice(status: &Status, failed: bool, cx: &mut Context<Waffle>) -> Opt
         Status::Ready(staged) => {
             let (title, note) = if failed { (might_fix(&staged.version), Some("It's downloaded. Restart to try it.".to_owned())) } else { (format!("Waffle {} is ready", staged.version), None) };
             let staged = staged.clone();
-            let restart = ui::button("login-update-restart", tone, cx)
-                .small()
+            let restart = ui::Button::new("login-update-restart").variant(variant)
+                .size(ui::ButtonSize::Sm)
                 .child("Restart to update")
                 .on_click(cx.listener(move |this, _, _, cx| this.request_restart(Some(staged.clone()), cx)));
             (title, note, Some(restart.into_any_element()))
@@ -196,7 +196,7 @@ fn update_notice(status: &Status, failed: bool, cx: &mut Context<Waffle>) -> Opt
         .gap_1p5()
         .child(heading)
         .children(note.map(|note| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(note)))
-        .children(progress.map(|f| div().w_full().pt_1().child(ui::progress_bar(f, cx).thin())))
+        .children(progress.map(|f| div().w_full().pt_1().child(ui::Progress::new(f).thin())))
         .children(action.map(|action| div().pt_1p5().child(action)));
     Some(arrive("login-update", notice))
 }
@@ -217,12 +217,12 @@ fn first_name(name: &str) -> &str {
 }
 
 // The code card while Discord prepares a code: its final size, shimmering.
-fn blank_card(cx: &App) -> AnyElement {
-    ui::skeleton("qr-shimmer", ui::RADIUS_LG, cx).size(px(QR_SIDE)).flex_none().into_any_element()
+fn blank_card(_cx: &App) -> AnyElement {
+    ui::Skeleton::new("qr-shimmer").radius(ui::RADIUS_LG).size(px(QR_SIDE)).flex_none().into_any_element()
 }
 
 // Graphite ink squircles on white, finder patterns as rounded rings, the waffle mark in the cleared centre.
-// lint-allow(custom-component): ui::card is a clickable raised card; this is the sign-in QR code painted on white in both themes.
+// lint-allow(custom-component): ui::Card::interactive is a clickable raised card; this is the sign-in QR code painted on white in both themes.
 fn qr_card(modules: Rc<Modules>, cx: &App) -> AnyElement {
     let inner = QR_SIDE - 2. * QR_PAD;
     let module = inner / modules.width as f32;
@@ -255,7 +255,7 @@ fn qr_card(modules: Rc<Modules>, cx: &App) -> AnyElement {
         },
     )
     .size(px(inner));
-    // lint-allow(custom-surface): ui::surface is the theme's overlay fill; the code sits on white in both themes so phones can read it.
+    // lint-allow(custom-surface): ui::PopoverContent::new is the theme's overlay fill; the code sits on white in both themes so phones can read it.
     div()
         .relative()
         .size(px(QR_SIDE))
@@ -289,7 +289,7 @@ fn steps(cx: &App) -> Div {
         let range = before.len()..before.len() + bold.len();
         ui::row()
             .gap_2()
-            .child(ui::badge(palette::selected(cx), strong).size_5().justify_center().child(n))
+            .child(ui::Badge::empty().colors(palette::selected(cx), strong).size_5().justify_center().child(n))
             .child(StyledText::new(text).with_highlights([(range, HighlightStyle { color: Some(strong), font_weight: Some(FontWeight::MEDIUM), ..Default::default() })]))
     };
     ui::col()
@@ -304,7 +304,7 @@ fn steps(cx: &App) -> Div {
 
 // The mini wave and what it waits on.
 fn waiting(id: &'static str, text: &'static str, cx: &App) -> Div {
-    ui::row().gap_2().font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child(ui::bars(id, palette::accent(), 12.)).child(text)
+    ui::row().gap_2().font_weight(FontWeight::NORMAL).text_color(palette::muted(cx)).child(ui::Spinner::new(id, palette::accent(), 12.)).child(text)
 }
 
 // The account that scanned springs in from half size, the phone it's approving on badged at its foot.
@@ -325,7 +325,7 @@ fn avatar_pop(user: &User, cx: &App) -> AnyElement {
     div()
         .relative()
         .size_24()
-        .child(ui::avatar(user.avatar.clone(), 96.))
+        .child(ui::Avatar::new(user.avatar.clone(), 96.))
         .child(badge)
         .with_animation("avatar-pop", Animation::new(Duration::from_millis(320)).with_easing(move |t| spring.sample(t)), |avatar, t| avatar.scale(0.5 + 0.5 * t).opacity(t.clamp(0., 1.)))
         .into_any_element()

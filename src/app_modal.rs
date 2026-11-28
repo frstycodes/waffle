@@ -19,7 +19,7 @@ use crate::{
     icons::Glyph,
     interactions::{InteractionKind, MODAL_FAILED, PendingInteraction},
     palette,
-    ui::{self, Check, Tone},
+    ui::{self, Check},
 };
 
 const DIALOG_WIDTH: f32 = 460.;
@@ -324,21 +324,21 @@ impl Waffle {
         let footer = ui::row().items_stretch()
             .justify_end()
             .gap_2()
-            .child(ui::button("app-modal-cancel", Tone::Secondary, cx).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_app_modal(cx))))
+            .child(ui::Button::new("app-modal-cancel").variant(ui::ButtonVariant::Secondary).child("Cancel").on_click(cx.listener(|this, _, _, cx| this.close_app_modal(cx))))
             .child(
-                ui::button("app-modal-submit", Tone::Primary, cx)
+                ui::Button::new("app-modal-submit")
                     .loading(busy.then_some("Submitting…"))
                     .child("Submit")
                     .on_click(cx.listener(|this, _, window, cx| this.submit_app_modal(window, cx))),
             );
-        let body = ui::dialog_body()
+        let body = ui::DialogContent::new()
             .child(head(app, &m.modal.title, cx))
-            .children(refused.then(|| ui::field_error(crate::interactions::MODAL_FAILED, cx).text_size(ui::TEXT_SM)))
+            .children(refused.then(|| ui::FieldError::new(crate::interactions::MODAL_FAILED, cx).text_size(ui::TEXT_SM)))
             .child(notice(&app.name, cx))
             .children(blocks)
             .child(footer);
         let backdrop = div().id("app-modal-backdrop").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.dismiss_app_modal(cx)));
-        Some(ui::modal(backdrop, ui::dialog("app-modal", DIALOG_WIDTH, body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop, ui::Dialog::new("app-modal", DIALOG_WIDTH, body, window, cx), cx))
     }
 
     // Demo scenes: the form after a Submit the app refused, with whatever `check` finds as typed.
@@ -429,7 +429,7 @@ fn head(app: &app_commands::App, title: &str, cx: &mut Context<Waffle>) -> impl 
         .gap_3()
         .child(ui::server_tile(app.icon.as_deref(), &app.name, 24., cx))
         .child(div().flex_1().min_w_0().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title.to_owned()))
-        .child(ui::icon_button("app-modal-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| this.close_app_modal(cx))))
+        .child(ui::Button::new("app-modal-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| this.close_app_modal(cx))))
 }
 
 // Discord's warning, always shown, the app's name in bold.
@@ -459,10 +459,10 @@ fn field_row(ix: usize, field: &Field, editor: Option<&Editor>, control: Option<
         (ModalComponent::Checkbox { .. }, _, _) => checkbox(ix, *value == FieldValue::Checked(true), cx),
         _ => div().into_any_element(),
     };
-    ui::field_marked(field.label.to_owned(), field.required(), cx)
+    ui::Field::marked(field.label.to_owned(), field.required(), cx)
         .children(field.description.map(|d| div().text_size(ui::TEXT_XS).text_color(palette::muted(cx)).child(d.to_owned())))
         .child(control)
-        .children(problem.map(|p| ui::field_error(p, cx)))
+        .children(problem.map(|p| ui::FieldError::new(p, cx)))
         .into_any_element()
 }
 
@@ -470,8 +470,8 @@ fn text_frame(ix: usize, editor: &Editor, error: bool, cx: &gpui_kit::App) -> An
     let id = SharedString::from(format!("app-modal-field-{ix}"));
     let focus = editor.focus_handle(cx);
     match editor {
-        Editor::Line(s) => ui::text_field(id, Input::new(s).appearance(false), &focus).error(error).into_any_element(),
-        Editor::Paragraph(s) => ui::text_area(id, Textarea::new(s).appearance(false).px_0().text_size(ui::TEXT_MD), &focus).error(error).into_any_element(),
+        Editor::Line(s) => ui::Input::new(id, Input::new(s).appearance(false), &focus).error(error).into_any_element(),
+        Editor::Paragraph(s) => ui::Textarea::new(id, Textarea::new(s).appearance(false).px_0().text_size(ui::TEXT_MD), &focus).error(error).into_any_element(),
     }
 }
 
@@ -505,7 +505,7 @@ impl Waffle {
         let zone = if files.len() >= max {
             drop_zone(Glyph::CheckCircle, div().text_color(palette::strong(cx)).child("File upload limit reached"), "Remove some files to upload new ones.".to_owned(), cx)
         } else {
-            let browse = ui::button(SharedString::from(format!("app-modal-browse-{ix}")), Tone::Link, cx)
+            let browse = ui::Button::new(SharedString::from(format!("app-modal-browse-{ix}"))).variant(ui::ButtonVariant::Link)
                 .child("browse")
                 .on_click(cx.listener(move |this, _, window, cx| this.browse_app_modal_files(ix, max, window, cx)));
             let lead = ui::row().flex_wrap().gap_1().child(drop_lead(max)).child(browse);
@@ -555,7 +555,7 @@ fn file_row(ix: usize, i: usize, file: &PendingFile, cx: &mut Context<Waffle>) -
         .py_1()
         .child(div().flex_none().text_color(palette::muted(cx)).child(gpui_kit::component::Icon::new(Glyph::File).size(ui::ICON_LG)))
         .child(ui::line(file.name.clone()).flex_1().text_size(ui::TEXT_SM).text_color(palette::strong(cx)))
-        .child(ui::icon_button(SharedString::from(format!("app-modal-file-{ix}-{i}")), Glyph::Trash, "Remove", cx).small().on_click(cx.listener(move |this, _, _, cx| this.remove_app_modal_file(ix, i, cx))))
+        .child(ui::Button::new(SharedString::from(format!("app-modal-file-{ix}-{i}"))).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconXs).icon(Glyph::Trash).tooltip_text("Remove").on_click(cx.listener(move |this, _, _, cx| this.remove_app_modal_file(ix, i, cx))))
         .into_any_element()
 }
 
@@ -567,7 +567,7 @@ fn choices(ix: usize, options: &[SelectOption], several: bool, value: &FieldValu
     };
     let rows = options.iter().enumerate().map(|(i, o)| {
         let on = picked.contains(&o.value);
-        let mark = if several { ui::check(if on { Check::On } else { Check::Off }, cx) } else { ui::radio(on, cx) };
+        let mark = if several { ui::Checkbox::mark(if on { Check::On } else { Check::Off }).into_any_element() } else { ui::RadioGroupItem::mark(on).into_any_element() };
         let pick = o.value.clone();
         ui::row()
             .id(SharedString::from(format!("app-modal-choice-{ix}-{i}")))
@@ -590,7 +590,7 @@ fn checkbox(ix: usize, on: bool, cx: &mut Context<Waffle>) -> AnyElement {
     div()
         .id(SharedString::from(format!("app-modal-check-{ix}")))
         .cursor_pointer()
-        .child(ui::check(if on { Check::On } else { Check::Off }, cx))
+        .child(ui::Checkbox::mark(if on { Check::On } else { Check::Off }))
         .on_click(cx.listener(move |this, _, _, cx| this.pick_app_modal(ix, None, cx)))
         .into_any_element()
 }

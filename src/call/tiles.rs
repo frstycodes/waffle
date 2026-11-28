@@ -48,7 +48,7 @@ impl TileSize {
 impl Waffle {
     // A watched stream that ended, in its card's place: that it ended and why, and Close stream to clear
     // it. While it's up, the streamer going live again brings us back in as a viewer, as Discord's does.
-    pub(super) fn ended_tile(&self, streamer: &str, size: TileSize, cx: &mut Context<Self>) -> AnyElement { // lint-allow(custom-component): ui::empty_state lacks a compact stage tile with a close action
+    pub(super) fn ended_tile(&self, streamer: &str, size: TileSize, cx: &mut Context<Self>) -> AnyElement { // lint-allow(custom-component): ui::Empty::new lacks a compact stage tile with a close action
         let name = self.user_name(streamer);
         let line = match (self.participants().iter().any(|s| s.user_id == streamer), self.activity_name(streamer)) {
             (false, _) => format!("{name} left the call"),
@@ -60,7 +60,7 @@ impl Waffle {
     }
 
     // Discord's failed-stream screen: what went wrong, its error code, and Close, which stops watching.
-    pub(super) fn failed_tile(&self, streamer: &str, code: u16, size: TileSize, cx: &mut Context<Self>) -> AnyElement { // lint-allow(custom-component): ui::empty_state lacks a compact stage tile with a close action
+    pub(super) fn failed_tile(&self, streamer: &str, code: u16, size: TileSize, cx: &mut Context<Self>) -> AnyElement { // lint-allow(custom-component): ui::Empty::new lacks a compact stage tile with a close action
         let close = streamer.to_owned();
         let line = format!("{} Error code: {code}", failure_line(code));
         self.stage_notice(format!("failed-{streamer}"), size, ("The stream couldn't start", line, "Close stream"), move |this, cx| {
@@ -100,11 +100,11 @@ impl Waffle {
 
     // Over a stream not yet watched: Watch Stream switches to it alone and focuses it; shift-click adds it to the
     // streams already playing, as Discord's.
-    fn watch_cta(&self, tile: &Tile, w: f32, cx: &mut Context<Self>) -> ui::Control {
+    fn watch_cta(&self, tile: &Tile, w: f32, cx: &mut Context<Self>) -> ui::Button {
         let card = tile.clone();
         let label = if w < WATCH_SHORT { "Watch" } else { "Watch Stream" };
-        let button = ui::button(SharedString::from(format!("watch-{}", tile_key(tile))), ui::Tone::Stage, cx).child(label);
-        if w < WATCH_SMALL { button.small() } else { button }.on_click(cx.listener(move |this, e: &gpui_kit::ClickEvent, _, cx| {
+        let button = ui::Button::new(SharedString::from(format!("watch-{}", tile_key(tile)))).scope(ui::ButtonScope::Stage).child(label);
+        if w < WATCH_SMALL { button.size(ui::ButtonSize::Sm) } else { button }.on_click(cx.listener(move |this, e: &gpui_kit::ClickEvent, _, cx| {
             cx.stop_propagation();
             let Tile::Stream(state) = &card else { return };
             if e.modifiers().shift {
@@ -199,7 +199,7 @@ impl Waffle {
                 .squircle(radius)
                 .bg(self.tile_fill(&state.user_id))
                 .justify_center()
-                .child(ui::avatar(user.avatar.clone(), if w < TILE_AVATAR_FROM { ui::AVATAR_XL } else { TILE_AVATAR }).when(local_muted, |a| a.opacity(0.5)))
+                .child(ui::Avatar::new(user.avatar.clone(), if w < TILE_AVATAR_FROM { ui::AVATAR_XL } else { TILE_AVATAR }).when(local_muted, |a| a.opacity(0.5)))
                 .into_any_element(),
         };
         let compact = w <= COMPACT;
@@ -229,7 +229,7 @@ impl Waffle {
         let issues = self.tile_issues(&state.user_id, is_stream, me);
         let issue_chip = (!issues.is_empty() && !compact).then(|| issue_chip(SharedString::from(format!("issues-{}-{is_stream}", state.user_id)), issues).absolute().top_2().left_2());
         let viewers = if is_stream && !compact { self.viewers(&state.user_id) } else { Vec::new() };
-        let live = is_stream.then(|| ui::row().absolute().top_2().right_2().gap_1().when(!viewers.is_empty(), |d| d.child(viewer_chip(viewers, &state.user_id))).child(ui::live_badge()));
+        let live = is_stream.then(|| ui::row().absolute().top_2().right_2().gap_1().when(!viewers.is_empty(), |d| d.child(viewer_chip(viewers, &state.user_id))).child(ui::Badge::live()));
         let (card, double, menu_user) = (tile.clone(), tile.clone(), state.user_id.clone());
         size.shape(div().id(group.clone()))
             .group(group.clone())
@@ -254,7 +254,7 @@ impl Waffle {
     }
 
     // Options, bottom right on hover: the person's menu, or the stream's.
-    fn tile_options(&self, user_id: &str, is_stream: bool, cx: &mut Context<Self>) -> ui::Control {
+    fn tile_options(&self, user_id: &str, is_stream: bool, cx: &mut Context<Self>) -> ui::Button {
         let id = user_id.to_owned();
         overlay_button(SharedString::from(format!("tile-options-{user_id}-{is_stream}")), Glyph::More, "Options", cx).on_mouse_down(
             MouseButton::Left,
@@ -269,7 +269,7 @@ impl Waffle {
     }
 
     // Mute on a stream we watch: its sound off, and back to where it was.
-    fn stream_mute_button(&self, streamer_id: &str, cx: &mut Context<Self>) -> ui::Control {
+    fn stream_mute_button(&self, streamer_id: &str, cx: &mut Context<Self>) -> ui::Button {
         let volume = self.stream_volumes.get(streamer_id).copied().unwrap_or(1.);
         let (glyph, tip) = if volume == 0. { (Glyph::VolumeOff, "Unmute") } else { (Glyph::VolumeHigh, "Mute") };
         let id = streamer_id.to_owned();
@@ -308,9 +308,9 @@ fn name_label(compact: bool) -> Div {
 }
 
 // The 32px buttons over a tile's foot, on the overlay black.
-fn overlay_button(id: SharedString, glyph: Glyph, tip: &'static str, cx: &App) -> ui::Control {
+fn overlay_button(id: SharedString, glyph: Glyph, tip: &'static str, _cx: &App) -> ui::Button {
     let black = gpui_kit::black();
-    ui::icon_button(id, glyph, tip, cx).scoped(black.opacity(OVERLAY), black.opacity(OVERLAY_HOVER), gpui_kit::white(), gpui_kit::white())
+    ui::Button::new(id).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).scope(ui::ButtonScope::Themed { rest: black.opacity(OVERLAY), hover: black.opacity(OVERLAY_HOVER), ink: gpui_kit::white(), ink_hover: gpui_kit::white() }).icon(glyph).tooltip_text(tip)
 }
 
 // The tile a soundboard effect plays across.

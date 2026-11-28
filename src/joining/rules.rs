@@ -10,7 +10,7 @@ use crate::{
     overlays::backdrop,
     part::Column,
     palette::{self, Level},
-    ui::{self, Check, Notice, RADIUS_LG, Squircle, Tone},
+    ui::{self, Check, Notice, RADIUS_LG, Squircle},
 };
 
 const DIALOG_WIDTH: f32 = 520.;
@@ -50,9 +50,9 @@ impl Waffle {
         // GAP: an application already sent (join request SUBMITTED or REJECTED) gets Discord's own bar text;
         // Waffle doesn't track join requests yet, so it keeps the default one.
         let guild_id = guild.id.clone();
-        let complete = ui::button("rules-complete", Tone::Primary, cx).child("Complete").on_click(cx.listener(move |this, _, _, cx| this.open_rules(&guild_id, cx)));
+        let complete = ui::Button::new("rules-complete").child("Complete").on_click(cx.listener(move |this, _, _, cx| this.open_rules(&guild_id, cx)));
         // The composer card's shape and glass (chat.rs render_composer), so swapping one for the other doesn't jump.
-        // lint-allow(custom-badge, custom-surface): ui::surface has no frosted translucent level matching the composer card
+        // lint-allow(custom-badge, custom-surface): ui::PopoverContent::new has no frosted translucent level matching the composer card
         let bar = ui::row()
             .id("rules-gate")
             .occlude()
@@ -109,17 +109,17 @@ impl Waffle {
         let guild = self.guilds.iter().find(|g| g.id == view.guild_id)?;
         let form = self.join.forms.get(&view.guild_id);
         let applies = guild.has_feature(features::MANUAL_APPROVAL) || matches!(form, Some(Load::Ready(f)) if f.has_questions);
-        let body = ui::dialog_body().gap_5().child(rules_head(guild, applies, cx));
+        let body = ui::DialogContent::new().gap_5().child(rules_head(guild, applies, cx));
         let body = match form {
             // GAP: apply-to-join forms (questions beyond the rules) aren't filled in here yet; Discord takes them.
             _ if applies => body.child(apply_in_discord(&guild.id, cx)),
-            Some(Load::Ready(form)) => body.child(rules_list(form, &view.rules_scroll, cx)).child(agree_row(view, window, cx)).children(view.refusal.as_ref().map(|r| ui::callout(Notice::Danger, Glyph::WarningCircle, r.title.clone(), r.detail.unwrap_or_default(), cx))).child(
-                ui::row().items_stretch().justify_end().child(ui::button("rules-submit", Tone::Primary, cx).large().loading(view.submitting.then_some("Submitting")).child("Submit").on_click(cx.listener(|this, _, _, cx| this.submit_rules(cx)))),
+            Some(Load::Ready(form)) => body.child(rules_list(form, &view.rules_scroll, cx)).child(agree_row(view, window, cx)).children(view.refusal.as_ref().map(|r| ui::Alert::new(Notice::Danger, Glyph::WarningCircle, r.title.clone(), r.detail.unwrap_or_default(), cx))).child(
+                ui::row().items_stretch().justify_end().child(ui::Button::new("rules-submit").size(ui::ButtonSize::Lg).loading(view.submitting.then_some("Submitting")).child("Submit").on_click(cx.listener(|this, _, _, cx| this.submit_rules(cx)))),
             ),
             Some(Load::Failed(error)) => body.child(load_failed(&guild.id, error, cx)),
             _ => body.child(rules_skeleton(cx)),
         };
-        Some(ui::modal(backdrop("rules-backdrop", cx), ui::dialog("rules-dialog", DIALOG_WIDTH, body, window, cx), cx))
+        Some(ui::Dialog::modal(backdrop("rules-backdrop", cx), ui::Dialog::new("rules-dialog", DIALOG_WIDTH, body, window, cx), cx))
     }
 
     fn toggle_agree(&mut self, cx: &mut Context<Self>) {
@@ -215,7 +215,7 @@ fn rules_head(guild: &Guild, applies: bool, cx: &mut Context<Waffle>) -> impl In
                 .child(div().text_size(ui::TEXT_LG).line_height(ui::LINE_LG).font_weight(FontWeight::SEMIBOLD).text_color(palette::strong(cx)).child(title))
                 .child(div().text_size(ui::TEXT_SM).text_color(palette::muted(cx)).child(subtitle)),
         )
-        .child(ui::icon_button("rules-close", Glyph::X, "Close", cx).on_click(cx.listener(|this, _, _, cx| {
+        .child(ui::Button::new("rules-close").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::X).tooltip_text("Close").on_click(cx.listener(|this, _, _, cx| {
             this.join.rules = None;
             cx.notify();
         })))
@@ -235,7 +235,7 @@ fn rules_list(form: &Form, scroll: &gpui_kit::ScrollHandle, cx: &mut Context<Waf
             .p_3()
             .items_start()
             .gap_3()
-            .when(i < last, |row| row.child(ui::inset_rule(12., cx).left_12()))
+            .when(i < last, |row| row.child(ui::Separator::new().inset(12.).left_12()))
             .child(number(i + 1, cx))
             .child(div().flex_1().min_w_0().text_size(ui::TEXT_LEAD).line_height(ui::LINE_LEAD).text_color(strong).child(rule.clone()))
     }).collect();
@@ -252,7 +252,7 @@ fn rules_list(form: &Form, scroll: &gpui_kit::ScrollHandle, cx: &mut Context<Waf
                 .child(div().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::muted(cx)).child(count)),
         )
         .children(form.description.clone().map(|d| div().px_1().pb_2().text_size(ui::TEXT_SM).text_color(palette::text(cx)).child(d)))
-        .child(div().p_1().squircle(RADIUS_LG).bg(palette::surface(Level::Group, cx)).child(ui::scroll_fade(ui::col().id("rules-list").max_h(px(RULES_HEIGHT)).children(rows), scroll, palette::surface(Level::Group, cx))))
+        .child(div().p_1().squircle(RADIUS_LG).bg(palette::surface(Level::Group, cx)).child(ui::ScrollArea::faded(ui::col().id("rules-list").max_h(px(RULES_HEIGHT)).children(rows), scroll, palette::surface(Level::Group, cx))))
 }
 
 // A rule's number: an accent-soft disc in the 24px column the agree row's checkbox shares.
@@ -263,11 +263,11 @@ fn number(n: usize, cx: &gpui_kit::App) -> impl IntoElement + use<> {
 
 // The full-width agree card: ticked takes the accent tint and edge; Submit pressed unticked gives it a danger
 // edge and says why under it.
-fn agree_row(view: &RulesView, window: &mut Window, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
+fn agree_row(view: &RulesView, _window: &mut Window, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
     let group = palette::surface(Level::Group, cx);
     let edge = if view.nudged { palette::danger() } else { gpui_kit::transparent_black() };
-    let check = ui::check_live("rules-agree-check", if view.agreed { Check::On } else { Check::Off }, window, cx);
-    let row = ui::card("rules-agree", cx)
+    let check = ui::Checkbox::new("rules-agree-check").checked(if view.agreed { Check::On } else { Check::Off });
+    let row = ui::Card::interactive("rules-agree", cx)
         .fill(group, cx)
         .edged(edge)
         .selected(view.agreed, cx)
@@ -299,18 +299,18 @@ fn apply_in_discord(guild_id: &str, cx: &mut Context<Waffle>) -> impl IntoElemen
     let url = format!("https://discord.com/channels/{guild_id}");
     ui::col()
         .gap_5()
-        .child(ui::callout(Notice::Info, Glyph::InfoFill, "This server asks a few questions Waffle can't show yet.", "Answer them in Discord to apply.", cx))
+        .child(ui::Alert::new(Notice::Info, Glyph::InfoFill, "This server asks a few questions Waffle can't show yet.", "Answer them in Discord to apply.", cx))
         .child(
             ui::row().items_stretch()
                 .justify_end()
-                .child(ui::button("rules-open-discord", Tone::Primary, cx).large().child(Icon::new(Glyph::Open).size(ui::ICON_MD)).child("Open in Discord").on_click(move |_, _, cx| cx.open_url(&url))),
+                .child(ui::Button::new("rules-open-discord").size(ui::ButtonSize::Lg).child(Icon::new(Glyph::Open).size(ui::ICON_MD)).child("Open in Discord").on_click(move |_, _, cx| cx.open_url(&url))),
         )
 }
 
 fn load_failed(guild_id: &str, error: &str, cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
     let guild_id = guild_id.to_owned();
-    let retry = ui::button("rules-retry", Tone::Secondary, cx).small().child("Try again").on_click(cx.listener(move |this, _, _, cx| this.fetch_form(&guild_id, cx)));
-    ui::callout_with(Notice::Danger, Glyph::WarningCircle, "Couldn't load the rules", error.to_owned(), div().pt_2().child(retry), cx)
+    let retry = ui::Button::new("rules-retry").variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Sm).child("Try again").on_click(cx.listener(move |this, _, _, cx| this.fetch_form(&guild_id, cx)));
+    ui::Alert::with_actions(Notice::Danger, Glyph::WarningCircle, "Couldn't load the rules", error.to_owned(), div().pt_2().child(retry), cx)
 }
 
 // The form on its way: the head, numbered rows of shimmer, and the agree card's place.
@@ -319,13 +319,13 @@ fn rules_skeleton(cx: &mut Context<Waffle>) -> impl IntoElement + use<> {
         ui::row()
             .p_3()
             .gap_3()
-            .child(ui::skeleton_circle(SharedString::from(format!("rules-skeleton-n{i}")), 24., cx))
-            .child(ui::skeleton(SharedString::from(format!("rules-skeleton-{i}")), 6., cx).h_3p5().w(relative(width)))
+            .child(ui::Skeleton::circle(SharedString::from(format!("rules-skeleton-n{i}")), 24.))
+            .child(ui::Skeleton::new(SharedString::from(format!("rules-skeleton-{i}"))).radius(6.).h_3p5().w(relative(width)))
     });
     ui::col()
         .gap_5()
         .child(div().p_1().squircle(RADIUS_LG).bg(palette::surface(Level::Group, cx)).children(rows))
-        .child(ui::skeleton("rules-skeleton-agree", RADIUS_LG, cx).w_full().h(px(AGREE_HEIGHT)))
+        .child(ui::Skeleton::new("rules-skeleton-agree").radius(RADIUS_LG).w_full().h(px(AGREE_HEIGHT)))
 }
 
 pub fn demo(waffle: &mut Waffle, scene: &str, _window: &mut Window, _cx: &mut Context<Waffle>) {

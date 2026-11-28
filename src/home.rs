@@ -24,7 +24,7 @@ use crate::{
     mascot::Mood,
     palette,
     sidebar::{Nav, RowState, channel_row},
-    ui::{self, Squircle, Tone},
+    ui::{self, Squircle},
 };
 
 pub(crate) const MASCOT: &str = "add-friend-mascot-hit";
@@ -355,7 +355,7 @@ impl Waffle {
             .gap_3()
             .child(Icon::new(Glyph::Users).size(ui::ICON_XL).flex_none())
             .child(ui::line("Friends").flex_1())
-            .when(pending > 0, |r| r.child(ui::count_badge(pending)))
+            .when(pending > 0, |r| r.child(ui::Badge::count(pending)))
             .on_click(cx.listener(|this, _, _, cx| this.open_home(cx)))
             .into_any_element()
     }
@@ -415,7 +415,7 @@ impl Waffle {
         let items = [ui::Tab::new("Online"), ui::Tab::new("All"), ui::Tab::new("Pending").count((pending > 0).then_some(pending)), ui::Tab::new("Blocked"), ui::Tab::new("Add friend").accent()];
         let selected = TABS.iter().position(|t| *t == tab).unwrap_or_default();
         let this = cx.entity().downgrade();
-        let tabs = ui::pill_tabs("friends-tabs", &items, selected, move |i, _, cx| {
+        let tabs = ui::ToggleGroup::new("friends-tabs").items(&items).value(selected).on_value_change(move |i, _, cx| {
             this.update(cx, |this, cx| {
                 this.friends_tab = TABS[i];
                 this.add_friend_result = None;
@@ -423,8 +423,8 @@ impl Waffle {
                 this.redraw(Column::Panel, cx);
             })
             .ok();
-        }, window, cx);
-        let new_group = ui::icon_button("new-group-dm", Glyph::ThreadNew, "New Group DM", cx).occlude().on_click(cx.listener(|this, _, window, cx| this.open_group_picker(None, window, cx)));
+        });
+        let new_group = ui::Button::new("new-group-dm").variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconSm).icon(Glyph::ThreadNew).tooltip_text("New Group DM").occlude().on_click(cx.listener(|this, _, window, cx| this.open_group_picker(None, window, cx)));
         let header = ui::row()
             .occlude()
             .h(px(crate::layout::HEADER_HEIGHT))
@@ -456,22 +456,22 @@ impl Waffle {
         };
         let body = match (people.is_empty(), tab) {
             (_, FriendsTab::AddFriend) => self.add_friend_page(cx),
-            (true, FriendsTab::Online) => ui::empty_state("friends-empty", Illustration::FriendsOnline, "No one's around to play with Waffle.", "Your friends are offline. Say hi anyway, they'll see it when they're back.", cx)
-                .child(div().pt_2().child(ui::button("show-all-friends", Tone::Secondary, cx).child("Show all friends").on_click(cx.listener(|this, _, _, cx| {
+            (true, FriendsTab::Online) => ui::Empty::new("friends-empty", Illustration::FriendsOnline, "No one's around to play with Waffle.", "Your friends are offline. Say hi anyway, they'll see it when they're back.", cx)
+                .child(div().pt_2().child(ui::Button::new("show-all-friends").variant(ui::ButtonVariant::Secondary).child("Show all friends").on_click(cx.listener(|this, _, _, cx| {
                     this.friends_tab = FriendsTab::All;
                     this.redraw(Column::Main, cx);
                     this.redraw(Column::Panel, cx);
                 }))))
                 .into_any_element(),
-            (true, FriendsTab::All) => ui::empty_state("friends-empty", Illustration::FriendsAll, "Waffle is waiting on friends. You don't have to though!", "Add someone by their username to start chatting.", cx)
-                .child(div().pt_2().child(ui::button("empty-add-friend", Tone::Primary, cx).child("Add friend").on_click(cx.listener(|this, _, _, cx| {
+            (true, FriendsTab::All) => ui::Empty::new("friends-empty", Illustration::FriendsAll, "Waffle is waiting on friends. You don't have to though!", "Add someone by their username to start chatting.", cx)
+                .child(div().pt_2().child(ui::Button::new("empty-add-friend").child("Add friend").on_click(cx.listener(|this, _, _, cx| {
                     this.friends_tab = FriendsTab::AddFriend;
                     this.redraw(Column::Main, cx);
                     this.redraw(Column::Panel, cx);
                 }))))
                 .into_any_element(),
-            (true, FriendsTab::Pending) => ui::empty_state("friends-empty", Illustration::FriendsPending, "There are no pending friend requests. Here's Waffle for now.", "Requests you send and receive show up here.", cx).into_any_element(),
-            (true, FriendsTab::Blocked) => ui::empty_state("friends-empty", Illustration::FriendsBlocked, "You can't unblock Waffle.", "People you block show up here.", cx).into_any_element(),
+            (true, FriendsTab::Pending) => ui::Empty::new("friends-empty", Illustration::FriendsPending, "There are no pending friend requests. Here's Waffle for now.", "Requests you send and receive show up here.", cx).into_any_element(),
+            (true, FriendsTab::Blocked) => ui::Empty::new("friends-empty", Illustration::FriendsBlocked, "You can't unblock Waffle.", "People you block show up here.", cx).into_any_element(),
             (false, _) => {
                 let label = div().pt_2().px_2().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(format!("{heading} · {}", people.len()));
                 let rows: Vec<AnyElement> = people.iter().map(|r| self.friend_row(r, cx)).collect();
@@ -514,7 +514,7 @@ impl Waffle {
             .child(crate::mascot::mascot_at("add-friend-mascot", mood, 1., cx))
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| this.set_hovered(MASCOT, *hovered, cx)))
             .on_click(cx.listener(|this, _, window, cx| this.add_friend_input.update(cx, |input, cx| input.focus(window, cx))));
-        let send = ui::button("send-friend-request", Tone::Primary, cx)
+        let send = ui::Button::new("send-friend-request")
             .flex_none()
             .child("Send request")
             .when(empty, |b| b.opacity(0.5))
@@ -523,10 +523,10 @@ impl Waffle {
         let note_focus = self.add_friend_note.read(cx).focus_handle(cx);
         let username = ui::row()
             .gap_2()
-            .child(div().flex_1().min_w_0().child(ui::text_field("add-friend-name", Input::new(&self.add_friend_input).appearance(false), &username_focus).leading(Icon::new(Glyph::At).size(ui::ICON_MD))))
+            .child(div().flex_1().min_w_0().child(ui::Input::new("add-friend-name", Input::new(&self.add_friend_input).appearance(false), &username_focus).leading(Icon::new(Glyph::At).size(ui::ICON_MD))))
             .child(send);
-        let note = ui::text_area("add-friend-note", Textarea::new(&self.add_friend_note).appearance(false).px_0().text_size(ui::TEXT_SM), &note_focus).error(note_len > NOTE_MAX);
-        let hint = ui::field_hint("Optional. If they accept, it opens your DM.", Some(format!("{note_len} / {NOTE_MAX}").into()), cx);
+        let note = ui::Textarea::new("add-friend-note", Textarea::new(&self.add_friend_note).appearance(false).px_0().text_size(ui::TEXT_SM), &note_focus).error(note_len > NOTE_MAX);
+        let hint = ui::FieldDescription::new("Optional. If they accept, it opens your DM.", Some(format!("{note_len} / {NOTE_MAX}").into()), cx);
         let result = self.add_friend_result.clone().map(|result| {
             let (ink, text) = match result {
                 Ok(text) => (palette::positive_ink(cx), text),
@@ -539,7 +539,7 @@ impl Waffle {
             let label = div().px_2().pb_1().text_size(ui::TEXT_XS).font_weight(FontWeight::MEDIUM).text_color(palette::faint(cx)).child(format!("Sent requests · {}", sent.len()));
             ui::col().gap_0p5().child(label).children(sent)
         });
-        let explore = ui::list_row("add-friend-explore", "Explore public servers", cx)
+        let explore = ui::Item::new("add-friend-explore", "Explore public servers", cx)
             .height(ui::RowHeight::Tall)
             .lead(ui::row().size_9().flex_none().squircle(ui::RADIUS_MD).bg(palette::positive_ink(cx)).text_color(gpui_kit::white()).justify_center().child(Nav::Compass.icon().size_5()))
             .subtitle("No username handy? Meet people around gaming, music, anime and more.")
@@ -557,7 +557,7 @@ impl Waffle {
                     .child(div().text_size(ui::TEXT_LG).font_weight(FontWeight::SEMIBOLD).text_color(strong).child("Add a friend"))
                     .child(div().text_color(muted).child("Send a request with their Discord username.")),
             )
-            .child(ui::col().gap_2().child(ui::settings_card(cx).p_4().gap_3().child(username).child(note).child(hint)).children(result))
+            .child(ui::col().gap_2().child(ui::Card::new(cx).p_4().gap_3().child(username).child(note).child(hint)).children(result))
             .children(sent)
             .child(explore);
         ui::row().items_stretch().w_full().justify_center().pt_6().child(column).into_any_element()
@@ -621,7 +621,7 @@ impl Waffle {
         let page = palette::surface(palette::Level::Page, cx);
         let status = (relation.kind == Relation::Friend).then_some(presence.mark());
         let id = user.id.clone();
-        let acts: Vec<ui::Control> = match relation.kind {
+        let acts: Vec<ui::Button> = match relation.kind {
             Relation::Friend => vec![
                 friend_action(("message", &id), Glyph::ChatRound, "Message", None, cx).on_click(cx.listener({
                     let id = id.clone();
@@ -651,7 +651,7 @@ impl Waffle {
                 move |this, _, _, cx| this.relation_optimistic(&id, None, Method::DELETE, None, cx)
             }))],
         };
-        ui::list_row(SharedString::from(format!("friend-{}", user.id)), user.name.clone(), cx)
+        ui::Item::new(SharedString::from(format!("friend-{}", user.id)), user.name.clone(), cx)
             .height(ui::RowHeight::Tall)
             .lead(avatar_with_status(&user.avatar, 32., status, page))
             .subtitle(ui::line(subtitle))
@@ -686,9 +686,9 @@ fn add_friend_error(error: &ApiError, username: &str) -> String {
 
 // A friend row's action (.friend .acts .iconbtn): a raised 36px tile with a hairline; `tone` is the
 // ink it hovers to (accept green, ignore coral).
-fn friend_action(id: (&'static str, &str), glyph: Glyph, tooltip: &'static str, tone: Option<Hsla>, cx: &App) -> ui::Control {
+fn friend_action(id: (&'static str, &str), glyph: Glyph, tooltip: &'static str, tone: Option<Hsla>, cx: &App) -> ui::Button {
     let ink = tone.unwrap_or(palette::strong(cx));
-    ui::icon_button(SharedString::from(format!("{}-{}", id.0, id.1)), glyph, tooltip, cx).sized(36.).tone(Tone::Secondary, cx).bordered(cx).hover(move |s| s.text_color(ink))
+    ui::Button::new(SharedString::from(format!("{}-{}", id.0, id.1))).variant(ui::ButtonVariant::Secondary).size(ui::ButtonSize::Icon).icon(glyph).tooltip_text(tooltip).bordered().hover(move |s| s.text_color(ink))
 }
 
 #[cfg(test)]
