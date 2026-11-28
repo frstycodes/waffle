@@ -315,6 +315,7 @@ _App-wide redraw: notifying Waffle re-renders every column. Notify only when wha
 - `src/part.rs` — the part doesn't exist yet
 - `src/pip.rs` — the PiP floats over every column
 - `src/pip.rs` — the PiP floats over every column
+- `src/pip.rs` — the PiP floats over every column
 - `src/poll.rs` — message components, polls and pending commands draw in the feed and the thread panel
 - `src/poll.rs` — message components, polls and pending commands draw in the feed and the thread panel
 - `src/poll.rs` — the poll creator is drawn by the root's overlays, over every column

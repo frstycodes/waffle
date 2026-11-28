@@ -128,7 +128,7 @@ impl Waffle {
         // Over everything but popups: a DM call's window, or, away from a server call, the stream we watch.
         // An activity away from its call outranks the DM call's window (it carries the way back); a ring outranks both.
         let activity = (!self.call_view && self.ringing_in.is_none()).then(|| self.activity_pip(cx)).flatten();
-        let pip = activity.or_else(|| self.call_window(cx)).or_else(|| (!self.call_view).then(|| self.stream_pip(cx)).flatten());
+        let pip = activity.or_else(|| self.call_window(cx)).or_else(|| (!self.call_view).then(|| self.stream_pip(window, cx)).flatten());
         let layer = std::iter::once(overlays)
             .chain(call_overlays)
             .chain(viewer)

@@ -18,6 +18,8 @@ const HEIGHT: f32 = WIDTH * 9. / 16.;
 
 type Size = (f32, f32);
 const MARGIN: f32 = 16.;
+// How far the header and the foot slide in from their edges as the hover chrome fades in, as the stage's.
+const CHROME_DRIFT: f32 = 8.;
 const SNAP: Duration = Duration::from_millis(260);
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
@@ -42,6 +44,8 @@ pub(crate) struct Pip {
     landed: Option<((f32, f32), usize)>,
     // The size of whichever window is floating, from its last render: the drag clamps and snaps by it.
     size: Cell<Size>,
+    // The pointer is on the stream PiP: its chrome eases in.
+    hovered: bool,
 }
 
 // The player being carried; the real one follows the pointer, so this draws nothing.
@@ -97,8 +101,10 @@ fn pin_to<E: Styled>(d: E, corner: Corner, insets: Insets) -> E {
 
 impl Waffle {
     // The call PiP, while looking away from the call: the focused stream or camera (else the first stream we
-    // watch, else our own Go Live, else someone's camera), 16:9. Our own stream shows its local preview. Hovered, the call's name leads back to it and Disconnect sits in the foot.
-    pub(crate) fn stream_pip(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    // watch, else our own Go Live, else someone's camera), 16:9. Hovered, the call's name leads back to it and
+    // Disconnect sits in the foot; our own stream shows its local preview, who's watching, our name, and Stream
+    // Settings and Stop Streaming in place of Disconnect, as Discord's.
+    pub(crate) fn stream_pip(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let call = self.call.as_ref()?;
         let me = self.me.as_ref().map(|m| m.id.as_str());
         let focus = self.call_focus.as_deref().and_then(|k| k.split_once(':'));
@@ -126,25 +132,41 @@ impl Waffle {
         };
         let shade = |angle: f32| gpui_kit::linear_gradient(angle, gpui_kit::linear_color_stop(gpui_kit::black().opacity(0.7), 0.), gpui_kit::linear_color_stop(gpui_kit::transparent_black(), 0.4));
         let back = channel.clone();
+        let shown = gpui_kit::base::transition("stream-pip-chrome", if self.pip.hovered { 1. } else { 0. }, gpui_kit::base::Transition::new(ui::DUR_POP).easing(crate::motion::ease_out()), window, cx);
+        let drift = CHROME_DRIFT * (1. - shown);
         let controls = ui::col()
             .absolute()
             .inset_0()
             .p_2()
             .justify_between()
             .bg(shade(180.))
-            .opacity(0.)
-            .group_hover("stream-pip", |s| s.opacity(1.))
+            .opacity(shown)
             .child(
-                ui::row().gap_1p5().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(white).child(Icon::new(Glyph::ChevronLeft).size(ui::ICON_LG)).child(ui::line(back.name.clone())),
+                ui::row()
+                    .relative()
+                    .top(px(-drift))
+                    .gap_2()
+                    .justify_between()
+                    .child(ui::row().gap_1p5().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(white).child(Icon::new(Glyph::ChevronLeft).size(ui::ICON_LG)).child(ui::line(back.name.clone())))
+                    .children(mine.then(|| spectators(self.viewers(&who))).flatten()),
             )
-            .child(ui::row().justify_end().child(ui::round_button("pip-disconnect", Glyph::CallEnd, "Disconnect", ui::AVATAR_LG).on_click(cx.listener(|this, _, _, cx| {
-                cx.stop_propagation();
-                this.leave_voice(cx);
-            }))));
-        let foot = div().absolute().left_0().right_0().bottom_0().h_1_2().bg(shade(0.)).opacity(0.).group_hover("stream-pip", |s| s.opacity(1.));
+            .child(match mine {
+                true => ui::row().relative().top(px(drift)).gap_2().justify_between().child(ui::line(name.clone()).flex_1().text_size(ui::TEXT_SM).font_weight(FontWeight::SEMIBOLD).text_color(white)).child(self.own_stream_controls(cx)),
+                false => ui::row().relative().top(px(drift)).justify_end().child(ui::round_button("pip-disconnect", Glyph::CallEnd, "Disconnect", ui::AVATAR_LG).on_click(cx.listener(|this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.leave_voice(cx);
+                }))),
+            });
+        let foot = div().absolute().left_0().right_0().bottom_0().h_1_2().bg(shade(0.)).opacity(shown);
         let player = self.floating_drag(div().id("stream-pip"), cx);
         let player = player
-            .group("stream-pip")
+            .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
+                if this.pip.hovered == *hovered {
+                    return;
+                }
+                this.pip.hovered = *hovered;
+                cx.notify(); // lint-allow(global-notify): the PiP floats over every column
+            }))
             // Floats over the app: what's under it must not take the hover or the click.
             .occlude()
             .absolute()
@@ -158,13 +180,23 @@ impl Waffle {
             .child(picture)
             .child(foot)
             .child(controls)
-            .tooltip(move |window, cx| ui::Tooltip::new(match (is_stream, mine) {
-                (true, true) => "Your screen".to_owned(),
-                (true, false) => format!("{name}'s screen"),
-                (false, _) => name.clone(),
-            }).build(window, cx))
+            // Not on ours: a tooltip on the whole window fights the viewers list and the buttons over the same
+            // hover, and the two take turns showing. Ours names itself in the foot.
+            .when(!mine, |d| d.tooltip(move |window, cx| ui::Tooltip::new(if is_stream { format!("{name}'s screen") } else { name.clone() }).build(window, cx)))
             .on_click(cx.listener(move |this, _, window, cx| this.show_call(channel.clone(), window, cx)));
         Some(self.place_floating(player, (WIDTH, HEIGHT)))
+    }
+
+    // Our own stream's foot: its settings menu and the way to end it, bare icons as Discord's.
+    fn own_stream_controls(&self, cx: &mut Context<Self>) -> gpui_kit::Div {
+        let settings = pip_icon("pip-stream-settings", Glyph::StreamSettings, "Stream Settings")
+            .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &gpui_kit::MouseDownEvent, _, cx| this.open_stream_menu(e.position, cx)))
+            .on_click(|_, _, cx| cx.stop_propagation());
+        let stop = pip_icon("pip-stop-stream", Glyph::ScreenOff, "Stop Streaming").on_click(cx.listener(|this, _, _, cx| {
+            cx.stop_propagation();
+            this.toggle_screen_share(cx);
+        }));
+        ui::row().flex_none().gap_1().child(settings).child(stop)
     }
 
     // Puts a floating window where it rests, follows the pointer while carried, or springs into its corner.
@@ -224,6 +256,25 @@ impl Waffle {
         self.pip.landed = Some((at, n));
         cx.notify(); // lint-allow(global-notify): the PiP floats over every column
     }
+}
+
+// A control over the picture with no fill of its own: the ink brightens under the pointer.
+fn pip_icon(id: &'static str, glyph: Glyph, tip: &'static str) -> ui::Button {
+    let clear = gpui_kit::transparent_black();
+    let scope = ui::ButtonScope::Themed { rest: clear, hover: clear, ink: gpui_kit::white().opacity(0.85), ink_hover: gpui_kit::white() };
+    ui::Button::new(id).variant(ui::ButtonVariant::Ghost).size(ui::ButtonSize::IconLg).scope(scope).icon(glyph).tooltip_text(tip)
+}
+
+// Who's watching our stream, top right: the stage's stack of faces, the list on hover under "Spectators" (the
+// list adds its own count).
+fn spectators(viewers: Vec<crate::call::Viewer>) -> Option<gpui_kit::Stateful<gpui_kit::Div>> {
+    if viewers.is_empty() {
+        return None;
+    }
+    let people: Vec<ui::Entry> = viewers.into_iter().map(|v| ui::Entry::person(v.avatar, v.name)).collect();
+    let stage = crate::palette::stage::dock();
+    let faces = ui::AvatarGroup::capped(&people, crate::call::VIEWER_FACES, ui::AVATAR_SM - 4., stage, crate::palette::stage::overlay(), crate::palette::stage::strong());
+    Some(ui::HoverCard::new(faces.id("pip-spectators").flex_none(), "Spectators", people))
 }
 
 #[cfg(test)]

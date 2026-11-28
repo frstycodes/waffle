@@ -393,6 +393,12 @@ pub struct GoLive {
 }
 
 impl GoLive {
+    // A stream with nothing behind it, for the demo scenes.
+    pub fn demo() -> Self {
+        let ((stop, _), (_, gone)) = (oneshot::channel(), oneshot::channel());
+        Self { stop, gone }
+    }
+
     // As `StreamWatch::ended`: a restarted stream's predecessor ends after it began.
     pub fn ended(&self) -> bool {
         self.stop.is_canceled()

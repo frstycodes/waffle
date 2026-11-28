@@ -587,12 +587,12 @@ pub(crate) fn control_group() -> Div {
 }
 
 // .tile .viewers: who's watching, top right; a few faces and a "+n", the full list on hover.
-const VIEWER_FACES: usize = 4;
+pub(crate) const VIEWER_FACES: usize = 4;
 
 #[derive(Clone)]
 pub(crate) struct Viewer {
-    name: SharedString,
-    avatar: String,
+    pub(crate) name: SharedString,
+    pub(crate) avatar: String,
 }
 
 pub(crate) fn viewer_chip(viewers: Vec<Viewer>, streamer_id: &str) -> Stateful<Div> {

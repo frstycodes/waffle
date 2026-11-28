@@ -321,6 +321,7 @@ MAP = [
     ("Nav::Restore", "Window", "Restore", "CUSTOM:win-restore"),
     ("Nav::DeafenedFill", "Voice", "Deafened", "CUSTOM:deafened"),
     ("Glyph::ScreenOff", "Voice", "Stop watching or streaming", "CUSTOM:monitor-off"),
+    ("Glyph::StreamSettings", "Voice", "Stream settings", "CUSTOM:gear-stream"),
     ("Glyph::TextLocked", "Channels", "Text channel, private", "CUSTOM:text-locked"),
     ("Glyph::VoiceLocked", "Channels", "Voice channel, private", "CUSTOM:voice-locked"),
     ("Glyph::Megaphone", "Channels", "Hold Up! before a mass ping", "bullhorn"),
@@ -451,6 +452,10 @@ def slashed(base):
 LOCK = f'<path d="{sq(14, 16.25, 9, 6.75, 2)}" fill="currentColor"/><path d="M16.25 16.25v-1.5a2.25 2.25 0 0 1 4.5 0v1.5"/>'
 
 
+# The stream-settings badge: an arrow pointing up from the corner, as Discord's gear on its own stream.
+STREAM_UP = '<path d="M18.5 22.25v-6.5M15.5 18.75l3-3 3 3"/>'
+
+
 def badged(base, badge):
     return (f'<mask id="badge" maskUnits="userSpaceOnUse" x="-2" y="-2" width="28" height="28"><rect x="-2" y="-2" width="28" height="28" fill="#fff"/>'
             f'<g stroke="#000" fill="#000" stroke-width="5">{badge}</g></mask><g mask="url(#badge)">{base}</g>{badge}')
@@ -469,6 +474,7 @@ def custom(reicon, name):
         # The screen with an X cut out of it, as Discord's stop-watching and stop-streaming buttons.
         "monitor-off": lambda: (f'<mask id="x" maskUnits="userSpaceOnUse" x="-2" y="-2" width="28" height="28"><rect x="-2" y="-2" width="28" height="28" fill="#fff"/>'
                                 f'<path d="M9.75 5 14.25 9.5M14.25 5 9.75 9.5" stroke="#000" stroke-width="2"/></mask><g mask="url(#x)">{glyph(reicon, "monitor")}</g>'),
+        "gear-stream": lambda: badged(glyph(reicon, "gear2"), STREAM_UP),
         "thumbtack-off": lambda: slashed(glyph(reicon, "thumbtack")),
         "gif": lambda: f'<path d="{sq(2.5, 5, 19, 14, 3.5)}"/><path d="M10 10.1a2.1 2.1 0 1 0 .4 2.2H8.6M12.75 9.75v4.5M15.5 14.25v-4.5h2.75M15.5 12h2.25" stroke-width="1.75"/>',
         "more-v": lambda: f'<g transform="rotate(90 12 12)">{glyph(reicon, "more-h")}</g>',

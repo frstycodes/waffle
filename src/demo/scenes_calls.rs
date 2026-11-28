@@ -316,7 +316,7 @@ pub(super) fn call_scenes(waffle: &mut Waffle, scene: &str, window: &mut Window,
         // Text chat in the voice channel we're in: the sidebar's rows, the stage's message previews (with a
         // mention, or unread only) and the chat open beside the call.
         "sidebar-voice-chat" | "call-previews" | "call-previews-unread" | "call-chat" => demo_voice_chat(waffle, scene, window, cx),
-        "call" | "call-info" | "call-noise" | "call-devices" | "call-watch" | "call-focus" | "call-person" | "call-alone" | "call-join" | "call-muted" | "call-idle" | "pip" => {
+        "call" | "call-info" | "call-noise" | "call-devices" | "call-watch" | "call-focus" | "call-person" | "call-alone" | "call-join" | "call-muted" | "call-idle" | "pip" | "pip-own" => {
             demo_call(waffle);
             // As if the pointer just moved on the stage, so its chrome shows for the first half minute.
             waffle.call_pointer_inside = scene != "call-idle";
@@ -358,6 +358,16 @@ pub(super) fn call_scenes(waffle: &mut Waffle, scene: &str, window: &mut Window,
                     if scene == "call-focus" {
                         waffle.call_focus = Some("stream:12582912".into());
                     }
+                }
+                // Our own Go Live floating while we read #general, seven watching: three faces and a "+4".
+                "pip-own" => {
+                    if let Some(call) = waffle.call.as_mut() {
+                        call.sharing = Some(crate::voice::GoLive::demo());
+                        call.self_view = Some((demo_frame(1280, 720, 200), std::time::Instant::now()));
+                    }
+                    let viewers = ["8388608", "16777216", "20971520", "12582912", "25165824", "33554432", "41943040"].map(String::from).to_vec();
+                    waffle.on_event(Event::StreamUpdate { key: "guild:1:lounge:4194304".into(), viewers, paused: false }, cx);
+                    waffle.call_view = false;
                 }
                 "call-devices" => waffle.open_device_menu(crate::call::DeviceKind::Input, demo_at(260., 760.), cx),
                 _ => {}
